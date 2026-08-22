@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    io.kompose.service: postgres
+  name: postgres
+  namespace: toadie
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        io.kompose.service: postgres
+    spec:
+      containers:
+        - env:
+            - name: POSTGRES_DB
+              value: toadie
+            # Credentials come from the `toadie-secrets` Secret (see k8s/secret.yaml) so the
+            # same values feed both this container and the app's connection settings.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: toadie-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: toadie-secrets
+                  key: POSTGRES_USER
+          image: postgres:18-alpine
+          # Keep the probe command as a proper argv list (a single-string argv can't exec).
+          # The readinessProbe gates the Service endpoint (the compose
+          # `depends_on: service_healthy` equivalent).
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "toadie", "-d", "toadie"]
+            failureThreshold: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "toadie", "-d", "toadie"]
+            initialDelaySeconds: 10
+            failureThreshold: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          name: toadie-postgres
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          volumeMounts:
+            # postgres 18+ images keep data in a versioned subdir of /var/lib/postgresql;
+            # mounting the pre-18 /var/lib/postgresql/data path breaks the container.
+            - mountPath: /var/lib/postgresql
+              name: postgres-data
+      restartPolicy: Always
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data

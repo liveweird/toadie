@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    io.kompose.service: app
+  name: app
+  namespace: toadie
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: app
+  template:
+    metadata:
+      labels:
+        io.kompose.service: app
+    spec:
+      containers:
+        - env:
+            # Secrets come from the `toadie-secrets` Secret — see k8s/secret.yaml for how to
+            # create it (never commit real values). The app fail-closes on placeholder/burned
+            # JWT secrets and on unrotated seed passwords, so a misconfigured deploy crash-loops
+            # instead of running with a backdoor.
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: toadie-secrets
+                  key: JWT_SECRET
+            - name: ADMIN_INITIAL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: toadie-secrets
+                  key: ADMIN_INITIAL_PASSWORD
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: toadie-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: toadie-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_JDBC_URL
+              value: jdbc:postgresql://postgres:5432/toadie
+            - name: POSTGRES_R2DBC_URL
+              value: r2dbc:postgresql://postgres:5432/toadie
+            # Production posture (the image default). For throwaway local-cluster testing over
+            # plain HTTP (no TLS ingress), set this to "true" — HTTPS redirect / HSTS turn off
+            # and the seed credentials are tolerated, exactly like the compose demo.
+            - name: KTOR_DEVELOPMENT
+              value: "false"
+            # The app sits behind an ingress / LB that must terminate TLS and set
+            # X-Forwarded-For + X-Forwarded-Proto (and strip client-supplied values), so rate
+            # limiting keys on the real client IP and the HTTPS redirect sees the real scheme.
+            - name: HTTP_BEHIND_PROXY
+              value: "true"
+          # Built locally with `docker build -t toadie-app:latest .`; OrbStack's
+          # Kubernetes shares the Docker image store, so IfNotPresent uses it
+          # directly (`:latest` would otherwise default to Always → registry pull).
+          image: toadie-app:latest
+          imagePullPolicy: IfNotPresent
+          name: toadie-app
+          ports:
+            - containerPort: 8081
+              protocol: TCP
+          # Sized for the tuned JVM baked into the image (SerialGC + -Xmx256m + C1): ~270 MiB RSS
+          # under light load. Request covers steady state; the 512 MiB limit bounds it with headroom.
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "320Mi"
+            limits:
+              memory: "512Mi"
+          # The image sets WEB_STATIC_DIR, so / serves the SPA. Initial delays
+          # cover JVM boot + Flyway; until postgres is ready the app restarts,
+          # which the rollout absorbs.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      restartPolicy: Always
