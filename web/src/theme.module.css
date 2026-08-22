@@ -1,0 +1,59 @@
+/* Theme-wide classNames, wired via the component extensions in theme.ts (v1.35.0, the
+   "clean enterprise SaaS" pass). Everything here is scheme-aware via light-dark(). */
+
+/* Every data table becomes a quiet card on the tinted canvas: own surface, hairline frame,
+   rounded corners. border-collapse must be separate for the radius to clip; the frame then
+   owns the outer edge, so the last row drops its own border. */
+.table {
+  background-color: var(--mantine-color-body);
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-md);
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Neutral, compact table headers: dimmed 600-weight labels on a faint surface tint, with a
+   crisper rule under the header row (replaces the former brand-green wash). */
+.tableHead {
+  background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+}
+
+.tableHead th {
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  border-bottom: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+}
+
+/* The shell: white (dark: dark-7) header + navbar surfaces over a faintly tinted main canvas,
+   separated by hairlines — surfaces (Papers, tables) lift off the canvas instead of blending. */
+.appMain {
+  background-color: light-dark(#f8f9fb, var(--mantine-color-dark-8));
+}
+
+.appHeader {
+  background-color: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+}
+
+.appNavbar {
+  background-color: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  border-right: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+}
+
+/* Navbar items: rounded, slightly spaced, with a confident active state (the active fill is
+   Mantine's primary-light, which the deep brand shade makes read as a precise accent). */
+.navLink {
+  border-radius: var(--mantine-radius-md);
+  margin-bottom: 2px;
+}
+
+.navLink[data-active] {
+  font-weight: 600;
+}

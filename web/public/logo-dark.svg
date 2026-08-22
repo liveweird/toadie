@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- A friendly toad glyph, amber/brown brand scale (dark-scheme variant: lighter body). -->
+  <ellipse cx="24" cy="30" rx="18" ry="13" fill="#f59e0b"/>
+  <circle cx="13" cy="16" r="7" fill="#f59e0b"/>
+  <circle cx="35" cy="16" r="7" fill="#f59e0b"/>
+  <circle cx="13" cy="15" r="3.2" fill="#451a03"/>
+  <circle cx="35" cy="15" r="3.2" fill="#451a03"/>
+  <circle cx="13" cy="15" r="1.6" fill="#fffbeb"/>
+  <circle cx="35" cy="15" r="1.6" fill="#fffbeb"/>
+  <ellipse cx="24" cy="33" rx="11" ry="7" fill="#fde68a"/>
+  <path d="M17 27 q7 5 14 0" stroke="#451a03" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,26 @@
+{
+  "action": {
+    "logout": "Logout"
+  },
+  "field": {
+    "email": "Email"
+  },
+  "language": {
+    "label": "Language"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "message": "This part of the app crashed. Reloading the page usually fixes it.",
+    "reload": "Reload"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "message": "This address doesn't match any page. It may have moved, or the link is mistyped.",
+    "backHome": "Back to home"
+  },
+  "home": {
+    "title": "Home",
+    "placeholder": "Toadie will help you create, cross-check, and render Backstage catalog-info.yaml files. The first features are on their way."
+  },
+  "buildInfo": "Build version"
+}

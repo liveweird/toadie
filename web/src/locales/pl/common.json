@@ -1,0 +1,26 @@
+{
+  "action": {
+    "logout": "Wyloguj"
+  },
+  "field": {
+    "email": "E-mail"
+  },
+  "language": {
+    "label": "Język"
+  },
+  "errorBoundary": {
+    "title": "Coś poszło nie tak",
+    "message": "Ta część aplikacji uległa awarii. Odświeżenie strony zwykle pomaga.",
+    "reload": "Odśwież"
+  },
+  "notFound": {
+    "title": "Nie znaleziono strony",
+    "message": "Ten adres nie pasuje do żadnej strony. Mogła zostać przeniesiona albo link zawiera literówkę.",
+    "backHome": "Wróć do strony głównej"
+  },
+  "home": {
+    "title": "Strona główna",
+    "placeholder": "Toadie pomoże Ci tworzyć, weryfikować i renderować pliki catalog-info.yaml Backstage. Pierwsze funkcje już wkrótce."
+  },
+  "buildInfo": "Wersja aplikacji"
+}
