@@ -73,13 +73,6 @@ class UserService(val database: R2dbcDatabase) {
         Users.selectAll().where { (Users.passwordHash eq hash) and active() }.count()
     }
 
-    /** Soft-delete: users never hard-delete; the partial unique index frees their email. */
-    suspend fun delete(id: UInt): Int = suspendTransaction(database) {
-        Users.update({ (Users.id eq id) and active() }) {
-            it[markedAsDeleted] = true
-        }
-    }
-
     private fun active(): Op<Boolean> = Users.markedAsDeleted eq false
 
     private fun ResultRow.toUser(): User = User(
