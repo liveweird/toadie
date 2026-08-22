@@ -1,0 +1,90 @@
+# Repo-specific detekt tuning, layered on top of the bundled defaults (buildUponDefaultConfig).
+# Policy: fix findings in code first; add a rule override here ONLY for a deliberate repo idiom,
+# and give every override a one-line comment naming that idiom. No baseline file.
+
+complexity:
+  # Route registration is declarative by architecture — each feature's configureXxxRoutes lists
+  # every endpoint in one function (see "Package layout" in CLAUDE.md), so *Routes.kt files are
+  # exempt from method-size/complexity rules; services and helpers are not. Tests are exempt
+  # from LongMethod: scenario tests are named sentences and read top-to-bottom.
+  LongMethod:
+    excludes: ['**/src/test/**', '**/*Routes.kt']
+    threshold: 100
+  CyclomaticComplexMethod:
+    excludes: ['**/*Routes.kt']
+    threshold: 25
+  # Notification descriptor builders and the shared list(view, caller, filter, paging, …)
+  # convention carry naturally wide, data-only signatures; test fixture builders likewise.
+  LongParameterList:
+    excludes: ['**/src/test/**']
+    functionThreshold: 12
+    constructorThreshold: 12
+  # One cohesive service per feature is the architecture (UserService, DaysOffService, …);
+  # splitting them by function count would fork feature logic across files.
+  TooManyFunctions:
+    active: false
+  # Per-feature route test suites are deliberately comprehensive (one file per feature).
+  LargeClass:
+    excludes: ['**/src/test/**']
+  # The documented authz/visibility matrices (canReadFeedback & friends) read best as single
+  # four-clause conditions — the clause count IS the matrix width.
+  ComplexCondition:
+    threshold: 5
+  # The OpenAPI conformance report writer (test infra) nests report sections naturally.
+  NestedBlockDepth:
+    excludes: ['**/src/test/**']
+
+exceptions:
+  # Generic catches are the documented best-effort boundaries — email delivery (a failure keeps
+  # the account / skips the mirror) and import row isolation — and every site logs or
+  # classifies the exception rather than swallowing it.
+  TooGenericExceptionCaught:
+    active: false
+
+naming:
+  # Feature files pair the typed-routing Resource declaration with the configureXxx extension
+  # (UserRoutes.kt holds `Users` + `configureUserRoutes`); file names follow the feature-local
+  # layout convention, not the first declaration.
+  MatchingDeclarationName:
+    active: false
+  # The source layout is feature-first under src/main/kotlin/<feature>/ without the
+  # ch/nokillswit prefix directories (Ktor scaffolding style) — deliberate, repo-wide.
+  InvalidPackageDeclaration:
+    active: false
+
+performance:
+  # Varargs pass-through (audit(event, *fields), typed-route params) — the array copy is
+  # irrelevant at this service's traffic, and the call sites read better.
+  SpreadOperator:
+    active: false
+
+style:
+  # The per-field validation convention (validate* helpers throwing BadRequestException per
+  # check — see "Request payload validation" in .claude/docs/security.md) and route handlers
+  # throwing typed authz/domain exceptions make throw counts meaningless here.
+  ThrowsCount:
+    active: false
+  # Ktor-idiomatic wildcard imports (io.ktor.server.application.* etc.) are used throughout.
+  WildcardImport:
+    active: false
+  # Exposed column widths, time math (* 1000, / 60), eNPS band bounds (9, 7..8, 6), and
+  # percentage ranges are self-describing domain literals; naming each would hurt readability.
+  MagicNumber:
+    active: false
+  # De-facto wrap is ~120, but assertion lines and bilingual copy run longer; 140 is the gate.
+  MaxLineLength:
+    maxLineLength: 140
+  # Guard-clause early returns are the documented authz evaluation-order idiom (Guards.kt
+  # evaluates the read matrices rule-by-rule, cheapest first).
+  ReturnCount:
+    max: 6
+  # Guard-continues in row-independent sweep loops (CSV import rows, the anonymous-access
+  # spec sweep) — each continue is one skip rule, not control-flow spaghetti.
+  LoopWithTooManyJumpStatements:
+    maxJumpCount: 3
+  # Unused imports are off in detekt's defaults (deprecated in favour of the ktlint wrapper,
+  # which is not installed); enabled here so helper-extraction leftovers can't accumulate
+  # (2026-08 review round found 16). If it ever false-positives on KDoc-only usage, prefer
+  # fixing the KDoc reference over disabling.
+  UnusedImports:
+    active: true
