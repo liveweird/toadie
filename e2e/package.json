@@ -1,0 +1,22 @@
+{
+  "name": "toadie-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Browser blackbox E2E tests (Playwright) against the full stack on http://localhost:8081",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "install:browsers": "playwright install chromium",
+    "typecheck": "tsc --noEmit",
+    "check:scenarios": "node scripts/check-scenarios.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.62.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2"
+  }
+}
