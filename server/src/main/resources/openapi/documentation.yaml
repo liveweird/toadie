@@ -1,0 +1,288 @@
+openapi: 3.1.0
+info:
+  title: toadie-api
+  version: 1.0.0
+  description: |
+    JWT-authenticated REST API for Toadie — a Backstage `catalog-info.yaml` helper
+    (visual creation with validation, cross-file reference checking, combined rendering).
+    The skeleton currently exposes only the authentication surface.
+
+    Authorization model: every user is implicitly a regular user; additional global roles
+    (`ADMIN`) are carried as the `roles` array and only ever ADD privileges on top of that
+    baseline. `ADMIN` is the management role: it may reset any user's password (and will own
+    future management surfaces).
+
+    All error responses use RFC 7807 `application/problem+json` (`ProblemDetail`).
+    Any endpoint may additionally return `500` (`InternalServerError`) on an
+    unexpected server fault.
+servers:
+  - url: http://localhost:8081
+    description: Local dev
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+  - name: users
+
+paths:
+  /api/v1/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Exchange credentials for a JWT
+      description: |
+        Rate-limited per client IP, and additionally throttled per account: after several
+        consecutive failures for one email (default 5, `LOGIN_LOCKOUT_THRESHOLD`), further
+        attempts for that account — even with the correct password — are rejected with `429`
+        for a lockout window (default 15 min, `LOGIN_LOCKOUT_DURATION_SECONDS`). A successful
+        login resets the counter.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      summary: Exchange a refresh token for a fresh access + refresh pair
+      description: |
+        Pure-sliding session renewal. Accepts a valid, unexpired, non-revoked refresh token and
+        returns a brand-new access token and refresh token (each with a full TTL). The presented
+        refresh token is left valid until its own expiry — it is not rotated out. Requires no
+        `Authorization` header (the access token may already be expired). Returns `401` for a
+        missing/invalid/expired/revoked refresh token, if the user no longer exists, or if the
+        token was minted before the user's most recent password change.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: A fresh token pair
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke the bearer token (server-side denylist)
+      description: |
+        Revokes the access token carried in the `Authorization` header. If a `refreshToken` is
+        supplied in the body, it is revoked too. The body is optional.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '204':
+          description: Token revoked
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/users/{id}/password:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      tags: [users]
+      operationId: changeUserPassword
+      summary: Change a user's password
+      description: |
+        Sets a new password for the user (minimum 10 characters). Only the password is
+        changed; no other fields are touched. Requires the caller to be the target user,
+        or to be ADMIN. When the caller changes their OWN password (even an admin),
+        `currentPassword` is required and must match; an admin resetting another user's
+        password omits it. A successful change invalidates all outstanding refresh tokens
+        (already-issued access tokens expire naturally within their TTL).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordUpdateRequest'
+      responses:
+        '204': { description: Password updated }
+        '400':
+          description: New password shorter than 10 characters or longer than 71 UTF-8 bytes
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Caller is not the target user and not ADMIN, or the required current password is missing/incorrect
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      # int32: ids are 32-bit server-side; a non-numeric or out-of-range id is a 400.
+      schema: { type: integer, format: int32, minimum: 0 }
+
+  responses:
+    BadRequest:
+      description: Malformed request
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    Forbidden:
+      description: Caller is not permitted to perform this action
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    Conflict:
+      description: Conflict with an existing resource
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    TooManyRequests:
+      description: >-
+        Throttled — either the per-IP rate-limit bucket is exhausted (generic detail) or, on
+        /login, the per-account lockout is active (account-specific detail). Both carry a
+        ProblemDetail body.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    InternalServerError:
+      description: Unexpected server error
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string }
+        password: { type: string }
+
+    LoginResponse:
+      type: object
+      required: [token, expiresAt, refreshToken, refreshExpiresAt, userId, roles]
+      properties:
+        token:
+          type: string
+          description: "Short-lived access token; send as the `Authorization: Bearer` value."
+        expiresAt:
+          type: integer
+          format: int64
+          description: Access-token expiry as Unix epoch milliseconds.
+        refreshToken:
+          type: string
+          description: Longer-lived token; POST to /api/v1/refresh to obtain a fresh pair.
+        refreshExpiresAt:
+          type: integer
+          format: int64
+          description: Refresh-token expiry as Unix epoch milliseconds.
+        userId: { type: integer, format: int32, minimum: 0 }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/UserRole' }
+          description: Additional roles of the authenticated user — empty for a regular user.
+
+    UserRole:
+      type: string
+      enum: [ADMIN]
+      description: >-
+        An additional role. Every user is implicitly a regular user; the array only ever
+        carries privileges added on top of that baseline.
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    LogoutRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          description: Optional refresh token to revoke together with the access token.
+
+    PasswordUpdateRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 10
+          description: The new password (at least 10 characters, at most 71 UTF-8 bytes).
+        currentPassword:
+          type: string
+          description: >-
+            Required when the caller changes their OWN password (even an admin); omitted
+            for an admin resetting somebody else's.
+
+    ProblemDetail:
+      type: object
+      description: RFC 7807 problem detail. Served as `application/problem+json`.
+      required: [title, status]
+      properties:
+        type:
+          type: string
+          default: about:blank
+          description: A URI reference identifying the problem type.
+        title:
+          type: string
+          description: Short, human-readable summary of the problem type.
+        status:
+          type: integer
+          description: HTTP status code.
+        detail:
+          type: string
+          description: Human-readable explanation specific to this occurrence.
+        instance:
+          type: string
+          description: URI reference of the specific occurrence (the request path).

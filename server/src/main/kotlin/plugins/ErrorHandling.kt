@@ -1,0 +1,211 @@
+package ch.nokillswit.plugins
+
+import ch.nokillswit.audit.audit
+import ch.nokillswit.authz.ConflictException
+import ch.nokillswit.authz.ForbiddenException
+import ch.nokillswit.authz.NotFoundException
+import ch.nokillswit.authz.TooManyRequestsException
+import ch.nokillswit.authz.UnauthorizedException
+import io.ktor.server.auth.jwt.JWTPrincipal
+import io.ktor.server.auth.principal
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.TextContent
+import io.ktor.http.decodeURLPart
+import io.ktor.http.withCharset
+import io.ktor.serialization.ContentConvertException
+import io.ktor.server.application.*
+import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.plugins.CannotTransformContentToTypeException
+import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.request.path
+import io.ktor.server.response.respond
+import io.r2dbc.spi.R2dbcException
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+
+/**
+ * RFC 7807 problem detail. Serialized as `application/problem+json`.
+ *
+ * `type` defaults to `about:blank`, in which case `title` is the standard reason phrase for
+ * `status` (per the RFC). `detail` is the occurrence-specific message.
+ */
+@Serializable
+data class ProblemDetail(
+    val type: String = "about:blank",
+    val title: String,
+    val status: Int,
+    val detail: String? = null,
+    val instance: String? = null,
+)
+
+/** RFC 7807 media type for error bodies. */
+val ProblemJson: ContentType = ContentType("application", "problem+json")
+
+private val problemSerializer = Json { encodeDefaults = true; explicitNulls = false }
+
+/**
+ * Respond with an RFC 7807 `application/problem+json` body. Goes through [TextContent] explicitly
+ * so ContentNegotiation does not relabel it as `application/json`. Usable from anywhere — including
+ * the JWT `challenge`, which runs outside [StatusPages].
+ */
+suspend fun ApplicationCall.respondProblem(
+    status: HttpStatusCode,
+    detail: String? = null,
+    title: String = status.description,
+    instance: String? = null,
+) {
+    val problem = ProblemDetail(title = title, status = status.value, detail = detail, instance = instance)
+    respond(
+        TextContent(
+            problemSerializer.encodeToString(ProblemDetail.serializer(), problem),
+            ProblemJson.withCharset(Charsets.UTF_8),
+            status,
+        )
+    )
+}
+
+private const val PG_UNIQUE_VIOLATION = "23505"
+
+// character_not_in_repertoire: PostgreSQL rejects NUL (0x00) inside text values — a client
+// error (nothing legitimate contains NUL), not a server fault.
+private const val PG_CHARACTER_NOT_IN_REPERTOIRE = "22021"
+
+private fun Throwable.hasSqlState(state: String): Boolean {
+    var cur: Throwable? = this
+    while (cur != null) {
+        if (cur is R2dbcException && cur.sqlState == state) return true
+        cur = cur.cause
+    }
+    return false
+}
+
+// Internal (not private): the user-import loop classifies per-row duplicates with it.
+internal fun Throwable.isUniqueViolation(): Boolean = hasSqlState(PG_UNIQUE_VIOLATION)
+
+internal fun Throwable.isCharacterNotInRepertoire(): Boolean = hasSqlState(PG_CHARACTER_NOT_IN_REPERTOIRE)
+
+private suspend fun ApplicationCall.respondConflict() =
+    respondProblem(HttpStatusCode.Conflict, "Resource already exists")
+
+private suspend fun ApplicationCall.respondDbFailure(cause: Throwable) = when {
+    cause.isUniqueViolation() -> respondConflict()
+    cause.isCharacterNotInRepertoire() ->
+        respondProblem(HttpStatusCode.BadRequest, "Text must not contain the NUL character")
+    else -> respondInternalError(cause)
+}
+
+private suspend fun ApplicationCall.respondInternalError(cause: Throwable) {
+    application.log.error("Unhandled exception while processing ${request.local.method.value} ${request.local.uri}", cause)
+    respondProblem(HttpStatusCode.InternalServerError, "An unexpected error occurred")
+}
+
+// ContentNegotiation wraps every converter failure in BadRequestException("Failed to convert
+// request body to class ch.nokillswit...", JsonConvertException) — the FQCN is internal
+// structure in a client-facing body (MT-007; API-ERR-003) and the text is Ktor-version
+// -dependent, so it is replaced with fixed vocabulary. The wrap always carries a
+// ContentConvertException in its cause chain; our own validators throw BadRequestException
+// with no such cause, so their intentional messages pass through untouched.
+private fun Throwable.hasContentConvertCause(): Boolean {
+    var cur: Throwable? = cause
+    while (cur != null) {
+        if (cur is ContentConvertException) return true
+        cur = cur.cause
+    }
+    return false
+}
+
+// The Resources plugin's path/query decode failures arrive as BadRequestException with this
+// exact message (an overflowing id, a non-numeric segment) — equally internal vocabulary.
+private const val RESOURCE_DECODE_MESSAGE = "Can't transform call to resource"
+
+private fun clientSafeBadRequestDetail(cause: BadRequestException): String = when {
+    cause.hasContentConvertCause() -> "Request body is invalid or does not match the expected schema"
+    cause.message == RESOURCE_DECODE_MESSAGE -> "Path or query parameter is malformed"
+    else -> cause.message ?: "Bad request"
+}
+
+// Path ids are unsigned (UInt) end-to-end, but kotlinx's UInt decoding parses via
+// toInt().toUInt() — a negative segment like /users/-1 silently WRAPPED to 4294967295 and
+// flowed into the normal lookup instead of failing (MT-005), contradicting the spec's
+// `minimum: 0`. No legitimate /api/ path has a negative-integer segment.
+private val NEGATIVE_ID_SEGMENT = Regex("""^-\d+$""")
+
+private fun ApplicationCall.hasNegativeIdSegment(): Boolean {
+    val path = request.path()
+    return path.startsWith("/api/") &&
+        path.split('/').any { NEGATIVE_ID_SEGMENT.matches(it.decodeURLPart()) }
+}
+
+fun Application.configureErrorHandling() {
+    install(StatusPages) {
+        // The per-IP RateLimit plugin rejects with a bodiless 429; give it the same RFC 7807
+        // body every other error carries. NOTE: this status handler intercepts EVERY 429 that
+        // StatusPages itself didn't produce — so caller-specific 429s (the login lockout) must
+        // go through TooManyRequestsException below (handled calls are marked and skipped),
+        // never a direct respondProblem, or their specific detail would be replaced.
+        status(HttpStatusCode.TooManyRequests) { call, status ->
+            call.respondProblem(status, "Rate limit exceeded — retry later")
+        }
+        // Routing's wrong-method-on-an-existing-path rejection is a bodiless 405; give it the
+        // RFC 7807 body every other error carries (MT-004; API-ERR-001). No `Allow` header —
+        // Ktor does not surface the allowed-method set at this point (noted in the guidelines).
+        status(HttpStatusCode.MethodNotAllowed) { call, status ->
+            call.respondProblem(status, "Method not allowed for this resource")
+        }
+        exception<TooManyRequestsException> { call, cause ->
+            call.respondProblem(HttpStatusCode.TooManyRequests, cause.message ?: "Too many requests")
+        }
+        exception<BadRequestException> { call, cause ->
+            call.respondProblem(HttpStatusCode.BadRequest, clientSafeBadRequestDetail(cause))
+        }
+        // A POST/PUT with NO Content-Type (a truly body-less request) never enters
+        // ContentNegotiation (no converter matches ContentType.Any), so `call.receive` throws
+        // this instead of the BadRequestException the converter path wraps malformed JSON in —
+        // and it used to escape to the 500 catch-all (v2.34.0; the 22021 central-mapping
+        // precedent). Deliberately NOT the abstract ContentTransformationException parent:
+        // that would mislabel a future PayloadTooLarge (413) / UnsupportedMediaType (415).
+        exception<CannotTransformContentToTypeException> { call, _ ->
+            call.respondProblem(HttpStatusCode.BadRequest, "Request body is missing or not JSON")
+        }
+        exception<UnauthorizedException> { call, cause ->
+            call.respondProblem(HttpStatusCode.Unauthorized, cause.message ?: "Unauthorized")
+        }
+        exception<ForbiddenException> { call, cause ->
+            // Denials are part of the security audit trail: who tried what they may not do.
+            audit(
+                "authz.denied",
+                "method" to call.request.local.method.value,
+                "path" to call.request.local.uri,
+                "userId" to call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong(),
+                "detail" to cause.message,
+            )
+            call.respondProblem(HttpStatusCode.Forbidden, cause.message ?: "Forbidden")
+        }
+        exception<NotFoundException> { call, cause ->
+            call.respondProblem(HttpStatusCode.NotFound, cause.message ?: "Resource not found")
+        }
+        exception<ConflictException> { call, cause ->
+            call.respondProblem(HttpStatusCode.Conflict, cause.message ?: "Conflict", instance = cause.instance)
+        }
+        // Non-unique DB failures fall through to a 500 problem (logged) instead of rethrowing,
+        // which would escape StatusPages and yield a bodiless default 500.
+        exception<ExposedSQLException> { call, cause ->
+            call.respondDbFailure(cause)
+        }
+        exception<R2dbcException> { call, cause ->
+            call.respondDbFailure(cause)
+        }
+        exception<Throwable> { call, cause ->
+            call.respondInternalError(cause)
+        }
+    }
+    // The negative-id rejection (MT-005) runs before routing, so no handler ever sees the
+    // silently wrapped value; StatusPages above turns the throw into the problem body.
+    intercept(ApplicationCallPipeline.Plugins) {
+        if (call.hasNegativeIdSegment()) {
+            throw BadRequestException("Path id must be a non-negative integer")
+        }
+    }
+}

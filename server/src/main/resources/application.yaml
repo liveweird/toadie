@@ -1,0 +1,97 @@
+ktor:
+  # Development default for :server:run and tests; the Docker image ships
+  # KTOR_DEVELOPMENT=false (production mode: JWT/seed fail-closed checks active,
+  # HSTS + HTTPS redirect on).
+  development: "$KTOR_DEVELOPMENT:true"
+  deployment:
+    port: 8081
+  application:
+    modules:
+      # — base plugins
+      - ch.nokillswit.plugins.HttpKt.configureHttp
+      - ch.nokillswit.plugins.SecurityHeadersKt.configureSecurityHeaders
+      - ch.nokillswit.plugins.MonitoringKt.configureMonitoring
+      - ch.nokillswit.plugins.SerializationKt.configureSerialization
+      - ch.nokillswit.plugins.SecurityKt.configureSecurity
+      - ch.nokillswit.plugins.ErrorHandlingKt.configureErrorHandling
+      - ch.nokillswit.plugins.OpenTelemetryKt.configureOpenTelemetry
+      - ch.nokillswit.plugins.AutoHeadResponseKt.configureAutoHeadResponse
+      - ch.nokillswit.plugins.ResourcesKt.configureResources
+      # — infrastructure
+      - ch.nokillswit.infra.db.FlywayKt.configureFlyway
+      - ch.nokillswit.infra.db.DatabaseKt.configureDatabase
+      - ch.nokillswit.infra.db.BootstrapKt.configureBootstrap
+      # — features
+      - ch.nokillswit.users.UserRoutesKt.configureUserRoutes
+      - ch.nokillswit.auth.AuthRoutesKt.configureAuthRoutes
+      # — catch-all router
+      - ch.nokillswit.plugins.RoutingKt.configureRouting
+
+security:
+  # Per-account login lockout (complements the per-IP rate limit): after `threshold`
+  # consecutive failures for one email, further attempts are 429 for `durationSeconds`.
+  # A successful login resets the counter. In-memory, per-instance.
+  lockout:
+    threshold: "$LOGIN_LOCKOUT_THRESHOLD:5"
+    durationSeconds: "$LOGIN_LOCKOUT_DURATION_SECONDS:900"
+  # Per-IP token bucket on POST /api/v1/login. The per-account lockout above is the
+  # actual brute-force defence and is unaffected by this. Blank FOLLOWS THE MODE:
+  # 10/min in production, 1000/min in development — the e2e suite drives many logins
+  # from a single host and would otherwise spend minutes sleeping out the bucket.
+  # Set a number to pin it in either mode.
+  rateLimit:
+    loginPerMinute: "$LOGIN_RATE_LIMIT_PER_MINUTE:"
+  csrf:
+    # TEMPLATE PLACEHOLDER — CSRF protection is off by default because this API
+    # authenticates via bearer JWT in the Authorization header, which browsers
+    # do not auto-attach to cross-origin requests. Enable only if you move to
+    # cookie-based session auth.
+    enabled: "$SECURITY_CSRF_ENABLED:false"
+
+jwt:
+  secret: "$JWT_SECRET:secret"
+  issuer: "$JWT_ISSUER:http://0.0.0.0:8081/"
+  audience: "$JWT_AUDIENCE:toadie-api"
+  realm: "$JWT_REALM:toadie-api"
+  # Short-lived access token used as the API bearer; the SPA silently refreshes it.
+  accessExpiresInSeconds: "$JWT_ACCESS_EXPIRES_IN_SECONDS:900"
+  # Longer-lived refresh token exchanged at POST /api/v1/refresh. Pure-sliding: each
+  # refresh mints a fresh pair, so an idle session ends only after this window elapses.
+  refreshExpiresInSeconds: "$JWT_REFRESH_EXPIRES_IN_SECONDS:3600"
+
+bootstrap:
+  # When set and the V3 seed admin still has the well-known "changeme" password,
+  # it is rotated to this value at startup (idempotent — a later admin-chosen
+  # password is never overwritten). Outside development mode, startup FAILS if
+  # any account still carries the seed password.
+  adminInitialPassword: "$ADMIN_INITIAL_PASSWORD:"
+
+http:
+  # Set true when the app runs behind a reverse proxy / ingress that terminates TLS.
+  # Installs XForwardedHeaders so the client IP (rate limiting) and scheme (HTTPS
+  # redirect) come from X-Forwarded-* headers. The proxy MUST set X-Forwarded-For
+  # and X-Forwarded-Proto and strip client-supplied values.
+  behindProxy: "$HTTP_BEHIND_PROXY:false"
+  # Comma-separated cross-origin hosts allowed to call the API (e.g.
+  # "app.example.com,other.example.com:8443"). Empty (the default) = CORS is not
+  # installed at all: production is single-origin (Ktor serves the SPA) and local
+  # dev goes through the Vite proxy, so no cross-origin caller exists.
+  corsHosts: "$CORS_ALLOWED_HOSTS:"
+  # Swagger UI + the OpenAPI spec at /openapi. Blank (default) = follow the mode:
+  # served in development, hidden in production. Set "true" to expose them in a
+  # trusted production environment, "false" to hide them even in development.
+  exposeOpenApi: "$HTTP_EXPOSE_OPENAPI:"
+
+web:
+  # When set, the server serves the built React SPA from this directory (static
+  # assets + SPA fallback to index.html). Empty in local dev, where Vite serves
+  # the SPA on :5174; set to /app/web inside the Docker image.
+  staticDir: "$WEB_STATIC_DIR:"
+
+postgres:
+  # Local-dev defaults point at the docker-compose Postgres, which maps host port
+  # 5433 (not 5432 — Lettuce may occupy it on the same machine).
+  jdbcUrl: "$POSTGRES_JDBC_URL:jdbc:postgresql://localhost:5433/toadie"
+  r2dbcUrl: "$POSTGRES_R2DBC_URL:r2dbc:postgresql://localhost:5433/toadie"
+  user: "$POSTGRES_USER:toadie"
+  password: "$POSTGRES_PASSWORD:toadie"

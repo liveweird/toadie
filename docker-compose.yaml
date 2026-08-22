@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: toadie-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: toadie
+      POSTGRES_USER: toadie
+      POSTGRES_PASSWORD: toadie
+    ports:
+      # Host port 5433 (not 5432) so Toadie can run beside Lettuce on the same machine;
+      # in-network consumers still use postgres:5432.
+      - "5433:5432"
+    volumes:
+      # postgres 18+ images keep data in a versioned subdir of /var/lib/postgresql;
+      # mounting the pre-18 /var/lib/postgresql/data path makes the container unhealthy.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toadie -d toadie"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: toadie-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/toadie
+      POSTGRES_R2DBC_URL: r2dbc:postgresql://postgres:5432/toadie
+      POSTGRES_USER: toadie
+      POSTGRES_PASSWORD: toadie
+      # This compose file is the LOCAL DEMO (clone & run over plain http://localhost:8081).
+      # Development mode keeps HSTS/HTTPS-redirect off and tolerates the demo credentials
+      # below. Any real deployment runs the image as shipped (KTOR_DEVELOPMENT=false), which
+      # fail-closes on this JWT key and on the seeded 'changeme' password.
+      KTOR_DEVELOPMENT: "true"
+      # Bundled-demo signing key so tokens can't be forged with the placeholder "secret".
+      # It is committed to the repo and therefore BURNED: production mode refuses to start
+      # with it. Set your own (e.g. `openssl rand -hex 32`) for any real deployment.
+      JWT_SECRET: "${JWT_SECRET:-dev-only-00366d050fa2c920f7efb9a880b8b9c60e693b1797e782a33ddbfb51f88ea9d0}"
+    ports:
+      - "8081:8081"
+    # Ceiling for the tuned JVM (SerialGC + -Xmx256m + C1, baked into bin/server): ~270 MiB RSS
+    # under light load, so 512 MiB leaves comfortable headroom and bounds the container.
+    mem_limit: 512m
+
+volumes:
+  postgres-data:
