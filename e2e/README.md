@@ -81,6 +81,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   import as Created, export downloads them as one `---`-separated file, and re-importing the
   export reports every row Already exists (nothing overwritten).
+- [`url-import.spec.ts`](scenarios/url-import.md) — fetch-from-URL through the real SSRF
+  guard: a loopback URL is refused with the uniform public-https error (the happy network
+  path deliberately stays server-tested, no external dependency in CI).
 - [`users.spec.ts`](scenarios/users.md) — the account lifecycle: create via the one-time
   password reveal → the new user's limited view + self password change → promotion →
   deletion → the dead login; own-row protections on the admin's row.
