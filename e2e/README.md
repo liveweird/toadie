@@ -78,6 +78,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   live; kind badges on the list.
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored, missing, and
   external nodes for a throwaway namespace; toggling a relation family prunes its nodes.
+- [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
+  import as Created, export downloads them as one `---`-separated file, and re-importing the
+  export reports every row Already exists (nothing overwritten).
 - [`users.spec.ts`](scenarios/users.md) — the account lifecycle: create via the one-time
   password reveal → the new user's limited view + self password change → promotion →
   deletion → the dead login; own-row protections on the admin's row.
