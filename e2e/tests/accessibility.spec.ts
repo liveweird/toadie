@@ -34,6 +34,8 @@ test("login screen has no WCAG A/AA violations", async ({ page }) => {
 // One test per page keeps the report line-per-page.
 const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/", heading: "Home" },
+  { path: "/catalog-files", heading: "Catalog files" },
+  { path: "/catalog-files/new", heading: "New catalog file" },
 ];
 
 for (const { path, heading } of AUTHED_PAGES) {

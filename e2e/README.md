@@ -63,8 +63,11 @@ outcomes). **A new or behaviorally changed test lands with its scenario file and
 the same commit** — this list is the coverage map, the scenario file is the design.
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
-  authenticated pages (currently `/`); `color-contrast` consciously waived theme-wide.
+  authenticated pages (`/`, `/catalog-files`, `/catalog-files/new`); `color-contrast`
+  consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
+- [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
+  create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
 
 Specs log in with the seeded admin (`admin@toadie.local`, password `changeme`), and use unique
 content where they create any — so they don't depend on a clean database or absolute counts.

@@ -32,3 +32,22 @@ export async function login(page: Page, email = ADMIN, password = PASSWORD): Pro
 export function logoutButton(page: Page) {
   return page.getByRole("button", { name: "Logout" });
 }
+
+/** Collision-free text so specs never depend on absolute counts or clean state. */
+export function uniqueText(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+}
+
+/**
+ * Ensure a list view's filter panel is expanded. Idempotent on purpose: the open/collapsed
+ * state persists per view in localStorage (toadie.viewSettings.*), so within one test a
+ * revisited page restores the panel open — a blind toggle click would close it again.
+ */
+export async function openFilters(page: Page): Promise<void> {
+  const toggle = page.getByRole("button", { name: "Filters" });
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
