@@ -16,8 +16,9 @@
      present, empty is fine); the file saves.
 2. They create an **API** in the same namespace, pasting a definition into the required
    Definition textarea.
-3. They create a **Component** in the same namespace, owned by the group (a bare name — the
-   default group kind) and providing the API.
+3. They create a **Component** in the same namespace, picking the owner from the reference
+   picker — the just-created group is suggested and inserts as the shortened bare name (same
+   namespace + the field's default group kind) — and providing the API.
    - *Expected*: the editor's live References panel shows the all-clear — the owner and the
      provided API both resolve against the files just stored.
 4. On the Catalog files list, filtered by the namespace, all three rows show their kind badges

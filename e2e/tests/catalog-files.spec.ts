@@ -15,7 +15,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
   await page.getByRole("combobox", { name: "Type" }).fill("service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
-  await page.getByRole("textbox", { name: "Owner" }).fill("group:default/platform");
+  await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("E2E Component");
 
   // The live preview reflects the document before anything is saved.

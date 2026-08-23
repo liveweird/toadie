@@ -14,7 +14,7 @@ test("a dangling reference is flagged, then resolves once the target file exists
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(source);
   await page.getByRole("combobox", { name: "Type" }).fill("service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
-  await page.getByRole("textbox", { name: "Owner" }).fill("group:default/platform");
+  await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await page.getByRole("combobox", { name: "Depends on" }).fill(`component:${ghost}`);
   await page.keyboard.press("Enter");
 
@@ -41,7 +41,7 @@ test("a dangling reference is flagged, then resolves once the target file exists
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(ghost);
   await page.getByRole("combobox", { name: "Type" }).fill("service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
-  await page.getByRole("textbox", { name: "Owner" }).fill("group:default/platform");
+  await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await Promise.all([
     page.waitForResponse(
       (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),

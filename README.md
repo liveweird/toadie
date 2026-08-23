@@ -12,7 +12,7 @@ working authentication surface:
 - **visual creation** of `catalog-info.yaml` files across the seven landscape kinds
   (Component, API, System, Domain, Resource, Group, User) — validated per kind against the
   Backstage descriptor format, stored server-side with full CRUD and a paginated list, live
-  YAML preview, one-click download,
+  YAML preview, one-click download, and reference pickers suggesting the stored entities,
 - **cross-checking**: a workspace report resolving every entity reference between stored
   files — owners, systems, APIs, domains, groups and users included (missing targets and
   kind-less `dependsOn` entries as errors; only Location/Template/custom kinds stay

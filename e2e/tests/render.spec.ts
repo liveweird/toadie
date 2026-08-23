@@ -19,7 +19,7 @@ test("the graph renders stored, missing, and external nodes for a namespace", as
     await page.getByRole("textbox", { name: "Namespace" }).fill(ns);
     await page.getByRole("combobox", { name: "Type" }).fill("service");
     await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
-    await page.getByRole("textbox", { name: "Owner" }).fill("group:default/platform");
+    await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
     for (const ref of dependsOn) {
       await page.getByRole("combobox", { name: "Depends on" }).fill(ref);
       await page.keyboard.press("Enter");
