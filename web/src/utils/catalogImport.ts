@@ -156,6 +156,21 @@ function mapDocument(raw: unknown): CatalogFileRequest {
   return { kind: mapKind(doc.kind), metadata: mapMetadata(doc.metadata), spec: mapSpec(doc.spec) };
 }
 
+/**
+ * Convenience rewrites of Git-hosting BROWSER links to their raw-file form, applied before
+ * the server-side fetch (which needs the actual file, not the HTML viewer): GitHub
+ * `/blob/` links become raw.githubusercontent.com, GitLab `/-/blob/` becomes `/-/raw/`.
+ * Anything else — raw links included — passes through untouched.
+ */
+export function normalizeCatalogUrl(url: string): string {
+  const trimmed = url.trim();
+  const github = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/.exec(trimmed);
+  if (github) {
+    return `https://raw.githubusercontent.com/${github[1]}/${github[2]}/${github[3]}`;
+  }
+  return trimmed.replace(/^(https:\/\/[^/]+\/.+)\/-\/blob\//, "$1/-/raw/");
+}
+
 /** Parses a (multi-document) catalog-info.yaml; every error carries its document's index. */
 export function parseCatalogYaml(text: string): CatalogParseResult {
   const documents: CatalogFileRequest[] = [];

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { CatalogFileRequest } from "../api/catalogFiles";
-import { parseCatalogYaml } from "./catalogImport";
+import { normalizeCatalogUrl, parseCatalogYaml } from "./catalogImport";
 import { catalogInfoMultiYaml } from "./catalogYaml";
 
 const COMPONENT_YAML = [
@@ -148,5 +148,36 @@ describe("parseCatalogYaml", () => {
     const { documents, errors } = parseCatalogYaml(catalogInfoMultiYaml(files));
     expect(errors).toEqual([]);
     expect(documents).toEqual(files);
+  });
+});
+
+describe("normalizeCatalogUrl", () => {
+  test("rewrites a GitHub blob link to its raw.githubusercontent.com form", () => {
+    expect(
+      normalizeCatalogUrl("https://github.com/acme/service/blob/main/catalog-info.yaml"),
+    ).toBe("https://raw.githubusercontent.com/acme/service/main/catalog-info.yaml");
+    expect(
+      normalizeCatalogUrl("https://github.com/acme/service/blob/v1.2/nested/dir/catalog-info.yaml"),
+    ).toBe("https://raw.githubusercontent.com/acme/service/v1.2/nested/dir/catalog-info.yaml");
+  });
+
+  test("rewrites a GitLab blob link to its raw form (self-hosted included)", () => {
+    expect(
+      normalizeCatalogUrl("https://gitlab.com/acme/service/-/blob/main/catalog-info.yaml"),
+    ).toBe("https://gitlab.com/acme/service/-/raw/main/catalog-info.yaml");
+    expect(
+      normalizeCatalogUrl("https://git.corp.example/group/sub/repo/-/blob/main/catalog-info.yaml"),
+    ).toBe("https://git.corp.example/group/sub/repo/-/raw/main/catalog-info.yaml");
+  });
+
+  test("leaves raw links and everything else untouched (trim aside)", () => {
+    const raw = "https://raw.githubusercontent.com/acme/service/main/catalog-info.yaml";
+    expect(normalizeCatalogUrl(raw)).toBe(raw);
+    expect(normalizeCatalogUrl("  https://example.com/catalog-info.yaml  ")).toBe(
+      "https://example.com/catalog-info.yaml",
+    );
+    expect(normalizeCatalogUrl("https://example.com/blob/of/text.yaml")).toBe(
+      "https://example.com/blob/of/text.yaml",
+    );
   });
 });

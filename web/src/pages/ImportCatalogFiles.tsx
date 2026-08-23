@@ -10,13 +10,14 @@ import {
   Stack,
   Table,
   Text,
+  TextInput,
   Textarea,
   Title,
 } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { IconArrowLeft, IconFileImport, IconUpload } from "@tabler/icons-react";
-import { importCatalogFiles, type ImportFileResult } from "../api/catalogFiles";
-import { parseCatalogYaml } from "../utils/catalogImport";
+import { IconArrowLeft, IconDownload, IconFileImport, IconUpload } from "@tabler/icons-react";
+import { fetchCatalogUrl, importCatalogFiles, type ImportFileResult } from "../api/catalogFiles";
+import { normalizeCatalogUrl, parseCatalogYaml } from "../utils/catalogImport";
 import { saveErrorMessage } from "../utils/saveError";
 
 const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
@@ -30,6 +31,9 @@ export default function ImportCatalogFiles() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
+  const [url, setUrl] = useState("");
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [results, setResults] = useState<ImportFileResult[] | null>(null);
@@ -41,6 +45,28 @@ export default function ImportCatalogFiles() {
     if (!file) return;
     setText(await file.text());
     setResults(null);
+  }
+
+  // Server-side fetch (any reachable public host, not just CORS-friendly ones); blob-style
+  // Git-hosting links are rewritten to their raw form first.
+  async function handleFetchUrl() {
+    setFetching(true);
+    setFetchError(null);
+    try {
+      const fetched = await fetchCatalogUrl(normalizeCatalogUrl(url));
+      setText(fetched.content);
+      setResults(null);
+    } catch (err) {
+      setFetchError(
+        saveErrorMessage(err, t, {
+          invalid: "catalog.import.urlInvalid",
+          failedStatus: "catalog.import.urlFailedStatus",
+          failed: "catalog.import.urlFailedNetwork",
+        }),
+      );
+    } finally {
+      setFetching(false);
+    }
   }
 
   async function handleImport() {
@@ -72,6 +98,31 @@ export default function ImportCatalogFiles() {
       <Text size="sm" c="dimmed">
         {t("catalog.import.intro")}
       </Text>
+
+      <Group align="flex-end" gap="xs">
+        <TextInput
+          label={t("catalog.import.urlLabel")}
+          placeholder="https://raw.githubusercontent.com/acme/service/main/catalog-info.yaml"
+          value={url}
+          onChange={(event) => setUrl(event.currentTarget.value)}
+          style={{ flex: 1 }}
+        />
+        <Button
+          variant="default"
+          leftSection={<IconDownload size={16} />}
+          onClick={() => void handleFetchUrl()}
+          disabled={!url.trim()}
+          loading={fetching}
+        >
+          {t("catalog.import.fetchButton")}
+        </Button>
+      </Group>
+
+      {fetchError && (
+        <Alert color="red" variant="light" title={t("catalog.import.urlFailedTitle")}>
+          {fetchError}
+        </Alert>
+      )}
 
       <Textarea
         label={t("catalog.import.textareaLabel")}

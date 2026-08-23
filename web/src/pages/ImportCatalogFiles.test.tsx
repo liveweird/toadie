@@ -199,6 +199,68 @@ describe("ImportCatalogFiles page", () => {
     );
   });
 
+  test("fetching a URL loads the text, normalizing GitHub blob links first", async () => {
+    mockFetch.mockImplementation((fetchUrl: string, init?: RequestInit) =>
+      fetchUrl === "/api/v1/catalog-files/fetch" && init?.method === "POST"
+        ? Promise.resolve(jsonResponse(200, { content: TWO_DOCS }))
+        : Promise.resolve(jsonResponse(404, {})),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    const urlInput = screen.getByLabelText("Fetch from URL");
+    expect(screen.getByRole("button", { name: "Fetch" })).toBeDisabled();
+    fireEvent.change(urlInput, {
+      target: { value: "https://github.com/acme/service/blob/main/catalog-info.yaml" },
+    });
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+
+    expect(await screen.findByText("2 documents ready to import")).toBeInTheDocument();
+    expect(screen.getByLabelText("YAML content")).toHaveValue(TWO_DOCS);
+
+    const [, init] = mockFetch.mock.calls.find(([u]) => u === "/api/v1/catalog-files/fetch")!;
+    const body = JSON.parse((init as RequestInit).body as string) as { url: string };
+    expect(body.url).toBe("https://raw.githubusercontent.com/acme/service/main/catalog-info.yaml");
+  });
+
+  test("a blocked URL shows the fixed public-https message", async () => {
+    mockFetch.mockImplementation((fetchUrl: string) =>
+      fetchUrl === "/api/v1/catalog-files/fetch"
+        ? Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }))
+        : Promise.resolve(jsonResponse(404, {})),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText("Fetch from URL"), {
+      target: { value: "http://10.0.0.1/catalog-info.yaml" },
+    });
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+
+    expect(
+      await screen.findByText(
+        "The URL must be a public https address (GitHub/GitLab links are converted automatically).",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test("an upstream failure shows the status-tagged fetch message", async () => {
+    mockFetch.mockImplementation((fetchUrl: string) =>
+      fetchUrl === "/api/v1/catalog-files/fetch"
+        ? Promise.resolve(jsonResponse(502, { title: "Bad Gateway", status: 502 }))
+        : Promise.resolve(jsonResponse(404, {})),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText("Fetch from URL"), {
+      target: { value: "https://example.com/catalog-info.yaml" },
+    });
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+
+    expect(await screen.findByText(/Couldn't fetch the URL \(502\)/)).toBeInTheDocument();
+  });
+
   test("picking a file loads its text into the textarea", async () => {
     renderPage();
     const file = new File([TWO_DOCS], "catalog-info.yaml", { type: "text/yaml" });

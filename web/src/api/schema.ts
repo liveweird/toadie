@@ -363,6 +363,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/catalog-files/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch a catalog-info.yaml from a URL (server-side)
+         * @description Retrieves the raw text at the given URL so the SPA can drop it into the import flow —
+         *     server-side so any reachable host works, not only CORS-friendly ones. YAML parsing
+         *     stays a client concern; this returns TEXT.
+         *
+         *     SSRF posture: the URL must be an absolute `https` address without credentials whose
+         *     host resolves ONLY to public addresses — anything else (http, userinfo, loopback,
+         *     private/link-local/unique-local ranges, unresolvable hosts) is a uniform `400` that
+         *     never echoes what was probed. Redirects are not followed (`502` — use the final URL),
+         *     the response body is capped at 1 MB, and upstream failures (non-200, timeout,
+         *     oversize) answer `502`.
+         */
+        post: operations["fetchCatalogUrl"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/catalog-files/{id}": {
         parameters: {
             query?: never;
@@ -480,6 +509,17 @@ export interface components {
          * @enum {string}
          */
         EntityKind: "Component" | "API" | "System" | "Domain" | "Resource" | "Group" | "User";
+        FetchUrlRequest: {
+            /**
+             * @description Absolute https URL of a catalog-info.yaml, without credentials, resolving to a public host.
+             * @example https://raw.githubusercontent.com/acme/service/main/catalog-info.yaml
+             */
+            url: string;
+        };
+        FetchUrlResponse: {
+            /** @description The raw text at the URL (at most 1 MB), ready for the import parser. */
+            content: string;
+        };
         ExportResponse: {
             /** @description The active documents, ordered by (namespace, name) case-insensitively. */
             files: components["schemas"]["CatalogFileRequest"][];
@@ -767,6 +807,15 @@ export interface components {
         };
         /** @description Unexpected server error */
         InternalServerError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetail"];
+            };
+        };
+        /** @description The upstream request made on the caller's behalf failed (the remote answered non-200, redirected, timed out, or exceeded the size cap). */
+        BadGateway: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1293,6 +1342,34 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalServerError"];
+        };
+    };
+    fetchCatalogUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FetchUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description The raw text at the URL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FetchUrlResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+            502: components["responses"]["BadGateway"];
         };
     };
     getCatalogFile: {

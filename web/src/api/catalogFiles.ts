@@ -114,3 +114,14 @@ export async function importCatalogFiles(files: CatalogFileRequest[]): Promise<I
     body: JSON.stringify({ files }),
   });
 }
+
+export type FetchUrlResult =
+  paths["/api/v1/catalog-files/fetch"]["post"]["responses"]["200"]["content"]["application/json"];
+
+/** Server-side fetch of a catalog-info.yaml URL (SSRF-guarded); returns the raw text. */
+export async function fetchCatalogUrl(url: string): Promise<FetchUrlResult> {
+  return jsonRequest<FetchUrlResult>("/api/v1/catalog-files/fetch", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
