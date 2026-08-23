@@ -156,6 +156,16 @@ class CatalogFileService(val database: R2dbcDatabase) {
         buildGraph(sources = rendered, allSources = all)
     }
 
+    /** The export payload: active documents, (namespace, name)-ordered, optionally one namespace. */
+    suspend fun export(namespace: String?): ExportResponse = suspendTransaction(database) {
+        val folded = namespace?.lowercase()
+        val files = activeSources()
+            .map { it.file }
+            .filter { folded == null || it.metadata.namespace.lowercase() == folded }
+            .sortedWith(compareBy({ it.metadata.namespace.lowercase() }, { it.metadata.name.lowercase() }))
+        ExportResponse(files = files)
+    }
+
     private suspend fun activeSources(): List<CrossCheckSource> =
         CatalogFiles.selectAll()
             .where { active() }

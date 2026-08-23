@@ -7,6 +7,7 @@ import ch.nokillswit.infra.db.orVanished
 import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
 import ch.nokillswit.infra.paging.toPage
+import ch.nokillswit.plugins.isUniqueViolation
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
@@ -43,6 +44,14 @@ class CatalogFiles {
     @Serializable
     @Resource("graph")
     class Graph(val parent: CatalogFiles = CatalogFiles())
+
+    @Serializable
+    @Resource("export")
+    class Export(val parent: CatalogFiles = CatalogFiles())
+
+    @Serializable
+    @Resource("import")
+    class Import(val parent: CatalogFiles = CatalogFiles())
 }
 
 fun Application.configureCatalogFileRoutes() {
@@ -97,6 +106,24 @@ fun Application.configureCatalogFileRoutes() {
                 val namespace = call.request.queryParameters.optionalString("namespace")
                 call.respond(HttpStatusCode.OK, catalogFileService.graph(namespace))
             }
+            get<CatalogFiles.Export> {
+                call.caller()
+                val namespace = call.request.queryParameters.optionalString("namespace")
+                call.respond(HttpStatusCode.OK, catalogFileService.export(namespace))
+            }
+            post<CatalogFiles.Import> {
+                val caller = call.caller()
+                val request = call.receive<ImportRequest>()
+                if (request.files.size > MAX_IMPORT_FILES) {
+                    throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
+                }
+                // Report & skip: each document imports independently — a bad or clashing
+                // document becomes its own result row and never aborts its neighbors.
+                val results = request.files.mapIndexed { index, raw ->
+                    importOne(catalogFileService, caller.userId, index, raw)
+                }
+                call.respond(HttpStatusCode.OK, ImportResponse(results = results))
+            }
             get<CatalogFiles.Id> { route ->
                 call.caller()
                 val detail = catalogFileService.read(route.id)
@@ -129,6 +156,52 @@ fun Application.configureCatalogFileRoutes() {
                 )
                 call.respond(HttpStatusCode.NoContent)
             }
+        }
+    }
+}
+
+/**
+ * One import document, in isolation: sanitize → validate (a validator 400 becomes INVALID with
+ * its message) → create (an identity clash — the partial unique index's 23505 — becomes
+ * CONFLICT, report & skip; any other storage failure becomes ERROR). Nothing here rethrows —
+ * the batch always runs to completion and the result rows ARE the outcome.
+ */
+private suspend fun importOne(
+    service: CatalogFileService,
+    callerUserId: UInt,
+    index: Int,
+    raw: CatalogFile,
+): ImportFileResult {
+    val file = sanitizedCatalogFile(raw)
+    val base = ImportFileResult(
+        index = index,
+        kind = file.kind,
+        namespace = file.metadata.namespace,
+        name = file.metadata.name,
+        status = ImportResultStatus.ERROR,
+    )
+    try {
+        validateCatalogFile(file)
+    } catch (e: BadRequestException) {
+        return base.copy(status = ImportResultStatus.INVALID, message = e.message)
+    }
+    return try {
+        val id = service.create(file, callerUserId)
+        audit(
+            "catalog_file.created",
+            "byUserId" to callerUserId.toLong(),
+            "catalogFileId" to id.toLong(),
+            "import" to true,
+        )
+        base.copy(status = ImportResultStatus.CREATED, fileId = id)
+    } catch (e: Exception) {
+        if (e.isUniqueViolation()) {
+            base.copy(
+                status = ImportResultStatus.CONFLICT,
+                message = "An active catalog file with this kind, namespace, and name already exists",
+            )
+        } else {
+            base.copy(status = ImportResultStatus.ERROR, message = e.message ?: "Storage failed")
         }
     }
 }

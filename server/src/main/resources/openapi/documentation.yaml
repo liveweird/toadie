@@ -477,6 +477,64 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/catalog-files/export:
+    get:
+      tags: [catalog-files]
+      operationId: exportCatalogFiles
+      summary: Export the workspace as structured catalog documents
+      description: |
+        Every active file as a structured document (the same shape create/replace accept),
+        ordered by (namespace, name) case-insensitively so the export is deterministic. YAML
+        rendering is deliberately a client concern — the SPA joins these documents into one
+        multi-document `catalog-info.yaml` with its tested generator. Unpaged by design — a
+        report-style read of the whole workspace.
+      parameters:
+        - name: namespace
+          in: query
+          required: false
+          schema: { type: string }
+          description: Exact (case-insensitive) namespace of the files to export.
+      responses:
+        '200':
+          description: The workspace's documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/catalog-files/import:
+    post:
+      tags: [catalog-files]
+      operationId: importCatalogFiles
+      summary: Import a batch of catalog documents (report & skip)
+      description: |
+        Imports up to 200 structured documents (the SPA parses `catalog-info.yaml` client-side
+        and ships the parsed documents here). Each document imports INDEPENDENTLY and gets its
+        own result row: `CREATED` (stored, `fileId` set), `INVALID` (failed the
+        descriptor-format validation, `message` names the rule), `CONFLICT` (an active file
+        already holds the kind+namespace+name identity — nothing is overwritten), or `ERROR`
+        (an unexpected storage failure). The response is `200` even when every document failed
+        — the result rows are the outcome; a `400` covers only the batch itself (an
+        undecodable body or more than 200 entries).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportRequest'
+      responses:
+        '200':
+          description: One result per submitted document, in order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/catalog-files/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -746,6 +804,69 @@ components:
       enum: [Component, API, System, Domain, Resource, Group, User]
       default: Component
       description: Accepted case-insensitively; canonicalized on write.
+
+    ExportResponse:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          description: The active documents, ordered by (namespace, name) case-insensitively.
+          items: { $ref: '#/components/schemas/CatalogFileRequest' }
+
+    ImportRequest:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          maxItems: 200
+          description: The documents to import, each handled independently (report & skip).
+          items: { $ref: '#/components/schemas/CatalogFileRequest' }
+
+    ImportResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          description: One result per submitted document, in submission order.
+          items: { $ref: '#/components/schemas/ImportFileResult' }
+
+    ImportFileResult:
+      type: object
+      required: [index, kind, namespace, name, status]
+      properties:
+        index:
+          type: integer
+          minimum: 0
+          description: The document's 0-based position in the submitted batch.
+        kind:
+          type: string
+          description: The document's (sanitized) kind — canonical-cased when recognized.
+        namespace:
+          type: string
+          description: The sanitized namespace (lowercased; blank became `default`).
+        name:
+          type: string
+          description: The sanitized entity name.
+        status:
+          type: string
+          enum: [CREATED, INVALID, CONFLICT, ERROR]
+          description: >-
+            CREATED — stored (`fileId` set). INVALID — failed the descriptor-format validation
+            (`message` names the rule). CONFLICT — an active file already holds this identity;
+            nothing was overwritten. ERROR — an unexpected storage failure for this document.
+        fileId:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: The new file's id, only when status is CREATED.
+        message:
+          type: string
+          nullable: true
+          description: The failure detail, absent on CREATED.
 
     CatalogFileMetadata:
       type: object
