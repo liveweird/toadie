@@ -1,10 +1,12 @@
 ### List endpoint conventions
 
-> **Not yet in Toadie.** The skeleton has no list endpoint and no `infra/paging` package. When the
-> first list endpoint arrives, **port `server/src/main/kotlin/infra/paging/` from Lettuce
-> verbatim** (`Paging.kt` + `QueryParams.kt` — `PageRequest`, `parsePaging`, `applyPaging`, the
-> strict `singleValue` param reader) rather than re-implementing; the conventions below are the
-> contract it enforces.
+> **Ported.** `server/src/main/kotlin/infra/paging/` (`Paging.kt` + `QueryParams.kt` +
+> `PageResponse.kt` — `PageRequest`, `parsePaging`, `applyPaging`, `toPage`, the strict
+> `singleValue` param reader and the `optionalString/UInt/Long/Boolean/Enum` parsers) is
+> Lettuce's implementation, ported with the first list endpoint (`GET /api/v1/catalog-files` —
+> the reference implementation). Lettuce's view-scoped helpers (`optionalIncludeIndirect`,
+> `uintOnlyForView`) were deliberately left behind; re-port them with their first consumer.
+> The conventions below are the contract the package enforces.
 
 **The generic list rules are owned by `api-guidelines/API-GUIDELINES.md`** (cite the rule IDs) — summary:
 
@@ -14,6 +16,6 @@
 - Free text: `q` first, per-column substring only when a UI requires it [API-LIST-005].
 - Naming: camelCase params; reusable `Page`/`PageSize`/`Sort` under `#/components/parameters` `$ref`'d from each list path; one `*Page` envelope schema per resource; sortable/filterable whitelists documented per path [API-NAME-001..004].
 
-**Implementation shape (once ported):** `ApplicationCall.parsePaging(...)` parses `page`/`pageSize`/`sort` from the query string against the per-endpoint whitelists into a `PageRequest`; `Query.applyPaging(req, columns)` applies `.limit(...).offset(...)` + `.orderBy(...)` to an Exposed `Query`. Validation failures throw a typed exception that `StatusPages` maps to `400` + `ProblemDetail`. New list endpoints reuse these rather than re-parsing params.
+**Implementation shape:** `ApplicationCall.parsePaging(sortable = setOf(...))` parses `page`/`pageSize`/`sort` from the query string against the per-endpoint whitelist into a `PageRequest` (appending the `id`-asc tiebreaker); `Query.applyPaging(req, columns)` applies `.orderBy(...)` + `.limit(...).offset(...)` to an Exposed `Query` via the service's file-level `SORTABLE_COLUMNS` map (the two whitelists must agree — a missing column is an `error()`, i.e. a 500-grade invariant violation). Validation failures throw `BadRequestException` → `400` + `ProblemDetail`. The service runs `count()` + the page rows against ONE shared predicate in ONE `suspendTransaction` and returns an `XListResult(items, total)`; the route responds `paging.toPage(items, total)` and the DTO file declares `typealias XPageResponse = PageResponse<XResponse>`. New list endpoints copy `catalog/` (service `list` + routes `get<X>` + the OpenAPI `$ref`s to the shared `Page`/`PageSize`/`Sort` parameters and a per-resource `*Page` schema) rather than re-parsing params.
 
-**Substring filters:** every per-column substring filter must be case- AND accent-insensitive — port Lettuce's `containsNormalized` (`infra/db/Sql.kt`, rendering `LOWER(public.unaccent(col)) LIKE LOWER(public.unaccent(?))`) together with its `unaccent`-extension migration when the first one arrives; never hand-roll `lowerCase() like containsPattern(...)`, and keep unaccent-before-LOWER (the reverse breaks uppercase-diacritic input under a C-locale database). The SPA mirrors the rule client-side via a theme-level folded options filter (Lettuce's `foldedOptionsFilter`) — port it alongside.
+**Substring filters:** every per-column substring filter must be case- AND accent-insensitive — use `containsNormalized` (`infra/db/Sql.kt`, rendering `LOWER(public.unaccent(col)) LIKE LOWER(public.unaccent(?))`, extension enabled in V4); never hand-roll `lowerCase() like containsPattern(...)`, and keep unaccent-before-LOWER (the reverse breaks uppercase-diacritic input under a C-locale database). The SPA mirrors the rule client-side via the theme-level `foldedOptionsFilter` (`web/src/utils/text.ts`, wired as the Select/MultiSelect/TagsInput default filter in `theme.ts`).

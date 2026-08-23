@@ -10,7 +10,7 @@ Vite + React 19 + TypeScript SPA. The Gradle and npm toolchains are disjoint —
 
 ## Layout conventions
 
-- **Flat directories**: `pages/`, `components/`, `api/`, `changelog/`, `locales/{en,pl}/`, `test/` — no deeper nesting, no per-feature folders (a feature contributes files into these).
+- **Flat directories**: `pages/`, `components/`, `hooks/`, `utils/`, `api/`, `changelog/`, `locales/{en,pl}/`, `test/` — no deeper nesting, no per-feature folders (a feature contributes files into these).
 - **Default exports for components/pages**, named exports for everything else; **no path aliases** — relative imports only.
 - **Co-located tests**: `Foo.test.tsx` sits beside `Foo.tsx`; shared test scaffolding lives in `src/test/` (`setup.ts` forces `en`, `render.tsx` is the provider wrapper — it and every file-local `MantineProvider` must pass `env="test"`, or Select/Popover interaction silently fails under happy-dom; `http.ts` holds the fetch stubs).
 - **CSS modules only where the theme can't express it**: styling belongs in `src/theme.ts` (Mantine `createTheme` — component `extend`s, defaultProps) with `src/theme.module.css` for the class-level parts; a per-component `*.module.css` is the exception, not the pattern.
@@ -33,8 +33,25 @@ The OpenAPI spec at `server/src/main/resources/openapi/documentation.yaml` is th
 - **Catch-all 404**: `pages/NotFound.tsx` is the LAST `path="*"` child of the Shell route. New routes go above it.
 - **Chunk-load recovery**: `main.tsx` listens for `vite:preloadError` (a redeploy 404s the old hashed chunks) and reloads once, rate-limited via sessionStorage (`toadie.chunkReloadedAt`, max one reload/minute) so a genuinely missing chunk falls through to the ErrorBoundary instead of looping.
 - **Query retry policy**: the `QueryClient` in `main.tsx` uses `shouldRetryQuery` (`api/http.ts`) — NEVER retry a 4xx (the answer won't change; retrying only delays the error UI), at most two retries for transient failures.
-- **Messages**: never render `error.message` (it's the internal `API <status>` / the browser's "Failed to fetch") — map statuses to i18n keys at the call site (the Login page's inline error is the current template). Errors render inline as `color="red" variant="light"` Alerts; the shared `saveErrorMessage`/`loadErrorMessage` mappers port from Lettuce (`utils/saveError.ts`) with the first mutation/list surfaces.
-- The `@mantine/notifications` host is mounted in `main.tsx` (top-center, autoClose 2500, limit 3 — deliberately not in App, so unit tests never mount it). The Lettuce convention it exists for: **success toasts with fixed vocabulary only** (errors stay inline) — port `utils/toast.tsx` with the first mutation surface.
+- **Messages**: never render `error.message` (it's the internal `API <status>` / the browser's "Failed to fetch") — map statuses to i18n keys via the shared mappers in `utils/saveError.ts`: `saveErrorMessage(err, t, keys)` for mutations (per-status keys + a `failed` fallback) and `loadErrorMessage(err, t)` for list loads. Errors render inline as `color="red" variant="light"` Alerts — never as toasts.
+- The `@mantine/notifications` host is mounted in `main.tsx` (top-center, autoClose 2500, limit 3 — deliberately not in App, so unit tests never mount it). **Success toasts only, with fixed vocabulary only** (`showSuccessToast(t("<area>.toast.*"))` in `utils/toast.tsx` — teal, never user-entered values; errors stay inline).
+
+## Shared list-page building blocks (the CatalogFiles.tsx template)
+
+Every list page composes the same ported Lettuce blocks — copy `pages/CatalogFiles.tsx`, don't re-derive:
+
+- **State**: filters in `useStoredState` (persisted under `toadie.viewSettings.<viewKey>.filter.*`, text filters debounced 300 ms — the DEBOUNCED value goes into the query key), sort/page/pageSize from `usePagedSort(initialSort, filterDeps, { key, sortFields })` with `SORT_FIELDS ... as const`.
+- **Query**: `useQuery({ queryKey: ["<area>", page, pageSize, sortParam, ...filters], queryFn: list<Area>(...), placeholderData: keepPreviousData })`.
+- **Chrome**: `FilterPanel` (collapsed by default, persisted, active-count badge) + `ClearableTextInput`; `SortHeader` in the `Table.Th`s; `TableLoadingRow` (`isLoading && !data`) / rows / `EmptyState` (`!isError`) triage in the tbody; a `color="red" variant="light"` Alert with `loadErrorMessage` ABOVE the table on error; `PaginationBar` below.
+- **Delete**: `useDeleteConfirm` + `ConfirmDeleteModal` — the hook owns modal state and the success toast, the page owns `invalidateQueries`.
+- Row action buttons carry interpolated aria-labels (`<area>.editAria` etc.) — unit tests and e2e locate by them; table tests query cells by **text**, not `cell` role names.
+
+## Forms (the CreateCatalogFile/EditCatalogFile template)
+
+- Shared vocabulary in `utils/<area>Form.ts`: the `<Area>FormValues` type, length constants mirroring the server's, a `<area>FormValidation(t)` factory (rules identical to the server's — keep them in sync), and `toRequest`/`fromResponse` mappers. The field block lives in `components/<Area>FormFields.tsx`; the pages own submit/error/navigation.
+- Edit prefills via **`form.initialize(...)` guarded by `!form.initialized` during render** — never a `useEffect`. Submit is a plain async fn with local `submitting`/`error` state wrapped by `form.onSubmit`; success → `invalidateQueries` (list + detail) → `showSuccessToast` → `navigate(list, { replace: true })`; failure → `saveErrorMessage` into an inline Alert.
+- **Widths**: `Container size="sm"` for simple field forms (the Lettuce rule). The catalog editor is the sanctioned deviation: a document screen rendered as a full-width `Grid` — form (`md=7`) beside a sticky live-preview card (`md=5`, `components/YamlPreviewCard.tsx`). Reuse that split for future document editors.
+- `utils/catalogYaml.ts` owns catalog-info.yaml rendering (canonical key order, empties omitted, `default` namespace implicit) + the `downloadYaml` Blob helper — client-side by design until the combined-render feature brings server-side YAML.
 
 ## Internationalization (i18n)
 
@@ -67,8 +84,6 @@ The app's only human-readable version is `APP_VERSION` in **`src/changelog/versi
 
 When a feature needs one of these, port Lettuce's `web/` implementation and its `web/CLAUDE.md` section wholesale:
 
-- **List-page building blocks**: `usePagedSort`, `PaginationBar`, `SortHeader`, `FilterPanel`/`ClearableTextInput`, persisted per-view list settings (`useStoredState`), delete/discard confirm modals, `EmptyState`, the person-cell/badge visual language.
-- **Success toasts** (`utils/toast.tsx`, fixed-vocabulary rule) and the shared error mappers (`utils/saveError.ts`).
 - **Per-user feature flags** (`hasFeature()`, nav/route/page gating in lockstep).
 - **Changelog entries + page** (see "App versioning").
 - **Link builders** (`utils/*Links.ts` — never hand-assemble app URLs once a second surface links to a screen) and the `safeBackParam` open-redirect guard for any future `?back=` param.

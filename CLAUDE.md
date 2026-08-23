@@ -24,7 +24,7 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Architecture
 
-Toadie is a Backstage `catalog-info.yaml` helper (visual creation with validation, cross-file reference checks, combined rendering). **The repo currently holds the skeleton: full stack + tooling + auth, no catalog features yet.** The architecture deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce) — when adding a capability Lettuce already has (mail, encryption at rest, paging, feature flags, MFA…), port Lettuce's implementation rather than inventing a new one.
+Toadie is a Backstage `catalog-info.yaml` helper (visual creation with validation, cross-file reference checks, combined rendering). **Implemented so far: the full stack + tooling + auth, and the first catalog feature — visual creation of Component files (stored server-side, full CRUD + list, live YAML preview/download).** The architecture deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce) — when adding a capability Lettuce already has (mail, encryption at rest, feature flags, MFA…), port Lettuce's implementation rather than inventing a new one.
 
 Multi-module Gradle build (Kotlin DSL) defined in `settings.gradle.kts` with two Kotlin modules plus a separate JS frontend in `web/`:
 
@@ -59,16 +59,23 @@ ch.nokillswit
 │                       ErrorHandling (RFC 7807), OpenTelemetry, AutoHeadResponse, Resources,
 │                       Routing (SPA catch-all)
 ├── infra/db/           Flyway bootstrap + the R2DBC connection/composition root + the seed
-│                       bootstrap (admin rotation, prod fail-closed)
+│                       bootstrap (admin rotation, prod fail-closed) + Sql.kt (containsNormalized,
+│                       requireValidReferences, orVanished)
+├── infra/paging/       the shared list-endpoint machinery (PageRequest/parsePaging/applyPaging/
+│                       PageResponse + the strict query-param readers) — Lettuce's, ported verbatim
 ├── audit/              security audit trail: `audit(event, fields…)` → AUDIT-marked structured logs
 ├── authz/              CallerPrincipal + guards (requireAdmin, requireSelfOrAdmin) + typed
 │                       HTTP exceptions (401/403/404/409/429)
 ├── auth/               POST /api/v1/login, /refresh, /logout + token minting + password
 │                       hashing + LoginThrottle + the revoked-token blocklist
-└── users/              the user domain: table + service + PUT /api/v1/users/{id}/password
+├── users/              the user domain: table + service + PUT /api/v1/users/{id}/password
+└── catalog/            the catalog-file domain (THE feature reference implementation):
+                        CatalogFile.kt (DTOs + the descriptor-format validation),
+                        CatalogFileService.kt, CatalogFileRoutes.kt — /api/v1/catalog-files CRUD
+                        + paginated list; shared workspace (no admin gate on content)
 ```
 
-Feature template (when catalog features arrive, follow Lettuce's): `catalog/CatalogFile.kt` (DTOs + `toResponse`), `CatalogFileRoutes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureCatalogFileRoutes()`), `CatalogFileService.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api`, lazy pages + `NAV_ITEMS` entries, and an e2e scenario doc. At the first **list** endpoint, port `infra/paging` from Lettuce verbatim (see `.claude/docs/list-endpoints.md`).
+**Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse` + the `validateX` free function enforced by route AND service), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_ITEMS` entries, and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`.
 
 ### The OpenAPI contract
 

@@ -6,8 +6,10 @@ Toadie will help with Backstage `catalog-info.yaml` files:
 - **cross-check them** — one file can reference another,
 - **render them altogether** — a combined view built from the content of several files.
 
-This repository currently holds the **application skeleton**: the full stack, tooling, quality
-gates, and a working authentication surface — no catalog functionality yet.
+Implemented so far: the full stack, tooling, quality gates, a working authentication surface,
+and the **first catalog feature** — visual creation of Component `catalog-info.yaml` files
+(validated against the Backstage descriptor format, stored server-side with full CRUD and a
+paginated list, live YAML preview, one-click download).
 
 ## The stack
 
