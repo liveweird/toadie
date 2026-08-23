@@ -1,5 +1,6 @@
 import {
   AppShell,
+  Autocomplete,
   Badge,
   Modal,
   MultiSelect,
@@ -86,6 +87,7 @@ export const theme = createTheme({
     // "Żółw"), mirroring the server-side unaccent list filters. A per-site `filter` prop still
     // wins — don't pass one unless it preserves the diacritics folding (see utils/text.ts).
     Select: Select.extend({ defaultProps: { filter: foldedOptionsFilter } }),
+    Autocomplete: Autocomplete.extend({ defaultProps: { filter: foldedOptionsFilter } }),
     MultiSelect: MultiSelect.extend({ defaultProps: { filter: foldedOptionsFilter } }),
     TagsInput: TagsInput.extend({ defaultProps: { filter: foldedOptionsFilter } }),
     Badge: Badge.extend({ defaultProps: { radius: "sm" } }),

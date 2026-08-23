@@ -14,7 +14,9 @@ import {
 import { type UseFormReturnType } from "@mantine/form";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
 import { charCountDescription } from "../utils/charCount";
+import { refSuggestions, type RefField } from "../utils/refSuggestions";
 import {
   ENTITY_KINDS,
   fieldApplies,
@@ -45,6 +47,10 @@ export default function CatalogFileFormFields({
   const { t } = useTranslation();
   const kind = form.values.kind;
   const has = (field: Parameters<typeof fieldApplies>[1]) => fieldApplies(kind, field);
+  // The reference pickers' pool — advisory: while loading or on failure the ref fields
+  // simply offer no suggestions and stay plain free-text inputs.
+  const { identities } = useCatalogIdentities();
+  const suggest = (field: RefField) => refSuggestions(identities, field, form.values.namespace);
   const relationFields = (["providesApis", "consumesApis", "dependsOn", "dependencyOf", "children", "members", "memberOf"] as const)
     .filter(has);
 
@@ -85,6 +91,7 @@ export default function CatalogFileFormFields({
       label={t(`catalog.field.${field}`)}
       description={t(`catalog.hint.${field}`)}
       splitChars={[",", " "]}
+      data={suggest(field)}
       {...form.getInputProps(field)}
     />
   );
@@ -167,48 +174,54 @@ export default function CatalogFileFormFields({
             </Group>
           )}
           {has("owner") && (
-            <TextInput
+            <Autocomplete
               label={t("catalog.field.owner")}
               required
               placeholder="group:default/platform"
               description={t("catalog.hint.owner")}
+              data={suggest("owner")}
               {...form.getInputProps("owner")}
             />
           )}
           {(has("system") || has("subcomponentOf") || has("domain") || has("subdomainOf") || has("parent")) && (
             <Group grow align="flex-start">
               {has("system") && (
-                <TextInput
+                <Autocomplete
                   label={t("catalog.field.system")}
                   description={t("catalog.hint.system")}
+                  data={suggest("system")}
                   {...form.getInputProps("system")}
                 />
               )}
               {has("subcomponentOf") && (
-                <TextInput
+                <Autocomplete
                   label={t("catalog.field.subcomponentOf")}
                   description={t("catalog.hint.subcomponentOf")}
+                  data={suggest("subcomponentOf")}
                   {...form.getInputProps("subcomponentOf")}
                 />
               )}
               {has("domain") && (
-                <TextInput
+                <Autocomplete
                   label={t("catalog.field.domain")}
                   description={t("catalog.hint.domain")}
+                  data={suggest("domain")}
                   {...form.getInputProps("domain")}
                 />
               )}
               {has("subdomainOf") && (
-                <TextInput
+                <Autocomplete
                   label={t("catalog.field.subdomainOf")}
                   description={t("catalog.hint.subdomainOf")}
+                  data={suggest("subdomainOf")}
                   {...form.getInputProps("subdomainOf")}
                 />
               )}
               {has("parent") && (
-                <TextInput
+                <Autocomplete
                   label={t("catalog.field.parent")}
                   description={t("catalog.hint.parent")}
+                  data={suggest("parent")}
                   {...form.getInputProps("parent")}
                 />
               )}

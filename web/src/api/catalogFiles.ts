@@ -32,6 +32,18 @@ export async function listCatalogFiles(q: CatalogFileListQuery): Promise<Catalog
   return jsonRequest<CatalogFilePage>(`/api/v1/catalog-files?${params}`);
 }
 
+/** Every stored file's list row, paging until the server total is reached (the pool loop). */
+export async function listAllCatalogFiles(): Promise<CatalogFilePage["items"]> {
+  const items: CatalogFilePage["items"] = [];
+  let page = 1;
+  for (;;) {
+    const result = await listCatalogFiles({ page, pageSize: 100, sort: "name" });
+    items.push(...result.items);
+    if (items.length >= result.total || result.items.length === 0) return items;
+    page += 1;
+  }
+}
+
 export async function getCatalogFile(id: number): Promise<CatalogFileResponse> {
   return jsonRequest<CatalogFileResponse>(`/api/v1/catalog-files/${id}`);
 }

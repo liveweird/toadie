@@ -45,7 +45,7 @@ async function fillMinimalForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
   await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
   await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
-  await user.type(screen.getByLabelText(/^owner( \*)?$/i), "group:default/platform");
+  await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "group:default/platform");
 }
 
 describe("CreateCatalogFile page", () => {
@@ -152,12 +152,12 @@ describe("CreateCatalogFile page", () => {
     renderCreate();
 
     // Component sections show owner + APIs; switch to Group.
-    expect(screen.getByLabelText(/^owner( \*)?$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Kind", { selector: "input" }));
     fireEvent.click(await screen.findByRole("option", { name: "Group" }));
 
     // Group has no owner/lifecycle but gains profile + membership fields.
-    expect(screen.queryByLabelText(/^owner( \*)?$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^owner( \*)?$/i, { selector: "input" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^lifecycle( \*)?$/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Display name")).toBeInTheDocument();
     expect(screen.getByLabelText("Members", { selector: "input" })).toBeInTheDocument();
@@ -189,7 +189,7 @@ describe("CreateCatalogFile page", () => {
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "billing-api");
     await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "openapi");
     await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
-    await user.type(screen.getByLabelText(/^owner( \*)?$/i), "team-a");
+    await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "team-a");
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
     expect(await screen.findAllByText("Required")).not.toHaveLength(0);
@@ -210,6 +210,47 @@ describe("CreateCatalogFile page", () => {
     await user.type(screen.getByLabelText("URL 1"), "https://example.com");
     await user.click(screen.getByRole("button", { name: "Remove link 1" }));
     expect(screen.queryByLabelText("URL 1")).not.toBeInTheDocument();
+  });
+
+  test("the owner picker suggests stored groups and inserts the shortened ref", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files") {
+        return Promise.resolve(jsonResponse(201, {
+          id: 12, kind: "Component",
+          metadata: { name: "my-svc", namespace: "default" },
+          spec: { type: "service", lifecycle: "production", owner: "team-a" },
+          createdBy: 1, creatorName: "A", creatorDeleted: false, createdAt: 1, updatedAt: 1,
+        }));
+      }
+      if (url.startsWith("/api/v1/catalog-files?")) {
+        // The identity pool behind the pickers.
+        return Promise.resolve(jsonResponse(200, {
+          items: [
+            { id: 5, kind: "Group", name: "team-a", namespace: "default", title: null, type: "team", lifecycle: null, owner: null, creatorName: "A", creatorDeleted: false, updatedAt: 1 },
+            { id: 6, kind: "API", name: "billing-api", namespace: "default", title: null, type: "openapi", lifecycle: "production", owner: null, creatorName: "A", creatorDeleted: false, updatedAt: 1 },
+          ],
+          page: 1, pageSize: 100, total: 2,
+        }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderCreate();
+
+    await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
+    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
+    await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
+
+    // Open the owner picker — the stored group is offered as the shortened bare name (same
+    // namespace + the field's default kind); the API is filtered out (wrong kind).
+    fireEvent.click(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "team-a" }));
+    expect(screen.queryByRole("option", { name: /billing-api/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    const postCall = findSaveCall(mockFetch);
+    expect(JSON.parse((postCall![1] as RequestInit).body as string).spec.owner).toBe("team-a");
   });
 
   test("the YAML preview follows the form values", async () => {
