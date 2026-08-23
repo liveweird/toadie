@@ -6,6 +6,7 @@ import {
   Group,
   Stack,
   TagsInput,
+  Text,
   Textarea,
   TextInput,
 } from "@mantine/core";
@@ -131,13 +132,19 @@ export default function CatalogFileFormFields({
           <TextInput
             label={t("catalog.field.owner")}
             required
-            placeholder={t("catalog.hint.owner")}
+            placeholder="group:default/platform"
+            description={t("catalog.hint.owner")}
             {...form.getInputProps("owner")}
           />
           <Group grow align="flex-start">
-            <TextInput label={t("catalog.field.system")} {...form.getInputProps("system")} />
+            <TextInput
+              label={t("catalog.field.system")}
+              description={t("catalog.hint.system")}
+              {...form.getInputProps("system")}
+            />
             <TextInput
               label={t("catalog.field.subcomponentOf")}
+              description={t("catalog.hint.subcomponentOf")}
               {...form.getInputProps("subcomponentOf")}
             />
           </Group>
@@ -146,27 +153,30 @@ export default function CatalogFileFormFields({
 
       <Fieldset legend={t("catalog.section.relations")}>
         <Stack gap="sm">
+          <Text size="xs" c="dimmed">
+            {t("catalog.refHelp")}
+          </Text>
           <TagsInput
             label={t("catalog.field.providesApis")}
-            description={t("catalog.hint.refs")}
+            description={t("catalog.hint.providesApis")}
             splitChars={[",", " "]}
             {...form.getInputProps("providesApis")}
           />
           <TagsInput
             label={t("catalog.field.consumesApis")}
-            description={t("catalog.hint.refs")}
+            description={t("catalog.hint.consumesApis")}
             splitChars={[",", " "]}
             {...form.getInputProps("consumesApis")}
           />
           <TagsInput
             label={t("catalog.field.dependsOn")}
-            description={t("catalog.hint.refs")}
+            description={t("catalog.hint.dependsOn")}
             splitChars={[",", " "]}
             {...form.getInputProps("dependsOn")}
           />
           <TagsInput
             label={t("catalog.field.dependencyOf")}
-            description={t("catalog.hint.refs")}
+            description={t("catalog.hint.dependencyOf")}
             splitChars={[",", " "]}
             {...form.getInputProps("dependencyOf")}
           />

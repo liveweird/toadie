@@ -46,9 +46,14 @@ Server-populated, **never author-written**: `metadata.uid`, `metadata.etag`, `re
 String form used by every `spec` relation field:
 
 - Full: `<kind>:<namespace>/<name>` — e.g. `component:default/artist-web`.
-- Kind + name: `<kind>:<name>` — namespace defaults to `default`.
-- Bare `<name>` — kind AND namespace default from the **context field** (each spec field below
-  documents its default kind; e.g. `spec.owner` defaults to `Group`).
+- Kind + name: `<kind>:<name>` — namespace defaults **contextually**: inside a descriptor's
+  spec field it is the *referencing entity's own* namespace (which is `default` unless the
+  file sets one); only context-free lookups fall back to `default`.
+- Bare `<name>` — the kind additionally defaults from the **context field** (each spec field
+  below documents its default kind; e.g. `spec.owner` defaults to `Group`,
+  `providesApis`/`consumesApis` to `API`, `subcomponentOf` to `Component`, `system` to
+  `System`). `dependsOn`/`dependencyOf` have no sensible default — write the kind explicitly
+  (`resource:orders-db`, `component:auth-svc`).
 - Kind and namespace match case-insensitively.
 
 Cross-checking = resolving each reference (with its contextual defaults applied) against the set

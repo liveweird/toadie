@@ -55,8 +55,13 @@
     "namespace": "Lowercase; blank means \"default\"",
     "type": "e.g. service, website, library",
     "lifecycle": "e.g. experimental, production, deprecated",
-    "owner": "Entity reference, e.g. group:default/platform",
-    "refs": "Entity references: [kind:][namespace/]name"
+    "owner": "The owning team. Kind defaults to group — “team-platform” means group:team-platform; a person needs the user: prefix.",
+    "system": "The system this component is part of. Kind defaults to system, e.g. “payments”.",
+    "subcomponentOf": "The parent component. Kind defaults to component, e.g. “parent-svc”.",
+    "providesApis": "APIs this component exposes. Kind defaults to api — “billing-api” means api:billing-api.",
+    "consumesApis": "APIs this component calls. Kind defaults to api, e.g. “payments-api”.",
+    "dependsOn": "Components and resources this component needs. Name the kind explicitly, e.g. resource:orders-db, component:auth-svc.",
+    "dependencyOf": "Components and resources that need this one. Name the kind explicitly, e.g. component:reporting."
   },
   "addLink": "Add link",
   "addLabel": "Add label",
@@ -89,5 +94,6 @@
     "created": "Catalog file created",
     "updated": "Catalog file updated",
     "deleted": "Catalog file deleted"
-  }
+  },
+  "refHelp": "References point at other catalog entities as [kind:][namespace/]name. Kind is the target's kind — component, api, group, user, resource, system or domain (case-insensitive); each field assumes a default kind when you omit it. An omitted namespace means this file's own namespace."
 }

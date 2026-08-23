@@ -55,8 +55,13 @@
     "namespace": "Małe litery; puste oznacza \"default\"",
     "type": "np. service, website, library",
     "lifecycle": "np. experimental, production, deprecated",
-    "owner": "Referencja encji, np. group:default/platform",
-    "refs": "Referencje encji: [kind:][namespace/]name"
+    "owner": "Zespół-właściciel. Domyślny rodzaj to group — „team-platform” oznacza group:team-platform; osoba wymaga prefiksu user:.",
+    "system": "System, do którego należy ten komponent. Domyślny rodzaj to system, np. „payments”.",
+    "subcomponentOf": "Komponent nadrzędny. Domyślny rodzaj to component, np. „parent-svc”.",
+    "providesApis": "API udostępniane przez ten komponent. Domyślny rodzaj to api — „billing-api” oznacza api:billing-api.",
+    "consumesApis": "API, z których ten komponent korzysta. Domyślny rodzaj to api, np. „payments-api”.",
+    "dependsOn": "Komponenty i zasoby, których ten komponent potrzebuje. Podaj rodzaj jawnie, np. resource:orders-db, component:auth-svc.",
+    "dependencyOf": "Komponenty i zasoby, które potrzebują tego komponentu. Podaj rodzaj jawnie, np. component:reporting."
   },
   "addLink": "Dodaj link",
   "addLabel": "Dodaj etykietę",
@@ -89,5 +94,6 @@
     "created": "Utworzono plik katalogu",
     "updated": "Zaktualizowano plik katalogu",
     "deleted": "Usunięto plik katalogu"
-  }
+  },
+  "refHelp": "Referencje wskazują inne encje katalogu w formacie [kind:][namespace/]name. Kind to rodzaj wskazywanej encji — component, api, group, user, resource, system lub domain (wielkość liter bez znaczenia); każde pole przyjmuje domyślny rodzaj, gdy go pominiesz. Pominięta przestrzeń nazw oznacza przestrzeń nazw tego pliku."
 }
