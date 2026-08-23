@@ -9,13 +9,14 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
 
 **Cross-feature table reads (the service-layer rule, inherited from Lettuce).** A feature service MAY query another feature's Exposed table objects directly when the read must run **inside its own transaction** (SQL joins, atomic snapshots) — calling the other feature's *service* would open a second transaction and break atomicity. Route handlers never touch tables (services only). The first such read is `CatalogFileService.joined()` (catalog list/read join `UserService.Users` for the creator's display fields).
 
-Current migrations are `V1`–`V5` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V6` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — `/refresh` rejects older tokens), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
 - `V3__seed_admin` — the bootstrap administrator `admin@toadie.local` / `changeme`, idempotent via `ON CONFLICT DO NOTHING`; production neutralizes it at startup (see "Default admin" in `.claude/docs/security.md`).
 - `V4__enable_unaccent_extension` — Lettuce's unaccent migration, backing every `containsNormalized` substring filter (see `infra/db/Sql.kt`).
 - `V5__create_catalog_files` — stored catalog-info.yaml documents (one row = one entity; structured JSON in `content`, identity columns `kind`/`name`/`namespace` denormalized), `created_by` FK to `users`, epoch-millis `created_at`/`updated_at`, and the partial unique index `uq_catalog_files_entity_active` over `(kind, namespace, LOWER(name))` — Backstage's case-insensitive identity, active rows only.
+- `V6__widen_catalog_kinds` — the kind CHECK grows from Component-only to the seven landscape kinds (API, System, Domain, Resource, Group, User join; Location/Template deliberately out).
 
 ### Soft delete (convention)
 

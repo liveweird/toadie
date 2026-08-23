@@ -9,13 +9,15 @@ Toadie will help with Backstage `catalog-info.yaml` files:
 All three pillars are implemented, on top of the full stack, tooling, quality gates, and a
 working authentication surface:
 
-- **visual creation** of Component `catalog-info.yaml` files (validated against the Backstage
-  descriptor format, stored server-side with full CRUD and a paginated list, live YAML
-  preview, one-click download),
+- **visual creation** of `catalog-info.yaml` files across the seven landscape kinds
+  (Component, API, System, Domain, Resource, Group, User) — validated per kind against the
+  Backstage descriptor format, stored server-side with full CRUD and a paginated list, live
+  YAML preview, one-click download,
 - **cross-checking**: a workspace report resolving every entity reference between stored
-  files (missing targets and kind-less `dependsOn` entries as errors; kinds Toadie doesn't
-  store yet listed as not-checkable-yet), plus a live reference panel in the editor —
-  findings never block saving, and
+  files — owners, systems, APIs, domains, groups and users included (missing targets and
+  kind-less `dependsOn` entries as errors; only Location/Template/custom kinds stay
+  not-checkable) — plus a live reference panel in the editor; findings never block saving,
+  and
 - **rendering together**: the `/render` relationship graph — every stored file and the
   reference edges between them (missing and external targets drawn as virtual nodes), with a
   namespace filter and per-relation toggles.

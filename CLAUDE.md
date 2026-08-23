@@ -24,7 +24,7 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Architecture
 
-Toadie is a Backstage `catalog-info.yaml` helper (visual creation with validation, cross-file reference checks, combined rendering). **All three product pillars are implemented on top of the full stack + tooling + auth: visual creation of Component files (stored server-side, full CRUD + list, live YAML preview/download), cross-checking (a workspace report at `/cross-check` + a live reference panel in the editor; three-tier findings, saves never blocked), and rendering-together (the `/render` relationship graph — React Flow + dagre over `GET …/graph`).** The architecture deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce) — when adding a capability Lettuce already has (mail, encryption at rest, feature flags, MFA…), port Lettuce's implementation rather than inventing a new one.
+Toadie is a Backstage `catalog-info.yaml` helper (visual creation with validation, cross-file reference checks, combined rendering). **All three product pillars are implemented on top of the full stack + tooling + auth: visual creation of catalog files across the seven landscape kinds — Component, API, System, Domain, Resource, Group, User — (stored server-side, per-kind validation, full CRUD + list, live YAML preview/download), cross-checking (a workspace report at `/cross-check` + a live reference panel in the editor; every stored kind resolves — UNVERIFIABLE means Location/Template/custom only; saves never blocked), and rendering-together (the `/render` relationship graph — React Flow + dagre over `GET …/graph`).** The architecture deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce) — when adding a capability Lettuce already has (mail, encryption at rest, feature flags, MFA…), port Lettuce's implementation rather than inventing a new one.
 
 Multi-module Gradle build (Kotlin DSL) defined in `settings.gradle.kts` with two Kotlin modules plus a separate JS frontend in `web/`:
 
@@ -70,7 +70,8 @@ ch.nokillswit
 │                       hashing + LoginThrottle + the revoked-token blocklist
 ├── users/              the user domain: table + service + PUT /api/v1/users/{id}/password
 └── catalog/            the catalog-file domain (THE feature reference implementation):
-                        CatalogFile.kt (DTOs + the descriptor-format validation),
+                        CatalogFile.kt (kind model + EntitySpec superset + the per-kind
+                        required/forbidden validation tables),
                         CatalogFileService.kt, CatalogFileRoutes.kt — /api/v1/catalog-files CRUD
                         + paginated list; shared workspace (no admin gate on content);
                         CrossCheck.kt — the pure reference resolver behind GET …/cross-check
