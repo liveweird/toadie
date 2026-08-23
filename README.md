@@ -21,7 +21,11 @@ generated-password reveal, self-service password change):
   and
 - **rendering together**: the `/render` relationship graph — every stored file and the
   reference edges between them (missing and external targets drawn as virtual nodes), with a
-  namespace filter and per-relation toggles.
+  namespace filter and per-relation toggles, and
+- **the YAML round-trip**: import existing (multi-document) `catalog-info.yaml` files —
+  parsed client-side, each document imported independently with a per-row result report
+  (created / invalid / already-exists; nothing overwritten) — and export the workspace (or
+  one namespace) back as a single `---`-separated `catalog-info.yaml`.
 
 ## The stack
 
