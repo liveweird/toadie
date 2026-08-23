@@ -51,7 +51,11 @@ Every list page composes the same ported Lettuce blocks — copy `pages/CatalogF
 - Shared vocabulary in `utils/<area>Form.ts`: the `<Area>FormValues` type, length constants mirroring the server's, a `<area>FormValidation(t)` factory (rules identical to the server's — keep them in sync), and `toRequest`/`fromResponse` mappers. The field block lives in `components/<Area>FormFields.tsx`; the pages own submit/error/navigation.
 - Edit prefills via **`form.initialize(...)` guarded by `!form.initialized` during render** — never a `useEffect`. Submit is a plain async fn with local `submitting`/`error` state wrapped by `form.onSubmit`; success → `invalidateQueries` (list + detail) → `showSuccessToast` → `navigate(list, { replace: true })`; failure → `saveErrorMessage` into an inline Alert.
 - **Widths**: `Container size="sm"` for simple field forms (the Lettuce rule). The catalog editor is the sanctioned deviation: a document screen rendered as a full-width `Grid` — form (`md=7`) beside a sticky live-preview card (`md=5`, `components/YamlPreviewCard.tsx`). Reuse that split for future document editors.
-- `utils/catalogYaml.ts` owns catalog-info.yaml rendering (canonical key order, empties omitted, `default` namespace implicit) + the `downloadYaml` Blob helper — client-side by design until the combined-render feature brings server-side YAML.
+- `utils/catalogYaml.ts` owns catalog-info.yaml rendering (canonical key order, empties omitted, `default` namespace implicit) + the `downloadYaml` Blob helper — client-side by design (the render pillar became the graph, not a combined YAML document; add server-side YAML only if an export need arrives).
+
+## The render graph (`pages/RenderGraph.tsx`)
+
+`@xyflow/react` (React Flow 12) + `@dagrejs/dagre` draw `GET /api/v1/catalog-files/graph`; both deps ride the lazy `/render` chunk — keep them out of eagerly-imported modules. The pure shaping lives in `utils/graphLayout.ts` (`filterGraph` relation-family filtering + orphaned-virtual-node pruning, `layoutGraph` dagre-LR → React Flow nodes/edges) and carries the unit-test coverage; **unit tests stub `@xyflow/react`** (happy-dom can't give it real DOM measurement — see `RenderGraph.test.tsx`'s `vi.mock`), and e2e exercises the real canvas. The custom node (`components/CatalogGraphNode.tsx`) styles by status through Mantine CSS vars only, and the canvas `colorMode` follows `useComputedColorScheme` — never hardcode colors there.
 
 ## Internationalization (i18n)
 

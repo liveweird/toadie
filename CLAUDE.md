@@ -24,7 +24,7 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Architecture
 
-Toadie is a Backstage `catalog-info.yaml` helper (visual creation with validation, cross-file reference checks, combined rendering). **Implemented so far: the full stack + tooling + auth, plus two catalog features — visual creation of Component files (stored server-side, full CRUD + list, live YAML preview/download) and cross-checking (a workspace report at `/cross-check` + a live reference panel in the editor; three-tier findings, saves never blocked).** The architecture deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce) — when adding a capability Lettuce already has (mail, encryption at rest, feature flags, MFA…), port Lettuce's implementation rather than inventing a new one.
+Toadie is a Backstage `catalog-info.yaml` helper (visual creation with validation, cross-file reference checks, combined rendering). **All three product pillars are implemented on top of the full stack + tooling + auth: visual creation of Component files (stored server-side, full CRUD + list, live YAML preview/download), cross-checking (a workspace report at `/cross-check` + a live reference panel in the editor; three-tier findings, saves never blocked), and rendering-together (the `/render` relationship graph — React Flow + dagre over `GET …/graph`).** The architecture deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce) — when adding a capability Lettuce already has (mail, encryption at rest, feature flags, MFA…), port Lettuce's implementation rather than inventing a new one.
 
 Multi-module Gradle build (Kotlin DSL) defined in `settings.gradle.kts` with two Kotlin modules plus a separate JS frontend in `web/`:
 
@@ -74,7 +74,9 @@ ch.nokillswit
                         CatalogFileService.kt, CatalogFileRoutes.kt — /api/v1/catalog-files CRUD
                         + paginated list; shared workspace (no admin gate on content);
                         CrossCheck.kt — the pure reference resolver behind GET …/cross-check
-                        (workspace report) and POST …/check (the editor's live document check)
+                        (workspace report) and POST …/check (the editor's live document check);
+                        Graph.kt — the same resolution machinery as a node/edge graph
+                        (GET …/graph, the /render page's backend)
 ```
 
 **Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse` + the `validateX` free function enforced by route AND service), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_ITEMS` entries, and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`.
