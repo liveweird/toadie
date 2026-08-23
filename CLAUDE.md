@@ -35,6 +35,10 @@ Multi-module Gradle build (Kotlin DSL) defined in `settings.gradle.kts` with two
 
 Group is `ch.nokillswit`, version `1.0.0-SNAPSHOT` (set in root `build.gradle.kts`). Dependency versions are centralized in `gradle/libs.versions.toml`; Ktor itself comes from a separate version catalog (`ktorLibs`) loaded from `io.ktor:ktor-version-catalog` in `settings.gradle.kts`.
 
+### The Backstage descriptor format (the domain reference)
+
+**`.claude/docs/backstage-descriptor-format.md` is the local offline reference for the `catalog-info.yaml` format** Toadie exists to create, cross-check, and render — the envelope, metadata validation rules, all kinds and their spec fields, entity-reference resolution defaults, substitutions, and well-known annotations. Consult it when designing any catalog feature instead of browsing; the upstream source it snapshots is <https://backstage.io/docs/features/software-catalog/descriptor-format/> — re-check upstream (and update the snapshot) when adding a new validation rule.
+
 ### API guidelines (the authoritative API standard)
 
 **`api-guidelines/API-GUIDELINES.md` is the single authoritative rulebook for API style** — document shape, URLs, versioning, list conventions, naming, data formats, status codes, errors, auth, caching, rate limiting, idempotency, security, and OpenAPI/conformance practice. Every rule has a stable ID (`API-LIST-002`); cite IDs when discussing API design. Validate spec changes with the `/api-review` skill (Spectral lint + LLM review checklist).
