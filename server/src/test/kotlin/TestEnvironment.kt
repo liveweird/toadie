@@ -2,7 +2,6 @@ package ch.nokillswit
 
 import ch.nokillswit.auth.LoginRequest
 import ch.nokillswit.auth.LoginResponse
-import ch.nokillswit.auth.TokenBlocklistService
 import ch.nokillswit.auth.hashPassword
 import ch.nokillswit.infra.db.SEED_ADMIN_EMAIL
 import ch.nokillswit.infra.db.SEED_PASSWORD_HASH
@@ -186,10 +185,6 @@ object TestUsers {
             }
         }
     }
-}
-
-object TestBlocklist {
-    val service: TokenBlocklistService by lazy { TokenBlocklistService(sharedTestDatabase) }
 }
 
 /** Direct service handle for contracts the routes can't exercise (e.g. blank-filter rules). */

@@ -9,6 +9,7 @@ import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.authz.ForbiddenException
 import ch.nokillswit.authz.NotFoundException
 import ch.nokillswit.authz.caller
+import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
 import ch.nokillswit.authz.requireSelfOrAdmin
 import ch.nokillswit.infra.paging.optionalEnum
@@ -50,6 +51,28 @@ internal fun validatePassword(password: String) {
 /** Audit format for a roles set: comma-joined sorted names, "" = the plain-user empty set. */
 private fun Set<UserRole>.joinedNames(): String = map { it.name }.sorted().joinToString(",")
 
+/**
+ * Name and email are identity/security-relevant (email is the login identifier); the
+ * `user.updated` event carries deltas only for the fields that actually changed — and is
+ * skipped entirely when neither did.
+ */
+private fun auditUserUpdated(byUserId: UInt, targetUserId: UInt, existing: User, name: String, email: String) {
+    if (name == existing.name && email == existing.email) return
+    val fields = mutableListOf<Pair<String, Any?>>(
+        "byUserId" to byUserId.toLong(),
+        "targetUserId" to targetUserId.toLong(),
+    )
+    if (name != existing.name) {
+        fields += "nameFrom" to existing.name
+        fields += "nameTo" to name
+    }
+    if (email != existing.email) {
+        fields += "emailFrom" to existing.email
+        fields += "emailTo" to email
+    }
+    audit("user.updated", *fields.toTypedArray())
+}
+
 @Serializable
 @Resource("/api/v1/users")
 class Users {
@@ -62,7 +85,6 @@ class Users {
     }
 }
 
-@Suppress("LongMethod") // one declarative route registrar per feature — the repo idiom
 fun Application.configureUserRoutes() {
     val userService = attributes[UserServiceKey]
 
@@ -72,7 +94,7 @@ fun Application.configureUserRoutes() {
             // keep the self password change below.
             get<Users> {
                 requireAdmin(call.caller())
-                val paging = call.parsePaging(sortable = setOf("id", "name", "email"))
+                val paging = call.parsePaging(sortable = USER_SORT_FIELDS)
                 val params = call.request.queryParameters
                 val filter = UserListFilter(
                     name = params.optionalString("name"),
@@ -96,9 +118,8 @@ fun Application.configureUserRoutes() {
                 // The password arrives client-generated and leaves this handler only as a
                 // bcrypt hash — no response ever carries plaintext. A duplicate active email
                 // rides the V1 partial index into the central 23505 → 409.
-                val id = userService.create(
-                    User(name = name, email = email, passwordHash = hashPassword(req.password), role = role),
-                )
+                val user = User(name = name, email = email, passwordHash = hashPassword(req.password), role = role)
+                val id = userService.create(user)
                 audit(
                     "user.created",
                     "byUserId" to caller.userId.toLong(),
@@ -107,25 +128,20 @@ fun Application.configureUserRoutes() {
                     "roles" to (req.roles?.toSet() ?: emptySet()).joinedNames(),
                 )
                 call.response.header(HttpHeaders.Location, call.application.href(Users.Id(id = id)))
-                call.respond(
-                    HttpStatusCode.Created,
-                    UserResponse(id = id, name = name, email = email, roles = listOfNotNull(role.takeIf { it == UserRole.ADMIN })),
-                )
+                call.respond(HttpStatusCode.Created, user.toResponse(id))
             }
             get<Users.Id> { route ->
                 // Guard BEFORE read (the documented users idiom): an unauthorized caller gets a
                 // uniform 403 whether or not the id exists.
                 requireSelfOrAdmin(call.caller(), route.id)
-                val user = userService.read(route.id)
-                    ?: throw NotFoundException("User not found")
+                val user = userService.read(route.id).orNotFound("User")
                 call.respond(HttpStatusCode.OK, user.toResponse(route.id))
             }
             put<Users.Id> { route ->
                 val caller = call.caller()
                 requireAdmin(caller)
                 val req = call.receive<UserUpdateRequest>()
-                val existing = userService.read(route.id)
-                    ?: throw NotFoundException("User not found")
+                val existing = userService.read(route.id).orNotFound("User")
                 val requestedRole = rolesToStored(req.roles)
                 // Last-admin protection: demoting the final active administrator would lock
                 // everyone out of the management surface. This pre-check only preserves the
@@ -145,23 +161,7 @@ fun Application.configureUserRoutes() {
                         throw ConflictException("The last administrator cannot be demoted")
                     UserService.GuardedMutation.DONE -> Unit
                 }
-                // Name and email are identity/security-relevant (email is the login
-                // identifier); audit with deltas only for the fields that actually changed.
-                if (name != existing.name || email != existing.email) {
-                    val fields = mutableListOf<Pair<String, Any?>>(
-                        "byUserId" to caller.userId.toLong(),
-                        "targetUserId" to route.id.toLong(),
-                    )
-                    if (name != existing.name) {
-                        fields += "nameFrom" to existing.name
-                        fields += "nameTo" to name
-                    }
-                    if (email != existing.email) {
-                        fields += "emailFrom" to existing.email
-                        fields += "emailTo" to email
-                    }
-                    audit("user.updated", *fields.toTypedArray())
-                }
+                auditUserUpdated(caller.userId, route.id, existing, name = name, email = email)
                 if (requestedRole != existing.role) {
                     audit(
                         "user.roles_changed",
@@ -205,8 +205,7 @@ fun Application.configureUserRoutes() {
                 // current password never mutates anything. Checked BEFORE the length validation
                 // so 403 wins over 400 (the convention everywhere else).
                 if (caller.userId == route.parent.id) {
-                    val existing = userService.read(route.parent.id)
-                        ?: throw NotFoundException("User not found")
+                    val existing = userService.read(route.parent.id).orNotFound("User")
                     if (req.currentPassword == null || !verifyPassword(req.currentPassword, existing.passwordHash)) {
                         audit(
                             "password.change_denied",
@@ -218,10 +217,7 @@ fun Application.configureUserRoutes() {
                     }
                 }
                 validatePassword(req.password)
-                val updated = userService.updatePassword(route.parent.id, hashPassword(req.password))
-                if (updated == 0) {
-                    throw NotFoundException("User not found")
-                }
+                userService.updatePassword(route.parent.id, hashPassword(req.password)).orNotFound("User")
                 audit(
                     "password.changed",
                     "targetUserId" to route.parent.id.toLong(),

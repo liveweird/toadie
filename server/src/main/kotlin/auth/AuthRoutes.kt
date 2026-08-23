@@ -147,7 +147,7 @@ fun Application.configureAuthRoutes() {
                 val (userId, user) = record
                 loginThrottle.recordSuccess(email)
                 audit("login.success", "email" to user.email, "userId" to userId.toLong())
-                call.respond(jwtConfig.authResponse(userId, user.email, user.additionalRoles))
+                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user.email, user.additionalRoles))
             }
         }
         rateLimit(RateLimitName(REFRESH_RATE_LIMIT)) {
@@ -186,7 +186,7 @@ fun Application.configureAuthRoutes() {
                 if (issuedAtSec < user.passwordChangedAt / 1000) {
                     reject("predates_password_change", rawUserId)
                 }
-                call.respond(jwtConfig.authResponse(userId, user.email, user.additionalRoles))
+                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user.email, user.additionalRoles))
             }
         }
         authenticate {

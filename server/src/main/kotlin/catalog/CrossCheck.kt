@@ -59,8 +59,6 @@ data class CrossCheckSource(
     val file: CatalogFile,
 )
 
-internal const val COMPONENT_KIND = "component"
-
 /** The lowercased kinds the editor stores — references to them are RESOLVABLE. */
 internal val STORED_KINDS: Set<String> = SUPPORTED_KINDS.map { it.lowercase() }.toSet()
 
@@ -69,7 +67,7 @@ internal val STORED_KINDS: Set<String> = SUPPORTED_KINDS.map { it.lowercase() }.
 internal val REF_FIELD_DEFAULT_KINDS: Map<String, String?> = mapOf(
     "spec.owner" to "group",
     "spec.system" to "system",
-    "spec.subcomponentOf" to COMPONENT_KIND,
+    "spec.subcomponentOf" to "component",
     "spec.providesApis" to "api",
     "spec.consumesApis" to "api",
     "spec.dependsOn" to null,
@@ -93,19 +91,39 @@ fun identityOf(file: CatalogFile) = EntityIdentity(
 
 internal data class ParsedRef(val kind: String?, val namespace: String?, val name: String)
 
+/**
+ * Splits on the single allowed occurrence of [sep]: `(prefix?, rest)`, or null when [sep]
+ * occurs more than once. The one splitter behind both the lenient [parseRef] and the strict
+ * grammar validators in CatalogFileValidation.kt — the ref grammar lives in one place.
+ */
+internal fun splitRefOnce(value: String, sep: Char): Pair<String?, String>? {
+    val first = value.indexOf(sep)
+    if (first != value.lastIndexOf(sep)) return null
+    return if (first >= 0) value.substring(0, first) to value.substring(first + 1) else null to value
+}
+
 // Lenient on purpose: the ad-hoc check sees in-progress documents whose refs the form is
 // already flagging — an unparsable ref is skipped here, never a 400.
 internal fun parseRef(raw: String): ParsedRef? {
-    val colon = raw.indexOf(':')
-    if (colon != raw.lastIndexOf(':')) return null
-    val kind = if (colon >= 0) raw.substring(0, colon) else null
-    val rest = if (colon >= 0) raw.substring(colon + 1) else raw
-    val slash = rest.indexOf('/')
-    if (slash != rest.lastIndexOf('/')) return null
-    val namespace = if (slash >= 0) rest.substring(0, slash) else null
-    val name = if (slash >= 0) rest.substring(slash + 1) else rest
+    val (kind, rest) = splitRefOnce(raw, ':') ?: return null
+    val (namespace, name) = splitRefOnce(rest, '/') ?: return null
     if (kind?.isEmpty() == true || namespace?.isEmpty() == true || name.isEmpty()) return null
     return ParsedRef(kind, namespace, name)
+}
+
+/**
+ * Resolves one raw reference to the identity it targets — the ONE resolution rule shared by
+ * the cross-check and the graph (contextual default kind, the referencing file's namespace as
+ * the fallback, lowercased identity). Null = unparsable or kind-less.
+ */
+internal fun resolveTarget(raw: String, defaultKind: String?, sourceNamespace: String): EntityIdentity? {
+    val parsed = parseRef(raw) ?: return null
+    val kind = parsed.kind?.lowercase() ?: defaultKind ?: return null
+    return EntityIdentity(
+        kind = kind,
+        namespace = parsed.namespace?.lowercase() ?: sourceNamespace,
+        name = parsed.name.lowercase(),
+    )
 }
 
 // Kind-independent on purpose: validation guarantees a stored document carries only its
@@ -127,15 +145,14 @@ internal fun EntitySpec.refFields(): List<Pair<String, List<String>>> = listOf(
     "spec.subdomainOf" to listOfNotNull(subdomainOf),
 )
 
-/**
- * Checks one document's references against the given identity set. [referenceCounter] (when
- * provided) is incremented once per non-blank reference encountered, parsable or not.
- */
-fun checkDocument(
-    file: CatalogFile,
-    identities: Set<EntityIdentity>,
-    referenceCounter: ((Int) -> Unit)? = null,
-): List<DocumentCheckFinding> {
+/** One document's verdicts plus how many non-blank references were seen (parsable or not). */
+data class DocumentCheckResult(
+    val findings: List<DocumentCheckFinding>,
+    val referenceCount: Int,
+)
+
+/** Checks one document's references against the given identity set. */
+fun checkDocument(file: CatalogFile, identities: Set<EntityIdentity>): DocumentCheckResult {
     val sourceNamespace = file.metadata.namespace.lowercase().ifEmpty { DEFAULT_NAMESPACE }
     val findings = mutableListOf<DocumentCheckFinding>()
     var seen = 0
@@ -148,8 +165,7 @@ fun checkDocument(
             }
         }
     }
-    referenceCounter?.invoke(seen)
-    return findings
+    return DocumentCheckResult(findings = findings, referenceCount = seen)
 }
 
 // The per-reference verdict; null = resolved (or unparsable — the form flags those itself).
@@ -159,14 +175,10 @@ private fun statusOf(
     sourceNamespace: String,
     identities: Set<EntityIdentity>,
 ): CrossCheckStatus? {
-    val parsed = parseRef(raw) ?: return null
-    val kind = parsed.kind?.lowercase() ?: defaultKind ?: return CrossCheckStatus.KIND_REQUIRED
-    if (kind !in STORED_KINDS) return CrossCheckStatus.UNVERIFIABLE
-    val target = EntityIdentity(
-        kind = kind,
-        namespace = parsed.namespace?.lowercase() ?: sourceNamespace,
-        name = parsed.name.lowercase(),
-    )
+    if (parseRef(raw) == null) return null
+    val target = resolveTarget(raw, defaultKind, sourceNamespace)
+        ?: return CrossCheckStatus.KIND_REQUIRED // parsable (checked above) but kind-less
+    if (target.kind !in STORED_KINDS) return CrossCheckStatus.UNVERIFIABLE
     return if (target in identities) null else CrossCheckStatus.MISSING
 }
 
@@ -175,7 +187,9 @@ fun crossCheckAll(sources: List<CrossCheckSource>): CrossCheckReport {
     val identities = sources.map { identityOf(it.file) }.toSet()
     var checkedReferences = 0
     val findings = sources.flatMap { source ->
-        checkDocument(source.file, identities) { checkedReferences += it }.map {
+        val result = checkDocument(source.file, identities)
+        checkedReferences += result.referenceCount
+        result.findings.map {
             CrossCheckFinding(
                 fileId = source.id,
                 fileName = source.file.metadata.name,

@@ -31,7 +31,11 @@ private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "email" to UserService.Users.email,
 )
 
-class UserService(val database: R2dbcDatabase) {
+/** The ONE sortable whitelist — the route's `parsePaging` argument derives from the column map
+ *  above, so the two can never drift apart (a mismatch used to be a runtime 500). */
+val USER_SORT_FIELDS: Set<String> = SORTABLE_COLUMNS.keys
+
+class UserService(private val database: R2dbcDatabase) {
     object Users : UIntIdTable() {
         val name = varchar("name", length = 50)
         // Uniqueness is enforced by a partial unique index (active rows only) in migration V1,

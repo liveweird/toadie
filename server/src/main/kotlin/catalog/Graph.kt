@@ -83,7 +83,8 @@ fun buildGraph(sources: List<CrossCheckSource>, allSources: List<CrossCheckSourc
         for ((field, refs) in source.file.spec.refFields()) {
             val defaultKind = REF_FIELD_DEFAULT_KINDS.getValue(field)
             for (raw in refs.filter { it.isNotBlank() }) {
-                val target = targetIdentity(raw, defaultKind, sourceIdentity.namespace) ?: continue
+                // Kind-less refs resolve to null — cross-check errors, not drawable edges.
+                val target = resolveTarget(raw, defaultKind, sourceIdentity.namespace) ?: continue
                 val targetId = nodeId(target)
                 nodes.getOrPut(targetId) { virtualOrForeignStoredNode(target, storedByIdentity) }
                 edges += GraphEdge(sourceId = nodeId(sourceIdentity), targetId = targetId, field = field)
@@ -92,17 +93,6 @@ fun buildGraph(sources: List<CrossCheckSource>, allSources: List<CrossCheckSourc
     }
 
     return CatalogGraph(nodes = nodes.values.toList(), edges = edges.toList())
-}
-
-// Null = unparsable or kind-less (not drawable).
-private fun targetIdentity(raw: String, defaultKind: String?, sourceNamespace: String): EntityIdentity? {
-    val parsed = parseRef(raw) ?: return null
-    val kind = parsed.kind?.lowercase() ?: defaultKind ?: return null
-    return EntityIdentity(
-        kind = kind,
-        namespace = parsed.namespace?.lowercase() ?: sourceNamespace,
-        name = parsed.name.lowercase(),
-    )
 }
 
 // A referenced node that is not in the rendered set: a stored file outside it, a missing

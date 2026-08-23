@@ -8,7 +8,7 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 
 val TokenBlocklistServiceKey = AttributeKey<TokenBlocklistService>("TokenBlocklistService")
 
-class TokenBlocklistService(val database: R2dbcDatabase) {
+class TokenBlocklistService(private val database: R2dbcDatabase) {
     object RevokedTokens : Table("revoked_tokens") {
         val jti = varchar("jti", 36)
         val expiresAt = long("expires_at")

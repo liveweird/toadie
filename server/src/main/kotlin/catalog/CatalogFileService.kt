@@ -3,8 +3,11 @@ package ch.nokillswit.catalog
 import ch.nokillswit.infra.db.containsNormalized
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
+import ch.nokillswit.plugins.isUniqueViolation
 import ch.nokillswit.users.UserService
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
@@ -59,7 +62,11 @@ private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "updatedAt" to CatalogFileService.CatalogFiles.updatedAt,
 )
 
-class CatalogFileService(val database: R2dbcDatabase) {
+/** The ONE sortable whitelist — the route's `parsePaging` argument derives from the column map
+ *  above, so the two can never drift apart (a mismatch used to be a runtime 500). */
+val CATALOG_FILE_SORT_FIELDS: Set<String> = SORTABLE_COLUMNS.keys
+
+class CatalogFileService(private val database: R2dbcDatabase) {
     object CatalogFiles : UIntIdTable("catalog_files") {
         val kind = varchar("kind", length = 63).default("Component")
         // Identity uniqueness (case-insensitive per kind+namespace, active rows only) is
@@ -91,7 +98,7 @@ class CatalogFileService(val database: R2dbcDatabase) {
     )
 
     suspend fun create(file: CatalogFile, createdByUserId: UInt): UInt = suspendTransaction(database) {
-        validate(file)
+        validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
             it[kind] = file.kind
@@ -113,7 +120,7 @@ class CatalogFileService(val database: R2dbcDatabase) {
     }
 
     suspend fun update(id: UInt, file: CatalogFile): Int = suspendTransaction(database) {
-        validate(file)
+        validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
             it[kind] = file.kind
             it[name] = file.metadata.name
@@ -141,7 +148,7 @@ class CatalogFileService(val database: R2dbcDatabase) {
      * hot path, so it reads only the three denormalized identity columns — never `content`.
      */
     suspend fun check(file: CatalogFile): DocumentCheckReport = suspendTransaction(database) {
-        DocumentCheckReport(findings = checkDocument(file, activeIdentities()))
+        DocumentCheckReport(findings = checkDocument(file, activeIdentities()).findings)
     }
 
     /** The identity triple of every active file, from the denormalized columns alone. */
@@ -182,6 +189,48 @@ class CatalogFileService(val database: R2dbcDatabase) {
             .toList()
             .sortedWith(compareBy({ it.metadata.namespace.lowercase() }, { it.metadata.name.lowercase() }))
         ExportResponse(files = files)
+    }
+
+    /**
+     * Report & skip: each document imports independently — sanitize → validate (a validator
+     * 400 becomes INVALID with its message) → create (an identity clash — the partial unique
+     * index's 23505 — becomes CONFLICT; any other storage failure ERROR). Nothing rethrows
+     * except cancellation, so the batch always runs to completion and the result rows ARE the
+     * outcome. The route emits the audit events for the CREATED rows (the repo convention:
+     * audits live route-side).
+     */
+    suspend fun import(files: List<CatalogFile>, createdByUserId: UInt): List<ImportFileResult> =
+        files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId) }
+
+    private suspend fun importOne(index: Int, raw: CatalogFile, createdByUserId: UInt): ImportFileResult {
+        val file = sanitizedCatalogFile(raw)
+        val base = ImportFileResult(
+            index = index,
+            kind = file.kind,
+            namespace = file.metadata.namespace,
+            name = file.metadata.name,
+            status = ImportResultStatus.ERROR,
+        )
+        try {
+            validateCatalogFile(file)
+        } catch (e: BadRequestException) {
+            return base.copy(status = ImportResultStatus.INVALID, message = e.message)
+        }
+        return try {
+            base.copy(status = ImportResultStatus.CREATED, fileId = create(file, createdByUserId))
+        } catch (e: CancellationException) {
+            // Cancellation is not a per-document failure — a gone client must stop the batch.
+            throw e
+        } catch (e: Exception) {
+            if (e.isUniqueViolation()) {
+                base.copy(
+                    status = ImportResultStatus.CONFLICT,
+                    message = "An active catalog file with this kind, namespace, and name already exists",
+                )
+            } else {
+                base.copy(status = ImportResultStatus.ERROR, message = e.message ?: "Storage failed")
+            }
+        }
     }
 
     private suspend fun activeSources(): List<CrossCheckSource> =
@@ -241,8 +290,4 @@ class CatalogFileService(val database: R2dbcDatabase) {
         }
         return op
     }
-
-    // Same rules the route enforces (single source in CatalogFile.kt) — re-checked here so
-    // direct service callers stay guarded too.
-    private fun validate(file: CatalogFile) = validateCatalogFile(file)
 }

@@ -1,7 +1,5 @@
 package ch.nokillswit.infra.db
 
-import io.ktor.server.plugins.BadRequestException
-import io.r2dbc.spi.R2dbcException
 import org.jetbrains.exposed.v1.core.CustomFunction
 import org.jetbrains.exposed.v1.core.Expression
 import org.jetbrains.exposed.v1.core.LikeEscapeOp
@@ -10,7 +8,6 @@ import org.jetbrains.exposed.v1.core.LowerCase
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.TextColumnType
 import org.jetbrains.exposed.v1.core.stringParam
-import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 
 /**
  * Case- and diacritics-insensitive contains-match: renders
@@ -52,20 +49,6 @@ internal fun containsPattern(raw: String): LikePattern {
         .replace("_", "\\_")
     return LikePattern("%$escaped%", escapeChar = '\\')
 }
-
-/**
- * Runs [block], translating low-level SQL failures (FK violations from client-supplied ids, on
- * either the JDBC or R2DBC path) into a 400 with [message]. Unique violations are not expected
- * through here — routes with unique columns rely on the global 23505→409 StatusPages mapping.
- */
-suspend fun <T> requireValidReferences(message: String, block: suspend () -> T): T =
-    try {
-        block()
-    } catch (e: ExposedSQLException) {
-        throw BadRequestException(message, e)
-    } catch (e: R2dbcException) {
-        throw BadRequestException(message, e)
-    }
 
 /**
  * Post-commit read-back guard: the create/transition already committed (Location set, audit

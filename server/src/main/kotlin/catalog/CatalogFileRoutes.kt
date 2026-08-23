@@ -1,13 +1,12 @@
 package ch.nokillswit.catalog
 
 import ch.nokillswit.audit.audit
-import ch.nokillswit.authz.NotFoundException
+import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.caller
 import ch.nokillswit.infra.db.orVanished
 import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
 import ch.nokillswit.infra.paging.toPage
-import ch.nokillswit.plugins.isUniqueViolation
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
@@ -23,7 +22,6 @@ import io.ktor.server.resources.put
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
-import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -71,7 +69,7 @@ fun Application.configureCatalogFileRoutes() {
             // bare caller() authentication check.
             get<CatalogFiles> {
                 call.caller()
-                val paging = call.parsePaging(sortable = setOf("id", "kind", "name", "namespace", "updatedAt"))
+                val paging = call.parsePaging(sortable = CATALOG_FILE_SORT_FIELDS)
                 val filter = CatalogFileListFilter(
                     name = call.request.queryParameters.optionalString("name"),
                     namespace = call.request.queryParameters.optionalString("namespace"),
@@ -124,10 +122,16 @@ fun Application.configureCatalogFileRoutes() {
                 if (request.files.size > MAX_IMPORT_FILES) {
                     throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
                 }
-                // Report & skip: each document imports independently — a bad or clashing
-                // document becomes its own result row and never aborts its neighbors.
-                val results = request.files.mapIndexed { index, raw ->
-                    importOne(catalogFileService, caller.userId, index, raw)
+                // Report & skip: the per-document orchestration lives in the service; audits
+                // stay route-side (the repo convention) — one created event per stored row.
+                val results = catalogFileService.import(request.files, caller.userId)
+                for (result in results.filter { it.status == ImportResultStatus.CREATED }) {
+                    audit(
+                        "catalog_file.created",
+                        "byUserId" to caller.userId.toLong(),
+                        "catalogFileId" to result.fileId!!.toLong(),
+                        "import" to true,
+                    )
                 }
                 call.respond(HttpStatusCode.OK, ImportResponse(results = results))
             }
@@ -151,17 +155,14 @@ fun Application.configureCatalogFileRoutes() {
             }
             get<CatalogFiles.Id> { route ->
                 call.caller()
-                val detail = catalogFileService.read(route.id)
-                    ?: throw NotFoundException("Catalog file not found")
+                val detail = catalogFileService.read(route.id).orNotFound("Catalog file")
                 call.respond(HttpStatusCode.OK, detail.toResponse())
             }
             put<CatalogFiles.Id> { route ->
                 val caller = call.caller()
                 val file = sanitizedCatalogFile(call.receive())
                 validateCatalogFile(file)
-                if (catalogFileService.update(route.id, file) == 0) {
-                    throw NotFoundException("Catalog file not found")
-                }
+                catalogFileService.update(route.id, file).orNotFound("Catalog file")
                 audit(
                     "catalog_file.updated",
                     "byUserId" to caller.userId.toLong(),
@@ -171,9 +172,7 @@ fun Application.configureCatalogFileRoutes() {
             }
             delete<CatalogFiles.Id> { route ->
                 val caller = call.caller()
-                if (catalogFileService.delete(route.id) == 0) {
-                    throw NotFoundException("Catalog file not found")
-                }
+                catalogFileService.delete(route.id).orNotFound("Catalog file")
                 audit(
                     "catalog_file.deleted",
                     "byUserId" to caller.userId.toLong(),
@@ -181,55 +180,6 @@ fun Application.configureCatalogFileRoutes() {
                 )
                 call.respond(HttpStatusCode.NoContent)
             }
-        }
-    }
-}
-
-/**
- * One import document, in isolation: sanitize → validate (a validator 400 becomes INVALID with
- * its message) → create (an identity clash — the partial unique index's 23505 — becomes
- * CONFLICT, report & skip; any other storage failure becomes ERROR). Nothing here rethrows —
- * the batch always runs to completion and the result rows ARE the outcome.
- */
-private suspend fun importOne(
-    service: CatalogFileService,
-    callerUserId: UInt,
-    index: Int,
-    raw: CatalogFile,
-): ImportFileResult {
-    val file = sanitizedCatalogFile(raw)
-    val base = ImportFileResult(
-        index = index,
-        kind = file.kind,
-        namespace = file.metadata.namespace,
-        name = file.metadata.name,
-        status = ImportResultStatus.ERROR,
-    )
-    try {
-        validateCatalogFile(file)
-    } catch (e: BadRequestException) {
-        return base.copy(status = ImportResultStatus.INVALID, message = e.message)
-    }
-    return try {
-        val id = service.create(file, callerUserId)
-        audit(
-            "catalog_file.created",
-            "byUserId" to callerUserId.toLong(),
-            "catalogFileId" to id.toLong(),
-            "import" to true,
-        )
-        base.copy(status = ImportResultStatus.CREATED, fileId = id)
-    } catch (e: CancellationException) {
-        // Cancellation is not a per-document failure — a gone client must stop the batch.
-        throw e
-    } catch (e: Exception) {
-        if (e.isUniqueViolation()) {
-            base.copy(
-                status = ImportResultStatus.CONFLICT,
-                message = "An active catalog file with this kind, namespace, and name already exists",
-            )
-        } else {
-            base.copy(status = ImportResultStatus.ERROR, message = e.message ?: "Storage failed")
         }
     }
 }

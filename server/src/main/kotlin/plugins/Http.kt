@@ -70,8 +70,7 @@ fun Application.configureHttp() {
     if (exposeOpenApi) {
         // swaggerUI serves both the UI page and the spec (GET /openapi/documentation.yaml).
         routing {
-            swaggerUI(path = "openapi") {
-            }
+            swaggerUI(path = "openapi")
         }
     }
 }

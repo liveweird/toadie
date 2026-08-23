@@ -73,14 +73,18 @@ private const val PG_UNIQUE_VIOLATION = "23505"
 // error (nothing legitimate contains NUL), not a server fault.
 private const val PG_CHARACTER_NOT_IN_REPERTOIRE = "22021"
 
-private fun Throwable.hasSqlState(state: String): Boolean {
+/** One cause-chain walk for every predicate below (self included). */
+private inline fun Throwable.anyInChain(predicate: (Throwable) -> Boolean): Boolean {
     var cur: Throwable? = this
     while (cur != null) {
-        if (cur is R2dbcException && cur.sqlState == state) return true
+        if (predicate(cur)) return true
         cur = cur.cause
     }
     return false
 }
+
+private fun Throwable.hasSqlState(state: String): Boolean =
+    anyInChain { it is R2dbcException && it.sqlState == state }
 
 // Internal (not private): the user-import loop classifies per-row duplicates with it.
 internal fun Throwable.isUniqueViolation(): Boolean = hasSqlState(PG_UNIQUE_VIOLATION)
@@ -108,14 +112,9 @@ private suspend fun ApplicationCall.respondInternalError(cause: Throwable) {
 // -dependent, so it is replaced with fixed vocabulary. The wrap always carries a
 // ContentConvertException in its cause chain; our own validators throw BadRequestException
 // with no such cause, so their intentional messages pass through untouched.
-private fun Throwable.hasContentConvertCause(): Boolean {
-    var cur: Throwable? = cause
-    while (cur != null) {
-        if (cur is ContentConvertException) return true
-        cur = cur.cause
-    }
-    return false
-}
+private fun Throwable.hasContentConvertCause(): Boolean =
+    // Starts at the CAUSE on purpose: a validator's own BadRequestException has no wrap.
+    cause?.anyInChain { it is ContentConvertException } == true
 
 // The Resources plugin's path/query decode failures arrive as BadRequestException with this
 // exact message (an overflowing id, a non-numeric segment) — equally internal vocabulary.
@@ -188,7 +187,7 @@ fun Application.configureErrorHandling() {
             call.respondProblem(HttpStatusCode.NotFound, cause.message ?: "Resource not found")
         }
         exception<ConflictException> { call, cause ->
-            call.respondProblem(HttpStatusCode.Conflict, cause.message ?: "Conflict", instance = cause.instance)
+            call.respondProblem(HttpStatusCode.Conflict, cause.message ?: "Conflict")
         }
         exception<BadGatewayException> { call, cause ->
             call.respondProblem(HttpStatusCode.BadGateway, cause.message ?: "Upstream request failed")

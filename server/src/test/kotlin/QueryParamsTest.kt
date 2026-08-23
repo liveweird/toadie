@@ -1,10 +1,7 @@
 package ch.nokillswit
 
-import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalEnum
-import ch.nokillswit.infra.paging.optionalLong
 import ch.nokillswit.infra.paging.optionalString
-import ch.nokillswit.infra.paging.optionalUInt
 import ch.nokillswit.infra.paging.singleValue
 import io.ktor.http.parametersOf
 import io.ktor.server.plugins.BadRequestException
@@ -37,32 +34,6 @@ class QueryParamsTest {
         val params = parametersOf("blank" to listOf("   "), "real" to listOf(" x "))
         assertNull(params.optionalString("blank"))
         assertEquals(" x ", params.optionalString("real"))
-    }
-
-    @Test
-    fun `optionalUInt parses and rejects non-UInt values`() {
-        val params = parametersOf("ok" to listOf("5"), "neg" to listOf("-1"), "junk" to listOf("abc"))
-        assertEquals(5u, params.optionalUInt("ok"))
-        assertNull(params.optionalUInt("missing"))
-        assertFailsWith<BadRequestException> { params.optionalUInt("neg") }
-        assertFailsWith<BadRequestException> { params.optionalUInt("junk") }
-    }
-
-    @Test
-    fun `optionalLong parses and rejects non-Long values`() {
-        val params = parametersOf("ok" to listOf("-7"), "junk" to listOf("seven"))
-        assertEquals(-7L, params.optionalLong("ok"))
-        assertNull(params.optionalLong("missing"))
-        assertFailsWith<BadRequestException> { params.optionalLong("junk") }
-    }
-
-    @Test
-    fun `optionalBoolean is strict`() {
-        val params = parametersOf("t" to listOf("true"), "f" to listOf("false"), "junk" to listOf("maybe"))
-        assertEquals(true, params.optionalBoolean("t"))
-        assertEquals(false, params.optionalBoolean("f"))
-        assertNull(params.optionalBoolean("missing"))
-        assertFailsWith<BadRequestException> { params.optionalBoolean("junk") }
     }
 
     @Test

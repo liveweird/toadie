@@ -13,21 +13,21 @@ complexity:
   CyclomaticComplexMethod:
     excludes: ['**/*Routes.kt']
     threshold: 25
-  # Notification descriptor builders and the shared list(view, caller, filter, paging, …)
-  # convention carry naturally wide, data-only signatures; test fixture builders likewise.
+  # Data-only wire DTOs (LoginResponse, CatalogFileResponse, ImportFileResult) and test
+  # fixture builders carry naturally wide signatures; nothing behavioral hides in them.
   LongParameterList:
     excludes: ['**/src/test/**']
     functionThreshold: 12
     constructorThreshold: 12
-  # One cohesive service per feature is the architecture (UserService, DaysOffService, …);
+  # One cohesive service per feature is the architecture (UserService, CatalogFileService);
   # splitting them by function count would fork feature logic across files.
   TooManyFunctions:
     active: false
   # Per-feature route test suites are deliberately comprehensive (one file per feature).
   LargeClass:
     excludes: ['**/src/test/**']
-  # The documented authz/visibility matrices (canReadFeedback & friends) read best as single
-  # four-clause conditions — the clause count IS the matrix width.
+  # The documented guard/validation matrices (the last-admin checks, sanitizedCatalogFile's
+  # branches) read best as single multi-clause conditions — the clause count IS the rule width.
   ComplexCondition:
     threshold: 5
   # The OpenAPI conformance report writer (test infra) nests report sections naturally.
@@ -35,9 +35,9 @@ complexity:
     excludes: ['**/src/test/**']
 
 exceptions:
-  # Generic catches are the documented best-effort boundaries — email delivery (a failure keeps
-  # the account / skips the mirror) and import row isolation — and every site logs or
-  # classifies the exception rather than swallowing it.
+  # Generic catches are the documented best-effort boundaries — the import loop's per-document
+  # isolation (report & skip) and the URL fetch's upstream classification — and every site
+  # rethrows cancellation and logs or classifies the exception rather than swallowing it.
   TooGenericExceptionCaught:
     active: false
 
@@ -67,8 +67,8 @@ style:
   # Ktor-idiomatic wildcard imports (io.ktor.server.application.* etc.) are used throughout.
   WildcardImport:
     active: false
-  # Exposed column widths, time math (* 1000, / 60), eNPS band bounds (9, 7..8, 6), and
-  # percentage ranges are self-describing domain literals; naming each would hurt readability.
+  # Exposed column widths, time math (* 1000, / 60), bcrypt costs, and the descriptor-format
+  # caps are self-describing domain literals; naming each would hurt readability.
   MagicNumber:
     active: false
   # De-facto wrap is ~120, but assertion lines and bilingual copy run longer; 140 is the gate.
@@ -78,8 +78,8 @@ style:
   # evaluates the read matrices rule-by-rule, cheapest first).
   ReturnCount:
     max: 6
-  # Guard-continues in row-independent sweep loops (CSV import rows, the anonymous-access
-  # spec sweep) — each continue is one skip rule, not control-flow spaghetti.
+  # Guard-continues in row-independent sweep loops (the graph's reference expansion, the
+  # anonymous-access spec sweep) — each continue is one skip rule, not control-flow spaghetti.
   LoopWithTooManyJumpStatements:
     maxJumpCount: 3
   # Unused imports are off in detekt's defaults (deprecated in favour of the ktlint wrapper,

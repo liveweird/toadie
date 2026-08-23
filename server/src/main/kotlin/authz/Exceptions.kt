@@ -11,16 +11,18 @@ class ForbiddenException(message: String = "Forbidden") : RuntimeException(messa
  */
 class NotFoundException(message: String = "Resource not found") : RuntimeException(message)
 
+/** The route 404 convention as a helper: a null read → `"<resource> not found"`. */
+fun <T : Any> T?.orNotFound(resource: String): T = this ?: throw NotFoundException("$resource not found")
+
+/** The zero-row-mutation half of the same convention. */
+fun Int.orNotFound(resource: String): Int =
+    if (this == 0) throw NotFoundException("$resource not found") else this
+
 /**
  * Requested action conflicts with the resource's current state (e.g. an invalid status
- * transition, or a duplicate of an in-progress resource). [instance] optionally points at the
- * conflicting resource (an API path) and rides the ProblemDetail `instance` field, so clients
- * can link to it.
+ * transition, or the last-admin protections) → 409 with the given detail.
  */
-class ConflictException(
-    message: String = "Conflict",
-    val instance: String? = null,
-) : RuntimeException(message)
+class ConflictException(message: String = "Conflict") : RuntimeException(message)
 
 /**
  * Caller-specific throttling (e.g. the per-account login lockout) → 429 with the given detail.
