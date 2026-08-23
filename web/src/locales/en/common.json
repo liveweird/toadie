@@ -1,10 +1,42 @@
 {
   "action": {
-    "logout": "Logout"
+    "logout": "Logout",
+    "create": "Create",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "download": "Download",
+    "close": "Close"
   },
   "field": {
-    "email": "Email"
+    "email": "Email",
+    "name": "Name"
   },
+  "state": {
+    "loading": "Loading…"
+  },
+  "filter": {
+    "title": "Filters",
+    "contains": "Contains…",
+    "exact": "Exact value…"
+  },
+  "table": {
+    "total": "{{count}} total",
+    "perPage": "{{count}} / page",
+    "firstPage": "First page",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "lastPage": "Last page"
+  },
+  "error": {
+    "timeout": "The request timed out. Try again.",
+    "network": "Network error. Check your connection and try again.",
+    "loadFailedStatus": "Load failed ({{status}})",
+    "actionFailed": "Action failed. Check your connection and try again.",
+    "actionFailedStatus": "Action failed ({{status}})"
+  },
+  "charCount": "{{current}} / {{max}}",
   "language": {
     "label": "Language"
   },

@@ -3,6 +3,7 @@
   "toggleColorScheme": "Przełącz motyw kolorystyczny",
   "skipToContent": "Przejdź do treści",
   "nav": {
-    "home": "Strona główna"
+    "home": "Strona główna",
+    "catalogFiles": "Pliki katalogu"
   }
 }

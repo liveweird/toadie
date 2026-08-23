@@ -101,6 +101,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/catalog-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List stored catalog files
+         * @description Lists the stored catalog-info.yaml files (shared workspace — every authenticated user
+         *     sees every file).
+         *
+         *     Supports offset pagination, sorting and filtering.
+         *
+         *     - Sortable fields: `id`, `name`, `namespace`, `updatedAt`. Default sort is `id`
+         *       ascending; `id` ascending is always appended as a deterministic tiebreaker.
+         *     - Filters (optional, whitelisted):
+         *       - `name` — case- and accent-insensitive substring match against the entity name.
+         *       - `namespace` — exact match (case-insensitive; namespaces are stored lowercase).
+         *
+         *     Each returned item includes the creator's `creatorName` resolved via join so the UI
+         *     does not need an N+1 lookup.
+         *
+         *     Malformed query parameters (unknown sort field, out-of-range page/pageSize, repeated
+         *     scalar keys) respond with `400` and a `ProblemDetail` body.
+         */
+        get: operations["listCatalogFiles"];
+        put?: never;
+        /**
+         * Create a catalog file
+         * @description Stores a new catalog-info.yaml document (a Backstage Component entity). The payload is
+         *     validated against the Backstage descriptor format (name/namespace/tag/label/annotation
+         *     grammars, entity-reference syntax for `owner`/`system`/`subcomponentOf` and the four
+         *     reference arrays); references are checked for FORMAT only — resolution against other
+         *     stored files is a future feature. Entity identity (namespace + name, case-insensitive)
+         *     must be unique among active files; a clash is a `409`.
+         */
+        post: operations["createCatalogFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog-files/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /** Fetch a catalog file */
+        get: operations["getCatalogFile"];
+        /**
+         * Replace a catalog file
+         * @description Full replacement; same validation as create. Renaming into an identity an active file
+         *     already holds is a `409`.
+         */
+        put: operations["replaceCatalogFile"];
+        post?: never;
+        /**
+         * Delete a catalog file
+         * @description Soft delete — the file leaves every list and read, and its identity is freed.
+         */
+        delete: operations["deleteCatalogFile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -146,6 +218,109 @@ export interface components {
             password: string;
             /** @description Required when the caller changes their OWN password (even an admin); omitted for an admin resetting somebody else's. */
             currentPassword?: string;
+        };
+        /** @description One catalog-info.yaml document — a Backstage Component entity. `kind` is implicit (`Component`) until further kinds arrive. */
+        CatalogFileRequest: {
+            metadata: components["schemas"]["CatalogFileMetadata"];
+            spec: components["schemas"]["ComponentSpec"];
+        };
+        CatalogFileMetadata: {
+            /** @description Entity name — unique (case-insensitively) per namespace among active files. */
+            name: string;
+            /**
+             * @description Folded to lowercase; blank/omitted means `default`.
+             * @default default
+             */
+            namespace: string;
+            /** @description Display-only alternative to `name`; no format restrictions. */
+            title?: string | null;
+            description?: string | null;
+            /** @description Kubernetes-style identifying key/value pairs. Keys are an optional lowercase-domain prefix (max 253 chars) plus `/` plus a name part; values follow the entity-name grammar. */
+            labels?: {
+                [key: string]: string;
+            };
+            /** @description Non-identifying key/value pairs (key grammar as labels; values free-form). Keys the catalog server writes itself (`backstage.io/managed-by-location`, `backstage.io/managed-by-origin-location`, `backstage.io/orphan`) are rejected. */
+            annotations?: {
+                [key: string]: string;
+            };
+            tags?: string[];
+            links?: components["schemas"]["CatalogLink"][];
+        };
+        CatalogLink: {
+            /** @description Absolute URI. */
+            url: string;
+            title?: string | null;
+            /** @description Semantic icon key (entity-name grammar). */
+            icon?: string | null;
+        };
+        ComponentSpec: {
+            /** @description Component classification, e.g. `service`, `website`, `library`. */
+            type: string;
+            /** @description Lifecycle state, e.g. `experimental`, `production`, `deprecated`. */
+            lifecycle: string;
+            /** @description Entity reference `[kind:][namespace/]name` of the owning group/user (format-checked only; resolution is a future feature). */
+            owner: string;
+            /** @description Entity reference of the parent System. */
+            system?: string | null;
+            /** @description Entity reference of the parent Component. */
+            subcomponentOf?: string | null;
+            /** @description Entity references of provided APIs. */
+            providesApis?: string[];
+            /** @description Entity references of consumed APIs. */
+            consumesApis?: string[];
+            /** @description Entity references of Components/Resources this component depends on. */
+            dependsOn?: string[];
+            /** @description Entity references of Components/Resources depending on this component. */
+            dependencyOf?: string[];
+        };
+        CatalogFileResponse: {
+            /** Format: int32 */
+            id: number;
+            metadata: components["schemas"]["CatalogFileMetadata"];
+            spec: components["schemas"]["ComponentSpec"];
+            /** Format: int32 */
+            createdBy: number;
+            creatorName: string;
+            /** @description True when the creating user has been soft-deleted. */
+            creatorDeleted: boolean;
+            /**
+             * Format: int64
+             * @description Epoch milliseconds.
+             */
+            createdAt: number;
+            /**
+             * Format: int64
+             * @description Epoch milliseconds.
+             */
+            updatedAt: number;
+        };
+        CatalogFileListItem: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            namespace: string;
+            title: string | null;
+            type: string;
+            lifecycle: string;
+            owner: string;
+            creatorName: string;
+            /** @description True when the creating user has been soft-deleted. */
+            creatorDeleted: boolean;
+            /**
+             * Format: int64
+             * @description Epoch milliseconds.
+             */
+            updatedAt: number;
+        };
+        CatalogFilePage: {
+            items: components["schemas"]["CatalogFileListItem"][];
+            page: number;
+            pageSize: number;
+            /**
+             * Format: int64
+             * @description Row count after filters, before pagination.
+             */
+            total: number;
         };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
@@ -231,6 +406,17 @@ export interface components {
     };
     parameters: {
         ResourceId: number;
+        /** @description 1-based page index. Defaults to 1. */
+        Page: number;
+        /** @description Rows per page. Defaults to 20, maximum 100. */
+        PageSize: number;
+        /**
+         * @description Sort spec. Format: `field` (ascending) or `-field` (descending). Multiple fields are
+         *     comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
+         *     sortable-field whitelist; unknown fields are rejected with `400`. `id` ascending is
+         *     always appended as a deterministic tiebreaker.
+         */
+        Sort: string;
     };
     requestBodies: never;
     headers: never;
@@ -359,6 +545,170 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listCatalogFiles: {
+        parameters: {
+            query?: {
+                /** @description 1-based page index. Defaults to 1. */
+                page?: components["parameters"]["Page"];
+                /** @description Rows per page. Defaults to 20, maximum 100. */
+                pageSize?: components["parameters"]["PageSize"];
+                /**
+                 * @description Sort spec. Format: `field` (ascending) or `-field` (descending). Multiple fields are
+                 *     comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
+                 *     sortable-field whitelist; unknown fields are rejected with `400`. `id` ascending is
+                 *     always appended as a deterministic tiebreaker.
+                 */
+                sort?: components["parameters"]["Sort"];
+                /** @description Case- and accent-insensitive substring match against the entity name. */
+                name?: string;
+                /** @description Exact (case-insensitive) namespace match. */
+                namespace?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of catalog files */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogFilePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createCatalogFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogFileRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new catalog-file resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogFileResponse"];
+                };
+            };
+            /** @description Payload violates the descriptor-format rules */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getCatalogFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogFileResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceCatalogFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogFileRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Payload violates the descriptor-format rules */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteCatalogFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };

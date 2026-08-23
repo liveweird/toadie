@@ -1,10 +1,42 @@
 {
   "action": {
-    "logout": "Wyloguj"
+    "logout": "Wyloguj",
+    "create": "Utwórz",
+    "save": "Zapisz",
+    "cancel": "Anuluj",
+    "delete": "Usuń",
+    "edit": "Edytuj",
+    "download": "Pobierz",
+    "close": "Zamknij"
   },
   "field": {
-    "email": "E-mail"
+    "email": "E-mail",
+    "name": "Nazwa"
   },
+  "state": {
+    "loading": "Wczytywanie…"
+  },
+  "filter": {
+    "title": "Filtry",
+    "contains": "Zawiera…",
+    "exact": "Dokładna wartość…"
+  },
+  "table": {
+    "total": "Łącznie: {{count}}",
+    "perPage": "{{count}} / stronę",
+    "firstPage": "Pierwsza strona",
+    "previousPage": "Poprzednia strona",
+    "nextPage": "Następna strona",
+    "lastPage": "Ostatnia strona"
+  },
+  "error": {
+    "timeout": "Przekroczono limit czasu żądania. Spróbuj ponownie.",
+    "network": "Błąd sieci. Sprawdź połączenie i spróbuj ponownie.",
+    "loadFailedStatus": "Wczytywanie nie powiodło się ({{status}})",
+    "actionFailed": "Akcja nie powiodła się. Sprawdź połączenie i spróbuj ponownie.",
+    "actionFailedStatus": "Akcja nie powiodła się ({{status}})"
+  },
+  "charCount": "{{current}} / {{max}}",
   "language": {
     "label": "Język"
   },

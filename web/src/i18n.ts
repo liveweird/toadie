@@ -10,6 +10,7 @@ import LanguageDetector from "i18next-browser-languagedetector";
 import enCommon from "./locales/en/common.json";
 import enAppShell from "./locales/en/appShell.json";
 import enAuth from "./locales/en/auth.json";
+import enCatalog from "./locales/en/catalog.json";
 
 /**
  * The build-time supported-language set. Adding a language: a complete `locales/<lang>/`
@@ -49,6 +50,7 @@ export const en = {
   common: enCommon,
   appShell: enAppShell,
   auth: enAuth,
+  catalog: enCatalog,
 };
 
 // Every non-EN bundle is assembled from its locales/<lang>/ folder — adding a language never
