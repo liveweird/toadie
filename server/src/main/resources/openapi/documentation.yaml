@@ -289,6 +289,43 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/catalog-files/graph:
+    get:
+      tags: [catalog-files]
+      operationId: getCatalogGraph
+      summary: The stored files rendered together as a relationship graph
+      description: |
+        Every active file and the reference edges between them, resolved with the cross-check's
+        semantics (per-field default kinds, namespaceless references resolve in the referencing
+        file's own namespace, case-insensitive identity). Node statuses:
+
+        - `STORED` — an active catalog file (carries `fileId`).
+        - `MISSING` — a referenced Component no active file provides (the cross-check's
+          MISSING, drawn).
+        - `EXTERNAL` — a referenced entity of a kind Toadie doesn't store yet.
+
+        Kind-less `dependsOn`/`dependencyOf` entries (cross-check errors) are not drawable and
+        are omitted. The optional `namespace` filter narrows which files' references are
+        EXPANDED; targets still resolve against the whole workspace, so a stored file outside
+        the filter appears as a STORED node when something points at it. Unpaged by design —
+        a report-style computation over the workspace.
+      parameters:
+        - name: namespace
+          in: query
+          required: false
+          schema: { type: string }
+          description: Exact (case-insensitive) namespace of the files to expand.
+      responses:
+        '200':
+          description: The graph
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogGraph'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/catalog-files/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -698,6 +735,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DocumentCheckFinding'
+
+    GraphNodeStatus:
+      type: string
+      enum: [STORED, MISSING, EXTERNAL]
+
+    GraphNode:
+      type: object
+      required: [id, kind, namespace, name, status]
+      properties:
+        id:
+          type: string
+          description: Canonical lowercased identity `kind:namespace/name` (the dedupe key).
+        kind: { type: string }
+        namespace: { type: string }
+        name: { type: string }
+        title: { type: string, nullable: true }
+        fileId:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          description: The backing file for STORED nodes; null for virtual nodes.
+        status: { $ref: '#/components/schemas/GraphNodeStatus' }
+
+    GraphEdge:
+      type: object
+      required: [sourceId, targetId, field]
+      properties:
+        sourceId: { type: string }
+        targetId: { type: string }
+        field:
+          type: string
+          description: The spec field the reference lives in, e.g. `spec.dependsOn`.
+
+    CatalogGraph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphEdge'
 
     CatalogFilePage:
       type: object

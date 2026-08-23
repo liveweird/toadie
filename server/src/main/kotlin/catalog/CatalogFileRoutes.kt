@@ -38,6 +38,10 @@ class CatalogFiles {
     @Serializable
     @Resource("check")
     class Check(val parent: CatalogFiles = CatalogFiles())
+
+    @Serializable
+    @Resource("graph")
+    class Graph(val parent: CatalogFiles = CatalogFiles())
 }
 
 fun Application.configureCatalogFileRoutes() {
@@ -80,6 +84,11 @@ fun Application.configureCatalogFileRoutes() {
                 // computation (POST only because the document travels in the body); no audit.
                 val file = sanitizedCatalogFile(call.receive())
                 call.respond(HttpStatusCode.OK, catalogFileService.check(file))
+            }
+            get<CatalogFiles.Graph> {
+                call.caller()
+                val namespace = call.request.queryParameters.optionalString("namespace")
+                call.respond(HttpStatusCode.OK, catalogFileService.graph(namespace))
             }
             get<CatalogFiles.Id> { route ->
                 call.caller()

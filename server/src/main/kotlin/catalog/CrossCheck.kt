@@ -60,11 +60,11 @@ data class CrossCheckSource(
 )
 
 /** The one stored kind — grows with the editor. */
-private const val COMPONENT_KIND = "component"
+internal const val COMPONENT_KIND = "component"
 
 // Per-field default kinds (the descriptor reference's context rules). dependsOn/dependencyOf
 // map to null ON PURPOSE: Backstage gives them no default, so a kind-less entry is an error.
-private val REF_FIELD_DEFAULT_KINDS: Map<String, String?> = mapOf(
+internal val REF_FIELD_DEFAULT_KINDS: Map<String, String?> = mapOf(
     "spec.owner" to "group",
     "spec.system" to "system",
     "spec.subcomponentOf" to COMPONENT_KIND,
@@ -83,11 +83,11 @@ fun identityOf(file: CatalogFile) = EntityIdentity(
     name = file.metadata.name.lowercase(),
 )
 
-private data class ParsedRef(val kind: String?, val namespace: String?, val name: String)
+internal data class ParsedRef(val kind: String?, val namespace: String?, val name: String)
 
 // Lenient on purpose: the ad-hoc check sees in-progress documents whose refs the form is
 // already flagging — an unparsable ref is skipped here, never a 400.
-private fun parseRef(raw: String): ParsedRef? {
+internal fun parseRef(raw: String): ParsedRef? {
     val colon = raw.indexOf(':')
     if (colon != raw.lastIndexOf(':')) return null
     val kind = if (colon >= 0) raw.substring(0, colon) else null
@@ -100,7 +100,7 @@ private fun parseRef(raw: String): ParsedRef? {
     return ParsedRef(kind, namespace, name)
 }
 
-private fun ComponentSpec.refFields(): List<Pair<String, List<String>>> = listOf(
+internal fun ComponentSpec.refFields(): List<Pair<String, List<String>>> = listOf(
     "spec.owner" to listOf(owner),
     "spec.system" to listOfNotNull(system),
     "spec.subcomponentOf" to listOfNotNull(subcomponentOf),

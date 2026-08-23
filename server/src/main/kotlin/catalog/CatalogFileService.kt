@@ -139,6 +139,18 @@ class CatalogFileService(val database: R2dbcDatabase) {
         DocumentCheckReport(findings = checkDocument(file, identities))
     }
 
+    /**
+     * The rendered-together graph — all active files in one transaction. A [namespace] narrows
+     * which files' references are EXPANDED; targets still resolve against the whole workspace
+     * (a stored file elsewhere appears as a STORED node when pointed at).
+     */
+    suspend fun graph(namespace: String?): CatalogGraph = suspendTransaction(database) {
+        val all = activeSources()
+        val folded = namespace?.lowercase()
+        val rendered = if (folded == null) all else all.filter { it.file.metadata.namespace.lowercase() == folded }
+        buildGraph(sources = rendered, allSources = all)
+    }
+
     private suspend fun activeSources(): List<CrossCheckSource> =
         CatalogFiles.selectAll()
             .where { active() }
