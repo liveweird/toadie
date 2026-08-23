@@ -7,16 +7,19 @@ import java.net.URISyntaxException
 import kotlinx.serialization.Serializable
 
 /**
- * One catalog-info.yaml document — a Backstage Component entity (the only kind the editor
- * supports yet; `kind` stays off the wire and fixed to `Component` until a second kind makes it
- * an additive field). Shape and validation rules mirror the descriptor reference
- * (`.claude/docs/backstage-descriptor-format.md`); references are validated by GRAMMAR only —
- * resolving them against other stored files is the future cross-check feature.
+ * One catalog-info.yaml document — a Backstage entity of one of the supported landscape kinds.
+ * Shape and validation rules mirror the descriptor reference
+ * (`.claude/docs/backstage-descriptor-format.md`). `spec` is ONE flat superset of every kind's
+ * fields (no oneOf/discriminator — hostile to the 3.0 tooling); the per-kind table below
+ * enforces required and forbidden fields, so stored documents stay canonical. References are
+ * validated by GRAMMAR only — resolving them is the cross-check feature's job.
  */
 @Serializable
 data class CatalogFile(
+    // Default keeps pre-kind stored content (and old clients) decoding as Components.
+    val kind: String = "Component",
     val metadata: CatalogFileMetadata,
-    val spec: ComponentSpec,
+    val spec: EntitySpec,
 )
 
 @Serializable
@@ -39,30 +42,56 @@ data class CatalogLink(
     val icon: String? = null,
 )
 
+/**
+ * The superset of every supported kind's spec fields. The Component fields keep their
+ * non-nullable empty-list defaults for stored-content back-compat; `children`/`memberOf` are
+ * nullable lists ON PURPOSE — Backstage requires them PRESENT (possibly empty) on Group/User,
+ * so null models absence.
+ */
 @Serializable
-data class ComponentSpec(
-    val type: String,
-    val lifecycle: String,
-    val owner: String,
+data class EntitySpec(
+    val type: String? = null,
+    val lifecycle: String? = null,
+    val owner: String? = null,
     val system: String? = null,
     val subcomponentOf: String? = null,
     val providesApis: List<String> = emptyList(),
     val consumesApis: List<String> = emptyList(),
     val dependsOn: List<String> = emptyList(),
     val dependencyOf: List<String> = emptyList(),
+    val definition: String? = null,
+    val profile: EntityProfile? = null,
+    val parent: String? = null,
+    val children: List<String>? = null,
+    val members: List<String> = emptyList(),
+    val memberOf: List<String>? = null,
+    val domain: String? = null,
+    val subdomainOf: String? = null,
+)
+
+@Serializable
+data class EntityProfile(
+    val displayName: String? = null,
+    val email: String? = null,
+    val picture: String? = null,
 )
 
 const val DEFAULT_NAMESPACE = "default"
 
+/** The kinds the editor supports, in canonical casing (identity matching stays lowercase). */
+val SUPPORTED_KINDS = listOf("Component", "API", "System", "Domain", "Resource", "Group", "User")
+
 // Backstage's own limits where it defines them (63/253 — the Kubernetes-derived rules); the
-// title/description/annotation-value/link-title caps and the collection caps are Toadie's own
-// sanity ceilings, declared as maxLength/maxItems in the OpenAPI spec.
+// title/description/annotation-value/link-title/definition/profile caps and the collection caps
+// are Toadie's own sanity ceilings, declared as maxLength/maxItems in the OpenAPI spec.
 const val MAX_ENTITY_PART_LENGTH = 63
 const val MAX_KEY_PREFIX_LENGTH = 253
 const val MAX_TITLE_LENGTH = 200
 const val MAX_DESCRIPTION_LENGTH = 2000
 const val MAX_ANNOTATION_VALUE_LENGTH = 5000
 const val MAX_LINK_TITLE_LENGTH = 100
+const val MAX_DEFINITION_LENGTH = 100_000
+const val MAX_PROFILE_EMAIL_LENGTH = 254
 const val MAX_TAGS = 50
 const val MAX_MAP_ENTRIES = 50
 const val MAX_LINKS = 20
@@ -92,11 +121,13 @@ private val SERVER_WRITTEN_ANNOTATIONS = setOf(
 )
 
 /**
- * Trims every scalar field and list entry and folds `namespace` to lowercase (blank → the
- * `default` namespace), so validation and storage always see canonical text. Map keys/values
- * are validated as sent — silently rewriting a key the user typed would mask the mistake.
+ * Trims every scalar field and list entry, folds `namespace` to lowercase (blank → the
+ * `default` namespace), and canonicalizes a case-variant supported kind (`api` → `API`).
+ * Map keys/values are validated as sent — silently rewriting a key the user typed would mask
+ * the mistake.
  */
 fun sanitizedCatalogFile(file: CatalogFile): CatalogFile = file.copy(
+    kind = SUPPORTED_KINDS.firstOrNull { it.equals(file.kind.trim(), ignoreCase = true) } ?: file.kind.trim(),
     metadata = file.metadata.copy(
         name = file.metadata.name.trim(),
         namespace = file.metadata.namespace.trim().lowercase().ifEmpty { DEFAULT_NAMESPACE },
@@ -108,16 +139,95 @@ fun sanitizedCatalogFile(file: CatalogFile): CatalogFile = file.copy(
         },
     ),
     spec = file.spec.copy(
-        type = file.spec.type.trim(),
-        lifecycle = file.spec.lifecycle.trim(),
-        owner = file.spec.owner.trim(),
+        type = file.spec.type?.trim(),
+        lifecycle = file.spec.lifecycle?.trim(),
+        owner = file.spec.owner?.trim(),
         system = file.spec.system?.trim(),
         subcomponentOf = file.spec.subcomponentOf?.trim(),
         providesApis = file.spec.providesApis.map { it.trim() },
         consumesApis = file.spec.consumesApis.map { it.trim() },
         dependsOn = file.spec.dependsOn.map { it.trim() },
         dependencyOf = file.spec.dependencyOf.map { it.trim() },
+        definition = file.spec.definition?.trim(),
+        profile = file.spec.profile?.let {
+            EntityProfile(
+                displayName = it.displayName?.trim(),
+                email = it.email?.trim(),
+                picture = it.picture?.trim(),
+            )
+        },
+        parent = file.spec.parent?.trim(),
+        children = file.spec.children?.map { it.trim() },
+        members = file.spec.members.map { it.trim() },
+        memberOf = file.spec.memberOf?.map { it.trim() },
+        domain = file.spec.domain?.trim(),
+        subdomainOf = file.spec.subdomainOf?.trim(),
     ),
+)
+
+// ─── The per-kind spec table ────────────────────────────────────────────────────────────────
+
+/** One spec field: how to detect it's present and how to validate it when it is. */
+private class SpecField(
+    val name: String,
+    val isPresent: (EntitySpec) -> Boolean,
+    val validate: (EntitySpec) -> Unit,
+)
+
+private fun scalar(name: String, get: (EntitySpec) -> String?, validate: (String) -> Unit) =
+    SpecField(name, { get(it) != null }, { get(it)?.let(validate) })
+
+private fun refList(name: String, get: (EntitySpec) -> List<String>?) =
+    SpecField(
+        name,
+        { !get(it).isNullOrEmpty() },
+        { spec -> get(spec)?.let { validateRefArray(it, "spec.$name") } },
+    )
+
+private val SPEC_FIELDS: List<SpecField> = listOf(
+    scalar("type", { it.type }) { validateSingleWord(it, "spec.type") },
+    scalar("lifecycle", { it.lifecycle }) { validateSingleWord(it, "spec.lifecycle") },
+    scalar("owner", { it.owner }) { validateEntityRef(it, "spec.owner") },
+    scalar("system", { it.system }) { validateEntityRef(it, "spec.system") },
+    scalar("subcomponentOf", { it.subcomponentOf }) { validateEntityRef(it, "spec.subcomponentOf") },
+    refList("providesApis") { it.providesApis },
+    refList("consumesApis") { it.consumesApis },
+    refList("dependsOn") { it.dependsOn },
+    refList("dependencyOf") { it.dependencyOf },
+    scalar("definition", { it.definition }) { validateDefinition(it) },
+    SpecField("profile", { it.profile != null }, { it.profile?.let(::validateProfile) }),
+    scalar("parent", { it.parent }) { validateEntityRef(it, "spec.parent") },
+    refList("children") { it.children },
+    refList("members") { it.members },
+    refList("memberOf") { it.memberOf },
+    scalar("domain", { it.domain }) { validateEntityRef(it, "spec.domain") },
+    scalar("subdomainOf", { it.subdomainOf }) { validateEntityRef(it, "spec.subdomainOf") },
+)
+
+// Which spec fields each kind may carry, and which it must (the descriptor reference's rules).
+// children/memberOf requiredness means PRESENT — an empty list satisfies it (checked apart,
+// since refList presence means non-empty).
+private val ALLOWED_FIELDS: Map<String, Set<String>> = mapOf(
+    "Component" to setOf(
+        "type", "lifecycle", "owner", "system", "subcomponentOf",
+        "providesApis", "consumesApis", "dependsOn", "dependencyOf",
+    ),
+    "API" to setOf("type", "lifecycle", "owner", "system", "definition"),
+    "System" to setOf("owner", "domain", "type"),
+    "Domain" to setOf("owner", "subdomainOf", "type"),
+    "Resource" to setOf("type", "owner", "system", "dependsOn", "dependencyOf"),
+    "Group" to setOf("type", "profile", "parent", "children", "members"),
+    "User" to setOf("profile", "memberOf"),
+)
+
+private val REQUIRED_FIELDS: Map<String, Set<String>> = mapOf(
+    "Component" to setOf("type", "lifecycle", "owner"),
+    "API" to setOf("type", "lifecycle", "owner", "definition"),
+    "System" to setOf("owner"),
+    "Domain" to setOf("owner"),
+    "Resource" to setOf("type", "owner"),
+    "Group" to setOf("type"),
+    "User" to emptySet(),
 )
 
 /**
@@ -126,9 +236,66 @@ fun sanitizedCatalogFile(file: CatalogFile): CatalogFile = file.copy(
  * no drift. Expects sanitized input ([sanitizedCatalogFile]).
  */
 fun validateCatalogFile(file: CatalogFile) {
+    if (file.kind !in SUPPORTED_KINDS) {
+        throw BadRequestException("kind must be one of ${SUPPORTED_KINDS.joinToString()}")
+    }
     validateMetadata(file.metadata)
-    validateSpec(file.spec)
+    validateSpec(file.kind, file.spec)
 }
+
+private fun validateSpec(kind: String, spec: EntitySpec) {
+    val allowed = ALLOWED_FIELDS.getValue(kind)
+    val required = REQUIRED_FIELDS.getValue(kind)
+    for (field in SPEC_FIELDS) {
+        val present = field.isPresent(spec)
+        if (present && field.name !in allowed) {
+            throw BadRequestException("spec.${field.name} does not apply to kind $kind")
+        }
+        if (!present && field.name in required) {
+            throw BadRequestException("spec.${field.name} is required for kind $kind")
+        }
+        if (present) field.validate(spec)
+    }
+    // Backstage requires these PRESENT (an empty list is fine) — presence, not non-emptiness.
+    if (kind == "Group" && spec.children == null) {
+        throw BadRequestException("spec.children is required for kind Group (an empty list is allowed)")
+    }
+    if (kind == "User" && spec.memberOf == null) {
+        throw BadRequestException("spec.memberOf is required for kind User (an empty list is allowed)")
+    }
+}
+
+private fun validateDefinition(definition: String) {
+    if (definition.isEmpty() || definition.length > MAX_DEFINITION_LENGTH) {
+        throw BadRequestException("spec.definition must be 1-$MAX_DEFINITION_LENGTH characters")
+    }
+}
+
+private fun validateProfile(profile: EntityProfile) {
+    profile.displayName?.let {
+        if (it.isEmpty() || it.length > MAX_TITLE_LENGTH) {
+            throw BadRequestException("spec.profile.displayName must be 1-$MAX_TITLE_LENGTH characters")
+        }
+    }
+    profile.email?.let {
+        if (it.isEmpty() || it.length > MAX_PROFILE_EMAIL_LENGTH) {
+            throw BadRequestException("spec.profile.email must be 1-$MAX_PROFILE_EMAIL_LENGTH characters")
+        }
+    }
+    profile.picture?.let {
+        if (!isAbsoluteUri(it)) {
+            throw BadRequestException("spec.profile.picture must be an absolute URI")
+        }
+    }
+}
+
+private fun isAbsoluteUri(value: String): Boolean = try {
+    value.isNotEmpty() && URI(value).isAbsolute
+} catch (_: URISyntaxException) {
+    false
+}
+
+// ─── Metadata rules (kind-independent) ──────────────────────────────────────────────────────
 
 private fun validateMetadata(metadata: CatalogFileMetadata) {
     validateNamePart(metadata.name, "metadata.name")
@@ -152,18 +319,6 @@ private fun validateMetadata(metadata: CatalogFileMetadata) {
     validateLabels(metadata.labels)
     validateAnnotations(metadata.annotations)
     validateLinks(metadata.links)
-}
-
-private fun validateSpec(spec: ComponentSpec) {
-    validateSingleWord(spec.type, "spec.type")
-    validateSingleWord(spec.lifecycle, "spec.lifecycle")
-    validateEntityRef(spec.owner, "spec.owner")
-    spec.system?.let { validateEntityRef(it, "spec.system") }
-    spec.subcomponentOf?.let { validateEntityRef(it, "spec.subcomponentOf") }
-    validateRefArray(spec.providesApis, "spec.providesApis")
-    validateRefArray(spec.consumesApis, "spec.consumesApis")
-    validateRefArray(spec.dependsOn, "spec.dependsOn")
-    validateRefArray(spec.dependencyOf, "spec.dependencyOf")
 }
 
 private fun validateNamePart(value: String, field: String) {
@@ -247,12 +402,7 @@ private fun validateKey(key: String, field: String) {
 private fun validateLinks(links: List<CatalogLink>) {
     if (links.size > MAX_LINKS) throw BadRequestException("metadata.links must have at most $MAX_LINKS entries")
     for (link in links) {
-        val absolute = try {
-            URI(link.url).isAbsolute
-        } catch (_: URISyntaxException) {
-            false
-        }
-        if (link.url.isEmpty() || !absolute) {
+        if (link.url.isEmpty() || !isAbsoluteUri(link.url)) {
             throw BadRequestException("metadata.links url '${link.url}' must be an absolute URI")
         }
         link.title?.let {
@@ -271,7 +421,7 @@ private fun validateRefArray(refs: List<String>, field: String) {
 
 /**
  * Validates the entity-reference grammar `[kind:][namespace/]name` (format only — dangling
- * references are the future cross-check feature's concern, not a 400 here).
+ * references are the cross-check feature's concern, not a 400 here).
  */
 fun validateEntityRef(ref: String, field: String) {
     val colon = ref.indexOf(':')
@@ -305,8 +455,9 @@ fun validateEntityRef(ref: String, field: String) {
 @Serializable
 data class CatalogFileResponse(
     val id: UInt,
+    val kind: String,
     val metadata: CatalogFileMetadata,
-    val spec: ComponentSpec,
+    val spec: EntitySpec,
     val createdBy: UInt,
     val creatorName: String,
     val creatorDeleted: Boolean,
@@ -318,12 +469,13 @@ data class CatalogFileResponse(
 @Serializable
 data class CatalogFileListItem(
     val id: UInt,
+    val kind: String,
     val name: String,
     val namespace: String,
     val title: String?,
-    val type: String,
-    val lifecycle: String,
-    val owner: String,
+    val type: String?,
+    val lifecycle: String?,
+    val owner: String?,
     val creatorName: String,
     val creatorDeleted: Boolean,
     val updatedAt: Long,

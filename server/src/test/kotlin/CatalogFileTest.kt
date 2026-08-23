@@ -5,7 +5,7 @@ import ch.nokillswit.catalog.CatalogFileMetadata
 import ch.nokillswit.catalog.CatalogFilePageResponse
 import ch.nokillswit.catalog.CatalogFileResponse
 import ch.nokillswit.catalog.CatalogLink
-import ch.nokillswit.catalog.ComponentSpec
+import ch.nokillswit.catalog.EntitySpec
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -42,7 +42,31 @@ fun componentFile(
     owner: String = "group:default/platform",
 ) = CatalogFile(
     metadata = CatalogFileMetadata(name = name, namespace = namespace, title = title),
-    spec = ComponentSpec(type = type, lifecycle = lifecycle, owner = owner),
+    spec = EntitySpec(type = type, lifecycle = lifecycle, owner = owner),
+)
+
+fun groupFile(
+    name: String,
+    namespace: String = "default",
+    children: List<String> = emptyList(),
+    members: List<String> = emptyList(),
+    parent: String? = null,
+) = CatalogFile(
+    kind = "Group",
+    metadata = CatalogFileMetadata(name = name, namespace = namespace),
+    spec = EntitySpec(type = "team", children = children, members = members, parent = parent),
+)
+
+fun userFile(name: String, namespace: String = "default", memberOf: List<String> = emptyList()) = CatalogFile(
+    kind = "User",
+    metadata = CatalogFileMetadata(name = name, namespace = namespace),
+    spec = EntitySpec(memberOf = memberOf),
+)
+
+fun apiFile(name: String, namespace: String = "default", owner: String = "group:default/platform") = CatalogFile(
+    kind = "API",
+    metadata = CatalogFileMetadata(name = name, namespace = namespace),
+    spec = EntitySpec(type = "openapi", lifecycle = "production", owner = owner, definition = "openapi: 3.0.0"),
 )
 
 suspend fun HttpClient.createCatalogFile(file: CatalogFile): CatalogFileResponse =
@@ -109,6 +133,133 @@ class CatalogFileTest {
     }
 
     @Test
+    fun `every supported kind creates and round-trips`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val ns = uniqueEntityName("kinds")
+        val files = listOf(
+            componentFile(uniqueEntityName("comp"), namespace = ns),
+            apiFile(uniqueEntityName("api"), namespace = ns),
+            CatalogFile(
+                kind = "System",
+                metadata = CatalogFileMetadata(name = uniqueEntityName("sys"), namespace = ns),
+                spec = EntitySpec(owner = "team-a", domain = "payments", type = "product"),
+            ),
+            CatalogFile(
+                kind = "Domain",
+                metadata = CatalogFileMetadata(name = uniqueEntityName("dom"), namespace = ns),
+                spec = EntitySpec(owner = "team-a", subdomainOf = "commerce"),
+            ),
+            CatalogFile(
+                kind = "Resource",
+                metadata = CatalogFileMetadata(name = uniqueEntityName("res"), namespace = ns),
+                spec = EntitySpec(type = "database", owner = "team-a", dependsOn = listOf("resource:other-db")),
+            ),
+            groupFile(uniqueEntityName("grp"), namespace = ns, members = listOf("user:$ns/someone")),
+            userFile(uniqueEntityName("usr"), namespace = ns, memberOf = listOf("team-a")),
+        )
+        for (file in files) {
+            val created = client.createCatalogFile(file)
+            assertEquals(file.kind, created.kind)
+            val fetched = client.get("/api/v1/catalog-files/${created.id}").body<CatalogFileResponse>()
+            assertEquals(file.spec, fetched.spec, "spec must round-trip for kind ${file.kind}")
+            assertEquals(file.kind, fetched.kind)
+        }
+        // Group children and User memberOf survive as PRESENT-and-empty, never null.
+        val group = files.first { it.kind == "Group" }
+        val fetchedGroup = client.get("/api/v1/catalog-files?namespace=$ns&kind=group")
+            .body<CatalogFilePageResponse>()
+        assertEquals(listOf(group.metadata.name), fetchedGroup.items.map { it.name })
+    }
+
+    @Test
+    fun `per-kind rules reject missing required and foreign fields`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+
+        suspend fun status(file: CatalogFile): HttpStatusCode = client.post("/api/v1/catalog-files") {
+            contentType(ContentType.Application.Json)
+            setBody(file)
+        }.status
+
+        val n = { uniqueEntityName("bad") }
+        // Unknown kind.
+        assertEquals(HttpStatusCode.BadRequest, status(componentFile(n()).copy(kind = "Gadget")))
+        // API without its definition.
+        assertEquals(HttpStatusCode.BadRequest, status(apiFile(n()).let { f -> f.copy(spec = f.spec.copy(definition = null)) }))
+        // Group without a children list (empty is fine, absent is not).
+        assertEquals(HttpStatusCode.BadRequest, status(groupFile(n()).let { f -> f.copy(spec = f.spec.copy(children = null)) }))
+        // User without a memberOf list.
+        assertEquals(HttpStatusCode.BadRequest, status(userFile(n()).let { f -> f.copy(spec = f.spec.copy(memberOf = null)) }))
+        // A field foreign to the kind: a Component with a definition, a User with an owner.
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            status(componentFile(n()).let { f -> f.copy(spec = f.spec.copy(definition = "nope")) }),
+        )
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            status(userFile(n()).let { f -> f.copy(spec = f.spec.copy(owner = "team-a")) }),
+        )
+        // Profile rules: picture must be an absolute URI.
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            status(
+                userFile(n()).let { f ->
+                    f.copy(spec = f.spec.copy(profile = ch.nokillswit.catalog.EntityProfile(picture = "/relative.png")))
+                },
+            ),
+        )
+        // A case-variant kind is canonicalized, not rejected.
+        val created = client.post("/api/v1/catalog-files") {
+            contentType(ContentType.Application.Json)
+            setBody(groupFile(uniqueEntityName("cased")).copy(kind = "gRoUp"))
+        }
+        assertEquals(HttpStatusCode.Created, created.status)
+        assertEquals("Group", created.body<CatalogFileResponse>().kind)
+    }
+
+    @Test
+    fun `kind can be changed by an update, and identity collisions still 409`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val ns = uniqueEntityName("flip")
+        val name = uniqueEntityName("chameleon")
+        val id = client.createCatalogFile(componentFile(name, namespace = ns)).id
+
+        // Component → API (a full replace with a new kind).
+        val flipped = client.put("/api/v1/catalog-files/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(apiFile(name, namespace = ns))
+        }
+        assertEquals(HttpStatusCode.NoContent, flipped.status)
+        assertEquals("API", client.get("/api/v1/catalog-files/$id").body<CatalogFileResponse>().kind)
+
+        // Same name, kind Group — a DIFFERENT identity, so it coexists…
+        val groupId = client.createCatalogFile(groupFile(name, namespace = ns)).id
+        // …but flipping the group to kind API collides with the flipped file's identity.
+        val collision = client.put("/api/v1/catalog-files/$groupId") {
+            contentType(ContentType.Application.Json)
+            setBody(apiFile(name, namespace = ns))
+        }
+        assertEquals(HttpStatusCode.Conflict, collision.status)
+    }
+
+    @Test
+    fun `the list filters by kind and rejects unknown kinds`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val ns = uniqueEntityName("kfilter")
+        client.createCatalogFile(componentFile(uniqueEntityName("c"), namespace = ns))
+        client.createCatalogFile(groupFile(uniqueEntityName("g"), namespace = ns))
+
+        val groups = client.get("/api/v1/catalog-files?namespace=$ns&kind=GROUP").body<CatalogFilePageResponse>()
+        assertEquals(listOf("Group"), groups.items.map { it.kind })
+        val all = client.get("/api/v1/catalog-files?namespace=$ns&sort=kind").body<CatalogFilePageResponse>()
+        assertEquals(listOf("Component", "Group"), all.items.map { it.kind })
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?kind=Gadget").status)
+    }
+
+    @Test
     fun `the full metadata surface round-trips`() = testApplication {
         usePostgresTestcontainer()
         val client = regularUserClient()
@@ -124,7 +275,7 @@ class CatalogFileTest {
                 tags = listOf("java", "c++"),
                 links = listOf(CatalogLink(url = "https://example.com/dash", title = "Dashboard", icon = "dashboard")),
             ),
-            spec = ComponentSpec(
+            spec = EntitySpec(
                 type = "service",
                 lifecycle = "experimental",
                 owner = "team-a",

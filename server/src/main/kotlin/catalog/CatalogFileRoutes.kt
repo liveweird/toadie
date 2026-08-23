@@ -12,6 +12,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
 import io.ktor.server.application.*
 import io.ktor.server.auth.authenticate
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
 import io.ktor.server.resources.delete
 import io.ktor.server.resources.get
@@ -54,10 +55,16 @@ fun Application.configureCatalogFileRoutes() {
             // bare caller() authentication check.
             get<CatalogFiles> {
                 call.caller()
-                val paging = call.parsePaging(sortable = setOf("id", "name", "namespace", "updatedAt"))
+                val paging = call.parsePaging(sortable = setOf("id", "kind", "name", "namespace", "updatedAt"))
                 val filter = CatalogFileListFilter(
                     name = call.request.queryParameters.optionalString("name"),
                     namespace = call.request.queryParameters.optionalString("namespace"),
+                    kind = call.request.queryParameters.optionalString("kind")?.let { raw ->
+                        SUPPORTED_KINDS.firstOrNull { it.equals(raw, ignoreCase = true) }
+                            ?: throw BadRequestException(
+                                "Unknown kind: $raw (allowed: ${SUPPORTED_KINDS.joinToString()})",
+                            )
+                    },
                 )
                 val result = catalogFileService.list(filter, paging)
                 call.respond(HttpStatusCode.OK, paging.toPage(result.items, result.total))

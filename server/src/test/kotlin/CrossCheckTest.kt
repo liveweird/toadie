@@ -38,31 +38,28 @@ class CrossCheckTest {
     fun `resolved component references produce no findings, dangling ones are MISSING`() = testApplication {
         usePostgresTestcontainer()
         val client = userClient()
+        val ns = uniqueEntityName("xns")
         val target = uniqueEntityName("target")
         val source = uniqueEntityName("source")
         val ghost = uniqueEntityName("ghost")
-        client.createCatalogFile(componentFile(target))
+        val team = uniqueEntityName("team")
+        client.createCatalogFile(groupFile(team, namespace = ns))
+        client.createCatalogFile(componentFile(target, namespace = ns, owner = team))
         client.createCatalogFile(
-            componentFile(source).let {
-                it.copy(spec = it.spec.copy(dependsOn = listOf("component:$target", "component:$ghost")))
+            componentFile(source, namespace = ns, owner = team).let {
+                it.copy(spec = it.spec.copy(dependsOn = listOf("component:$ns/$target", "component:$ns/$ghost")))
             },
         )
 
         val report = client.report()
-        assertTrue(report.checkedFiles >= 2)
+        assertTrue(report.checkedFiles >= 3)
         assertTrue(report.checkedReferences >= 4, "owner refs count too")
         val mine = report.findings.filter { it.fileName == source }
-        // The resolved reference yields nothing; the dangling one is MISSING; the owner ref
-        // (group kind) is UNVERIFIABLE.
+        // The stored component AND the stored group both resolve; only the ghost is MISSING.
         assertEquals(
-            listOf("component:$ghost" to CrossCheckStatus.MISSING),
-            mine.filter { it.status == CrossCheckStatus.MISSING }.map { it.reference to it.status },
+            listOf("component:$ns/$ghost" to CrossCheckStatus.MISSING),
+            mine.map { it.reference to it.status },
         )
-        assertEquals(
-            listOf("spec.owner"),
-            mine.filter { it.status == CrossCheckStatus.UNVERIFIABLE }.map { it.field },
-        )
-        assertTrue(mine.none { it.reference == "component:$target" })
     }
 
     @Test
@@ -102,7 +99,11 @@ class CrossCheckTest {
             },
         )
 
-        assertTrue(client.report().findings.none { it.fileName == source && it.status == CrossCheckStatus.MISSING })
+        assertTrue(
+            client.report().findings.none {
+                it.fileName == source && it.field == "spec.dependsOn" && it.status == CrossCheckStatus.MISSING
+            },
+        )
     }
 
     @Test
@@ -128,20 +129,46 @@ class CrossCheckTest {
         val source = uniqueEntityName("external")
         client.createCatalogFile(
             componentFile(source).let {
+                // Location, Template, and custom kinds stay out of the store — only explicit
+                // references can carry them (every default kind is a stored kind now).
                 it.copy(
                     spec = it.spec.copy(
-                        system = "payments",
-                        providesApis = listOf("billing-api"),
-                        consumesApis = listOf("api:default/other-api"),
+                        dependsOn = listOf("template:default/scaffolder", "mycustomkind:thing"),
                     ),
                 )
             },
         )
 
-        val mine = client.report().findings.filter { it.fileName == source }
-        // owner (group), system (system), both API refs — all informational, none an error.
-        assertEquals(4, mine.size)
+        val mine = client.report().findings.filter { it.fileName == source && it.field == "spec.dependsOn" }
+        assertEquals(2, mine.size)
         assertTrue(mine.all { it.status == CrossCheckStatus.UNVERIFIABLE })
+        // The owner ref (group kind, stored) is a real MISSING error, not informational.
+        assertEquals(
+            listOf(CrossCheckStatus.MISSING),
+            client.report().findings.filter { it.fileName == source && it.field == "spec.owner" }.map { it.status },
+        )
+    }
+
+    @Test
+    fun `stored groups and users resolve organizational references`() = testApplication {
+        usePostgresTestcontainer()
+        val client = userClient()
+        val ns = uniqueEntityName("orgns")
+        val person = uniqueEntityName("person")
+        val team = uniqueEntityName("team")
+        val ghostParent = uniqueEntityName("ghostparent")
+        client.createCatalogFile(userFile(person, namespace = ns, memberOf = listOf(team)))
+        client.createCatalogFile(
+            groupFile(team, namespace = ns, members = listOf("user:$ns/$person"), parent = ghostParent),
+        )
+
+        val findings = client.report().findings.filter { it.fileNamespace == ns }
+        // memberOf → the stored group, members → the stored user: both resolve. The group's
+        // parent points nowhere → MISSING with the group default kind.
+        assertEquals(
+            listOf(Triple(team, "spec.parent", CrossCheckStatus.MISSING)),
+            findings.map { Triple(it.fileName, it.field, it.status) },
+        )
     }
 
     @Test
@@ -155,7 +182,11 @@ class CrossCheckTest {
             componentFile(source).let { it.copy(spec = it.spec.copy(dependsOn = listOf("component:$target"))) },
         )
 
-        assertTrue(client.report().findings.none { it.fileName == source && it.status == CrossCheckStatus.MISSING })
+        assertTrue(
+            client.report().findings.none {
+                it.fileName == source && it.field == "spec.dependsOn" && it.status == CrossCheckStatus.MISSING
+            },
+        )
         client.delete("/api/v1/catalog-files/$targetId")
         val after = client.report().findings.filter { it.fileName == source }
         assertEquals(listOf(CrossCheckStatus.MISSING), after.filter { it.field == "spec.dependsOn" }.map { it.status })

@@ -12,10 +12,10 @@ enum class GraphNodeStatus {
     /** A stored (active) catalog file. */
     STORED,
 
-    /** A referenced Component no active file provides — the cross-check's MISSING, drawn. */
+    /** A referenced entity of a stored kind that no active file provides — MISSING, drawn. */
     MISSING,
 
-    /** A referenced entity of a kind Toadie doesn't store (group, api, system, …). */
+    /** A referenced entity of a kind Toadie doesn't store (Location, Template, custom). */
     EXTERNAL,
 }
 
@@ -111,7 +111,7 @@ private fun virtualOrForeignStoredNode(
     target: EntityIdentity,
     storedByIdentity: Map<EntityIdentity, CrossCheckSource>,
 ): GraphNode {
-    if (target.kind == COMPONENT_KIND) {
+    if (target.kind in STORED_KINDS) {
         storedByIdentity[target]?.let { return storedNode(it) }
     }
     return GraphNode(
@@ -119,6 +119,6 @@ private fun virtualOrForeignStoredNode(
         kind = target.kind,
         namespace = target.namespace,
         name = target.name,
-        status = if (target.kind == COMPONENT_KIND) GraphNodeStatus.MISSING else GraphNodeStatus.EXTERNAL,
+        status = if (target.kind in STORED_KINDS) GraphNodeStatus.MISSING else GraphNodeStatus.EXTERNAL,
     )
 }

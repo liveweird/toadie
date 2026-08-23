@@ -19,6 +19,8 @@ val CatalogFileServiceKey = AttributeKey<CatalogFileService>("CatalogFileService
 data class CatalogFileListFilter(
     val name: String? = null,
     val namespace: String? = null,
+    /** Canonical-cased kind (the route validates against SUPPORTED_KINDS). */
+    val kind: String? = null,
 )
 
 data class CatalogFileListResult(
@@ -38,6 +40,7 @@ data class CatalogFileDetail(
 ) {
     fun toResponse() = CatalogFileResponse(
         id = id,
+        kind = file.kind,
         metadata = file.metadata,
         spec = file.spec,
         createdBy = createdBy,
@@ -50,6 +53,7 @@ data class CatalogFileDetail(
 
 private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "id" to CatalogFileService.CatalogFiles.id,
+    "kind" to CatalogFileService.CatalogFiles.kind,
     "name" to CatalogFileService.CatalogFiles.name,
     "namespace" to CatalogFileService.CatalogFiles.namespace,
     "updatedAt" to CatalogFileService.CatalogFiles.updatedAt,
@@ -90,7 +94,7 @@ class CatalogFileService(val database: R2dbcDatabase) {
         validate(file)
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
-            it[kind] = "Component"
+            it[kind] = file.kind
             it[name] = file.metadata.name
             it[namespace] = file.metadata.namespace
             it[content] = json.encodeToString(file)
@@ -111,6 +115,7 @@ class CatalogFileService(val database: R2dbcDatabase) {
     suspend fun update(id: UInt, file: CatalogFile): Int = suspendTransaction(database) {
         validate(file)
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
+            it[kind] = file.kind
             it[name] = file.metadata.name
             it[namespace] = file.metadata.namespace
             it[content] = json.encodeToString(file)
@@ -181,6 +186,7 @@ class CatalogFileService(val database: R2dbcDatabase) {
 
     private fun CatalogFileDetail.toListItem() = CatalogFileListItem(
         id = id,
+        kind = file.kind,
         name = file.metadata.name,
         namespace = file.metadata.namespace,
         title = file.metadata.title,
@@ -200,6 +206,9 @@ class CatalogFileService(val database: R2dbcDatabase) {
         filter.namespace?.takeIf { it.isNotBlank() }?.let {
             // Stored namespaces are lowercase (sanitizedCatalogFile) — fold the filter too.
             op = op and (CatalogFiles.namespace eq it.lowercase())
+        }
+        filter.kind?.let {
+            op = op and (CatalogFiles.kind eq it)
         }
         return op
     }

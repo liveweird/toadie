@@ -38,7 +38,7 @@ class GraphTest {
         val ns = uniqueEntityName("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
-        // Both files share the namespaceless owner, so it collapses into ONE external node.
+        // Both files share the namespaceless owner, so it collapses into ONE virtual node.
         client.createCatalogFile(componentFile(b, namespace = ns, title = "Target B", owner = "team-x"))
         client.createCatalogFile(
             componentFile(a, namespace = ns).let {
@@ -54,7 +54,8 @@ class GraphTest {
         assertEquals("Target B", nodeB.title)
         assertNotNull(nodeB.fileId)
         val owner = graph.nodes.single { it.id == "group:$ns/team-x" }
-        assertEquals(GraphNodeStatus.EXTERNAL, owner.status)
+        // Groups are a stored kind now — an absent one is MISSING, not external.
+        assertEquals(GraphNodeStatus.MISSING, owner.status)
         assertNull(owner.fileId)
         assertEquals(3, graph.nodes.size)
 
@@ -171,6 +172,27 @@ class GraphTest {
         val nodeB = graph.nodes.single { it.name == b }
         assertEquals(GraphNodeStatus.MISSING, nodeB.status)
         assertNull(nodeB.fileId)
+    }
+
+    @Test
+    fun `stored groups and users draw as STORED nodes with membership edges`() = testApplication {
+        usePostgresTestcontainer()
+        val client = userClient()
+        val ns = uniqueEntityName("gns")
+        val team = uniqueEntityName("team")
+        val person = uniqueEntityName("person")
+        client.createCatalogFile(groupFile(team, namespace = ns, members = listOf("user:$ns/$person")))
+        client.createCatalogFile(userFile(person, namespace = ns, memberOf = listOf(team)))
+
+        val graph = client.graph(namespace = ns)
+        val teamNode = graph.nodes.single { it.name == team }
+        val personNode = graph.nodes.single { it.name == person }
+        assertEquals(GraphNodeStatus.STORED, teamNode.status)
+        assertEquals(GraphNodeStatus.STORED, personNode.status)
+        assertEquals("group", teamNode.kind)
+        assertEquals("user", personNode.kind)
+        assertTrue(graph.edges.any { it.sourceId == teamNode.id && it.targetId == personNode.id && it.field == "spec.members" })
+        assertTrue(graph.edges.any { it.sourceId == personNode.id && it.targetId == teamNode.id && it.field == "spec.memberOf" })
     }
 
     @Test

@@ -12,13 +12,13 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 enum class CrossCheckStatus {
-    /** The reference should resolve to a stored Component but no active file matches. */
+    /** The reference should resolve to a stored file of its kind but no active one matches. */
     MISSING,
 
     /** A dependsOn/dependencyOf entry without a kind — Backstage cannot ingest those. */
     KIND_REQUIRED,
 
-    /** The target kind is not stored in Toadie (yet) — nothing to resolve against. */
+    /** The target kind is not stored in Toadie (Location, Template, custom kinds). */
     UNVERIFIABLE,
 }
 
@@ -59,8 +59,10 @@ data class CrossCheckSource(
     val file: CatalogFile,
 )
 
-/** The one stored kind — grows with the editor. */
 internal const val COMPONENT_KIND = "component"
+
+/** The lowercased kinds the editor stores — references to them are RESOLVABLE. */
+internal val STORED_KINDS: Set<String> = SUPPORTED_KINDS.map { it.lowercase() }.toSet()
 
 // Per-field default kinds (the descriptor reference's context rules). dependsOn/dependencyOf
 // map to null ON PURPOSE: Backstage gives them no default, so a kind-less entry is an error.
@@ -72,13 +74,19 @@ internal val REF_FIELD_DEFAULT_KINDS: Map<String, String?> = mapOf(
     "spec.consumesApis" to "api",
     "spec.dependsOn" to null,
     "spec.dependencyOf" to null,
+    "spec.parent" to "group",
+    "spec.children" to "group",
+    "spec.members" to "user",
+    "spec.memberOf" to "group",
+    "spec.domain" to "domain",
+    "spec.subdomainOf" to "domain",
 )
 
 /** A lowercased identity a reference can resolve to. */
 data class EntityIdentity(val kind: String, val namespace: String, val name: String)
 
 fun identityOf(file: CatalogFile) = EntityIdentity(
-    kind = COMPONENT_KIND,
+    kind = file.kind.lowercase(),
     namespace = file.metadata.namespace.lowercase(),
     name = file.metadata.name.lowercase(),
 )
@@ -100,14 +108,23 @@ internal fun parseRef(raw: String): ParsedRef? {
     return ParsedRef(kind, namespace, name)
 }
 
-internal fun ComponentSpec.refFields(): List<Pair<String, List<String>>> = listOf(
-    "spec.owner" to listOf(owner),
+// Kind-independent on purpose: validation guarantees a stored document carries only its
+// kind's fields, so enumerating the whole superset is both simpler and correct (and for the
+// ad-hoc check, a mid-edit foreign field still gets a useful verdict).
+internal fun EntitySpec.refFields(): List<Pair<String, List<String>>> = listOf(
+    "spec.owner" to listOfNotNull(owner),
     "spec.system" to listOfNotNull(system),
     "spec.subcomponentOf" to listOfNotNull(subcomponentOf),
     "spec.providesApis" to providesApis,
     "spec.consumesApis" to consumesApis,
     "spec.dependsOn" to dependsOn,
     "spec.dependencyOf" to dependencyOf,
+    "spec.parent" to listOfNotNull(parent),
+    "spec.children" to children.orEmpty(),
+    "spec.members" to members,
+    "spec.memberOf" to memberOf.orEmpty(),
+    "spec.domain" to listOfNotNull(domain),
+    "spec.subdomainOf" to listOfNotNull(subdomainOf),
 )
 
 /**
@@ -144,9 +161,9 @@ private fun statusOf(
 ): CrossCheckStatus? {
     val parsed = parseRef(raw) ?: return null
     val kind = parsed.kind?.lowercase() ?: defaultKind ?: return CrossCheckStatus.KIND_REQUIRED
-    if (kind != COMPONENT_KIND) return CrossCheckStatus.UNVERIFIABLE
+    if (kind !in STORED_KINDS) return CrossCheckStatus.UNVERIFIABLE
     val target = EntityIdentity(
-        kind = COMPONENT_KIND,
+        kind = kind,
         namespace = parsed.namespace?.lowercase() ?: sourceNamespace,
         name = parsed.name.lowercase(),
     )
