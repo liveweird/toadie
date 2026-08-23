@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -51,6 +52,24 @@ class PayloadValidationTest {
         }
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertContains(response.bodyAsText(), "non-negative")
+    }
+
+    @Test
+    fun `a repeated scalar query parameter is a 400 problem`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("repeated")
+        TestUsers.seed(email = email, password = "pw")
+        val client = authedClient(email, "pw")
+        // Repetition is reserved for per-endpoint documented IN semantics (API-LIST-004) —
+        // silently first-winning would hide the caller's conflicting input.
+        val paging = client.get("/api/v1/catalog-files?page=1&page=2")
+        assertEquals(HttpStatusCode.BadRequest, paging.status)
+        assertContains(paging.bodyAsText(), "Parameter 'page' must not be repeated")
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?sort=id&sort=name").status)
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            client.get("/api/v1/catalog-files?name=a&name=b").status,
+        )
     }
 
     @Test

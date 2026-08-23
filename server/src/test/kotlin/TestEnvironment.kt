@@ -157,6 +157,13 @@ object TestBlocklist {
     val service: TokenBlocklistService by lazy { TokenBlocklistService(sharedTestDatabase) }
 }
 
+/** Direct service handle for contracts the routes can't exercise (e.g. blank-filter rules). */
+object TestCatalogFiles {
+    val service: ch.nokillswit.catalog.CatalogFileService by lazy {
+        ch.nokillswit.catalog.CatalogFileService(sharedTestDatabase)
+    }
+}
+
 // Bootstrap tests (and prod-mode boot tests) rotate the seed admin password in the SHARED
 // container. Call this afterwards to put the V3 seed state back so later tests (and re-runs)
 // see the pristine seed.

@@ -1,7 +1,10 @@
 package ch.nokillswit
 
 import ch.nokillswit.auth.LoginRequest
+import ch.nokillswit.users.UserRole
+import io.ktor.client.request.delete
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -29,6 +32,38 @@ class AuditTest {
             }
             val event = capture.awaitEvent { it.message == "login.success" && it.hasKeyValue("email", email) }
             assertNotNull(event, "expected a login.success audit event for $email")
+        } finally {
+            capture.detach()
+        }
+    }
+
+    @Test
+    fun `catalog file mutations emit audit events`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("catalogaudit")
+        val userId = TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
+        val capture = LogCapture("ch.nokillswit.audit")
+        try {
+            val client = authedClient(email, "pw")
+            val name = uniqueEntityName("audited")
+            val fileId = client.createCatalogFile(componentFile(name)).id
+            client.put("/api/v1/catalog-files/$fileId") {
+                contentType(ContentType.Application.Json)
+                setBody(componentFile(name, title = "Edited"))
+            }
+            client.delete("/api/v1/catalog-files/$fileId")
+
+            // Ids travel as Long key/values (not message text), so match on the raw value.
+            fun hasLong(event: ch.qos.logback.classic.spi.ILoggingEvent, key: String, value: Long) =
+                event.keyValuePairs?.any { it.key == key && it.value == value } == true
+
+            for (eventName in listOf("catalog_file.created", "catalog_file.updated", "catalog_file.deleted")) {
+                val event = capture.awaitEvent {
+                    it.message == eventName && hasLong(it, "catalogFileId", fileId.toLong())
+                }
+                assertNotNull(event, "expected a $eventName audit event for file $fileId")
+                assertTrue(hasLong(event, "byUserId", userId.toLong()))
+            }
         } finally {
             capture.detach()
         }

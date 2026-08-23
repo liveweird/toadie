@@ -2,6 +2,8 @@ package ch.nokillswit.infra.db
 
 import ch.nokillswit.auth.TokenBlocklistService
 import ch.nokillswit.auth.TokenBlocklistServiceKey
+import ch.nokillswit.catalog.CatalogFileService
+import ch.nokillswit.catalog.CatalogFileServiceKey
 import ch.nokillswit.users.UserService
 import ch.nokillswit.users.UserServiceKey
 import io.ktor.server.application.*
@@ -19,5 +21,6 @@ suspend fun Application.configureDatabase() {
         password = environment.config.property("postgres.password").getString(),
     )
     attributes.put(UserServiceKey, UserService(database))
+    attributes.put(CatalogFileServiceKey, CatalogFileService(database))
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
 }

@@ -1,0 +1,436 @@
+package ch.nokillswit
+
+import ch.nokillswit.catalog.CatalogFile
+import ch.nokillswit.catalog.CatalogFileMetadata
+import ch.nokillswit.catalog.CatalogFilePageResponse
+import ch.nokillswit.catalog.CatalogFileResponse
+import ch.nokillswit.catalog.CatalogLink
+import ch.nokillswit.catalog.ComponentSpec
+import ch.nokillswit.users.UserRole
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.delete
+import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.put
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
+import io.ktor.server.testing.ApplicationTestBuilder
+import io.ktor.server.testing.testApplication
+import java.util.UUID
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/** Unique, grammar-valid entity name so parallel tests and re-runs never collide on identity. */
+fun uniqueEntityName(prefix: String) = "$prefix-${UUID.randomUUID().toString().substring(0, 8)}"
+
+fun componentFile(
+    name: String,
+    namespace: String = "default",
+    title: String? = null,
+    type: String = "service",
+    lifecycle: String = "production",
+    owner: String = "group:default/platform",
+) = CatalogFile(
+    metadata = CatalogFileMetadata(name = name, namespace = namespace, title = title),
+    spec = ComponentSpec(type = type, lifecycle = lifecycle, owner = owner),
+)
+
+suspend fun HttpClient.createCatalogFile(file: CatalogFile): CatalogFileResponse =
+    post("/api/v1/catalog-files") {
+        contentType(ContentType.Application.Json)
+        setBody(file)
+    }.body()
+
+class CatalogFileTest {
+
+    /** A non-ADMIN caller on purpose: the workspace is shared, no route is admin-gated. */
+    private suspend fun ApplicationTestBuilder.regularUserClient(prefix: String = "cataloguser"): HttpClient {
+        val email = uniqueEmail(prefix)
+        TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
+        return authedClient(email, "pw")
+    }
+
+    @Test
+    fun `a regular user can create, read, list, update and delete a catalog file`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val name = uniqueEntityName("svc")
+
+        val created = client.post("/api/v1/catalog-files") {
+            contentType(ContentType.Application.Json)
+            setBody(componentFile(name, title = "My Service"))
+        }
+        assertEquals(HttpStatusCode.Created, created.status)
+        val body = created.body<CatalogFileResponse>()
+        assertEquals(name, body.metadata.name)
+        assertEquals("default", body.metadata.namespace)
+        assertEquals("My Service", body.metadata.title)
+        assertEquals("service", body.spec.type)
+        assertEquals("group:default/platform", body.spec.owner)
+        assertFalse(body.creatorDeleted)
+        assertTrue(body.createdAt > 0)
+        assertEquals(body.createdAt, body.updatedAt)
+        assertEquals("/api/v1/catalog-files/${body.id}", created.headers[HttpHeaders.Location])
+
+        val fetched = client.get("/api/v1/catalog-files/${body.id}")
+        assertEquals(HttpStatusCode.OK, fetched.status)
+        assertEquals(name, fetched.body<CatalogFileResponse>().metadata.name)
+
+        val listed = client.get("/api/v1/catalog-files?name=$name").body<CatalogFilePageResponse>()
+        assertEquals(1L, listed.total)
+        val row = listed.items.single()
+        assertEquals(body.id, row.id)
+        assertEquals("My Service", row.title)
+        assertEquals("production", row.lifecycle)
+        assertEquals(body.creatorName, row.creatorName)
+
+        val updated = client.put("/api/v1/catalog-files/${body.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(componentFile(name, title = "Renamed", lifecycle = "deprecated"))
+        }
+        assertEquals(HttpStatusCode.NoContent, updated.status)
+        val reFetched = client.get("/api/v1/catalog-files/${body.id}").body<CatalogFileResponse>()
+        assertEquals("Renamed", reFetched.metadata.title)
+        assertEquals("deprecated", reFetched.spec.lifecycle)
+        assertTrue(reFetched.updatedAt >= reFetched.createdAt)
+
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/${body.id}").status)
+        assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/catalog-files/${body.id}").status)
+    }
+
+    @Test
+    fun `the full metadata surface round-trips`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val name = uniqueEntityName("full")
+        val file = CatalogFile(
+            metadata = CatalogFileMetadata(
+                name = name,
+                namespace = "team-a",
+                title = "Fully Loaded",
+                description = "Everything the format allows.",
+                labels = mapOf("example.com/tier" to "backend"),
+                annotations = mapOf("github.com/project-slug" to "acme/loaded"),
+                tags = listOf("java", "c++"),
+                links = listOf(CatalogLink(url = "https://example.com/dash", title = "Dashboard", icon = "dashboard")),
+            ),
+            spec = ComponentSpec(
+                type = "service",
+                lifecycle = "experimental",
+                owner = "team-a",
+                system = "system:payments",
+                subcomponentOf = "component:default/parent-svc",
+                providesApis = listOf("loaded-api"),
+                consumesApis = listOf("api:default/billing-api"),
+                dependsOn = listOf("resource:default/loaded-db"),
+                dependencyOf = listOf("component:consumer-svc"),
+            ),
+        )
+        val created = client.createCatalogFile(file)
+        val fetched = jsonClientBody(client, created.id)
+        assertEquals(file.metadata, fetched.metadata)
+        assertEquals(file.spec, fetched.spec)
+    }
+
+    private suspend fun jsonClientBody(client: HttpClient, id: UInt): CatalogFileResponse =
+        client.get("/api/v1/catalog-files/$id").body()
+
+    @Test
+    fun `create and update reject payloads violating the descriptor format`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+
+        suspend fun createStatus(file: CatalogFile): HttpStatusCode = client.post("/api/v1/catalog-files") {
+            contentType(ContentType.Application.Json)
+            setBody(file)
+        }.status
+
+        val ok = uniqueEntityName("valid")
+        // metadata.name grammar
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile("has space")))
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile("-leading-dash")))
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile("double..dot")))
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile("x".repeat(64))))
+        // metadata.namespace grammar (uppercase input is folded, so use a truly invalid one)
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile(ok, namespace = "under_score")))
+        // tags
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            createStatus(componentFile(ok).let { it.copy(metadata = it.metadata.copy(tags = listOf("Uppercase"))) }),
+        )
+        // label key and value
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            createStatus(
+                componentFile(ok).let { it.copy(metadata = it.metadata.copy(labels = mapOf("a/b/c" to "x"))) },
+            ),
+        )
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            createStatus(
+                componentFile(ok).let { it.copy(metadata = it.metadata.copy(labels = mapOf("tier" to "has space"))) },
+            ),
+        )
+        // server-written annotation key
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            createStatus(
+                componentFile(ok).let {
+                    it.copy(metadata = it.metadata.copy(annotations = mapOf("backstage.io/orphan" to "true")))
+                },
+            ),
+        )
+        // link url must be an absolute URI; icon follows the name grammar
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            createStatus(
+                componentFile(ok).let {
+                    it.copy(metadata = it.metadata.copy(links = listOf(CatalogLink(url = "/relative/path"))))
+                },
+            ),
+        )
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            createStatus(
+                componentFile(ok).let {
+                    it.copy(
+                        metadata = it.metadata.copy(
+                            links = listOf(CatalogLink(url = "https://x.example", icon = "bad icon")),
+                        ),
+                    )
+                },
+            ),
+        )
+        // spec basics
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile(ok, type = "  ")))
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile(ok, lifecycle = "two words")))
+        // entity-reference grammar
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile(ok, owner = "a:b:c")))
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile(ok, owner = "group:ns/x/y")))
+        assertEquals(HttpStatusCode.BadRequest, createStatus(componentFile(ok, owner = "group:default/")))
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            createStatus(componentFile(ok).let { it.copy(spec = it.spec.copy(dependsOn = listOf("bad ref"))) }),
+        )
+
+        // The same validation guards PUT.
+        val existing = client.createCatalogFile(componentFile(uniqueEntityName("put")))
+        val put = client.put("/api/v1/catalog-files/${existing.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(componentFile("has space"))
+        }
+        assertEquals(HttpStatusCode.BadRequest, put.status)
+    }
+
+    @Test
+    fun `entity identity is case-insensitively unique among active files`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val name = uniqueEntityName("Uniq")
+
+        val first = client.createCatalogFile(componentFile(name))
+
+        // Case-variant duplicate in the same namespace → 409 via the partial unique index.
+        val duplicate = client.post("/api/v1/catalog-files") {
+            contentType(ContentType.Application.Json)
+            setBody(componentFile(name.lowercase()))
+        }
+        assertEquals(HttpStatusCode.Conflict, duplicate.status)
+
+        // Same name in another namespace is a different identity.
+        val otherNamespace = client.post("/api/v1/catalog-files") {
+            contentType(ContentType.Application.Json)
+            setBody(componentFile(name, namespace = "team-b"))
+        }
+        assertEquals(HttpStatusCode.Created, otherNamespace.status)
+
+        // Renaming onto an active identity conflicts too.
+        val renamed = client.put("/api/v1/catalog-files/${otherNamespace.body<CatalogFileResponse>().id}") {
+            contentType(ContentType.Application.Json)
+            setBody(componentFile(name))
+        }
+        assertEquals(HttpStatusCode.Conflict, renamed.status)
+
+        // Soft-deleting frees the identity for reuse.
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/${first.id}").status)
+        val reused = client.post("/api/v1/catalog-files") {
+            contentType(ContentType.Application.Json)
+            setBody(componentFile(name))
+        }
+        assertEquals(HttpStatusCode.Created, reused.status)
+    }
+
+    @Test
+    fun `namespace is folded to lowercase and blank means default`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+
+        val folded = client.createCatalogFile(componentFile(uniqueEntityName("fold"), namespace = "TEAM-A"))
+        assertEquals("team-a", folded.metadata.namespace)
+
+        val blank = client.createCatalogFile(componentFile(uniqueEntityName("blank"), namespace = "  "))
+        assertEquals("default", blank.metadata.namespace)
+    }
+
+    @Test
+    fun `list filters by name and namespace, sorts and paginates`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val prefix = uniqueEntityName("page")
+        client.createCatalogFile(componentFile("$prefix-a", namespace = "ns-one"))
+        client.createCatalogFile(componentFile("$prefix-b", namespace = "ns-two"))
+        client.createCatalogFile(componentFile("$prefix-c", namespace = "ns-one"))
+
+        val all = client.get("/api/v1/catalog-files?name=$prefix&sort=name").body<CatalogFilePageResponse>()
+        assertEquals(3L, all.total)
+        assertEquals(listOf("$prefix-a", "$prefix-b", "$prefix-c"), all.items.map { it.name })
+
+        // The namespace filter is exact and case-insensitive (stored lowercase, query folded).
+        val nsOne = client.get("/api/v1/catalog-files?name=$prefix&namespace=NS-ONE&sort=name")
+            .body<CatalogFilePageResponse>()
+        assertEquals(listOf("$prefix-a", "$prefix-c"), nsOne.items.map { it.name })
+
+        val desc = client.get("/api/v1/catalog-files?name=$prefix&sort=-name&page=1&pageSize=2")
+            .body<CatalogFilePageResponse>()
+        assertEquals(3L, desc.total)
+        assertEquals(1, desc.page)
+        assertEquals(2, desc.pageSize)
+        assertEquals(listOf("$prefix-c", "$prefix-b"), desc.items.map { it.name })
+        val page2 = client.get("/api/v1/catalog-files?name=$prefix&sort=-name&page=2&pageSize=2")
+            .body<CatalogFilePageResponse>()
+        assertEquals(listOf("$prefix-a"), page2.items.map { it.name })
+    }
+
+    @Test
+    fun `list name filter folds diacritics on the query side`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        // Stored names are grammar-constrained ASCII — the folding is proven from the query
+        // side: a diacritic search term must match its ASCII base form.
+        val name = "zolw-${uniqueEntityName("dia")}"
+        client.createCatalogFile(componentFile(name))
+
+        val page = client.get("/api/v1/catalog-files") {
+            url.parameters.append("name", name.replace("zolw", "żółw"))
+        }.body<CatalogFilePageResponse>()
+        assertEquals(1L, page.total)
+        assertEquals(name, page.items.single().name)
+    }
+
+    @Test
+    fun `list rejects malformed query parameters`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?page=0").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?page=abc").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?pageSize=0").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?pageSize=101").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?pageSize=abc").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?sort=owner").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?sort=,name").status)
+    }
+
+    @Test
+    fun `soft-deleted file is invisible to read, update, delete and list`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val name = uniqueEntityName("gone")
+        val created = client.createCatalogFile(componentFile(name))
+
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/${created.id}").status)
+
+        assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/catalog-files/${created.id}").status)
+        val put = client.put("/api/v1/catalog-files/${created.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(componentFile(name))
+        }
+        assertEquals(HttpStatusCode.NotFound, put.status)
+        // Idempotent: a second delete finds no active row → 404.
+        assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/catalog-files/${created.id}").status)
+        val page = client.get("/api/v1/catalog-files?name=$name").body<CatalogFilePageResponse>()
+        assertEquals(0L, page.total)
+        assertTrue(page.items.isEmpty())
+    }
+
+    @Test
+    fun `update and delete of a non-existent file return 404`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val put = client.put("/api/v1/catalog-files/999999") {
+            contentType(ContentType.Application.Json)
+            setBody(componentFile(uniqueEntityName("ghost")))
+        }
+        assertEquals(HttpStatusCode.NotFound, put.status)
+        assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/catalog-files/999999").status)
+    }
+
+    @Test
+    fun `catalog file endpoints require authentication`() = testApplication {
+        usePostgresTestcontainer()
+        val client = jsonClient()
+        val endpoints = listOf(
+            HttpMethod.Get to "/api/v1/catalog-files",
+            HttpMethod.Post to "/api/v1/catalog-files",
+            HttpMethod.Get to "/api/v1/catalog-files/1",
+            HttpMethod.Put to "/api/v1/catalog-files/1",
+            HttpMethod.Delete to "/api/v1/catalog-files/1",
+        )
+        for ((verb, path) in endpoints) {
+            val response: HttpResponse = client.request(path) { method = verb }
+            assertEquals(HttpStatusCode.Unauthorized, response.status, "$verb $path expected 401")
+        }
+    }
+
+    @Test
+    fun `creator enrichment survives the creator's soft-deletion`() = testApplication {
+        usePostgresTestcontainer()
+        val creatorEmail = uniqueEmail("creator")
+        val creatorId = TestUsers.seed(email = creatorEmail, password = "pw", name = "Casey Creator", role = UserRole.USER)
+        val creatorClient = authedClient(creatorEmail, "pw")
+        val name = uniqueEntityName("orphaned")
+        val created = creatorClient.createCatalogFile(componentFile(name))
+        assertEquals(creatorId, created.createdBy)
+        assertEquals("Casey Creator", created.creatorName)
+
+        TestUsers.softDelete(creatorId)
+
+        val reader = regularUserClient("reader")
+        val fetched = reader.get("/api/v1/catalog-files/${created.id}").body<CatalogFileResponse>()
+        assertEquals("Casey Creator", fetched.creatorName)
+        assertTrue(fetched.creatorDeleted)
+        val row = reader.get("/api/v1/catalog-files?name=$name").body<CatalogFilePageResponse>().items.single()
+        assertTrue(row.creatorDeleted)
+    }
+
+    @Test
+    fun `service treats a blank name filter as absent`() = testApplication {
+        usePostgresTestcontainer()
+        val client = regularUserClient()
+        val name = uniqueEntityName("blankfilter")
+        val created = client.createCatalogFile(componentFile(name))
+
+        // The name contains no space, so a literally-applied blank filter (LIKE '% %') would
+        // exclude it — its presence proves blank means "no filter" at the service layer too.
+        val page = TestCatalogFiles.service.list(
+            ch.nokillswit.catalog.CatalogFileListFilter(name = " ", namespace = null),
+            ch.nokillswit.infra.paging.PageRequest(
+                page = 1,
+                pageSize = 100,
+                sort = listOf(ch.nokillswit.infra.paging.SortField("id", descending = true)),
+            ),
+        )
+        assertTrue(page.items.any { it.id == created.id })
+        assertNull(page.items.first { it.id == created.id }.title)
+    }
+}
