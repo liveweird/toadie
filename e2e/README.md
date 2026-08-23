@@ -71,6 +71,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`cross-check.spec.ts`](scenarios/cross-check.md) — a dangling `component:` reference is
   flagged live in the editor and on the Cross-check page, then resolves once its target file
   is created.
+- [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored, missing, and
+  external nodes for a throwaway namespace; toggling a relation family prunes its nodes.
 
 Specs log in with the seeded admin (`admin@toadie.local`, password `changeme`), and use unique
 content where they create any — so they don't depend on a clean database or absolute counts.
