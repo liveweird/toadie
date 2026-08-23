@@ -52,10 +52,16 @@ class CatalogFiles {
     @Serializable
     @Resource("import")
     class Import(val parent: CatalogFiles = CatalogFiles())
+
+    @Serializable
+    @Resource("fetch")
+    class Fetch(val parent: CatalogFiles = CatalogFiles())
 }
 
 fun Application.configureCatalogFileRoutes() {
     val catalogFileService = attributes[CatalogFileServiceKey]
+    // Stateless, no DB — constructed here rather than in the composition root.
+    val urlFetcher = CatalogUrlFetcher()
 
     routing {
         authenticate {
@@ -123,6 +129,24 @@ fun Application.configureCatalogFileRoutes() {
                     importOne(catalogFileService, caller.userId, index, raw)
                 }
                 call.respond(HttpStatusCode.OK, ImportResponse(results = results))
+            }
+            post<CatalogFiles.Fetch> {
+                val caller = call.caller()
+                val request = call.receive<FetchUrlRequest>()
+                val content = try {
+                    urlFetcher.fetch(request.url)
+                } catch (blocked: BlockedUrlException) {
+                    // A blocked fetch attempt is a probe signal worth keeping; the response
+                    // itself stays uniform so nothing about the internal network leaks.
+                    audit(
+                        "catalog_file.fetch_blocked",
+                        "byUserId" to caller.userId.toLong(),
+                        "scheme" to blocked.scheme,
+                        "host" to blocked.host,
+                    )
+                    throw BadRequestException(FETCH_URL_INVALID_DETAIL)
+                }
+                call.respond(HttpStatusCode.OK, FetchUrlResponse(content = content))
             }
             get<CatalogFiles.Id> { route ->
                 call.caller()

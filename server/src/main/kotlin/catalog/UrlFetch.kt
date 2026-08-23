@@ -1,0 +1,139 @@
+package ch.nokillswit.catalog
+
+import ch.nokillswit.authz.BadGatewayException
+import java.io.IOException
+import java.net.InetAddress
+import java.net.URI
+import java.net.URISyntaxException
+import java.net.UnknownHostException
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+
+/**
+ * The server side of "import from a URL": fetches a catalog-info.yaml the user points at and
+ * returns the raw TEXT (YAML parsing stays a client concern — the standing decision).
+ *
+ * This endpoint makes the server issue outbound requests on user command, so SSRF is the
+ * design center: https only, no userinfo, the resolved host must be a PUBLIC address
+ * (loopback/private/link-local/ULA/multicast all refused), redirects are never followed
+ * (following one would bypass the address check), and the body read is hard-capped. The
+ * resolve-check-then-connect gap (DNS rebinding) is a documented accepted residual risk —
+ * see "Outbound URL fetch" in .claude/docs/security.md.
+ */
+const val MAX_FETCH_URL_LENGTH = 2048
+const val MAX_FETCH_BYTES = 1_048_576
+private const val FETCH_TIMEOUT_SECONDS = 10L
+
+/** The uniform 400 detail for every guard rejection — never echoes what was probed. */
+const val FETCH_URL_INVALID_DETAIL =
+    "The URL must be a public https address (no credentials, resolvable, not a private or local host)"
+
+@Serializable
+data class FetchUrlRequest(val url: String)
+
+@Serializable
+data class FetchUrlResponse(val content: String)
+
+/**
+ * A guard rejection. Carries ONLY fields safe to audit — a full URL may embed query-string
+ * tokens, and we never log secrets. The route converts it to the uniform 400.
+ */
+class BlockedUrlException(val scheme: String?, val host: String?) : RuntimeException("Blocked URL")
+
+/** The static SSRF rules: absolute https, no userinfo, a non-blank host, sane length. */
+fun parseFetchUrl(raw: String): URI {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty() || trimmed.length > MAX_FETCH_URL_LENGTH) throw BlockedUrlException(null, null)
+    val uri = try {
+        URI(trimmed)
+    } catch (_: URISyntaxException) {
+        throw BlockedUrlException(null, null)
+    }
+    if (!uri.isAbsolute || !"https".equals(uri.scheme, ignoreCase = true)) {
+        throw BlockedUrlException(uri.scheme, uri.host)
+    }
+    if (uri.userInfo != null || uri.host.isNullOrBlank()) throw BlockedUrlException(uri.scheme, uri.host)
+    return uri
+}
+
+/** The dynamic SSRF rule: every address the host resolves to must be public. */
+fun requirePublicHost(host: String) {
+    val addresses = try {
+        InetAddress.getAllByName(host)
+    } catch (_: UnknownHostException) {
+        throw BlockedUrlException("https", host)
+    }
+    if (addresses.any { it.isBlockedAddress() }) throw BlockedUrlException("https", host)
+}
+
+internal fun InetAddress.isBlockedAddress(): Boolean =
+    isLoopbackAddress || isSiteLocalAddress || isLinkLocalAddress || isAnyLocalAddress ||
+        isMulticastAddress || isUniqueLocalIpv6()
+
+// fc00::/7 — NOT covered by isSiteLocalAddress (that is the deprecated fec0::/10).
+private fun InetAddress.isUniqueLocalIpv6(): Boolean {
+    val bytes = address
+    return bytes.size == 16 && (bytes[0].toInt() and 0xFE) == 0xFC
+}
+
+/** The full guard chain: static rules, then the resolved-address check. */
+fun validateFetchUrl(raw: String): URI {
+    val uri = parseFetchUrl(raw)
+    requirePublicHost(uri.host)
+    return uri
+}
+
+/**
+ * The fetcher. [urlValidator] is injectable ONLY so tests can point the response-handling
+ * logic at a plain-HTTP 127.0.0.1 fixture server — production wiring always uses
+ * [validateFetchUrl] (the default).
+ */
+class CatalogUrlFetcher(private val urlValidator: (String) -> URI = ::validateFetchUrl) {
+
+    private val client: HttpClient = HttpClient.newBuilder()
+        // Load-bearing: following a redirect would re-open the private-address hole.
+        .followRedirects(HttpClient.Redirect.NEVER)
+        .connectTimeout(Duration.ofSeconds(FETCH_TIMEOUT_SECONDS))
+        .build()
+
+    /** Throws [BlockedUrlException] (→ the route's 400) or [BadGatewayException] (→ 502). */
+    suspend fun fetch(rawUrl: String): String {
+        val uri = urlValidator(rawUrl)
+        return withContext(Dispatchers.IO) { execute(uri) }
+    }
+
+    private fun execute(uri: URI): String {
+        val request = HttpRequest.newBuilder(uri)
+            .timeout(Duration.ofSeconds(FETCH_TIMEOUT_SECONDS))
+            .header("Accept", "text/yaml, text/plain, */*")
+            .GET()
+            .build()
+        val response = try {
+            client.send(request, HttpResponse.BodyHandlers.ofInputStream())
+        } catch (_: IOException) {
+            throw BadGatewayException("The URL could not be fetched")
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw BadGatewayException("The URL could not be fetched")
+        }
+        response.body().use { body ->
+            if (response.statusCode() in 300..399) {
+                throw BadGatewayException("The URL redirects — use the final URL")
+            }
+            if (response.statusCode() != 200) {
+                throw BadGatewayException("The URL could not be fetched (HTTP ${response.statusCode()})")
+            }
+            // Bounded read — a BodyHandlers.ofString would buffer an attacker-sized response.
+            val bytes = body.readNBytes(MAX_FETCH_BYTES + 1)
+            if (bytes.size > MAX_FETCH_BYTES) {
+                throw BadGatewayException("The file is larger than the 1 MB fetch limit")
+            }
+            return String(bytes, Charsets.UTF_8)
+        }
+    }
+}

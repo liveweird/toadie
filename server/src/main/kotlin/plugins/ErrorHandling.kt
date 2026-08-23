@@ -1,6 +1,7 @@
 package ch.nokillswit.plugins
 
 import ch.nokillswit.audit.audit
+import ch.nokillswit.authz.BadGatewayException
 import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.authz.ForbiddenException
 import ch.nokillswit.authz.NotFoundException
@@ -188,6 +189,9 @@ fun Application.configureErrorHandling() {
         }
         exception<ConflictException> { call, cause ->
             call.respondProblem(HttpStatusCode.Conflict, cause.message ?: "Conflict", instance = cause.instance)
+        }
+        exception<BadGatewayException> { call, cause ->
+            call.respondProblem(HttpStatusCode.BadGateway, cause.message ?: "Upstream request failed")
         }
         // Non-unique DB failures fall through to a 500 problem (logged) instead of rethrowing,
         // which would escape StatusPages and yield a bodiless default 500.

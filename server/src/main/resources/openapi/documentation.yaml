@@ -535,6 +535,40 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/catalog-files/fetch:
+    post:
+      tags: [catalog-files]
+      operationId: fetchCatalogUrl
+      summary: Fetch a catalog-info.yaml from a URL (server-side)
+      description: |
+        Retrieves the raw text at the given URL so the SPA can drop it into the import flow —
+        server-side so any reachable host works, not only CORS-friendly ones. YAML parsing
+        stays a client concern; this returns TEXT.
+
+        SSRF posture: the URL must be an absolute `https` address without credentials whose
+        host resolves ONLY to public addresses — anything else (http, userinfo, loopback,
+        private/link-local/unique-local ranges, unresolvable hosts) is a uniform `400` that
+        never echoes what was probed. Redirects are not followed (`502` — use the final URL),
+        the response body is capped at 1 MB, and upstream failures (non-200, timeout,
+        oversize) answer `502`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FetchUrlRequest'
+      responses:
+        '200':
+          description: The raw text at the URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FetchUrlResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/catalog-files/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -662,6 +696,13 @@ components:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
     InternalServerError:
       description: Unexpected server error
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    BadGateway:
+      description: >-
+        The upstream request made on the caller's behalf failed (the remote answered non-200,
+        redirected, timed out, or exceeded the size cap).
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
@@ -804,6 +845,26 @@ components:
       enum: [Component, API, System, Domain, Resource, Group, User]
       default: Component
       description: Accepted case-insensitively; canonicalized on write.
+
+    FetchUrlRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          maxLength: 2048
+          description: >-
+            Absolute https URL of a catalog-info.yaml, without credentials, resolving to a
+            public host.
+          example: https://raw.githubusercontent.com/acme/service/main/catalog-info.yaml
+
+    FetchUrlResponse:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: The raw text at the URL (at most 1 MB), ready for the import parser.
 
     ExportResponse:
       type: object
