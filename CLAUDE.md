@@ -82,7 +82,9 @@ ch.nokillswit
                         (GET …/graph, the /render page's backend);
                         Import.kt — the round-trip DTOs (GET …/export ships structured
                         documents, POST …/import stores each independently, report & skip;
-                        YAML parsing/rendering stays a client concern)
+                        YAML parsing/rendering stays a client concern);
+                        UrlFetch.kt — POST …/fetch, the SSRF-guarded server-side fetch of a
+                        catalog-info.yaml URL (guards documented in security.md)
 ```
 
 **Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse` + the `validateX` free function enforced by route AND service), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_ITEMS` entries, and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`.

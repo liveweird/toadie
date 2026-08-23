@@ -23,7 +23,9 @@ generated-password reveal, self-service password change):
   reference edges between them (missing and external targets drawn as virtual nodes), with a
   namespace filter and per-relation toggles, and
 - **the YAML round-trip**: import existing (multi-document) `catalog-info.yaml` files —
-  parsed client-side, each document imported independently with a per-row result report
+  pasted, picked, or **fetched from a URL** (server-side and SSRF-guarded, so GitHub, GitLab,
+  and self-hosted Git all work; blob links are converted to raw automatically) — parsed
+  client-side, each document imported independently with a per-row result report
   (created / invalid / already-exists; nothing overwritten) — and export the workspace (or
   one namespace) back as a single `---`-separated `catalog-info.yaml`.
 
