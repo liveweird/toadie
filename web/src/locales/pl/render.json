@@ -1,0 +1,20 @@
+{
+  "title": "Renderowanie",
+  "loadFailed": "Nie udało się wczytać grafu",
+  "clearNamespaceFilter": "Wyczyść filtr przestrzeni nazw",
+  "relationsLabel": "Relacje",
+  "relation": {
+    "dependsOn": "Zależy od",
+    "subcomponentOf": "Podkomponent",
+    "apis": "API",
+    "owner": "Właściciel/ka",
+    "system": "System"
+  },
+  "legend": {
+    "stored": "Zapisany plik",
+    "missing": "Brakujący komponent",
+    "external": "Nieprzechowywane w Toadie"
+  },
+  "empty": "Nie ma czego renderować — żaden zapisany plik nie pasuje.",
+  "nodeAria": "Otwórz {{name}}"
+}

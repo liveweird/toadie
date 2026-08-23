@@ -5,6 +5,7 @@
   "nav": {
     "home": "Strona główna",
     "catalogFiles": "Pliki katalogu",
-    "crossCheck": "Weryfikacja referencji"
+    "crossCheck": "Weryfikacja referencji",
+    "render": "Renderowanie"
   }
 }

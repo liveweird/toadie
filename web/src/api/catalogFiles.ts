@@ -63,6 +63,16 @@ export async function getCrossCheckReport(): Promise<CrossCheckReport> {
   return jsonRequest<CrossCheckReport>("/api/v1/catalog-files/cross-check");
 }
 
+export type CatalogGraph =
+  paths["/api/v1/catalog-files/graph"]["get"]["responses"]["200"]["content"]["application/json"];
+export type GraphNode = components["schemas"]["GraphNode"];
+
+/** The rendered-together graph; a namespace narrows which files' references are expanded. */
+export async function getCatalogGraph(namespace?: string): Promise<CatalogGraph> {
+  const params = buildQuery({ namespace });
+  return jsonRequest<CatalogGraph>(`/api/v1/catalog-files/graph${params ? `?${params}` : ""}`);
+}
+
 /** The editor's live check of one (possibly unsaved) document against the store. */
 export async function checkCatalogFile(req: CatalogFileRequest): Promise<DocumentCheckReport> {
   return jsonRequest<DocumentCheckReport>("/api/v1/catalog-files/check", {

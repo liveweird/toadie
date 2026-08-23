@@ -205,6 +205,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/catalog-files/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The stored files rendered together as a relationship graph
+         * @description Every active file and the reference edges between them, resolved with the cross-check's
+         *     semantics (per-field default kinds, namespaceless references resolve in the referencing
+         *     file's own namespace, case-insensitive identity). Node statuses:
+         *
+         *     - `STORED` — an active catalog file (carries `fileId`).
+         *     - `MISSING` — a referenced Component no active file provides (the cross-check's
+         *       MISSING, drawn).
+         *     - `EXTERNAL` — a referenced entity of a kind Toadie doesn't store yet.
+         *
+         *     Kind-less `dependsOn`/`dependencyOf` entries (cross-check errors) are not drawable and
+         *     are omitted. The optional `namespace` filter narrows which files' references are
+         *     EXPANDED; targets still resolve against the whole workspace, so a stored file outside
+         *     the filter appears as a STORED node when something points at it. Unpaged by design —
+         *     a report-style computation over the workspace.
+         */
+        get: operations["getCatalogGraph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/catalog-files/{id}": {
         parameters: {
             query?: never;
@@ -401,6 +434,32 @@ export interface components {
         };
         DocumentCheckReport: {
             findings: components["schemas"]["DocumentCheckFinding"][];
+        };
+        /** @enum {string} */
+        GraphNodeStatus: "STORED" | "MISSING" | "EXTERNAL";
+        GraphNode: {
+            /** @description Canonical lowercased identity `kind:namespace/name` (the dedupe key). */
+            id: string;
+            kind: string;
+            namespace: string;
+            name: string;
+            title?: string | null;
+            /**
+             * Format: int32
+             * @description The backing file for STORED nodes; null for virtual nodes.
+             */
+            fileId?: number | null;
+            status: components["schemas"]["GraphNodeStatus"];
+        };
+        GraphEdge: {
+            sourceId: string;
+            targetId: string;
+            /** @description The spec field the reference lives in, e.g. `spec.dependsOn`. */
+            field: string;
+        };
+        CatalogGraph: {
+            nodes: components["schemas"]["GraphNode"][];
+            edges: components["schemas"]["GraphEdge"][];
         };
         CatalogFilePage: {
             items: components["schemas"]["CatalogFileListItem"][];
@@ -758,6 +817,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentCheckReport"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getCatalogGraph: {
+        parameters: {
+            query?: {
+                /** @description Exact (case-insensitive) namespace of the files to expand. */
+                namespace?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The graph */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogGraph"];
                 };
             };
             400: components["responses"]["BadRequest"];

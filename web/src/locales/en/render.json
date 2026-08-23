@@ -1,0 +1,20 @@
+{
+  "title": "Render",
+  "loadFailed": "Failed to load the graph",
+  "clearNamespaceFilter": "Clear namespace filter",
+  "relationsLabel": "Relations",
+  "relation": {
+    "dependsOn": "Depends on",
+    "subcomponentOf": "Subcomponent",
+    "apis": "APIs",
+    "owner": "Owner",
+    "system": "System"
+  },
+  "legend": {
+    "stored": "Stored file",
+    "missing": "Missing component",
+    "external": "Not stored in Toadie"
+  },
+  "empty": "Nothing to render — no stored files match.",
+  "nodeAria": "Open {{name}}"
+}

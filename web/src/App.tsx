@@ -18,6 +18,7 @@ import {
   IconFileDescription,
   IconHome,
   IconListCheck,
+  IconTopologyStar3,
   IconLogout,
   IconMoon,
   IconSun,
@@ -45,6 +46,7 @@ const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
 const EditCatalogFile = lazy(() => import("./pages/EditCatalogFile"));
 const CrossCheck = lazy(() => import("./pages/CrossCheck"));
+const RenderGraph = lazy(() => import("./pages/RenderGraph"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function RouteFallback() {
@@ -70,6 +72,7 @@ const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   { to: "/", label: "appShell.nav.home", icon: IconHome },
   { to: "/catalog-files", label: "appShell.nav.catalogFiles", icon: IconFileDescription },
   { to: "/cross-check", label: "appShell.nav.crossCheck", icon: IconListCheck },
+  { to: "/render", label: "appShell.nav.render", icon: IconTopologyStar3 },
 ];
 
 function ColorSchemeToggle() {
@@ -205,6 +208,7 @@ export default function App() {
             <Route path="catalog-files/new" element={<CreateCatalogFile />} />
             <Route path="catalog-files/:id/edit" element={<EditCatalogFile />} />
             <Route path="cross-check" element={<CrossCheck />} />
+            <Route path="render" element={<RenderGraph />} />
             {/* The authenticated catch-all — LAST child, never feature-gated. */}
             <Route path="*" element={<NotFound />} />
           </Route>
