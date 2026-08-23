@@ -12,6 +12,7 @@ type FetchMock = ReturnType<typeof vi.fn>;
 
 const STORED_FILE = {
   id: 7,
+  kind: "Component",
   metadata: {
     name: "stored-svc",
     namespace: "team-a",
@@ -105,6 +106,7 @@ describe("EditCatalogFile page", () => {
     );
     expect(putCall).toBeDefined();
     expect(JSON.parse((putCall![1] as RequestInit).body as string)).toEqual({
+      kind: "Component",
       metadata: {
         name: "stored-svc",
         namespace: "team-a",

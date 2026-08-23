@@ -12,6 +12,7 @@ type FetchMock = ReturnType<typeof vi.fn>;
 
 type FileRow = {
   id: number;
+  kind: string;
   name: string;
   namespace: string;
   title: string | null;
@@ -26,6 +27,7 @@ type FileRow = {
 const SEED_FILES: FileRow[] = [
   {
     id: 1,
+    kind: "Component",
     name: "payments-svc",
     namespace: "default",
     title: "Payments",
@@ -38,6 +40,7 @@ const SEED_FILES: FileRow[] = [
   },
   {
     id: 2,
+    kind: "API",
     name: "web-portal",
     namespace: "team-a",
     title: null,
@@ -129,6 +132,28 @@ describe("CatalogFiles page", () => {
     await user.type(screen.getByLabelText("Name"), "paym");
 
     await calledWith(mockFetch, "name=paym");
+  });
+
+  test("picking a Kind filter triggers a refetch with kind=", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    await user.click(screen.getByRole("button", { name: /filters/i }));
+    fireEvent.click(screen.getByLabelText("Kind", { selector: "input" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Group" }));
+
+    await calledWith(mockFetch, "kind=Group");
+  });
+
+  test("rows show their kind badge", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    expect(screen.getByText("Component")).toBeInTheDocument();
+    expect(screen.getByText("API")).toBeInTheDocument();
   });
 
   test("typing in the Namespace filter triggers a refetch with namespace=", async () => {
@@ -287,6 +312,7 @@ describe("CatalogFiles page", () => {
         return Promise.resolve(
           jsonResponse(200, {
             id: 1,
+            kind: "Component",
             metadata: { name: "payments-svc", namespace: "default" },
             spec: { type: "service", lifecycle: "production", owner: "group:platform" },
             createdBy: 1,

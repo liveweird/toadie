@@ -8,11 +8,13 @@
     "subcomponentOf": "Subcomponent",
     "apis": "APIs",
     "owner": "Owner",
-    "system": "System"
+    "system": "System",
+    "domain": "Domain",
+    "membership": "Membership"
   },
   "legend": {
     "stored": "Stored file",
-    "missing": "Missing component",
+    "missing": "Missing entity",
     "external": "Not stored in Toadie"
   },
   "empty": "Nothing to render — no stored files match.",

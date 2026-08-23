@@ -7,10 +7,22 @@ export const MAX_TITLE_LENGTH = 200;
 export const MAX_DESCRIPTION_LENGTH = 2000;
 const MAX_ANNOTATION_VALUE_LENGTH = 5000;
 export const MAX_LINK_TITLE_LENGTH = 100;
+export const MAX_DEFINITION_LENGTH = 100000;
+const MAX_PROFILE_EMAIL_LENGTH = 254;
 
-// The well-known values from the Backstage descriptor reference — suggestions, not an enum
-// (both fields are open strings by design).
-export const WELL_KNOWN_TYPES = ["service", "website", "library"] as const;
+export const ENTITY_KINDS = ["Component", "API", "System", "Domain", "Resource", "Group", "User"] as const;
+export type EntityKind = (typeof ENTITY_KINDS)[number];
+
+// The well-known type values per kind (the descriptor reference) — suggestions, not enums.
+export const WELL_KNOWN_TYPES: Record<EntityKind, readonly string[]> = {
+  Component: ["service", "website", "library"],
+  API: ["openapi", "asyncapi", "graphql", "grpc"],
+  System: ["product", "service", "feature-set"],
+  Domain: ["product-area", "product-group", "bundle"],
+  Resource: ["database", "s3-bucket", "kubernetes-cluster"],
+  Group: ["team", "business-unit", "product-area", "root"],
+  User: [],
+};
 export const WELL_KNOWN_LIFECYCLES = ["experimental", "production", "deprecated"] as const;
 
 // The grammars from .claude/docs/backstage-descriptor-format.md, identical to the server's
@@ -32,6 +44,7 @@ type LinkRow = { url: string; title: string; icon: string };
 
 /** The form values shared by CreateCatalogFile and EditCatalogFile (the shared-vocab idiom). */
 export type CatalogFileFormValues = {
+  kind: EntityKind;
   name: string;
   namespace: string;
   title: string;
@@ -49,9 +62,20 @@ export type CatalogFileFormValues = {
   consumesApis: string[];
   dependsOn: string[];
   dependencyOf: string[];
+  definition: string;
+  profileDisplayName: string;
+  profileEmail: string;
+  profilePicture: string;
+  parent: string;
+  children: string[];
+  members: string[];
+  memberOf: string[];
+  domain: string;
+  subdomainOf: string;
 };
 
 export const EMPTY_CATALOG_FILE_FORM: CatalogFileFormValues = {
+  kind: "Component",
   name: "",
   namespace: "",
   title: "",
@@ -69,7 +93,69 @@ export const EMPTY_CATALOG_FILE_FORM: CatalogFileFormValues = {
   consumesApis: [],
   dependsOn: [],
   dependencyOf: [],
+  definition: "",
+  profileDisplayName: "",
+  profileEmail: "",
+  profilePicture: "",
+  parent: "",
+  children: [],
+  members: [],
+  memberOf: [],
+  domain: "",
+  subdomainOf: "",
 };
+
+// The client mirror of the server's per-kind field tables (catalog/CatalogFile.kt): which
+// spec fields a kind carries, and which it requires. Keep the three in sync.
+type SpecFieldName =
+  | "type"
+  | "lifecycle"
+  | "owner"
+  | "system"
+  | "subcomponentOf"
+  | "providesApis"
+  | "consumesApis"
+  | "dependsOn"
+  | "dependencyOf"
+  | "definition"
+  | "profile"
+  | "parent"
+  | "children"
+  | "members"
+  | "memberOf"
+  | "domain"
+  | "subdomainOf";
+
+const KIND_FIELDS: Record<EntityKind, readonly SpecFieldName[]> = {
+  Component: [
+    "type", "lifecycle", "owner", "system", "subcomponentOf",
+    "providesApis", "consumesApis", "dependsOn", "dependencyOf",
+  ],
+  API: ["type", "lifecycle", "owner", "system", "definition"],
+  System: ["type", "owner", "domain"],
+  Domain: ["type", "owner", "subdomainOf"],
+  Resource: ["type", "owner", "system", "dependsOn", "dependencyOf"],
+  Group: ["type", "profile", "parent", "children", "members"],
+  User: ["profile", "memberOf"],
+};
+
+const KIND_REQUIRED: Record<EntityKind, readonly SpecFieldName[]> = {
+  Component: ["type", "lifecycle", "owner"],
+  API: ["type", "lifecycle", "owner", "definition"],
+  System: ["owner"],
+  Domain: ["owner"],
+  Resource: ["type", "owner"],
+  Group: ["type"],
+  User: [],
+};
+
+export function fieldApplies(kind: EntityKind, field: SpecFieldName): boolean {
+  return KIND_FIELDS[kind].includes(field);
+}
+
+function fieldRequired(kind: EntityKind, field: SpecFieldName): boolean {
+  return KIND_REQUIRED[kind].includes(field);
+}
 
 export function isValidName(value: string): boolean {
   return value.length >= 1 && value.length <= MAX_ENTITY_PART_LENGTH && NAME_RE.test(value);
@@ -86,7 +172,7 @@ function isValidKey(key: string): boolean {
   return isValidName(name);
 }
 
-/** Format check of `[kind:][namespace/]name` — resolution is the future cross-check feature. */
+/** Format check of `[kind:][namespace/]name` — resolution is the cross-check's job. */
 export function isValidEntityRef(ref: string): boolean {
   const colon = ref.indexOf(":");
   if (colon !== ref.lastIndexOf(":")) return false;
@@ -117,24 +203,30 @@ function isAbsoluteUri(url: string): boolean {
   }
 }
 
-function singleWordError(t: TFunction) {
-  return (value: string) => {
+// Per-kind-aware rule factories: a rule returns null when its field doesn't apply to the
+// current kind, so switching kinds never leaves stale errors on hidden fields.
+function singleWordRule(field: SpecFieldName, t: TFunction) {
+  return (value: string, values: CatalogFileFormValues) => {
+    if (!fieldApplies(values.kind, field)) return null;
     const v = value.trim();
-    if (!v) return t("catalog.validation.required");
+    if (!v) return fieldRequired(values.kind, field) ? t("catalog.validation.required") : null;
     return v.length <= MAX_ENTITY_PART_LENGTH && !/\s/.test(v) ? null : t("catalog.validation.singleWord");
   };
 }
 
-function optionalRefError(t: TFunction) {
-  return (value: string) => {
+function refRule(field: SpecFieldName, t: TFunction) {
+  return (value: string, values: CatalogFileFormValues) => {
+    if (!fieldApplies(values.kind, field)) return null;
     const v = value.trim();
-    return !v || isValidEntityRef(v) ? null : t("catalog.validation.ref");
+    if (!v) return fieldRequired(values.kind, field) ? t("catalog.validation.required") : null;
+    return isValidEntityRef(v) ? null : t("catalog.validation.ref");
   };
 }
 
-function refArrayError(t: TFunction) {
-  return (values: string[]) => {
-    const bad = values.map((r) => r.trim()).find((r) => r && !isValidEntityRef(r));
+function refArrayRule(field: SpecFieldName, t: TFunction) {
+  return (values_: string[], values: CatalogFileFormValues) => {
+    if (!fieldApplies(values.kind, field)) return null;
+    const bad = values_.map((r) => r.trim()).find((r) => r && !isValidEntityRef(r));
     return bad === undefined ? null : t("catalog.validation.refEntry", { ref: bad });
   };
 }
@@ -173,30 +265,87 @@ export function catalogFileFormValidation(t: TFunction) {
           : t("catalog.validation.annotationValueLength"),
     },
     links: {
-      url: (value: string) =>
-        isAbsoluteUri(value.trim()) ? null : t("catalog.validation.url"),
+      url: (value: string) => (isAbsoluteUri(value.trim()) ? null : t("catalog.validation.url")),
       icon: (value: string) => {
         const v = value.trim();
         return !v || isValidName(v) ? null : t("catalog.validation.icon");
       },
     },
-    type: singleWordError(t),
-    lifecycle: singleWordError(t),
-    owner: (value: string) => {
+    type: singleWordRule("type", t),
+    lifecycle: singleWordRule("lifecycle", t),
+    owner: refRule("owner", t),
+    system: refRule("system", t),
+    subcomponentOf: refRule("subcomponentOf", t),
+    providesApis: refArrayRule("providesApis", t),
+    consumesApis: refArrayRule("consumesApis", t),
+    dependsOn: refArrayRule("dependsOn", t),
+    dependencyOf: refArrayRule("dependencyOf", t),
+    definition: (value: string, values: CatalogFileFormValues) => {
+      if (!fieldApplies(values.kind, "definition")) return null;
       const v = value.trim();
       if (!v) return t("catalog.validation.required");
-      return isValidEntityRef(v) ? null : t("catalog.validation.ref");
+      return v.length <= MAX_DEFINITION_LENGTH ? null : t("catalog.validation.definitionLength");
     },
-    system: optionalRefError(t),
-    subcomponentOf: optionalRefError(t),
-    providesApis: refArrayError(t),
-    consumesApis: refArrayError(t),
-    dependsOn: refArrayError(t),
-    dependencyOf: refArrayError(t),
+    profileEmail: (value: string, values: CatalogFileFormValues) => {
+      if (!fieldApplies(values.kind, "profile")) return null;
+      return value.trim().length <= MAX_PROFILE_EMAIL_LENGTH
+        ? null
+        : t("catalog.validation.profileEmailLength");
+    },
+    profilePicture: (value: string, values: CatalogFileFormValues) => {
+      if (!fieldApplies(values.kind, "profile")) return null;
+      const v = value.trim();
+      return !v || isAbsoluteUri(v) ? null : t("catalog.validation.url");
+    },
+    parent: refRule("parent", t),
+    children: refArrayRule("children", t),
+    members: refArrayRule("members", t),
+    memberOf: refArrayRule("memberOf", t),
+    domain: refRule("domain", t),
+    subdomainOf: refRule("subdomainOf", t),
   };
 }
 
 const trimmedTags = (values: string[]) => values.map((v) => v.trim()).filter(Boolean);
+const orUndefined = (value: string) => value.trim() || undefined;
+
+type EntitySpecWire = CatalogFileRequest["spec"];
+
+// The kind's fields only — foreign values a kind switch left behind are stripped, mirroring
+// the server's forbidden-field rule.
+function specFor(values: CatalogFileFormValues): EntitySpecWire {
+  const kind = values.kind;
+  const has = (field: SpecFieldName) => fieldApplies(kind, field);
+  const profile =
+    has("profile") &&
+    (values.profileDisplayName.trim() || values.profileEmail.trim() || values.profilePicture.trim())
+      ? {
+          displayName: orUndefined(values.profileDisplayName),
+          email: orUndefined(values.profileEmail),
+          picture: orUndefined(values.profilePicture),
+        }
+      : undefined;
+  return {
+    type: has("type") ? orUndefined(values.type) : undefined,
+    lifecycle: has("lifecycle") ? orUndefined(values.lifecycle) : undefined,
+    owner: has("owner") ? orUndefined(values.owner) : undefined,
+    system: has("system") ? orUndefined(values.system) : undefined,
+    subcomponentOf: has("subcomponentOf") ? orUndefined(values.subcomponentOf) : undefined,
+    providesApis: has("providesApis") ? trimmedTags(values.providesApis) : undefined,
+    consumesApis: has("consumesApis") ? trimmedTags(values.consumesApis) : undefined,
+    dependsOn: has("dependsOn") ? trimmedTags(values.dependsOn) : undefined,
+    dependencyOf: has("dependencyOf") ? trimmedTags(values.dependencyOf) : undefined,
+    definition: has("definition") ? values.definition.trim() || undefined : undefined,
+    profile,
+    parent: has("parent") ? orUndefined(values.parent) : undefined,
+    // PRESENT-and-possibly-empty by contract for Group/User (the Backstage rule).
+    children: has("children") ? trimmedTags(values.children) : undefined,
+    members: has("members") ? trimmedTags(values.members) : undefined,
+    memberOf: has("memberOf") ? trimmedTags(values.memberOf) : undefined,
+    domain: has("domain") ? orUndefined(values.domain) : undefined,
+    subdomainOf: has("subdomainOf") ? orUndefined(values.subdomainOf) : undefined,
+  };
+}
 
 /** Form → wire shape: trims everything, drops empties, folds the namespace like the server. */
 export function toCatalogFileRequest(values: CatalogFileFormValues): CatalogFileRequest {
@@ -207,6 +356,7 @@ export function toCatalogFileRequest(values: CatalogFileFormValues): CatalogFile
     values.annotations.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value.trim()]),
   );
   return {
+    kind: values.kind,
     metadata: {
       name: values.name.trim(),
       namespace: values.namespace.trim().toLowerCase() || "default",
@@ -223,23 +373,16 @@ export function toCatalogFileRequest(values: CatalogFileFormValues): CatalogFile
           icon: l.icon.trim() || undefined,
         })),
     },
-    spec: {
-      type: values.type.trim(),
-      lifecycle: values.lifecycle.trim(),
-      owner: values.owner.trim(),
-      system: values.system.trim() || undefined,
-      subcomponentOf: values.subcomponentOf.trim() || undefined,
-      providesApis: trimmedTags(values.providesApis),
-      consumesApis: trimmedTags(values.consumesApis),
-      dependsOn: trimmedTags(values.dependsOn),
-      dependencyOf: trimmedTags(values.dependencyOf),
-    },
+    spec: specFor(values),
   };
 }
 
 /** Wire shape → form values (the edit page's prefill). */
 export function fromCatalogFileResponse(file: CatalogFileResponse): CatalogFileFormValues {
   return {
+    kind: (ENTITY_KINDS as readonly string[]).includes(file.kind)
+      ? (file.kind as EntityKind)
+      : "Component",
     name: file.metadata.name,
     namespace: file.metadata.namespace ?? "",
     title: file.metadata.title ?? "",
@@ -255,14 +398,24 @@ export function fromCatalogFileResponse(file: CatalogFileResponse): CatalogFileF
       title: l.title ?? "",
       icon: l.icon ?? "",
     })),
-    type: file.spec.type,
-    lifecycle: file.spec.lifecycle,
-    owner: file.spec.owner,
+    type: file.spec.type ?? "",
+    lifecycle: file.spec.lifecycle ?? "",
+    owner: file.spec.owner ?? "",
     system: file.spec.system ?? "",
     subcomponentOf: file.spec.subcomponentOf ?? "",
     providesApis: file.spec.providesApis ?? [],
     consumesApis: file.spec.consumesApis ?? [],
     dependsOn: file.spec.dependsOn ?? [],
     dependencyOf: file.spec.dependencyOf ?? [],
+    definition: file.spec.definition ?? "",
+    profileDisplayName: file.spec.profile?.displayName ?? "",
+    profileEmail: file.spec.profile?.email ?? "",
+    profilePicture: file.spec.profile?.picture ?? "",
+    parent: file.spec.parent ?? "",
+    children: file.spec.children ?? [],
+    members: file.spec.members ?? [],
+    memberOf: file.spec.memberOf ?? [],
+    domain: file.spec.domain ?? "",
+    subdomainOf: file.spec.subdomainOf ?? "",
   };
 }

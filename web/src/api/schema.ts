@@ -115,11 +115,12 @@ export interface paths {
          *
          *     Supports offset pagination, sorting and filtering.
          *
-         *     - Sortable fields: `id`, `name`, `namespace`, `updatedAt`. Default sort is `id`
-         *       ascending; `id` ascending is always appended as a deterministic tiebreaker.
+         *     - Sortable fields: `id`, `kind`, `name`, `namespace`, `updatedAt`. Default sort is
+         *       `id` ascending; `id` ascending is always appended as a deterministic tiebreaker.
          *     - Filters (optional, whitelisted):
          *       - `name` — case- and accent-insensitive substring match against the entity name.
          *       - `namespace` — exact match (case-insensitive; namespaces are stored lowercase).
+         *       - `kind` — one of the supported kinds (case-insensitive; unknown values are a `400`).
          *
          *     Each returned item includes the creator's `creatorName` resolved via join so the UI
          *     does not need an N+1 lookup.
@@ -158,14 +159,14 @@ export interface paths {
          *     `subcomponentOf`, `providesApis`, `consumesApis`, `dependsOn`, `dependencyOf`) against
          *     the workspace and reports three tiers of findings:
          *
-         *     - `MISSING` (error) — the reference should resolve to a stored Component (explicit
-         *       `component:` kind, or a field whose default kind is component) but no active file
-         *       matches. Namespaceless references resolve within the REFERENCING file's own
-         *       namespace; matching is case-insensitive throughout.
+         *     - `MISSING` (error) — the reference targets one of the stored kinds (Component, API,
+         *       System, Domain, Resource, Group, User — explicitly or via the field's default kind)
+         *       but no active file matches. Namespaceless references resolve within the REFERENCING
+         *       file's own namespace; matching is case-insensitive throughout.
          *     - `KIND_REQUIRED` (error) — a `dependsOn`/`dependencyOf` entry without a kind; those
          *       fields have no default kind, so Backstage itself cannot ingest such a reference.
-         *     - `UNVERIFIABLE` (info) — the target kind is not stored in Toadie yet (group, user,
-         *       api, system, domain, …); becomes checkable as further kinds are added.
+         *     - `UNVERIFIABLE` (info) — the target kind is not stored in Toadie (Location, Template,
+         *       custom kinds).
          *
          *     Findings never block saving — files legitimately reference entities that arrive later.
          */
@@ -219,9 +220,10 @@ export interface paths {
          *     file's own namespace, case-insensitive identity). Node statuses:
          *
          *     - `STORED` — an active catalog file (carries `fileId`).
-         *     - `MISSING` — a referenced Component no active file provides (the cross-check's
-         *       MISSING, drawn).
-         *     - `EXTERNAL` — a referenced entity of a kind Toadie doesn't store yet.
+         *     - `MISSING` — a referenced entity of a stored kind that no active file provides (the
+         *       cross-check's MISSING, drawn).
+         *     - `EXTERNAL` — a referenced entity of a kind Toadie doesn't store (Location, Template,
+         *       custom kinds).
          *
          *     Kind-less `dependsOn`/`dependencyOf` entries (cross-check errors) are not drawable and
          *     are omitted. The optional `namespace` filter narrows which files' references are
@@ -312,11 +314,18 @@ export interface components {
             /** @description Required when the caller changes their OWN password (even an admin); omitted for an admin resetting somebody else's. */
             currentPassword?: string;
         };
-        /** @description One catalog-info.yaml document — a Backstage Component entity. `kind` is implicit (`Component`) until further kinds arrive. */
+        /** @description One catalog-info.yaml document — a Backstage entity of one of the supported landscape kinds. `spec` is one flat superset of every kind's fields; the server enforces the per-kind required/forbidden rules (a field foreign to the kind is a 400 naming it). */
         CatalogFileRequest: {
+            kind?: components["schemas"]["EntityKind"];
             metadata: components["schemas"]["CatalogFileMetadata"];
-            spec: components["schemas"]["ComponentSpec"];
+            spec: components["schemas"]["EntitySpec"];
         };
+        /**
+         * @description Accepted case-insensitively; canonicalized on write.
+         * @default Component
+         * @enum {string}
+         */
+        EntityKind: "Component" | "API" | "System" | "Domain" | "Resource" | "Group" | "User";
         CatalogFileMetadata: {
             /** @description Entity name — unique (case-insensitively) per namespace among active files. */
             name: string;
@@ -346,13 +355,14 @@ export interface components {
             /** @description Semantic icon key (entity-name grammar). */
             icon?: string | null;
         };
-        ComponentSpec: {
-            /** @description Component classification, e.g. `service`, `website`, `library`. */
-            type: string;
+        /** @description The superset of every supported kind's spec fields — required/forbidden per kind: Component needs type/lifecycle/owner; API additionally definition; System and Domain need owner; Resource type/owner; Group type plus a PRESENT children list (may be empty); User a PRESENT memberOf list. Fields foreign to the document's kind are rejected. */
+        EntitySpec: {
+            /** @description Classification, e.g. `service` (Component), `openapi` (API), `team` (Group). */
+            type?: string | null;
             /** @description Lifecycle state, e.g. `experimental`, `production`, `deprecated`. */
-            lifecycle: string;
-            /** @description Entity reference `[kind:][namespace/]name` of the owning group/user (format-checked only; resolution is a future feature). */
-            owner: string;
+            lifecycle?: string | null;
+            /** @description Entity reference `[kind:][namespace/]name` of the owning group/user (format-checked here; resolution is the cross-check's job). */
+            owner?: string | null;
             /** @description Entity reference of the parent System. */
             system?: string | null;
             /** @description Entity reference of the parent Component. */
@@ -365,12 +375,35 @@ export interface components {
             dependsOn?: string[];
             /** @description Entity references of Components/Resources depending on this component. */
             dependencyOf?: string[];
+            /** @description The API definition document itself (OpenAPI/AsyncAPI/GraphQL/gRPC…). API kind only, required there. */
+            definition?: string | null;
+            profile?: components["schemas"]["EntityProfile"] | null;
+            /** @description Entity reference of the parent Group (Group kind). */
+            parent?: string | null;
+            /** @description Immediate child Groups — REQUIRED (possibly empty) for Group. */
+            children?: string[] | null;
+            /** @description User references in this group (Group kind). */
+            members?: string[];
+            /** @description Group references — REQUIRED (possibly empty) for User. */
+            memberOf?: string[] | null;
+            /** @description Entity reference of the parent Domain (System kind). */
+            domain?: string | null;
+            /** @description Entity reference of the parent Domain (Domain kind). */
+            subdomainOf?: string | null;
+        };
+        /** @description Display profile for Group/User entities. */
+        EntityProfile: {
+            displayName?: string | null;
+            email?: string | null;
+            /** @description Absolute URI of a representative image. */
+            picture?: string | null;
         };
         CatalogFileResponse: {
             /** Format: int32 */
             id: number;
+            kind: components["schemas"]["EntityKind"];
             metadata: components["schemas"]["CatalogFileMetadata"];
-            spec: components["schemas"]["ComponentSpec"];
+            spec: components["schemas"]["EntitySpec"];
             /** Format: int32 */
             createdBy: number;
             creatorName: string;
@@ -390,12 +423,13 @@ export interface components {
         CatalogFileListItem: {
             /** Format: int32 */
             id: number;
+            kind: components["schemas"]["EntityKind"];
             name: string;
             namespace: string;
             title: string | null;
-            type: string;
-            lifecycle: string;
-            owner: string;
+            type: string | null;
+            lifecycle: string | null;
+            owner: string | null;
             creatorName: string;
             /** @description True when the creating user has been soft-deleted. */
             creatorDeleted: boolean;
@@ -716,6 +750,8 @@ export interface operations {
                 name?: string;
                 /** @description Exact (case-insensitive) namespace match. */
                 namespace?: string;
+                /** @description One of the supported kinds (case-insensitive); unknown values are a 400. */
+                kind?: string;
             };
             header?: never;
             path?: never;

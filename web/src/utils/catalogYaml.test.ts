@@ -4,6 +4,7 @@ import type { CatalogFileRequest } from "../api/catalogFiles";
 import { catalogInfoYaml, downloadYaml } from "./catalogYaml";
 
 const minimal: CatalogFileRequest = {
+  kind: "Component",
   metadata: { name: "my-svc", namespace: "default" },
   spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
 };
@@ -41,6 +42,7 @@ describe("catalogInfoYaml", () => {
 
   test("round-trips the full surface through a YAML parser", () => {
     const full: CatalogFileRequest = {
+      kind: "Component",
       metadata: {
         name: "svc",
         namespace: "team-a",
@@ -88,6 +90,55 @@ describe("catalogInfoYaml", () => {
     expect(yaml).toContain("url: https://example.com");
     expect(yaml).not.toContain("title:");
     expect(yaml).not.toContain("icon:");
+  });
+});
+
+describe("catalogInfoYaml per kind", () => {
+  test("a Group renders children even when empty, and the profile compactly", () => {
+    const yaml = catalogInfoYaml({
+      kind: "Group",
+      metadata: { name: "team-a", namespace: "default" },
+      spec: {
+        type: "team",
+        profile: { displayName: "Team A" },
+        children: [],
+        members: ["user:jdoe"],
+      },
+    });
+    expect(yaml).toContain("kind: Group");
+    expect(yaml).toContain("children: []");
+    expect(yaml).toContain("displayName: Team A");
+    expect(yaml).not.toContain("email");
+    const parsed = parse(yaml) as { spec: Record<string, unknown> };
+    expect(parsed.spec.children).toEqual([]);
+    expect(parsed.spec.members).toEqual(["user:jdoe"]);
+  });
+
+  test("a User renders memberOf even when empty", () => {
+    const yaml = catalogInfoYaml({
+      kind: "User",
+      metadata: { name: "jdoe", namespace: "default" },
+      spec: { memberOf: [] },
+    });
+    expect(yaml).toContain("kind: User");
+    expect(yaml).toContain("memberOf: []");
+    expect(yaml).not.toContain("profile");
+  });
+
+  test("an API renders its definition as a block", () => {
+    const yaml = catalogInfoYaml({
+      kind: "API",
+      metadata: { name: "billing-api", namespace: "default" },
+      spec: {
+        type: "openapi",
+        lifecycle: "production",
+        owner: "team-a",
+        definition: "openapi: 3.0.0\ninfo:\n  title: Billing",
+      },
+    });
+    expect(yaml).toContain("kind: API");
+    const parsed = parse(yaml) as { spec: { definition: string } };
+    expect(parsed.spec.definition).toBe("openapi: 3.0.0\ninfo:\n  title: Billing");
   });
 });
 

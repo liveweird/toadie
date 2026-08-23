@@ -27,7 +27,8 @@
     "relations": "Relations",
     "links": "Links",
     "labels": "Labels",
-    "annotations": "Annotations"
+    "annotations": "Annotations",
+    "profile": "Profile"
   },
   "field": {
     "namespace": "Namespace",
@@ -49,7 +50,18 @@
     "value": "Value",
     "url": "URL",
     "linkTitle": "Link title",
-    "icon": "Icon"
+    "icon": "Icon",
+    "kind": "Kind",
+    "definition": "Definition",
+    "parent": "Parent group",
+    "children": "Children",
+    "members": "Members",
+    "memberOf": "Member of",
+    "domain": "Domain",
+    "subdomainOf": "Subdomain of",
+    "profileDisplayName": "Display name",
+    "profileEmail": "Email",
+    "profilePicture": "Picture URL"
   },
   "hint": {
     "namespace": "Lowercase; blank means \"default\"",
@@ -61,7 +73,14 @@
     "providesApis": "APIs this component exposes. Kind defaults to api — “billing-api” means api:billing-api.",
     "consumesApis": "APIs this component calls. Kind defaults to api, e.g. “payments-api”.",
     "dependsOn": "Components and resources this component needs. Name the kind explicitly, e.g. resource:orders-db, component:auth-svc.",
-    "dependencyOf": "Components and resources that need this one. Name the kind explicitly, e.g. component:reporting."
+    "dependencyOf": "Components and resources that need this one. Name the kind explicitly, e.g. component:reporting.",
+    "definition": "Paste the API document itself (OpenAPI, AsyncAPI, GraphQL, gRPC, …).",
+    "parent": "The parent group. Kind defaults to group, e.g. “engineering”.",
+    "children": "Immediate child groups. Kind defaults to group; Backstage requires this list, empty is fine.",
+    "members": "Users in this group. Kind defaults to user, e.g. “jdoe”.",
+    "memberOf": "Groups this user belongs to. Kind defaults to group; Backstage requires this list, empty is fine.",
+    "domain": "The domain this system belongs to. Kind defaults to domain, e.g. “payments”.",
+    "subdomainOf": "The parent domain. Kind defaults to domain."
   },
   "addLink": "Add link",
   "addLabel": "Add label",
@@ -82,7 +101,9 @@
     "url": "Must be an absolute URL",
     "icon": "Icon must be 1–63 alphanumeric characters with single - _ . separators",
     "ref": "Must be an entity reference: [kind:][namespace/]name",
-    "refEntry": "\"{{ref}}\" is not a valid entity reference"
+    "refEntry": "\"{{ref}}\" is not a valid entity reference",
+    "definitionLength": "Definition must be at most 100000 characters",
+    "profileEmailLength": "Email must be at most 254 characters"
   },
   "validationError": "Validation error. Please check the form and try again.",
   "conflictError": "An active file with this namespace and name already exists.",
@@ -95,5 +116,7 @@
     "updated": "Catalog file updated",
     "deleted": "Catalog file deleted"
   },
-  "refHelp": "References point at other catalog entities as [kind:][namespace/]name. Kind is the target's kind — component, api, group, user, resource, system or domain (case-insensitive); each field assumes a default kind when you omit it. An omitted namespace means this file's own namespace."
+  "refHelp": "References point at other catalog entities as [kind:][namespace/]name. Kind is the target's kind — component, api, group, user, resource, system or domain (case-insensitive); each field assumes a default kind when you omit it. An omitted namespace means this file's own namespace.",
+  "anyKind": "Any kind",
+  "clearKindFilter": "Clear kind filter"
 }

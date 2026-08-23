@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Badge, Button, Group, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Button, Group, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconDownload, IconFileDescription, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
@@ -11,6 +11,7 @@ import {
   listCatalogFiles,
   type CatalogFileListItem,
 } from "../api/catalogFiles";
+import { ENTITY_KINDS } from "../utils/catalogFileForm";
 import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
@@ -24,7 +25,7 @@ import { isString, useStoredState } from "../hooks/useStoredState";
 import { catalogInfoYaml, downloadYaml } from "../utils/catalogYaml";
 import { loadErrorMessage } from "../utils/saveError";
 
-const SORT_FIELDS = ["name", "namespace", "updatedAt"] as const;
+const SORT_FIELDS = ["name", "kind", "namespace", "updatedAt"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
 
 const SETTINGS_KEY = "catalogFiles";
@@ -37,7 +38,9 @@ export default function CatalogFiles() {
     "",
     isString,
   );
-  const activeFilterCount = (nameFilter.trim() ? 1 : 0) + (namespaceFilter.trim() ? 1 : 0);
+  const [kindFilter, setKindFilter] = useStoredState(`${SETTINGS_KEY}.filter.kind`, "", isString);
+  const activeFilterCount =
+    (nameFilter.trim() ? 1 : 0) + (namespaceFilter.trim() ? 1 : 0) + (kindFilter ? 1 : 0);
 
   const queryClient = useQueryClient();
   const [downloadError, setDownloadError] = useState(false);
@@ -46,13 +49,13 @@ export default function CatalogFiles() {
   const [debouncedNamespace] = useDebouncedValue(namespaceFilter, 300);
 
   const { page, setPage, pageSize, setPageSize, sortField, sortDir, sortParam, toggleSort } =
-    usePagedSort<SortField>("name", [debouncedName, debouncedNamespace], {
+    usePagedSort<SortField>("name", [debouncedName, debouncedNamespace, kindFilter], {
       key: SETTINGS_KEY,
       sortFields: SORT_FIELDS,
     });
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["catalogFiles", page, pageSize, sortParam, debouncedName, debouncedNamespace],
+    queryKey: ["catalogFiles", page, pageSize, sortParam, debouncedName, debouncedNamespace, kindFilter],
     queryFn: () =>
       listCatalogFiles({
         page,
@@ -60,6 +63,7 @@ export default function CatalogFiles() {
         sort: sortParam,
         name: debouncedName || undefined,
         namespace: debouncedNamespace || undefined,
+        kind: kindFilter || undefined,
       }),
     placeholderData: keepPreviousData,
   });
@@ -75,14 +79,14 @@ export default function CatalogFiles() {
     setDownloadError(false);
     try {
       const file = await getCatalogFile(row.id);
-      downloadYaml(catalogInfoYaml({ metadata: file.metadata, spec: file.spec }));
+      downloadYaml(catalogInfoYaml({ kind: file.kind, metadata: file.metadata, spec: file.spec }));
     } catch {
       setDownloadError(true);
     }
   }
 
   const total = data?.total ?? 0;
-  const columnCount = 7;
+  const columnCount = 8;
 
   return (
     <Stack gap="md">
@@ -101,6 +105,15 @@ export default function CatalogFiles() {
           onChange={setNamespaceFilter}
           clearLabel={t("catalog.clearNamespaceFilter")}
           placeholder={t("common.filter.exact")}
+        />
+        <Select
+          label={t("catalog.field.kind")}
+          placeholder={t("catalog.anyKind")}
+          data={[...ENTITY_KINDS]}
+          value={kindFilter || null}
+          onChange={(v) => setKindFilter(v ?? "")}
+          clearable
+          clearButtonProps={{ "aria-label": t("catalog.clearKindFilter") }}
         />
       </FilterPanel>
 
@@ -129,6 +142,15 @@ export default function CatalogFiles() {
               <SortHeader
                 field="name"
                 label={t("common.field.name")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+              />
+            </Table.Th>
+            <Table.Th>
+              <SortHeader
+                field="kind"
+                label={t("catalog.field.kind")}
                 activeField={sortField}
                 activeDir={sortDir}
                 onToggle={toggleSort}
@@ -175,20 +197,29 @@ export default function CatalogFiles() {
                   )}
                 </Table.Td>
                 <Table.Td>
+                  <Badge variant="light" size="sm">
+                    {file.kind}
+                  </Badge>
+                </Table.Td>
+                <Table.Td>
                   <Text size="sm">{file.namespace}</Text>
                 </Table.Td>
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
-                    <Badge variant="light" size="sm">
-                      {file.type}
-                    </Badge>
-                    <Badge variant="outline" size="sm" color="gray">
-                      {file.lifecycle}
-                    </Badge>
+                    {file.type && (
+                      <Badge variant="outline" size="sm" color="gray">
+                        {file.type}
+                      </Badge>
+                    )}
+                    {file.lifecycle && (
+                      <Badge variant="outline" size="sm" color="gray">
+                        {file.lifecycle}
+                      </Badge>
+                    )}
                   </Group>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">{file.owner}</Text>
+                  <Text size="sm">{file.owner ?? ""}</Text>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm" c={file.creatorDeleted ? "dimmed" : undefined}>

@@ -7,7 +7,15 @@ import type { CatalogGraph, GraphNode } from "../api/catalogFiles";
  * left-to-right layout that turns the API's CatalogGraph into React Flow nodes/edges.
  */
 
-export const RELATION_FAMILIES = ["dependsOn", "subcomponentOf", "apis", "owner", "system"] as const;
+export const RELATION_FAMILIES = [
+  "dependsOn",
+  "subcomponentOf",
+  "apis",
+  "owner",
+  "system",
+  "domain",
+  "membership",
+] as const;
 export type RelationFamily = (typeof RELATION_FAMILIES)[number];
 
 const FIELD_FAMILY: Record<string, RelationFamily> = {
@@ -18,6 +26,12 @@ const FIELD_FAMILY: Record<string, RelationFamily> = {
   "spec.consumesApis": "apis",
   "spec.owner": "owner",
   "spec.system": "system",
+  "spec.domain": "domain",
+  "spec.subdomainOf": "domain",
+  "spec.parent": "membership",
+  "spec.children": "membership",
+  "spec.members": "membership",
+  "spec.memberOf": "membership",
 };
 
 /**

@@ -8,9 +8,16 @@ import {
   isValidEntityRef,
   isValidName,
   toCatalogFileRequest,
+  type CatalogFileFormValues,
+  type EntityKind,
 } from "./catalogFileForm";
 
 const t = i18n.t;
+
+const values = (overrides: Partial<CatalogFileFormValues>): CatalogFileFormValues => ({
+  ...EMPTY_CATALOG_FILE_FORM,
+  ...overrides,
+});
 
 describe("isValidName", () => {
   test.each(["svc", "my-svc", "a_b.c-d", "A1"])("accepts %s", (v) => {
@@ -43,8 +50,9 @@ describe("isValidEntityRef", () => {
 
 describe("catalogFileFormValidation", () => {
   const rules = catalogFileFormValidation(t);
+  const component = values({ kind: "Component" });
 
-  test("mirrors the server's field rules", () => {
+  test("mirrors the server's kind-independent field rules", () => {
     expect(rules.name("ok-name")).toBeNull();
     expect(rules.name("bad name")).not.toBeNull();
     expect(rules.namespace("")).toBeNull();
@@ -62,57 +70,85 @@ describe("catalogFileFormValidation", () => {
     expect(rules.links.url("/relative")).not.toBeNull();
     expect(rules.links.icon("")).toBeNull();
     expect(rules.links.icon("bad icon")).not.toBeNull();
-    expect(rules.type("service")).toBeNull();
-    expect(rules.type("  ")).not.toBeNull();
-    expect(rules.lifecycle("two words")).not.toBeNull();
-    expect(rules.owner("")).not.toBeNull();
-    expect(rules.owner("group:default/platform")).toBeNull();
-    expect(rules.system("")).toBeNull();
-    expect(rules.system("a:b:c")).not.toBeNull();
-    expect(rules.dependsOn(["resource:db", ""])).toBeNull(); // blanks are dropped, not errors
-    expect(rules.dependsOn(["bad ref"])).not.toBeNull();
+  });
+
+  test("mirrors the server's Component rules", () => {
+    expect(rules.type("service", component)).toBeNull();
+    expect(rules.type("  ", component)).not.toBeNull();
+    expect(rules.lifecycle("two words", component)).not.toBeNull();
+    expect(rules.owner("", component)).not.toBeNull();
+    expect(rules.owner("group:default/platform", component)).toBeNull();
+    expect(rules.system("", component)).toBeNull();
+    expect(rules.system("a:b:c", component)).not.toBeNull();
+    expect(rules.dependsOn(["resource:db", ""], component)).toBeNull(); // blanks are dropped
+    expect(rules.dependsOn(["bad ref"], component)).not.toBeNull();
+  });
+
+  test("required-ness follows the kind", () => {
+    const system = values({ kind: "System" });
+    const user = values({ kind: "User" });
+    const api = values({ kind: "API" });
+    // type is required for Component but optional for System, absent for User.
+    expect(rules.type("", component)).not.toBeNull();
+    expect(rules.type("", system)).toBeNull();
+    expect(rules.type("whatever", user)).toBeNull(); // not applicable → never an error
+    // lifecycle applies only to Component/API.
+    expect(rules.lifecycle("", system)).toBeNull();
+    expect(rules.lifecycle("", api)).not.toBeNull();
+    // owner is required for System but doesn't apply to User.
+    expect(rules.owner("", system)).not.toBeNull();
+    expect(rules.owner("", user)).toBeNull();
+    // definition is required for API only.
+    expect(rules.definition("", api)).not.toBeNull();
+    expect(rules.definition("", component)).toBeNull();
+    expect(rules.definition("openapi: 3.0.0", api)).toBeNull();
+    // profile picture must be an absolute URI where profile applies.
+    expect(rules.profilePicture("/rel.png", user)).not.toBeNull();
+    expect(rules.profilePicture("https://x.example/a.png", user)).toBeNull();
+    expect(rules.profilePicture("/rel.png", component)).toBeNull(); // not applicable
+    // membership refs validate for their kinds.
+    expect(rules.memberOf(["bad ref"], user)).not.toBeNull();
+    expect(rules.children(["group:teams/a"], values({ kind: "Group" }))).toBeNull();
   });
 });
 
 describe("toCatalogFileRequest / fromCatalogFileResponse", () => {
-  test("trims, folds the namespace, and drops empties", () => {
-    const req = toCatalogFileRequest({
-      ...EMPTY_CATALOG_FILE_FORM,
-      name: "  my-svc  ",
-      namespace: "  TEAM-A ",
-      title: "  ",
-      tags: [" java ", ""],
-      labels: [
-        { key: " tier ", value: " backend " },
-        { key: "", value: "ignored" },
-      ],
-      links: [
-        { url: " https://example.com ", title: "", icon: "" },
-        { url: "", title: "dropped", icon: "" },
-      ],
-      type: " service ",
-      lifecycle: "production",
-      owner: " group:platform ",
-      system: "  ",
-      providesApis: [" svc-api "],
-    });
+  test("trims, folds the namespace, and drops empties (Component)", () => {
+    const req = toCatalogFileRequest(
+      values({
+        name: "  my-svc  ",
+        namespace: "  TEAM-A ",
+        title: "  ",
+        tags: [" java ", ""],
+        labels: [
+          { key: " tier ", value: " backend " },
+          { key: "", value: "ignored" },
+        ],
+        links: [
+          { url: " https://example.com ", title: "", icon: "" },
+          { url: "", title: "dropped", icon: "" },
+        ],
+        type: " service ",
+        lifecycle: "production",
+        owner: " group:platform ",
+        system: "  ",
+        providesApis: [" svc-api "],
+      }),
+    );
     expect(req).toEqual({
+      kind: "Component",
       metadata: {
         name: "my-svc",
         namespace: "team-a",
-        title: undefined,
-        description: undefined,
         labels: { tier: "backend" },
         annotations: {},
         tags: ["java"],
-        links: [{ url: "https://example.com", title: undefined, icon: undefined }],
+        links: [{ url: "https://example.com" }],
       },
       spec: {
         type: "service",
         lifecycle: "production",
         owner: "group:platform",
-        system: undefined,
-        subcomponentOf: undefined,
         providesApis: ["svc-api"],
         consumesApis: [],
         dependsOn: [],
@@ -121,49 +157,87 @@ describe("toCatalogFileRequest / fromCatalogFileResponse", () => {
     });
   });
 
-  test("a blank namespace becomes the default namespace", () => {
-    const req = toCatalogFileRequest({
-      ...EMPTY_CATALOG_FILE_FORM,
-      name: "n",
-      type: "t",
-      lifecycle: "l",
-      owner: "o",
-    });
-    expect(req.metadata.namespace).toBe("default");
+  test("strips fields foreign to the kind (a kind switch leaves no residue)", () => {
+    const req = toCatalogFileRequest(
+      values({
+        kind: "System",
+        name: "payments",
+        owner: "team-a",
+        domain: "commerce",
+        // Leftovers from a previous Component/API/Group phase of the form:
+        lifecycle: "production",
+        definition: "openapi: 3.0.0",
+        dependsOn: ["resource:db"],
+        children: ["group:x"],
+        memberOf: ["group:y"],
+      }),
+    );
+    expect(req.spec).toEqual({ owner: "team-a", domain: "commerce" });
   });
 
-  test("fromCatalogFileResponse round-trips through toCatalogFileRequest", () => {
-    const response: CatalogFileResponse = {
-      id: 7,
-      metadata: {
-        name: "svc",
-        namespace: "team-a",
-        title: "Svc",
-        description: "d",
-        labels: { tier: "backend" },
-        annotations: { "github.com/project-slug": "acme/svc" },
-        tags: ["java"],
-        links: [{ url: "https://example.com", title: "Home", icon: "dashboard" }],
-      },
-      spec: {
-        type: "service",
-        lifecycle: "production",
-        owner: "group:platform",
-        system: "payments",
-        subcomponentOf: null,
-        providesApis: ["svc-api"],
-        consumesApis: [],
-        dependsOn: [],
-        dependencyOf: [],
-      },
-      createdBy: 1,
-      creatorName: "Casey",
-      creatorDeleted: false,
-      createdAt: 1000,
-      updatedAt: 2000,
-    };
-    const req = toCatalogFileRequest(fromCatalogFileResponse(response));
-    expect(req.metadata).toEqual({ ...response.metadata, links: response.metadata.links });
-    expect(req.spec).toEqual({ ...response.spec, subcomponentOf: undefined });
+  test("Group children and User memberOf stay present even when empty", () => {
+    const group = toCatalogFileRequest(values({ kind: "Group", name: "team-a", type: "team" }));
+    expect(group.spec.children).toEqual([]);
+    expect(group.spec.members).toEqual([]);
+    const user = toCatalogFileRequest(values({ kind: "User", name: "jdoe" }));
+    expect(user.spec.memberOf).toEqual([]);
+    expect(user.spec.children).toBeUndefined();
   });
+
+  test("profile is emitted only when a field is set, and round-trips", () => {
+    const bare = toCatalogFileRequest(values({ kind: "User", name: "jdoe" }));
+    expect(bare.spec.profile).toBeUndefined();
+    const withProfile = toCatalogFileRequest(
+      values({ kind: "User", name: "jdoe", profileDisplayName: " Jane Doe ", profileEmail: "j@x.dev" }),
+    );
+    expect(withProfile.spec.profile).toEqual({ displayName: "Jane Doe", email: "j@x.dev" });
+  });
+
+  test.each(["Component", "API", "System", "Domain", "Resource", "Group", "User"] as EntityKind[])(
+    "fromCatalogFileResponse round-trips a %s through toCatalogFileRequest",
+    (kind) => {
+      const response: CatalogFileResponse = {
+        id: 7,
+        kind,
+        metadata: { name: "thing", namespace: "team-a" },
+        spec: {
+          type: kind === "User" ? null : "one-word",
+          lifecycle: kind === "Component" || kind === "API" ? "production" : null,
+          owner: kind === "Group" || kind === "User" ? null : "team-a",
+          definition: kind === "API" ? "openapi: 3.0.0" : null,
+          children: kind === "Group" ? ["group:sub"] : null,
+          members: kind === "Group" ? ["user:jdoe"] : [],
+          memberOf: kind === "User" ? [] : null,
+          domain: kind === "System" ? "commerce" : null,
+          subdomainOf: kind === "Domain" ? "commerce" : null,
+          providesApis: [],
+          consumesApis: [],
+          dependsOn: kind === "Component" || kind === "Resource" ? ["resource:db"] : [],
+          dependencyOf: [],
+          system: null,
+          subcomponentOf: null,
+          profile: null,
+          parent: null,
+        },
+        createdBy: 1,
+        creatorName: "Casey",
+        creatorDeleted: false,
+        createdAt: 1000,
+        updatedAt: 2000,
+      };
+      const req = toCatalogFileRequest(fromCatalogFileResponse(response));
+      expect(req.kind).toBe(kind);
+      // Every field the kind carries survives; nulls and foreign fields vanish.
+      if (kind === "API") expect(req.spec.definition).toBe("openapi: 3.0.0");
+      if (kind === "Group") expect(req.spec.children).toEqual(["group:sub"]);
+      if (kind === "User") expect(req.spec.memberOf).toEqual([]);
+      if (kind === "System") expect(req.spec.domain).toBe("commerce");
+      if (kind === "Domain") expect(req.spec.subdomainOf).toBe("commerce");
+      if (kind === "Component" || kind === "Resource") {
+        expect(req.spec.dependsOn).toEqual(["resource:db"]);
+      } else {
+        expect(req.spec.dependsOn ?? []).toEqual([]);
+      }
+    },
+  );
 });

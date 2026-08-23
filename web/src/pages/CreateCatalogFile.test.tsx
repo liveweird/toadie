@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import CreateCatalogFile from "./CreateCatalogFile";
@@ -97,6 +97,7 @@ describe("CreateCatalogFile page", () => {
     const toast = vi.spyOn(notifications, "show").mockReturnValue("id");
     mockPostStatus(mockFetch, 201, {
       id: 9,
+      kind: "Component",
       metadata: { name: "my-svc", namespace: "default" },
       spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
       createdBy: 1,
@@ -117,6 +118,7 @@ describe("CreateCatalogFile page", () => {
     );
     expect(postCall).toBeDefined();
     expect(JSON.parse((postCall![1] as RequestInit).body as string)).toEqual({
+      kind: "Component",
       metadata: { name: "my-svc", namespace: "default", labels: {}, annotations: {}, tags: [], links: [] },
       spec: {
         type: "service",
@@ -132,6 +134,82 @@ describe("CreateCatalogFile page", () => {
       expect.objectContaining({ message: "Catalog file created", color: "teal" }),
     );
     toast.mockRestore();
+  });
+
+  test("switching the kind swaps the per-kind sections and submits a Group", async () => {
+    mockPostStatus(mockFetch, 201, {
+      id: 11,
+      kind: "Group",
+      metadata: { name: "team-a", namespace: "default" },
+      spec: { type: "team", children: [], members: [] },
+      createdBy: 1,
+      creatorName: "A",
+      creatorDeleted: false,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const user = userEvent.setup();
+    renderCreate();
+
+    // Component sections show owner + APIs; switch to Group.
+    expect(screen.getByLabelText(/^owner( \*)?$/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Kind", { selector: "input" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Group" }));
+
+    // Group has no owner/lifecycle but gains profile + membership fields.
+    expect(screen.queryByLabelText(/^owner( \*)?$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^lifecycle( \*)?$/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Display name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Members", { selector: "input" })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^name( \*)?$/i), "team-a");
+    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "team");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    const postCall = mockFetch.mock.calls.find(
+      ([url, init]) => (init as RequestInit | undefined)?.method === "POST" && url === "/api/v1/catalog-files",
+    );
+    expect(JSON.parse((postCall![1] as RequestInit).body as string)).toEqual({
+      kind: "Group",
+      metadata: { name: "team-a", namespace: "default", labels: {}, annotations: {}, tags: [], links: [] },
+      spec: { type: "team", children: [], members: [] },
+    });
+  });
+
+  test("an API without its definition is blocked client-side", async () => {
+    mockPostStatus(mockFetch, 201);
+    const user = userEvent.setup();
+    renderCreate();
+
+    fireEvent.click(screen.getByLabelText("Kind", { selector: "input" }));
+    fireEvent.click(await screen.findByRole("option", { name: "API" }));
+    expect(screen.getByLabelText(/^definition( \*)?$/i)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^name( \*)?$/i), "billing-api");
+    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "openapi");
+    await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
+    await user.type(screen.getByLabelText(/^owner( \*)?$/i), "team-a");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(await screen.findAllByText("Required")).not.toHaveLength(0);
+    expect(findSaveCall(mockFetch)).toBeUndefined();
+  });
+
+  test("annotation and link rows can be added and removed", async () => {
+    mockPostStatus(mockFetch, 201);
+    const user = userEvent.setup();
+    renderCreate();
+
+    await user.click(screen.getByRole("button", { name: /add annotation/i }));
+    await user.type(screen.getByLabelText("Annotations Key 1"), "github.com/project-slug");
+    await user.click(screen.getByRole("button", { name: "Remove annotation 1" }));
+    expect(screen.queryByLabelText("Annotations Key 1")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /add link/i }));
+    await user.type(screen.getByLabelText("URL 1"), "https://example.com");
+    await user.click(screen.getByRole("button", { name: "Remove link 1" }));
+    expect(screen.queryByLabelText("URL 1")).not.toBeInTheDocument();
   });
 
   test("the YAML preview follows the form values", async () => {

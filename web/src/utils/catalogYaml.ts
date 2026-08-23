@@ -3,11 +3,53 @@ import type { CatalogFileRequest } from "../api/catalogFiles";
 
 /**
  * Renders the canonical catalog-info.yaml for one stored document: fixed key order
- * (apiVersion, kind, metadata, spec — each section in the descriptor reference's order),
- * empties omitted, the `default` namespace left implicit (the Backstage convention).
- * Client-side by design in this slice — server-side canonical YAML arrives with the
- * combined-render feature.
+ * (apiVersion, kind, metadata, spec — each section in the descriptor reference's per-kind
+ * order), empties omitted, the `default` namespace left implicit (the Backstage convention).
+ * Two deliberate exceptions to empty-omission: Group `children` and User `memberOf` are
+ * REQUIRED-present in Backstage, so they render even when empty.
  */
+
+// Per-kind spec key order (the descriptor reference). "children"/"memberOf" marked with "!"
+// render even when empty.
+const SPEC_ORDER: Record<string, readonly string[]> = {
+  Component: [
+    "type", "lifecycle", "owner", "system", "subcomponentOf",
+    "providesApis", "consumesApis", "dependsOn", "dependencyOf",
+  ],
+  API: ["type", "lifecycle", "owner", "system", "definition"],
+  System: ["type", "owner", "domain"],
+  Domain: ["type", "owner", "subdomainOf"],
+  Resource: ["type", "owner", "system", "dependsOn", "dependencyOf"],
+  Group: ["type", "profile", "parent", "!children", "members"],
+  User: ["profile", "!memberOf"],
+};
+
+function profileDoc(profile: NonNullable<CatalogFileRequest["spec"]["profile"]>) {
+  const out: Record<string, unknown> = {};
+  if (profile.displayName) out.displayName = profile.displayName;
+  if (profile.email) out.email = profile.email;
+  if (profile.picture) out.picture = profile.picture;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function specDoc(kind: string, spec: CatalogFileRequest["spec"]): Record<string, unknown> {
+  const source = spec as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const entry of SPEC_ORDER[kind] ?? SPEC_ORDER.Component) {
+    const alwaysEmit = entry.startsWith("!");
+    const key = alwaysEmit ? entry.slice(1) : entry;
+    const value = key === "profile" && spec.profile ? profileDoc(spec.profile) : source[key];
+    if (value == null) {
+      if (alwaysEmit) out[key] = [];
+      continue;
+    }
+    if (Array.isArray(value) && value.length === 0 && !alwaysEmit) continue;
+    if (typeof value === "string" && value === "") continue;
+    out[key] = value;
+  }
+  return out;
+}
+
 export function catalogInfoYaml(file: CatalogFileRequest): string {
   const metadata: Record<string, unknown> = { name: file.metadata.name };
   const namespace = file.metadata.namespace;
@@ -29,20 +71,9 @@ export function catalogInfoYaml(file: CatalogFileRequest): string {
     }));
   }
 
-  const spec: Record<string, unknown> = {
-    type: file.spec.type,
-    lifecycle: file.spec.lifecycle,
-    owner: file.spec.owner,
-  };
-  if (file.spec.system) spec.system = file.spec.system;
-  if (file.spec.subcomponentOf) spec.subcomponentOf = file.spec.subcomponentOf;
-  for (const field of ["providesApis", "consumesApis", "dependsOn", "dependencyOf"] as const) {
-    const refs = file.spec[field];
-    if (refs && refs.length > 0) spec[field] = refs;
-  }
-
+  const kind = file.kind ?? "Component";
   return stringify(
-    { apiVersion: "backstage.io/v1alpha1", kind: "Component", metadata, spec },
+    { apiVersion: "backstage.io/v1alpha1", kind, metadata, spec: specDoc(kind, file.spec) },
     { indent: 2 },
   );
 }
