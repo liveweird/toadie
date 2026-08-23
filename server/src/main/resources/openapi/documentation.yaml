@@ -228,6 +228,67 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/catalog-files/cross-check:
+    get:
+      tags: [catalog-files]
+      operationId: crossCheckCatalogFiles
+      summary: Cross-check every stored file's entity references
+      description: |
+        Resolves every entity reference the active files make (`owner`, `system`,
+        `subcomponentOf`, `providesApis`, `consumesApis`, `dependsOn`, `dependencyOf`) against
+        the workspace and reports three tiers of findings:
+
+        - `MISSING` (error) — the reference should resolve to a stored Component (explicit
+          `component:` kind, or a field whose default kind is component) but no active file
+          matches. Namespaceless references resolve within the REFERENCING file's own
+          namespace; matching is case-insensitive throughout.
+        - `KIND_REQUIRED` (error) — a `dependsOn`/`dependencyOf` entry without a kind; those
+          fields have no default kind, so Backstage itself cannot ingest such a reference.
+        - `UNVERIFIABLE` (info) — the target kind is not stored in Toadie yet (group, user,
+          api, system, domain, …); becomes checkable as further kinds are added.
+
+        Findings never block saving — files legitimately reference entities that arrive later.
+      responses:
+        '200':
+          description: The workspace report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrossCheckReport'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/catalog-files/check:
+    post:
+      tags: [catalog-files]
+      operationId: checkCatalogFile
+      summary: Check one document's references against the stored files
+      description: |
+        The editor's live companion to the workspace cross-check: takes one (possibly unsaved,
+        possibly not-yet-valid) document and returns its reference findings against the stored
+        identities — same three-tier semantics as the workspace report. The document is
+        sanitized but deliberately NOT validated (in-progress documents are legal here;
+        unparsable references are skipped — the form flags them itself). A pure computation:
+        nothing is stored; POST only because the document travels in the body. Note an unsaved
+        file is not in the identity set, so its self-references read as missing until first
+        save.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogFileRequest'
+      responses:
+        '200':
+          description: The document's findings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentCheckReport'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/catalog-files/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -584,6 +645,59 @@ components:
           type: boolean
           description: True when the creating user has been soft-deleted.
         updatedAt: { type: integer, format: int64, description: Epoch milliseconds. }
+
+    CrossCheckStatus:
+      type: string
+      enum: [MISSING, KIND_REQUIRED, UNVERIFIABLE]
+      description: >-
+        MISSING and KIND_REQUIRED are errors; UNVERIFIABLE is informational (the target kind
+        is not stored in Toadie yet).
+
+    CrossCheckFinding:
+      type: object
+      required: [fileId, fileName, fileNamespace, field, reference, status]
+      properties:
+        fileId: { type: integer, format: int32, minimum: 0 }
+        fileName: { type: string }
+        fileNamespace: { type: string }
+        field:
+          type: string
+          description: The spec field holding the reference, e.g. `spec.dependsOn`.
+        reference: { type: string }
+        status: { $ref: '#/components/schemas/CrossCheckStatus' }
+
+    CrossCheckReport:
+      type: object
+      required: [findings, checkedFiles, checkedReferences]
+      properties:
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/CrossCheckFinding'
+        checkedFiles: { type: integer, minimum: 0 }
+        checkedReferences:
+          type: integer
+          minimum: 0
+          description: Non-blank references encountered across all checked files.
+
+    DocumentCheckFinding:
+      type: object
+      required: [field, reference, status]
+      properties:
+        field:
+          type: string
+          description: The spec field holding the reference, e.g. `spec.dependsOn`.
+        reference: { type: string }
+        status: { $ref: '#/components/schemas/CrossCheckStatus' }
+
+    DocumentCheckReport:
+      type: object
+      required: [findings]
+      properties:
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentCheckFinding'
 
     CatalogFilePage:
       type: object

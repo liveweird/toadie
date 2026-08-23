@@ -124,6 +124,27 @@ class CatalogFileService(val database: R2dbcDatabase) {
         }
     }
 
+    /** The workspace cross-check report — all active files loaded and resolved in ONE transaction. */
+    suspend fun crossCheck(): CrossCheckReport = suspendTransaction(database) {
+        crossCheckAll(activeSources())
+    }
+
+    /**
+     * Ad-hoc check of one (possibly unsaved, possibly not-yet-valid) document against the
+     * stored identities. An unsaved doc is deliberately NOT in the identity set, so its
+     * self-references read as missing until first save.
+     */
+    suspend fun check(file: CatalogFile): DocumentCheckReport = suspendTransaction(database) {
+        val identities = activeSources().map { identityOf(it.file) }.toSet()
+        DocumentCheckReport(findings = checkDocument(file, identities))
+    }
+
+    private suspend fun activeSources(): List<CrossCheckSource> =
+        CatalogFiles.selectAll()
+            .where { active() }
+            .map { CrossCheckSource(id = it[CatalogFiles.id].value, file = json.decodeFromString(it[CatalogFiles.content])) }
+            .toList()
+
     suspend fun list(filter: CatalogFileListFilter, paging: PageRequest): CatalogFileListResult =
         suspendTransaction(database) {
             val predicate: Op<Boolean> = buildPredicate(filter) and active()

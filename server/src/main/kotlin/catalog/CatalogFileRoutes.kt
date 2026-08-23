@@ -29,6 +29,15 @@ class CatalogFiles {
     @Serializable
     @Resource("{id}")
     class Id(val parent: CatalogFiles = CatalogFiles(), val id: UInt)
+
+    // Literal segments win over {id} in Ktor's route resolution (pinned by CrossCheckTest).
+    @Serializable
+    @Resource("cross-check")
+    class CrossCheck(val parent: CatalogFiles = CatalogFiles())
+
+    @Serializable
+    @Resource("check")
+    class Check(val parent: CatalogFiles = CatalogFiles())
 }
 
 fun Application.configureCatalogFileRoutes() {
@@ -59,6 +68,18 @@ fun Application.configureCatalogFileRoutes() {
                 val created = catalogFileService.read(id).orVanished("CatalogFile", id)
                 call.response.header(HttpHeaders.Location, call.application.href(CatalogFiles.Id(id = id)))
                 call.respond(HttpStatusCode.Created, created.toResponse())
+            }
+            get<CatalogFiles.CrossCheck> {
+                call.caller()
+                call.respond(HttpStatusCode.OK, catalogFileService.crossCheck())
+            }
+            post<CatalogFiles.Check> {
+                call.caller()
+                // Sanitized but deliberately NOT validated: the editor checks in-progress
+                // documents as the user types — findings-so-far, never a 400. A pure
+                // computation (POST only because the document travels in the body); no audit.
+                val file = sanitizedCatalogFile(call.receive())
+                call.respond(HttpStatusCode.OK, catalogFileService.check(file))
             }
             get<CatalogFiles.Id> { route ->
                 call.caller()
