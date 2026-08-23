@@ -68,6 +68,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
+- [`cross-check.spec.ts`](scenarios/cross-check.md) — a dangling `component:` reference is
+  flagged live in the editor and on the Cross-check page, then resolves once its target file
+  is created.
 
 Specs log in with the seeded admin (`admin@toadie.local`, password `changeme`), and use unique
 content where they create any — so they don't depend on a clean database or absolute counts.
