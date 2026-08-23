@@ -137,12 +137,26 @@ class CatalogFileService(val database: R2dbcDatabase) {
     /**
      * Ad-hoc check of one (possibly unsaved, possibly not-yet-valid) document against the
      * stored identities. An unsaved doc is deliberately NOT in the identity set, so its
-     * self-references read as missing until first save.
+     * self-references read as missing until first save. This is the editor's per-keystroke
+     * hot path, so it reads only the three denormalized identity columns — never `content`.
      */
     suspend fun check(file: CatalogFile): DocumentCheckReport = suspendTransaction(database) {
-        val identities = activeSources().map { identityOf(it.file) }.toSet()
-        DocumentCheckReport(findings = checkDocument(file, identities))
+        DocumentCheckReport(findings = checkDocument(file, activeIdentities()))
     }
+
+    /** The identity triple of every active file, from the denormalized columns alone. */
+    private suspend fun activeIdentities(): Set<EntityIdentity> =
+        CatalogFiles.select(CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name)
+            .where { active() }
+            .map {
+                EntityIdentity(
+                    kind = it[CatalogFiles.kind].lowercase(),
+                    namespace = it[CatalogFiles.namespace].lowercase(),
+                    name = it[CatalogFiles.name].lowercase(),
+                )
+            }
+            .toList()
+            .toSet()
 
     /**
      * The rendered-together graph — all active files in one transaction. A [namespace] narrows
@@ -158,10 +172,14 @@ class CatalogFileService(val database: R2dbcDatabase) {
 
     /** The export payload: active documents, (namespace, name)-ordered, optionally one namespace. */
     suspend fun export(namespace: String?): ExportResponse = suspendTransaction(database) {
-        val folded = namespace?.lowercase()
-        val files = activeSources()
-            .map { it.file }
-            .filter { folded == null || it.metadata.namespace.lowercase() == folded }
+        // The namespace predicate runs in SQL (stored namespaces are lowercase, so folding the
+        // filter matches the case-insensitive contract) — no loading the workspace to discard it.
+        var predicate: Op<Boolean> = active()
+        namespace?.let { predicate = predicate and (CatalogFiles.namespace eq it.lowercase()) }
+        val files = CatalogFiles.selectAll()
+            .where { predicate }
+            .map { json.decodeFromString<CatalogFile>(it[CatalogFiles.content]) }
+            .toList()
             .sortedWith(compareBy({ it.metadata.namespace.lowercase() }, { it.metadata.name.lowercase() }))
         ExportResponse(files = files)
     }
@@ -174,8 +192,9 @@ class CatalogFileService(val database: R2dbcDatabase) {
 
     suspend fun list(filter: CatalogFileListFilter, paging: PageRequest): CatalogFileListResult =
         suspendTransaction(database) {
+            // Counted on the same join as the rows, so the two can never disagree.
             val predicate: Op<Boolean> = buildPredicate(filter) and active()
-            val total = CatalogFiles.selectAll().where { predicate }.count()
+            val total = joined().selectAll().where { predicate }.count()
             val rows = joined().selectAll()
                 .where { predicate }
                 .applyPaging(paging, SORTABLE_COLUMNS)

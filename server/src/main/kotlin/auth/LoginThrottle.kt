@@ -27,11 +27,13 @@ class LoginThrottle(
     fun isLocked(email: String): Boolean {
         val k = key(email)
         val s = states[k] ?: return false
-        if (s.lockedUntil in 1..clock()) {
+        // One clock read for both branches — re-reading could straddle the expiry instant.
+        val now = clock()
+        if (s.lockedUntil in 1..now) {
             states.remove(k, s) // lock expired — fresh start
             return false
         }
-        return s.lockedUntil > clock()
+        return s.lockedUntil > now
     }
 
     /** Record a failed attempt; returns true when this failure trips the lockout. */

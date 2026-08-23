@@ -93,27 +93,67 @@ class UserService(val database: R2dbcDatabase) {
             UserListResult(items = rows, total = total)
         }
 
-    /** Updates the identity fields + role; password and passwordChangedAt stay untouched. */
-    suspend fun update(id: UInt, name: String, email: String, role: UserRole): Int =
+    /** Outcome of a last-admin-guarded mutation (see [updateGuarded]/[deleteGuarded]). */
+    enum class GuardedMutation { DONE, NOT_FOUND, LAST_ADMIN }
+
+    /**
+     * Updates the identity fields + role inside ONE transaction with the last-admin check —
+     * password and passwordChangedAt stay untouched. The check and the mutation share the
+     * transaction (admin rows locked via [lockedActiveAdminCount]), so two concurrent demotes
+     * cannot both observe "two admins left" and demote both — the read-then-count-then-update
+     * split across separate transactions was a TOCTOU.
+     */
+    suspend fun updateGuarded(id: UInt, name: String, email: String, role: UserRole): GuardedMutation =
         suspendTransaction(database) {
-            Users.update({ (Users.id eq id) and (Users.markedAsDeleted eq false) }) {
+            val existingRole = activeRole(id) ?: return@suspendTransaction GuardedMutation.NOT_FOUND
+            if (existingRole == UserRole.ADMIN && role != UserRole.ADMIN && lockedActiveAdminCount() <= 1) {
+                return@suspendTransaction GuardedMutation.LAST_ADMIN
+            }
+            val rows = Users.update({ (Users.id eq id) and active() }) {
                 it[Users.name] = name
                 it[Users.email] = email
                 it[Users.role] = role.name
             }
+            if (rows == 0) GuardedMutation.NOT_FOUND else GuardedMutation.DONE
         }
 
-    /** Soft delete: blocks login, refresh rejects `user_gone`, the V1 partial index frees the email. */
-    suspend fun delete(id: UInt): Int = suspendTransaction(database) {
-        Users.update({ (Users.id eq id) and (Users.markedAsDeleted eq false) }) {
+    /**
+     * Soft delete with the last-admin check in the SAME transaction (see [updateGuarded]):
+     * blocks login, refresh rejects `user_gone`, the V1 partial index frees the email.
+     */
+    suspend fun deleteGuarded(id: UInt): GuardedMutation = suspendTransaction(database) {
+        val existingRole = activeRole(id) ?: return@suspendTransaction GuardedMutation.NOT_FOUND
+        if (existingRole == UserRole.ADMIN && lockedActiveAdminCount() <= 1) {
+            return@suspendTransaction GuardedMutation.LAST_ADMIN
+        }
+        val rows = Users.update({ (Users.id eq id) and active() }) {
             it[markedAsDeleted] = true
         }
+        if (rows == 0) GuardedMutation.NOT_FOUND else GuardedMutation.DONE
     }
 
-    /** Backs the last-admin protections (delete/demote of the final active ADMIN → 409). */
+    /** Backs the routes' fast-path 409 pre-checks (the ordering gate; correctness lives in
+     *  the guarded mutations above). */
     suspend fun countActiveAdmins(): Long = suspendTransaction(database) {
         Users.selectAll().where { (Users.role eq UserRole.ADMIN.name) and active() }.count()
     }
+
+    private suspend fun activeRole(id: UInt): UserRole? =
+        Users.select(Users.role)
+            .where { (Users.id eq id) and active() }
+            .toList()
+            .singleOrNull()
+            ?.let { UserRole.valueOf(it[Users.role]) }
+
+    // FOR UPDATE on the active-admin rows serializes concurrent admin mutations: the second
+    // transaction blocks on the first's locks and re-evaluates the predicate after its commit,
+    // so a demoted/deleted row no longer counts. Admins are few — counting in memory is fine.
+    private suspend fun lockedActiveAdminCount(): Int =
+        Users.selectAll()
+            .where { (Users.role eq UserRole.ADMIN.name) and active() }
+            .forUpdate()
+            .toList()
+            .size
 
     private fun buildPredicate(filter: UserListFilter): Op<Boolean> {
         var op: Op<Boolean> = Op.TRUE

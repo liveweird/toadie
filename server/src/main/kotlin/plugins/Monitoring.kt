@@ -10,14 +10,18 @@ import io.ktor.server.plugins.callid.*
 import io.ktor.server.response.*
 
 fun Application.configureMonitoring() {
+    var reporter: Slf4jReporter? = null
     install(DropwizardMetrics) {
-        Slf4jReporter.forRegistry(registry)
+        reporter = Slf4jReporter.forRegistry(registry)
             .outputTo(LoggerFactory.getLogger("metrics"))
             .convertRatesTo(TimeUnit.SECONDS)
             .convertDurationsTo(TimeUnit.MILLISECONDS)
             .build()
-            .start(10, TimeUnit.SECONDS)
+            .also { it.start(10, TimeUnit.SECONDS) }
     }
+    // The reporter owns a scheduler thread — stop it with the application, or every
+    // testApplication block (and every redeploy) leaks one.
+    monitor.subscribe(ApplicationStopped) { reporter?.stop() }
     install(CallId) {
         header(HttpHeaders.XRequestId)
         verify { callId: String ->

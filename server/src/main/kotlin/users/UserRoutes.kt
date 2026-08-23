@@ -128,7 +128,9 @@ fun Application.configureUserRoutes() {
                     ?: throw NotFoundException("User not found")
                 val requestedRole = rolesToStored(req.roles)
                 // Last-admin protection: demoting the final active administrator would lock
-                // everyone out of the management surface.
+                // everyone out of the management surface. This pre-check only preserves the
+                // response ORDER (409 before the payload's 400); the race-proof check runs
+                // inside updateGuarded's transaction.
                 if (existing.role == UserRole.ADMIN && requestedRole != UserRole.ADMIN &&
                     userService.countActiveAdmins() <= 1
                 ) {
@@ -137,8 +139,11 @@ fun Application.configureUserRoutes() {
                 val name = sanitizeSingleLine(req.name, "Name")
                 val email = canonicalEmail(req.email)
                 validateNameAndEmail(name, email)
-                if (userService.update(route.id, name, email, requestedRole) == 0) {
-                    throw NotFoundException("User not found")
+                when (userService.updateGuarded(route.id, name, email, requestedRole)) {
+                    UserService.GuardedMutation.NOT_FOUND -> throw NotFoundException("User not found")
+                    UserService.GuardedMutation.LAST_ADMIN ->
+                        throw ConflictException("The last administrator cannot be demoted")
+                    UserService.GuardedMutation.DONE -> Unit
                 }
                 // Name and email are identity/security-relevant (email is the login
                 // identifier); audit with deltas only for the fields that actually changed.
@@ -176,13 +181,13 @@ fun Application.configureUserRoutes() {
                 if (caller.userId == route.id) {
                     throw ForbiddenException("You cannot delete your own account")
                 }
-                val existing = userService.read(route.id)
-                    ?: throw NotFoundException("User not found")
-                if (existing.role == UserRole.ADMIN && userService.countActiveAdmins() <= 1) {
-                    throw ConflictException("The last administrator cannot be deleted")
-                }
-                if (userService.delete(route.id) == 0) {
-                    throw NotFoundException("User not found")
+                // Existence (404) and the last-admin state (409) are decided inside ONE
+                // transaction — same outcome order as before, without the check/mutate race.
+                when (userService.deleteGuarded(route.id)) {
+                    UserService.GuardedMutation.NOT_FOUND -> throw NotFoundException("User not found")
+                    UserService.GuardedMutation.LAST_ADMIN ->
+                        throw ConflictException("The last administrator cannot be deleted")
+                    UserService.GuardedMutation.DONE -> Unit
                 }
                 audit(
                     "user.deleted",

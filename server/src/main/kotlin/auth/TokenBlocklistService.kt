@@ -1,7 +1,6 @@
 package ch.nokillswit.auth
 
 import io.ktor.util.AttributeKey
-import kotlinx.coroutines.flow.firstOrNull
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.*
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
@@ -29,6 +28,6 @@ class TokenBlocklistService(val database: R2dbcDatabase) {
     suspend fun isRevoked(jti: String): Boolean = suspendTransaction(database) {
         RevokedTokens.selectAll()
             .where { RevokedTokens.jti eq jti }
-            .firstOrNull() != null
+            .count() > 0
     }
 }

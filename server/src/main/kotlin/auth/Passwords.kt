@@ -1,6 +1,8 @@
 package ch.nokillswit.auth
 
 import at.favre.lib.crypto.bcrypt.BCrypt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * bcrypt hashes at most 72 bytes including a null terminator, so a password may be at most
@@ -14,8 +16,11 @@ const val MAX_PASSWORD_BYTES = 71
 internal fun exceedsBcryptLimit(plain: String): Boolean =
     plain.toByteArray(Charsets.UTF_8).size > MAX_PASSWORD_BYTES
 
-internal fun hashPassword(plain: String, cost: Int = 12): String =
-    BCrypt.withDefaults().hashToString(cost, plain.toCharArray())
+// Both bcrypt entry points hop to Dispatchers.Default: at cost 12 a hash/verify is hundreds
+// of milliseconds of pure CPU, which must not occupy a request-dispatcher thread.
+internal suspend fun hashPassword(plain: String, cost: Int = 12): String =
+    withContext(Dispatchers.Default) { BCrypt.withDefaults().hashToString(cost, plain.toCharArray()) }
 
-internal fun verifyPassword(plain: String, hash: String): Boolean =
-    !exceedsBcryptLimit(plain) && BCrypt.verifyer().verify(plain.toCharArray(), hash).verified
+internal suspend fun verifyPassword(plain: String, hash: String): Boolean =
+    !exceedsBcryptLimit(plain) &&
+        withContext(Dispatchers.Default) { BCrypt.verifyer().verify(plain.toCharArray(), hash).verified }

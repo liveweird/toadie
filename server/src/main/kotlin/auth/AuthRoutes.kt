@@ -16,6 +16,8 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
+import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.plugins.CannotTransformContentToTypeException
 import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.ratelimit.RateLimit
 import io.ktor.server.plugins.ratelimit.RateLimitName
@@ -52,13 +54,15 @@ data class LoginResponse(
 )
 
 // The refresh rejection detail per audited reason — data beside the handler, not control flow
-// in it. Unlisted reasons fall through to the password-change wording (see the handler).
+// in it. Every reason has its explicit entry; the handler's fallback is generic, so a typo in
+// a reason string can never masquerade as a specific message.
 private val REFRESH_REJECT_MESSAGES = mapOf(
     "invalid_or_expired" to "Invalid or expired refresh token",
     "wrong_token_type" to "Not a refresh token",
     "revoked" to "Refresh token revoked",
     "malformed" to "Malformed refresh token",
     "user_gone" to "User no longer exists",
+    "predates_password_change" to "Refresh token predates a password change",
 )
 
 private fun JwtConfig.authResponse(userId: UInt, email: String, roles: Set<UserRole>): LoginResponse {
@@ -153,9 +157,7 @@ fun Application.configureAuthRoutes() {
                 val req = call.receive<RefreshRequest>()
                 fun reject(reason: String, userId: Long? = null): Nothing {
                     audit("refresh.rejected", "reason" to reason, "userId" to userId)
-                    throw UnauthorizedException(
-                        REFRESH_REJECT_MESSAGES[reason] ?: "Refresh token predates a password change",
-                    )
+                    throw UnauthorizedException(REFRESH_REJECT_MESSAGES[reason] ?: "Refresh token rejected")
                 }
 
                 val decoded = try {
@@ -197,12 +199,29 @@ fun Application.configureAuthRoutes() {
                 }
                 // Also revoke the refresh token, if the client sent it, so an explicit logout kills it
                 // too (rotation leaves superseded tokens alive, but logout is a deliberate revoke).
-                val body = runCatching { call.receiveNullable<LogoutRequest>() }.getOrNull()
+                // Best-effort by design (logout always answers 204), but the failures are NARROW
+                // and logged — a blanket catch would silently skip revocation on unrelated errors
+                // and swallow coroutine cancellation.
+                val body = try {
+                    call.receiveNullable<LogoutRequest>()
+                } catch (cause: BadRequestException) {
+                    // ContentNegotiation's malformed-JSON wrap.
+                    call.application.log.debug("Logout body unparsable — skipping refresh-token revocation", cause)
+                    null
+                } catch (cause: CannotTransformContentToTypeException) {
+                    // A body-less/Content-Type-less POST never enters ContentNegotiation.
+                    call.application.log.debug("Logout sent no body — skipping refresh-token revocation", cause)
+                    null
+                }
                 body?.refreshToken?.let { rt ->
-                    runCatching { refreshVerifier.verify(rt) }.getOrNull()?.let { decoded ->
-                        val rjti = decoded.id
-                        val rexp = decoded.expiresAt?.time ?: System.currentTimeMillis()
-                        if (rjti != null) blocklist.revoke(rjti, rexp)
+                    val decoded = try {
+                        refreshVerifier.verify(rt)
+                    } catch (cause: JWTVerificationException) {
+                        call.application.log.debug("Logout refresh token invalid — nothing to revoke", cause)
+                        null
+                    }
+                    decoded?.id?.let { rjti ->
+                        blocklist.revoke(rjti, decoded.expiresAt?.time ?: System.currentTimeMillis())
                     }
                 }
                 audit(

@@ -23,6 +23,7 @@ import io.ktor.server.resources.put
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -218,6 +219,9 @@ private suspend fun importOne(
             "import" to true,
         )
         base.copy(status = ImportResultStatus.CREATED, fileId = id)
+    } catch (e: CancellationException) {
+        // Cancellation is not a per-document failure — a gone client must stop the batch.
+        throw e
     } catch (e: Exception) {
         if (e.isUniqueViolation()) {
             base.copy(

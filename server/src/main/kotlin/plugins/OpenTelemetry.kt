@@ -2,9 +2,7 @@ package ch.nokillswit.plugins
 
 import ch.nokillswit.getOpenTelemetry
 import io.ktor.http.*
-import io.ktor.server.request.*
 import io.ktor.server.application.*
-import io.opentelemetry.api.trace.SpanKind
 import io.opentelemetry.instrumentation.ktor.v3_0.KtorServerTelemetry
 import io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender
 
@@ -16,13 +14,9 @@ fun Application.configureOpenTelemetry() {
     install(KtorServerTelemetry) {
         setOpenTelemetry(openTelemetry)
         capturedRequestHeaders(HttpHeaders.UserAgent)
-        spanKindExtractor {
-            if (httpMethod == HttpMethod.Post) {
-                SpanKind.PRODUCER
-            } else {
-                SpanKind.CLIENT
-            }
-        }
+        // No spanKindExtractor: these are HTTP SERVER spans and the plugin's default says so.
+        // (The Ktor scaffold's template maps POST→PRODUCER/else→CLIENT, which mislabels
+        // every span for trace consumers — deliberately removed.)
         attributesExtractor {
             onStart {
                 attributes.put("start-time", System.currentTimeMillis())
