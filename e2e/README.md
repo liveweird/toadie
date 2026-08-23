@@ -78,6 +78,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   live; kind badges on the list.
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored, missing, and
   external nodes for a throwaway namespace; toggling a relation family prunes its nodes.
+- [`users.spec.ts`](scenarios/users.md) — the account lifecycle: create via the one-time
+  password reveal → the new user's limited view + self password change → promotion →
+  deletion → the dead login; own-row protections on the admin's row.
 
 Specs log in with the seeded admin (`admin@toadie.local`, password `changeme`), and use unique
 content where they create any — so they don't depend on a clean database or absolute counts.
