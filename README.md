@@ -7,9 +7,15 @@ Toadie will help with Backstage `catalog-info.yaml` files:
 - **render them altogether** — a combined view built from the content of several files.
 
 Implemented so far: the full stack, tooling, quality gates, a working authentication surface,
-and the **first catalog feature** — visual creation of Component `catalog-info.yaml` files
-(validated against the Backstage descriptor format, stored server-side with full CRUD and a
-paginated list, live YAML preview, one-click download).
+and the first two catalog features —
+
+- **visual creation** of Component `catalog-info.yaml` files (validated against the Backstage
+  descriptor format, stored server-side with full CRUD and a paginated list, live YAML
+  preview, one-click download), and
+- **cross-checking**: a workspace report resolving every entity reference between stored
+  files (missing targets and kind-less `dependsOn` entries as errors; kinds Toadie doesn't
+  store yet listed as not-checkable-yet), plus a live reference panel in the editor.
+  Findings never block saving.
 
 ## The stack
 
