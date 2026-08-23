@@ -30,6 +30,27 @@ describe("filterGraph", () => {
     expect(filtered.nodes.map((n) => n.name)).toEqual(["a", "b"]);
   });
 
+  test("the new families map their fields: domain and membership", () => {
+    const graph = {
+      nodes: [
+        { id: "system:default/pay", kind: "system", namespace: "default", name: "pay", title: null, fileId: 1, status: "STORED" },
+        { id: "domain:default/commerce", kind: "domain", namespace: "default", name: "commerce", title: null, fileId: null, status: "MISSING" },
+        { id: "group:default/team", kind: "group", namespace: "default", name: "team", title: null, fileId: 2, status: "STORED" },
+        { id: "user:default/jdoe", kind: "user", namespace: "default", name: "jdoe", title: null, fileId: null, status: "MISSING" },
+      ],
+      edges: [
+        { sourceId: "system:default/pay", targetId: "domain:default/commerce", field: "spec.domain" },
+        { sourceId: "group:default/team", targetId: "user:default/jdoe", field: "spec.members" },
+      ],
+    } as CatalogGraph;
+    const domainOnly = filterGraph(graph, ["domain"]);
+    expect(domainOnly.edges).toHaveLength(1);
+    expect(domainOnly.nodes.map((n) => n.name)).toEqual(["pay", "commerce", "team"]);
+    const membershipOnly = filterGraph(graph, ["membership"]);
+    expect(membershipOnly.edges[0].field).toBe("spec.members");
+    expect(membershipOnly.nodes.map((n) => n.name)).toEqual(["pay", "team", "jdoe"]);
+  });
+
   test("stored nodes survive even with every family disabled", () => {
     const filtered = filterGraph(GRAPH, []);
     expect(filtered.edges).toHaveLength(0);

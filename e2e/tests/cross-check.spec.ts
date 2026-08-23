@@ -34,7 +34,7 @@ test("a dangling reference is flagged, then resolves once the target file exists
   await page.goto("/cross-check");
   const findingRef = page.getByText(`component:${ghost}`, { exact: true });
   await expect(findingRef).toBeVisible();
-  await expect(page.getByRole("link", { name: `Edit ${source}` })).toBeVisible();
+  await expect(page.getByRole("link", { name: `Edit ${source}` }).first()).toBeVisible();
 
   // Create the missing target — the finding disappears from a fresh report.
   await page.goto("/catalog-files/new");

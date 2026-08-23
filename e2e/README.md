@@ -71,6 +71,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`cross-check.spec.ts`](scenarios/cross-check.md) — a dangling `component:` reference is
   flagged live in the editor and on the Cross-check page, then resolves once its target file
   is created.
+- [`kinds.spec.ts`](scenarios/kinds.md) — the multi-kind editor journey: a Group (empty
+  children), an API (pasted definition), and a Component whose owner/API references resolve
+  live; kind badges on the list.
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored, missing, and
   external nodes for a throwaway namespace; toggling a relation family prunes its nodes.
 
