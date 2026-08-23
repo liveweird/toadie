@@ -3,14 +3,16 @@ info:
   title: toadie-api
   version: 1.0.0
   description: |
-    JWT-authenticated REST API for Toadie — a Backstage `catalog-info.yaml` helper
-    (visual creation with validation, cross-file reference checking, combined rendering).
-    Exposes the authentication surface plus catalog-file storage (visual creation).
+    JWT-authenticated REST API for Toadie — a Backstage `catalog-info.yaml` helper.
+    Exposes the authentication surface, admin-managed user accounts, and the catalog-file
+    workspace: CRUD across the seven landscape kinds, the cross-check report and live
+    document check, the relationship graph, the structured export/import round-trip, and
+    the SSRF-guarded URL fetch.
 
     Authorization model: every user is implicitly a regular user; additional global roles
     (`ADMIN`) are carried as the `roles` array and only ever ADD privileges on top of that
-    baseline. `ADMIN` is the management role: it may reset any user's password (and will own
-    future management surfaces).
+    baseline. `ADMIN` is the management role and owns the whole `/users` surface; catalog
+    content is a shared workspace where ADMIN gets no special access.
 
     All error responses use RFC 7807 `application/problem+json` (`ProblemDetail`).
     Any endpoint may additionally return `500` (`InternalServerError`) on an
@@ -346,12 +348,13 @@ paths:
       operationId: createCatalogFile
       summary: Create a catalog file
       description: |
-        Stores a new catalog-info.yaml document (a Backstage Component entity). The payload is
-        validated against the Backstage descriptor format (name/namespace/tag/label/annotation
-        grammars, entity-reference syntax for `owner`/`system`/`subcomponentOf` and the four
-        reference arrays); references are checked for FORMAT only — resolution against other
-        stored files is a future feature. Entity identity (namespace + name, case-insensitive)
-        must be unique among active files; a clash is a `409`.
+        Stores a new catalog-info.yaml document — a Backstage entity of any of the seven
+        landscape kinds (Component, API, System, Domain, Resource, Group, User). The payload
+        is validated against the Backstage descriptor format (name/namespace/tag/label/
+        annotation grammars, entity-reference syntax, the per-kind required/forbidden field
+        tables); references are checked for FORMAT only here — resolution is the cross-check
+        endpoints' job and never blocks a save. Entity identity (kind + namespace + name,
+        case-insensitive) must be unique among active files; a clash is a `409`.
       requestBody:
         required: true
         content:
@@ -501,6 +504,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExportResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
@@ -844,7 +848,9 @@ components:
       type: string
       enum: [Component, API, System, Domain, Resource, Group, User]
       default: Component
-      description: Accepted case-insensitively; canonicalized on write.
+      description: >-
+        The canonical kind casing. The server accepts case-variant input and canonicalizes it
+        on write; responses always carry the canonical form listed here.
 
     FetchUrlRequest:
       type: object
@@ -920,7 +926,7 @@ components:
             nothing was overwritten. ERROR — an unexpected storage failure for this document.
         fileId:
           type: integer
-          format: int64
+          format: int32
           minimum: 0
           nullable: true
           description: The new file's id, only when status is CREATED.

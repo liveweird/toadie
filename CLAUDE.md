@@ -63,6 +63,7 @@ ch.nokillswit
 │                       requireValidReferences, orVanished)
 ├── infra/paging/       the shared list-endpoint machinery (PageRequest/parsePaging/applyPaging/
 │                       PageResponse + the strict query-param readers) — Lettuce's, ported verbatim
+├── infra/validation/   cross-feature input helpers (sanitizeSingleLine — trim + control-char 400)
 ├── audit/              security audit trail: `audit(event, fields…)` → AUDIT-marked structured logs
 ├── authz/              CallerPrincipal + guards (requireAdmin, requireSelfOrAdmin) + typed
 │                       HTTP exceptions (401/403/404/409/429)
@@ -72,8 +73,9 @@ ch.nokillswit
 │                       + {id} get/put/delete with the self-delete 403 and last-admin 409
 │                       protections) + PUT /api/v1/users/{id}/password + Validation.kt
 └── catalog/            the catalog-file domain (THE feature reference implementation):
-                        CatalogFile.kt (kind model + EntitySpec superset + the per-kind
-                        required/forbidden validation tables),
+                        CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),
+                        CatalogFileValidation.kt (the sanitizer + per-kind required/forbidden
+                        tables + every descriptor-format validator),
                         CatalogFileService.kt, CatalogFileRoutes.kt — /api/v1/catalog-files CRUD
                         + paginated list; shared workspace (no admin gate on content);
                         CrossCheck.kt — the pure reference resolver behind GET …/cross-check
@@ -87,7 +89,7 @@ ch.nokillswit
                         catalog-info.yaml URL (guards documented in security.md)
 ```
 
-**Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse` + the `validateX` free function enforced by route AND service), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_ITEMS` entries, and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`.
+**Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse`) with the `validateX` free function enforced by route AND service (in the DTO file, or a sibling `<Entity>Validation.kt` once the rules outgrow it — the catalog split), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_ITEMS` entries, and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`.
 
 ### The OpenAPI contract
 
