@@ -12,10 +12,17 @@ persistence, UI, and testing conventions shared by the project. For API work,
 reviews. If documentation and executable configuration disagree, the configuration and code win;
 update the affected guidance in the same change.
 
-Toadie is a skeleton that deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce):
-when adding a capability Lettuce already has (mail, MFA, password reset, encryption at rest,
-paging, feature flags…), port Lettuce's implementation rather than inventing a new one — the
-docs above mark each such capability as a "port from Lettuce" note.
+Toadie deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce). The full stack,
+authentication/session machinery, shared paging infrastructure, Component catalog-file CRUD,
+live YAML preview/download, and cross-checking are implemented. When adding another capability
+Lettuce already has (mail, MFA, password reset, encryption at rest, feature flags…), port
+Lettuce's implementation rather than inventing a new one — the docs above mark each such
+capability as a "port from Lettuce" note.
+
+`.claude/docs/backstage-descriptor-format.md` is the local domain reference for the catalog
+descriptor envelope, metadata validation, kinds, entity-reference defaults, substitutions, and
+well-known annotations. Consult it before designing catalog behavior; re-check its linked
+upstream Backstage documentation when introducing a new validation rule.
 
 The playbooks in `.claude/skills/` are useful repository-local references even outside Claude:
 `api-review` covers the two-pass OpenAPI review, `run-stack` covers packaging/deployment, and
@@ -28,9 +35,10 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
 - `core/` is Kotlin Multiplatform (currently JVM-targeted) and owns the shared OpenTelemetry SDK
   bootstrap.
 - `server/` is the Kotlin/JVM Ktor application. Feature packages live directly under
-  `server/src/main/kotlin/` (currently `auth` and `users` — the skeleton's only surface).
-  Cross-cutting wiring and policy live in `plugins/`, `audit/`, and `authz/`; infrastructure is
-  in `infra/`.
+  `server/src/main/kotlin/`: `auth`, `users`, and `catalog`. `catalog` is the feature reference
+  implementation: stored Component documents, full CRUD + paginated list, and the workspace/live
+  cross-check operations. Cross-cutting wiring and policy live in `plugins/`, `audit/`, and
+  `authz/`; database and shared paging infrastructure live in `infra/`.
 - `server/src/main/resources/application.yaml` declaratively registers application modules.
   `main.kt` only starts `EngineMain`; do not wire features from it. Module order matters because
   modules publish and consume Ktor application attributes.
@@ -81,8 +89,9 @@ service descriptors breaks plugin discovery at runtime. JVM runtime flags are in
 Follow `api-guidelines/API-GUIDELINES.md` for resource naming, pagination, filtering, sorting,
 errors, statuses, auth, and conformance. All error bodies are RFC 7807
 `application/problem+json`. Keep authorization checks before resource-dependent validation so
-callers cannot infer inaccessible state (403 wins over 400). Future list endpoints use the
-`{items, page, pageSize, total}` envelope — port `infra/paging` from Lettuce with the first one
+callers cannot infer inaccessible state (403 wins over 400). List endpoints use the
+`{items, page, pageSize, total}` envelope and the already-ported `infra/paging` machinery; copy
+the catalog-file list implementation rather than parsing pagination, filters, or sorting again
 (see `.claude/docs/list-endpoints.md`).
 
 When an API changes, update all of the following in the same change:
@@ -127,8 +136,8 @@ markers (`uniqueEmail(...)`) instead of asserting global counts.
 
 Every `/api/` interaction made through the shared backend test clients is checked against OpenAPI.
 Prefer `jsonClient()`/`authedClient()` so tests do not bypass conformance validation. `check`
-enforces Kover floors of 90% lines and 55% branches. Frontend coverage floors in
-`web/vite.config.ts` are 95% lines, 92% statements, 90% functions, and 77% branches. Any test-local
+enforces Kover floors of 92% lines and 68% branches. Frontend coverage floors in
+`web/vite.config.ts` are 95% lines, 92% statements, 90% functions, and 84% branches. Any test-local
 Mantine provider must set `env="test"` so popovers and selects work under happy-dom.
 
 A new or behaviorally changed e2e test lands with its scenario file in `e2e/scenarios/` and its
