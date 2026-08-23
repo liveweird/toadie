@@ -4,9 +4,18 @@ import { Link as RouterLink } from "react-router-dom";
 import { Alert, Badge, Button, Group, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconDownload, IconFileDescription, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
+import {
+  IconDownload,
+  IconFileDescription,
+  IconFileExport,
+  IconFileImport,
+  IconPencil,
+  IconPlus,
+  IconTrash,
+} from "@tabler/icons-react";
 import {
   deleteCatalogFile,
+  exportCatalogFiles,
   getCatalogFile,
   listCatalogFiles,
   type CatalogFileListItem,
@@ -22,7 +31,7 @@ import TableLoadingRow from "../components/TableLoadingRow";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { isString, useStoredState } from "../hooks/useStoredState";
-import { catalogInfoYaml, downloadYaml } from "../utils/catalogYaml";
+import { catalogInfoMultiYaml, catalogInfoYaml, downloadYaml } from "../utils/catalogYaml";
 import { loadErrorMessage } from "../utils/saveError";
 
 const SORT_FIELDS = ["name", "kind", "namespace", "updatedAt"] as const;
@@ -44,6 +53,7 @@ export default function CatalogFiles() {
 
   const queryClient = useQueryClient();
   const [downloadError, setDownloadError] = useState(false);
+  const [exportError, setExportError] = useState(false);
 
   const [debouncedName] = useDebouncedValue(nameFilter, 300);
   const [debouncedNamespace] = useDebouncedValue(namespaceFilter, 300);
@@ -85,6 +95,18 @@ export default function CatalogFiles() {
     }
   }
 
+  // The whole workspace (or the exact-namespace slice the filter selects) as ONE
+  // multi-document catalog-info.yaml — the round-trip's outbound half.
+  async function handleExport() {
+    setExportError(false);
+    try {
+      const exported = await exportCatalogFiles(namespaceFilter.trim() || undefined);
+      downloadYaml(catalogInfoMultiYaml(exported.files));
+    } catch {
+      setExportError(true);
+    }
+  }
+
   const total = data?.total ?? 0;
   const columnCount = 8;
 
@@ -120,6 +142,18 @@ export default function CatalogFiles() {
       {isError && (
         <Alert color="red" variant="light" title={t("catalog.loadFailed")}>
           {loadErrorMessage(error, t)}
+        </Alert>
+      )}
+      {exportError && (
+        <Alert
+          color="red"
+          variant="light"
+          title={t("catalog.export.failed")}
+          withCloseButton
+          closeButtonLabel={t("common.action.close")}
+          onClose={() => setExportError(false)}
+        >
+          {t("common.error.network")}
         </Alert>
       )}
       {downloadError && (
@@ -288,6 +322,22 @@ export default function CatalogFiles() {
       />
 
       <Group justify="flex-end">
+        <Button
+          component={RouterLink}
+          to="/catalog-files/import"
+          variant="default"
+          leftSection={<IconFileImport size={16} />}
+        >
+          {t("catalog.import.linkLabel")}
+        </Button>
+        <Button
+          variant="default"
+          leftSection={<IconFileExport size={16} />}
+          onClick={() => void handleExport()}
+          disabled={total === 0}
+        >
+          {t("catalog.export.button")}
+        </Button>
         <Button component={RouterLink} to="/catalog-files/new" leftSection={<IconPlus size={16} />}>
           {t("catalog.createFile")}
         </Button>

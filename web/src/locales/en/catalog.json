@@ -118,5 +118,37 @@
   },
   "refHelp": "References point at other catalog entities as [kind:][namespace/]name. Kind is the target's kind — component, api, group, user, resource, system or domain (case-insensitive); each field assumes a default kind when you omit it. An omitted namespace means this file's own namespace.",
   "anyKind": "Any kind",
-  "clearKindFilter": "Clear kind filter"
+  "clearKindFilter": "Clear kind filter",
+  "export": {
+    "button": "Export YAML",
+    "failed": "Failed to export catalog files"
+  },
+  "import": {
+    "linkLabel": "Import YAML",
+    "title": "Import catalog files",
+    "intro": "Paste a catalog-info.yaml (multiple documents separated by ---) or pick a file. Each document imports independently — an existing file is never overwritten.",
+    "textareaLabel": "YAML content",
+    "placeholder": "apiVersion: backstage.io/v1alpha1\nkind: Component\nmetadata:\n  name: my-service\nspec:\n  ...",
+    "pickFile": "Choose file…",
+    "summaryDocuments_one": "{{count}} document ready to import",
+    "summaryDocuments_other": "{{count}} documents ready to import",
+    "summaryErrors_one": "{{count}} document has problems",
+    "summaryErrors_other": "{{count}} documents have problems",
+    "parseErrorsTitle": "Fix these documents before importing",
+    "documentLabel": "Document {{number}}",
+    "importButton": "Import",
+    "statusHeader": "Result",
+    "messageHeader": "Detail",
+    "resultSummary": "Imported {{created}} of {{total}} documents.",
+    "status": {
+      "CREATED": "Created",
+      "CONFLICT": "Already exists",
+      "INVALID": "Invalid",
+      "ERROR": "Failed"
+    },
+    "failedTitle": "Import failed",
+    "tooMany": "Too many documents for one import (the limit is 200).",
+    "failedStatus": "Import failed ({{status}})",
+    "failedNetwork": "Import failed. Check your connection and try again."
+  }
 }

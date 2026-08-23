@@ -94,3 +94,23 @@ export async function checkCatalogFile(req: CatalogFileRequest): Promise<Documen
     body: JSON.stringify(req),
   });
 }
+
+export type CatalogExport =
+  paths["/api/v1/catalog-files/export"]["get"]["responses"]["200"]["content"]["application/json"];
+export type ImportResult =
+  paths["/api/v1/catalog-files/import"]["post"]["responses"]["200"]["content"]["application/json"];
+export type ImportFileResult = components["schemas"]["ImportFileResult"];
+
+/** The workspace (or one namespace) as structured documents — the SPA renders the YAML. */
+export async function exportCatalogFiles(namespace?: string): Promise<CatalogExport> {
+  const params = buildQuery({ namespace });
+  return jsonRequest<CatalogExport>(`/api/v1/catalog-files/export${params ? `?${params}` : ""}`);
+}
+
+/** Report & skip: one result row per document, 200 even when every document failed. */
+export async function importCatalogFiles(files: CatalogFileRequest[]): Promise<ImportResult> {
+  return jsonRequest<ImportResult>("/api/v1/catalog-files/import", {
+    method: "POST",
+    body: JSON.stringify({ files }),
+  });
+}

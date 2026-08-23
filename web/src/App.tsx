@@ -47,6 +47,7 @@ const Login = lazy(() => import("./pages/Login"));
 const Home = lazy(() => import("./pages/Home"));
 const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
+const ImportCatalogFiles = lazy(() => import("./pages/ImportCatalogFiles"));
 const EditCatalogFile = lazy(() => import("./pages/EditCatalogFile"));
 const CrossCheck = lazy(() => import("./pages/CrossCheck"));
 const Users = lazy(() => import("./pages/Users"));
@@ -218,6 +219,7 @@ export default function App() {
             <Route index element={<Home />} />
             <Route path="catalog-files" element={<CatalogFiles />} />
             <Route path="catalog-files/new" element={<CreateCatalogFile />} />
+            <Route path="catalog-files/import" element={<ImportCatalogFiles />} />
             <Route path="catalog-files/:id/edit" element={<EditCatalogFile />} />
             <Route path="cross-check" element={<CrossCheck />} />
             <Route path="render" element={<RenderGraph />} />

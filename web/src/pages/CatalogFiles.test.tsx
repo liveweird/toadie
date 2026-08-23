@@ -335,4 +335,83 @@ describe("CatalogFiles page", () => {
     expect(createObjectURL).toHaveBeenCalledOnce();
     click.mockRestore();
   });
+
+  test("links to the import page", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    renderPage();
+    const link = await screen.findByRole("link", { name: "Import YAML" });
+    expect(link).toHaveAttribute("href", "/catalog-files/import");
+  });
+
+  test("export fetches the workspace and downloads one multi-document YAML", async () => {
+    const createObjectURL = vi.fn().mockReturnValue("blob:fake");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL }));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/catalog-files/export") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            files: [
+              {
+                kind: "Component",
+                metadata: { name: "payments-svc", namespace: "default" },
+                spec: { type: "service", lifecycle: "production", owner: "platform" },
+              },
+              {
+                kind: "Group",
+                metadata: { name: "team-a", namespace: "default" },
+                spec: { type: "team", children: [] },
+              },
+            ],
+          }),
+        );
+      }
+      if (url.startsWith("/api/v1/catalog-files?")) return Promise.resolve(filesPage(SEED_FILES));
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Export YAML" }));
+
+    await waitFor(() => expect(click).toHaveBeenCalledOnce());
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    const text = await blob.text();
+    expect(text).toContain("name: payments-svc");
+    expect(text).toContain("\n---\n");
+    expect(text).toContain("name: team-a");
+    click.mockRestore();
+  });
+
+  test("export passes the exact-namespace filter through and errors show the alert", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url.startsWith("/api/v1/catalog-files/export")) {
+        return Promise.resolve(jsonResponse(500, {}));
+      }
+      if (url.startsWith("/api/v1/catalog-files?")) return Promise.resolve(filesPage(SEED_FILES));
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /filters/i }));
+    fireEvent.change(screen.getByLabelText("Namespace"), { target: { value: "team-a" } });
+    await calledWith(mockFetch, "namespace=team-a");
+
+    await user.click(screen.getByRole("button", { name: "Export YAML" }));
+
+    expect(await screen.findByText("Failed to export catalog files")).toBeInTheDocument();
+    const exportCall = mockFetch.mock.calls.find(
+      ([url]) => typeof url === "string" && url.startsWith("/api/v1/catalog-files/export"),
+    );
+    expect(exportCall?.[0]).toBe("/api/v1/catalog-files/export?namespace=team-a");
+  });
+
+  test("the export button is disabled while the list is empty", async () => {
+    setupMocks(mockFetch, () => filesPage([]));
+    renderPage();
+    await screen.findByText("No catalog files");
+    expect(screen.getByRole("button", { name: "Export YAML" })).toBeDisabled();
+  });
 });

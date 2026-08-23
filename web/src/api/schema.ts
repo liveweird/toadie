@@ -312,6 +312,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/catalog-files/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the workspace as structured catalog documents
+         * @description Every active file as a structured document (the same shape create/replace accept),
+         *     ordered by (namespace, name) case-insensitively so the export is deterministic. YAML
+         *     rendering is deliberately a client concern — the SPA joins these documents into one
+         *     multi-document `catalog-info.yaml` with its tested generator. Unpaged by design — a
+         *     report-style read of the whole workspace.
+         */
+        get: operations["exportCatalogFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog-files/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import a batch of catalog documents (report & skip)
+         * @description Imports up to 200 structured documents (the SPA parses `catalog-info.yaml` client-side
+         *     and ships the parsed documents here). Each document imports INDEPENDENTLY and gets its
+         *     own result row: `CREATED` (stored, `fileId` set), `INVALID` (failed the
+         *     descriptor-format validation, `message` names the rule), `CONFLICT` (an active file
+         *     already holds the kind+namespace+name identity — nothing is overwritten), or `ERROR`
+         *     (an unexpected storage failure). The response is `200` even when every document failed
+         *     — the result rows are the outcome; a `400` covers only the batch itself (an
+         *     undecodable body or more than 200 entries).
+         */
+        post: operations["importCatalogFiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/catalog-files/{id}": {
         parameters: {
             query?: never;
@@ -429,6 +480,40 @@ export interface components {
          * @enum {string}
          */
         EntityKind: "Component" | "API" | "System" | "Domain" | "Resource" | "Group" | "User";
+        ExportResponse: {
+            /** @description The active documents, ordered by (namespace, name) case-insensitively. */
+            files: components["schemas"]["CatalogFileRequest"][];
+        };
+        ImportRequest: {
+            /** @description The documents to import, each handled independently (report & skip). */
+            files: components["schemas"]["CatalogFileRequest"][];
+        };
+        ImportResponse: {
+            /** @description One result per submitted document, in submission order. */
+            results: components["schemas"]["ImportFileResult"][];
+        };
+        ImportFileResult: {
+            /** @description The document's 0-based position in the submitted batch. */
+            index: number;
+            /** @description The document's (sanitized) kind — canonical-cased when recognized. */
+            kind: string;
+            /** @description The sanitized namespace (lowercased; blank became `default`). */
+            namespace: string;
+            /** @description The sanitized entity name. */
+            name: string;
+            /**
+             * @description CREATED — stored (`fileId` set). INVALID — failed the descriptor-format validation (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document.
+             * @enum {string}
+             */
+            status: "CREATED" | "INVALID" | "CONFLICT" | "ERROR";
+            /**
+             * Format: int64
+             * @description The new file's id, only when status is CREATED.
+             */
+            fileId?: number | null;
+            /** @description The failure detail, absent on CREATED. */
+            message?: string | null;
+        };
         CatalogFileMetadata: {
             /** @description Entity name — unique (case-insensitively) per namespace among active files. */
             name: string;
@@ -1151,6 +1236,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogGraph"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    exportCatalogFiles: {
+        parameters: {
+            query?: {
+                /** @description Exact (case-insensitive) namespace of the files to export. */
+                namespace?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The workspace's documents */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    importCatalogFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportRequest"];
+            };
+        };
+        responses: {
+            /** @description One result per submitted document, in order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

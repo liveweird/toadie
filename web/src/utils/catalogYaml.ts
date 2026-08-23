@@ -78,6 +78,11 @@ export function catalogInfoYaml(file: CatalogFileRequest): string {
   );
 }
 
+/** The multi-document form: one catalog-info.yaml with `---` separators (the export shape). */
+export function catalogInfoMultiYaml(files: CatalogFileRequest[]): string {
+  return files.map(catalogInfoYaml).join("---\n");
+}
+
 /** Hands the YAML to the browser as a file download (Backstage's canonical filename). */
 export function downloadYaml(text: string, filename = "catalog-info.yaml") {
   const blob = new Blob([text], { type: "application/yaml" });
