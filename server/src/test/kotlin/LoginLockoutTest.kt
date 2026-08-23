@@ -1,12 +1,7 @@
 package ch.nokillswit
 
-import ch.nokillswit.auth.LoginRequest
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -28,17 +23,11 @@ class LoginLockoutTest {
         val client = jsonClient()
 
         repeat(3) {
-            val attempt = client.post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(email, "wrong-pw"))
-            }
+            val attempt = client.login(email, "wrong-pw")
             assertEquals(HttpStatusCode.Unauthorized, attempt.status)
         }
 
-        val lockedOut = client.post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(email, "right-pw"))
-        }
+        val lockedOut = client.login(email, "right-pw")
         assertEquals(HttpStatusCode.TooManyRequests, lockedOut.status)
         // The lockout's account-specific detail must survive StatusPages' generic 429 handler.
         assertContains(lockedOut.bodyAsText(), "failed login attempts")
@@ -53,23 +42,14 @@ class LoginLockoutTest {
         val client = jsonClient()
 
         repeat(2) {
-            client.post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(email, "wrong-pw"))
-            }
+            client.login(email, "wrong-pw")
         }
-        val success = client.post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(email, "right-pw"))
-        }
+        val success = client.login(email, "right-pw")
         assertEquals(HttpStatusCode.OK, success.status)
 
         // The counter restarted: two more failures stay under the threshold of 3.
         repeat(2) {
-            val attempt = client.post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(email, "wrong-pw"))
-            }
+            val attempt = client.login(email, "wrong-pw")
             assertEquals(HttpStatusCode.Unauthorized, attempt.status)
         }
     }
@@ -83,15 +63,9 @@ class LoginLockoutTest {
         val client = jsonClient()
 
         for (variant in listOf(email, email.uppercase(), " $email ")) {
-            client.post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(variant, "wrong-pw"))
-            }
+            client.login(variant, "wrong-pw")
         }
-        val lockedOut = client.post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(email, "right-pw"))
-        }
+        val lockedOut = client.login(email, "right-pw")
         assertEquals(HttpStatusCode.TooManyRequests, lockedOut.status)
     }
 }

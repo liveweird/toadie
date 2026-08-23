@@ -11,89 +11,29 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
-import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.request
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
-import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
-import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
-import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Unique, grammar-valid entity name so parallel tests and re-runs never collide on identity. */
-fun uniqueEntityName(prefix: String) = "$prefix-${UUID.randomUUID().toString().substring(0, 8)}"
-
-fun componentFile(
-    name: String,
-    namespace: String = "default",
-    title: String? = null,
-    type: String = "service",
-    lifecycle: String = "production",
-    owner: String = "group:default/platform",
-) = CatalogFile(
-    metadata = CatalogFileMetadata(name = name, namespace = namespace, title = title),
-    spec = EntitySpec(type = type, lifecycle = lifecycle, owner = owner),
-)
-
-fun groupFile(
-    name: String,
-    namespace: String = "default",
-    children: List<String> = emptyList(),
-    members: List<String> = emptyList(),
-    parent: String? = null,
-) = CatalogFile(
-    kind = "Group",
-    metadata = CatalogFileMetadata(name = name, namespace = namespace),
-    spec = EntitySpec(type = "team", children = children, members = members, parent = parent),
-)
-
-fun userFile(name: String, namespace: String = "default", memberOf: List<String> = emptyList()) = CatalogFile(
-    kind = "User",
-    metadata = CatalogFileMetadata(name = name, namespace = namespace),
-    spec = EntitySpec(memberOf = memberOf),
-)
-
-fun apiFile(name: String, namespace: String = "default", owner: String = "group:default/platform") = CatalogFile(
-    kind = "API",
-    metadata = CatalogFileMetadata(name = name, namespace = namespace),
-    spec = EntitySpec(type = "openapi", lifecycle = "production", owner = owner, definition = "openapi: 3.0.0"),
-)
-
-suspend fun HttpClient.createCatalogFile(file: CatalogFile): CatalogFileResponse =
-    post("/api/v1/catalog-files") {
-        contentType(ContentType.Application.Json)
-        setBody(file)
-    }.body()
-
 class CatalogFileTest {
 
-    /** A non-ADMIN caller on purpose: the workspace is shared, no route is admin-gated. */
-    private suspend fun ApplicationTestBuilder.regularUserClient(prefix: String = "cataloguser"): HttpClient {
-        val email = uniqueEmail(prefix)
-        TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
-        return authedClient(email, "pw")
-    }
 
     @Test
     fun `a regular user can create, read, list, update and delete a catalog file`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         val name = uniqueEntityName("svc")
 
-        val created = client.post("/api/v1/catalog-files") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile(name, title = "My Service"))
-        }
+        val created = client.postJson("/api/v1/catalog-files", componentFile(name, title = "My Service"))
         assertEquals(HttpStatusCode.Created, created.status)
         val body = created.body<CatalogFileResponse>()
         assertEquals(name, body.metadata.name)
@@ -118,10 +58,7 @@ class CatalogFileTest {
         assertEquals("production", row.lifecycle)
         assertEquals(body.creatorName, row.creatorName)
 
-        val updated = client.put("/api/v1/catalog-files/${body.id}") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile(name, title = "Renamed", lifecycle = "deprecated"))
-        }
+        val updated = client.putJson("/api/v1/catalog-files/${body.id}", componentFile(name, title = "Renamed", lifecycle = "deprecated"))
         assertEquals(HttpStatusCode.NoContent, updated.status)
         val reFetched = client.get("/api/v1/catalog-files/${body.id}").body<CatalogFileResponse>()
         assertEquals("Renamed", reFetched.metadata.title)
@@ -135,7 +72,7 @@ class CatalogFileTest {
     @Test
     fun `every supported kind creates and round-trips`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         val ns = uniqueEntityName("kinds")
         val files = listOf(
             componentFile(uniqueEntityName("comp"), namespace = ns),
@@ -175,12 +112,9 @@ class CatalogFileTest {
     @Test
     fun `per-kind rules reject missing required and foreign fields`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
 
-        suspend fun status(file: CatalogFile): HttpStatusCode = client.post("/api/v1/catalog-files") {
-            contentType(ContentType.Application.Json)
-            setBody(file)
-        }.status
+        suspend fun status(file: CatalogFile): HttpStatusCode = client.postJson("/api/v1/catalog-files", file).status
 
         val n = { uniqueEntityName("bad") }
         // Unknown kind.
@@ -210,10 +144,7 @@ class CatalogFileTest {
             ),
         )
         // A case-variant kind is canonicalized, not rejected.
-        val created = client.post("/api/v1/catalog-files") {
-            contentType(ContentType.Application.Json)
-            setBody(groupFile(uniqueEntityName("cased")).copy(kind = "gRoUp"))
-        }
+        val created = client.postJson("/api/v1/catalog-files", groupFile(uniqueEntityName("cased")).copy(kind = "gRoUp"))
         assertEquals(HttpStatusCode.Created, created.status)
         assertEquals("Group", created.body<CatalogFileResponse>().kind)
     }
@@ -221,33 +152,27 @@ class CatalogFileTest {
     @Test
     fun `kind can be changed by an update, and identity collisions still 409`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         val ns = uniqueEntityName("flip")
         val name = uniqueEntityName("chameleon")
         val id = client.createCatalogFile(componentFile(name, namespace = ns)).id
 
         // Component → API (a full replace with a new kind).
-        val flipped = client.put("/api/v1/catalog-files/$id") {
-            contentType(ContentType.Application.Json)
-            setBody(apiFile(name, namespace = ns))
-        }
+        val flipped = client.putJson("/api/v1/catalog-files/$id", apiFile(name, namespace = ns))
         assertEquals(HttpStatusCode.NoContent, flipped.status)
         assertEquals("API", client.get("/api/v1/catalog-files/$id").body<CatalogFileResponse>().kind)
 
         // Same name, kind Group — a DIFFERENT identity, so it coexists…
         val groupId = client.createCatalogFile(groupFile(name, namespace = ns)).id
         // …but flipping the group to kind API collides with the flipped file's identity.
-        val collision = client.put("/api/v1/catalog-files/$groupId") {
-            contentType(ContentType.Application.Json)
-            setBody(apiFile(name, namespace = ns))
-        }
+        val collision = client.putJson("/api/v1/catalog-files/$groupId", apiFile(name, namespace = ns))
         assertEquals(HttpStatusCode.Conflict, collision.status)
     }
 
     @Test
     fun `the list filters by kind and rejects unknown kinds`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         val ns = uniqueEntityName("kfilter")
         client.createCatalogFile(componentFile(uniqueEntityName("c"), namespace = ns))
         client.createCatalogFile(groupFile(uniqueEntityName("g"), namespace = ns))
@@ -262,7 +187,7 @@ class CatalogFileTest {
     @Test
     fun `the full metadata surface round-trips`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         val name = uniqueEntityName("full")
         val file = CatalogFile(
             metadata = CatalogFileMetadata(
@@ -299,12 +224,9 @@ class CatalogFileTest {
     @Test
     fun `create and update reject payloads violating the descriptor format`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
 
-        suspend fun createStatus(file: CatalogFile): HttpStatusCode = client.post("/api/v1/catalog-files") {
-            contentType(ContentType.Application.Json)
-            setBody(file)
-        }.status
+        suspend fun createStatus(file: CatalogFile): HttpStatusCode = client.postJson("/api/v1/catalog-files", file).status
 
         val ok = uniqueEntityName("valid")
         // metadata.name grammar
@@ -376,55 +298,40 @@ class CatalogFileTest {
 
         // The same validation guards PUT.
         val existing = client.createCatalogFile(componentFile(uniqueEntityName("put")))
-        val put = client.put("/api/v1/catalog-files/${existing.id}") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile("has space"))
-        }
+        val put = client.putJson("/api/v1/catalog-files/${existing.id}", componentFile("has space"))
         assertEquals(HttpStatusCode.BadRequest, put.status)
     }
 
     @Test
     fun `entity identity is case-insensitively unique among active files`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         val name = uniqueEntityName("Uniq")
 
         val first = client.createCatalogFile(componentFile(name))
 
         // Case-variant duplicate in the same namespace → 409 via the partial unique index.
-        val duplicate = client.post("/api/v1/catalog-files") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile(name.lowercase()))
-        }
+        val duplicate = client.postJson("/api/v1/catalog-files", componentFile(name.lowercase()))
         assertEquals(HttpStatusCode.Conflict, duplicate.status)
 
         // Same name in another namespace is a different identity.
-        val otherNamespace = client.post("/api/v1/catalog-files") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile(name, namespace = "team-b"))
-        }
+        val otherNamespace = client.postJson("/api/v1/catalog-files", componentFile(name, namespace = "team-b"))
         assertEquals(HttpStatusCode.Created, otherNamespace.status)
 
         // Renaming onto an active identity conflicts too.
-        val renamed = client.put("/api/v1/catalog-files/${otherNamespace.body<CatalogFileResponse>().id}") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile(name))
-        }
+        val renamed = client.putJson("/api/v1/catalog-files/${otherNamespace.body<CatalogFileResponse>().id}", componentFile(name))
         assertEquals(HttpStatusCode.Conflict, renamed.status)
 
         // Soft-deleting frees the identity for reuse.
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/${first.id}").status)
-        val reused = client.post("/api/v1/catalog-files") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile(name))
-        }
+        val reused = client.postJson("/api/v1/catalog-files", componentFile(name))
         assertEquals(HttpStatusCode.Created, reused.status)
     }
 
     @Test
     fun `namespace is folded to lowercase and blank means default`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
 
         val folded = client.createCatalogFile(componentFile(uniqueEntityName("fold"), namespace = "TEAM-A"))
         assertEquals("team-a", folded.metadata.namespace)
@@ -436,7 +343,7 @@ class CatalogFileTest {
     @Test
     fun `list filters by name and namespace, sorts and paginates`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         val prefix = uniqueEntityName("page")
         client.createCatalogFile(componentFile("$prefix-a", namespace = "ns-one"))
         client.createCatalogFile(componentFile("$prefix-b", namespace = "ns-two"))
@@ -465,7 +372,7 @@ class CatalogFileTest {
     @Test
     fun `list name filter folds diacritics on the query side`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         // Stored names are grammar-constrained ASCII — the folding is proven from the query
         // side: a diacritic search term must match its ASCII base form.
         val name = "zolw-${uniqueEntityName("dia")}"
@@ -481,7 +388,7 @@ class CatalogFileTest {
     @Test
     fun `list rejects malformed query parameters`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
 
         assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?page=0").status)
         assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?page=abc").status)
@@ -495,17 +402,14 @@ class CatalogFileTest {
     @Test
     fun `soft-deleted file is invisible to read, update, delete and list`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         val name = uniqueEntityName("gone")
         val created = client.createCatalogFile(componentFile(name))
 
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/${created.id}").status)
 
         assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/catalog-files/${created.id}").status)
-        val put = client.put("/api/v1/catalog-files/${created.id}") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile(name))
-        }
+        val put = client.putJson("/api/v1/catalog-files/${created.id}", componentFile(name))
         assertEquals(HttpStatusCode.NotFound, put.status)
         // Idempotent: a second delete finds no active row → 404.
         assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/catalog-files/${created.id}").status)
@@ -517,11 +421,8 @@ class CatalogFileTest {
     @Test
     fun `update and delete of a non-existent file return 404`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
-        val put = client.put("/api/v1/catalog-files/999999") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile(uniqueEntityName("ghost")))
-        }
+        val client = seededClient("cataloguser")
+        val put = client.putJson("/api/v1/catalog-files/999999", componentFile(uniqueEntityName("ghost")))
         assertEquals(HttpStatusCode.NotFound, put.status)
         assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/catalog-files/999999").status)
     }
@@ -556,7 +457,7 @@ class CatalogFileTest {
 
         TestUsers.softDelete(creatorId)
 
-        val reader = regularUserClient("reader")
+        val reader = seededClient("reader")
         val fetched = reader.get("/api/v1/catalog-files/${created.id}").body<CatalogFileResponse>()
         assertEquals("Casey Creator", fetched.creatorName)
         assertTrue(fetched.creatorDeleted)
@@ -567,7 +468,7 @@ class CatalogFileTest {
     @Test
     fun `service treats a blank name filter as absent`() = testApplication {
         usePostgresTestcontainer()
-        val client = regularUserClient()
+        val client = seededClient("cataloguser")
         val name = uniqueEntityName("blankfilter")
         val created = client.createCatalogFile(componentFile(name))
 

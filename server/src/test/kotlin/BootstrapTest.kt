@@ -4,16 +4,11 @@ import ch.nokillswit.auth.LoginRequest
 import ch.nokillswit.auth.LoginResponse
 import ch.nokillswit.infra.db.SEED_ADMIN_EMAIL
 import io.ktor.client.call.body
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -28,24 +23,16 @@ class BootstrapTest {
     fun `ADMIN_INITIAL_PASSWORD rotates the seed admin so changeme stops working`() = testApplication {
         val newPassword = "rotated-${UUID.randomUUID()}"
         configureApp("bootstrap.adminInitialPassword" to newPassword)
-        try {
+        withSeedRestored {
             startApplication()
             val client = jsonClient()
 
-            val withOld = client.post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(SEED_ADMIN_EMAIL, "changeme"))
-            }
+            val withOld = client.login(SEED_ADMIN_EMAIL, "changeme")
             assertEquals(HttpStatusCode.Unauthorized, withOld.status)
 
-            val withNew = client.post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(SEED_ADMIN_EMAIL, newPassword))
-            }
+            val withNew = client.login(SEED_ADMIN_EMAIL, newPassword)
             assertEquals(HttpStatusCode.OK, withNew.status)
             assertTrue(withNew.body<LoginResponse>().token.isNotBlank())
-        } finally {
-            TestSeedState.restoreSeedAccounts()
         }
     }
 
@@ -54,7 +41,7 @@ class BootstrapTest {
         val chosen = "chosen-${UUID.randomUUID()}"
         // First boot rotates away from the seed hash…
         configureApp("bootstrap.adminInitialPassword" to chosen)
-        try {
+        withSeedRestored {
             startApplication()
             // …then simulate a later boot with a DIFFERENT initial password: the admin's password
             // no longer matches the seed hash, so nothing may change.
@@ -65,13 +52,8 @@ class BootstrapTest {
             )
             assertEquals(0, rotatedAgain)
 
-            val stillChosen = jsonClient().post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(SEED_ADMIN_EMAIL, chosen))
-            }
+            val stillChosen = jsonClient().postJson("/api/v1/login", LoginRequest(SEED_ADMIN_EMAIL, chosen))
             assertEquals(HttpStatusCode.OK, stillChosen.status)
-        } finally {
-            TestSeedState.restoreSeedAccounts()
         }
     }
 
@@ -80,13 +62,8 @@ class BootstrapTest {
         // No ADMIN_INITIAL_PASSWORD; strong JWT secret so the failure is the seed check.
         configureApp("jwt.secret" to "strong-${UUID.randomUUID()}")
         serverConfig { developmentMode = false }
-        try {
-            val failure = runCatching { startApplication() }.exceptionOrNull()
-            assertNotNull(failure, "startup must fail closed while seed passwords are active")
-            val messages = generateSequence(failure) { it.cause }.mapNotNull { it.message }.joinToString(" | ")
-            assertTrue("seed password" in messages, "unexpected startup failure: $messages")
-        } finally {
-            TestSeedState.restoreSeedAccounts()
+        withSeedRestored {
+            assertStartupFails("seed password") { startApplication() }
         }
     }
 
@@ -98,10 +75,8 @@ class BootstrapTest {
             "jwt.secret" to "strong-${UUID.randomUUID()}",
         )
         serverConfig { developmentMode = false }
-        try {
+        withSeedRestored {
             startApplication() // must not throw: rotation happens before the fail-closed check
-        } finally {
-            TestSeedState.restoreSeedAccounts()
         }
     }
 }

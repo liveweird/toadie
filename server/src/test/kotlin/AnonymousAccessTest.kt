@@ -18,10 +18,7 @@ class AnonymousAccessTest {
     @Test
     fun `password change without a token is 401`() = testApplication {
         usePostgresTestcontainer()
-        val response = jsonClient().put("/api/v1/users/1/password") {
-            contentType(ContentType.Application.Json)
-            setBody(PasswordUpdateRequest(password = "whatever-works"))
-        }
+        val response = jsonClient().putJson("/api/v1/users/1/password", PasswordUpdateRequest(password = "whatever-works"))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 

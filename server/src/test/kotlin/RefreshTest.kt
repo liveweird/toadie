@@ -35,10 +35,7 @@ class RefreshTest {
         val client = jsonClient()
         val session = client.login(email, "pw")
 
-        val response = client.post("/api/v1/refresh") {
-            contentType(ContentType.Application.Json)
-            setBody(RefreshRequest(session.refreshToken))
-        }
+        val response = client.postJson("/api/v1/refresh", RefreshRequest(session.refreshToken))
 
         assertEquals(HttpStatusCode.OK, response.status)
         val renewed = response.body<LoginResponse>()
@@ -54,20 +51,14 @@ class RefreshTest {
         val client = jsonClient()
         val session = client.login(email, "pw")
 
-        val response = client.post("/api/v1/refresh") {
-            contentType(ContentType.Application.Json)
-            setBody(RefreshRequest(session.token))
-        }
+        val response = client.postJson("/api/v1/refresh", RefreshRequest(session.token))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
     @Test
     fun `garbage refresh token returns 401`() = testApplication {
         usePostgresTestcontainer()
-        val response = jsonClient().post("/api/v1/refresh") {
-            contentType(ContentType.Application.Json)
-            setBody(RefreshRequest("not-a-jwt"))
-        }
+        val response = jsonClient().postJson("/api/v1/refresh", RefreshRequest("not-a-jwt"))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
@@ -86,10 +77,7 @@ class RefreshTest {
         }
         assertEquals(HttpStatusCode.NoContent, logout.status)
 
-        val response = client.post("/api/v1/refresh") {
-            contentType(ContentType.Application.Json)
-            setBody(RefreshRequest(session.refreshToken))
-        }
+        val response = client.postJson("/api/v1/refresh", RefreshRequest(session.refreshToken))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
@@ -106,10 +94,7 @@ class RefreshTest {
         Thread.sleep(1100)
         TestUsers.service.updatePassword(userId, hashPassword("new-password!", cost = 4))
 
-        val response = client.post("/api/v1/refresh") {
-            contentType(ContentType.Application.Json)
-            setBody(RefreshRequest(session.refreshToken))
-        }
+        val response = client.postJson("/api/v1/refresh", RefreshRequest(session.refreshToken))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
@@ -123,10 +108,7 @@ class RefreshTest {
 
         TestUsers.softDelete(userId)
 
-        val response = client.post("/api/v1/refresh") {
-            contentType(ContentType.Application.Json)
-            setBody(RefreshRequest(session.refreshToken))
-        }
+        val response = client.postJson("/api/v1/refresh", RefreshRequest(session.refreshToken))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 }

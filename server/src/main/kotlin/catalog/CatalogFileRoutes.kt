@@ -59,8 +59,9 @@ class CatalogFiles {
 
 fun Application.configureCatalogFileRoutes() {
     val catalogFileService = attributes[CatalogFileServiceKey]
-    // Stateless, no DB — constructed here rather than in the composition root.
-    val urlFetcher = CatalogUrlFetcher()
+    // Stateless, no DB — constructed here rather than in the composition root. Lazy so the
+    // test seam (CatalogUrlFetcherKey, set after module load) can supply a fixture fetcher.
+    val urlFetcher by lazy { attributes.getOrNull(CatalogUrlFetcherKey) ?: CatalogUrlFetcher() }
 
     routing {
         authenticate {

@@ -25,16 +25,10 @@ class AuditTest {
         usePostgresTestcontainer()
         val email = uniqueEmail("audited")
         TestUsers.seed(email = email, password = "pw")
-        val capture = LogCapture("ch.nokillswit.audit")
-        try {
-            jsonClient().post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(email, "pw"))
-            }
+        withAuditCapture { capture ->
+            jsonClient().postJson("/api/v1/login", LoginRequest(email, "pw"))
             val event = capture.awaitEvent { it.message == "login.success" && it.hasKeyValue("email", email) }
             assertNotNull(event, "expected a login.success audit event for $email")
-        } finally {
-            capture.detach()
         }
     }
 
@@ -43,30 +37,21 @@ class AuditTest {
         usePostgresTestcontainer()
         val email = uniqueEmail("catalogaudit")
         val userId = TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
-        val capture = LogCapture("ch.nokillswit.audit")
-        try {
+        withAuditCapture { capture ->
             val client = authedClient(email, "pw")
             val name = uniqueEntityName("audited")
             val fileId = client.createCatalogFile(componentFile(name)).id
-            client.put("/api/v1/catalog-files/$fileId") {
-                contentType(ContentType.Application.Json)
-                setBody(componentFile(name, title = "Edited"))
-            }
+            client.putJson("/api/v1/catalog-files/$fileId", componentFile(name, title = "Edited"))
             client.delete("/api/v1/catalog-files/$fileId")
 
-            // Ids travel as Long key/values (not message text), so match on the raw value.
-            fun hasLong(event: ch.qos.logback.classic.spi.ILoggingEvent, key: String, value: Long) =
-                event.keyValuePairs?.any { it.key == key && it.value == value } == true
 
             for (eventName in listOf("catalog_file.created", "catalog_file.updated", "catalog_file.deleted")) {
                 val event = capture.awaitEvent {
-                    it.message == eventName && hasLong(it, "catalogFileId", fileId.toLong())
+                    it.message == eventName && it.hasKeyValue("catalogFileId", fileId.toLong())
                 }
                 assertNotNull(event, "expected a $eventName audit event for file $fileId")
-                assertTrue(hasLong(event, "byUserId", userId.toLong()))
+                assertTrue(event.hasKeyValue("byUserId", userId.toLong()))
             }
-        } finally {
-            capture.detach()
         }
     }
 
@@ -75,8 +60,7 @@ class AuditTest {
         usePostgresTestcontainer()
         val adminEmail = uniqueEmail("useraudit")
         val adminId = TestUsers.seed(email = adminEmail, password = "pw-123456789")
-        val capture = LogCapture("ch.nokillswit.audit")
-        try {
+        withAuditCapture { capture ->
             val client = authedClient(adminEmail, "pw-123456789")
             val email = uniqueEmail("audited-user")
             val created = client.post("/api/v1/users") {
@@ -101,33 +85,29 @@ class AuditTest {
             }
             client.delete("/api/v1/users/${created.id}")
 
-            fun hasLong(event: ch.qos.logback.classic.spi.ILoggingEvent, key: String, value: Long) =
-                event.keyValuePairs?.any { it.key == key && it.value == value } == true
 
             val createdEvent = capture.awaitEvent {
                 it.message == "user.created" && it.hasKeyValue("email", email)
             }
             assertNotNull(createdEvent)
-            assertTrue(hasLong(createdEvent, "byUserId", adminId.toLong()))
+            assertTrue(createdEvent.hasKeyValue("byUserId", adminId.toLong()))
             val updatedEvent = capture.awaitEvent {
-                it.message == "user.updated" && hasLong(it, "targetUserId", created.id.toLong())
+                it.message == "user.updated" && it.hasKeyValue("targetUserId", created.id.toLong())
             }
             assertNotNull(updatedEvent)
             assertTrue(updatedEvent.hasKeyValue("nameFrom", "Audited One"))
             assertTrue(updatedEvent.hasKeyValue("nameTo", "Audited Two"))
             val rolesEvent = capture.awaitEvent {
-                it.message == "user.roles_changed" && hasLong(it, "targetUserId", created.id.toLong())
+                it.message == "user.roles_changed" && it.hasKeyValue("targetUserId", created.id.toLong())
             }
             assertNotNull(rolesEvent)
             assertTrue(rolesEvent.hasKeyValue("from", ""))
             assertTrue(rolesEvent.hasKeyValue("to", "ADMIN"))
             assertNotNull(
                 capture.awaitEvent {
-                    it.message == "user.deleted" && hasLong(it, "targetUserId", created.id.toLong())
+                    it.message == "user.deleted" && it.hasKeyValue("targetUserId", created.id.toLong())
                 },
             )
-        } finally {
-            capture.detach()
         }
     }
 
@@ -136,17 +116,11 @@ class AuditTest {
         usePostgresTestcontainer()
         val email = uniqueEmail("failaudit")
         TestUsers.seed(email = email, password = "right-pw")
-        val capture = LogCapture("ch.nokillswit.audit")
-        try {
-            jsonClient().post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(email, "wrong-pw"))
-            }
+        withAuditCapture { capture ->
+            jsonClient().postJson("/api/v1/login", LoginRequest(email, "wrong-pw"))
             val event = capture.awaitEvent { it.message == "login.failure" && it.hasKeyValue("email", email) }
             assertNotNull(event, "expected a login.failure audit event for $email")
             assertTrue(event.hasKeyValue("reason", "wrong_password"))
-        } finally {
-            capture.detach()
         }
     }
 }

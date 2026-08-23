@@ -6,11 +6,7 @@ import ch.nokillswit.users.UserRole
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.client.call.body
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,10 +22,7 @@ class LoginTest {
         TestUsers.seed(email = email, password = "correct-horse")
 
         val before = System.currentTimeMillis()
-        val response = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(email, "correct-horse"))
-        }
+        val response = jsonClient().postJson("/api/v1/login", LoginRequest(email, "correct-horse"))
 
         assertEquals(HttpStatusCode.OK, response.status)
         val body = response.body<LoginResponse>()
@@ -43,10 +36,7 @@ class LoginTest {
         val email = uniqueEmail("bob")
         TestUsers.seed(email = email, password = "pw")
 
-        val token = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(email, "pw"))
-        }.body<LoginResponse>().token
+        val token = jsonClient().postJson("/api/v1/login", LoginRequest(email, "pw")).body<LoginResponse>().token
 
         val decoded = JWT.require(Algorithm.HMAC256("secret"))
             .withAudience("toadie-api")
@@ -68,14 +58,8 @@ class LoginTest {
         TestUsers.seed(email = userEmail, password = "pw", role = UserRole.USER)
 
         val client = jsonClient()
-        val admin = client.post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(adminEmail, "pw"))
-        }.body<LoginResponse>()
-        val user = client.post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(userEmail, "pw"))
-        }.body<LoginResponse>()
+        val admin = client.login(adminEmail, "pw").body<LoginResponse>()
+        val user = client.login(userEmail, "pw").body<LoginResponse>()
 
         assertEquals(listOf(UserRole.ADMIN), admin.roles)
         assertEquals(emptyList(), user.roles, "a regular user carries no additional roles")
@@ -87,10 +71,7 @@ class LoginTest {
         val email = uniqueEmail("case")
         TestUsers.seed(email = email, password = "pw")
 
-        val response = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest("  ${email.uppercase()}  ", "pw"))
-        }
+        val response = jsonClient().postJson("/api/v1/login", LoginRequest("  ${email.uppercase()}  ", "pw"))
         assertEquals(HttpStatusCode.OK, response.status)
     }
 
@@ -100,20 +81,14 @@ class LoginTest {
         val email = uniqueEmail("dave")
         TestUsers.seed(email = email, password = "right-pw")
 
-        val response = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(email, "wrong-pw"))
-        }
+        val response = jsonClient().postJson("/api/v1/login", LoginRequest(email, "wrong-pw"))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
     @Test
     fun `unknown email returns the same uniform 401`() = testApplication {
         usePostgresTestcontainer()
-        val response = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(uniqueEmail("ghost"), "whatever"))
-        }
+        val response = jsonClient().postJson("/api/v1/login", LoginRequest(uniqueEmail("ghost"), "whatever"))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
@@ -126,10 +101,7 @@ class LoginTest {
         // Over bcrypt's 72-byte limit the hasher throws; verifyPassword must treat it as
         // non-matching, or the 500 (existing account) vs 401 (unknown email) difference
         // would disclose account existence.
-        val response = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(email, "x".repeat(200)))
-        }
+        val response = jsonClient().postJson("/api/v1/login", LoginRequest(email, "x".repeat(200)))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 }

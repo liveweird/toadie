@@ -1,12 +1,7 @@
 package ch.nokillswit
 
-import ch.nokillswit.auth.LoginRequest
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -27,15 +22,9 @@ class RateLimitResponseTest {
         val client = jsonClient()
 
         repeat(3) {
-            client.post("/api/v1/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(uniqueEmail("bucket"), "whatever"))
-            }
+            client.login(uniqueEmail("bucket"), "whatever")
         }
-        val throttled = client.post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(uniqueEmail("bucket"), "whatever"))
-        }
+        val throttled = client.login(uniqueEmail("bucket"), "whatever")
 
         assertEquals(HttpStatusCode.TooManyRequests, throttled.status)
         assertTrue(

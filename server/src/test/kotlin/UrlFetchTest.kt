@@ -3,6 +3,8 @@ package ch.nokillswit
 import ch.nokillswit.authz.BadGatewayException
 import ch.nokillswit.catalog.BlockedUrlException
 import ch.nokillswit.catalog.CatalogUrlFetcher
+import ch.nokillswit.catalog.CatalogUrlFetcherKey
+import ch.nokillswit.catalog.FetchUrlResponse
 import ch.nokillswit.catalog.FetchUrlRequest
 import ch.nokillswit.catalog.FETCH_URL_INVALID_DETAIL
 import ch.nokillswit.catalog.MAX_FETCH_BYTES
@@ -13,11 +15,7 @@ import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserRole
 import com.sun.net.httpserver.HttpServer
 import io.ktor.client.call.body
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -141,17 +139,13 @@ class UrlFetchTest {
     fun `the fetch route answers a uniform 400 for blocked URLs and audits the attempt`() =
         testApplication {
             usePostgresTestcontainer()
-            val capture = LogCapture("ch.nokillswit.audit")
-            try {
+            withAuditCapture { capture ->
                 val email = uniqueEmail("urlfetch")
                 TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
                 val client = authedClient(email, "pw")
 
                 for (url in listOf("http://example.com/x.yaml", "https://127.0.0.1/x.yaml")) {
-                    val response = client.post("/api/v1/catalog-files/fetch") {
-                        contentType(ContentType.Application.Json)
-                        setBody(FetchUrlRequest(url = url))
-                    }
+                    val response = client.postJson("/api/v1/catalog-files/fetch", FetchUrlRequest(url = url))
                     assertEquals(HttpStatusCode.BadRequest, response.status)
                     assertEquals(FETCH_URL_INVALID_DETAIL, response.body<ProblemDetail>().detail)
                 }
@@ -160,18 +154,39 @@ class UrlFetchTest {
                     it.message == "catalog_file.fetch_blocked" && it.hasKeyValue("host", "127.0.0.1")
                 }
                 assertNotNull(event)
-            } finally {
-                capture.detach()
             }
         }
 
     @Test
     fun `the fetch route requires authentication`() = testApplication {
         usePostgresTestcontainer()
-        val response = jsonClient().post("/api/v1/catalog-files/fetch") {
-            contentType(ContentType.Application.Json)
-            setBody(FetchUrlRequest(url = "https://example.com/catalog-info.yaml"))
-        }
+        val response = jsonClient().postJson("/api/v1/catalog-files/fetch", FetchUrlRequest(url = "https://example.com/catalog-info.yaml"))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
+
+    @Test
+    fun `the fetch route returns the fetched text and maps upstream failures to 502`() =
+        withFixtureServer(
+            configure = { server ->
+                server.respond("/ok", 200, "kind: Component\nmetadata:\n  name: fetched\n".toByteArray())
+                server.respond("/missing", 404, "not here".toByteArray())
+            },
+        ) { base ->
+            testApplication {
+                configureApp()
+                // The test seam: a lenient-validator fetcher so the ROUTE can reach the
+                // 127.0.0.1 fixture; production wiring never sets this attribute.
+                application { attributes.put(CatalogUrlFetcherKey, fixtureFetcher()) }
+                startApplication()
+                val client = seededClient("fetchroute")
+
+                val ok = client.postJson("/api/v1/catalog-files/fetch", FetchUrlRequest(url = "$base/ok"))
+                assertEquals(HttpStatusCode.OK, ok.status)
+                assertTrue(ok.body<FetchUrlResponse>().content.contains("name: fetched"))
+
+                val bad = client.postJson("/api/v1/catalog-files/fetch", FetchUrlRequest(url = "$base/missing"))
+                assertEquals(HttpStatusCode.BadGateway, bad.status)
+                assertTrue(bad.body<ProblemDetail>().detail!!.contains("HTTP 404"))
+            }
+        }
 }

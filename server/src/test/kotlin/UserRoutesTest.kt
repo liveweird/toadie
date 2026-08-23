@@ -11,7 +11,6 @@ import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
-import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -60,10 +59,7 @@ class UserRoutesTest {
         val (client, _) = adminClient()
         val email = uniqueEmail("created")
 
-        val response = client.post("/api/v1/users") {
-            contentType(ContentType.Application.Json)
-            setBody(createRequest(email, name = "  Fresh Face  "))
-        }
+        val response = client.postJson("/api/v1/users", createRequest(email, name = "  Fresh Face  "))
         assertEquals(HttpStatusCode.Created, response.status)
         val body = response.body<UserResponse>()
         assertEquals("Fresh Face", body.name, "single-line sanitization trims")
@@ -71,10 +67,7 @@ class UserRoutesTest {
         assertEquals(emptyList(), body.roles)
         assertEquals("/api/v1/users/${body.id}", response.headers[HttpHeaders.Location])
 
-        val login = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(email, "initial-pass-123"))
-        }
+        val login = jsonClient().postJson("/api/v1/login", LoginRequest(email, "initial-pass-123"))
         assertEquals(HttpStatusCode.OK, login.status)
     }
 
@@ -87,18 +80,12 @@ class UserRoutesTest {
         val created = client.createUser(createRequest("  ${email.uppercase()}  "))
         assertEquals(email, created.email)
 
-        val duplicate = client.post("/api/v1/users") {
-            contentType(ContentType.Application.Json)
-            setBody(createRequest(email))
-        }
+        val duplicate = client.postJson("/api/v1/users", createRequest(email))
         assertEquals(HttpStatusCode.Conflict, duplicate.status)
 
         // Soft-deleting frees the email for reuse (the V1 partial index).
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/users/${created.id}").status)
-        val reused = client.post("/api/v1/users") {
-            contentType(ContentType.Application.Json)
-            setBody(createRequest(email))
-        }
+        val reused = client.postJson("/api/v1/users", createRequest(email))
         assertEquals(HttpStatusCode.Created, reused.status)
     }
 
@@ -107,10 +94,7 @@ class UserRoutesTest {
         usePostgresTestcontainer()
         val (client, _) = adminClient()
 
-        suspend fun status(req: UserCreateRequest): HttpStatusCode = client.post("/api/v1/users") {
-            contentType(ContentType.Application.Json)
-            setBody(req)
-        }.status
+        suspend fun status(req: UserCreateRequest): HttpStatusCode = client.postJson("/api/v1/users", req).status
 
         assertEquals(HttpStatusCode.BadRequest, status(createRequest(uniqueEmail("v"), name = "   ")))
         assertEquals(HttpStatusCode.BadRequest, status(createRequest(uniqueEmail("v"), name = "x".repeat(51))))
@@ -179,10 +163,10 @@ class UserRoutesTest {
         val created = client.createUser(createRequest(email))
 
         val newEmail = uniqueEmail("edited")
-        val updated = client.put("/api/v1/users/${created.id}") {
-            contentType(ContentType.Application.Json)
-            setBody(UserUpdateRequest(name = "Renamed Person", email = newEmail, roles = listOf(UserRole.ADMIN)))
-        }
+        val updated = client.putJson(
+            "/api/v1/users/${created.id}",
+            UserUpdateRequest(name = "Renamed Person", email = newEmail, roles = listOf(UserRole.ADMIN)),
+        )
         assertEquals(HttpStatusCode.NoContent, updated.status)
         val fetched = client.get("/api/v1/users/${created.id}").body<UserResponse>()
         assertEquals("Renamed Person", fetched.name)
@@ -190,20 +174,17 @@ class UserRoutesTest {
         assertEquals(listOf(UserRole.ADMIN), fetched.roles)
 
         // The password endpoint owns passwords — the PUT must not have touched it.
-        val login = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(newEmail, "initial-pass-123"))
-        }
+        val login = jsonClient().postJson("/api/v1/login", LoginRequest(newEmail, "initial-pass-123"))
         assertEquals(HttpStatusCode.OK, login.status)
 
         // Non-admins cannot touch the management surface at all.
         val plainEmail = uniqueEmail("plainput")
         val plainId = TestUsers.seed(email = plainEmail, password = "pw", role = UserRole.USER)
         val plainClient = authedClient(plainEmail, "pw")
-        val selfPut = plainClient.put("/api/v1/users/$plainId") {
-            contentType(ContentType.Application.Json)
-            setBody(UserUpdateRequest(name = "Sneaky", email = plainEmail, roles = listOf(UserRole.ADMIN)))
-        }
+        val selfPut = plainClient.putJson(
+            "/api/v1/users/$plainId",
+            UserUpdateRequest(name = "Sneaky", email = plainEmail, roles = listOf(UserRole.ADMIN)),
+        )
         assertEquals(HttpStatusCode.Forbidden, selfPut.status)
     }
 
@@ -230,31 +211,31 @@ class UserRoutesTest {
             // The acting admin still exists, so solo is not last yet — sanity check the count
             // logic by parking the actor too via a second nesting level is overkill; instead
             // demote the ACTOR first (allowed: solo remains), making solo the last admin.
-            val demoteActor = client.put("/api/v1/users/$actingAdminId") {
-                contentType(ContentType.Application.Json)
-                setBody(UserUpdateRequest(name = "Acting Admin", email = uniqueEmail("acting"), roles = emptyList()))
-            }
+            val demoteActor = client.putJson(
+                "/api/v1/users/$actingAdminId",
+                UserUpdateRequest(name = "Acting Admin", email = uniqueEmail("acting"), roles = emptyList()),
+            )
             assertEquals(HttpStatusCode.NoContent, demoteActor.status)
 
             // solo is now the final active admin: demotion and deletion are both 409 …
-            val demote = client.put("/api/v1/users/${solo.id}") {
-                contentType(ContentType.Application.Json)
-                setBody(UserUpdateRequest(name = solo.name, email = soloEmail, roles = emptyList()))
-            }
+            val demote = client.putJson(
+                "/api/v1/users/${solo.id}",
+                UserUpdateRequest(name = solo.name, email = soloEmail, roles = emptyList()),
+            )
             assertEquals(HttpStatusCode.Conflict, demote.status)
             val delete = client.delete("/api/v1/users/${solo.id}")
             assertEquals(HttpStatusCode.Conflict, delete.status)
 
             // … until the actor is re-promoted, after which both succeed.
-            val promoteActor = client.put("/api/v1/users/$actingAdminId") {
-                contentType(ContentType.Application.Json)
-                setBody(UserUpdateRequest(name = "Acting Admin", email = uniqueEmail("acting2"), roles = listOf(UserRole.ADMIN)))
-            }
+            val promoteActor = client.putJson(
+                "/api/v1/users/$actingAdminId",
+                UserUpdateRequest(name = "Acting Admin", email = uniqueEmail("acting2"), roles = listOf(UserRole.ADMIN)),
+            )
             assertEquals(HttpStatusCode.NoContent, promoteActor.status)
-            val demoteNow = client.put("/api/v1/users/${solo.id}") {
-                contentType(ContentType.Application.Json)
-                setBody(UserUpdateRequest(name = solo.name, email = soloEmail, roles = emptyList()))
-            }
+            val demoteNow = client.putJson(
+                "/api/v1/users/${solo.id}",
+                UserUpdateRequest(name = solo.name, email = soloEmail, roles = emptyList()),
+            )
             assertEquals(HttpStatusCode.NoContent, demoteNow.status)
             assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/users/${solo.id}").status)
         }
@@ -273,10 +254,7 @@ class UserRoutesTest {
         assertEquals(0L, client.get("/api/v1/users?$filter").body<UserPageResponse>().total)
         // Idempotent in effect: the second delete finds no active row.
         assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/users/${created.id}").status)
-        val login = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(email, "initial-pass-123"))
-        }
+        val login = jsonClient().postJson("/api/v1/login", LoginRequest(email, "initial-pass-123"))
         assertEquals(HttpStatusCode.Unauthorized, login.status)
     }
 
@@ -294,5 +272,52 @@ class UserRoutesTest {
             .body<ch.nokillswit.catalog.CatalogFileResponse>()
         assertEquals("Departing Creator", fetched.creatorName)
         assertTrue(fetched.creatorDeleted)
+    }
+
+    @Test
+    fun `create and update also require authentication`() = testApplication {
+        usePostgresTestcontainer()
+        val client = jsonClient()
+        val create = client.postJson("/api/v1/users", createRequest(uniqueEmail("anon")))
+        assertEquals(HttpStatusCode.Unauthorized, create.status)
+        val update = client.putJson(
+            "/api/v1/users/1",
+            UserUpdateRequest(name = "Anon", email = uniqueEmail("anon"), roles = emptyList()),
+        )
+        assertEquals(HttpStatusCode.Unauthorized, update.status)
+    }
+
+    @Test
+    fun `a non-admin's malformed create body stays 403 - the guard runs before the body decodes`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("plainmgr")
+            val response = client.post("/api/v1/users") {
+                contentType(ContentType.Application.Json)
+                setBody("{ this is not json")
+            }
+            // The documented guard-before-receive idiom: authorization is decided without
+            // touching the payload, so the converter's 400 never outranks the 403.
+            assertEquals(HttpStatusCode.Forbidden, response.status)
+        }
+
+    @Test
+    fun `update validates the payload and 404s a missing user`() = testApplication {
+        usePostgresTestcontainer()
+        val (client, _) = adminClient()
+        val created = client.createUser(createRequest(uniqueEmail("updtgt")))
+
+        val invalid = client.putJson(
+            "/api/v1/users/${created.id}",
+            UserUpdateRequest(name = "ctrl\u0007char", email = uniqueEmail("updbad"), roles = emptyList()),
+        )
+        assertEquals(HttpStatusCode.BadRequest, invalid.status)
+
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/users/${created.id}").status)
+        val gone = client.putJson(
+            "/api/v1/users/${created.id}",
+            UserUpdateRequest(name = "Valid Name", email = uniqueEmail("updgone"), roles = emptyList()),
+        )
+        assertEquals(HttpStatusCode.NotFound, gone.status)
     }
 }

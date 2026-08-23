@@ -8,7 +8,6 @@ import ch.nokillswit.catalog.ImportRequest
 import ch.nokillswit.catalog.ImportResponse
 import ch.nokillswit.catalog.ImportResultStatus
 import ch.nokillswit.catalog.MAX_IMPORT_FILES
-import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -18,7 +17,6 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,11 +31,6 @@ import kotlin.test.assertTrue
  */
 class RoundTripTest {
 
-    private suspend fun ApplicationTestBuilder.userClient(): HttpClient {
-        val email = uniqueEmail("roundtrip")
-        TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
-        return authedClient(email, "pw")
-    }
 
     private suspend fun HttpClient.export(namespace: String? = null): ExportResponse =
         get("/api/v1/catalog-files/export" + (namespace?.let { "?namespace=$it" } ?: "")).body()
@@ -51,7 +44,7 @@ class RoundTripTest {
     @Test
     fun `export returns the namespace's active files ordered by name`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("roundtrip")
         val ns = uniqueEntityName("expns")
         // Created out of name order on purpose — the export must sort.
         client.createCatalogFile(componentFile("zz-last", namespace = ns))
@@ -68,7 +61,7 @@ class RoundTripTest {
     @Test
     fun `export without a namespace spans namespaces in (namespace, name) order`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("roundtrip")
         val nsA = uniqueEntityName("aexp")
         val nsB = uniqueEntityName("bexp")
         client.createCatalogFile(componentFile(uniqueEntityName("c"), namespace = nsB))
@@ -85,7 +78,7 @@ class RoundTripTest {
     @Test
     fun `export excludes soft-deleted files`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("roundtrip")
         val ns = uniqueEntityName("delns")
         val kept = client.createCatalogFile(componentFile(uniqueEntityName("kept"), namespace = ns))
         val deleted = client.createCatalogFile(componentFile(uniqueEntityName("gone"), namespace = ns))
@@ -101,7 +94,7 @@ class RoundTripTest {
     @Test
     fun `import handles each document independently and reports per-row statuses`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("roundtrip")
         val ns = uniqueEntityName("impns")
         val existing = uniqueEntityName("dup")
         client.createCatalogFile(componentFile(existing, namespace = ns))
@@ -139,7 +132,7 @@ class RoundTripTest {
     @Test
     fun `import sanitizes before reporting — namespace folds and kind canonicalizes`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("roundtrip")
         val ns = uniqueEntityName("sanns")
         val name = uniqueEntityName("comp")
         val file = componentFile(name, namespace = ns.uppercase()).copy(kind = "component")
@@ -154,13 +147,10 @@ class RoundTripTest {
     @Test
     fun `import caps the batch at MAX_IMPORT_FILES`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("roundtrip")
         val ns = uniqueEntityName("capns")
         val batch = (0..MAX_IMPORT_FILES).map { componentFile(uniqueEntityName("cap$it"), namespace = ns) }
-        val response = client.post("/api/v1/catalog-files/import") {
-            contentType(ContentType.Application.Json)
-            setBody(ImportRequest(files = batch))
-        }
+        val response = client.postJson("/api/v1/catalog-files/import", ImportRequest(files = batch))
         assertEquals(HttpStatusCode.BadRequest, response.status)
         // Nothing from the oversized batch was stored.
         assertTrue(client.export(namespace = ns).files.isEmpty())
@@ -169,7 +159,7 @@ class RoundTripTest {
     @Test
     fun `the round-trip pin — re-importing an export conflicts on every document`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("roundtrip")
         val ns = uniqueEntityName("rtns")
         client.createCatalogFile(componentFile(uniqueEntityName("c"), namespace = ns))
         client.createCatalogFile(groupFile(uniqueEntityName("g"), namespace = ns))
@@ -190,22 +180,17 @@ class RoundTripTest {
     @Test
     fun `import audits created files with the import marker`() = testApplication {
         usePostgresTestcontainer()
-        val capture = LogCapture("ch.nokillswit.audit")
-        try {
-            val client = userClient()
+        withAuditCapture { capture ->
+            val client = seededClient("roundtrip")
             val file = componentFile(uniqueEntityName("aud"), namespace = uniqueEntityName("audns"))
             val result = client.import(listOf(file)).results.single()
             assertEquals(ImportResultStatus.CREATED, result.status)
             val event = capture.awaitEvent { logged ->
                 logged.message == "catalog_file.created" &&
-                    logged.keyValuePairs.orEmpty()
-                        .any { kv -> kv.key == "catalogFileId" && kv.value == result.fileId!!.toLong() }
+                    logged.hasKeyValue("catalogFileId", result.fileId!!.toLong())
             }
             assertNotNull(event)
-            // The marker travels as a Boolean key/value, not a string.
-            assertTrue(event.keyValuePairs.orEmpty().any { kv -> kv.key == "import" && kv.value == true })
-        } finally {
-            capture.detach()
+            assertTrue(event.hasKeyValue("import", true))
         }
     }
 
@@ -214,10 +199,25 @@ class RoundTripTest {
         usePostgresTestcontainer()
         val client = jsonClient()
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/catalog-files/export").status)
-        val response = client.post("/api/v1/catalog-files/import") {
-            contentType(ContentType.Application.Json)
-            setBody(ImportRequest(files = emptyList()))
-        }
+        val response = client.postJson("/api/v1/catalog-files/import", ImportRequest(files = emptyList()))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `a storage-level failure becomes an ERROR row, not an exception`() = kotlinx.coroutines.runBlocking<Unit> {
+        // The ERROR branch is unreachable through the route with the current schema (every
+        // text column is validation-capped first, and the JSON content column escapes NUL),
+        // so it is pinned directly: a service on a dead database connection fails at create —
+        // and the import still completes with a classified row instead of throwing.
+        val deadService = ch.nokillswit.catalog.CatalogFileService(
+            org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase.connect(
+                url = "r2dbc:postgresql://127.0.0.1:1/nowhere",
+                user = "nobody",
+                password = "nothing",
+            ),
+        )
+        val results = deadService.import(listOf(componentFile(uniqueEntityName("err"))), createdByUserId = 1u)
+        assertEquals(ImportResultStatus.ERROR, results.single().status)
+        assertNotNull(results.single().message)
     }
 }

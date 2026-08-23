@@ -2,13 +2,11 @@ package ch.nokillswit
 
 import ch.nokillswit.catalog.CatalogGraph
 import ch.nokillswit.catalog.GraphNodeStatus
-import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,11 +20,6 @@ import kotlin.test.assertTrue
  */
 class GraphTest {
 
-    private suspend fun ApplicationTestBuilder.userClient(): HttpClient {
-        val email = uniqueEmail("graph")
-        TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
-        return authedClient(email, "pw")
-    }
 
     private suspend fun HttpClient.graph(namespace: String? = null): CatalogGraph =
         get("/api/v1/catalog-files/graph" + (namespace?.let { "?namespace=$it" } ?: "")).body()
@@ -34,7 +27,7 @@ class GraphTest {
     @Test
     fun `stored files and their resolved references become STORED nodes and edges`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("graph")
         val ns = uniqueEntityName("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
@@ -66,7 +59,7 @@ class GraphTest {
     @Test
     fun `a dangling component reference draws a MISSING node`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("graph")
         val ns = uniqueEntityName("gns")
         val a = uniqueEntityName("a")
         val ghost = uniqueEntityName("ghost")
@@ -88,7 +81,7 @@ class GraphTest {
     @Test
     fun `kind-less dependsOn entries draw neither node nor edge`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("graph")
         val ns = uniqueEntityName("gns")
         val a = uniqueEntityName("a")
         val bare = uniqueEntityName("bare")
@@ -106,7 +99,7 @@ class GraphTest {
     @Test
     fun `case-variant references collapse into one node`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("graph")
         val ns = uniqueEntityName("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
@@ -132,7 +125,7 @@ class GraphTest {
     @Test
     fun `the namespace filter keeps a stored target from another namespace as STORED`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("graph")
         val nsA = uniqueEntityName("gns")
         val nsB = uniqueEntityName("gns")
         val a = uniqueEntityName("a")
@@ -156,7 +149,7 @@ class GraphTest {
     @Test
     fun `a soft-deleted file leaves the graph and its targets go MISSING`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("graph")
         val ns = uniqueEntityName("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
@@ -177,7 +170,7 @@ class GraphTest {
     @Test
     fun `stored groups and users draw as STORED nodes with membership edges`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("graph")
         val ns = uniqueEntityName("gns")
         val team = uniqueEntityName("team")
         val person = uniqueEntityName("person")
@@ -198,7 +191,7 @@ class GraphTest {
     @Test
     fun `the unfiltered graph spans the workspace`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("graph")
         val ns = uniqueEntityName("gns")
         val a = uniqueEntityName("a")
         client.createCatalogFile(componentFile(a, namespace = ns))
@@ -214,6 +207,6 @@ class GraphTest {
         usePostgresTestcontainer()
         assertEquals(HttpStatusCode.Unauthorized, jsonClient().get("/api/v1/catalog-files/graph").status)
         // Would be a 400 ("id must be a UInt") if {id} captured the literal segment.
-        assertEquals(HttpStatusCode.OK, userClient().get("/api/v1/catalog-files/graph").status)
+        assertEquals(HttpStatusCode.OK, seededClient("graph").get("/api/v1/catalog-files/graph").status)
     }
 }

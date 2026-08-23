@@ -15,7 +15,9 @@ import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
@@ -72,19 +74,40 @@ fun ApplicationTestBuilder.jsonClient(): HttpClient = createClient { toadieTestC
 /** A unique throwaway email so tests never collide on the partial-unique active-email index. */
 fun uniqueEmail(prefix: String) = "$prefix-${java.util.UUID.randomUUID()}@test"
 
+/** POSTs [body] as JSON — the contentType+setBody ceremony, owned once. */
+suspend inline fun <reified T> HttpClient.postJson(path: String, body: T): HttpResponse =
+    post(path) {
+        contentType(ContentType.Application.Json)
+        setBody(body)
+    }
+
+/** PUTs [body] as JSON. */
+suspend inline fun <reified T> HttpClient.putJson(path: String, body: T): HttpResponse =
+    put(path) {
+        contentType(ContentType.Application.Json)
+        setBody(body)
+    }
+
+/** The raw login POST — for tests asserting login behavior itself ([authedClient] wraps it). */
+suspend fun HttpClient.login(email: String, password: String): HttpResponse =
+    postJson("/api/v1/login", LoginRequest(email, password))
+
 /** Logs in as [email] and returns a client that sends the bearer token on every request. */
 suspend fun ApplicationTestBuilder.authedClient(email: String, password: String): HttpClient {
-    val client = jsonClient()
-    val token = client.post("/api/v1/login") {
-        contentType(ContentType.Application.Json)
-        setBody(LoginRequest(email, password))
-    }.body<LoginResponse>().token
+    val token = jsonClient().login(email, password).body<LoginResponse>().token
     return createClient {
         toadieTestClientDefaults()
         install(DefaultRequest) {
             header(HttpHeaders.Authorization, "Bearer $token")
         }
     }
+}
+
+/** Seeds a unique throwaway user and logs them in — the standard per-test caller fixture. */
+suspend fun ApplicationTestBuilder.seededClient(prefix: String, role: UserRole = UserRole.USER): HttpClient {
+    val email = uniqueEmail(prefix)
+    TestUsers.seed(email = email, password = "pw", role = role)
+    return authedClient(email, "pw")
 }
 
 /**
@@ -116,9 +139,39 @@ class LogCapture(loggerName: String) {
     }
 }
 
-/** audit() fields travel as SLF4J key/values, not in the message text. */
-fun ch.qos.logback.classic.spi.ILoggingEvent.hasKeyValue(key: String, value: String) =
+/**
+ * audit() fields travel as SLF4J key/values, not in the message text — and TYPED: ids arrive
+ * as Longs, flags as Booleans, so compare with the same type the emitter used.
+ */
+fun ch.qos.logback.classic.spi.ILoggingEvent.hasKeyValue(key: String, value: Any?) =
     keyValuePairs?.any { it.key == key && it.value == value } == true
+
+/** The audit-trail capture scaffold: attaches to the audit logger and always detaches. */
+suspend fun <T> withAuditCapture(block: suspend (LogCapture) -> T): T {
+    val capture = LogCapture("ch.nokillswit.audit")
+    return try {
+        block(capture)
+    } finally {
+        capture.detach()
+    }
+}
+
+/** Bootstrap/prod-mode scaffold: whatever [block] does to the seed admin is restored after. */
+suspend fun withSeedRestored(block: suspend () -> Unit) {
+    try {
+        block()
+    } finally {
+        TestSeedState.restoreSeedAccounts()
+    }
+}
+
+/** Asserts the app refuses to start and that the failure cause chain mentions [messagePart]. */
+suspend fun assertStartupFails(messagePart: String, start: suspend () -> Unit) {
+    val failure = runCatching { start() }.exceptionOrNull()
+    kotlin.test.assertNotNull(failure, "startup must fail closed")
+    val messages = generateSequence(failure) { it.cause }.mapNotNull { it.message }.joinToString(" | ")
+    kotlin.test.assertTrue(messagePart in messages, "unexpected startup failure: $messages")
+}
 
 private val sharedTestDatabase: R2dbcDatabase by lazy {
     R2dbcDatabase.connect(

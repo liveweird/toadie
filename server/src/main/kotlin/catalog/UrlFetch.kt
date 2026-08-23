@@ -9,6 +9,7 @@ import java.net.UnknownHostException
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import io.ktor.util.AttributeKey
 import java.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -87,6 +88,13 @@ fun validateFetchUrl(raw: String): URI {
     requirePublicHost(uri.host)
     return uri
 }
+
+/**
+ * Test seam: the route resolves its fetcher through this key (falling back to the default
+ * full-guard [CatalogUrlFetcher]), so the suite can exercise the ROUTE's 200/502 paths against
+ * a 127.0.0.1 fixture server. Production never sets it.
+ */
+val CatalogUrlFetcherKey = AttributeKey<CatalogUrlFetcher>("CatalogUrlFetcher")
 
 /**
  * The fetcher. [urlValidator] is injectable ONLY so tests can point the response-handling

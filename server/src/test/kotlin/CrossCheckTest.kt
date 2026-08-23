@@ -3,7 +3,6 @@ package ch.nokillswit
 import ch.nokillswit.catalog.CrossCheckReport
 import ch.nokillswit.catalog.CrossCheckStatus
 import ch.nokillswit.catalog.DocumentCheckReport
-import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -13,7 +12,6 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,11 +23,6 @@ import kotlin.test.assertTrue
  */
 class CrossCheckTest {
 
-    private suspend fun ApplicationTestBuilder.userClient(): HttpClient {
-        val email = uniqueEmail("crosscheck")
-        TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
-        return authedClient(email, "pw")
-    }
 
     private suspend fun HttpClient.report(): CrossCheckReport =
         get("/api/v1/catalog-files/cross-check").body()
@@ -37,7 +30,7 @@ class CrossCheckTest {
     @Test
     fun `resolved component references produce no findings, dangling ones are MISSING`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("crosscheck")
         val ns = uniqueEntityName("xns")
         val target = uniqueEntityName("target")
         val source = uniqueEntityName("source")
@@ -65,7 +58,7 @@ class CrossCheckTest {
     @Test
     fun `a namespaceless reference resolves within the referencing file's own namespace`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("crosscheck")
         val parent = uniqueEntityName("parent")
         val inTeam = uniqueEntityName("child-team")
         val inDefault = uniqueEntityName("child-default")
@@ -89,7 +82,7 @@ class CrossCheckTest {
     @Test
     fun `resolution is case-insensitive across kind, namespace and name`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("crosscheck")
         val target = uniqueEntityName("Cased")
         val source = uniqueEntityName("caser")
         client.createCatalogFile(componentFile(target, namespace = "team-b"))
@@ -110,7 +103,7 @@ class CrossCheckTest {
     fun `a kind-less dependsOn entry is KIND_REQUIRED even when a component of that name exists`() =
         testApplication {
             usePostgresTestcontainer()
-            val client = userClient()
+            val client = seededClient("crosscheck")
             val target = uniqueEntityName("present")
             val source = uniqueEntityName("kindless")
             client.createCatalogFile(componentFile(target))
@@ -125,7 +118,7 @@ class CrossCheckTest {
     @Test
     fun `references to kinds Toadie does not store are UNVERIFIABLE`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("crosscheck")
         val source = uniqueEntityName("external")
         client.createCatalogFile(
             componentFile(source).let {
@@ -152,7 +145,7 @@ class CrossCheckTest {
     @Test
     fun `stored groups and users resolve organizational references`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("crosscheck")
         val ns = uniqueEntityName("orgns")
         val person = uniqueEntityName("person")
         val team = uniqueEntityName("team")
@@ -174,7 +167,7 @@ class CrossCheckTest {
     @Test
     fun `a soft-deleted target stops resolving`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("crosscheck")
         val target = uniqueEntityName("doomed")
         val source = uniqueEntityName("bereft")
         val targetId = client.createCatalogFile(componentFile(target)).id
@@ -195,7 +188,7 @@ class CrossCheckTest {
     @Test
     fun `the ad-hoc check reports an unsaved document without validating it`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("crosscheck")
         val target = uniqueEntityName("adhoc-target")
         client.createCatalogFile(componentFile(target))
         val ghost = uniqueEntityName("adhoc-ghost")
@@ -226,7 +219,7 @@ class CrossCheckTest {
     @Test
     fun `the literal cross-check segment does not fall into the id route`() = testApplication {
         usePostgresTestcontainer()
-        val client = userClient()
+        val client = seededClient("crosscheck")
         // Would be a 400 ("id must be a UInt") if {id} captured the literal segment.
         assertEquals(HttpStatusCode.OK, client.get("/api/v1/catalog-files/cross-check").status)
     }
@@ -236,10 +229,7 @@ class CrossCheckTest {
         usePostgresTestcontainer()
         val client = jsonClient()
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/catalog-files/cross-check").status)
-        val check = client.post("/api/v1/catalog-files/check") {
-            contentType(ContentType.Application.Json)
-            setBody(componentFile("x"))
-        }
+        val check = client.postJson("/api/v1/catalog-files/check", componentFile("x"))
         assertEquals(HttpStatusCode.Unauthorized, check.status)
     }
 }

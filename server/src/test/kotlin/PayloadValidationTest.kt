@@ -3,11 +3,8 @@ package ch.nokillswit
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -23,10 +20,7 @@ class PayloadValidationTest {
     @Test
     fun `malformed JSON is a 400 problem without internal class names`() = testApplication {
         usePostgresTestcontainer()
-        val response = jsonClient().post("/api/v1/login") {
-            contentType(ContentType.Application.Json)
-            setBody("{ not json")
-        }
+        val response = jsonClient().postJson("/api/v1/login", "{ not json")
         assertEquals(HttpStatusCode.BadRequest, response.status)
         val body = response.bodyAsText()
         assertContains(body, "Request body is invalid")
@@ -46,10 +40,7 @@ class PayloadValidationTest {
         usePostgresTestcontainer()
         // kotlinx UInt decoding would silently wrap /users/-1 to 4294967295 — the pre-routing
         // interceptor must reject it instead.
-        val response = jsonClient().put("/api/v1/users/-1/password") {
-            contentType(ContentType.Application.Json)
-            setBody("""{"password":"whatever-works"}""")
-        }
+        val response = jsonClient().putJson("/api/v1/users/-1/password", """{"password":"whatever-works"}""")
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertContains(response.bodyAsText(), "non-negative")
     }

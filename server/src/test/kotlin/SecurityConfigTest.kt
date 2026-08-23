@@ -2,8 +2,6 @@ package ch.nokillswit
 
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * The JWT-secret fail-closed check (plugins/Security.kt): a blank, placeholder, or
@@ -15,10 +13,7 @@ class SecurityConfigTest {
     private fun assertRefusedInProduction(vararg overrides: Pair<String, String>) = testApplication {
         configureApp(*overrides)
         serverConfig { developmentMode = false }
-        val failure = runCatching { startApplication() }.exceptionOrNull()
-        assertNotNull(failure, "startup must fail closed on a burned/placeholder JWT secret")
-        val messages = generateSequence(failure) { it.cause }.mapNotNull { it.message }.joinToString(" | ")
-        assertTrue("JWT secret" in messages, "unexpected startup failure: $messages")
+        assertStartupFails("JWT secret") { startApplication() }
     }
 
     @Test
