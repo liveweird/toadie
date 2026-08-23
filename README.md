@@ -7,7 +7,8 @@ Toadie will help with Backstage `catalog-info.yaml` files:
 - **render them altogether** — a combined view built from the content of several files.
 
 All three pillars are implemented, on top of the full stack, tooling, quality gates, and a
-working authentication surface:
+working authentication surface with admin-managed accounts (user CRUD with a one-time
+generated-password reveal, self-service password change):
 
 - **visual creation** of `catalog-info.yaml` files across the seven landscape kinds
   (Component, API, System, Domain, Resource, Group, User) — validated per kind against the

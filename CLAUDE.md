@@ -68,7 +68,9 @@ ch.nokillswit
 │                       HTTP exceptions (401/403/404/409/429)
 ├── auth/               POST /api/v1/login, /refresh, /logout + token minting + password
 │                       hashing + LoginThrottle + the revoked-token blocklist
-├── users/              the user domain: table + service + PUT /api/v1/users/{id}/password
+├── users/              the user domain: ADMIN-only management CRUD (/api/v1/users list/create
+│                       + {id} get/put/delete with the self-delete 403 and last-admin 409
+│                       protections) + PUT /api/v1/users/{id}/password + Validation.kt
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (kind model + EntitySpec superset + the per-kind
                         required/forbidden validation tables),

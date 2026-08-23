@@ -8,6 +8,7 @@
 - `logout`,
 - `refresh.rejected` (with `reason`: invalid_or_expired/wrong_token_type/revoked/malformed/user_gone/predates_password_change),
 - `password.changed` (targetUserId/byUserId/selfChange) / `password.change_denied` (wrong or missing current password),
+- `user.created` (byUserId/newUserId/email/roles) / `user.updated` (name/email deltas, only when changed) / `user.roles_changed` (from/to) / `user.deleted` (byUserId/targetUserId),
 - `catalog_file.created` / `catalog_file.updated` / `catalog_file.deleted` (byUserId/catalogFileId — every catalog-file mutation),
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/userId/detail).
 
