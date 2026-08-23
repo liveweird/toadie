@@ -17,7 +17,9 @@ npm test                      # brings the stack up (docker compose), runs specs
 - `global-setup.ts` starts `docker compose up -d --build` and waits for `:8081` — **unless a stack
   is already running there**, which it reuses (fast local iteration: keep `docker compose up` or a
   local `WEB_STATIC_DIR=… ./gradlew :server:run` going and just run `npm test`).
-  `global-teardown.ts` only runs `docker compose down -v` if setup started the stack.
+  `global-teardown.ts` only runs `docker compose down` if setup started the stack — the
+  postgres volume is deliberately kept, so the local database (your own demo files included)
+  survives e2e runs; `docker compose down -v` manually when you want a pristine one.
 - Requires Docker. Override the target with `E2E_BASE_URL`. (8081, not 8080 — probing 8080 could
   happily "reuse" a running Lettuce.)
 
