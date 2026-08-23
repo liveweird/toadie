@@ -36,8 +36,10 @@ const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/", heading: "Home" },
   { path: "/catalog-files", heading: "Catalog files" },
   { path: "/catalog-files/new", heading: "New catalog file" },
+  { path: "/catalog-files/import", heading: "Import catalog files" },
   { path: "/cross-check", heading: "Cross-check" },
   { path: "/render", heading: "Render" },
+  { path: "/users", heading: "Users" },
 ];
 
 for (const { path, heading } of AUTHED_PAGES) {

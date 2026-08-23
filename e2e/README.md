@@ -44,15 +44,17 @@ tests may be order-dependent); different files run concurrently. That is only so
 from Lettuce, that any new or edited spec must satisfy:
 
 - Each spec's scenario file declares its **Owns** line (exclusive server-side state; "nothing —
-  read-only" when applicable) — the current two specs are both read-only, so no collision exists
-  today.
+  read-only" when applicable). Today: `auth`, `accessibility`, and `url-import` are read-only;
+  `catalog-files`, `cross-check`, `kinds`, `render`, and `round-trip` each own throwaway files
+  in unique namespaces; `users` owns its throwaway accounts — all deleted by their own spec.
 - Seeded accounts are never mutated. The seed admin (`admin@toadie.local`) is a shared
   read-mostly actor: specs sign in as it but must not change its password, roles, or state — a
   future spec that needs a mutated account creates a throwaway.
-- E2e-created entities (when creation surfaces arrive) must carry a sweepable marker — Lettuce's
-  contract: every e2e-created user's EMAIL contains `e2e`, every e2e-created team's NAME contains
-  `E2E`, and nothing that must SURVIVE runs is ever named that way; port the `sweep-residue`
-  global-setup pass from Lettuce together with the first creating spec.
+- E2e-created entities carry a sweepable marker — every e2e-created file's name/namespace and
+  every e2e-created user's email contains `e2e`, and nothing that must SURVIVE runs is ever
+  named that way. Each spec deletes its own state, so the rule is currently satisfied by
+  self-cleanup; port Lettuce's `sweep-residue` global-setup pass if aborted runs start leaving
+  residue that self-cleanup misses.
 - Artifacts must be unique-named and list asserts filter- or sort-anchored — never bare page-1
   assumptions. A future spec minting globally-visible state (banners, org-wide notifications)
   runs in its own dependent project phase, not in the parallel pool.
@@ -65,8 +67,8 @@ outcomes). **A new or behaviorally changed test lands with its scenario file and
 the same commit** — this list is the coverage map, the scenario file is the design.
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
-  authenticated pages (`/`, `/catalog-files`, `/catalog-files/new`); `color-contrast`
-  consciously waived theme-wide.
+  authenticated pages (`/`, `/catalog-files`, `/catalog-files/new`, `/catalog-files/import`,
+  `/cross-check`, `/render`, `/users`); `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.

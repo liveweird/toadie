@@ -177,8 +177,25 @@ stale (server actuals 95.7/74.1 vs commented 95.2/72.2; web 97.9/95.1/92.8/89.5 
 - **Docs are unusually close to the code** — of hundreds of checked claims, the drift list
   above is the whole of it; the migration catalog and audit-event list matched perfectly.
 
-## Outcomes
+## Outcomes (2026-08-24)
 
-All items marked `fixed` above landed in this checkup's commits (see git history around this
-file's introduction); `follow-up` items are unimplemented by design — each changes observable
-behavior and awaits an explicit go-ahead. Both coverage floors were re-measured and raised.
+Every item marked `fixed` above landed in the eight checkup commits that follow this file in
+git history (server S1/S2/S3, web W1/W2, docs+spec D1, e2e+floors E1); `follow-up` items are
+unimplemented by design — each changes observable behavior and awaits an explicit go-ahead.
+
+Final state, all gates green:
+
+- **Server**: 147 tests (was 143 pre-checkup: 5 dead-helper tests removed with their subjects,
+  9 coverage pins added), detekt zero findings, conformance coverage **75 of 98** declared
+  (operation, status) pairs exercised (was 63; the remainder is dominated by the 20
+  deliberately-unreachable 500s). Kover floors raised: line 92→**94** (actual 96.2), branch
+  68→**70** (actual 73.5).
+- **Web**: 301 tests across 40 files (was 232/29), lint + knip zero findings. Vitest floors
+  raised: lines 95→**97** (actual 98.8), statements 92→**94** (96.4), functions 90→**92**
+  (94.5), branches 84→**89** (91.9).
+- **e2e**: 18 tests green (the axe smoke now scans 7 authenticated pages — `/users` and
+  `/catalog-files/import` joined clean), scenario parity intact.
+- Behavior preservation was proven mechanically: the OpenAPI conformance layer validated every
+  server interaction against the unchanged wire contract, and the full e2e suite ran against
+  the rebuilt containers. One regression was caught mid-flight by exactly that net (a
+  narrowed logout catch missing the body-less case) and fixed before commit.
