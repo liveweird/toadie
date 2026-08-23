@@ -74,6 +74,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List users (management view)
+         * @description ADMIN only — the whole management surface is admin-gated; regular users keep only
+         *     their self password change.
+         *
+         *     Supports offset pagination, sorting and filtering.
+         *
+         *     - Sortable fields: `id`, `name`, `email` (deliberately not `roles` — a set has no
+         *       order). Default sort is `id` ascending; `id` ascending is always appended as a
+         *       deterministic tiebreaker.
+         *     - Filters (optional, whitelisted):
+         *       - `name` / `email` — case- and accent-insensitive substring matches.
+         *       - `role` — `ADMIN` (holders of the additional role) or `USER` (plain users).
+         */
+        get: operations["listUsers"];
+        put?: never;
+        /**
+         * Create a user
+         * @description ADMIN only. The initial password is CLIENT-generated (the SPA's 96-bit generator) and
+         *     shown to the admin exactly once — the server stores only the bcrypt hash and no
+         *     response ever carries plaintext. The email is canonicalized (trimmed + lowercased);
+         *     a duplicate among active accounts is a `409` (a soft-deleted account frees its email).
+         */
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Fetch a user
+         * @description Target user or ADMIN (guard-before-read — an unauthorized caller 403s uniformly).
+         */
+        get: operations["getUser"];
+        /**
+         * Update a user's name, email, and roles
+         * @description ADMIN only. The password is deliberately not writable here (it has its own endpoint).
+         *     Demoting the LAST active administrator is a `409` — the management surface must stay
+         *     reachable. An email already used by another active account is also a `409`.
+         */
+        put: operations["updateUser"];
+        post?: never;
+        /**
+         * Delete a user
+         * @description ADMIN only, soft delete: the account can no longer sign in, outstanding refresh
+         *     tokens die (`user_gone`), the email is freed for reuse, and the user's catalog files
+         *     stay with a deleted-creator marker. Deleting YOURSELF is a `403`; deleting the LAST
+         *     active administrator is a `409`.
+         */
+        delete: operations["deleteUser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/password": {
         parameters: {
             query?: never;
@@ -307,6 +379,37 @@ export interface components {
         LogoutRequest: {
             /** @description Optional refresh token to revoke together with the access token. */
             refreshToken?: string;
+        };
+        UserCreateRequest: {
+            name: string;
+            email: string;
+            /** @description Client-generated; at most 71 UTF-8 bytes (the bcrypt ceiling). Stored only as a hash and never returned. */
+            password: string;
+            /** @description Additional roles; omitted/empty = a regular user. */
+            roles?: components["schemas"]["UserRole"][];
+        };
+        UserUpdateRequest: {
+            name: string;
+            email: string;
+            roles: components["schemas"]["UserRole"][];
+        };
+        UserResponse: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            email: string;
+            /** @description Additional roles only — empty for a regular user. */
+            roles: components["schemas"]["UserRole"][];
+        };
+        UserPage: {
+            items: components["schemas"]["UserResponse"][];
+            page: number;
+            pageSize: number;
+            /**
+             * Format: int64
+             * @description Row count after filters, before pagination.
+             */
+            total: number;
         };
         PasswordUpdateRequest: {
             /** @description The new password (at least 10 characters, at most 71 UTF-8 bytes). */
@@ -684,6 +787,175 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: {
+                /** @description 1-based page index. Defaults to 1. */
+                page?: components["parameters"]["Page"];
+                /** @description Rows per page. Defaults to 20, maximum 100. */
+                pageSize?: components["parameters"]["PageSize"];
+                /**
+                 * @description Sort spec. Format: `field` (ascending) or `-field` (descending). Multiple fields are
+                 *     comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
+                 *     sortable-field whitelist; unknown fields are rejected with `400`. `id` ascending is
+                 *     always appended as a deterministic tiebreaker.
+                 */
+                sort?: components["parameters"]["Sort"];
+                name?: string;
+                email?: string;
+                role?: "ADMIN" | "USER";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of users */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new user resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation error (blank/too-long name or email, password rules) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not ADMIN, or attempted to delete their own account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };

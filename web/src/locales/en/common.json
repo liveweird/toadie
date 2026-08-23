@@ -7,14 +7,19 @@
     "delete": "Delete",
     "edit": "Edit",
     "download": "Download",
-    "close": "Close"
+    "close": "Close",
+    "copy": "Copy",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "field": {
     "email": "Email",
-    "name": "Name"
+    "name": "Name",
+    "role": "Role"
   },
   "state": {
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "any": "Any"
   },
   "filter": {
     "title": "Filters",
@@ -54,5 +59,8 @@
     "title": "Home",
     "placeholder": "Toadie will help you create, cross-check, and render Backstage catalog-info.yaml files. The first features are on their way."
   },
-  "buildInfo": "Build version"
+  "buildInfo": "Build version",
+  "role": {
+    "ADMIN": "Admin"
+  }
 }

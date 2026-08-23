@@ -13,6 +13,7 @@ import enAuth from "./locales/en/auth.json";
 import enCatalog from "./locales/en/catalog.json";
 import enCrossCheck from "./locales/en/crossCheck.json";
 import enRender from "./locales/en/render.json";
+import enUsers from "./locales/en/users.json";
 
 /**
  * The build-time supported-language set. Adding a language: a complete `locales/<lang>/`
@@ -55,6 +56,7 @@ export const en = {
   catalog: enCatalog,
   crossCheck: enCrossCheck,
   render: enRender,
+  users: enUsers,
 };
 
 // Every non-EN bundle is assembled from its locales/<lang>/ folder — adding a language never

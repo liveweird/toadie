@@ -6,6 +6,8 @@
     "home": "Home",
     "catalogFiles": "Catalog files",
     "crossCheck": "Cross-check",
-    "render": "Render"
+    "render": "Render",
+    "users": "Users",
+    "changePassword": "Change password"
   }
 }

@@ -17,11 +17,13 @@ import { useDisclosure } from "@mantine/hooks";
 import {
   IconFileDescription,
   IconHome,
+  IconKey,
   IconListCheck,
-  IconTopologyStar3,
   IconLogout,
   IconMoon,
   IconSun,
+  IconTopologyStar3,
+  IconUsers,
 } from "@tabler/icons-react";
 import {
   Link as RouterLink,
@@ -34,6 +36,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { logout } from "./api/auth";
+import { isAdmin } from "./api/session";
 import { RedirectIfAuthed, RequireAuth, flagSignedOut, notifyAuthChange } from "./auth";
 import BrandLogo from "./components/BrandLogo";
 import LanguageSwitcher from "./components/LanguageSwitcher";
@@ -46,6 +49,10 @@ const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
 const EditCatalogFile = lazy(() => import("./pages/EditCatalogFile"));
 const CrossCheck = lazy(() => import("./pages/CrossCheck"));
+const Users = lazy(() => import("./pages/Users"));
+const CreateUser = lazy(() => import("./pages/CreateUser"));
+const EditUser = lazy(() => import("./pages/EditUser"));
+const ChangePassword = lazy(() => import("./pages/ChangePassword"));
 const RenderGraph = lazy(() => import("./pages/RenderGraph"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -73,6 +80,8 @@ const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   { to: "/catalog-files", label: "appShell.nav.catalogFiles", icon: IconFileDescription },
   { to: "/cross-check", label: "appShell.nav.crossCheck", icon: IconListCheck },
   { to: "/render", label: "appShell.nav.render", icon: IconTopologyStar3 },
+  { to: "/users", label: "appShell.nav.users", icon: IconUsers, adminOnly: true },
+  { to: "/change-password", label: "appShell.nav.changePassword", icon: IconKey },
 ];
 
 function ColorSchemeToggle() {
@@ -100,11 +109,14 @@ function Shell() {
   const queryClient = useQueryClient();
   const { pathname } = useLocation();
 
+  // Admin-gated leaves render only for ADMIN sessions (the routes are guarded too).
+  const visibleItems = NAV_ITEMS.filter((entry) => !entry.adminOnly || isAdmin());
+
   // Longest-matching-prefix active-link resolution — "/" only matches exactly.
   const matches = (to: string) =>
     to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`);
   const activeTo =
-    NAV_ITEMS.map((e) => e.to)
+    visibleItems.map((e) => e.to)
       .filter(matches)
       .sort((a, b) => b.length - a.length)[0] ?? null;
 
@@ -153,7 +165,7 @@ function Shell() {
       <AppShell.Navbar p="sm">
         {/* The link list scrolls when it outgrows the viewport; the version stamp stays pinned. */}
         <AppShell.Section grow component={ScrollArea} type="hover" scrollbarSize={6} offsetScrollbars>
-          {NAV_ITEMS.map((entry) => {
+          {visibleItems.map((entry) => {
             const active = entry.to === activeTo;
             const Icon = entry.icon;
             return (
@@ -209,6 +221,10 @@ export default function App() {
             <Route path="catalog-files/:id/edit" element={<EditCatalogFile />} />
             <Route path="cross-check" element={<CrossCheck />} />
             <Route path="render" element={<RenderGraph />} />
+            <Route path="users" element={<Users />} />
+            <Route path="users/new" element={<CreateUser />} />
+            <Route path="users/:id/edit" element={<EditUser />} />
+            <Route path="change-password" element={<ChangePassword />} />
             {/* The authenticated catch-all — LAST child, never feature-gated. */}
             <Route path="*" element={<NotFound />} />
           </Route>

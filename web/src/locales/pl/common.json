@@ -7,14 +7,19 @@
     "delete": "Usuń",
     "edit": "Edytuj",
     "download": "Pobierz",
-    "close": "Zamknij"
+    "close": "Zamknij",
+    "copy": "Kopiuj",
+    "showPassword": "Pokaż hasło",
+    "hidePassword": "Ukryj hasło"
   },
   "field": {
     "email": "E-mail",
-    "name": "Nazwa"
+    "name": "Nazwa",
+    "role": "Rola"
   },
   "state": {
-    "loading": "Wczytywanie…"
+    "loading": "Wczytywanie…",
+    "any": "Dowolna"
   },
   "filter": {
     "title": "Filtry",
@@ -54,5 +59,8 @@
     "title": "Strona główna",
     "placeholder": "Toadie pomoże Ci tworzyć, weryfikować i renderować pliki catalog-info.yaml Backstage. Pierwsze funkcje już wkrótce."
   },
-  "buildInfo": "Wersja aplikacji"
+  "buildInfo": "Wersja aplikacji",
+  "role": {
+    "ADMIN": "Admin"
+  }
 }

@@ -6,6 +6,8 @@
     "home": "Strona główna",
     "catalogFiles": "Pliki katalogu",
     "crossCheck": "Weryfikacja referencji",
-    "render": "Renderowanie"
+    "render": "Renderowanie",
+    "users": "Użytkownicy/czki",
+    "changePassword": "Zmiana hasła"
   }
 }
