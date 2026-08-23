@@ -9,7 +9,7 @@ export default function RevealablePassword({
   copyLabel,
 }: {
   password: string;
-  copyLabel?: string;
+  copyLabel: string;
 }) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
@@ -30,7 +30,7 @@ export default function RevealablePassword({
       <CopyButton value={password}>
         {({ copied, copy }) => (
           <Button size="sm" variant="light" onClick={copy}>
-            {copied ? t("users.passwordCopied") : (copyLabel ?? t("common.action.copy"))}
+            {copied ? t("users.passwordCopied") : copyLabel}
           </Button>
         )}
       </CopyButton>

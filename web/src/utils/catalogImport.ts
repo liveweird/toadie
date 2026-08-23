@@ -1,5 +1,6 @@
 import { parseAllDocuments } from "yaml";
 import type { CatalogFileRequest } from "../api/catalogFiles";
+import { ENTITY_KINDS } from "./catalogFileForm";
 
 /**
  * The STRICT mirror of the catalogYaml generator: parses a (multi-document) catalog-info.yaml
@@ -21,8 +22,6 @@ export type CatalogParseResult = {
   documents: CatalogFileRequest[];
   errors: CatalogParseError[];
 };
-
-const KINDS = ["Component", "API", "System", "Domain", "Resource", "Group", "User"] as const;
 
 const ROOT_KEYS = ["apiVersion", "kind", "metadata", "spec"];
 const METADATA_KEYS = [
@@ -75,8 +74,8 @@ function asStringMap(value: unknown, key: string): Record<string, string> {
 function mapKind(value: unknown): NonNullable<CatalogFileRequest["kind"]> {
   if (value === undefined) throw new DocumentError("kind is required");
   const raw = asString(value, "kind");
-  const kind = KINDS.find((k) => k.toLowerCase() === raw.trim().toLowerCase());
-  if (!kind) throw new DocumentError(`kind must be one of ${KINDS.join(", ")}`);
+  const kind = ENTITY_KINDS.find((k) => k.toLowerCase() === raw.trim().toLowerCase());
+  if (!kind) throw new DocumentError(`kind must be one of ${ENTITY_KINDS.join(", ")}`);
   return kind;
 }
 

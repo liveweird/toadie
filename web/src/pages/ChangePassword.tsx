@@ -7,9 +7,7 @@ import { getUserId } from "../api/session";
 import { utf8ByteLength } from "../utils/password";
 import { saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
-
-const MIN_PASSWORD_LENGTH = 10;
-const MAX_PASSWORD_BYTES = 71;
+import { MAX_PASSWORD_BYTES, MIN_PASSWORD_LENGTH } from "../utils/userForm";
 
 type Values = { currentPassword: string; password: string; confirm: string };
 

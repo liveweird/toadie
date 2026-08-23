@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { Alert, Badge, Button, Group, Select, Stack, Table, Text, Title } from "@mantine/core";
@@ -13,13 +12,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import {
-  deleteCatalogFile,
-  exportCatalogFiles,
-  getCatalogFile,
-  listCatalogFiles,
-  type CatalogFileListItem,
-} from "../api/catalogFiles";
+import { deleteCatalogFile, listCatalogFiles, type CatalogFileListItem } from "../api/catalogFiles";
 import { ENTITY_KINDS } from "../utils/catalogFileForm";
 import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
@@ -28,10 +21,10 @@ import FilterPanel from "../components/FilterPanel";
 import PaginationBar from "../components/PaginationBar";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
+import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { isString, useStoredState } from "../hooks/useStoredState";
-import { catalogInfoMultiYaml, catalogInfoYaml, downloadYaml } from "../utils/catalogYaml";
 import { loadErrorMessage } from "../utils/saveError";
 
 const SORT_FIELDS = ["name", "kind", "namespace", "updatedAt"] as const;
@@ -52,8 +45,7 @@ export default function CatalogFiles() {
     (nameFilter.trim() ? 1 : 0) + (namespaceFilter.trim() ? 1 : 0) + (kindFilter ? 1 : 0);
 
   const queryClient = useQueryClient();
-  const [downloadError, setDownloadError] = useState(false);
-  const [exportError, setExportError] = useState(false);
+  const downloads = useCatalogDownloads();
 
   const [debouncedName] = useDebouncedValue(nameFilter, 300);
   const [debouncedNamespace] = useDebouncedValue(namespaceFilter, 300);
@@ -84,29 +76,6 @@ export default function CatalogFiles() {
     successMessage: t("catalog.toast.deleted"),
   });
 
-  // The list row carries only the display fields — fetch the full document for the YAML.
-  async function handleDownload(row: CatalogFileListItem) {
-    setDownloadError(false);
-    try {
-      const file = await getCatalogFile(row.id);
-      downloadYaml(catalogInfoYaml({ kind: file.kind, metadata: file.metadata, spec: file.spec }));
-    } catch {
-      setDownloadError(true);
-    }
-  }
-
-  // The whole workspace (or the exact-namespace slice the filter selects) as ONE
-  // multi-document catalog-info.yaml — the round-trip's outbound half.
-  async function handleExport() {
-    setExportError(false);
-    try {
-      const exported = await exportCatalogFiles(namespaceFilter.trim() || undefined);
-      downloadYaml(catalogInfoMultiYaml(exported.files));
-    } catch {
-      setExportError(true);
-    }
-  }
-
   const total = data?.total ?? 0;
   const columnCount = 8;
 
@@ -119,13 +88,13 @@ export default function CatalogFiles() {
           label={t("common.field.name")}
           value={nameFilter}
           onChange={setNameFilter}
-          clearLabel={t("catalog.clearNameFilter")}
+          clearLabel={t("common.filter.clearName")}
         />
         <ClearableTextInput
           label={t("catalog.field.namespace")}
           value={namespaceFilter}
           onChange={setNamespaceFilter}
-          clearLabel={t("catalog.clearNamespaceFilter")}
+          clearLabel={t("common.filter.clearNamespace")}
           placeholder={t("common.filter.exact")}
         />
         <Select
@@ -144,32 +113,32 @@ export default function CatalogFiles() {
           {loadErrorMessage(error, t)}
         </Alert>
       )}
-      {exportError && (
+      {downloads.exportError && (
         <Alert
           color="red"
           variant="light"
           title={t("catalog.export.failed")}
           withCloseButton
           closeButtonLabel={t("common.action.close")}
-          onClose={() => setExportError(false)}
+          onClose={downloads.dismissExportError}
         >
           {t("common.error.network")}
         </Alert>
       )}
-      {downloadError && (
+      {downloads.downloadError && (
         <Alert
           color="red"
           variant="light"
           title={t("catalog.downloadFailed")}
           withCloseButton
           closeButtonLabel={t("common.action.close")}
-          onClose={() => setDownloadError(false)}
+          onClose={downloads.dismissDownloadError}
         >
           {t("common.error.network")}
         </Alert>
       )}
 
-      <Table highlightOnHover withTableBorder verticalSpacing="sm">
+      <Table withTableBorder>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>
@@ -272,7 +241,7 @@ export default function CatalogFiles() {
                       variant="subtle"
                       size="xs"
                       leftSection={<IconPencil size={14} />}
-                      aria-label={t("catalog.editAria", { name: file.name })}
+                      aria-label={t("common.action.editAria", { name: file.name })}
                     >
                       {t("common.action.edit")}
                     </Button>
@@ -280,7 +249,7 @@ export default function CatalogFiles() {
                       variant="subtle"
                       size="xs"
                       leftSection={<IconDownload size={14} />}
-                      onClick={() => void handleDownload(file)}
+                      onClick={() => void downloads.handleDownload(file)}
                       aria-label={t("catalog.downloadAria", { name: file.name })}
                     >
                       {t("common.action.download")}
@@ -291,7 +260,7 @@ export default function CatalogFiles() {
                       size="xs"
                       leftSection={<IconTrash size={14} />}
                       onClick={() => deleteConfirm.requestDelete(file)}
-                      aria-label={t("catalog.deleteAria", { name: file.name })}
+                      aria-label={t("common.action.deleteAria", { name: file.name })}
                     >
                       {t("common.action.delete")}
                     </Button>
@@ -318,7 +287,6 @@ export default function CatalogFiles() {
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        rowsPerPageLabelKey="catalog.rowsPerPage"
       />
 
       <Group justify="flex-end">
@@ -333,7 +301,7 @@ export default function CatalogFiles() {
         <Button
           variant="default"
           leftSection={<IconFileExport size={16} />}
-          onClick={() => void handleExport()}
+          onClick={() => void downloads.handleExport(namespaceFilter.trim() || undefined)}
           disabled={total === 0}
         >
           {t("catalog.export.button")}

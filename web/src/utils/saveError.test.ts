@@ -10,8 +10,8 @@ const KEYS = {
   notFound: "catalog.fileGone",
   conflict: "catalog.conflictError",
   invalid: "catalog.validationError",
-  failedStatus: "catalog.createFailedStatus",
-  failed: "catalog.createFailedNetwork",
+  failedStatus: "common.error.createFailedStatus",
+  failed: "common.error.createFailedNetwork",
 } as const;
 
 const timeout = new DOMException("timed out", "TimeoutError");

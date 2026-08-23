@@ -32,7 +32,6 @@
   },
   "noFindings": "Nie znaleziono problemów — każda sprawdzalna referencja się rozwiązuje.",
   "noFindingsFiltered": "Brak wyników dla tego filtra.",
-  "editFileAria": "Edytuj {{name}}",
   "panel": {
     "title": "Referencje",
     "errorsTitle": "Nierozwiązane referencje",

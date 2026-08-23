@@ -150,10 +150,10 @@ export async function safeJson(res: Response): Promise<unknown> {
 }
 
 /**
- * The two standard wrapper shapes (2026-08 review round, CR-008) — previously the ok-check +
- * ProblemDetail-body + parse trio was hand-copied ~119 times across the feature modules. New
- * endpoint wrappers use these; `authedFetch`/`ApiError`/`safeJson` stay exported for the
- * special cases (extra response logic, non-authed auth flows).
+ * The two standard wrapper shapes: every ordinary endpoint wrapper in `api/users.ts` and
+ * `api/catalogFiles.ts` is one call to these (ok-check + ProblemDetail body + parse);
+ * `authedFetch`/`ApiError`/`safeJson` stay exported for the special cases (extra response
+ * logic, non-authed auth flows).
  */
 export async function jsonRequest<T>(input: string, init?: RequestInit): Promise<T> {
   const res = await authedFetch(input, init);
@@ -168,11 +168,10 @@ export async function voidRequest(input: string, init?: RequestInit): Promise<vo
 }
 
 /**
- * The list wrappers' query-string builder — replaces the per-module `URLSearchParams`
- * ladders (2026-08 review round). Skips null/undefined/"" (an absent or cleared filter);
- * `false` and `0` ARE sent (wasSeen=false, deactivated=false are meaningful filters) — a
- * field that must be OMITTED when false (`includeIndirect`) is passed as `value || undefined`
- * at the call site.
+ * The query-string builder behind the list/export wrappers (`listUsers`, `listCatalogFiles`,
+ * `exportCatalogFiles`). Skips null/undefined/"" (an absent or cleared filter); `false` and
+ * `0` ARE sent — a param that must be OMITTED rather than sent as false/empty is passed as
+ * `value || undefined` at the call site (the pages' `filter || undefined` idiom).
  */
 export function buildQuery(params: Record<string, string | number | boolean | null | undefined>): string {
   const search = new URLSearchParams();

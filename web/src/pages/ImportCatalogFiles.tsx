@@ -75,7 +75,9 @@ export default function ImportCatalogFiles() {
     try {
       const response = await importCatalogFiles(parsed.documents);
       setResults(response.results);
-      // Everything derived from the store refreshes: list, identities, graph, cross-check.
+      // Refreshes what the ["catalogFiles"] prefix covers: the list pages and the
+      // reference-picker identities pool. The graph/cross-check queries use their own
+      // keys and simply refetch on their next mount.
       await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
     } catch (err) {
       setSubmitError(
@@ -178,7 +180,7 @@ export default function ImportCatalogFiles() {
           <Text size="sm" fw={500}>
             {t("catalog.import.resultSummary", { created: createdCount, total: results.length })}
           </Text>
-          <Table withTableBorder verticalSpacing="sm">
+          <Table withTableBorder>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>{t("catalog.field.kind")}</Table.Th>

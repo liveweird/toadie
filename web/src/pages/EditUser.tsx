@@ -1,22 +1,17 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Alert, Button, Center, Container, Group, Loader, Paper, Stack, Title } from "@mantine/core";
+import { Alert, Button, Container, Group, Paper, Stack, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getUser, updateUser } from "../api/users";
 import { ApiError } from "../api/http";
 import { isAdmin } from "../api/session";
+import EditPageLoadState from "../components/EditPageLoadState";
 import UserFormFields from "../components/UserFormFields";
 import { EMPTY_USER_FORM, rolesOf, userFormValidation, type UserFormValues } from "../utils/userForm";
-import { saveErrorMessage } from "../utils/saveError";
+import { isLastAdminConflict, saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
-
-/** The 409 disambiguator: last-admin demotion vs an email already in use. */
-function isLastAdminConflict(err: unknown): boolean {
-  return err instanceof ApiError && err.status === 409 &&
-    (err.detail?.toLowerCase().includes("administrator") ?? false);
-}
 
 export default function EditUser() {
   const { t } = useTranslation();
@@ -69,8 +64,8 @@ export default function EditUser() {
           : saveErrorMessage(err, t, {
               notFound: "users.userGone",
               conflict: "users.emailAlreadyInUse",
-              failedStatus: "users.editFailedStatus",
-              failed: "users.editFailedNetwork",
+              failedStatus: "common.error.saveFailedStatus",
+              failed: "common.error.saveFailedNetwork",
             }),
       );
     } finally {
@@ -85,25 +80,19 @@ export default function EditUser() {
       <Paper withBorder shadow="sm" p="xl" radius="md">
         <Stack>
           <Title order={2}>{t("users.editUser")}</Title>
-          {isLoading ? (
-            <Center py="xl">
-              <Loader />
-            </Center>
-          ) : isError ? (
-            <>
-              <Alert color="red" variant="light">
-                {notFound
+          {isLoading || isError ? (
+            <EditPageLoadState
+              isLoading={isLoading}
+              message={
+                notFound
                   ? t("users.userNotFound")
                   : t("users.loadUserFailed", {
                       suffix: fetchError instanceof ApiError ? ` (${fetchError.status})` : "",
-                    })}
-              </Alert>
-              <Group justify="flex-end">
-                <Button component={RouterLink} to="/users" variant="default">
-                  {t("users.backToUsers")}
-                </Button>
-              </Group>
-            </>
+                    })
+              }
+              backTo="/users"
+              backLabel={t("users.backToUsers")}
+            />
           ) : (
             <form onSubmit={form.onSubmit(onSubmit)} noValidate>
               <Stack>

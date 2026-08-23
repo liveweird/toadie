@@ -8,10 +8,10 @@ import { listAllCatalogFiles } from "../api/catalogFiles";
  * refreshes the pool too.
  */
 export function useCatalogIdentities() {
-  const { data, isLoading, isError } = useQuery({
+  const { data } = useQuery({
     queryKey: ["catalogFiles", "identities"],
     queryFn: () => listAllCatalogFiles(),
     staleTime: 5 * 60 * 1000,
   });
-  return { identities: data, identitiesLoading: isLoading, identitiesError: isError };
+  return data;
 }

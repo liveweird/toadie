@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
-import { Alert, Button, Container, Group, Modal, Paper, Stack, Text, Title } from "@mantine/core";
+import { Alert, Button, Container, Group, Paper, Stack, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { IconMail } from "@tabler/icons-react";
 import { createUser } from "../api/users";
 import { isAdmin } from "../api/session";
-import RevealablePassword from "../components/RevealablePassword";
+import OneTimePasswordModal from "../components/OneTimePasswordModal";
 import UserFormFields from "../components/UserFormFields";
 import { generatePassword } from "../utils/password";
 import { EMPTY_USER_FORM, rolesOf, userFormValidation, type UserFormValues } from "../utils/userForm";
@@ -49,8 +49,8 @@ export default function CreateUser() {
       setError(
         saveErrorMessage(err, t, {
           conflict: "users.emailAlreadyInUse",
-          failedStatus: "users.createFailedStatus",
-          failed: "users.createFailedNetwork",
+          failedStatus: "common.error.createFailedStatus",
+          failed: "common.error.createFailedNetwork",
         }),
       );
     } finally {
@@ -102,34 +102,16 @@ export default function CreateUser() {
         </form>
       </Paper>
 
-      {/* One-time password reveal. Deliberate close only (no click-outside / Escape) so the
-          password can't be lost by accident — after closing it is unrecoverable by design. */}
-      <Modal
-        opened={created !== null}
-        onClose={closeConfirmation}
+      <OneTimePasswordModal
+        reveal={created}
         title={t("users.createdTitle")}
-        centered
-        closeOnClickOutside={false}
-        closeOnEscape={false}
-      >
-        {created && (
-          <Stack gap="md">
-            <Text>{t("users.generatedPasswordNote", { email: created.email })}</Text>
-            <RevealablePassword password={created.password} copyLabel={t("users.copyPassword")} />
-            <Group justify="space-between">
-              <Button
-                component="a"
-                href={mailtoHref}
-                variant="light"
-                leftSection={<IconMail size={16} />}
-              >
-                {t("users.composeOnboardingEmail")}
-              </Button>
-              <Button onClick={closeConfirmation}>{t("common.action.close")}</Button>
-            </Group>
-          </Stack>
-        )}
-      </Modal>
+        onClose={closeConfirmation}
+        secondaryAction={
+          <Button component="a" href={mailtoHref} variant="light" leftSection={<IconMail size={16} />}>
+            {t("users.composeOnboardingEmail")}
+          </Button>
+        }
+      />
     </Container>
   );
 }

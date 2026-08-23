@@ -3,7 +3,7 @@ import i18n from "../i18n";
 import type { CatalogFileResponse } from "../api/catalogFiles";
 import {
   catalogFileFormValidation,
-  EMPTY_CATALOG_FILE_FORM,
+  emptyCatalogFileForm,
   fromCatalogFileResponse,
   isValidEntityRef,
   isValidName,
@@ -15,7 +15,7 @@ import {
 const t = i18n.t;
 
 const values = (overrides: Partial<CatalogFileFormValues>): CatalogFileFormValues => ({
-  ...EMPTY_CATALOG_FILE_FORM,
+  ...emptyCatalogFileForm(),
   ...overrides,
 });
 

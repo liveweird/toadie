@@ -32,7 +32,6 @@
   },
   "noFindings": "No problems found — every checkable reference resolves.",
   "noFindingsFiltered": "Nothing to show for this filter.",
-  "editFileAria": "Edit {{name}}",
   "panel": {
     "title": "References",
     "errorsTitle": "Unresolved references",

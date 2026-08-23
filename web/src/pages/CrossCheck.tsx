@@ -12,24 +12,26 @@ import { loadErrorMessage } from "../utils/saveError";
 const VIEWS = ["errors", "unverifiable", "all"] as const;
 type View = (typeof VIEWS)[number];
 
-const isError = (status: CrossCheckStatus) => status !== "UNVERIFIABLE";
+const isBlockingStatus = (status: CrossCheckStatus) => status !== "UNVERIFIABLE";
 
 export default function CrossCheck() {
   const { t } = useTranslation();
   // Deliberately not persisted: "problems" is the right default every visit.
   const [view, setView] = useState<View>("errors");
 
-  const { data, isLoading, isError: loadFailed, error } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["crossCheck"],
     queryFn: getCrossCheckReport,
   });
 
   const findings = data?.findings ?? [];
-  const errorCount = findings.filter((f) => isError(f.status)).length;
+  const errorCount = findings.filter((f) => isBlockingStatus(f.status)).length;
   const shown =
     view === "all"
       ? findings
-      : findings.filter((f) => (view === "errors" ? isError(f.status) : !isError(f.status)));
+      : findings.filter((f) =>
+          view === "errors" ? isBlockingStatus(f.status) : !isBlockingStatus(f.status),
+        );
   const columnCount = 5;
 
   return (
@@ -67,13 +69,13 @@ export default function CrossCheck() {
         />
       </Group>
 
-      {loadFailed && (
+      {isError && (
         <Alert color="red" variant="light" title={t("crossCheck.loadFailed")}>
           {loadErrorMessage(error, t)}
         </Alert>
       )}
 
-      <Table highlightOnHover withTableBorder verticalSpacing="sm">
+      <Table withTableBorder>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>{t("crossCheck.field.file")}</Table.Th>
@@ -95,7 +97,7 @@ export default function CrossCheck() {
                     to={`/catalog-files/${f.fileId}/edit`}
                     size="sm"
                     fw={500}
-                    aria-label={t("crossCheck.editFileAria", { name: f.fileName })}
+                    aria-label={t("common.action.editAria", { name: f.fileName })}
                   >
                     {f.fileName}
                   </Anchor>
@@ -110,7 +112,7 @@ export default function CrossCheck() {
                   <Code>{f.reference}</Code>
                 </Table.Td>
                 <Table.Td>
-                  <Badge variant="light" color={isError(f.status) ? "red" : "gray"}>
+                  <Badge variant="light" color={isBlockingStatus(f.status) ? "red" : "gray"}>
                     {t(`crossCheck.status.${f.status}`)}
                   </Badge>
                   <Text size="xs" c="dimmed" mt={2}>
@@ -119,7 +121,7 @@ export default function CrossCheck() {
                 </Table.Td>
               </Table.Tr>
             ))
-          ) : !loadFailed ? (
+          ) : !isError ? (
             <Table.Tr>
               <Table.Td colSpan={columnCount}>
                 <EmptyState

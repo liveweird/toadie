@@ -74,40 +74,43 @@ export type CatalogFileFormValues = {
   subdomainOf: string;
 };
 
-export const EMPTY_CATALOG_FILE_FORM: CatalogFileFormValues = {
-  kind: "Component",
-  name: "",
-  namespace: "",
-  title: "",
-  description: "",
-  tags: [],
-  labels: [],
-  annotations: [],
-  links: [],
-  type: "",
-  lifecycle: "",
-  owner: "",
-  system: "",
-  subcomponentOf: "",
-  providesApis: [],
-  consumesApis: [],
-  dependsOn: [],
-  dependencyOf: [],
-  definition: "",
-  profileDisplayName: "",
-  profileEmail: "",
-  profilePicture: "",
-  parent: "",
-  children: [],
-  members: [],
-  memberOf: [],
-  domain: "",
-  subdomainOf: "",
-};
+/** A fresh set of initial form values — a factory so form instances never share array refs. */
+export function emptyCatalogFileForm(): CatalogFileFormValues {
+  return {
+    kind: "Component",
+    name: "",
+    namespace: "",
+    title: "",
+    description: "",
+    tags: [],
+    labels: [],
+    annotations: [],
+    links: [],
+    type: "",
+    lifecycle: "",
+    owner: "",
+    system: "",
+    subcomponentOf: "",
+    providesApis: [],
+    consumesApis: [],
+    dependsOn: [],
+    dependencyOf: [],
+    definition: "",
+    profileDisplayName: "",
+    profileEmail: "",
+    profilePicture: "",
+    parent: "",
+    children: [],
+    members: [],
+    memberOf: [],
+    domain: "",
+    subdomainOf: "",
+  };
+}
 
 // The client mirror of the server's per-kind field tables (catalog/CatalogFile.kt): which
 // spec fields a kind carries, and which it requires. Keep the three in sync.
-type SpecFieldName =
+export type SpecFieldName =
   | "type"
   | "lifecycle"
   | "owner"
@@ -148,6 +151,17 @@ const KIND_REQUIRED: Record<EntityKind, readonly SpecFieldName[]> = {
   Group: ["type"],
   User: [],
 };
+
+/** The multi-value relation fields, in the editor's render order. */
+export const RELATION_FIELDS = [
+  "providesApis",
+  "consumesApis",
+  "dependsOn",
+  "dependencyOf",
+  "children",
+  "members",
+  "memberOf",
+] as const satisfies readonly SpecFieldName[];
 
 export function fieldApplies(kind: EntityKind, field: SpecFieldName): boolean {
   return KIND_FIELDS[kind].includes(field);

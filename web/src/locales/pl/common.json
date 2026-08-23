@@ -8,7 +8,8 @@
     "edit": "Edytuj",
     "download": "Pobierz",
     "close": "Zamknij",
-    "copy": "Kopiuj",
+    "editAria": "Edytuj {{name}}",
+    "deleteAria": "Usuń {{name}}",
     "showPassword": "Pokaż hasło",
     "hidePassword": "Ukryj hasło"
   },
@@ -18,15 +19,17 @@
     "role": "Rola"
   },
   "state": {
-    "loading": "Wczytywanie…",
     "any": "Dowolna"
   },
   "filter": {
     "title": "Filtry",
     "contains": "Zawiera…",
-    "exact": "Dokładna wartość…"
+    "exact": "Dokładna wartość…",
+    "clearName": "Wyczyść filtr nazwy",
+    "clearNamespace": "Wyczyść filtr przestrzeni nazw"
   },
   "table": {
+    "rowsPerPage": "Wierszy na stronę",
     "total": "Łącznie: {{count}}",
     "perPage": "{{count}} / stronę",
     "firstPage": "Pierwsza strona",
@@ -39,7 +42,11 @@
     "network": "Błąd sieci. Sprawdź połączenie i spróbuj ponownie.",
     "loadFailedStatus": "Wczytywanie nie powiodło się ({{status}})",
     "actionFailed": "Akcja nie powiodła się. Sprawdź połączenie i spróbuj ponownie.",
-    "actionFailedStatus": "Akcja nie powiodła się ({{status}})"
+    "actionFailedStatus": "Akcja nie powiodła się ({{status}})",
+    "createFailedStatus": "Tworzenie nie powiodło się ({{status}})",
+    "createFailedNetwork": "Tworzenie nie powiodło się. Sprawdź połączenie i spróbuj ponownie.",
+    "saveFailedStatus": "Zapis nie powiódł się ({{status}})",
+    "saveFailedNetwork": "Zapis nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
   },
   "charCount": "{{current}} / {{max}}",
   "language": {

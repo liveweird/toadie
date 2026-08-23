@@ -1,7 +1,6 @@
 {
   "title": "Renderowanie",
   "loadFailed": "Nie udało się wczytać grafu",
-  "clearNamespaceFilter": "Wyczyść filtr przestrzeni nazw",
   "relationsLabel": "Relacje",
   "relation": {
     "dependsOn": "Zależy od",

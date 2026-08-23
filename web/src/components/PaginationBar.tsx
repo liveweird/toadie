@@ -1,4 +1,3 @@
-import type { ParseKeys } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Group, Pagination, Select, Text } from "@mantine/core";
 import { PAGE_SIZE_OPTIONS } from "../hooks/usePagedSort";
@@ -10,14 +9,12 @@ export default function PaginationBar({
   pageSize,
   onPageChange,
   onPageSizeChange,
-  rowsPerPageLabelKey,
 }: {
   total: number;
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
-  rowsPerPageLabelKey: ParseKeys;
 }) {
   const { t } = useTranslation();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -29,7 +26,7 @@ export default function PaginationBar({
       <Group gap="sm" align="center">
         <Select
           size="xs"
-          aria-label={t(rowsPerPageLabelKey)}
+          aria-label={t("common.table.rowsPerPage")}
           data={PAGE_SIZE_OPTIONS.map((n) => ({
             value: String(n),
             label: t("common.table.perPage", { count: n }),

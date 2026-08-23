@@ -1,22 +1,20 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link as RouterLink, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Alert, Button, Center, Grid, Group, Loader, Paper, Stack, Title } from "@mantine/core";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Paper, Stack, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCatalogFile, updateCatalogFile } from "../api/catalogFiles";
 import { ApiError } from "../api/http";
-import CatalogFileFormFields from "../components/CatalogFileFormFields";
-import ReferenceCheckPanel from "../components/ReferenceCheckPanel";
-import YamlPreviewCard from "../components/YamlPreviewCard";
+import CatalogFileEditor from "../components/CatalogFileEditor";
+import EditPageLoadState from "../components/EditPageLoadState";
 import {
   catalogFileFormValidation,
-  EMPTY_CATALOG_FILE_FORM,
+  emptyCatalogFileForm,
   fromCatalogFileResponse,
   toCatalogFileRequest,
   type CatalogFileFormValues,
 } from "../utils/catalogFileForm";
-import { catalogInfoYaml } from "../utils/catalogYaml";
 import { saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
 
@@ -31,7 +29,7 @@ export default function EditCatalogFile() {
 
   // The shared form vocabulary (utils/catalogFileForm.ts); the field block owns the sections.
   const form = useForm<CatalogFileFormValues>({
-    initialValues: EMPTY_CATALOG_FILE_FORM,
+    initialValues: emptyCatalogFileForm(),
     validate: catalogFileFormValidation(t),
   });
 
@@ -66,8 +64,8 @@ export default function EditCatalogFile() {
           notFound: "catalog.fileGone",
           invalid: "catalog.validationError",
           conflict: "catalog.conflictError",
-          failedStatus: "catalog.editFailedStatus",
-          failed: "catalog.editFailedNetwork",
+          failedStatus: "common.error.saveFailedStatus",
+          failed: "common.error.saveFailedNetwork",
         }),
       );
     } finally {
@@ -82,26 +80,18 @@ export default function EditCatalogFile() {
       <Paper withBorder shadow="sm" p="xl" radius="md" maw={560}>
         <Stack>
           <Title order={2}>{t("catalog.editFile")}</Title>
-          {isLoading ? (
-            <Center py="xl">
-              <Loader />
-            </Center>
-          ) : (
-            <>
-              <Alert color="red" variant="light">
-                {notFound
-                  ? t("catalog.fileNotFound")
-                  : t("catalog.loadFileFailed", {
-                      suffix: fetchError instanceof ApiError ? ` (${fetchError.status})` : "",
-                    })}
-              </Alert>
-              <Group justify="flex-end">
-                <Button component={RouterLink} to="/catalog-files" variant="default">
-                  {t("catalog.backToList")}
-                </Button>
-              </Group>
-            </>
-          )}
+          <EditPageLoadState
+            isLoading={isLoading}
+            message={
+              notFound
+                ? t("catalog.fileNotFound")
+                : t("catalog.loadFileFailed", {
+                    suffix: fetchError instanceof ApiError ? ` (${fetchError.status})` : "",
+                  })
+            }
+            backTo="/catalog-files"
+            backLabel={t("catalog.backToList")}
+          />
         </Stack>
       </Paper>
     );
@@ -109,36 +99,13 @@ export default function EditCatalogFile() {
 
   return (
     // Same two-pane document layout as the create page (see web/CLAUDE.md).
-    <Grid>
-      <Grid.Col span={{ base: 12, md: 7 }}>
-        <Paper withBorder shadow="sm" p="xl" radius="md">
-          <form onSubmit={form.onSubmit(onSubmit)} noValidate>
-            <Stack>
-              <Title order={2}>{t("catalog.editFile")}</Title>
-              <CatalogFileFormFields form={form} />
-              {error && (
-                <Alert color="red" variant="light">
-                  {error}
-                </Alert>
-              )}
-              <Group justify="flex-end" gap="sm">
-                <Button component={RouterLink} to="/catalog-files" variant="default">
-                  {t("common.action.cancel")}
-                </Button>
-                <Button type="submit" loading={submitting}>
-                  {t("common.action.save")}
-                </Button>
-              </Group>
-            </Stack>
-          </form>
-        </Paper>
-      </Grid.Col>
-      <Grid.Col span={{ base: 12, md: 5 }}>
-        <Stack style={{ position: "sticky", top: 72 }}>
-          <YamlPreviewCard yaml={catalogInfoYaml(toCatalogFileRequest(form.values))} />
-          <ReferenceCheckPanel document={toCatalogFileRequest(form.values)} />
-        </Stack>
-      </Grid.Col>
-    </Grid>
+    <CatalogFileEditor
+      title={t("catalog.editFile")}
+      submitLabel={t("common.action.save")}
+      form={form}
+      onSubmit={onSubmit}
+      error={error}
+      submitting={submitting}
+    />
   );
 }

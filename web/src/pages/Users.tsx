@@ -1,24 +1,23 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, Navigate } from "react-router-dom";
 import { Alert, Badge, Button, Group, Modal, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconKey, IconPencil, IconPlus, IconTrash, IconUsers } from "@tabler/icons-react";
-import { changeUserPassword, deleteUser, listUsers, type UserResponse } from "../api/users";
+import { deleteUser, listUsers, type UserResponse } from "../api/users";
 import { getUserId, isAdmin } from "../api/session";
 import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
+import OneTimePasswordModal from "../components/OneTimePasswordModal";
 import PaginationBar from "../components/PaginationBar";
-import RevealablePassword from "../components/RevealablePassword";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
+import { useResetPassword } from "../hooks/useResetPassword";
 import { isString, useStoredState } from "../hooks/useStoredState";
-import { generatePassword } from "../utils/password";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 
 const SORT_FIELDS = ["name", "email"] as const;
@@ -67,31 +66,7 @@ export default function Users() {
   });
 
   // The reset flow: confirm → generate client-side → PUT → the one-time reveal modal.
-  const [resetTarget, setResetTarget] = useState<UserResponse | null>(null);
-  const [resetError, setResetError] = useState<string | null>(null);
-  const [resetPending, setResetPending] = useState(false);
-  const [revealed, setRevealed] = useState<{ email: string; password: string } | null>(null);
-
-  async function confirmReset() {
-    if (!resetTarget) return;
-    setResetError(null);
-    setResetPending(true);
-    const password = generatePassword();
-    try {
-      await changeUserPassword(resetTarget.id, { password });
-      setRevealed({ email: resetTarget.email, password });
-      setResetTarget(null);
-    } catch (err) {
-      setResetError(
-        saveErrorMessage(err, t, {
-          failedStatus: "users.resetFailedStatus",
-          failed: "users.resetFailedNetwork",
-        }),
-      );
-    } finally {
-      setResetPending(false);
-    }
-  }
+  const reset = useResetPassword();
 
   if (!isAdmin()) return <Navigate to="/" replace />;
 
@@ -107,7 +82,7 @@ export default function Users() {
           label={t("common.field.name")}
           value={nameFilter}
           onChange={setNameFilter}
-          clearLabel={t("users.clearNameFilter")}
+          clearLabel={t("common.filter.clearName")}
         />
         <ClearableTextInput
           label={t("common.field.email")}
@@ -135,7 +110,7 @@ export default function Users() {
         </Alert>
       )}
 
-      <Table highlightOnHover withTableBorder verticalSpacing="sm">
+      <Table withTableBorder>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>
@@ -202,7 +177,7 @@ export default function Users() {
                         variant="subtle"
                         size="xs"
                         leftSection={<IconPencil size={14} />}
-                        aria-label={t("users.editAria", { name: user.name })}
+                        aria-label={t("common.action.editAria", { name: user.name })}
                       >
                         {t("common.action.edit")}
                       </Button>
@@ -214,10 +189,7 @@ export default function Users() {
                             variant="subtle"
                             size="xs"
                             leftSection={<IconKey size={14} />}
-                            onClick={() => {
-                              setResetError(null);
-                              setResetTarget(user);
-                            }}
+                            onClick={() => reset.request(user)}
                             aria-label={t("users.resetPasswordAria", { name: user.name })}
                           >
                             {t("users.resetPassword")}
@@ -228,7 +200,7 @@ export default function Users() {
                             size="xs"
                             leftSection={<IconTrash size={14} />}
                             onClick={() => deleteConfirm.requestDelete(user)}
-                            aria-label={t("users.deleteAria", { name: user.name })}
+                            aria-label={t("common.action.deleteAria", { name: user.name })}
                           >
                             {t("common.action.delete")}
                           </Button>
@@ -258,7 +230,6 @@ export default function Users() {
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        rowsPerPageLabelKey="users.rowsPerPage"
       />
 
       <Group justify="flex-end">
@@ -287,26 +258,26 @@ export default function Users() {
       />
 
       <Modal
-        opened={resetTarget !== null}
+        opened={reset.target !== null}
         onClose={() => {
-          if (!resetPending) setResetTarget(null);
+          if (!reset.pending) reset.clearTarget();
         }}
         title={t("users.resetTitle")}
         centered
       >
-        {resetTarget && (
+        {reset.target && (
           <Stack gap="md">
-            <Text>{t("users.resetBody", { name: resetTarget.name })}</Text>
-            {resetError && (
+            <Text>{t("users.resetBody", { name: reset.target.name })}</Text>
+            {reset.error && (
               <Alert color="red" variant="light" title={t("users.resetFailedTitle")}>
-                {resetError}
+                {reset.error}
               </Alert>
             )}
             <Group justify="flex-end" gap="sm">
-              <Button variant="default" onClick={() => setResetTarget(null)} disabled={resetPending}>
+              <Button variant="default" onClick={reset.clearTarget} disabled={reset.pending}>
                 {t("common.action.cancel")}
               </Button>
-              <Button onClick={() => void confirmReset()} loading={resetPending}>
+              <Button onClick={() => void reset.confirm()} loading={reset.pending}>
                 {t("users.resetConfirm")}
               </Button>
             </Group>
@@ -314,26 +285,11 @@ export default function Users() {
         )}
       </Modal>
 
-      {/* One-time password reveal. Deliberate close only (no click-outside / Escape) so the
-          password can't be lost by accident — after closing it is unrecoverable by design. */}
-      <Modal
-        opened={revealed !== null}
-        onClose={() => setRevealed(null)}
+      <OneTimePasswordModal
+        reveal={reset.revealed}
         title={t("users.resetDoneTitle")}
-        centered
-        closeOnClickOutside={false}
-        closeOnEscape={false}
-      >
-        {revealed && (
-          <Stack gap="md">
-            <Text>{t("users.generatedPasswordNote", { email: revealed.email })}</Text>
-            <RevealablePassword password={revealed.password} copyLabel={t("users.copyPassword")} />
-            <Group justify="flex-end">
-              <Button onClick={() => setRevealed(null)}>{t("common.action.close")}</Button>
-            </Group>
-          </Stack>
-        )}
-      </Modal>
+        onClose={reset.closeReveal}
+      />
     </Stack>
   );
 }

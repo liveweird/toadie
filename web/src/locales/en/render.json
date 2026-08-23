@@ -1,7 +1,6 @@
 {
   "title": "Render",
   "loadFailed": "Failed to load the graph",
-  "clearNamespaceFilter": "Clear namespace filter",
   "relationsLabel": "Relations",
   "relation": {
     "dependsOn": "Depends on",

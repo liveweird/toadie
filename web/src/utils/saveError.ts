@@ -29,6 +29,12 @@ export function saveErrorMessage(err: unknown, t: TFunction, keys: SaveErrorKeys
   return t(keys.failed);
 }
 
+/** The user-save 409 disambiguator: last-admin demotion vs an email already in use. */
+export function isLastAdminConflict(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409 &&
+    (err.detail?.toLowerCase().includes("administrator") ?? false);
+}
+
 /** The list-load counterpart: status-tagged for ApiErrors, generic otherwise. */
 export function loadErrorMessage(err: unknown, t: TFunction): string {
   if (err instanceof ApiError) return t("common.error.loadFailedStatus", { status: err.status });

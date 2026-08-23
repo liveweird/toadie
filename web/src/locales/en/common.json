@@ -8,7 +8,8 @@
     "edit": "Edit",
     "download": "Download",
     "close": "Close",
-    "copy": "Copy",
+    "editAria": "Edit {{name}}",
+    "deleteAria": "Delete {{name}}",
     "showPassword": "Show password",
     "hidePassword": "Hide password"
   },
@@ -18,15 +19,17 @@
     "role": "Role"
   },
   "state": {
-    "loading": "Loading…",
     "any": "Any"
   },
   "filter": {
     "title": "Filters",
     "contains": "Contains…",
-    "exact": "Exact value…"
+    "exact": "Exact value…",
+    "clearName": "Clear name filter",
+    "clearNamespace": "Clear namespace filter"
   },
   "table": {
+    "rowsPerPage": "Rows per page",
     "total": "{{count}} total",
     "perPage": "{{count}} / page",
     "firstPage": "First page",
@@ -39,7 +42,11 @@
     "network": "Network error. Check your connection and try again.",
     "loadFailedStatus": "Load failed ({{status}})",
     "actionFailed": "Action failed. Check your connection and try again.",
-    "actionFailedStatus": "Action failed ({{status}})"
+    "actionFailedStatus": "Action failed ({{status}})",
+    "createFailedStatus": "Create failed ({{status}})",
+    "createFailedNetwork": "Create failed. Check your connection and try again.",
+    "saveFailedStatus": "Save failed ({{status}})",
+    "saveFailedNetwork": "Save failed. Check your connection and try again."
   },
   "charCount": "{{current}} / {{max}}",
   "language": {

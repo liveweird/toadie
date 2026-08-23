@@ -1,8 +1,11 @@
 import type { TFunction } from "i18next";
 
-// Server limits (users/Validation.kt) mirrored client-side.
+// Server limits (users/Validation.kt + auth/Passwords.kt) mirrored client-side.
 export const MAX_USER_NAME_LENGTH = 50;
 export const MAX_EMAIL_LENGTH = 254;
+export const MIN_PASSWORD_LENGTH = 10;
+/** The bcrypt ceiling — counts BYTES, not characters (multibyte input bites earlier). */
+export const MAX_PASSWORD_BYTES = 71;
 
 // Linear-time shape check (no catastrophic backtracking); the server's rule is looser
 // (just '@' + no control chars) — this is UX-level guidance, not the gate.

@@ -155,7 +155,7 @@ function Shell() {
               color="gray"
               size="lg"
               aria-label={t("common.action.logout")}
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
             >
               <IconLogout size={18} />
             </ActionIcon>

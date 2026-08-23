@@ -7,6 +7,7 @@ import { ApiError } from "../api/http";
 import { login } from "../api/auth";
 import { consumeSignedOut, notifyAuthChange } from "../auth";
 import AuthCard from "../components/AuthCard";
+import { MAX_EMAIL_LENGTH } from "../utils/userForm";
 
 type LocationState = { from?: { pathname?: string } } | null;
 
@@ -61,7 +62,7 @@ export default function Login() {
             type="email"
             autoFocus
             autoComplete="email"
-            maxLength={254}
+            maxLength={MAX_EMAIL_LENGTH}
             {...form.getInputProps("email")}
           />
           <PasswordInput

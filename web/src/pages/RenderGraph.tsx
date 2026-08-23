@@ -68,7 +68,7 @@ export default function RenderGraph() {
           label={t("catalog.field.namespace")}
           value={namespaceFilter}
           onChange={setNamespaceFilter}
-          clearLabel={t("render.clearNamespaceFilter")}
+          clearLabel={t("common.filter.clearNamespace")}
           placeholder={t("common.filter.exact")}
         />
         <Chip.Group

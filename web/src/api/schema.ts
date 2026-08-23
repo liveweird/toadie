@@ -204,12 +204,13 @@ export interface paths {
         put?: never;
         /**
          * Create a catalog file
-         * @description Stores a new catalog-info.yaml document (a Backstage Component entity). The payload is
-         *     validated against the Backstage descriptor format (name/namespace/tag/label/annotation
-         *     grammars, entity-reference syntax for `owner`/`system`/`subcomponentOf` and the four
-         *     reference arrays); references are checked for FORMAT only — resolution against other
-         *     stored files is a future feature. Entity identity (namespace + name, case-insensitive)
-         *     must be unique among active files; a clash is a `409`.
+         * @description Stores a new catalog-info.yaml document — a Backstage entity of any of the seven
+         *     landscape kinds (Component, API, System, Domain, Resource, Group, User). The payload
+         *     is validated against the Backstage descriptor format (name/namespace/tag/label/
+         *     annotation grammars, entity-reference syntax, the per-kind required/forbidden field
+         *     tables); references are checked for FORMAT only here — resolution is the cross-check
+         *     endpoints' job and never blocks a save. Entity identity (kind + namespace + name,
+         *     case-insensitive) must be unique among active files; a clash is a `409`.
          */
         post: operations["createCatalogFile"];
         delete?: never;
@@ -504,7 +505,7 @@ export interface components {
             spec: components["schemas"]["EntitySpec"];
         };
         /**
-         * @description Accepted case-insensitively; canonicalized on write.
+         * @description The canonical kind casing. The server accepts case-variant input and canonicalizes it on write; responses always carry the canonical form listed here.
          * @default Component
          * @enum {string}
          */
@@ -547,7 +548,7 @@ export interface components {
              */
             status: "CREATED" | "INVALID" | "CONFLICT" | "ERROR";
             /**
-             * Format: int64
+             * Format: int32
              * @description The new file's id, only when status is CREATED.
              */
             fileId?: number | null;
@@ -1313,6 +1314,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportResponse"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalServerError"];
         };
