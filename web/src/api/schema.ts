@@ -145,6 +145,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/catalog-files/cross-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cross-check every stored file's entity references
+         * @description Resolves every entity reference the active files make (`owner`, `system`,
+         *     `subcomponentOf`, `providesApis`, `consumesApis`, `dependsOn`, `dependencyOf`) against
+         *     the workspace and reports three tiers of findings:
+         *
+         *     - `MISSING` (error) — the reference should resolve to a stored Component (explicit
+         *       `component:` kind, or a field whose default kind is component) but no active file
+         *       matches. Namespaceless references resolve within the REFERENCING file's own
+         *       namespace; matching is case-insensitive throughout.
+         *     - `KIND_REQUIRED` (error) — a `dependsOn`/`dependencyOf` entry without a kind; those
+         *       fields have no default kind, so Backstage itself cannot ingest such a reference.
+         *     - `UNVERIFIABLE` (info) — the target kind is not stored in Toadie yet (group, user,
+         *       api, system, domain, …); becomes checkable as further kinds are added.
+         *
+         *     Findings never block saving — files legitimately reference entities that arrive later.
+         */
+        get: operations["crossCheckCatalogFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog-files/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check one document's references against the stored files
+         * @description The editor's live companion to the workspace cross-check: takes one (possibly unsaved,
+         *     possibly not-yet-valid) document and returns its reference findings against the stored
+         *     identities — same three-tier semantics as the workspace report. The document is
+         *     sanitized but deliberately NOT validated (in-progress documents are legal here;
+         *     unparsable references are skipped — the form flags them itself). A pure computation:
+         *     nothing is stored; POST only because the document travels in the body. Note an unsaved
+         *     file is not in the identity set, so its self-references read as missing until first
+         *     save.
+         */
+        post: operations["checkCatalogFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/catalog-files/{id}": {
         parameters: {
             query?: never;
@@ -311,6 +371,36 @@ export interface components {
              * @description Epoch milliseconds.
              */
             updatedAt: number;
+        };
+        /**
+         * @description MISSING and KIND_REQUIRED are errors; UNVERIFIABLE is informational (the target kind is not stored in Toadie yet).
+         * @enum {string}
+         */
+        CrossCheckStatus: "MISSING" | "KIND_REQUIRED" | "UNVERIFIABLE";
+        CrossCheckFinding: {
+            /** Format: int32 */
+            fileId: number;
+            fileName: string;
+            fileNamespace: string;
+            /** @description The spec field holding the reference, e.g. `spec.dependsOn`. */
+            field: string;
+            reference: string;
+            status: components["schemas"]["CrossCheckStatus"];
+        };
+        CrossCheckReport: {
+            findings: components["schemas"]["CrossCheckFinding"][];
+            checkedFiles: number;
+            /** @description Non-blank references encountered across all checked files. */
+            checkedReferences: number;
+        };
+        DocumentCheckFinding: {
+            /** @description The spec field holding the reference, e.g. `spec.dependsOn`. */
+            field: string;
+            reference: string;
+            status: components["schemas"]["CrossCheckStatus"];
+        };
+        DocumentCheckReport: {
+            findings: components["schemas"]["DocumentCheckFinding"][];
         };
         CatalogFilePage: {
             items: components["schemas"]["CatalogFileListItem"][];
@@ -623,6 +713,55 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    crossCheckCatalogFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The workspace report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrossCheckReport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    checkCatalogFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogFileRequest"];
+            };
+        };
+        responses: {
+            /** @description The document's findings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentCheckReport"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalServerError"];
         };
     };

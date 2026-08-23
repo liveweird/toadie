@@ -14,7 +14,14 @@ import {
   useMantineColorScheme,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconFileDescription, IconHome, IconLogout, IconMoon, IconSun } from "@tabler/icons-react";
+import {
+  IconFileDescription,
+  IconHome,
+  IconListCheck,
+  IconLogout,
+  IconMoon,
+  IconSun,
+} from "@tabler/icons-react";
 import {
   Link as RouterLink,
   Outlet,
@@ -37,6 +44,7 @@ const Home = lazy(() => import("./pages/Home"));
 const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
 const EditCatalogFile = lazy(() => import("./pages/EditCatalogFile"));
+const CrossCheck = lazy(() => import("./pages/CrossCheck"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function RouteFallback() {
@@ -61,6 +69,7 @@ type NavLeaf = {
 const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   { to: "/", label: "appShell.nav.home", icon: IconHome },
   { to: "/catalog-files", label: "appShell.nav.catalogFiles", icon: IconFileDescription },
+  { to: "/cross-check", label: "appShell.nav.crossCheck", icon: IconListCheck },
 ];
 
 function ColorSchemeToggle() {
@@ -195,6 +204,7 @@ export default function App() {
             <Route path="catalog-files" element={<CatalogFiles />} />
             <Route path="catalog-files/new" element={<CreateCatalogFile />} />
             <Route path="catalog-files/:id/edit" element={<EditCatalogFile />} />
+            <Route path="cross-check" element={<CrossCheck />} />
             {/* The authenticated catch-all — LAST child, never feature-gated. */}
             <Route path="*" element={<NotFound />} />
           </Route>

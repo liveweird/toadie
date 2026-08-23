@@ -1,0 +1,44 @@
+{
+  "title": "Cross-check",
+  "loadFailed": "Failed to load the cross-check report",
+  "summary": {
+    "files": "{{count}} files checked",
+    "references": "{{count}} references checked",
+    "errors": "{{count}} problems",
+    "unverifiable": "{{count}} not checkable yet"
+  },
+  "filter": {
+    "label": "Show",
+    "errors": "Problems",
+    "unverifiable": "Not checkable yet",
+    "all": "All findings"
+  },
+  "field": {
+    "file": "File",
+    "namespace": "Namespace",
+    "refField": "Field",
+    "reference": "Reference",
+    "status": "Status"
+  },
+  "status": {
+    "MISSING": "Not found",
+    "KIND_REQUIRED": "Kind required",
+    "UNVERIFIABLE": "Not checkable yet"
+  },
+  "message": {
+    "MISSING": "No active file matches this component reference.",
+    "KIND_REQUIRED": "dependsOn/dependencyOf entries need an explicit kind, e.g. component: or resource:.",
+    "UNVERIFIABLE": "Toadie doesn't store this kind yet, so the reference can't be verified."
+  },
+  "noFindings": "No problems found — every checkable reference resolves.",
+  "noFindingsFiltered": "Nothing to show for this filter.",
+  "editFileAria": "Edit {{name}}",
+  "panel": {
+    "title": "References",
+    "errorsTitle": "Unresolved references",
+    "allClear": "All checkable references resolve.",
+    "unverifiableCount_one": "{{count}} reference points at a kind Toadie doesn't store yet.",
+    "unverifiableCount_other": "{{count}} references point at kinds Toadie doesn't store yet.",
+    "selfNote": "An unsaved file isn't in the store yet — references to itself show as not found until the first save."
+  }
+}

@@ -4,6 +4,7 @@
   "skipToContent": "Skip to main content",
   "nav": {
     "home": "Home",
-    "catalogFiles": "Catalog files"
+    "catalogFiles": "Catalog files",
+    "crossCheck": "Cross-check"
   }
 }

@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCatalogFile, updateCatalogFile } from "../api/catalogFiles";
 import { ApiError } from "../api/http";
 import CatalogFileFormFields from "../components/CatalogFileFormFields";
+import ReferenceCheckPanel from "../components/ReferenceCheckPanel";
 import YamlPreviewCard from "../components/YamlPreviewCard";
 import {
   catalogFileFormValidation,
@@ -133,7 +134,10 @@ export default function EditCatalogFile() {
         </Paper>
       </Grid.Col>
       <Grid.Col span={{ base: 12, md: 5 }}>
-        <YamlPreviewCard yaml={catalogInfoYaml(toCatalogFileRequest(form.values))} />
+        <Stack style={{ position: "sticky", top: 72 }}>
+          <YamlPreviewCard yaml={catalogInfoYaml(toCatalogFileRequest(form.values))} />
+          <ReferenceCheckPanel document={toCatalogFileRequest(form.values)} />
+        </Stack>
       </Grid.Col>
     </Grid>
   );

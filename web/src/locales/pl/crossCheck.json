@@ -1,0 +1,46 @@
+{
+  "title": "Weryfikacja referencji",
+  "loadFailed": "Nie udało się wczytać raportu weryfikacji",
+  "summary": {
+    "files": "Sprawdzone pliki: {{count}}",
+    "references": "Sprawdzone referencje: {{count}}",
+    "errors": "Problemy: {{count}}",
+    "unverifiable": "Jeszcze niesprawdzalne: {{count}}"
+  },
+  "filter": {
+    "label": "Pokaż",
+    "errors": "Problemy",
+    "unverifiable": "Jeszcze niesprawdzalne",
+    "all": "Wszystkie wyniki"
+  },
+  "field": {
+    "file": "Plik",
+    "namespace": "Przestrzeń nazw",
+    "refField": "Pole",
+    "reference": "Referencja",
+    "status": "Status"
+  },
+  "status": {
+    "MISSING": "Nie znaleziono",
+    "KIND_REQUIRED": "Wymagany rodzaj",
+    "UNVERIFIABLE": "Jeszcze niesprawdzalne"
+  },
+  "message": {
+    "MISSING": "Żaden aktywny plik nie odpowiada tej referencji komponentu.",
+    "KIND_REQUIRED": "Wpisy dependsOn/dependencyOf wymagają jawnego rodzaju, np. component: lub resource:.",
+    "UNVERIFIABLE": "Toadie nie przechowuje jeszcze tego rodzaju encji, więc referencji nie da się zweryfikować."
+  },
+  "noFindings": "Nie znaleziono problemów — każda sprawdzalna referencja się rozwiązuje.",
+  "noFindingsFiltered": "Brak wyników dla tego filtra.",
+  "editFileAria": "Edytuj {{name}}",
+  "panel": {
+    "title": "Referencje",
+    "errorsTitle": "Nierozwiązane referencje",
+    "allClear": "Wszystkie sprawdzalne referencje się rozwiązują.",
+    "unverifiableCount_one": "{{count}} referencja wskazuje rodzaj encji, którego Toadie jeszcze nie przechowuje.",
+    "unverifiableCount_few": "{{count}} referencje wskazują rodzaje encji, których Toadie jeszcze nie przechowuje.",
+    "unverifiableCount_many": "{{count}} referencji wskazuje rodzaje encji, których Toadie jeszcze nie przechowuje.",
+    "unverifiableCount_other": "{{count}} referencji wskazuje rodzaje encji, których Toadie jeszcze nie przechowuje.",
+    "selfNote": "Niezapisany plik nie jest jeszcze w magazynie — referencje do niego samego pokazują się jako nieznalezione do pierwszego zapisu."
+  }
+}

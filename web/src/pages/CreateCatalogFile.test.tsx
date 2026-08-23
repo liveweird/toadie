@@ -35,6 +35,12 @@ function mockPostStatus(mockFetch: FetchMock, status: number, body: unknown = { 
   });
 }
 
+function findSaveCall(mockFetch: FetchMock) {
+  return mockFetch.mock.calls.find(
+    ([url, init]) => (init as RequestInit | undefined)?.method === "POST" && url === "/api/v1/catalog-files",
+  );
+}
+
 async function fillMinimalForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
   await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
@@ -67,7 +73,8 @@ describe("CreateCatalogFile page", () => {
       await screen.findByText(/1–63 alphanumeric characters with single/i),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Required").length).toBeGreaterThanOrEqual(3);
-    expect(mockFetch).not.toHaveBeenCalled();
+    // The advisory reference panel may POST /check — only the SAVE call must be absent.
+    expect(findSaveCall(mockFetch)).toBeUndefined();
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
   });
 
@@ -83,7 +90,7 @@ describe("CreateCatalogFile page", () => {
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
     expect(await screen.findByText(/Key must be/)).toBeInTheDocument();
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(findSaveCall(mockFetch)).toBeUndefined();
   });
 
   test("submits the trimmed request, toasts, and navigates to the list", async () => {
@@ -137,6 +144,44 @@ describe("CreateCatalogFile page", () => {
 
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "preview-svc");
     expect(preview).toHaveTextContent("name: preview-svc");
+  });
+
+  test("the reference panel lists unresolved refs and the unverifiable count", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files/check") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            findings: [
+              { field: "spec.dependsOn", reference: "component:ghost", status: "MISSING" },
+              { field: "spec.dependsOn", reference: "orders-db", status: "KIND_REQUIRED" },
+              { field: "spec.owner", reference: "team-x", status: "UNVERIFIABLE" },
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderCreate();
+
+    expect(await screen.findByText("Unresolved references")).toBeInTheDocument();
+    expect(screen.getByText("component:ghost")).toBeInTheDocument();
+    expect(screen.getByText("orders-db")).toBeInTheDocument();
+    expect(screen.getByText(/1 reference points at a kind/)).toBeInTheDocument();
+    // The create page carries the unsaved-self-reference note.
+    expect(screen.getByText(/references to itself show as not found/i)).toBeInTheDocument();
+  });
+
+  test("the reference panel shows the all-clear line when everything resolves", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files/check") {
+        return Promise.resolve(jsonResponse(200, { findings: [] }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderCreate();
+
+    expect(await screen.findByText("All checkable references resolve.")).toBeInTheDocument();
+    expect(screen.queryByText("Unresolved references")).not.toBeInTheDocument();
   });
 
   test.each([

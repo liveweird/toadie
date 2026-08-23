@@ -4,6 +4,7 @@
   "skipToContent": "Przejdź do treści",
   "nav": {
     "home": "Strona główna",
-    "catalogFiles": "Pliki katalogu"
+    "catalogFiles": "Pliki katalogu",
+    "crossCheck": "Weryfikacja referencji"
   }
 }

@@ -51,3 +51,22 @@ export async function updateCatalogFile(id: number, req: CatalogFileRequest): Pr
 export async function deleteCatalogFile(id: number): Promise<void> {
   await voidRequest(`/api/v1/catalog-files/${id}`, { method: "DELETE" });
 }
+
+export type CrossCheckReport =
+  paths["/api/v1/catalog-files/cross-check"]["get"]["responses"]["200"]["content"]["application/json"];
+export type CrossCheckStatus = components["schemas"]["CrossCheckStatus"];
+export type DocumentCheckReport =
+  paths["/api/v1/catalog-files/check"]["post"]["responses"]["200"]["content"]["application/json"];
+
+/** The workspace report: every stored file's references resolved against the store. */
+export async function getCrossCheckReport(): Promise<CrossCheckReport> {
+  return jsonRequest<CrossCheckReport>("/api/v1/catalog-files/cross-check");
+}
+
+/** The editor's live check of one (possibly unsaved) document against the store. */
+export async function checkCatalogFile(req: CatalogFileRequest): Promise<DocumentCheckReport> {
+  return jsonRequest<DocumentCheckReport>("/api/v1/catalog-files/check", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}

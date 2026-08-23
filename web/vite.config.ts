@@ -70,7 +70,7 @@ export default defineConfig({
       ],
       // Floors set just below current measured coverage so they gate regressions without
       // blocking unrelated work. Raise as coverage improves.
-      // (2026-08-23: actuals lines 96.8 / statements 94.7 / functions 91.7 / branches 87.0)
+      // (2026-08-23: actuals lines 97.0 / statements 94.8 / functions 91.8 / branches 87.8)
       thresholds: {
         lines: 95,
         statements: 92,
