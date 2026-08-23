@@ -25,8 +25,11 @@ import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.config.MapApplicationConfig
 import io.ktor.server.config.mergeWith
 import io.ktor.server.testing.ApplicationTestBuilder
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
+import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
 
@@ -143,11 +146,43 @@ object TestUsers {
         )
     )
 
-    /** Direct soft-delete for fixtures (no delete endpoint exists in the skeleton). */
+    /** Direct soft-delete for fixtures needing to bypass the endpoint's guards. */
     suspend fun softDelete(id: UInt) {
         suspendTransaction(sharedTestDatabase) {
             UserService.Users.update({ UserService.Users.id eq id }) {
                 it[UserService.Users.markedAsDeleted] = true
+            }
+        }
+    }
+
+    /**
+     * Runs [block] while the users in [soloAdminIds] are the ONLY active admins — every other
+     * active ADMIN row (the seed admin and other tests' fixtures included) is temporarily
+     * soft-deleted and restored in a finally. Backs the last-admin-protection tests, which
+     * need `countActiveAdmins()` to be exact in the shared container.
+     */
+    suspend fun withSoloAdmins(soloAdminIds: Set<UInt>, block: suspend () -> Unit) {
+        val parked: List<UInt> = suspendTransaction(sharedTestDatabase) {
+            val others = UserService.Users.selectAll()
+                .where {
+                    (UserService.Users.role eq UserRole.ADMIN.name) and
+                        (UserService.Users.markedAsDeleted eq false)
+                }
+                .map { it[UserService.Users.id].value }
+                .toList()
+                .filter { it !in soloAdminIds }
+            UserService.Users.update({ UserService.Users.id inList others }) {
+                it[UserService.Users.markedAsDeleted] = true
+            }
+            others
+        }
+        try {
+            block()
+        } finally {
+            suspendTransaction(sharedTestDatabase) {
+                UserService.Users.update({ UserService.Users.id inList parked }) {
+                    it[UserService.Users.markedAsDeleted] = false
+                }
             }
         }
     }

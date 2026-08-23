@@ -1,6 +1,7 @@
 package ch.nokillswit
 
 import ch.nokillswit.auth.LoginRequest
+import io.ktor.client.call.body
 import ch.nokillswit.users.UserRole
 import io.ktor.client.request.delete
 import io.ktor.client.request.post
@@ -64,6 +65,67 @@ class AuditTest {
                 assertNotNull(event, "expected a $eventName audit event for file $fileId")
                 assertTrue(hasLong(event, "byUserId", userId.toLong()))
             }
+        } finally {
+            capture.detach()
+        }
+    }
+
+    @Test
+    fun `user management mutations emit audit events with deltas`() = testApplication {
+        usePostgresTestcontainer()
+        val adminEmail = uniqueEmail("useraudit")
+        val adminId = TestUsers.seed(email = adminEmail, password = "pw-123456789")
+        val capture = LogCapture("ch.nokillswit.audit")
+        try {
+            val client = authedClient(adminEmail, "pw-123456789")
+            val email = uniqueEmail("audited-user")
+            val created = client.post("/api/v1/users") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ch.nokillswit.users.UserCreateRequest(
+                        name = "Audited One",
+                        email = email,
+                        password = "initial-pass-123",
+                    ),
+                )
+            }.body<ch.nokillswit.users.UserResponse>()
+            client.put("/api/v1/users/${created.id}") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ch.nokillswit.users.UserUpdateRequest(
+                        name = "Audited Two",
+                        email = email,
+                        roles = listOf(ch.nokillswit.users.UserRole.ADMIN),
+                    ),
+                )
+            }
+            client.delete("/api/v1/users/${created.id}")
+
+            fun hasLong(event: ch.qos.logback.classic.spi.ILoggingEvent, key: String, value: Long) =
+                event.keyValuePairs?.any { it.key == key && it.value == value } == true
+
+            val createdEvent = capture.awaitEvent {
+                it.message == "user.created" && it.hasKeyValue("email", email)
+            }
+            assertNotNull(createdEvent)
+            assertTrue(hasLong(createdEvent, "byUserId", adminId.toLong()))
+            val updatedEvent = capture.awaitEvent {
+                it.message == "user.updated" && hasLong(it, "targetUserId", created.id.toLong())
+            }
+            assertNotNull(updatedEvent)
+            assertTrue(updatedEvent.hasKeyValue("nameFrom", "Audited One"))
+            assertTrue(updatedEvent.hasKeyValue("nameTo", "Audited Two"))
+            val rolesEvent = capture.awaitEvent {
+                it.message == "user.roles_changed" && hasLong(it, "targetUserId", created.id.toLong())
+            }
+            assertNotNull(rolesEvent)
+            assertTrue(rolesEvent.hasKeyValue("from", ""))
+            assertTrue(rolesEvent.hasKeyValue("to", "ADMIN"))
+            assertNotNull(
+                capture.awaitEvent {
+                    it.message == "user.deleted" && hasLong(it, "targetUserId", created.id.toLong())
+                },
+            )
         } finally {
             capture.detach()
         }

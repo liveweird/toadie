@@ -5,17 +5,30 @@ import ch.nokillswit.auth.MAX_PASSWORD_BYTES
 import ch.nokillswit.auth.exceedsBcryptLimit
 import ch.nokillswit.auth.hashPassword
 import ch.nokillswit.auth.verifyPassword
+import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.authz.ForbiddenException
 import ch.nokillswit.authz.NotFoundException
 import ch.nokillswit.authz.caller
+import ch.nokillswit.authz.requireAdmin
 import ch.nokillswit.authz.requireSelfOrAdmin
+import ch.nokillswit.infra.paging.optionalEnum
+import ch.nokillswit.infra.paging.optionalString
+import ch.nokillswit.infra.paging.parsePaging
+import ch.nokillswit.infra.paging.toPage
+import ch.nokillswit.infra.validation.sanitizeSingleLine
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
 import io.ktor.server.application.*
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
+import io.ktor.server.resources.delete
+import io.ktor.server.resources.get
+import io.ktor.server.resources.href
+import io.ktor.server.resources.post
 import io.ktor.server.resources.put
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
@@ -34,6 +47,9 @@ internal fun validatePassword(password: String) {
     }
 }
 
+/** Audit format for a roles set: comma-joined sorted names, "" = the plain-user empty set. */
+private fun Set<UserRole>.joinedNames(): String = map { it.name }.sorted().joinToString(",")
+
 @Serializable
 @Resource("/api/v1/users")
 class Users {
@@ -46,11 +62,135 @@ class Users {
     }
 }
 
+@Suppress("LongMethod") // one declarative route registrar per feature — the repo idiom
 fun Application.configureUserRoutes() {
     val userService = attributes[UserServiceKey]
 
     routing {
         authenticate {
+            // Management surface: ADMIN-only end to end (list included) — regular users only
+            // keep the self password change below.
+            get<Users> {
+                requireAdmin(call.caller())
+                val paging = call.parsePaging(sortable = setOf("id", "name", "email"))
+                val params = call.request.queryParameters
+                val filter = UserListFilter(
+                    name = params.optionalString("name"),
+                    email = params.optionalString("email"),
+                    role = params.optionalEnum<UserRole>("role"),
+                )
+                val result = userService.list(filter, paging)
+                call.respond(HttpStatusCode.OK, paging.toPage(result.items, result.total))
+            }
+            post<Users> {
+                val caller = call.caller()
+                // Guarded BEFORE the body decodes — the guard needs nothing from the payload,
+                // so a non-admin's malformed body stays 403, not the converter's 400.
+                requireAdmin(caller)
+                val req = call.receive<UserCreateRequest>()
+                val name = sanitizeSingleLine(req.name, "Name")
+                val email = canonicalEmail(req.email)
+                validateNameAndEmail(name, email)
+                validatePassword(req.password)
+                val role = rolesToStored(req.roles)
+                // The password arrives client-generated and leaves this handler only as a
+                // bcrypt hash — no response ever carries plaintext. A duplicate active email
+                // rides the V1 partial index into the central 23505 → 409.
+                val id = userService.create(
+                    User(name = name, email = email, passwordHash = hashPassword(req.password), role = role),
+                )
+                audit(
+                    "user.created",
+                    "byUserId" to caller.userId.toLong(),
+                    "newUserId" to id.toLong(),
+                    "email" to email,
+                    "roles" to (req.roles?.toSet() ?: emptySet()).joinedNames(),
+                )
+                call.response.header(HttpHeaders.Location, call.application.href(Users.Id(id = id)))
+                call.respond(
+                    HttpStatusCode.Created,
+                    UserResponse(id = id, name = name, email = email, roles = listOfNotNull(role.takeIf { it == UserRole.ADMIN })),
+                )
+            }
+            get<Users.Id> { route ->
+                // Guard BEFORE read (the documented users idiom): an unauthorized caller gets a
+                // uniform 403 whether or not the id exists.
+                requireSelfOrAdmin(call.caller(), route.id)
+                val user = userService.read(route.id)
+                    ?: throw NotFoundException("User not found")
+                call.respond(HttpStatusCode.OK, user.toResponse(route.id))
+            }
+            put<Users.Id> { route ->
+                val caller = call.caller()
+                requireAdmin(caller)
+                val req = call.receive<UserUpdateRequest>()
+                val existing = userService.read(route.id)
+                    ?: throw NotFoundException("User not found")
+                val requestedRole = rolesToStored(req.roles)
+                // Last-admin protection: demoting the final active administrator would lock
+                // everyone out of the management surface.
+                if (existing.role == UserRole.ADMIN && requestedRole != UserRole.ADMIN &&
+                    userService.countActiveAdmins() <= 1
+                ) {
+                    throw ConflictException("The last administrator cannot be demoted")
+                }
+                val name = sanitizeSingleLine(req.name, "Name")
+                val email = canonicalEmail(req.email)
+                validateNameAndEmail(name, email)
+                if (userService.update(route.id, name, email, requestedRole) == 0) {
+                    throw NotFoundException("User not found")
+                }
+                // Name and email are identity/security-relevant (email is the login
+                // identifier); audit with deltas only for the fields that actually changed.
+                if (name != existing.name || email != existing.email) {
+                    val fields = mutableListOf<Pair<String, Any?>>(
+                        "byUserId" to caller.userId.toLong(),
+                        "targetUserId" to route.id.toLong(),
+                    )
+                    if (name != existing.name) {
+                        fields += "nameFrom" to existing.name
+                        fields += "nameTo" to name
+                    }
+                    if (email != existing.email) {
+                        fields += "emailFrom" to existing.email
+                        fields += "emailTo" to email
+                    }
+                    audit("user.updated", *fields.toTypedArray())
+                }
+                if (requestedRole != existing.role) {
+                    audit(
+                        "user.roles_changed",
+                        "byUserId" to caller.userId.toLong(),
+                        "targetUserId" to route.id.toLong(),
+                        "from" to existing.additionalRoles.joinedNames(),
+                        "to" to req.roles.toSet().joinedNames(),
+                    )
+                }
+                call.respond(HttpStatusCode.NoContent)
+            }
+            delete<Users.Id> { route ->
+                val caller = call.caller()
+                requireAdmin(caller)
+                // Before the read, so it 403s uniformly: deleting your own account mid-session
+                // is a lockout footgun, not a management action.
+                if (caller.userId == route.id) {
+                    throw ForbiddenException("You cannot delete your own account")
+                }
+                val existing = userService.read(route.id)
+                    ?: throw NotFoundException("User not found")
+                if (existing.role == UserRole.ADMIN && userService.countActiveAdmins() <= 1) {
+                    throw ConflictException("The last administrator cannot be deleted")
+                }
+                if (userService.delete(route.id) == 0) {
+                    throw NotFoundException("User not found")
+                }
+                audit(
+                    "user.deleted",
+                    "byUserId" to caller.userId.toLong(),
+                    "targetUserId" to route.id.toLong(),
+                )
+                call.respond(HttpStatusCode.NoContent)
+            }
             put<Users.Id.Password> { route ->
                 val caller = call.caller()
                 requireSelfOrAdmin(caller, route.parent.id)
