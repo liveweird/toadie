@@ -31,6 +31,10 @@ class DictionaryService(private val database: R2dbcDatabase) {
         val dictionary = varchar("dictionary", length = 30)
         val position = integer("position")
         val value = varchar("value", length = 63)
+
+        // At most one active default per dictionary — backstopped by the V9 partial unique
+        // index; the exactly-one rule for non-empty documents lives in validateDictionaryUpdate.
+        val isDefault = bool("is_default").default(false)
         val markedAsDeleted = bool("marked_as_deleted").default(false)
     }
 
@@ -41,7 +45,13 @@ class DictionaryService(private val database: R2dbcDatabase) {
         Entries.selectAll()
             .where { (Entries.dictionary eq dict.name) and active() }
             .orderBy(Entries.position to SortOrder.ASC, Entries.id to SortOrder.ASC)
-            .map { row -> DictionaryEntry(id = row[Entries.id].value, value = row[Entries.value]) }
+            .map { row ->
+                DictionaryEntry(
+                    id = row[Entries.id].value,
+                    value = row[Entries.value],
+                    isDefault = row[Entries.isDefault],
+                )
+            }
             .toList()
     }
 
@@ -79,18 +89,25 @@ class DictionaryService(private val database: R2dbcDatabase) {
                 Entries.update({ Entries.id inList toSoftDelete }) { it[markedAsDeleted] = true }
             }
 
+            // Clear every active default flag BEFORE the upserts: moving the flag between two
+            // rows in one save would otherwise transiently hold two flagged rows mid-statement
+            // and trip the V9 partial unique index (the value-swap 409, but for the core flow).
+            Entries.update({ (Entries.dictionary eq dict.name) and active() }) { it[isDefault] = false }
+
             request.items.forEachIndexed { index, item ->
                 val normalized = normalizeDictionaryValue(item.value)
                 if (item.id != null) {
                     Entries.update({ (Entries.id eq item.id) and active() }) {
                         it[position] = index
                         it[value] = normalized
+                        it[isDefault] = item.isDefault
                     }
                 } else {
                     Entries.insert {
                         it[dictionary] = dict.name
                         it[position] = index
                         it[value] = normalized
+                        it[isDefault] = item.isDefault
                     }
                 }
             }

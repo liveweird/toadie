@@ -11,8 +11,8 @@ const ROLES_KEY = "toadie.auth.roles";
 type FetchMock = ReturnType<typeof vi.fn>;
 
 const SEED = [
-  { id: 1, value: "default" },
-  { id: 2, value: "team-a" },
+  { id: 1, value: "default", isDefault: true },
+  { id: 2, value: "team-a", isDefault: false },
 ];
 
 /**
@@ -22,7 +22,7 @@ const SEED = [
 function serveDictionary(mockFetch: FetchMock, initial = SEED, putStatus = 204) {
   let current = [...initial];
   let nextId = 100;
-  const puts: Array<{ items: Array<{ id?: number; value: string }> }> = [];
+  const puts: Array<{ items: Array<{ id?: number; value: string; isDefault: boolean }> }> = [];
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (!url.startsWith("/api/v1/dictionaries/namespaces")) {
       return Promise.resolve(jsonResponse(404, {}));
@@ -33,7 +33,11 @@ function serveDictionary(mockFetch: FetchMock, initial = SEED, putStatus = 204) 
       }
       const body = JSON.parse(String(init.body)) as (typeof puts)[number];
       puts.push(body);
-      current = body.items.map((item) => ({ id: item.id ?? nextId++, value: item.value }));
+      current = body.items.map((item) => ({
+        id: item.id ?? nextId++,
+        value: item.value,
+        isDefault: item.isDefault,
+      }));
       return Promise.resolve(new Response(null, { status: 204 }));
     }
     return Promise.resolve(jsonResponse(200, { items: current }));
@@ -60,12 +64,14 @@ describe("Namespaces page", () => {
     localStorage.clear();
   });
 
-  test("non-admin sees the ordered read-only list without editor controls", async () => {
+  test("non-admin sees the ordered read-only list with the Default badge, without editor controls", async () => {
     localStorage.setItem(ROLES_KEY, "[]");
     serveDictionary(mockFetch);
     renderPage();
     expect(await screen.findByText("default")).toBeInTheDocument();
     expect(screen.getByText("team-a")).toBeInTheDocument();
+    // Exactly one row carries the flagged-default badge.
+    expect(screen.getAllByText("Default", { exact: true })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Add namespace" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
   });
@@ -92,9 +98,9 @@ describe("Namespaces page", () => {
 
     await waitFor(() => expect(puts).toHaveLength(1));
     expect(puts[0].items).toEqual([
-      { id: 1, value: "default" },
-      { id: 2, value: "team-a" },
-      { value: "team-b" },
+      { id: 1, value: "default", isDefault: true },
+      { id: 2, value: "team-a", isDefault: false },
+      { value: "team-b", isDefault: false },
     ]);
     // Re-seed: Save drops back to disabled and a resubmit would now carry the minted id.
     await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeDisabled());
@@ -102,21 +108,48 @@ describe("Namespaces page", () => {
 
   test("reordering and removing rows shape the payload from the visible order", async () => {
     const puts = serveDictionary(mockFetch, [
-      { id: 1, value: "default" },
-      { id: 2, value: "team-a" },
-      { id: 3, value: "team-b" },
+      { id: 1, value: "default", isDefault: true },
+      { id: 2, value: "team-a", isDefault: false },
+      { id: 3, value: "team-b", isDefault: false },
     ]);
     renderPage();
     await screen.findByRole("textbox", { name: "Namespace 1" });
     await userEvent.click(screen.getByRole("button", { name: "Move namespace 3 up" }));
     await userEvent.click(screen.getByRole("button", { name: "Remove namespace 1" }));
+    // Removing row 1 dropped the flagged default — flag team-a so the save passes the rule.
+    await userEvent.click(screen.getByRole("radio", { name: "Mark namespace 2 as the default" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(puts).toHaveLength(1));
     expect(puts[0].items).toEqual([
-      { id: 3, value: "team-b" },
-      { id: 2, value: "team-a" },
+      { id: 3, value: "team-b", isDefault: false },
+      { id: 2, value: "team-a", isDefault: true },
     ]);
+  });
+
+  test("the default radio moves the flag to exactly one row", async () => {
+    const puts = serveDictionary(mockFetch);
+    renderPage();
+    await screen.findByRole("textbox", { name: "Namespace 1" });
+    const radios = screen.getAllByRole("radio");
+    expect(radios.map((r) => (r as HTMLInputElement).checked)).toEqual([true, false]);
+    await userEvent.click(screen.getByRole("radio", { name: "Mark namespace 2 as the default" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(puts).toHaveLength(1));
+    expect(puts[0].items).toEqual([
+      { id: 1, value: "default", isDefault: false },
+      { id: 2, value: "team-a", isDefault: true },
+    ]);
+  });
+
+  test("removing the flagged row without re-flagging blocks the save with the inline rule", async () => {
+    const puts = serveDictionary(mockFetch);
+    renderPage();
+    await screen.findByRole("textbox", { name: "Namespace 1" });
+    await userEvent.click(screen.getByRole("button", { name: "Remove namespace 1" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Mark one namespace as the default")).toBeInTheDocument();
+    expect(puts).toHaveLength(0);
   });
 
   test("a duplicate value flags the later row inline and blocks the save", async () => {

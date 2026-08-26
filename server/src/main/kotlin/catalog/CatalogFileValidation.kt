@@ -62,7 +62,9 @@ fun sanitizedCatalogFile(file: CatalogFile): CatalogFile = file.copy(
     kind = SUPPORTED_KINDS.firstOrNull { it.equals(file.kind.trim(), ignoreCase = true) } ?: file.kind.trim(),
     metadata = file.metadata.copy(
         name = file.metadata.name.trim(),
-        namespace = file.metadata.namespace.trim().lowercase().ifEmpty { DEFAULT_NAMESPACE },
+        // Blank survives sanitization: it means "the ADMIN-flagged default namespace", which
+        // only the service can resolve (a DB read) — see CatalogFileService.resolveNamespace.
+        namespace = file.metadata.namespace.trim().lowercase(),
         title = file.metadata.title?.trim(),
         description = file.metadata.description?.trim(),
         tags = file.metadata.tags.map { it.trim() },
@@ -223,7 +225,11 @@ private fun isAbsoluteUri(value: String): Boolean = try {
 
 private fun validateMetadata(metadata: CatalogFileMetadata) {
     validateNamePart(metadata.name, "metadata.name")
-    if (!NAMESPACE_REGEX.matches(metadata.namespace) || metadata.namespace.length > MAX_ENTITY_PART_LENGTH) {
+    // Blank is legal here: it means the flagged default namespace, resolved (and its
+    // existence enforced) by the service at write time — validation stays pure.
+    if (metadata.namespace.isNotEmpty() &&
+        (!NAMESPACE_REGEX.matches(metadata.namespace) || metadata.namespace.length > MAX_ENTITY_PART_LENGTH)
+    ) {
         throw BadRequestException(
             "metadata.namespace must be 1-$MAX_ENTITY_PART_LENGTH lowercase alphanumeric characters " +
                 "with single dash separators",

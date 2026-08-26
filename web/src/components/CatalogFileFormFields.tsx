@@ -49,16 +49,16 @@ type Suggest = (field: RefField) => string[];
  */
 function NamespaceSelect({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
-  const { options, loading, error } = useNamespaceOptions(form.values.namespace);
+  const { options, defaultNamespace, loading, error } = useNamespaceOptions(form.values.namespace);
   return (
     <Select
       label={t("catalog.field.namespace")}
-      placeholder="default"
+      placeholder={defaultNamespace ?? "default"}
       data={options}
       searchable
       clearable
       disabled={loading}
-      description={t("catalog.hint.namespace")}
+      description={t("catalog.hint.namespace", { default: defaultNamespace ?? "default" })}
       value={form.values.namespace.trim().toLowerCase() || null}
       onChange={(value) => form.setFieldValue("namespace", value ?? "")}
       error={form.getInputProps("namespace").error ?? (error ? t("catalog.namespaceOptionsFailed") : undefined)}
@@ -368,9 +368,12 @@ export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
   const kind = form.values.kind;
   const has = (field: SpecFieldName) => fieldApplies(kind, field);
   // The reference pickers' pool — advisory: while loading or on failure the ref fields
-  // simply offer no suggestions and stay plain free-text inputs.
+  // simply offer no suggestions and stay plain free-text inputs. A blank namespace suggests
+  // against the flagged default (where a blank-namespace file will actually land).
   const identities = useCatalogIdentities();
-  const suggest = (field: RefField) => refSuggestions(identities, field, form.values.namespace);
+  const { defaultNamespace } = useNamespaceOptions();
+  const suggest = (field: RefField) =>
+    refSuggestions(identities, field, form.values.namespace.trim() || (defaultNamespace ?? "default"));
   const relationFields = RELATION_FIELDS.filter(has);
 
   return (

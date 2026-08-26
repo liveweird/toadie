@@ -22,15 +22,16 @@ enum class Dictionary(val slug: String) {
     }
 }
 
+/** [isDefault]: what a blank/omitted catalog-file namespace resolves to — exactly one per document. */
 @Serializable
-data class DictionaryEntry(val id: UInt, val value: String)
+data class DictionaryEntry(val id: UInt, val value: String, val isDefault: Boolean)
 
 @Serializable
 data class DictionaryEntryList(val items: List<DictionaryEntry>)
 
 /** PUT item: `id` present = update that active entry in place; absent = insert a new one. */
 @Serializable
-data class DictionaryEntryInput(val id: UInt? = null, val value: String)
+data class DictionaryEntryInput(val id: UInt? = null, val value: String, val isDefault: Boolean = false)
 
 @Serializable
 data class DictionaryUpdateRequest(val items: List<DictionaryEntryInput>)
@@ -61,6 +62,11 @@ fun validateDictionaryUpdate(request: DictionaryUpdateRequest) {
     }
     if (normalized.size != normalized.toSet().size) {
         throw BadRequestException("Dictionary values must be unique")
+    }
+    // Exactly one DEFAULT per non-empty document (the empty document legally has none —
+    // blank-namespace catalog writes then 400 until an entry is flagged).
+    if (request.items.isNotEmpty() && request.items.count { it.isDefault } != 1) {
+        throw BadRequestException("Exactly one dictionary entry must be marked as the default")
     }
 }
 

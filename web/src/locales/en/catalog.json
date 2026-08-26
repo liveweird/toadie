@@ -59,7 +59,7 @@
     "profilePicture": "Picture URL"
   },
   "hint": {
-    "namespace": "Pick a defined namespace; blank means \"default\"",
+    "namespace": "Pick a defined namespace; blank means \"{{default}}\"",
     "type": "e.g. service, website, library",
     "lifecycle": "e.g. experimental, production, deprecated",
     "owner": "The owning team. Kind defaults to group — “team-platform” means group:team-platform; a person needs the user: prefix.",

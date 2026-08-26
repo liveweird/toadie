@@ -41,7 +41,7 @@ export async function adminApiHeaders(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 }
 
-export type DictionaryItems = { items: { id: number; value: string }[] };
+export type DictionaryItems = { items: { id: number; value: string; isDefault: boolean }[] };
 
 /**
  * Registers this run's throwaway namespaces (catalog writes accept only dictionary-defined
@@ -65,7 +65,9 @@ async function registerRunNamespaces(): Promise<void> {
     headers,
     body: JSON.stringify({
       items: [
-        ...current.items.map(({ id, value }) => ({ id, value })),
+        // The whole-document replace must replay each row's DEFAULT flag, or the
+        // exactly-one-default rule rejects the PUT (and a flip would be a silent side effect).
+        ...current.items.map(({ id, value, isDefault }) => ({ id, value, isDefault })),
         ...Object.values(minted).map((value) => ({ value })),
       ],
     }),

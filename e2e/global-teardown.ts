@@ -26,7 +26,9 @@ async function removeRunNamespaces(): Promise<void> {
       await fetch(`${BASE_URL}/api/v1/dictionaries/namespaces`, {
         method: "PUT",
         headers,
-        body: JSON.stringify({ items: kept.map(({ id, value }) => ({ id, value })) }),
+        body: JSON.stringify({
+          items: kept.map(({ id, value, isDefault }) => ({ id, value, isDefault })),
+        }),
       });
     }
     rmSync(NAMESPACES_FILE, { force: true });

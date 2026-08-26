@@ -450,9 +450,10 @@ export interface paths {
          *     order (there is no reorder endpoint). An item carrying an `id` renames/repositions
          *     that active entry in place (rename keeps identity); an id-less item inserts; an
          *     active entry missing from the payload is soft-deleted. Values are trimmed and folded
-         *     to lowercase, and must satisfy the namespace grammar. Swapping two values in one
-         *     save is a `409` (the value uniqueness index) — rename through a temporary value in
-         *     two saves.
+         *     to lowercase, and must satisfy the namespace grammar; a non-empty document must mark
+         *     EXACTLY one item `isDefault` (what blank catalog-file namespaces resolve to).
+         *     Swapping two values in one save is a `409` (the value uniqueness index) — rename
+         *     through a temporary value in two saves.
          */
         put: operations["replaceDictionary"];
         post?: never;
@@ -599,11 +600,8 @@ export interface components {
         CatalogFileMetadata: {
             /** @description Entity name — unique (case-insensitively) per namespace among active files. */
             name: string;
-            /**
-             * @description Folded to lowercase; blank/omitted means `default`. Must be an active entry of the `namespaces` dictionary (`GET /api/v1/dictionaries/namespaces`) — writes with an undefined namespace are rejected with `400`.
-             * @default default
-             */
-            namespace: string;
+            /** @description Folded to lowercase; blank/omitted resolves to the dictionary entry flagged as the DEFAULT at write time (none flagged → `400`). A concrete value must be an active entry of the `namespaces` dictionary (`GET /api/v1/dictionaries/namespaces`) — undefined namespaces are rejected with `400`. */
+            namespace?: string;
             /** @description Display-only alternative to `name`; no format restrictions. */
             title?: string | null;
             description?: string | null;
@@ -780,6 +778,8 @@ export interface components {
             id: number;
             /** @description Stored lowercase-folded (the namespace grammar). */
             value: string;
+            /** @description Exactly one entry per (non-empty) dictionary carries this — for `namespaces` it is what a blank/omitted catalog-file namespace resolves to. */
+            isDefault: boolean;
         };
         DictionaryEntryList: {
             /** @description Active entries in the admin-curated order. */
@@ -793,6 +793,11 @@ export interface components {
             id?: number | null;
             /** @description Trimmed and folded to lowercase before validation and storage. */
             value: string;
+            /**
+             * @description A non-empty document must flag EXACTLY one item (zero or several is a `400`).
+             * @default false
+             */
+            isDefault: boolean;
         };
         DictionaryUpdateRequest: {
             /** @description The full replacement document — array order becomes the stored order. */

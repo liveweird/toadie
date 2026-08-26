@@ -48,6 +48,11 @@ test("admin curates the ordered namespaces list; a regular user reads it only", 
   const save = page.getByRole("button", { name: "Save" });
   await expect(save).toBeDisabled();
 
+  // Exactly one row carries the DEFAULT radio; this spec never CHANGES which — the flag is
+  // shared run-state that parallel specs' blank-namespace creates resolve against (flipping
+  // is pinned by the server + web unit tests instead).
+  await expect(page.getByRole("radio", { checked: true })).toHaveCount(1);
+
   // A grammar violation is flagged inline and never reaches the server.
   const lastEntry = () => page.getByRole("textbox", { name: /^Namespace / }).last();
   await page.getByRole("button", { name: "Add namespace" }).click();
@@ -81,6 +86,7 @@ test("admin curates the ordered namespaces list; a regular user reads it only", 
   await page.getByRole("link", { name: "Namespaces" }).click();
   await expect(page.getByRole("heading", { name: "Namespaces" })).toBeVisible();
   await expect(page.getByText(nsB)).toBeVisible();
+  await expect(page.getByText("Default", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Add namespace" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
   await logoutButton(page).click();

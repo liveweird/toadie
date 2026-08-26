@@ -3,6 +3,7 @@ import type { TFunction } from "i18next";
 import {
   emptyEntryDraft,
   foldNamespaceValue,
+  missingDefault,
   namespaceFormValidation,
   namespaceSaveErrorMessage,
   toFormValues,
@@ -14,29 +15,46 @@ import { ApiError } from "../api/http";
 // Key-echoing translator: assertions match on i18n keys, not rendered English.
 const t = ((key: string) => key) as TFunction;
 
-function values(...entries: Array<{ id?: number; value: string }>): NamespaceFormValues {
-  return { entries: entries.map((e, i) => ({ key: `k${i}`, ...e })) };
+function values(
+  ...entries: Array<{ id?: number; value: string; isDefault?: boolean }>
+): NamespaceFormValues {
+  return { entries: entries.map((e, i) => ({ key: `k${i}`, isDefault: false, ...e })) };
 }
 
 describe("namespaceForm", () => {
   test("toFormValues mints stable local keys and keeps server ids", () => {
     const form = toFormValues([
-      { id: 7, value: "default" },
-      { id: 9, value: "team-a" },
+      { id: 7, value: "default", isDefault: true },
+      { id: 9, value: "team-a", isDefault: false },
     ]);
     expect(form.entries.map((e) => e.id)).toEqual([7, 9]);
     expect(form.entries.map((e) => e.value)).toEqual(["default", "team-a"]);
+    expect(form.entries.map((e) => e.isDefault)).toEqual([true, false]);
     const keys = form.entries.map((e) => e.key);
     expect(new Set(keys).size).toBe(2);
     expect(keys).not.toContain(emptyEntryDraft().key);
   });
 
-  test("toUpdateBody strips keys, folds values, and preserves ids in visible order", () => {
-    const body = toUpdateBody(values({ id: 7, value: "  Team-B " }, { value: "team-c" }));
-    expect(body).toEqual({ items: [{ id: 7, value: "team-b" }, { id: undefined, value: "team-c" }] });
-    expect(JSON.parse(JSON.stringify(body))).toEqual({
-      items: [{ id: 7, value: "team-b" }, { value: "team-c" }],
+  test("toUpdateBody strips keys, folds values, and preserves ids and flags in visible order", () => {
+    const body = toUpdateBody(
+      values({ id: 7, value: "  Team-B ", isDefault: true }, { value: "team-c" }),
+    );
+    expect(body).toEqual({
+      items: [
+        { id: 7, value: "team-b", isDefault: true },
+        { id: undefined, value: "team-c", isDefault: false },
+      ],
     });
+    expect(JSON.parse(JSON.stringify(body))).toEqual({
+      items: [{ id: 7, value: "team-b", isDefault: true }, { value: "team-c", isDefault: false }],
+    });
+  });
+
+  test("missingDefault flags a non-empty document with no default and nothing else", () => {
+    expect(missingDefault(values({ value: "a" }, { value: "b" }))).toBe(true);
+    expect(missingDefault(values({ value: "a", isDefault: true }, { value: "b" }))).toBe(false);
+    expect(missingDefault({ entries: [] })).toBe(false);
+    expect(emptyEntryDraft().isDefault).toBe(false);
   });
 
   test("folding trims and lowercases — the server's stored form", () => {

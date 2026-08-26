@@ -47,6 +47,9 @@ fun Application.configureDictionaryRoutes() {
                     "added" to counts.added,
                     "renamed" to counts.renamed,
                     "removed" to counts.removed,
+                    // The flagged default's stored value (null for the empty document).
+                    "default" to request.items.firstOrNull { it.isDefault }
+                        ?.let { normalizeDictionaryValue(it.value) },
                 )
                 call.respond(HttpStatusCode.NoContent)
             }

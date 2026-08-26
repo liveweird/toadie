@@ -13,6 +13,8 @@ import { getDictionary } from "../api/dictionaries";
  */
 export function useNamespaceOptions(current?: string): {
   options: string[];
+  /** The entry flagged as DEFAULT — what a blank namespace resolves to (undefined while loading or when none is flagged). */
+  defaultNamespace: string | undefined;
   loading: boolean;
   error: boolean;
 } {
@@ -28,5 +30,7 @@ export function useNamespaceOptions(current?: string): {
     return folded && !active.includes(folded) ? [...active, folded] : active;
   }, [data, current]);
 
-  return { options, loading: isLoading, error: isError };
+  const defaultNamespace = useMemo(() => data?.find((entry) => entry.isDefault)?.value, [data]);
+
+  return { options, defaultNamespace, loading: isLoading, error: isError };
 }

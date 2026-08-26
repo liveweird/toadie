@@ -363,8 +363,16 @@ function specFor(values: CatalogFileFormValues): EntitySpecWire {
   };
 }
 
-/** Form → wire shape: trims everything, drops empties, folds the namespace like the server. */
-export function toCatalogFileRequest(values: CatalogFileFormValues): CatalogFileRequest {
+/**
+ * Form → wire shape: trims everything, drops empties, folds the namespace like the server.
+ * A blank namespace means "the ADMIN-flagged default entry": the submit path sends it blank
+ * (the server resolves authoritatively), while the editor's preview/check path passes the
+ * flagged value as [defaultNamespace] so the YAML preview shows what will actually be stored.
+ */
+export function toCatalogFileRequest(
+  values: CatalogFileFormValues,
+  defaultNamespace = "",
+): CatalogFileRequest {
   const labels = Object.fromEntries(
     values.labels.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value.trim()]),
   );
@@ -375,7 +383,7 @@ export function toCatalogFileRequest(values: CatalogFileFormValues): CatalogFile
     kind: values.kind,
     metadata: {
       name: values.name.trim(),
-      namespace: values.namespace.trim().toLowerCase() || "default",
+      namespace: values.namespace.trim().toLowerCase() || defaultNamespace,
       title: values.title.trim() || undefined,
       description: values.description.trim() || undefined,
       labels,

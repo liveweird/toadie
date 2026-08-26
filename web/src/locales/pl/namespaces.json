@@ -25,5 +25,8 @@
     "validation": "Co najmniej jedna wartość jest nieprawidłowa",
     "saveFailedStatus": "Zapis nie powiódł się ({{status}})",
     "saveFailed": "Zapis nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
-  }
+  },
+  "defaultBadge": "Domyślna",
+  "defaultAria": "Oznacz przestrzeń nazw {{position}} jako domyślną",
+  "defaultRequired": "Oznacz jedną przestrzeń nazw jako domyślną"
 }

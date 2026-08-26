@@ -130,6 +130,19 @@ class RoundTripTest {
     }
 
     @Test
+    fun `import resolves a blank namespace to the flagged default in the result row`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("roundtrip")
+        val custom = uniqueEntityName("impdflt")
+        TestNamespaces.withDefaultNamespace(custom) {
+            val result = client.import(listOf(componentFile(uniqueEntityName("impblank"), namespace = "")))
+                .results.single()
+            assertEquals(ImportResultStatus.CREATED, result.status)
+            assertEquals(custom, result.namespace, "the row reports the CONCRETE resolved namespace")
+        }
+    }
+
+    @Test
     fun `import reports an undefined namespace as INVALID and stores nothing`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")

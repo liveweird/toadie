@@ -24,7 +24,9 @@ data class CatalogFile(
 data class CatalogFileMetadata(
     val name: String,
     // Folded to lowercase by [sanitizedCatalogFile] (Backstage renders namespaces lowercase).
-    val namespace: String = DEFAULT_NAMESPACE,
+    // Blank/omitted resolves to the ADMIN-flagged default dictionary entry at write time
+    // (CatalogFileService.resolveNamespace) — stored files always hold the concrete value.
+    val namespace: String = "",
     val title: String? = null,
     val description: String? = null,
     val labels: Map<String, String> = emptyMap(),

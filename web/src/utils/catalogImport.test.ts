@@ -28,7 +28,8 @@ describe("parseCatalogYaml", () => {
   test("defaults an omitted namespace and accepts-and-ignores apiVersion", () => {
     const { documents, errors } = parseCatalogYaml(COMPONENT_YAML);
     expect(errors).toEqual([]);
-    expect(documents[0].metadata.namespace).toBe("default");
+    // Absent means "the ADMIN-flagged default" — sent blank, resolved server-side.
+    expect(documents[0].metadata.namespace).toBe("");
     expect(documents[0]).not.toHaveProperty("apiVersion");
   });
 
@@ -109,6 +110,9 @@ describe("parseCatalogYaml", () => {
   });
 
   test("the round-trip property: parsing a generated export returns the same documents", () => {
+    // One deliberate representation change survives the trip: the generator omits a literal
+    // `default` namespace (Backstage-canonical output), and the parser maps the absent key
+    // to "" (resolved to the flagged default server-side) — see expectedAfterTrip below.
     const files: CatalogFileRequest[] = [
       {
         kind: "Component",
@@ -147,7 +151,12 @@ describe("parseCatalogYaml", () => {
     ];
     const { documents, errors } = parseCatalogYaml(catalogInfoMultiYaml(files));
     expect(errors).toEqual([]);
-    expect(documents).toEqual(files);
+    const expectedAfterTrip = files.map((f) =>
+      f.metadata.namespace === "default"
+        ? { ...f, metadata: { ...f.metadata, namespace: "" } }
+        : f,
+    );
+    expect(documents).toEqual(expectedAfterTrip);
   });
 });
 

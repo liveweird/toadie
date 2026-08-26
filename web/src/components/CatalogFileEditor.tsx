@@ -7,6 +7,7 @@ import ReferenceCheckPanel from "./ReferenceCheckPanel";
 import YamlPreviewCard from "./YamlPreviewCard";
 import { toCatalogFileRequest, type CatalogFileFormValues } from "../utils/catalogFileForm";
 import { catalogInfoYaml } from "../utils/catalogYaml";
+import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
 
 /**
  * The editor shell shared by the create and edit catalog-file pages: the app's document
@@ -31,8 +32,11 @@ export default function CatalogFileEditor({
   showSelfNote?: boolean;
 }) {
   const { t } = useTranslation();
-  // One mapping per render, shared by the preview and the reference panel.
-  const requestDocument = toCatalogFileRequest(form.values);
+  // One mapping per render, shared by the preview and the reference panel. Blank namespace
+  // shows as the flagged default here (what will actually be stored); the pages' SUBMIT
+  // mapping deliberately keeps it blank — the server resolves authoritatively.
+  const { defaultNamespace } = useNamespaceOptions();
+  const requestDocument = toCatalogFileRequest(form.values, defaultNamespace);
   return (
     <Grid>
       <Grid.Col span={{ base: 12, md: 7 }}>

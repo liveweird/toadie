@@ -25,5 +25,8 @@
     "validation": "One or more values are invalid",
     "saveFailedStatus": "Save failed ({{status}})",
     "saveFailed": "Save failed. Check your connection and try again."
-  }
+  },
+  "defaultBadge": "Default",
+  "defaultAria": "Mark namespace {{position}} as the default",
+  "defaultRequired": "Mark one namespace as the default"
 }

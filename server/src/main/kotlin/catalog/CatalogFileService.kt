@@ -99,16 +99,32 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         otherColumn = UserService.Users.id,
     )
 
+    /** The active NAMESPACE entry flagged as the default, or null when none is (V9). */
+    private suspend fun flaggedDefaultNamespace(): String? =
+        DictionaryService.Entries.selectAll()
+            .where {
+                (DictionaryService.Entries.dictionary eq Dictionary.NAMESPACE.name) and
+                    (DictionaryService.Entries.isDefault eq true) and
+                    (DictionaryService.Entries.markedAsDeleted eq false)
+            }
+            .map { it[DictionaryService.Entries.value] }
+            .toList()
+            .singleOrNull()
+
     /**
      * The second sanctioned cross-feature table read (see persistence.md): STRICT namespace
-     * enforcement — every write (create, update, import) requires its namespace to be an
-     * ACTIVE entry of the NAMESPACE dictionary, checked inside the write's own transaction.
-     * There is no grandfathering: a stored file whose namespace was since removed from the
-     * dictionary cannot be saved until the namespace is re-added or changed (a deliberate
-     * product decision). The incoming value is already sanitized (lowercase-folded, blank →
-     * `default`), matching the dictionary's stored form.
+     * enforcement — every write (create, update, import) resolves its (sanitized: folded,
+     * possibly blank) namespace inside the write's own transaction. Blank means "the
+     * ADMIN-flagged default entry" (none flagged → 400); a concrete value must be an ACTIVE
+     * dictionary entry. There is no grandfathering: a stored file whose namespace was since
+     * removed cannot be saved until it is re-added or changed (a deliberate product decision).
      */
-    private suspend fun requireDefinedNamespace(namespace: String) {
+    private suspend fun resolvedNamespace(namespace: String): String {
+        if (namespace.isEmpty()) {
+            return flaggedDefaultNamespace() ?: throw BadRequestException(
+                "No default namespace is defined — mark one on the Namespaces page or specify a namespace",
+            )
+        }
         val defined = DictionaryService.Entries.selectAll()
             .where {
                 (DictionaryService.Entries.dictionary eq Dictionary.NAMESPACE.name) and
@@ -119,17 +135,31 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         if (!defined) {
             throw BadRequestException("metadata.namespace '$namespace' is not a defined namespace")
         }
+        return namespace
+    }
+
+    private fun CatalogFile.withNamespace(resolved: String): CatalogFile =
+        if (metadata.namespace == resolved) this else copy(metadata = metadata.copy(namespace = resolved))
+
+    /**
+     * Resolves a sanitized file's namespace outside a write ([resolvedNamespace] semantics,
+     * own transaction) — the import path uses it so each result row reports the CONCRETE
+     * namespace a blank one resolved to.
+     */
+    suspend fun resolveNamespace(file: CatalogFile): CatalogFile = suspendTransaction(database) {
+        file.withNamespace(resolvedNamespace(file.metadata.namespace))
     }
 
     suspend fun create(file: CatalogFile, createdByUserId: UInt): UInt = suspendTransaction(database) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
-        requireDefinedNamespace(file.metadata.namespace)
+        // The stored row AND the content JSON both carry the resolved concrete namespace.
+        val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
-            it[kind] = file.kind
-            it[name] = file.metadata.name
-            it[namespace] = file.metadata.namespace
-            it[content] = json.encodeToString(file)
+            it[kind] = stored.kind
+            it[name] = stored.metadata.name
+            it[namespace] = stored.metadata.namespace
+            it[content] = json.encodeToString(stored)
             it[createdBy] = createdByUserId
             it[createdAt] = now
             it[updatedAt] = now
@@ -146,12 +176,12 @@ class CatalogFileService(private val database: R2dbcDatabase) {
 
     suspend fun update(id: UInt, file: CatalogFile): Int = suspendTransaction(database) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
-        requireDefinedNamespace(file.metadata.namespace)
+        val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
-            it[kind] = file.kind
-            it[name] = file.metadata.name
-            it[namespace] = file.metadata.namespace
-            it[content] = json.encodeToString(file)
+            it[kind] = stored.kind
+            it[name] = stored.metadata.name
+            it[namespace] = stored.metadata.namespace
+            it[content] = json.encodeToString(stored)
             it[updatedAt] = System.currentTimeMillis()
         }
     }
@@ -174,7 +204,10 @@ class CatalogFileService(private val database: R2dbcDatabase) {
      * hot path, so it reads only the three denormalized identity columns — never `content`.
      */
     suspend fun check(file: CatalogFile): DocumentCheckReport = suspendTransaction(database) {
-        DocumentCheckReport(findings = checkDocument(file, activeIdentities()).findings)
+        // A blank namespace resolves to the flagged default for the live check too; the
+        // literal fallback keeps the check non-blocking when nothing is flagged.
+        val ns = file.metadata.namespace.ifEmpty { flaggedDefaultNamespace() ?: DEFAULT_NAMESPACE }
+        DocumentCheckReport(findings = checkDocument(file.withNamespace(ns), activeIdentities()).findings)
     }
 
     /** The identity triple of every active file, from the denormalized columns alone. */
@@ -229,27 +262,40 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId) }
 
     private suspend fun importOne(index: Int, raw: CatalogFile, createdByUserId: UInt): ImportFileResult {
-        val file = sanitizedCatalogFile(raw)
-        val base = ImportFileResult(
+        val sanitized = sanitizedCatalogFile(raw)
+        fun base(f: CatalogFile) = ImportFileResult(
             index = index,
-            kind = file.kind,
-            namespace = file.metadata.namespace,
-            name = file.metadata.name,
+            kind = f.kind,
+            namespace = f.metadata.namespace,
+            name = f.metadata.name,
             status = ImportResultStatus.ERROR,
         )
         try {
-            validateCatalogFile(file)
+            validateCatalogFile(sanitized)
         } catch (e: BadRequestException) {
-            return base.copy(status = ImportResultStatus.INVALID, message = e.message)
+            return base(sanitized).copy(status = ImportResultStatus.INVALID, message = e.message)
         }
+        // Resolve blank → the flagged default (or the undefined-namespace 400) up front, so
+        // the result row reports the CONCRETE namespace the document lands in. Storage-level
+        // resolution failures classify as ERROR rows exactly like create's.
+        val file = try {
+            resolveNamespace(sanitized)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: BadRequestException) {
+            return base(sanitized).copy(status = ImportResultStatus.INVALID, message = e.message)
+        } catch (e: Exception) {
+            return base(sanitized).copy(status = ImportResultStatus.ERROR, message = e.message ?: "Storage failed")
+        }
+        val base = base(file)
         return try {
             base.copy(status = ImportResultStatus.CREATED, fileId = create(file, createdByUserId))
         } catch (e: CancellationException) {
             // Cancellation is not a per-document failure — a gone client must stop the batch.
             throw e
         } catch (e: BadRequestException) {
-            // create()'s own rule rejections (the undefined-namespace check) are INVALID rows,
-            // exactly like the pre-flight validator's.
+            // create()'s own rule rejections (the namespace resolution re-check) are INVALID
+            // rows, exactly like the pre-flight validator's.
             base.copy(status = ImportResultStatus.INVALID, message = e.message)
         } catch (e: Exception) {
             if (e.isUniqueViolation()) {

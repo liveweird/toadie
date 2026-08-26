@@ -1,12 +1,14 @@
 import { useState } from "react";
 import {
   Alert,
+  Badge,
   Button,
   Center,
   Container,
   Group,
   Loader,
   Paper,
+  Radio,
   Stack,
   Text,
   TextInput,
@@ -25,6 +27,7 @@ import EmptyState from "../components/EmptyState";
 import RowControls from "../components/RowControls";
 import {
   emptyEntryDraft,
+  missingDefault,
   namespaceFormValidation,
   namespaceSaveErrorMessage,
   toFormValues,
@@ -95,7 +98,14 @@ function ReadOnlyEntries({ items }: { items: DictionaryEntry[] }) {
             <Text size="sm" c="dimmed" w={24} ta="right" style={{ flexShrink: 0 }}>
               {index + 1}.
             </Text>
-            <Text size="sm">{entry.value}</Text>
+            <Group gap="xs" wrap="nowrap" align="baseline" justify="space-between" style={{ flex: 1 }}>
+              <Text size="sm">{entry.value}</Text>
+              {entry.isDefault && (
+                <Badge color="teal" variant="light" size="sm" style={{ flexShrink: 0 }}>
+                  {t("namespaces.defaultBadge")}
+                </Badge>
+              )}
+            </Group>
           </Group>
         </Paper>
       ))}
@@ -119,6 +129,12 @@ function NamespacesEditor({ initialItems }: { initialItems: DictionaryEntry[] })
   });
 
   async function save(values: NamespaceFormValues) {
+    // The document-level rule the per-field validation can't carry: removing the flagged
+    // row leaves no default — the radio UI already makes more-than-one impossible.
+    if (missingDefault(values)) {
+      setError(t("namespaces.defaultRequired"));
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -153,6 +169,12 @@ function NamespacesEditor({ initialItems }: { initialItems: DictionaryEntry[] })
     closeCancel();
   }
 
+  function markDefault(index: number) {
+    form.setValues({
+      entries: form.values.entries.map((entry, i) => ({ ...entry, isDefault: i === index })),
+    });
+  }
+
   const rows = form.values.entries;
 
   return (
@@ -179,6 +201,13 @@ function NamespacesEditor({ initialItems }: { initialItems: DictionaryEntry[] })
                 )}
                 inputWrapperOrder={["label", "input", "description", "error"]}
                 {...form.getInputProps(`entries.${index}.value`)}
+              />
+              <Radio
+                mt={10}
+                checked={row.isDefault}
+                onChange={() => markDefault(index)}
+                label={t("namespaces.defaultBadge")}
+                aria-label={t("namespaces.defaultAria", { position: index + 1 })}
               />
               <RowControls
                 index={index}

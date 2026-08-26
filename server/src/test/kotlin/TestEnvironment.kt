@@ -258,46 +258,100 @@ object TestNamespaces {
         ch.nokillswit.dictionaries.DictionaryService(sharedTestDatabase)
     }
 
-    data class RawEntry(val id: UInt, val value: String, val position: Int, val markedAsDeleted: Boolean)
+    private val DICT = ch.nokillswit.dictionaries.Dictionary.NAMESPACE
+
+    data class RawEntry(
+        val id: UInt,
+        val value: String,
+        val position: Int,
+        val isDefault: Boolean,
+        val markedAsDeleted: Boolean,
+    )
 
     suspend fun rawRows(): List<RawEntry> = suspendTransaction(sharedTestDatabase) {
         val t = ch.nokillswit.dictionaries.DictionaryService.Entries
         t.selectAll()
-            .where { t.dictionary eq ch.nokillswit.dictionaries.Dictionary.NAMESPACE.name }
-            .map { RawEntry(it[t.id].value, it[t.value], it[t.position], it[t.markedAsDeleted]) }
+            .where { t.dictionary eq DICT.name }
+            .map { RawEntry(it[t.id].value, it[t.value], it[t.position], it[t.isDefault], it[t.markedAsDeleted]) }
             .toList()
     }
 
+    /** The active document as replayable inputs — ids AND default flags preserved. */
+    private suspend fun currentInputs(): List<ch.nokillswit.dictionaries.DictionaryEntryInput> =
+        service.read(DICT).map {
+            ch.nokillswit.dictionaries.DictionaryEntryInput(it.id, it.value, isDefault = it.isDefault)
+        }
+
     /**
      * Ensures every value in [values] is an active namespace entry (append-preserving
-     * whole-document replace; already-present values are kept as-is) and returns their ids
-     * in [values] order.
+     * whole-document replace keeping every existing flag) and returns their ids in
+     * [values] order.
      */
     suspend fun ensure(vararg values: String): List<UInt> {
-        val dict = ch.nokillswit.dictionaries.Dictionary.NAMESPACE
-        val current = service.read(dict)
+        val current = service.read(DICT)
         val missing = values.filterNot { v -> current.any { it.value == v } }
         if (missing.isNotEmpty()) {
             service.replace(
-                dict,
+                DICT,
                 ch.nokillswit.dictionaries.DictionaryUpdateRequest(
-                    current.map { ch.nokillswit.dictionaries.DictionaryEntryInput(it.id, it.value) } +
-                        missing.map { ch.nokillswit.dictionaries.DictionaryEntryInput(value = it) },
+                    currentInputs() + missing.map { ch.nokillswit.dictionaries.DictionaryEntryInput(value = it) },
                 ),
             )
         }
-        val byValue = service.read(dict).associate { it.value to it.id }
+        val byValue = service.read(DICT).associate { it.value to it.id }
         return values.map { byValue.getValue(it) }
     }
 
-    /** Removes [values] from the active document (a no-op for values not present). */
+    /** Removes [values] from the active document (a no-op for values not present; flags kept). */
     suspend fun remove(vararg values: String) {
-        val dict = ch.nokillswit.dictionaries.Dictionary.NAMESPACE
-        val kept = service.read(dict).filterNot { it.value in values }
         service.replace(
-            dict,
+            DICT,
+            ch.nokillswit.dictionaries.DictionaryUpdateRequest(currentInputs().filterNot { it.value in values }),
+        )
+    }
+
+    /**
+     * Snapshot of the active document as id-LESS inputs (flags kept) — replay with
+     * [replaceDocument] to restore after a document-mutating test (ids are reminted;
+     * nothing keys on them).
+     */
+    suspend fun snapshotValues(): List<ch.nokillswit.dictionaries.DictionaryEntryInput> =
+        service.read(DICT).map {
+            ch.nokillswit.dictionaries.DictionaryEntryInput(value = it.value, isDefault = it.isDefault)
+        }
+
+    suspend fun replaceDocument(items: List<ch.nokillswit.dictionaries.DictionaryEntryInput>) {
+        service.replace(DICT, ch.nokillswit.dictionaries.DictionaryUpdateRequest(items))
+    }
+
+    /**
+     * Runs [block] with [value] as the flagged DEFAULT namespace (registered if missing),
+     * restoring the prior flag — and removing [value] again if this call added it — in a
+     * finally. The flag is SHARED suite state exactly like the seed admin.
+     */
+    suspend fun withDefaultNamespace(value: String, block: suspend () -> Unit) {
+        val before = service.read(DICT)
+        val prior = before.firstOrNull { it.isDefault }?.value
+        val added = before.none { it.value == value }
+        ensure(value)
+        setDefault(value)
+        try {
+            block()
+        } finally {
+            if (prior != null && prior != value) {
+                setDefault(prior)
+                if (added) remove(value)
+            }
+        }
+    }
+
+    private suspend fun setDefault(value: String) {
+        service.replace(
+            DICT,
             ch.nokillswit.dictionaries.DictionaryUpdateRequest(
-                kept.map { ch.nokillswit.dictionaries.DictionaryEntryInput(it.id, it.value) },
+                service.read(DICT).map {
+                    ch.nokillswit.dictionaries.DictionaryEntryInput(it.id, it.value, isDefault = it.value == value)
+                },
             ),
         )
     }

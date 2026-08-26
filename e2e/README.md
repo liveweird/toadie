@@ -56,7 +56,10 @@ from Lettuce, that any new or edited spec must satisfy:
   worker starts and exposes them via `runNamespace()` in `helpers.ts`; global-teardown removes
   them) and **`namespaces.spec.ts`** (the ONLY in-run writer — it appends/removes its own
   unique entries through the real editor). A new spec needing a throwaway namespace adds a
-  key to global-setup's minted set — it must NOT write the dictionary from a worker.
+  key to global-setup's minted set — it must NOT write the dictionary from a worker. The
+  DEFAULT flag is doubly shared-critical: blank-namespace creates resolve against it, so no
+  spec may flip which entry is flagged (`namespaces.spec` only asserts it; flipping is pinned
+  server-/unit-side).
 - Seeded accounts are never mutated. The seed admin (`admin@toadie.local`) is a shared
   read-mostly actor: specs sign in as it but must not change its password, roles, or state — a
   future spec that needs a mutated account creates a throwaway.

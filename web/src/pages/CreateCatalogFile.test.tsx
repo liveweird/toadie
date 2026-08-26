@@ -119,7 +119,8 @@ describe("CreateCatalogFile page", () => {
     expect(postCall).toBeDefined();
     expect(JSON.parse((postCall![1] as RequestInit).body as string)).toEqual({
       kind: "Component",
-      metadata: { name: "my-svc", namespace: "default", labels: {}, annotations: {}, tags: [], links: [] },
+      // Blank namespace on the wire — the server resolves it to the flagged default.
+      metadata: { name: "my-svc", namespace: "", labels: {}, annotations: {}, tags: [], links: [] },
       spec: {
         type: "service",
         lifecycle: "production",
@@ -172,7 +173,7 @@ describe("CreateCatalogFile page", () => {
     );
     expect(JSON.parse((postCall![1] as RequestInit).body as string)).toEqual({
       kind: "Group",
-      metadata: { name: "team-a", namespace: "default", labels: {}, annotations: {}, tags: [], links: [] },
+      metadata: { name: "team-a", namespace: "", labels: {}, annotations: {}, tags: [], links: [] },
       spec: { type: "team", children: [], members: [] },
     });
   });

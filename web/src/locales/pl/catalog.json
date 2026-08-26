@@ -59,7 +59,7 @@
     "profilePicture": "URL obrazka"
   },
   "hint": {
-    "namespace": "Wybierz zdefiniowaną przestrzeń nazw; puste pole oznacza \"default\"",
+    "namespace": "Wybierz zdefiniowaną przestrzeń nazw; puste pole oznacza \"{{default}}\"",
     "type": "np. service, website, library",
     "lifecycle": "np. experimental, production, deprecated",
     "owner": "Zespół-właściciel. Domyślny rodzaj to group — „team-platform” oznacza group:team-platform; osoba wymaga prefiksu user:.",

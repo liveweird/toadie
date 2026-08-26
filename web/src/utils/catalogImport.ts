@@ -99,7 +99,9 @@ function mapMetadata(value: unknown): CatalogFileRequest["metadata"] {
   if (raw.name === undefined) throw new DocumentError("metadata.name is required");
   return {
     name: asString(raw.name, "metadata.name"),
-    namespace: raw.namespace !== undefined ? asString(raw.namespace, "metadata.namespace") : "default",
+    // Absent means "the ADMIN-flagged default namespace" — sent blank, resolved server-side
+    // (the import report's rows show the concrete namespace each document landed in).
+    namespace: raw.namespace !== undefined ? asString(raw.namespace, "metadata.namespace") : "",
     ...(raw.title !== undefined ? { title: asString(raw.title, "metadata.title") } : {}),
     ...(raw.description !== undefined
       ? { description: asString(raw.description, "metadata.description") }

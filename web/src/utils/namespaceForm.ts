@@ -10,6 +10,8 @@ export type NamespaceEntryDraft = {
   key: string;
   id?: number;
   value: string;
+  /** Exactly one draft carries this — what a blank catalog-file namespace resolves to. */
+  isDefault: boolean;
 };
 
 export type NamespaceFormValues = {
@@ -23,13 +25,13 @@ function newDraftKey(): string {
 }
 
 export function emptyEntryDraft(): NamespaceEntryDraft {
-  return { key: newDraftKey(), value: "" };
+  return { key: newDraftKey(), value: "", isDefault: false };
 }
 
 /** The loaded dictionary -> editable form values. */
 export function toFormValues(items: DictionaryEntry[]): NamespaceFormValues {
   return {
-    entries: items.map((e) => ({ key: newDraftKey(), id: e.id, value: e.value })),
+    entries: items.map((e) => ({ key: newDraftKey(), id: e.id, value: e.value, isDefault: e.isDefault })),
   };
 }
 
@@ -44,7 +46,11 @@ export function foldNamespaceValue(value: string): string {
  */
 export function toUpdateBody(values: NamespaceFormValues): DictionaryUpdateBody {
   return {
-    items: values.entries.map((e) => ({ id: e.id, value: foldNamespaceValue(e.value) })),
+    items: values.entries.map((e) => ({
+      id: e.id,
+      value: foldNamespaceValue(e.value),
+      isDefault: e.isDefault,
+    })),
   };
 }
 
@@ -73,6 +79,15 @@ export function namespaceFormValidation(t: TFunction) {
       },
     },
   };
+}
+
+/**
+ * The document-level rule the per-field validation can't express: a non-empty document must
+ * flag exactly one default. The radio UI makes >1 impossible, so the page only has to guard
+ * "none" (e.g. after removing the flagged row) — surfaced as an inline alert on save.
+ */
+export function missingDefault(values: NamespaceFormValues): boolean {
+  return values.entries.length > 0 && !values.entries.some((e) => e.isDefault);
 }
 
 /** The shared mutation-error -> message mapping for namespace saves. */

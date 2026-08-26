@@ -345,6 +345,35 @@ class CatalogFileTest {
     }
 
     @Test
+    fun `a blank namespace resolves to the ADMIN-flagged default entry`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("nsdflt")
+        val custom = uniqueEntityName("dfltns")
+        TestNamespaces.withDefaultNamespace(custom) {
+            val created = client.createCatalogFile(componentFile(uniqueEntityName("blankdoc"), namespace = ""))
+            assertEquals(custom, created.metadata.namespace, "blank resolves to the flagged entry, not the literal")
+        }
+    }
+
+    @Test
+    fun `a blank namespace is 400 while no entry is flagged as default`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("nsnodflt")
+        val snapshot = TestNamespaces.snapshotValues()
+        try {
+            TestNamespaces.replaceDocument(emptyList()) // the empty document has no default
+            val response = client.postJson(
+                "/api/v1/catalog-files",
+                componentFile(uniqueEntityName("nodflt"), namespace = ""),
+            )
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertTrue(response.body<ProblemDetail>().detail!!.contains("No default namespace"))
+        } finally {
+            TestNamespaces.replaceDocument(snapshot)
+        }
+    }
+
+    @Test
     fun `an undefined namespace is rejected on create and update - strict, no grandfathering`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("nsenforce")

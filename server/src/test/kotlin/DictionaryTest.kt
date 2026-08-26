@@ -32,14 +32,11 @@ class DictionaryTest {
         get("/api/v1/dictionaries/namespaces").body()
 
     private suspend fun withNamespacesDocument(block: suspend () -> Unit) {
-        val snapshot = TestNamespaces.service.read(Dictionary.NAMESPACE).map { it.value }
+        val snapshot = TestNamespaces.snapshotValues() // id-less, default flags kept
         try {
             block()
         } finally {
-            TestNamespaces.service.replace(
-                Dictionary.NAMESPACE,
-                DictionaryUpdateRequest(snapshot.map { DictionaryEntryInput(value = it) }),
-            )
+            TestNamespaces.replaceDocument(snapshot)
         }
     }
 
@@ -73,12 +70,15 @@ class DictionaryTest {
     }
 
     @Test
-    fun `default namespace is seeded`() = testApplication {
+    fun `default namespace is seeded and carries the default flag`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("dictseed")
-        assertTrue(
-            client.readNamespaces().items.any { it.value == "default" },
-            "V8 must seed the default namespace",
+        val items = client.readNamespaces().items
+        assertTrue(items.any { it.value == "default" }, "V8 must seed the default namespace")
+        assertEquals(
+            "default",
+            items.single { it.isDefault }.value,
+            "V9 must flag the seeded default (and at most one entry may carry the flag)",
         )
     }
 
@@ -90,7 +90,9 @@ class DictionaryTest {
             val (a, b) = ns("aa") to ns("bb")
             val put1 = admin.putJson(
                 "/api/v1/dictionaries/namespaces",
-                DictionaryUpdateRequest(listOf(DictionaryEntryInput(value = a), DictionaryEntryInput(value = b))),
+                DictionaryUpdateRequest(
+                    listOf(DictionaryEntryInput(value = a, isDefault = true), DictionaryEntryInput(value = b)),
+                ),
             )
             assertEquals(HttpStatusCode.NoContent, put1.status)
             val after1 = admin.readNamespaces().items
@@ -101,7 +103,7 @@ class DictionaryTest {
             val put2 = admin.putJson(
                 "/api/v1/dictionaries/namespaces",
                 DictionaryUpdateRequest(
-                    listOf(DictionaryEntryInput(idB, b), DictionaryEntryInput(idA, renamed)),
+                    listOf(DictionaryEntryInput(idB, b), DictionaryEntryInput(idA, renamed, isDefault = true)),
                 ),
             )
             assertEquals(HttpStatusCode.NoContent, put2.status)
@@ -123,7 +125,7 @@ class DictionaryTest {
                 DictionaryUpdateRequest(
                     TestNamespaces.service.read(Dictionary.NAMESPACE)
                         .filterNot { it.id == dropId }
-                        .map { DictionaryEntryInput(it.id, it.value) },
+                        .map { DictionaryEntryInput(it.id, it.value, isDefault = it.isDefault) },
                 ),
             )
             assertEquals(HttpStatusCode.NoContent, put.status)
@@ -142,7 +144,7 @@ class DictionaryTest {
             val value = ns("idv")
             val (id) = TestNamespaces.ensure(value)
             val current = TestNamespaces.service.read(Dictionary.NAMESPACE)
-                .map { DictionaryEntryInput(it.id, it.value) }
+                .map { DictionaryEntryInput(it.id, it.value, isDefault = it.isDefault) }
 
             val dup = current + DictionaryEntryInput(id, ns("dup"))
             assertEquals(
@@ -158,7 +160,8 @@ class DictionaryTest {
 
             TestNamespaces.remove(value)
             val resurrect = TestNamespaces.service.read(Dictionary.NAMESPACE)
-                .map { DictionaryEntryInput(it.id, it.value) } + DictionaryEntryInput(id, value)
+                .map { DictionaryEntryInput(it.id, it.value, isDefault = it.isDefault) } +
+                DictionaryEntryInput(id, value)
             assertEquals(
                 HttpStatusCode.BadRequest,
                 admin.putJson("/api/v1/dictionaries/namespaces", DictionaryUpdateRequest(resurrect)).status,
@@ -175,7 +178,9 @@ class DictionaryTest {
             val raw = ns("fold")
             val put = admin.putJson(
                 "/api/v1/dictionaries/namespaces",
-                DictionaryUpdateRequest(listOf(DictionaryEntryInput(value = "  ${raw.uppercase()}  "))),
+                DictionaryUpdateRequest(
+                    listOf(DictionaryEntryInput(value = "  ${raw.uppercase()}  ", isDefault = true)),
+                ),
             )
             assertEquals(HttpStatusCode.NoContent, put.status)
             assertEquals(listOf(raw), admin.readNamespaces().items.map { it.value })
@@ -188,7 +193,10 @@ class DictionaryTest {
         val admin = seededClient("dictdup", UserRole.ADMIN)
         val value = ns("dupfold")
         val payload = DictionaryUpdateRequest(
-            listOf(DictionaryEntryInput(value = value), DictionaryEntryInput(value = " ${value.uppercase()} ")),
+            listOf(
+                DictionaryEntryInput(value = value, isDefault = true),
+                DictionaryEntryInput(value = " ${value.uppercase()} "),
+            ),
         )
         assertEquals(
             HttpStatusCode.BadRequest,
@@ -229,6 +237,59 @@ class DictionaryTest {
     }
 
     @Test
+    fun `a non-empty document must flag exactly one default - zero and two are 400`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("dictdflt", UserRole.ADMIN)
+        val (a, b) = ns("dza") to ns("dzb")
+        val none = DictionaryUpdateRequest(
+            listOf(DictionaryEntryInput(value = a), DictionaryEntryInput(value = b)),
+        )
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            admin.putJson("/api/v1/dictionaries/namespaces", none).status,
+            "zero defaults must be rejected",
+        )
+        val two = DictionaryUpdateRequest(
+            listOf(
+                DictionaryEntryInput(value = a, isDefault = true),
+                DictionaryEntryInput(value = b, isDefault = true),
+            ),
+        )
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            admin.putJson("/api/v1/dictionaries/namespaces", two).status,
+            "two defaults must be rejected",
+        )
+    }
+
+    @Test
+    fun `the default flag moves between entries in one save`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("dictmove", UserRole.ADMIN)
+        withNamespacesDocument {
+            val (a, b) = ns("mva") to ns("mvb")
+            admin.putJson(
+                "/api/v1/dictionaries/namespaces",
+                DictionaryUpdateRequest(
+                    listOf(DictionaryEntryInput(value = a, isDefault = true), DictionaryEntryInput(value = b)),
+                ),
+            ).let { assertEquals(HttpStatusCode.NoContent, it.status) }
+            val items = admin.readNamespaces().items
+            assertEquals(a, items.single { it.isDefault }.value)
+
+            // The flip: same rows, the flag jumps a -> b (the replace clears flags before the
+            // upserts, so this never trips the one-default partial index mid-save).
+            admin.putJson(
+                "/api/v1/dictionaries/namespaces",
+                DictionaryUpdateRequest(
+                    items.map { DictionaryEntryInput(it.id, it.value, isDefault = it.value == b) },
+                ),
+            ).let { assertEquals(HttpStatusCode.NoContent, it.status) }
+            assertEquals(b, admin.readNamespaces().items.single { it.isDefault }.value)
+        }
+    }
+
+    @Test
     fun `an empty payload clears the dictionary`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("dictclear", UserRole.ADMIN)
@@ -265,7 +326,7 @@ class DictionaryTest {
             val (idA, idB) = TestNamespaces.ensure(a, b).let { it[0] to it[1] }
             val others = TestNamespaces.service.read(Dictionary.NAMESPACE)
                 .filterNot { it.id == idA || it.id == idB }
-                .map { DictionaryEntryInput(it.id, it.value) }
+                .map { DictionaryEntryInput(it.id, it.value, isDefault = it.isDefault) }
             val swap = DictionaryUpdateRequest(
                 others + listOf(DictionaryEntryInput(idA, b), DictionaryEntryInput(idB, a)),
             )
@@ -286,7 +347,9 @@ class DictionaryTest {
                 val (a, b) = ns("auda") to ns("audb")
                 val put = admin.putJson(
                     "/api/v1/dictionaries/namespaces",
-                    DictionaryUpdateRequest(listOf(DictionaryEntryInput(value = a), DictionaryEntryInput(value = b))),
+                    DictionaryUpdateRequest(
+                        listOf(DictionaryEntryInput(value = a, isDefault = true), DictionaryEntryInput(value = b)),
+                    ),
                 )
                 assertEquals(HttpStatusCode.NoContent, put.status)
                 val event = capture.awaitEvent { it.message == "dictionary.updated" }
@@ -294,6 +357,7 @@ class DictionaryTest {
                 assertTrue(event.hasKeyValue("dictionary", "NAMESPACE"))
                 assertTrue(event.hasKeyValue("added", 2))
                 assertTrue(event.hasKeyValue("renamed", 0))
+                assertTrue(event.hasKeyValue("default", a))
 
                 val before = capture.events.count { it.message == "dictionary.updated" }
                 val bad = DictionaryUpdateRequest(listOf(DictionaryEntryInput(value = "no_good")))
