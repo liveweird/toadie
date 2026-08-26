@@ -28,6 +28,7 @@ tags:
   - name: auth
   - name: users
   - name: catalog-files
+  - name: dictionaries
 
 paths:
   /api/v1/login:
@@ -625,6 +626,61 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/dictionaries/{dictionary}:
+    parameters:
+      - name: dictionary
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [namespaces]
+        description: The dictionary's URL slug. `namespaces` is the only dictionary today.
+    get:
+      tags: [dictionaries]
+      operationId: getDictionary
+      summary: Read a dictionary's entries
+      description: |
+        Any authenticated user. Returns the active entries in the admin-curated order —
+        deliberately unpaged (a dictionary holds at most 200 entries by validation), NOT a
+        standard list endpoint. The `namespaces` dictionary is the allowlist every
+        catalog-file write is validated against.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryEntryList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    put:
+      tags: [dictionaries]
+      operationId: replaceDictionary
+      summary: Replace a dictionary's entries
+      description: |
+        ADMIN only — a whole-document replace; the payload's array order becomes the stored
+        order (there is no reorder endpoint). An item carrying an `id` renames/repositions
+        that active entry in place (rename keeps identity); an id-less item inserts; an
+        active entry missing from the payload is soft-deleted. Values are trimmed and folded
+        to lowercase, and must satisfy the namespace grammar. Swapping two values in one
+        save is a `409` (the value uniqueness index) — rename through a temporary value in
+        two saves.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DictionaryUpdateRequest'
+      responses:
+        '204': { description: Replaced }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
 components:
@@ -1258,6 +1314,55 @@ components:
           format: int64
           minimum: 0
           description: Row count after filters, before pagination.
+
+    DictionaryEntry:
+      type: object
+      required: [id, value]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 0
+        value:
+          type: string
+          maxLength: 63
+          description: Stored lowercase-folded (the namespace grammar).
+
+    DictionaryEntryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DictionaryEntry'
+          description: Active entries in the admin-curated order.
+
+    DictionaryEntryInput:
+      type: object
+      required: [value]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          description: Present = update that active entry in place; absent = insert a new one.
+        value:
+          type: string
+          maxLength: 63
+          description: Trimmed and folded to lowercase before validation and storage.
+
+    DictionaryUpdateRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/DictionaryEntryInput'
+          description: The full replacement document — array order becomes the stored order.
 
     ProblemDetail:
       type: object

@@ -78,6 +78,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`kinds.spec.ts`](scenarios/kinds.md) — the multi-kind editor journey: a Group (empty
   children), an API (pasted definition), and a Component whose owner/API references resolve
   live; kind badges on the list.
+- [`namespaces.spec.ts`](scenarios/namespaces.md) — the namespaces dictionary: inline grammar
+  validation → append two entries → reorder → the regular user's read-only view → removal;
+  append-only against the shared document.
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored, missing, and
   external nodes for a throwaway namespace; toggling a relation family prunes its nodes.
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents

@@ -28,7 +28,9 @@ export const WELL_KNOWN_LIFECYCLES = ["experimental", "production", "deprecated"
 // The grammars from .claude/docs/backstage-descriptor-format.md, identical to the server's
 // validateCatalogFile (catalog/CatalogFile.kt) — keep the two in sync.
 const NAME_RE = /^[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*$/;
-const NAMESPACE_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+// Exported: utils/namespaceForm.ts validates namespace-dictionary values against the same
+// grammar (the descriptor format owns the rule, the dictionary borrows it — like the server).
+export const NAMESPACE_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const TAG_RE = /^[a-z0-9:+#]+(?:-[a-z0-9:+#]+)*$/;
 const KEY_PREFIX_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)*$/;
 const KIND_RE = /^[A-Za-z][A-Za-z0-9]*$/;

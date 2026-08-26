@@ -1,0 +1,29 @@
+{
+  "title": "Namespaces",
+  "intro": "The only namespaces catalog files may use. Administrators curate the list and its order.",
+  "empty": "No namespaces defined yet",
+  "loadFailed": "Could not load the namespaces",
+  "addEntry": "Add namespace",
+  "entryAria": "Namespace {{position}}",
+  "moveUp": "Move namespace {{position}} up",
+  "moveDown": "Move namespace {{position}} down",
+  "removeEntry": "Remove namespace {{position}}",
+  "valueRequired": "Namespace is required",
+  "valueInvalid": "Must be 1–63 lowercase alphanumeric characters with single dashes",
+  "valueDuplicate": "This namespace is already in the list",
+  "discardTitle": "Discard changes?",
+  "discardMessage": "Your unsaved namespace changes will be lost.",
+  "keepEditing": "Keep editing",
+  "discard": "Discard",
+  "savedButStale": "Saved — but reloading the editor failed. Reload the page before making further changes.",
+  "toast": {
+    "saved": "Namespaces saved"
+  },
+  "error": {
+    "permission": "Only administrators can edit namespaces",
+    "conflict": "Save conflict — swapping two values needs two saves; rename through a temporary value first",
+    "validation": "One or more values are invalid",
+    "saveFailedStatus": "Save failed ({{status}})",
+    "saveFailed": "Save failed. Check your connection and try again."
+  }
+}

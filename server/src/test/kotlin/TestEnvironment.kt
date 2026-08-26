@@ -247,6 +247,62 @@ object TestCatalogFiles {
     }
 }
 
+/**
+ * The namespaces dictionary is SHARED suite state (like the seed admin) — tests append
+ * unique throwaway values via [ensure] rather than replacing the whole document, so the
+ * V8 `default` seed and other tests' values survive. [rawRows] reads soft-deleted rows
+ * too (the API read filters active) to assert flagging over physical removal.
+ */
+object TestNamespaces {
+    val service: ch.nokillswit.dictionaries.DictionaryService by lazy {
+        ch.nokillswit.dictionaries.DictionaryService(sharedTestDatabase)
+    }
+
+    data class RawEntry(val id: UInt, val value: String, val position: Int, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawEntry> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.dictionaries.DictionaryService.Entries
+        t.selectAll()
+            .where { t.dictionary eq ch.nokillswit.dictionaries.Dictionary.NAMESPACE.name }
+            .map { RawEntry(it[t.id].value, it[t.value], it[t.position], it[t.markedAsDeleted]) }
+            .toList()
+    }
+
+    /**
+     * Ensures every value in [values] is an active namespace entry (append-preserving
+     * whole-document replace; already-present values are kept as-is) and returns their ids
+     * in [values] order.
+     */
+    suspend fun ensure(vararg values: String): List<UInt> {
+        val dict = ch.nokillswit.dictionaries.Dictionary.NAMESPACE
+        val current = service.read(dict)
+        val missing = values.filterNot { v -> current.any { it.value == v } }
+        if (missing.isNotEmpty()) {
+            service.replace(
+                dict,
+                ch.nokillswit.dictionaries.DictionaryUpdateRequest(
+                    current.map { ch.nokillswit.dictionaries.DictionaryEntryInput(it.id, it.value) } +
+                        missing.map { ch.nokillswit.dictionaries.DictionaryEntryInput(value = it) },
+                ),
+            )
+        }
+        val byValue = service.read(dict).associate { it.value to it.id }
+        return values.map { byValue.getValue(it) }
+    }
+
+    /** Removes [values] from the active document (a no-op for values not present). */
+    suspend fun remove(vararg values: String) {
+        val dict = ch.nokillswit.dictionaries.Dictionary.NAMESPACE
+        val kept = service.read(dict).filterNot { it.value in values }
+        service.replace(
+            dict,
+            ch.nokillswit.dictionaries.DictionaryUpdateRequest(
+                kept.map { ch.nokillswit.dictionaries.DictionaryEntryInput(it.id, it.value) },
+            ),
+        )
+    }
+}
+
 // Bootstrap tests (and prod-mode boot tests) rotate the seed admin password in the SHARED
 // container. Call this afterwards to put the V3 seed state back so later tests (and re-runs)
 // see the pristine seed.

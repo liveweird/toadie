@@ -31,8 +31,10 @@ const val MAX_REFS = 100
 // parts, and link icons all share this shape.
 private val NAME_REGEX = Regex("[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*")
 
-// Lowercase alphanumeric runs joined by single dashes (validated post-folding).
-private val NAMESPACE_REGEX = Regex("[a-z0-9]+(?:-[a-z0-9]+)*")
+// Lowercase alphanumeric runs joined by single dashes (validated post-folding). Internal:
+// the namespaces dictionary (dictionaries/Dictionary.kt) validates its values against the
+// same grammar — the descriptor format owns the rule, the dictionary borrows it.
+internal val NAMESPACE_REGEX = Regex("[a-z0-9]+(?:-[a-z0-9]+)*")
 
 // Tags: lowercase [a-z0-9:+#] runs joined by single dashes (e.g. "java", "c++", "csharp:v2").
 private val TAG_REGEX = Regex("[a-z0-9:+#]+(?:-[a-z0-9:+#]+)*")

@@ -24,6 +24,7 @@ ktor:
       # — features
       - ch.nokillswit.users.UserRoutesKt.configureUserRoutes
       - ch.nokillswit.catalog.CatalogFileRoutesKt.configureCatalogFileRoutes
+      - ch.nokillswit.dictionaries.DictionaryRoutesKt.configureDictionaryRoutes
       - ch.nokillswit.auth.AuthRoutesKt.configureAuthRoutes
       # — catch-all router
       - ch.nokillswit.plugins.RoutingKt.configureRouting

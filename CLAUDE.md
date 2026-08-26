@@ -72,6 +72,14 @@ ch.nokillswit
 ├── users/              the user domain: ADMIN-only management CRUD (/api/v1/users list/create
 │                       + {id} get/put/delete with the self-delete 403 and last-admin 409
 │                       protections) + PUT /api/v1/users/{id}/password + Validation.kt
+├── dictionaries/       admin-curated ordered value lists (Lettuce's dictionaries, single-
+│                       valued — no translations): Dictionary.kt (the Dictionary enum whitelist
+│                       + DTOs + validateDictionaryUpdate), DictionaryService.kt (whole-document
+│                       replace: soft-delete-first reconcile, positions rewritten from payload
+│                       order — no reorder endpoint), DictionaryRoutes.kt —
+│                       GET /api/v1/dictionaries/{slug} (any authenticated, unpaged) +
+│                       PUT (ADMIN). NAMESPACE ("namespaces") is the only dictionary: the
+│                       allowlist every catalog-file write's namespace must be in
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),
                         CatalogFileValidation.kt (the sanitizer + per-kind required/forbidden

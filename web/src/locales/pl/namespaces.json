@@ -1,0 +1,29 @@
+{
+  "title": "Przestrzenie nazw",
+  "intro": "Jedyne przestrzenie nazw dostępne dla plików katalogu. Administratorzy/ki zarządzają listą i jej kolejnością.",
+  "empty": "Nie zdefiniowano jeszcze żadnych przestrzeni nazw",
+  "loadFailed": "Nie udało się wczytać przestrzeni nazw",
+  "addEntry": "Dodaj przestrzeń nazw",
+  "entryAria": "Przestrzeń nazw {{position}}",
+  "moveUp": "Przenieś przestrzeń nazw {{position}} wyżej",
+  "moveDown": "Przenieś przestrzeń nazw {{position}} niżej",
+  "removeEntry": "Usuń przestrzeń nazw {{position}}",
+  "valueRequired": "Przestrzeń nazw jest wymagana",
+  "valueInvalid": "Musi mieć 1–63 małe znaki alfanumeryczne z pojedynczymi myślnikami",
+  "valueDuplicate": "Ta przestrzeń nazw jest już na liście",
+  "discardTitle": "Odrzucić zmiany?",
+  "discardMessage": "Niezapisane zmiany w przestrzeniach nazw zostaną utracone.",
+  "keepEditing": "Kontynuuj edycję",
+  "discard": "Odrzuć",
+  "savedButStale": "Zapisano — ale nie udało się odświeżyć edytora. Przeładuj stronę przed kolejnymi zmianami.",
+  "toast": {
+    "saved": "Zapisano przestrzenie nazw"
+  },
+  "error": {
+    "permission": "Tylko administratorzy/ki mogą edytować przestrzenie nazw",
+    "conflict": "Konflikt zapisu — zamiana dwóch wartości wymaga dwóch zapisów; najpierw zmień nazwę przez wartość tymczasową",
+    "validation": "Co najmniej jedna wartość jest nieprawidłowa",
+    "saveFailedStatus": "Zapis nie powiódł się ({{status}})",
+    "saveFailed": "Zapis nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
+  }
+}

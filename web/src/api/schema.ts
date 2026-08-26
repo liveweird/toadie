@@ -421,6 +421,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dictionaries/{dictionary}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The dictionary's URL slug. `namespaces` is the only dictionary today. */
+                dictionary: "namespaces";
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a dictionary's entries
+         * @description Any authenticated user. Returns the active entries in the admin-curated order —
+         *     deliberately unpaged (a dictionary holds at most 200 entries by validation), NOT a
+         *     standard list endpoint. The `namespaces` dictionary is the allowlist every
+         *     catalog-file write is validated against.
+         */
+        get: operations["getDictionary"];
+        /**
+         * Replace a dictionary's entries
+         * @description ADMIN only — a whole-document replace; the payload's array order becomes the stored
+         *     order (there is no reorder endpoint). An item carrying an `id` renames/repositions
+         *     that active entry in place (rename keeps identity); an id-less item inserts; an
+         *     active entry missing from the payload is soft-deleted. Values are trimmed and folded
+         *     to lowercase, and must satisfy the namespace grammar. Swapping two values in one
+         *     save is a `409` (the value uniqueness index) — rename through a temporary value in
+         *     two saves.
+         */
+        put: operations["replaceDictionary"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -733,6 +769,29 @@ export interface components {
              * @description Row count after filters, before pagination.
              */
             total: number;
+        };
+        DictionaryEntry: {
+            /** Format: int32 */
+            id: number;
+            /** @description Stored lowercase-folded (the namespace grammar). */
+            value: string;
+        };
+        DictionaryEntryList: {
+            /** @description Active entries in the admin-curated order. */
+            items: components["schemas"]["DictionaryEntry"][];
+        };
+        DictionaryEntryInput: {
+            /**
+             * Format: int32
+             * @description Present = update that active entry in place; absent = insert a new one.
+             */
+            id?: number | null;
+            /** @description Trimmed and folded to lowercase before validation and storage. */
+            value: string;
+        };
+        DictionaryUpdateRequest: {
+            /** @description The full replacement document — array order becomes the stored order. */
+            items: components["schemas"]["DictionaryEntryInput"][];
         };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
@@ -1458,6 +1517,63 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getDictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The dictionary's URL slug. `namespaces` is the only dictionary today. */
+                dictionary: "namespaces";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictionaryEntryList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceDictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The dictionary's URL slug. `namespaces` is the only dictionary today. */
+                dictionary: "namespaces";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DictionaryUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };

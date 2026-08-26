@@ -12,6 +12,7 @@ import enAppShell from "./locales/en/appShell.json";
 import enAuth from "./locales/en/auth.json";
 import enCatalog from "./locales/en/catalog.json";
 import enCrossCheck from "./locales/en/crossCheck.json";
+import enNamespaces from "./locales/en/namespaces.json";
 import enRender from "./locales/en/render.json";
 import enUsers from "./locales/en/users.json";
 
@@ -55,6 +56,7 @@ export const en = {
   auth: enAuth,
   catalog: enCatalog,
   crossCheck: enCrossCheck,
+  namespaces: enNamespaces,
   render: enRender,
   users: enUsers,
 };
