@@ -31,7 +31,7 @@ class CrossCheckTest {
     fun `resolved component references produce no findings, dangling ones are MISSING`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("crosscheck")
-        val ns = uniqueEntityName("xns")
+        val ns = uniqueNamespace("xns")
         val target = uniqueEntityName("target")
         val source = uniqueEntityName("source")
         val ghost = uniqueEntityName("ghost")
@@ -63,6 +63,7 @@ class CrossCheckTest {
         val inTeam = uniqueEntityName("child-team")
         val inDefault = uniqueEntityName("child-default")
         // The parent exists ONLY in team-a.
+        TestNamespaces.ensure("team-a")
         client.createCatalogFile(componentFile(parent, namespace = "team-a"))
         client.createCatalogFile(
             componentFile(inTeam, namespace = "team-a").let {
@@ -85,6 +86,7 @@ class CrossCheckTest {
         val client = seededClient("crosscheck")
         val target = uniqueEntityName("Cased")
         val source = uniqueEntityName("caser")
+        TestNamespaces.ensure("team-b")
         client.createCatalogFile(componentFile(target, namespace = "team-b"))
         client.createCatalogFile(
             componentFile(source).let {
@@ -146,7 +148,7 @@ class CrossCheckTest {
     fun `stored groups and users resolve organizational references`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("crosscheck")
-        val ns = uniqueEntityName("orgns")
+        val ns = uniqueNamespace("orgns")
         val person = uniqueEntityName("person")
         val team = uniqueEntityName("team")
         val ghostParent = uniqueEntityName("ghostparent")

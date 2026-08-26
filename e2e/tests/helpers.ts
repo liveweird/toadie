@@ -82,3 +82,29 @@ export async function openFilters(page: Page): Promise<void> {
   }
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
 }
+
+/**
+ * The per-run namespaces registered in the namespaces dictionary by global-setup (and
+ * removed by global-teardown). Catalog writes accept only defined namespaces, and the
+ * dictionary PUT is a whole-document replace — parallel workers must never write it
+ * concurrently, so the setup process is the one writer and specs just read these values
+ * (namespaces.spec.ts, the sole in-run writer, appends/removes only its own entries).
+ */
+export function runNamespace(key: "kinds" | "render" | "roundTrip"): string {
+  const value = process.env[`E2E_NS_${key.toUpperCase()}`];
+  if (!value) throw new Error(`global-setup did not register the "${key}" run namespace`);
+  return value;
+}
+
+/**
+ * Pick a namespace in the catalog form's Select (free text is no longer accepted there —
+ * the field offers only the dictionary's entries). Mantine Select inputs carry the
+ * combobox role; searchable filtering narrows the dropdown before the option click.
+ */
+export async function pickNamespace(page: Page, ns: string): Promise<void> {
+  const select = page.getByRole("combobox", { name: "Namespace" });
+  await select.click();
+  await select.fill(ns);
+  await page.getByRole("option", { name: ns }).click();
+  await expect(select).toHaveValue(ns);
+}

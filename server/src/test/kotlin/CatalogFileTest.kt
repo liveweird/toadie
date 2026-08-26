@@ -16,6 +16,7 @@ import io.ktor.client.request.request
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
+import ch.nokillswit.plugins.ProblemDetail
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
@@ -73,7 +74,7 @@ class CatalogFileTest {
     fun `every supported kind creates and round-trips`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
-        val ns = uniqueEntityName("kinds")
+        val ns = uniqueNamespace("kinds")
         val files = listOf(
             componentFile(uniqueEntityName("comp"), namespace = ns),
             apiFile(uniqueEntityName("api"), namespace = ns),
@@ -153,7 +154,7 @@ class CatalogFileTest {
     fun `kind can be changed by an update, and identity collisions still 409`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
-        val ns = uniqueEntityName("flip")
+        val ns = uniqueNamespace("flip")
         val name = uniqueEntityName("chameleon")
         val id = client.createCatalogFile(componentFile(name, namespace = ns)).id
 
@@ -173,7 +174,7 @@ class CatalogFileTest {
     fun `the list filters by kind and rejects unknown kinds`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
-        val ns = uniqueEntityName("kfilter")
+        val ns = uniqueNamespace("kfilter")
         client.createCatalogFile(componentFile(uniqueEntityName("c"), namespace = ns))
         client.createCatalogFile(groupFile(uniqueEntityName("g"), namespace = ns))
 
@@ -189,6 +190,7 @@ class CatalogFileTest {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
         val name = uniqueEntityName("full")
+        TestNamespaces.ensure("team-a")
         val file = CatalogFile(
             metadata = CatalogFileMetadata(
                 name = name,
@@ -315,6 +317,7 @@ class CatalogFileTest {
         assertEquals(HttpStatusCode.Conflict, duplicate.status)
 
         // Same name in another namespace is a different identity.
+        TestNamespaces.ensure("team-b")
         val otherNamespace = client.postJson("/api/v1/catalog-files", componentFile(name, namespace = "team-b"))
         assertEquals(HttpStatusCode.Created, otherNamespace.status)
 
@@ -333,6 +336,7 @@ class CatalogFileTest {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
 
+        TestNamespaces.ensure("team-a") // the dictionary stores folded values — "TEAM-A" folds onto it
         val folded = client.createCatalogFile(componentFile(uniqueEntityName("fold"), namespace = "TEAM-A"))
         assertEquals("team-a", folded.metadata.namespace)
 
@@ -341,10 +345,43 @@ class CatalogFileTest {
     }
 
     @Test
+    fun `an undefined namespace is rejected on create and update - strict, no grandfathering`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("nsenforce")
+
+        // Grammar-valid but not a dictionary entry → 400 on create.
+        val undefined = uniqueEntityName("ghost")
+        val create = client.postJson(
+            "/api/v1/catalog-files",
+            componentFile(uniqueEntityName("nsc"), namespace = undefined),
+        )
+        assertEquals(HttpStatusCode.BadRequest, create.status)
+        assertTrue(create.body<ProblemDetail>().detail!!.contains("not a defined namespace"))
+
+        // A stored file whose namespace was since REMOVED from the dictionary blocks on save
+        // (the deliberate strict rule) — re-adding the namespace unblocks it.
+        val ns = uniqueNamespace("nsgone")
+        val created = client.createCatalogFile(componentFile(uniqueEntityName("nsu"), namespace = ns))
+        TestNamespaces.remove(ns)
+        val update = client.putJson(
+            "/api/v1/catalog-files/${created.id}",
+            componentFile(created.metadata.name, namespace = ns),
+        )
+        assertEquals(HttpStatusCode.BadRequest, update.status)
+        TestNamespaces.ensure(ns)
+        val unblocked = client.putJson(
+            "/api/v1/catalog-files/${created.id}",
+            componentFile(created.metadata.name, namespace = ns),
+        )
+        assertEquals(HttpStatusCode.NoContent, unblocked.status)
+    }
+
+    @Test
     fun `list filters by name and namespace, sorts and paginates`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
         val prefix = uniqueEntityName("page")
+        TestNamespaces.ensure("ns-one", "ns-two")
         client.createCatalogFile(componentFile("$prefix-a", namespace = "ns-one"))
         client.createCatalogFile(componentFile("$prefix-b", namespace = "ns-two"))
         client.createCatalogFile(componentFile("$prefix-c", namespace = "ns-one"))

@@ -4,13 +4,16 @@
 - **Actors**: the seed administrator (`admin@toadie.local`) — an ordinary user here (shared
   workspace)
 - **Owns** (exclusive server-side state): three throwaway files (a Group, an API, a Component)
-  in a throwaway unique namespace (`e2e-kns-…`), deleted at the end; assertions are
+  in this run's throwaway namespace (`e2e-kns-…`, registered in the namespaces dictionary
+  by global-setup — the form's namespace field offers only defined entries), deleted at the
+  end; assertions are
   namespace-/name-anchored so nothing else in the shared database can interfere
 
 ## Scenario: a group, an API, and a component owned by the group are created and resolve
 
 1. The admin signs in, opens the new-file form, and switches **Kind** to **Group** — the form
-   swaps to the Group fields. They fill a unique name/namespace and type `team`, leaving the
+   swaps to the Group fields. They fill a unique name, pick the run namespace from the Namespace select, and type
+   `team`, leaving the
    children list empty.
    - *Expected*: the YAML preview shows `children: []` (Backstage requires the list to be
      present, empty is fine); the file saves.

@@ -45,7 +45,7 @@ class RoundTripTest {
     fun `export returns the namespace's active files ordered by name`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
-        val ns = uniqueEntityName("expns")
+        val ns = uniqueNamespace("expns")
         // Created out of name order on purpose — the export must sort.
         client.createCatalogFile(componentFile("zz-last", namespace = ns))
         client.createCatalogFile(groupFile("aa-first", namespace = ns))
@@ -62,8 +62,8 @@ class RoundTripTest {
     fun `export without a namespace spans namespaces in (namespace, name) order`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
-        val nsA = uniqueEntityName("aexp")
-        val nsB = uniqueEntityName("bexp")
+        val nsA = uniqueNamespace("aexp")
+        val nsB = uniqueNamespace("bexp")
         client.createCatalogFile(componentFile(uniqueEntityName("c"), namespace = nsB))
         client.createCatalogFile(componentFile(uniqueEntityName("c"), namespace = nsA))
 
@@ -79,7 +79,7 @@ class RoundTripTest {
     fun `export excludes soft-deleted files`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
-        val ns = uniqueEntityName("delns")
+        val ns = uniqueNamespace("delns")
         val kept = client.createCatalogFile(componentFile(uniqueEntityName("kept"), namespace = ns))
         val deleted = client.createCatalogFile(componentFile(uniqueEntityName("gone"), namespace = ns))
         assertEquals(
@@ -95,7 +95,7 @@ class RoundTripTest {
     fun `import handles each document independently and reports per-row statuses`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
-        val ns = uniqueEntityName("impns")
+        val ns = uniqueNamespace("impns")
         val existing = uniqueEntityName("dup")
         client.createCatalogFile(componentFile(existing, namespace = ns))
 
@@ -130,10 +130,24 @@ class RoundTripTest {
     }
 
     @Test
+    fun `import reports an undefined namespace as INVALID and stores nothing`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("roundtrip")
+        // Grammar-valid, never registered in the namespaces dictionary.
+        val undefined = uniqueEntityName("ghostns")
+
+        val result = client.import(listOf(componentFile(uniqueEntityName("ghostdoc"), namespace = undefined)))
+            .results.single()
+        assertEquals(ImportResultStatus.INVALID, result.status)
+        assertNull(result.fileId)
+        assertTrue(result.message!!.contains("not a defined namespace"))
+    }
+
+    @Test
     fun `import sanitizes before reporting — namespace folds and kind canonicalizes`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
-        val ns = uniqueEntityName("sanns")
+        val ns = uniqueNamespace("sanns")
         val name = uniqueEntityName("comp")
         val file = componentFile(name, namespace = ns.uppercase()).copy(kind = "component")
 
@@ -148,7 +162,7 @@ class RoundTripTest {
     fun `import caps the batch at MAX_IMPORT_FILES`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
-        val ns = uniqueEntityName("capns")
+        val ns = uniqueNamespace("capns")
         val batch = (0..MAX_IMPORT_FILES).map { componentFile(uniqueEntityName("cap$it"), namespace = ns) }
         val response = client.postJson("/api/v1/catalog-files/import", ImportRequest(files = batch))
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -160,7 +174,7 @@ class RoundTripTest {
     fun `the round-trip pin — re-importing an export conflicts on every document`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
-        val ns = uniqueEntityName("rtns")
+        val ns = uniqueNamespace("rtns")
         client.createCatalogFile(componentFile(uniqueEntityName("c"), namespace = ns))
         client.createCatalogFile(groupFile(uniqueEntityName("g"), namespace = ns))
         client.createCatalogFile(userFile(uniqueEntityName("u"), namespace = ns))
@@ -182,7 +196,7 @@ class RoundTripTest {
         usePostgresTestcontainer()
         withAuditCapture { capture ->
             val client = seededClient("roundtrip")
-            val file = componentFile(uniqueEntityName("aud"), namespace = uniqueEntityName("audns"))
+            val file = componentFile(uniqueEntityName("aud"), namespace = uniqueNamespace("audns"))
             val result = client.import(listOf(file)).results.single()
             assertEquals(ImportResultStatus.CREATED, result.status)
             val event = capture.awaitEvent { logged ->

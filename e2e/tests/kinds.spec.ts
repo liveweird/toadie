@@ -1,17 +1,19 @@
-import { expect, login, openFilters, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickNamespace, runNamespace, test, uniqueText } from "./helpers";
 
 async function fillIdentity(page: import("@playwright/test").Page, name: string, ns: string) {
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
-  await page.getByRole("textbox", { name: "Namespace" }).fill(ns);
+  await pickNamespace(page, ns);
 }
 
-// The multi-kind journey in a throwaway unique namespace: a Group and an API through the
-// editor, a Component owned by the group — proving the org reference resolves end to end.
+// The multi-kind journey in this run's throwaway namespace (registered in the namespaces
+// dictionary by global-setup — the form accepts only defined namespaces): a Group and an API
+// through the editor, a Component owned by the group — proving the org reference resolves
+// end to end. Entity names stay unique per attempt, so retries never collide on identity.
 test("a group, an API, and a component owned by the group are created and resolve", async ({
   page,
 }) => {
   await login(page);
-  const ns = uniqueText("e2e-kns");
+  const ns = runNamespace("kinds");
   const team = uniqueText("e2e-team");
   const api = uniqueText("e2e-api");
   const comp = uniqueText("e2e-comp");

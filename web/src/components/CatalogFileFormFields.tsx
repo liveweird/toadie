@@ -15,6 +15,7 @@ import { type UseFormReturnType } from "@mantine/form";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
+import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
 import { charCountDescription } from "../utils/charCount";
 import { refSuggestions, type RefField } from "../utils/refSuggestions";
 import {
@@ -38,6 +39,33 @@ const BELOW_INPUT = ["label", "input", "description", "error"] as const;
 type CatalogForm = UseFormReturnType<CatalogFileFormValues>;
 type Suggest = (field: RefField) => string[];
 
+/**
+ * The namespace picker: catalog writes accept ONLY namespaces defined in the admin-curated
+ * dictionary, so free text became a Select over the active entries (blank still means
+ * `default`). A stored value no longer in the dictionary is appended by the hook so it keeps
+ * displaying — the server's strict 400 then names the problem on save. A failed options load
+ * shows its own error (never an empty-looking list) but leaves the field enabled: the server
+ * is the actual gate.
+ */
+function NamespaceSelect({ form }: { form: CatalogForm }) {
+  const { t } = useTranslation();
+  const { options, loading, error } = useNamespaceOptions(form.values.namespace);
+  return (
+    <Select
+      label={t("catalog.field.namespace")}
+      placeholder="default"
+      data={options}
+      searchable
+      clearable
+      disabled={loading}
+      description={t("catalog.hint.namespace")}
+      value={form.values.namespace.trim().toLowerCase() || null}
+      onChange={(value) => form.setFieldValue("namespace", value ?? "")}
+      error={form.getInputProps("namespace").error ?? (error ? t("catalog.namespaceOptionsFailed") : undefined)}
+    />
+  );
+}
+
 function MetadataFieldset({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
   return (
@@ -52,13 +80,7 @@ function MetadataFieldset({ form }: { form: CatalogForm }) {
           inputWrapperOrder={[...BELOW_INPUT]}
           {...form.getInputProps("name")}
         />
-        <TextInput
-          label={t("catalog.field.namespace")}
-          placeholder="default"
-          maxLength={MAX_ENTITY_PART_LENGTH}
-          description={t("catalog.hint.namespace")}
-          {...form.getInputProps("namespace")}
-        />
+        <NamespaceSelect form={form} />
         <TextInput
           label={t("catalog.field.title")}
           maxLength={MAX_TITLE_LENGTH}

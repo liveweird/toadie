@@ -28,7 +28,7 @@ class GraphTest {
     fun `stored files and their resolved references become STORED nodes and edges`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
-        val ns = uniqueEntityName("gns")
+        val ns = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
         // Both files share the namespaceless owner, so it collapses into ONE virtual node.
@@ -60,7 +60,7 @@ class GraphTest {
     fun `a dangling component reference draws a MISSING node`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
-        val ns = uniqueEntityName("gns")
+        val ns = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         val ghost = uniqueEntityName("ghost")
         client.createCatalogFile(
@@ -82,7 +82,7 @@ class GraphTest {
     fun `kind-less dependsOn entries draw neither node nor edge`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
-        val ns = uniqueEntityName("gns")
+        val ns = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         val bare = uniqueEntityName("bare")
         client.createCatalogFile(
@@ -100,7 +100,7 @@ class GraphTest {
     fun `case-variant references collapse into one node`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
-        val ns = uniqueEntityName("gns")
+        val ns = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
         client.createCatalogFile(
@@ -126,8 +126,8 @@ class GraphTest {
     fun `the namespace filter keeps a stored target from another namespace as STORED`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
-        val nsA = uniqueEntityName("gns")
-        val nsB = uniqueEntityName("gns")
+        val nsA = uniqueNamespace("gns")
+        val nsB = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
         val bId = client.createCatalogFile(componentFile(b, namespace = nsB)).id
@@ -150,7 +150,7 @@ class GraphTest {
     fun `a soft-deleted file leaves the graph and its targets go MISSING`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
-        val ns = uniqueEntityName("gns")
+        val ns = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
         val bId = client.createCatalogFile(componentFile(b, namespace = ns)).id
@@ -171,7 +171,7 @@ class GraphTest {
     fun `stored groups and users draw as STORED nodes with membership edges`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
-        val ns = uniqueEntityName("gns")
+        val ns = uniqueNamespace("gns")
         val team = uniqueEntityName("team")
         val person = uniqueEntityName("person")
         client.createCatalogFile(groupFile(team, namespace = ns, members = listOf("user:$ns/$person")))
@@ -192,7 +192,7 @@ class GraphTest {
     fun `the unfiltered graph spans the workspace`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
-        val ns = uniqueEntityName("gns")
+        val ns = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         client.createCatalogFile(componentFile(a, namespace = ns))
 

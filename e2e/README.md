@@ -45,8 +45,18 @@ from Lettuce, that any new or edited spec must satisfy:
 
 - Each spec's scenario file declares its **Owns** line (exclusive server-side state; "nothing —
   read-only" when applicable). Today: `auth`, `accessibility`, and `url-import` are read-only;
-  `catalog-files`, `cross-check`, `kinds`, `render`, and `round-trip` each own throwaway files
-  in unique namespaces; `users` owns its throwaway accounts — all deleted by their own spec.
+  `catalog-files` and `cross-check` own throwaway files (unique names in `default`); `kinds`,
+  `render`, and `round-trip` own throwaway files in this RUN's namespaces (below); `users` owns
+  its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user — all
+  deleted by their own spec.
+- **The namespaces dictionary is single-writer state.** Catalog writes accept only
+  dictionary-defined namespaces, and the dictionary PUT is a whole-document replace — two
+  parallel writers silently drop each other's entries. The writers are: **global-setup**
+  (registers the three per-run namespaces `e2e-kns-*`/`e2e-rns-*`/`e2e-rtns-*` before any
+  worker starts and exposes them via `runNamespace()` in `helpers.ts`; global-teardown removes
+  them) and **`namespaces.spec.ts`** (the ONLY in-run writer — it appends/removes its own
+  unique entries through the real editor). A new spec needing a throwaway namespace adds a
+  key to global-setup's minted set — it must NOT write the dictionary from a worker.
 - Seeded accounts are never mutated. The seed admin (`admin@toadie.local`) is a shared
   read-mostly actor: specs sign in as it but must not change its password, roles, or state — a
   future spec that needs a mutated account creates a throwaway.

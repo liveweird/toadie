@@ -1,5 +1,7 @@
 package ch.nokillswit.catalog
 
+import ch.nokillswit.dictionaries.Dictionary
+import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.infra.db.containsNormalized
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
@@ -97,8 +99,31 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         otherColumn = UserService.Users.id,
     )
 
+    /**
+     * The second sanctioned cross-feature table read (see persistence.md): STRICT namespace
+     * enforcement — every write (create, update, import) requires its namespace to be an
+     * ACTIVE entry of the NAMESPACE dictionary, checked inside the write's own transaction.
+     * There is no grandfathering: a stored file whose namespace was since removed from the
+     * dictionary cannot be saved until the namespace is re-added or changed (a deliberate
+     * product decision). The incoming value is already sanitized (lowercase-folded, blank →
+     * `default`), matching the dictionary's stored form.
+     */
+    private suspend fun requireDefinedNamespace(namespace: String) {
+        val defined = DictionaryService.Entries.selectAll()
+            .where {
+                (DictionaryService.Entries.dictionary eq Dictionary.NAMESPACE.name) and
+                    (DictionaryService.Entries.value eq namespace) and
+                    (DictionaryService.Entries.markedAsDeleted eq false)
+            }
+            .count() > 0
+        if (!defined) {
+            throw BadRequestException("metadata.namespace '$namespace' is not a defined namespace")
+        }
+    }
+
     suspend fun create(file: CatalogFile, createdByUserId: UInt): UInt = suspendTransaction(database) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
+        requireDefinedNamespace(file.metadata.namespace)
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
             it[kind] = file.kind
@@ -121,6 +146,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
 
     suspend fun update(id: UInt, file: CatalogFile): Int = suspendTransaction(database) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
+        requireDefinedNamespace(file.metadata.namespace)
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
             it[kind] = file.kind
             it[name] = file.metadata.name
@@ -221,6 +247,10 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         } catch (e: CancellationException) {
             // Cancellation is not a per-document failure — a gone client must stop the batch.
             throw e
+        } catch (e: BadRequestException) {
+            // create()'s own rule rejections (the undefined-namespace check) are INVALID rows,
+            // exactly like the pre-flight validator's.
+            base.copy(status = ImportResultStatus.INVALID, message = e.message)
         } catch (e: Exception) {
             if (e.isUniqueViolation()) {
                 base.copy(

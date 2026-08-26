@@ -7,6 +7,8 @@ import { BASE_URL } from "./playwright.config";
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..");
 export const STARTED_MARKER = resolve(here, ".playwright", "stack-started");
+// The per-run namespaces registered below, persisted for global-teardown's removal.
+export const NAMESPACES_FILE = resolve(here, ".playwright", "run-namespaces.json");
 
 async function responds(url: string): Promise<boolean> {
   try {
@@ -27,10 +29,59 @@ async function waitForUp(url: string, timeoutMs: number): Promise<void> {
   throw new Error(`Timed out waiting for the app at ${url}`);
 }
 
+/** Logs in as the seed admin and returns Authorization/Content-Type headers. */
+export async function adminApiHeaders(): Promise<Record<string, string>> {
+  const login = await fetch(`${BASE_URL}/api/v1/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "admin@toadie.local", password: "changeme" }),
+  });
+  if (!login.ok) throw new Error(`[e2e] admin API login failed: ${login.status}`);
+  const { token } = (await login.json()) as { token: string };
+  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+export type DictionaryItems = { items: { id: number; value: string }[] };
+
+/**
+ * Registers this run's throwaway namespaces (catalog writes accept only dictionary-defined
+ * namespaces) and hands them to the workers via process.env — the setup process is the ONE
+ * dictionary writer besides namespaces.spec.ts, because the PUT is a whole-document replace
+ * and concurrent writers from parallel workers would lose each other's entries.
+ */
+async function registerRunNamespaces(): Promise<void> {
+  const headers = await adminApiHeaders();
+  const uniq = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+  const minted: Record<string, string> = {
+    KINDS: `e2e-kns-${uniq}`,
+    RENDER: `e2e-rns-${uniq}`,
+    ROUNDTRIP: `e2e-rtns-${uniq}`,
+  };
+  const current = (await (
+    await fetch(`${BASE_URL}/api/v1/dictionaries/namespaces`, { headers })
+  ).json()) as DictionaryItems;
+  const put = await fetch(`${BASE_URL}/api/v1/dictionaries/namespaces`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({
+      items: [
+        ...current.items.map(({ id, value }) => ({ id, value })),
+        ...Object.values(minted).map((value) => ({ value })),
+      ],
+    }),
+  });
+  if (put.status !== 204) throw new Error(`[e2e] namespace registration failed: ${put.status}`);
+  for (const [key, value] of Object.entries(minted)) process.env[`E2E_NS_${key}`] = value;
+  mkdirSync(dirname(NAMESPACES_FILE), { recursive: true });
+  writeFileSync(NAMESPACES_FILE, JSON.stringify(minted));
+  console.log(`[e2e] Registered run namespaces: ${Object.values(minted).join(", ")}`);
+}
+
 export default async function globalSetup(): Promise<void> {
   // Reuse a stack that's already up (fast local iteration); don't tear it down afterward.
   if (await responds(BASE_URL)) {
     console.log(`[e2e] Reusing the app already running at ${BASE_URL}`);
+    await registerRunNamespaces();
     return;
   }
 
@@ -43,4 +94,5 @@ export default async function globalSetup(): Promise<void> {
   mkdirSync(dirname(STARTED_MARKER), { recursive: true });
   writeFileSync(STARTED_MARKER, "started-by-e2e");
   console.log("[e2e] Stack is up.");
+  await registerRunNamespaces();
 }

@@ -7,7 +7,7 @@ PostgreSQL is the only database. Connection settings come from the `postgres:` b
 
 The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flyway; runtime queries go through R2DBC.
 
-**Cross-feature table reads (the service-layer rule, inherited from Lettuce).** A feature service MAY query another feature's Exposed table objects directly when the read must run **inside its own transaction** (SQL joins, atomic snapshots) — calling the other feature's *service* would open a second transaction and break atomicity. Route handlers never touch tables (services only). The first such read is `CatalogFileService.joined()` (catalog list/read join `UserService.Users` for the creator's display fields).
+**Cross-feature table reads (the service-layer rule, inherited from Lettuce).** A feature service MAY query another feature's Exposed table objects directly when the read must run **inside its own transaction** (SQL joins, atomic snapshots) — calling the other feature's *service* would open a second transaction and break atomicity. Route handlers never touch tables (services only). The reads in place: `CatalogFileService.joined()` (catalog list/read join `UserService.Users` for the creator's display fields) and `CatalogFileService.requireDefinedNamespace()` (every catalog write checks its namespace against the active `NAMESPACE` dictionary entries inside the write's own transaction — STRICT, no grandfathering: a stored file whose namespace was since removed cannot be saved until it is re-added or changed).
 
 Current migrations are `V1`–`V6` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 

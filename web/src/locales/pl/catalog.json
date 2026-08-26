@@ -59,7 +59,7 @@
     "profilePicture": "URL obrazka"
   },
   "hint": {
-    "namespace": "Małe litery; puste oznacza \"default\"",
+    "namespace": "Wybierz zdefiniowaną przestrzeń nazw; puste pole oznacza \"default\"",
     "type": "np. service, website, library",
     "lifecycle": "np. experimental, production, deprecated",
     "owner": "Zespół-właściciel. Domyślny rodzaj to group — „team-platform” oznacza group:team-platform; osoba wymaga prefiksu user:.",
@@ -151,5 +151,6 @@
     "tooMany": "Za dużo dokumentów w jednym imporcie (limit to 200).",
     "failedStatus": "Import nie powiódł się ({{status}})",
     "failedNetwork": "Import nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
-  }
+  },
+  "namespaceOptionsFailed": "Nie udało się wczytać listy przestrzeni nazw. Przeładuj stronę, aby spróbować ponownie."
 }

@@ -1,14 +1,16 @@
 import { readFileSync } from "node:fs";
-import { expect, login, openFilters, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, runNamespace, test, uniqueText } from "./helpers";
 
-// The YAML round-trip end to end: paste-import two documents in a throwaway unique
-// namespace, export the namespace back as one multi-document file, and prove identity
-// survived the trip — re-importing the export conflicts on every row (report & skip).
+// The YAML round-trip end to end: paste-import two documents in this run's throwaway
+// namespace (registered by global-setup — imports of undefined namespaces report INVALID),
+// export the namespace back as one multi-document file, and prove identity survived the
+// trip — re-importing the export conflicts on every row (report & skip). The export-side
+// counts are regexes: a retried attempt shares the run namespace with its own residue.
 test("two pasted documents import, export as one YAML, and re-import as conflicts", async ({
   page,
 }) => {
   await login(page);
-  const ns = uniqueText("e2e-rtns").toLowerCase();
+  const ns = runNamespace("roundTrip");
   const comp = uniqueText("e2e-rt-comp");
   const team = uniqueText("e2e-rt-team");
   const yaml = [
@@ -69,16 +71,17 @@ test("two pasted documents import, export as one YAML, and re-import as conflict
   expect(exported).toContain("\n---\n");
 
   // Re-import the export verbatim: every identity already exists — report & skip.
+  // Counts by regex, not literals: a CI retry's export can carry the failed attempt's rows.
   await page.goto("/catalog-files/import");
   await page.getByRole("textbox", { name: "YAML content" }).fill(exported);
-  await expect(page.getByText("2 documents ready to import")).toBeVisible();
+  await expect(page.getByText(/\d+ documents ready to import/)).toBeVisible();
   await Promise.all([
     page.waitForResponse(
       (r) => r.url().endsWith("/api/v1/catalog-files/import") && r.ok(),
     ),
     page.getByRole("button", { name: "Import", exact: true }).click(),
   ]);
-  await expect(page.getByText("Imported 0 of 2 documents.")).toBeVisible();
+  await expect(page.getByText(/Imported 0 of \d+ documents\./)).toBeVisible();
   await expect(
     page.getByRole("row").filter({ hasText: comp }).getByText("Already exists", { exact: true }),
   ).toBeVisible();

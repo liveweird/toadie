@@ -209,8 +209,10 @@ export interface paths {
          *     is validated against the Backstage descriptor format (name/namespace/tag/label/
          *     annotation grammars, entity-reference syntax, the per-kind required/forbidden field
          *     tables); references are checked for FORMAT only here — resolution is the cross-check
-         *     endpoints' job and never blocks a save. Entity identity (kind + namespace + name,
-         *     case-insensitive) must be unique among active files; a clash is a `409`.
+         *     endpoints' job and never blocks a save. The namespace must additionally be an active
+         *     entry of the `namespaces` dictionary (strict — no grandfathering), else `400`.
+         *     Entity identity (kind + namespace + name, case-insensitive) must be unique among
+         *     active files; a clash is a `409`.
          */
         post: operations["createCatalogFile"];
         delete?: never;
@@ -351,7 +353,8 @@ export interface paths {
          * @description Imports up to 200 structured documents (the SPA parses `catalog-info.yaml` client-side
          *     and ships the parsed documents here). Each document imports INDEPENDENTLY and gets its
          *     own result row: `CREATED` (stored, `fileId` set), `INVALID` (failed the
-         *     descriptor-format validation, `message` names the rule), `CONFLICT` (an active file
+         *     descriptor-format validation or the defined-namespace rule, `message` names the
+         *     problem), `CONFLICT` (an active file
          *     already holds the kind+namespace+name identity — nothing is overwritten), or `ERROR`
          *     (an unexpected storage failure). The response is `200` even when every document failed
          *     — the result rows are the outcome; a `400` covers only the batch itself (an
@@ -406,7 +409,9 @@ export interface paths {
         get: operations["getCatalogFile"];
         /**
          * Replace a catalog file
-         * @description Full replacement; same validation as create. Renaming into an identity an active file
+         * @description Full replacement; same validation as create (the defined-namespace rule included —
+         *     strict: a file whose namespace was removed from the dictionary cannot be saved until
+         *     the namespace is re-added or changed). Renaming into an identity an active file
          *     already holds is a `409`.
          */
         put: operations["replaceCatalogFile"];
@@ -595,7 +600,7 @@ export interface components {
             /** @description Entity name — unique (case-insensitively) per namespace among active files. */
             name: string;
             /**
-             * @description Folded to lowercase; blank/omitted means `default`.
+             * @description Folded to lowercase; blank/omitted means `default`. Must be an active entry of the `namespaces` dictionary (`GET /api/v1/dictionaries/namespaces`) — writes with an undefined namespace are rejected with `400`.
              * @default default
              */
             namespace: string;

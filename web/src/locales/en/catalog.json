@@ -59,7 +59,7 @@
     "profilePicture": "Picture URL"
   },
   "hint": {
-    "namespace": "Lowercase; blank means \"default\"",
+    "namespace": "Pick a defined namespace; blank means \"default\"",
     "type": "e.g. service, website, library",
     "lifecycle": "e.g. experimental, production, deprecated",
     "owner": "The owning team. Kind defaults to group — “team-platform” means group:team-platform; a person needs the user: prefix.",
@@ -147,5 +147,6 @@
     "tooMany": "Too many documents for one import (the limit is 200).",
     "failedStatus": "Import failed ({{status}})",
     "failedNetwork": "Import failed. Check your connection and try again."
-  }
+  },
+  "namespaceOptionsFailed": "Could not load the namespace list. Reload to try again."
 }

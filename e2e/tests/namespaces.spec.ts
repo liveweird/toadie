@@ -6,7 +6,7 @@ import { createUserViaUi, expect, login, logoutButton, openFilters, test, unique
  * so the first row is awaited explicitly — after a navigation the editor renders async.
  */
 async function namespaceValues(page: Page): Promise<string[]> {
-  await expect(page.getByRole("textbox", { name: "Namespace 1" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Namespace 1", exact: true })).toBeVisible();
   const inputs = await page.getByRole("textbox", { name: /^Namespace / }).all();
   return Promise.all(inputs.map((input) => input.inputValue()));
 }
@@ -30,7 +30,7 @@ async function saveNamespaces(page: Page): Promise<void> {
 async function removeNamespaceRow(page: Page, value: string): Promise<void> {
   const index = (await namespaceValues(page)).indexOf(value);
   expect(index).toBeGreaterThanOrEqual(0);
-  await page.getByRole("button", { name: `Remove namespace ${index + 1}` }).click();
+  await page.getByRole("button", { name: `Remove namespace ${index + 1}`, exact: true }).click();
 }
 
 // The whole dictionary journey on throwaway values (the e2e marker + uniqueness keeps the
@@ -68,7 +68,7 @@ test("admin curates the ordered namespaces list; a regular user reads it only", 
 
   // Reorder with the row's up control, save, and confirm the order survives a fresh load.
   await page
-    .getByRole("button", { name: `Move namespace ${afterAdd.indexOf(nsB) + 1} up` })
+    .getByRole("button", { name: `Move namespace ${afterAdd.indexOf(nsB) + 1} up`, exact: true })
     .click();
   await saveNamespaces(page);
   await page.goto("/namespaces");

@@ -14,6 +14,14 @@ import java.util.UUID
 /** Unique, grammar-valid entity name so parallel tests and re-runs never collide on identity. */
 fun uniqueEntityName(prefix: String) = "$prefix-${UUID.randomUUID().toString().substring(0, 8)}"
 
+/**
+ * A unique throwaway namespace, registered as an active namespaces-dictionary entry first —
+ * catalog writes reject undefined namespaces, so a test minting a namespace to create files
+ * in must go through this (or [TestNamespaces.ensure] for fixed values).
+ */
+suspend fun uniqueNamespace(prefix: String): String =
+    uniqueEntityName(prefix).also { TestNamespaces.ensure(it) }
+
 fun componentFile(
     name: String,
     namespace: String = "default",

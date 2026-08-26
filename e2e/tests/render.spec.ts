@@ -1,10 +1,12 @@
-import { expect, login, openFilters, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickNamespace, runNamespace, test, uniqueText } from "./helpers";
 
-// The render-graph journey in a throwaway unique NAMESPACE, so the namespace filter isolates
-// this spec's nodes completely from other files (and residue) in the shared database.
+// The render-graph journey in this run's throwaway NAMESPACE (registered by global-setup —
+// the form accepts only defined namespaces): the namespace filter isolates this spec's nodes
+// from other files in the shared database, and per-attempt-unique node names keep retries
+// honest against their own residue.
 test("the graph renders stored, missing, and external nodes for a namespace", async ({ page }) => {
   await login(page);
-  const ns = uniqueText("e2e-rns");
+  const ns = runNamespace("render");
   const a = uniqueText("e2e-rnode-a");
   const b = uniqueText("e2e-rnode-b");
   const ghost = uniqueText("e2e-rnode-ghost");
@@ -16,7 +18,7 @@ test("the graph renders stored, missing, and external nodes for a namespace", as
   ] as [string, string[]][]) {
     await page.goto("/catalog-files/new");
     await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
-    await page.getByRole("textbox", { name: "Namespace" }).fill(ns);
+    await pickNamespace(page, ns);
     await page.getByRole("combobox", { name: "Type" }).fill("service");
     await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
     await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");

@@ -4,7 +4,9 @@
 - **Actors**: the seed administrator (`admin@toadie.local`) — an ordinary user here (shared
   workspace)
 - **Owns** (exclusive server-side state): two throwaway files (a Component and the Group that
-  owns it) in a throwaway unique namespace (`e2e-rtns-…`), deleted at the end;
+  owns it) in this run's throwaway namespace (`e2e-rtns-…`, registered in the namespaces
+  dictionary by global-setup — an undefined namespace would import as INVALID), deleted at
+  the end;
   namespace-/name-anchored assertions keep the shared database out of the picture
 
 ## Scenario: two pasted documents import, export as one YAML, and re-import as conflicts
