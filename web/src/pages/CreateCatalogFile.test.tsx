@@ -78,19 +78,67 @@ describe("CreateCatalogFile page", () => {
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
   });
 
-  test("an invalid label key blocks submission with the key error", async () => {
-    mockPostStatus(mockFetch, 201);
+  test("labels come from the registry pickers and land in the payload", async () => {
+    // The registry offers one Component label; the row's two Selects are the only way in.
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url === "/api/v1/labels") {
+        return Promise.resolve(
+          jsonResponse(200, { items: [{ id: 1, key: "tier", values: ["backend", "frontend"], kinds: ["Component"] }] }),
+        );
+      }
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files") {
+        return Promise.resolve(
+          jsonResponse(201, {
+            id: 9,
+            kind: "Component",
+            metadata: { name: "my-svc", namespace: "default" },
+            spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
+            createdBy: 1,
+            creatorName: "A",
+            creatorDeleted: false,
+            createdAt: 1,
+            updatedAt: 1,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
     const user = userEvent.setup();
     renderCreate();
 
     await fillMinimalForm(user);
+    // Adding is gated on the registry offering a label for this kind.
+    await waitFor(() => expect(screen.getByRole("button", { name: /add label/i })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: /add label/i }));
-    await user.type(screen.getByLabelText("Labels Key 1"), "a/b/c");
-    await user.type(screen.getByLabelText("Labels Value 1"), "backend");
+    await user.click(screen.getByRole("combobox", { name: "Labels Key 1" }));
+    await user.click(await screen.findByRole("option", { name: "tier" }));
+    await user.click(screen.getByRole("combobox", { name: "Labels Value 1" }));
+    await user.click(await screen.findByRole("option", { name: "backend" }));
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
-    expect(await screen.findByText(/Key must be/)).toBeInTheDocument();
-    expect(findSaveCall(mockFetch)).toBeUndefined();
+    await waitFor(() => expect(findSaveCall(mockFetch)).toBeDefined());
+    const body = JSON.parse((findSaveCall(mockFetch)![1] as RequestInit).body as string);
+    expect(body.metadata.labels).toEqual({ tier: "backend" });
+  });
+
+  test("with no registry label for the kind, adding is disabled behind the hint", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url === "/api/v1/labels") {
+        return Promise.resolve(
+          jsonResponse(200, { items: [{ id: 1, key: "tier", values: ["backend"], kinds: ["API"] }] }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderCreate();
+
+    expect(await screen.findByText(/No labels are defined for kind Component/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add label/i })).toBeDisabled();
+    // The registry HAS an API label — switching kind re-enables adding.
+    await user.click(screen.getByRole("combobox", { name: /^kind$/i }));
+    await user.click(await screen.findByRole("option", { name: "API" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /add label/i })).toBeEnabled());
   });
 
   test("submits the trimmed request, toasts, and navigates to the list", async () => {

@@ -19,6 +19,7 @@ import {
   IconHome,
   IconKey,
   IconListCheck,
+  IconTag,
   IconLogout,
   IconMoon,
   IconSun,
@@ -52,6 +53,7 @@ const ImportCatalogFiles = lazy(() => import("./pages/ImportCatalogFiles"));
 const EditCatalogFile = lazy(() => import("./pages/EditCatalogFile"));
 const CrossCheck = lazy(() => import("./pages/CrossCheck"));
 const Namespaces = lazy(() => import("./pages/Namespaces"));
+const Labels = lazy(() => import("./pages/Labels"));
 const Users = lazy(() => import("./pages/Users"));
 const CreateUser = lazy(() => import("./pages/CreateUser"));
 const EditUser = lazy(() => import("./pages/EditUser"));
@@ -85,6 +87,7 @@ const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   { to: "/render", label: "appShell.nav.render", icon: IconTopologyStar3 },
   // Visible to everyone: non-admins get the read-only list, ADMINs the editor (the page branches).
   { to: "/namespaces", label: "appShell.nav.namespaces", icon: IconTags },
+  { to: "/labels", label: "appShell.nav.labels", icon: IconTag },
   { to: "/users", label: "appShell.nav.users", icon: IconUsers, adminOnly: true },
   { to: "/change-password", label: "appShell.nav.changePassword", icon: IconKey },
 ];
@@ -228,6 +231,7 @@ export default function App() {
             <Route path="cross-check" element={<CrossCheck />} />
             <Route path="render" element={<RenderGraph />} />
             <Route path="namespaces" element={<Namespaces />} />
+            <Route path="labels" element={<Labels />} />
             <Route path="users" element={<Users />} />
             <Route path="users/new" element={<CreateUser />} />
             <Route path="users/:id/edit" element={<EditUser />} />

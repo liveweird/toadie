@@ -8,6 +8,7 @@
     "crossCheck": "Cross-check",
     "render": "Render",
     "namespaces": "Namespaces",
+    "labels": "Labels",
     "users": "Users",
     "changePassword": "Change password"
   }

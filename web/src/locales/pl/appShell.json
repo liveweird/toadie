@@ -8,6 +8,7 @@
     "crossCheck": "Weryfikacja referencji",
     "render": "Renderowanie",
     "namespaces": "Przestrzenie nazw",
+    "labels": "Etykiety",
     "users": "Użytkownicy/czki",
     "changePassword": "Zmiana hasła"
   }

@@ -243,7 +243,9 @@ private fun validateMetadata(metadata: CatalogFileMetadata) {
     validateLinks(metadata.links)
 }
 
-private fun validateNamePart(value: String, field: String) {
+// Internal: the label registry (labels/Label.kt) validates its allowed values against the
+// same name grammar — the descriptor format owns the rule, the registry borrows it.
+internal fun validateNamePart(value: String, field: String) {
     if (value.length !in 1..MAX_ENTITY_PART_LENGTH || !NAME_REGEX.matches(value)) {
         throw BadRequestException(
             "$field must be 1-$MAX_ENTITY_PART_LENGTH alphanumeric characters " +
@@ -298,7 +300,9 @@ private fun validateAnnotations(annotations: Map<String, String>) {
 }
 
 // A label/annotation key: an optional lowercase-domain prefix + '/', then a name-shaped part.
-private fun validateKey(key: String, field: String) {
+// Internal: the label registry (labels/Label.kt) validates registered keys against the same
+// grammar — never duplicate it.
+internal fun validateKey(key: String, field: String) {
     val (prefix, name) = splitRefOnce(key, '/')
         ?: throw BadRequestException("$field key '$key' must contain at most one '/'")
     prefix?.let {

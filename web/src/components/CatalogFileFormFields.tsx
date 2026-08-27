@@ -15,6 +15,7 @@ import { type UseFormReturnType } from "@mantine/form";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
+import { useLabels } from "../hooks/useLabels";
 import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
 import { charCountDescription } from "../utils/charCount";
 import { refSuggestions, type RefField } from "../utils/refSuggestions";
@@ -308,36 +309,125 @@ function LinksFieldset({ form }: { form: CatalogForm }) {
   );
 }
 
-/** The labels/annotations key-value editor — one fieldset per list, index-addressed rows. */
-function KeyValueFieldset({ form, listField }: { form: CatalogForm; listField: "labels" | "annotations" }) {
+/**
+ * The labels editor — registry-constrained pickers, NOT free key/value inputs: catalog
+ * writes accept only ADMIN-registered labels allowed for the document's kind, each with a
+ * value from that label's closed list (server-enforced, strict). A stored key or value no
+ * longer offered (label removed/renamed/narrowed since the file was saved) is appended to
+ * its own row's options so it keeps displaying — the server's 400 then names the problem
+ * on save. A failed registry load disables adding but keeps existing rows rendered.
+ */
+function LabelsFieldset({ form }: { form: CatalogForm }) {
+  const { t } = useTranslation();
+  const { labels, error } = useLabels();
+  const kind = form.values.kind;
+  const allowed = labels.filter((label) => label.kinds.includes(kind));
+  const usedKeys = new Set(form.values.labels.map((row) => row.key));
+  return (
+    <Fieldset legend={t("catalog.section.labels")}>
+      <Stack gap="sm">
+        {form.values.labels.map((row, index) => {
+          const rowLabel = labels.find((label) => label.key === row.key);
+          // A key stays offered to the row that holds it; other rows can't duplicate it.
+          const keyOptions = allowed
+            .map((label) => label.key)
+            .filter((key) => key === row.key || !usedKeys.has(key));
+          const keyData = row.key && !keyOptions.includes(row.key) ? [...keyOptions, row.key] : keyOptions;
+          const valueOptions = rowLabel ? [...rowLabel.values] : [];
+          const valueData =
+            row.value && !valueOptions.includes(row.value) ? [...valueOptions, row.value] : valueOptions;
+          return (
+            // Rows have no identity beyond position — Mantine's form list helpers are index-addressed.
+            <Group key={`labels-${index}`} align="flex-start" gap="sm" wrap="nowrap">
+              <Select
+                style={{ flex: 1 }}
+                aria-label={`${t("catalog.section.labels")} ${t("catalog.field.key")} ${index + 1}`}
+                placeholder={t("catalog.field.key")}
+                data={keyData}
+                searchable
+                value={row.key || null}
+                onChange={(value) => {
+                  form.setFieldValue(`labels.${index}.key`, value ?? "");
+                  // The closed value list is per-key — a key change invalidates the value.
+                  form.setFieldValue(`labels.${index}.value`, "");
+                }}
+                error={form.getInputProps(`labels.${index}.key`).error}
+              />
+              <Select
+                style={{ flex: 1 }}
+                aria-label={`${t("catalog.section.labels")} ${t("catalog.field.value")} ${index + 1}`}
+                placeholder={t("catalog.field.value")}
+                data={valueData}
+                searchable
+                value={row.value || null}
+                onChange={(value) => form.setFieldValue(`labels.${index}.value`, value ?? "")}
+                error={form.getInputProps(`labels.${index}.value`).error}
+              />
+              <ActionIcon
+                variant="subtle"
+                color="red"
+                mt={4}
+                aria-label={t("catalog.removeLabelAria", { index: index + 1 })}
+                onClick={() => form.removeListItem("labels", index)}
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </Group>
+          );
+        })}
+        {error ? (
+          <Text size="sm" c="dimmed">
+            {t("catalog.labelOptionsFailed")}
+          </Text>
+        ) : (
+          allowed.length === 0 && (
+            <Text size="sm" c="dimmed">
+              {t("catalog.noLabelsForKind", { kind })}
+            </Text>
+          )
+        )}
+        <Button
+          variant="light"
+          size="xs"
+          leftSection={<IconPlus size={14} />}
+          style={{ alignSelf: "flex-start" }}
+          disabled={allowed.length === 0}
+          onClick={() => form.insertListItem("labels", { key: "", value: "" })}
+        >
+          {t("catalog.addLabel")}
+        </Button>
+      </Stack>
+    </Fieldset>
+  );
+}
+
+/** The annotations key-value editor — free-form (key grammar aside), index-addressed rows. */
+function AnnotationsFieldset({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
   return (
-    <Fieldset legend={t(`catalog.section.${listField}`)}>
+    <Fieldset legend={t("catalog.section.annotations")}>
       <Stack gap="sm">
-        {form.values[listField].map((_row, index) => (
+        {form.values.annotations.map((_row, index) => (
           // Rows have no identity beyond position — Mantine's form list helpers are index-addressed.
-          <Group key={`${listField}-${index}`} align="flex-start" gap="sm" wrap="nowrap">
+          <Group key={`annotations-${index}`} align="flex-start" gap="sm" wrap="nowrap">
             <TextInput
               style={{ flex: 1 }}
-              aria-label={`${t(`catalog.section.${listField}`)} ${t("catalog.field.key")} ${index + 1}`}
+              aria-label={`${t("catalog.section.annotations")} ${t("catalog.field.key")} ${index + 1}`}
               placeholder={t("catalog.field.key")}
-              {...form.getInputProps(`${listField}.${index}.key`)}
+              {...form.getInputProps(`annotations.${index}.key`)}
             />
             <TextInput
               style={{ flex: 1 }}
-              aria-label={`${t(`catalog.section.${listField}`)} ${t("catalog.field.value")} ${index + 1}`}
+              aria-label={`${t("catalog.section.annotations")} ${t("catalog.field.value")} ${index + 1}`}
               placeholder={t("catalog.field.value")}
-              {...form.getInputProps(`${listField}.${index}.value`)}
+              {...form.getInputProps(`annotations.${index}.value`)}
             />
             <ActionIcon
               variant="subtle"
               color="red"
               mt={4}
-              aria-label={t(
-                listField === "labels" ? "catalog.removeLabelAria" : "catalog.removeAnnotationAria",
-                { index: index + 1 },
-              )}
-              onClick={() => form.removeListItem(listField, index)}
+              aria-label={t("catalog.removeAnnotationAria", { index: index + 1 })}
+              onClick={() => form.removeListItem("annotations", index)}
             >
               <IconTrash size={16} />
             </ActionIcon>
@@ -348,9 +438,9 @@ function KeyValueFieldset({ form, listField }: { form: CatalogForm; listField: "
           size="xs"
           leftSection={<IconPlus size={14} />}
           style={{ alignSelf: "flex-start" }}
-          onClick={() => form.insertListItem(listField, { key: "", value: "" })}
+          onClick={() => form.insertListItem("annotations", { key: "", value: "" })}
         >
-          {t(listField === "labels" ? "catalog.addLabel" : "catalog.addAnnotation")}
+          {t("catalog.addAnnotation")}
         </Button>
       </Stack>
     </Fieldset>
@@ -395,8 +485,8 @@ export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
         <RelationsFieldset form={form} fields={relationFields} suggest={suggest} />
       )}
       <LinksFieldset form={form} />
-      <KeyValueFieldset form={form} listField="labels" />
-      <KeyValueFieldset form={form} listField="annotations" />
+      <LabelsFieldset form={form} />
+      <AnnotationsFieldset form={form} />
     </Stack>
   );
 }

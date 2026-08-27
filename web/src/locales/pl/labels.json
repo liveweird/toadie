@@ -1,0 +1,41 @@
+{
+  "title": "Etykiety",
+  "intro": "Jedyne etykiety, jakie mogą nosić pliki katalogu. Administratorzy i administratorki definiują klucz każdej etykiety, jej dozwolone wartości oraz rodzaje encji, których dotyczy.",
+  "empty": "Nie zdefiniowano jeszcze żadnych etykiet",
+  "loadFailed": "Nie udało się wczytać etykiet",
+  "newLabel": "Nowa etykieta",
+  "createTitle": "Nowa etykieta",
+  "editTitle": "Edytuj etykietę",
+  "column": {
+    "key": "Klucz",
+    "values": "Dozwolone wartości",
+    "kinds": "Dotyczy"
+  },
+  "field": {
+    "key": "Klucz",
+    "keyHint": "Opcjonalny prefiks domenowy małymi literami, ukośnik, potem nazwa — np. example.com/tier",
+    "values": "Dozwolone wartości",
+    "valuesHint": "Zamknięta lista, z której plik może wybierać — naciśnij Enter, aby dodać każdą wartość",
+    "kinds": "Dotyczy rodzajów",
+    "kindsHint": "Tylko pliki tych rodzajów mogą nosić tę etykietę"
+  },
+  "validation": {
+    "key": "Musi być opcjonalnym prefiksem domenowym małymi literami plus nazwą 1–63 znaków z liter, cyfr i pojedynczych separatorów [-_.]",
+    "valuesRequired": "Dodaj co najmniej jedną dozwoloną wartość",
+    "valuesCount": "Najwyżej 100 wartości",
+    "value": "Wartość „{{value}}\" musi mieć 1–63 znaki alfanumeryczne z pojedynczymi separatorami [-_.]",
+    "valuesDuplicate": "Wartości nie mogą się powtarzać",
+    "kindsRequired": "Wybierz co najmniej jeden rodzaj"
+  },
+  "saveConflict": "Etykieta o tym kluczu już istnieje",
+  "saveInvalid": "Co najmniej jedno pole jest nieprawidłowe",
+  "saveGone": "Ta etykieta już nie istnieje — odśwież stronę",
+  "deleteTitle": "Usunąć etykietę?",
+  "deleteFailed": "Nie udało się usunąć etykiety",
+  "deleteBody": "Pliki noszące „{{key}}\" nie zapiszą się, dopóki etykieta nie zostanie ponownie zarejestrowana lub z nich usunięta.",
+  "toast": {
+    "created": "Utworzono etykietę",
+    "saved": "Zapisano etykietę",
+    "deleted": "Usunięto etykietę"
+  }
+}

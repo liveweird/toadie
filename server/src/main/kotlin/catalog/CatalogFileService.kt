@@ -4,6 +4,7 @@ import ch.nokillswit.dictionaries.Dictionary
 import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.infra.db.containsNormalized
 import ch.nokillswit.infra.paging.PageRequest
+import ch.nokillswit.labels.LabelService
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.plugins.isUniqueViolation
 import ch.nokillswit.users.UserService
@@ -138,6 +139,41 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         return namespace
     }
 
+    /**
+     * The third sanctioned cross-feature table read (see persistence.md): STRICT label
+     * enforcement — every write (create, update, import) checks its labels against the
+     * ADMIN-curated registry inside the write's own transaction. Every key must be an active
+     * registered label, allowed for the file's kind, with the value from the label's closed
+     * list (matching is byte-exact — the editor only ever writes registered keys verbatim).
+     * No grandfathering: a stored file whose label was since removed or narrowed cannot be
+     * saved until it is fixed. An empty registry means no file may carry labels.
+     */
+    private suspend fun requireAllowedLabels(kind: String, labels: Map<String, String>) {
+        if (labels.isEmpty()) return
+        val registry: Map<String, Pair<List<String>, List<String>>> =
+            LabelService.Labels.selectAll()
+                .where { LabelService.Labels.markedAsDeleted eq false }
+                .map {
+                    it[LabelService.Labels.key] to Pair(
+                        json.decodeFromString<List<String>>(it[LabelService.Labels.allowedKinds]),
+                        json.decodeFromString<List<String>>(it[LabelService.Labels.allowedValues]),
+                    )
+                }
+                .toList()
+                .toMap()
+        for ((key, value) in labels) {
+            val (allowedKinds, allowedValues) = registry[key] ?: throw BadRequestException(
+                "metadata.labels key '$key' is not a defined label — define it on the Labels page",
+            )
+            if (kind !in allowedKinds) {
+                throw BadRequestException("Label '$key' cannot be applied to kind '$kind'")
+            }
+            if (value !in allowedValues) {
+                throw BadRequestException("Value '$value' is not allowed for label '$key'")
+            }
+        }
+    }
+
     private fun CatalogFile.withNamespace(resolved: String): CatalogFile =
         if (metadata.namespace == resolved) this else copy(metadata = metadata.copy(namespace = resolved))
 
@@ -154,6 +190,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         // The stored row AND the content JSON both carry the resolved concrete namespace.
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
+        requireAllowedLabels(stored.kind, stored.metadata.labels)
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
             it[kind] = stored.kind
@@ -177,6 +214,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
     suspend fun update(id: UInt, file: CatalogFile): Int = suspendTransaction(database) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
+        requireAllowedLabels(stored.kind, stored.metadata.labels)
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
             it[kind] = stored.kind
             it[name] = stored.metadata.name

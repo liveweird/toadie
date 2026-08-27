@@ -148,5 +148,7 @@
     "failedStatus": "Import failed ({{status}})",
     "failedNetwork": "Import failed. Check your connection and try again."
   },
-  "namespaceOptionsFailed": "Could not load the namespace list. Reload to try again."
+  "namespaceOptionsFailed": "Could not load the namespace list. Reload to try again.",
+  "labelOptionsFailed": "Could not load the label list. Reload to try again.",
+  "noLabelsForKind": "No labels are defined for kind {{kind}} — administrators register them on the Labels page."
 }

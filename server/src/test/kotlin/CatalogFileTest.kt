@@ -191,6 +191,7 @@ class CatalogFileTest {
         val client = seededClient("cataloguser")
         val name = uniqueEntityName("full")
         TestNamespaces.ensure("team-a")
+        TestLabels.ensure("example.com/tier", listOf("backend"), listOf("Component"))
         val file = CatalogFile(
             metadata = CatalogFileMetadata(
                 name = name,
@@ -403,6 +404,62 @@ class CatalogFileTest {
             componentFile(created.metadata.name, namespace = ns),
         )
         assertEquals(HttpStatusCode.NoContent, unblocked.status)
+    }
+
+    @Test
+    fun `labels are enforced against the ADMIN registry - key, kind, and value`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("lblenforce")
+
+        fun labeled(name: String, labels: Map<String, String>) =
+            componentFile(name).let { it.copy(metadata = it.metadata.copy(labels = labels)) }
+
+        // Grammar-valid but unregistered key → 400.
+        val ghost = uniqueEntityName("lblghost")
+        val unknown = client.postJson("/api/v1/catalog-files", labeled(uniqueEntityName("lku"), mapOf(ghost to "x")))
+        assertEquals(HttpStatusCode.BadRequest, unknown.status)
+        assertTrue(unknown.body<ProblemDetail>().detail!!.contains("not a defined label"))
+
+        // Registered, but for another kind → 400.
+        val apiOnly = uniqueLabel("lblapi", values = listOf("backend"), kinds = listOf("API"))
+        val wrongKind = client.postJson(
+            "/api/v1/catalog-files",
+            labeled(uniqueEntityName("lkk"), mapOf(apiOnly to "backend")),
+        )
+        assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
+        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("cannot be applied to kind"))
+
+        // Registered for the kind, but a value outside the closed list → 400.
+        val lbl = uniqueLabel("lblok", values = listOf("backend", "frontend"), kinds = listOf("Component"))
+        val wrongValue = client.postJson(
+            "/api/v1/catalog-files",
+            labeled(uniqueEntityName("lkv"), mapOf(lbl to "database")),
+        )
+        assertEquals(HttpStatusCode.BadRequest, wrongValue.status)
+        assertTrue(wrongValue.body<ProblemDetail>().detail!!.contains("is not allowed for label"))
+
+        // The allowed combination stores and round-trips.
+        val created = client.createCatalogFile(labeled(uniqueEntityName("lok"), mapOf(lbl to "backend")))
+        assertEquals("backend", created.metadata.labels[lbl])
+    }
+
+    @Test
+    fun `a removed label blocks a resave - strict, no grandfathering - until re-registered`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("lblgone")
+        val lbl = uniqueLabel("lblgone", values = listOf("backend"), kinds = listOf("Component"))
+        val name = uniqueEntityName("lblg")
+        val file = componentFile(name).let { it.copy(metadata = it.metadata.copy(labels = mapOf(lbl to "backend"))) }
+        val created = client.createCatalogFile(file)
+
+        TestLabels.remove(lbl)
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            client.putJson("/api/v1/catalog-files/${created.id}", file).status,
+            "a stored file whose label was removed from the registry must block on save",
+        )
+        TestLabels.ensure(lbl, listOf("backend"), listOf("Component"))
+        assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", file).status)
     }
 
     @Test

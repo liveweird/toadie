@@ -357,6 +357,41 @@ object TestNamespaces {
     }
 }
 
+/**
+ * Direct access to the SHARED label registry (V10) — like the namespaces dictionary, suite
+ * state every catalog write is checked against. Tests only ever mint UNIQUE keys (the
+ * `uniqueLabel` fixture) and remove them when a test's assertions depend on absence.
+ */
+object TestLabels {
+    val service: ch.nokillswit.labels.LabelService by lazy {
+        ch.nokillswit.labels.LabelService(sharedTestDatabase)
+    }
+
+    data class RawRow(val id: UInt, val key: String, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.labels.LabelService.Labels
+        t.selectAll().map { RawRow(it[t.id].value, it[t.key], it[t.markedAsDeleted]) }.toList()
+    }
+
+    /** Registers [key] (create-if-missing; an existing active label is updated) and returns its id. */
+    suspend fun ensure(key: String, values: List<String>, kinds: List<String>): UInt {
+        val request = ch.nokillswit.labels.LabelRequest(key = key, values = values, kinds = kinds)
+        val existing = service.list().firstOrNull { it.key.equals(key, ignoreCase = true) }
+        if (existing != null) {
+            service.update(existing.id, request)
+            return existing.id
+        }
+        return service.create(request)
+    }
+
+    /** Soft-deletes the active labels holding [keys] (a no-op for keys not present). */
+    suspend fun remove(vararg keys: String) {
+        service.list().filter { label -> keys.any { it.equals(label.key, ignoreCase = true) } }
+            .forEach { service.delete(it.id) }
+    }
+}
+
 // Bootstrap tests (and prod-mode boot tests) rotate the seed admin password in the SHARED
 // container. Call this afterwards to put the V3 seed state back so later tests (and re-runs)
 // see the pristine seed.

@@ -177,7 +177,7 @@ export function isValidName(value: string): boolean {
   return value.length >= 1 && value.length <= MAX_ENTITY_PART_LENGTH && NAME_RE.test(value);
 }
 
-function isValidKey(key: string): boolean {
+export function isValidKey(key: string): boolean {
   const slash = key.indexOf("/");
   if (slash !== key.lastIndexOf("/")) return false;
   const prefix = slash >= 0 ? key.slice(0, slash) : null;

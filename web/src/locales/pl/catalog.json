@@ -152,5 +152,7 @@
     "failedStatus": "Import nie powiódł się ({{status}})",
     "failedNetwork": "Import nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
   },
-  "namespaceOptionsFailed": "Nie udało się wczytać listy przestrzeni nazw. Przeładuj stronę, aby spróbować ponownie."
+  "namespaceOptionsFailed": "Nie udało się wczytać listy przestrzeni nazw. Przeładuj stronę, aby spróbować ponownie.",
+  "labelOptionsFailed": "Nie udało się wczytać listy etykiet. Przeładuj stronę, aby spróbować ponownie.",
+  "noLabelsForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych etykiet — administratorzy i administratorki rejestrują je na stronie Etykiety."
 }

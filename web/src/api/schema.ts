@@ -210,7 +210,9 @@ export interface paths {
          *     annotation grammars, entity-reference syntax, the per-kind required/forbidden field
          *     tables); references are checked for FORMAT only here — resolution is the cross-check
          *     endpoints' job and never blocks a save. The namespace must additionally be an active
-         *     entry of the `namespaces` dictionary (strict — no grandfathering), else `400`.
+         *     entry of the `namespaces` dictionary, and every label must be an ADMIN-registered
+         *     label allowed for the file's kind with a value from its closed list (both strict —
+         *     no grandfathering), else `400`.
          *     Entity identity (kind + namespace + name, case-insensitive) must be unique among
          *     active files; a clash is a `409`.
          */
@@ -353,7 +355,8 @@ export interface paths {
          * @description Imports up to 200 structured documents (the SPA parses `catalog-info.yaml` client-side
          *     and ships the parsed documents here). Each document imports INDEPENDENTLY and gets its
          *     own result row: `CREATED` (stored, `fileId` set), `INVALID` (failed the
-         *     descriptor-format validation or the defined-namespace rule, `message` names the
+         *     descriptor-format validation, the defined-namespace rule, or the registered-label
+         *     rule, `message` names the
          *     problem), `CONFLICT` (an active file
          *     already holds the kind+namespace+name identity — nothing is overwritten), or `ERROR`
          *     (an unexpected storage failure). The response is `200` even when every document failed
@@ -409,10 +412,10 @@ export interface paths {
         get: operations["getCatalogFile"];
         /**
          * Replace a catalog file
-         * @description Full replacement; same validation as create (the defined-namespace rule included —
-         *     strict: a file whose namespace was removed from the dictionary cannot be saved until
-         *     the namespace is re-added or changed). Renaming into an identity an active file
-         *     already holds is a `409`.
+         * @description Full replacement; same validation as create (the defined-namespace and
+         *     registered-label rules included — strict: a file whose namespace or label was removed
+         *     from its registry cannot be saved until it is re-added or changed). Renaming into an
+         *     identity an active file already holds is a `409`.
          */
         put: operations["replaceCatalogFile"];
         post?: never;
@@ -458,6 +461,67 @@ export interface paths {
         put: operations["replaceDictionary"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the label registry
+         * @description Any authenticated user. Returns every active label, key-ordered case-insensitively —
+         *     deliberately unpaged (the registry holds at most 200 labels by validation), NOT a
+         *     standard list endpoint. The registry is the whitelist every catalog-file write's
+         *     `metadata.labels` is validated against.
+         */
+        get: operations["listLabels"];
+        put?: never;
+        /**
+         * Register a label
+         * @description ADMIN only. Registers a new allowed `metadata.labels` key with its CLOSED value list
+         *     and the entity kinds it may be applied to. The key follows the descriptor-format
+         *     label-key grammar; each value follows the entity-name grammar; kinds must be among
+         *     the seven landscape kinds (normalized to canonical casing and order). A key already
+         *     held by an active label (case-insensitively) is a `409`.
+         */
+        post: operations["createLabel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/labels/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a label
+         * @description ADMIN only — whole-label replacement (key rename included: stored files carrying the
+         *     old key simply fail the strict check on their next save). Same validation as create;
+         *     renaming onto a key an active label already holds is a `409`.
+         */
+        put: operations["replaceLabel"];
+        post?: never;
+        /**
+         * Delete a label
+         * @description ADMIN only — soft delete; the key becomes reusable by a NEW label. Stored files
+         *     carrying the deleted label fail the strict check on their next save until it is
+         *     re-registered or removed from the file.
+         */
+        delete: operations["deleteLabel"];
         options?: never;
         head?: never;
         patch?: never;
@@ -605,7 +669,7 @@ export interface components {
             /** @description Display-only alternative to `name`; no format restrictions. */
             title?: string | null;
             description?: string | null;
-            /** @description Kubernetes-style identifying key/value pairs. Keys are an optional lowercase-domain prefix (max 253 chars) plus `/` plus a name part; values follow the entity-name grammar. */
+            /** @description Kubernetes-style identifying key/value pairs. Keys are an optional lowercase-domain prefix (max 253 chars) plus `/` plus a name part; values follow the entity-name grammar. On every write, each key must additionally be an ADMIN-registered label (`GET /api/v1/labels`) allowed for the file's kind, with the value from that label's closed list (strict — no grandfathering); violations are rejected with `400`. */
             labels?: {
                 [key: string]: string;
             };
@@ -802,6 +866,28 @@ export interface components {
         DictionaryUpdateRequest: {
             /** @description The full replacement document — array order becomes the stored order. */
             items: components["schemas"]["DictionaryEntryInput"][];
+        };
+        Label: {
+            /** Format: int32 */
+            id: number;
+            /** @description The allowed `metadata.labels` key — an optional lowercase-domain prefix (max 253 chars) plus `/` plus a name part. Unique case-insensitively among active labels. */
+            key: string;
+            /** @description The CLOSED value list, in the admin's order. */
+            values: string[];
+            /** @description The entity kinds the label may be applied to, in canonical casing and order. */
+            kinds: string[];
+        };
+        LabelList: {
+            /** @description Active labels, key-ordered case-insensitively. */
+            items: components["schemas"]["Label"][];
+        };
+        LabelRequest: {
+            /** @description Trimmed; the descriptor-format label-key grammar. */
+            key: string;
+            /** @description At least one entry; each trimmed and validated against the entity-name grammar; no case-folded duplicates. Array order becomes the stored order. */
+            values: string[];
+            /** @description At least one of the seven landscape kinds (case-insensitive input; stored in canonical casing and order); no duplicates. */
+            kinds: string[];
         };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
@@ -1584,6 +1670,113 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listLabels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabelList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new label resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Label"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };

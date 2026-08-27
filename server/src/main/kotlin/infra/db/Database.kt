@@ -6,6 +6,8 @@ import ch.nokillswit.catalog.CatalogFileService
 import ch.nokillswit.catalog.CatalogFileServiceKey
 import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.dictionaries.DictionaryServiceKey
+import ch.nokillswit.labels.LabelService
+import ch.nokillswit.labels.LabelServiceKey
 import ch.nokillswit.users.UserService
 import ch.nokillswit.users.UserServiceKey
 import io.ktor.server.application.*
@@ -25,5 +27,6 @@ suspend fun Application.configureDatabase() {
     attributes.put(UserServiceKey, UserService(database))
     attributes.put(CatalogFileServiceKey, CatalogFileService(database))
     attributes.put(DictionaryServiceKey, DictionaryService(database))
+    attributes.put(LabelServiceKey, LabelService(database))
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
 }

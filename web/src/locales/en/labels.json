@@ -1,0 +1,41 @@
+{
+  "title": "Labels",
+  "intro": "The only labels catalog files may carry. Administrators define each label's key, its allowed values, and the entity kinds it applies to.",
+  "empty": "No labels defined yet",
+  "loadFailed": "Could not load the labels",
+  "newLabel": "New label",
+  "createTitle": "New label",
+  "editTitle": "Edit label",
+  "column": {
+    "key": "Key",
+    "values": "Allowed values",
+    "kinds": "Applies to"
+  },
+  "field": {
+    "key": "Key",
+    "keyHint": "Optional lowercase domain prefix, a slash, then the name — e.g. example.com/tier",
+    "values": "Allowed values",
+    "valuesHint": "The closed list a file may pick from — press Enter to add each value",
+    "kinds": "Applies to kinds",
+    "kindsHint": "Only files of these kinds may carry this label"
+  },
+  "validation": {
+    "key": "Must be an optional lowercase-domain prefix plus a 1–63 character name of letters, digits, and single [-_.] separators",
+    "valuesRequired": "Add at least one allowed value",
+    "valuesCount": "At most 100 values",
+    "value": "Value \"{{value}}\" must be 1–63 alphanumeric characters with single [-_.] separators",
+    "valuesDuplicate": "Values must not repeat",
+    "kindsRequired": "Pick at least one kind"
+  },
+  "saveConflict": "A label with this key already exists",
+  "saveInvalid": "One or more fields are invalid",
+  "saveGone": "This label no longer exists — reload the page",
+  "deleteTitle": "Delete label?",
+  "deleteFailed": "Could not delete the label",
+  "deleteBody": "Files carrying \"{{key}}\" will not save until the label is re-registered or removed from them.",
+  "toast": {
+    "created": "Label created",
+    "saved": "Label saved",
+    "deleted": "Label deleted"
+  }
+}

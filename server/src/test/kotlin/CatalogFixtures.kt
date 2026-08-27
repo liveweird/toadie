@@ -22,6 +22,16 @@ fun uniqueEntityName(prefix: String) = "$prefix-${UUID.randomUUID().toString().s
 suspend fun uniqueNamespace(prefix: String): String =
     uniqueEntityName(prefix).also { TestNamespaces.ensure(it) }
 
+/**
+ * A unique throwaway label key, registered in the label registry first — catalog writes
+ * reject unregistered labels, so a test applying labels to files must go through this.
+ */
+suspend fun uniqueLabel(
+    prefix: String,
+    values: List<String> = listOf("v1", "v2"),
+    kinds: List<String> = listOf("Component"),
+): String = uniqueEntityName(prefix).also { TestLabels.ensure(it, values, kinds) }
+
 fun componentFile(
     name: String,
     namespace: String = "default",

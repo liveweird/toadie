@@ -47,7 +47,8 @@ from Lettuce, that any new or edited spec must satisfy:
   read-only" when applicable). Today: `auth`, `accessibility`, and `url-import` are read-only;
   `catalog-files` and `cross-check` own throwaway files (unique names in `default`); `kinds`,
   `render`, and `round-trip` own throwaway files in this RUN's namespaces (below); `users` owns
-  its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user — all
+  its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user;
+  `labels` owns its throwaway label, the one file carrying it, and its user — all
   deleted by their own spec.
 - **The namespaces dictionary is single-writer state.** Catalog writes accept only
   dictionary-defined namespaces, and the dictionary PUT is a whole-document replace — two
@@ -60,6 +61,11 @@ from Lettuce, that any new or edited spec must satisfy:
   DEFAULT flag is doubly shared-critical: blank-namespace creates resolve against it, so no
   spec may flip which entry is flagged (`namespaces.spec` only asserts it; flipping is pinned
   server-/unit-side).
+- **The label registry is single-writer state too.** Catalog writes accept only registered
+  labels, so a concurrently deleted/edited label breaks parallel specs' saves —
+  **`labels.spec.ts` is the registry's ONLY in-run writer**, and it only ever creates and
+  deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
+  first moving label registration into global-setup (the run-namespace pattern).
 - Seeded accounts are never mutated. The seed admin (`admin@toadie.local`) is a shared
   read-mostly actor: specs sign in as it but must not change its password, roles, or state — a
   future spec that needs a mutated account creates a throwaway.
@@ -81,7 +87,7 @@ the same commit** — this list is the coverage map, the scenario file is the de
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
   authenticated pages (`/`, `/catalog-files`, `/catalog-files/new`, `/catalog-files/import`,
-  `/cross-check`, `/render`, `/users`); `color-contrast` consciously waived theme-wide.
+  `/cross-check`, `/render`, `/labels`, `/users`); `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
@@ -91,6 +97,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`kinds.spec.ts`](scenarios/kinds.md) — the multi-kind editor journey: a Group (empty
   children), an API (pasted definition), and a Component whose owner/API references resolve
   live; kind badges on the list.
+- [`labels.spec.ts`](scenarios/labels.md) — the label registry: modal validation → create a
+  label (values + kinds) → edit → the regular user's read-only view → the editor's
+  registry-constrained label pickers on a new Component → cleanup; the registry's only
+  in-run writer.
 - [`namespaces.spec.ts`](scenarios/namespaces.md) — the namespaces dictionary: inline grammar
   validation → append two entries → reorder → the regular user's read-only view → removal;
   append-only against the shared document.

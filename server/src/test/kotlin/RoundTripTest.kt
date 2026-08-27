@@ -157,6 +157,28 @@ class RoundTripTest {
     }
 
     @Test
+    fun `import reports an unregistered label as INVALID and stores a registered one`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("roundtrip")
+
+        fun labeled(name: String, labels: Map<String, String>) =
+            componentFile(name).let { it.copy(metadata = it.metadata.copy(labels = labels)) }
+
+        // Grammar-valid, never registered in the label registry.
+        val ghost = uniqueEntityName("ghostlbl")
+        val rejected = client.import(listOf(labeled(uniqueEntityName("ghostdoc"), mapOf(ghost to "x"))))
+            .results.single()
+        assertEquals(ImportResultStatus.INVALID, rejected.status)
+        assertNull(rejected.fileId)
+        assertTrue(rejected.message!!.contains("not a defined label"))
+
+        val lbl = uniqueLabel("rtlbl", values = listOf("backend"), kinds = listOf("Component"))
+        val stored = client.import(listOf(labeled(uniqueEntityName("rtlbldoc"), mapOf(lbl to "backend"))))
+            .results.single()
+        assertEquals(ImportResultStatus.CREATED, stored.status)
+    }
+
+    @Test
     fun `import sanitizes before reporting — namespace folds and kind canonicalizes`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
