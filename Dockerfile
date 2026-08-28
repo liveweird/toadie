@@ -45,5 +45,8 @@ ENV WEB_STATIC_DIR=/app/web
 # checks are active, and HSTS + HTTPS redirect are on. Local demos (docker-compose.yaml)
 # explicitly override this back to true.
 ENV KTOR_DEVELOPMENT=false
+# No outbound email unless the deployment opts in: a real deployment sets
+# MAIL_TRANSPORT=smtp with real SMTP_* settings (production mode refuses `log`).
+ENV MAIL_TRANSPORT=disabled
 EXPOSE 8081
 ENTRYPOINT ["/app/bin/server"]

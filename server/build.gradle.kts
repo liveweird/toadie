@@ -84,6 +84,7 @@ dependencies {
     implementation(ktorLibs.server.resources)
     implementation(ktorLibs.server.statusPages)
     implementation(ktorLibs.server.swagger)
+    implementation(libs.angus.mail)
     implementation(libs.bcrypt)
     implementation(libs.exposed.core)
     implementation(libs.exposed.r2dbc)

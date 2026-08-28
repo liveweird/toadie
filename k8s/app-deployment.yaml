@@ -55,6 +55,34 @@ spec:
             # limiting keys on the real client IP and the HTTPS redirect sees the real scheme.
             - name: HTTP_BEHIND_PROXY
               value: "true"
+            # Outbound email (no consumer feature yet — password reset / MFA arrive with
+            # their Lettuce ports). Ships disabled — set "smtp" plus real SMTP_HOST/
+            # MAIL_FROM/MAIL_APP_URL to enable (production refuses the `log` transport).
+            # SMTP credentials come from the Secret.
+            - name: MAIL_TRANSPORT
+              value: "disabled"
+            - name: SMTP_HOST
+              value: ""
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_STARTTLS
+              value: "true"
+            - name: MAIL_FROM
+              value: "toadie@localhost"
+            - name: MAIL_APP_URL
+              value: ""
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: toadie-secrets
+                  key: SMTP_USER
+                  optional: true
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: toadie-secrets
+                  key: SMTP_PASSWORD
+                  optional: true
           # Built locally with `docker build -t toadie-app:latest .`; OrbStack's
           # Kubernetes shares the Docker image store, so IfNotPresent uses it
           # directly (`:latest` would otherwise default to Always → registry pull).

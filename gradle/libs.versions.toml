@@ -1,4 +1,5 @@
 [versions]
+angus-mail = "2.0.5"
 bcrypt = "0.10.2"
 # detekt 1.23.x embeds a pre-2.x Kotlin compiler — fine for the plain rule sets we run
 # (no type resolution); revisit the detekt 2.x line once it has a stable release.
@@ -19,6 +20,7 @@ swagger-request-validator = "3.0.0"
 testcontainers = "2.0.5"
 
 [libraries]
+angus-mail = { module = "org.eclipse.angus:angus-mail", version.ref = "angus-mail" }
 bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-r2dbc = { module = "org.jetbrains.exposed:exposed-r2dbc", version.ref = "exposed" }

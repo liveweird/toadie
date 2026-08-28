@@ -21,6 +21,15 @@ services:
       timeout: 5s
       retries: 5
 
+  mailpit:
+    # Local mail catcher for the demo: outbound email (password reset etc., once those
+    # features arrive) lands here. Read it at http://localhost:8026 (8025 is Lettuce's).
+    image: axllent/mailpit:v1.30
+    container_name: toadie-mailpit
+    restart: unless-stopped
+    ports:
+      - "8026:8025"
+
   app:
     build:
       context: .
@@ -44,6 +53,13 @@ services:
       # It is committed to the repo and therefore BURNED: production mode refuses to start
       # with it. Set your own (e.g. `openssl rand -hex 32`) for any real deployment.
       JWT_SECRET: "${JWT_SECRET:-dev-only-00366d050fa2c920f7efb9a880b8b9c60e693b1797e782a33ddbfb51f88ea9d0}"
+      # Real SMTP delivery into the bundled Mailpit (the image default is MAIL_TRANSPORT=disabled).
+      MAIL_TRANSPORT: smtp
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_STARTTLS: "false"
+      MAIL_FROM: toadie@localhost
+      MAIL_APP_URL: http://localhost:8081
     ports:
       - "8081:8081"
     # Ceiling for the tuned JVM (SerialGC + -Xmx256m + C1, baked into bin/server): ~270 MiB RSS

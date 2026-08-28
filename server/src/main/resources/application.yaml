@@ -18,6 +18,7 @@ ktor:
       - ch.nokillswit.plugins.AutoHeadResponseKt.configureAutoHeadResponse
       - ch.nokillswit.plugins.ResourcesKt.configureResources
       # — infrastructure
+      - ch.nokillswit.infra.mail.MailKt.configureMail
       - ch.nokillswit.infra.db.FlywayKt.configureFlyway
       - ch.nokillswit.infra.db.DatabaseKt.configureDatabase
       - ch.nokillswit.infra.db.BootstrapKt.configureBootstrap
@@ -93,6 +94,24 @@ web:
   # assets + SPA fallback to index.html). Empty in local dev, where Vite serves
   # the SPA on :5174; set to /app/web inside the Docker image.
   staticDir: "$WEB_STATIC_DIR:"
+
+mail:
+  # Outbound-email transport (infra/mail/Mail.kt): `log` (dev default — messages,
+  # including generated passwords, go to the ch.nokillswit.mail logger instead of
+  # being sent; production startup REFUSES it), `smtp` (real delivery; blank host
+  # refuses startup in any mode), or `disabled` (the Docker image default — email
+  # features answer 503).
+  transport: "$MAIL_TRANSPORT:log"
+  smtp:
+    host: "$SMTP_HOST:"
+    port: "$SMTP_PORT:587"
+    user: "$SMTP_USER:"
+    password: "$SMTP_PASSWORD:"
+    startTls: "$SMTP_STARTTLS:true"
+  from: "$MAIL_FROM:toadie@localhost"
+  # Optional absolute URL of this deployment (e.g. https://toadie.example.com);
+  # when set, outbound emails include a sign-in link.
+  appUrl: "$MAIL_APP_URL:"
 
 postgres:
   # Local-dev defaults point at the docker-compose Postgres, which maps host port

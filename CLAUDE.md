@@ -20,7 +20,7 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Running the full stack
 
-`docker compose up --build` serves everything at `http://localhost:8081` (sign in as `admin@toadie.local` / `changeme`); local dev is `docker compose up postgres` (host port **5433**) + `./gradlew :server:run` + `cd web && npm run dev` (Vite on **5174**, proxying `/api` to :8081). Ports deliberately avoid Lettuce's 8080/5432/5173 so both stacks can run side by side. Kubernetes (OrbStack) deployment targets the dedicated `toadie` namespace — see `k8s/secret.yaml`'s header for the secret-creation command.
+`docker compose up --build` serves everything at `http://localhost:8081` (sign in as `admin@toadie.local` / `changeme`); local dev is `docker compose up postgres` (host port **5433**) + `./gradlew :server:run` + `cd web && npm run dev` (Vite on **5174**, proxying `/api` to :8081). The compose stack bundles **Mailpit** (`http://localhost:8026`) and wires the app's outbound email to it (`MAIL_TRANSPORT=smtp`; no consumer feature sends yet — the transport is infrastructure for the password-reset/MFA ports). Ports deliberately avoid Lettuce's 8080/5432/5173/8025 so both stacks can run side by side. Kubernetes (OrbStack) deployment targets the dedicated `toadie` namespace — see `k8s/secret.yaml`'s header for the secret-creation command.
 
 ## Architecture
 
@@ -58,6 +58,10 @@ ch.nokillswit
 │                       Http, SecurityHeaders, Monitoring, Serialization, Security (JWT),
 │                       ErrorHandling (RFC 7807), OpenTelemetry, AutoHeadResponse, Resources,
 │                       Routing (SPA catch-all)
+├── infra/mail/         outbound email (Lettuce's, ported): Mailer/SmtpMailer/LogMailer +
+│                       configureMail — MAIL_TRANSPORT log/smtp/disabled, the log-transport
+│                       production refusal (fail-closed), null mailer = email features 503.
+│                       No consumer yet; prerequisite for the password-reset/MFA ports
 ├── infra/db/           Flyway bootstrap + the R2DBC connection/composition root + the seed
 │                       bootstrap (admin rotation, prod fail-closed) + Sql.kt (containsNormalized,
 │                       requireValidReferences, orVanished)

@@ -60,7 +60,11 @@ class BootstrapTest {
     @Test
     fun `production mode refuses to start while seed passwords are active`() = testApplication {
         // No ADMIN_INITIAL_PASSWORD; strong JWT secret so the failure is the seed check.
-        configureApp("jwt.secret" to "strong-${UUID.randomUUID()}")
+        configureApp(
+            "jwt.secret" to "strong-${UUID.randomUUID()}",
+            // The dev-default `log` mail transport is refused in production (see infra/mail).
+            "mail.transport" to "disabled",
+        )
         serverConfig { developmentMode = false }
         withSeedRestored {
             assertStartupFails("seed password") { startApplication() }
@@ -73,6 +77,8 @@ class BootstrapTest {
         configureApp(
             "bootstrap.adminInitialPassword" to newPassword,
             "jwt.secret" to "strong-${UUID.randomUUID()}",
+            // The dev-default `log` mail transport is refused in production (see infra/mail).
+            "mail.transport" to "disabled",
         )
         serverConfig { developmentMode = false }
         withSeedRestored {
