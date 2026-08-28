@@ -45,6 +45,8 @@ security:
   # Set a number to pin it in either mode.
   rateLimit:
     loginPerMinute: "$LOGIN_RATE_LIMIT_PER_MINUTE:"
+    # Blank keeps the default 30/min (both modes); a number pins it.
+    refreshPerMinute: "$REFRESH_RATE_LIMIT_PER_MINUTE:"
   csrf:
     # TEMPLATE PLACEHOLDER — CSRF protection is off by default because this API
     # authenticates via bearer JWT in the Authorization header, which browsers

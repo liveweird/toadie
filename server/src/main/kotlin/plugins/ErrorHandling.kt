@@ -91,11 +91,34 @@ internal fun Throwable.isUniqueViolation(): Boolean = hasSqlState(PG_UNIQUE_VIOL
 
 internal fun Throwable.isCharacterNotInRepertoire(): Boolean = hasSqlState(PG_CHARACTER_NOT_IN_REPERTOIRE)
 
-private suspend fun ApplicationCall.respondConflict() =
-    respondProblem(HttpStatusCode.Conflict, "Resource already exists")
+// Per-constraint 409 wording: Postgres names the violated unique index in its error message
+// ('duplicate key value violates unique constraint "uq_…"'), so the detail can say WHAT
+// already exists instead of the generic fallback. Keyed by the partial unique indexes the
+// migrations define; an unmapped constraint (a future migration) falls back to the generic.
+private val UNIQUE_CONSTRAINT_DETAILS = mapOf(
+    "uq_users_email_active" to "A user with this email already exists",
+    "uq_catalog_files_entity_active" to "A catalog file with this kind, namespace, and name already exists",
+    "uq_dictionary_entries_value_active" to "This value is already in the dictionary",
+    "uq_dictionary_entries_default_active" to "Another entry is already flagged as the default",
+    "uq_labels_key_active" to "A label with this key already exists",
+    "uq_tag_categories_name_active" to "A tag category with this name already exists",
+)
+
+private fun Throwable.uniqueViolationDetail(): String {
+    var found: String? = null
+    anyInChain { t ->
+        val message = t.message ?: return@anyInChain false
+        found = UNIQUE_CONSTRAINT_DETAILS.entries.firstOrNull { (name, _) -> name in message }?.value
+        found != null
+    }
+    return found ?: "Resource already exists"
+}
+
+private suspend fun ApplicationCall.respondConflict(cause: Throwable) =
+    respondProblem(HttpStatusCode.Conflict, cause.uniqueViolationDetail())
 
 private suspend fun ApplicationCall.respondDbFailure(cause: Throwable) = when {
-    cause.isUniqueViolation() -> respondConflict()
+    cause.isUniqueViolation() -> respondConflict(cause)
     cause.isCharacterNotInRepertoire() ->
         respondProblem(HttpStatusCode.BadRequest, "Text must not contain the NUL character")
     else -> respondInternalError(cause)
@@ -178,7 +201,7 @@ fun Application.configureErrorHandling() {
                 "authz.denied",
                 "method" to call.request.local.method.value,
                 "path" to call.request.local.uri,
-                "userId" to call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong(),
+                "byUserId" to call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong(),
                 "detail" to cause.message,
             )
             call.respondProblem(HttpStatusCode.Forbidden, cause.message ?: "Forbidden")

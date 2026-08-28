@@ -175,6 +175,10 @@ suspend fun assertStartupFails(messagePart: String, start: suspend () -> Unit) {
     kotlin.test.assertTrue(messagePart in messages, "unexpected startup failure: $messages")
 }
 
+/** A fresh blocklist service (own cache) over the shared container DB, with an injected clock. */
+internal fun newTokenBlocklistService(clock: () -> Long): ch.nokillswit.auth.TokenBlocklistService =
+    ch.nokillswit.auth.TokenBlocklistService(sharedTestDatabase, clock)
+
 private val sharedTestDatabase: R2dbcDatabase by lazy {
     R2dbcDatabase.connect(
         url = PostgresTestSupport.r2dbcUrl,

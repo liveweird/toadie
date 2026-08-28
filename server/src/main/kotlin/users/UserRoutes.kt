@@ -125,7 +125,8 @@ fun Application.configureUserRoutes() {
                     "byUserId" to caller.userId.toLong(),
                     "newUserId" to id.toLong(),
                     "email" to email,
-                    "roles" to (req.roles?.toSet() ?: emptySet()).joinedNames(),
+                    // As STORED (the request set folded through rolesToStored), not as requested.
+                    "roles" to role.asAdditionalRoles().joinedNames(),
                 )
                 call.response.header(HttpHeaders.Location, call.application.href(Users.Id(id = id)))
                 call.respond(HttpStatusCode.Created, user.toResponse(id))
@@ -141,20 +142,20 @@ fun Application.configureUserRoutes() {
                 val caller = call.caller()
                 requireAdmin(caller)
                 val req = call.receive<UserUpdateRequest>()
-                val existing = userService.read(route.id).orNotFound("User")
+                // Payload validation FIRST — 400 wins over 404/409, like the sibling handlers.
+                val name = sanitizeSingleLine(req.name, "Name")
+                val email = canonicalEmail(req.email)
+                validateNameAndEmail(name, email)
                 val requestedRole = rolesToStored(req.roles)
+                val existing = userService.read(route.id).orNotFound("User")
                 // Last-admin protection: demoting the final active administrator would lock
-                // everyone out of the management surface. This pre-check only preserves the
-                // response ORDER (409 before the payload's 400); the race-proof check runs
-                // inside updateGuarded's transaction.
+                // everyone out of the management surface. The race-proof check runs inside
+                // updateGuarded's transaction; this pre-check only exists for the audit read.
                 if (existing.role == UserRole.ADMIN && requestedRole != UserRole.ADMIN &&
                     userService.countActiveAdmins() <= 1
                 ) {
                     throw ConflictException("The last administrator cannot be demoted")
                 }
-                val name = sanitizeSingleLine(req.name, "Name")
-                val email = canonicalEmail(req.email)
-                validateNameAndEmail(name, email)
                 when (userService.updateGuarded(route.id, name, email, requestedRole)) {
                     UserService.GuardedMutation.NOT_FOUND -> throw NotFoundException("User not found")
                     UserService.GuardedMutation.LAST_ADMIN ->
@@ -167,8 +168,9 @@ fun Application.configureUserRoutes() {
                         "user.roles_changed",
                         "byUserId" to caller.userId.toLong(),
                         "targetUserId" to route.id.toLong(),
-                        "from" to existing.additionalRoles.joinedNames(),
-                        "to" to req.roles.toSet().joinedNames(),
+                        // As STORED on both sides, and named like user.updated's nameFrom/nameTo.
+                        "rolesFrom" to existing.additionalRoles.joinedNames(),
+                        "rolesTo" to requestedRole.asAdditionalRoles().joinedNames(),
                     )
                 }
                 call.respond(HttpStatusCode.NoContent)

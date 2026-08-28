@@ -18,7 +18,14 @@ fun Application.configureHttp() {
     install(CachingHeaders) {
         options { call, outgoingContent ->
             when (outgoingContent.contentType?.withoutParameters()) {
-                ContentType.Text.CSS -> CachingOptions(CacheControl.MaxAge(maxAgeSeconds = 24 * 60 * 60))
+                // The SPA's static assets are content-hashed by Vite, so a day-long cache is
+                // safe for both stylesheets and scripts (both JS media types — the served one
+                // depends on the container's mime mapping). index.html stays uncached: it is
+                // the un-hashed entry point that must pick up new asset names on deploy.
+                ContentType.Text.CSS,
+                ContentType.Text.JavaScript,
+                ContentType.Application.JavaScript,
+                -> CachingOptions(CacheControl.MaxAge(maxAgeSeconds = 24 * 60 * 60))
                 else -> null
             }
         }

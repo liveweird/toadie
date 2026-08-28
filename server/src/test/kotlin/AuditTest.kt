@@ -101,8 +101,8 @@ class AuditTest {
                 it.message == "user.roles_changed" && it.hasKeyValue("targetUserId", created.id.toLong())
             }
             assertNotNull(rolesEvent)
-            assertTrue(rolesEvent.hasKeyValue("from", ""))
-            assertTrue(rolesEvent.hasKeyValue("to", "ADMIN"))
+            assertTrue(rolesEvent.hasKeyValue("rolesFrom", ""))
+            assertTrue(rolesEvent.hasKeyValue("rolesTo", "ADMIN"))
             assertNotNull(
                 capture.awaitEvent {
                     it.message == "user.deleted" && it.hasKeyValue("targetUserId", created.id.toLong())

@@ -1,6 +1,7 @@
 package ch.nokillswit
 
 import ch.nokillswit.auth.LoginRequest
+import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserCreateRequest
 import ch.nokillswit.users.UserPageResponse
 import ch.nokillswit.users.UserResponse
@@ -82,6 +83,8 @@ class UserRoutesTest {
 
         val duplicate = client.postJson("/api/v1/users", createRequest(email))
         assertEquals(HttpStatusCode.Conflict, duplicate.status)
+        // The central 23505 handler names WHAT clashed (per-constraint detail, ErrorHandling.kt).
+        assertEquals("A user with this email already exists", duplicate.body<ProblemDetail>().detail)
 
         // Soft-deleting frees the email for reuse (the V1 partial index).
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/users/${created.id}").status)
@@ -319,5 +322,13 @@ class UserRoutesTest {
             UserUpdateRequest(name = "Valid Name", email = uniqueEmail("updgone"), roles = emptyList()),
         )
         assertEquals(HttpStatusCode.NotFound, gone.status)
+
+        // Response order: the payload's 400 beats the 404 — validation runs before the read,
+        // like the sibling handlers (create, password change).
+        val invalidAndGone = client.putJson(
+            "/api/v1/users/${created.id}",
+            UserUpdateRequest(name = "   ", email = uniqueEmail("updbadgone"), roles = emptyList()),
+        )
+        assertEquals(HttpStatusCode.BadRequest, invalidAndGone.status)
     }
 }

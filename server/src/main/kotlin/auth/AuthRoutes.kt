@@ -33,6 +33,8 @@ import kotlin.time.Duration.Companion.seconds
 private const val LOGIN_RATE_LIMIT = "login"
 private const val REFRESH_RATE_LIMIT = "refresh"
 
+private const val DEFAULT_REFRESH_LIMIT_PER_MINUTE = 30
+
 @Serializable
 data class LoginRequest(val email: String, val password: String)
 
@@ -104,6 +106,12 @@ fun Application.configureAuthRoutes() {
         ?.getString()?.takeIf { it.isNotBlank() }?.toInt()
         ?: if (developmentMode) 1000 else 10
 
+    // The refresh bucket blunts token abuse; blank keeps the default 30/min in both modes
+    // (a healthy client refreshes about once per access-token TTL).
+    val refreshLimit = environment.config.propertyOrNull("security.rateLimit.refreshPerMinute")
+        ?.getString()?.takeIf { it.isNotBlank() }?.toInt()
+        ?: DEFAULT_REFRESH_LIMIT_PER_MINUTE
+
     // Throttle login to blunt password brute-forcing, and refresh to blunt token abuse: a token
     // bucket per client host.
     install(RateLimit) {
@@ -112,7 +120,7 @@ fun Application.configureAuthRoutes() {
             requestKey { call -> call.request.origin.remoteHost }
         }
         register(RateLimitName(REFRESH_RATE_LIMIT)) {
-            rateLimiter(limit = 30, refillPeriod = 60.seconds)
+            rateLimiter(limit = refreshLimit, refillPeriod = 60.seconds)
             requestKey { call -> call.request.origin.remoteHost }
         }
     }

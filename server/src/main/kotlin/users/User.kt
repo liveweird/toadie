@@ -27,8 +27,12 @@ data class User(
 ) {
     /** The wire/claim shape: additional roles only — empty for a regular user. */
     val additionalRoles: Set<UserRole>
-        get() = if (role == UserRole.ADMIN) setOf(UserRole.ADMIN) else emptySet()
+        get() = role.asAdditionalRoles()
 }
+
+/** The wire/audit shape of one stored role: additional roles only — empty for the baseline. */
+fun UserRole.asAdditionalRoles(): Set<UserRole> =
+    if (this == UserRole.ADMIN) setOf(UserRole.ADMIN) else emptySet()
 
 @Serializable
 data class UserCreateRequest(
