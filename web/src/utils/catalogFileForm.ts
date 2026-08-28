@@ -259,11 +259,15 @@ function resolutionError(
   const ctx = refContext?.current;
   if (!ctx) return null;
   const namespace = values.namespace.trim().toLowerCase() || (ctx.defaultNamespace ?? "default");
-  const error = refResolutionError(ref, field as RefField, namespace, ctx.identities);
+  const name = values.name.trim().toLowerCase();
+  // The entity's own identity — a reference may never point at the document being edited.
+  const self = name ? { kind: values.kind, namespace, name } : null;
+  const error = refResolutionError(ref, field as RefField, namespace, self, ctx.identities);
   if (error === "kindRequired") return t("catalog.validation.refKindRequired", { ref });
   if (error === "wrongKind") {
     return t("catalog.validation.refWrongKind", { ref, kinds: allowedKindsLabel(field) });
   }
+  if (error === "selfReference") return t("catalog.validation.refSelf", { ref });
   if (error === "unresolved") return t("catalog.validation.refUnresolved", { ref });
   return null;
 }

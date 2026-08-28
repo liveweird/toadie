@@ -219,8 +219,9 @@ class CatalogFileService(private val database: R2dbcDatabase) {
      * dangling references can only arise from deletions (allowed by design — the cross-check
      * report is the net for those) or import batches whose sibling documents failed.
      * [extraIdentities] is the import path's batch universe (sibling documents resolve
-     * order-independently). Note: a CREATE cannot reference itself (not stored yet); an
-     * UPDATE can (its identity is active).
+     * order-independently). A document may never reference ITSELF (SELF_REFERENCE, checked
+     * against the payload's own identity inside checkDocument) — uniform across create,
+     * update (a rename's "self" is the NEW identity), import, and the ad-hoc check.
      */
     private suspend fun requireResolvedReferences(stored: CatalogFile, extraIdentities: Set<EntityIdentity>) {
         val findings = checkDocument(stored, activeIdentities() + extraIdentities).findings
@@ -238,6 +239,8 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                     REF_FIELD_ALLOWED_KINDS.getValue(finding.field).joinToString(" or ") { canonical(it) }
             CrossCheckStatus.KIND_REQUIRED ->
                 "${finding.field} reference '${finding.reference}' needs an explicit kind"
+            CrossCheckStatus.SELF_REFERENCE ->
+                "${finding.field} reference '${finding.reference}' must not point at the entity itself"
         }
     }
 

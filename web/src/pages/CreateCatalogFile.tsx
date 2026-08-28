@@ -73,7 +73,6 @@ export default function CreateCatalogFile() {
       onSubmit={onSubmit}
       error={error}
       submitting={submitting}
-      showSelfNote
     />
   );
 }

@@ -486,7 +486,8 @@ paths:
         must belong to an ADMIN-defined tag category allowed for the file's kind, and every
         entity reference must RESOLVE to a stored active entity of a kind the field allows
         (e.g. `spec.owner` → Group or User; namespaceless references resolve within the
-        file's own namespace, matching is case-insensitive) — all strict, no grandfathering,
+        file's own namespace, matching is case-insensitive) and must NOT reference the
+        entity itself — all strict, no grandfathering,
         else `400` (reference violations aggregate into one detail).
         Entity identity (kind + namespace + name, case-insensitive) must be unique among
         active files; a clash is a `409`.
@@ -524,7 +525,7 @@ paths:
       description: |
         Resolves every entity reference the active files make (`owner`, `system`,
         `subcomponentOf`, `providesApis`, `consumesApis`, `dependsOn`, `dependencyOf`) against
-        the workspace and reports three tiers of findings:
+        the workspace and reports four tiers of findings:
 
         - `MISSING` (error) — no active file matches the referenced identity (explicit or via
           the field's default kind). Namespaceless references resolve within the REFERENCING
@@ -533,10 +534,14 @@ paths:
           fields have no default kind, so Backstage itself cannot ingest such a reference.
         - `WRONG_KIND` (error) — the reference names a kind the field does not allow (e.g. a
           Component in `spec.owner`, which accepts only Group or User).
+        - `SELF_REFERENCE` (error) — the reference resolves to the referencing file itself
+          (e.g. a Domain's `spec.subdomainOf` naming that very Domain); a Toadie rule beyond
+          upstream Backstage.
 
-        Saves themselves enforce resolution (an unresolved reference is a `400`), so findings
-        here arise from DELETIONS (dangling references are allowed to appear that way — this
-        report is the net for them) and from import batches whose sibling documents failed.
+        Saves themselves enforce resolution (an unresolved or self reference is a `400`), so
+        findings here arise from DELETIONS (dangling references are allowed to appear that way
+        — this report is the net for them), from import batches whose sibling documents
+        failed, and from legacy self-references stored before the rule existed.
       responses:
         '200':
           description: The workspace report
@@ -559,9 +564,9 @@ paths:
         resolution, every finding here means the save WILL be rejected. The document is
         sanitized but deliberately NOT validated (in-progress documents are legal here;
         unparsable references are skipped — the form flags them itself). A pure computation:
-        nothing is stored; POST only because the document travels in the body. Note an unsaved
-        file is not in the identity set, so its self-references read as missing until first
-        save.
+        nothing is stored; POST only because the document travels in the body. A reference to
+        the document's OWN identity is `SELF_REFERENCE` — saved or not, an entity may never
+        reference itself.
       requestBody:
         required: true
         content:
@@ -739,7 +744,8 @@ paths:
         Full replacement; same validation as create (the defined-namespace,
         registered-label, registered-tag, and resolved-reference rules included — strict: a
         file whose namespace, label, or tag was removed from its registry, or whose
-        referenced entity was deleted, cannot be saved until it is fixed). Renaming into an
+        referenced entity was deleted, cannot be saved until it is fixed; a reference to the
+        file's own identity is a `400`). Renaming into an
         identity an active file already holds is a `409`.
       requestBody:
         required: true
@@ -1597,11 +1603,12 @@ components:
 
     CrossCheckStatus:
       type: string
-      enum: [MISSING, KIND_REQUIRED, WRONG_KIND]
+      enum: [MISSING, KIND_REQUIRED, WRONG_KIND, SELF_REFERENCE]
       description: >-
-        All three are errors that BLOCK the referencing document's next save: MISSING (no
+        Every status is an error that BLOCKS the referencing document's next save: MISSING (no
         stored entity matches), KIND_REQUIRED (a kind-less dependsOn/dependencyOf entry),
-        WRONG_KIND (the reference names a kind the field does not allow).
+        WRONG_KIND (the reference names a kind the field does not allow), SELF_REFERENCE
+        (the reference resolves to the referencing file itself).
 
     CrossCheckFinding:
       type: object

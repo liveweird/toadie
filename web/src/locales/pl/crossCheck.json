@@ -16,18 +16,19 @@
   "status": {
     "MISSING": "Nie znaleziono",
     "KIND_REQUIRED": "Wymagany rodzaj",
-    "WRONG_KIND": "Zły rodzaj"
+    "WRONG_KIND": "Zły rodzaj",
+    "SELF_REFERENCE": "Odwołuje się do siebie"
   },
   "message": {
     "MISSING": "Żadna zapisana encja nie odpowiada temu odwołaniu — plik nie zapisze się, dopóki nie zostanie poprawiony.",
     "KIND_REQUIRED": "Wpisy dependsOn/dependencyOf wymagają jawnego rodzaju, np. component: lub resource:.",
-    "WRONG_KIND": "Odwołanie wskazuje rodzaj, na który to pole nie pozwala."
+    "WRONG_KIND": "Odwołanie wskazuje rodzaj, na który to pole nie pozwala.",
+    "SELF_REFERENCE": "Odwołanie wskazuje ten sam plik — encja nie może odwoływać się do samej siebie."
   },
   "noFindings": "Nie znaleziono problemów — każde odwołanie się rozwiązuje.",
   "panel": {
     "title": "Odwołania",
     "errorsTitle": "Odwołania, które zablokują zapis",
-    "allClear": "Wszystkie odwołania się rozwiązują.",
-    "selfNote": "Niezapisany plik nie jest jeszcze w magazynie — odwołania do samego siebie pokazują się jako nieznalezione do pierwszego zapisu."
+    "allClear": "Wszystkie odwołania się rozwiązują."
   }
 }

@@ -59,6 +59,12 @@ String form used by every `spec` relation field:
 Cross-checking = resolving each reference (with its contextual defaults applied) against the set
 of known entities and flagging danglers, kind mismatches, and case-only duplicates.
 
+**Toadie-specific rule (beyond upstream Backstage)**: an entity may never reference ITSELF —
+a reference resolving to the referencing document's own identity (e.g. a Domain's
+`spec.subdomainOf` naming that Domain) is rejected on every write and flagged
+`SELF_REFERENCE` by the checks. Upstream does not forbid self-references; Toadie does, as a
+data-quality rule.
+
 ## Kinds
 
 All `backstage.io/v1alpha1` unless noted. "Relation" names the catalog-generated relation

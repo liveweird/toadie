@@ -166,6 +166,24 @@ describe("CreateCatalogFile page", () => {
     expect(findSaveCall(mockFetch)).toBeUndefined();
   });
 
+  test("a reference to the entity itself blocks submission inline", async () => {
+    mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(404, {})));
+    const user = userEvent.setup();
+    renderCreate();
+
+    await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
+    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
+    await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
+    await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "group:default/platform");
+    // The short form resolves via the default kind (component) to this very document — the
+    // self check needs no identity pool, so it fires even though every fetch 404s here.
+    await user.type(screen.getByLabelText(/subcomponent of/i, { selector: "input" }), "my-svc");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(await screen.findByText(/"my-svc" points at this entity itself/)).toBeInTheDocument();
+    expect(findSaveCall(mockFetch)).toBeUndefined();
+  });
+
   test("tags come from the grouped category picker and land in the payload", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") === "GET" && url === "/api/v1/tag-categories") {
@@ -426,8 +444,6 @@ describe("CreateCatalogFile page", () => {
     expect(screen.getByText("component:ghost")).toBeInTheDocument();
     expect(screen.getByText("orders-db")).toBeInTheDocument();
     expect(screen.getByText("component:team-x")).toBeInTheDocument();
-    // The create page carries the unsaved-self-reference note.
-    expect(screen.getByText(/references to itself show as not found/i)).toBeInTheDocument();
   });
 
   test("the reference panel shows the all-clear line when everything resolves", async () => {

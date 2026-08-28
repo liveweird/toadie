@@ -16,18 +16,19 @@
   "status": {
     "MISSING": "Not found",
     "KIND_REQUIRED": "Kind required",
-    "WRONG_KIND": "Wrong kind"
+    "WRONG_KIND": "Wrong kind",
+    "SELF_REFERENCE": "References itself"
   },
   "message": {
     "MISSING": "No stored entity matches this reference — the file will not save until it is fixed.",
     "KIND_REQUIRED": "dependsOn/dependencyOf entries need an explicit kind, e.g. component: or resource:.",
-    "WRONG_KIND": "The reference names a kind this field does not allow."
+    "WRONG_KIND": "The reference names a kind this field does not allow.",
+    "SELF_REFERENCE": "The reference points at this file itself — an entity cannot reference itself."
   },
   "noFindings": "No problems found — every reference resolves.",
   "panel": {
     "title": "References",
     "errorsTitle": "References that will block saving",
-    "allClear": "All references resolve.",
-    "selfNote": "An unsaved file isn't in the store yet — references to itself show as not found until the first save."
+    "allClear": "All references resolve."
   }
 }

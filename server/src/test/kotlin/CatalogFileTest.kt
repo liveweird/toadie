@@ -613,6 +613,17 @@ class CatalogFileTest {
             componentFile(uniqueEntityName("ru"), namespace = ns, owner = "user:$ns/$person"),
         )
         assertEquals(HttpStatusCode.Created, userOwned.status)
+
+        // SELF_REFERENCE on create: the self message, not MISSING (the identity isn't stored yet).
+        val selfName = uniqueEntityName("rs")
+        val selfCreate = client.postJson(
+            "/api/v1/catalog-files",
+            componentFile(selfName, namespace = ns).let {
+                it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$selfName"))
+            },
+        )
+        assertEquals(HttpStatusCode.BadRequest, selfCreate.status)
+        assertTrue(selfCreate.body<ProblemDetail>().detail!!.contains("must not point at the entity itself"))
     }
 
     @Test
@@ -637,17 +648,22 @@ class CatalogFileTest {
     }
 
     @Test
-    fun `an update may reference the file's own identity`() = testApplication {
+    fun `an update may not reference the file's own identity`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("refself")
         val ns = uniqueNamespace("refsns")
         val name = uniqueEntityName("selfish")
         val created = client.createCatalogFile(componentFile(name, namespace = ns))
-        // Nonsensical semantically but structurally legal: the file's identity is active.
-        val selfRef = componentFile(name, namespace = ns).let {
-            it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$name"))
+        // The identity IS active (its own row), but self-references are forbidden outright —
+        // full and short forms alike (the short form resolves within the file's namespace).
+        for (ref in listOf("component:$ns/$name", name)) {
+            val selfRef = componentFile(name, namespace = ns).let {
+                it.copy(spec = it.spec.copy(subcomponentOf = ref))
+            }
+            val response = client.putJson("/api/v1/catalog-files/${created.id}", selfRef)
+            assertEquals(HttpStatusCode.BadRequest, response.status, "self-reference '$ref' must 400")
+            assertTrue(response.body<ProblemDetail>().detail!!.contains("must not point at the entity itself"))
         }
-        assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", selfRef).status)
     }
 
     @Test

@@ -100,7 +100,8 @@
     "profileEmailLength": "Email must be at most 254 characters",
     "refUnresolved": "\"{{ref}}\" does not resolve to a stored entity",
     "refWrongKind": "\"{{ref}}\" must reference a {{kinds}}",
-    "refKindRequired": "\"{{ref}}\" needs an explicit kind, e.g. component: or resource:"
+    "refKindRequired": "\"{{ref}}\" needs an explicit kind, e.g. component: or resource:",
+    "refSelf": "\"{{ref}}\" points at this entity itself — an entity cannot reference itself"
   },
   "validationError": "Validation error. Please check the form and try again.",
   "conflictError": "An active file with this namespace and name already exists.",

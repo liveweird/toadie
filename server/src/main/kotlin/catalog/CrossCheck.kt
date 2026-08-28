@@ -9,8 +9,9 @@ import kotlinx.serialization.Serializable
  * kinds, an omitted namespace defaults to the REFERENCING file's own namespace, and
  * kind/namespace/name all match case-insensitively. This is ALSO the write-time enforcement
  * rulebook (CatalogFileService.requireResolvedReferences): every save must resolve every
- * reference, so findings here arise only from deletions (dangling refs) and imports whose
- * sibling documents failed — the cross-check report is the net for those.
+ * reference (and may never reference the document itself), so findings here arise only from
+ * deletions (dangling refs), imports whose sibling documents failed, and legacy self-references
+ * predating the rule — the cross-check report is the net for those.
  */
 @Serializable
 enum class CrossCheckStatus {
@@ -22,6 +23,12 @@ enum class CrossCheckStatus {
 
     /** The reference names a kind the field does not allow (e.g. a Component in spec.owner). */
     WRONG_KIND,
+
+    /**
+     * The reference resolves to the referencing document itself (e.g. a Domain's
+     * spec.subdomainOf naming that very Domain) — a Toadie rule beyond upstream Backstage.
+     */
+    SELF_REFERENCE,
 }
 
 /** One problematic reference inside one document (the ad-hoc check's shape). */
@@ -175,12 +182,19 @@ data class DocumentCheckResult(
 /** Checks one document's references against the given identity set. */
 fun checkDocument(file: CatalogFile, identities: Set<EntityIdentity>): DocumentCheckResult {
     val sourceNamespace = file.metadata.namespace.lowercase().ifEmpty { DEFAULT_NAMESPACE }
+    // The document's OWN identity — built from the same namespace fallback as the refs it
+    // anchors (identityOf() has no blank->default fallback), so short-form self-refs match.
+    val self = EntityIdentity(
+        kind = file.kind.lowercase(),
+        namespace = sourceNamespace,
+        name = file.metadata.name.lowercase(),
+    )
     val findings = mutableListOf<DocumentCheckFinding>()
     var seen = 0
     for ((field, refs) in file.spec.refFields()) {
         for (raw in refs.filter { it.isNotBlank() }) {
             seen++
-            statusOf(raw, field, sourceNamespace, identities)?.let {
+            statusOf(raw, field, sourceNamespace, self, identities)?.let {
                 findings += DocumentCheckFinding(field, raw, it)
             }
         }
@@ -194,12 +208,15 @@ private fun statusOf(
     raw: String,
     field: String,
     sourceNamespace: String,
+    self: EntityIdentity,
     identities: Set<EntityIdentity>,
 ): CrossCheckStatus? {
     if (parseRef(raw) == null) return null
     val target = resolveTarget(raw, REF_FIELD_DEFAULT_KINDS.getValue(field), sourceNamespace)
         ?: return CrossCheckStatus.KIND_REQUIRED // parsable (checked above) but kind-less
     if (target.kind !in REF_FIELD_ALLOWED_KINDS.getValue(field)) return CrossCheckStatus.WRONG_KIND
+    // Before the membership test: an entity may never reference itself, saved or not.
+    if (target == self) return CrossCheckStatus.SELF_REFERENCE
     return if (target in identities) null else CrossCheckStatus.MISSING
 }
 

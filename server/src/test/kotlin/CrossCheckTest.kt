@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.catalog.CatalogFileService
 import ch.nokillswit.catalog.CrossCheckReport
 import ch.nokillswit.catalog.CrossCheckStatus
 import ch.nokillswit.catalog.DocumentCheckReport
@@ -13,6 +14,10 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
+import org.jetbrains.exposed.v1.r2dbc.update
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -232,6 +237,57 @@ class CrossCheckTest {
         assertEquals(
             listOf("component:$ghost" to CrossCheckStatus.MISSING),
             findings.filter { it.field == "spec.dependsOn" }.map { it.reference to it.status },
+        )
+    }
+
+    @Test
+    fun `the ad-hoc check flags a self-reference as SELF_REFERENCE, saved or not`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("crosscheck")
+        val ns = uniqueNamespace("selfck")
+        val name = uniqueEntityName("narcissus")
+        // Unsaved document (nothing stored): the self identity comes from the payload, so the
+        // verdict is SELF_REFERENCE — not MISSING — for full and short forms alike.
+        val response = client.postJson(
+            "/api/v1/catalog-files/check",
+            componentFile(name, namespace = ns).let {
+                it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$name", dependsOn = listOf("component:$name")))
+            },
+        )
+        assertEquals(HttpStatusCode.OK, response.status)
+        val mine = response.body<DocumentCheckReport>().findings
+        assertEquals(
+            listOf(
+                "spec.subcomponentOf" to CrossCheckStatus.SELF_REFERENCE,
+                "spec.dependsOn" to CrossCheckStatus.SELF_REFERENCE,
+            ),
+            mine.map { it.field to it.status },
+        )
+    }
+
+    @Test
+    fun `a legacy stored self-reference surfaces in the workspace report`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("crosscheck")
+        val ns = uniqueNamespace("selfrep")
+        val name = uniqueEntityName("legacy-self")
+        val id = client.createCatalogFile(componentFile(name, namespace = ns)).id
+        // The write path can no longer produce a self-reference — plant one by rewriting the
+        // stored content directly (the TestUsers.softDelete bypass precedent), modeling a row
+        // saved before the rule existed.
+        val selfRef = componentFile(name, namespace = ns).let {
+            it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$name"))
+        }
+        suspendTransaction(sharedTestDatabase) {
+            CatalogFileService.CatalogFiles.update({ CatalogFileService.CatalogFiles.id eq id }) {
+                it[CatalogFileService.CatalogFiles.content] = Json.encodeToString(selfRef)
+            }
+        }
+
+        val findings = client.report().findings.filter { it.fileName == name && it.fileNamespace == ns }
+        assertEquals(
+            listOf("component:$ns/$name" to CrossCheckStatus.SELF_REFERENCE),
+            findings.map { it.reference to it.status },
         )
     }
 

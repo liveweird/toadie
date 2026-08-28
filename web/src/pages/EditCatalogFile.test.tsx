@@ -158,6 +158,28 @@ describe("EditCatalogFile page", () => {
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
   });
 
+  test("pointing a same-kind field at the file's own identity blocks the save inline", async () => {
+    mockGetAndPut(mockFetch);
+    const user = userEvent.setup();
+    renderEdit();
+
+    const nameInput = (await screen.findByLabelText(/^name( \*)?$/i)) as HTMLInputElement;
+    await waitFor(() => expect(nameInput.value).toBe("stored-svc"));
+    // The stored file IS its own identity — referencing it (full form) is the self error.
+    await user.type(
+      screen.getByLabelText(/subcomponent of/i, { selector: "input" }),
+      "component:team-a/stored-svc",
+    );
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(
+      await screen.findByText(/"component:team-a\/stored-svc" points at this entity itself/),
+    ).toBeInTheDocument();
+    expect(
+      mockFetch.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PUT"),
+    ).toBe(false);
+  });
+
   test("a non-numeric id redirects to the list without fetching the file", () => {
     mockGetAndPut(mockFetch);
     renderEdit("/catalog-files/abc/edit");

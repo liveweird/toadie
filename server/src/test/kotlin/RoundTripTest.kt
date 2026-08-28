@@ -225,6 +225,19 @@ class RoundTripTest {
         ).results.single()
         assertEquals(ImportResultStatus.INVALID, rejected.status)
         assertTrue(rejected.message!!.contains("does not resolve to a stored entity"))
+
+        // A document referencing ITSELF is INVALID even though its own identity is in the
+        // batch universe — the self-reference rule beats batch resolution.
+        val selfName = uniqueEntityName("sibself")
+        val selfRejected = client.import(
+            listOf(
+                componentFile(selfName, namespace = ns).let {
+                    it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$selfName"))
+                },
+            ),
+        ).results.single()
+        assertEquals(ImportResultStatus.INVALID, selfRejected.status)
+        assertTrue(selfRejected.message!!.contains("must not point at the entity itself"))
     }
 
     @Test

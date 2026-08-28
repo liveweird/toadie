@@ -74,19 +74,29 @@ function splitOnce(value: string, sep: string): [string | null, string] | null {
   return first >= 0 ? [value.slice(0, first), value.slice(first + 1)] : [null, value];
 }
 
-export type RefResolutionError = "unresolved" | "wrongKind" | "kindRequired";
+export type RefResolutionError = "unresolved" | "wrongKind" | "kindRequired" | "selfReference";
+
+function sameIdentity(a: Identity, b: Identity): boolean {
+  return (
+    a.kind.toLowerCase() === b.kind.toLowerCase() &&
+    a.namespace.toLowerCase() === b.namespace.toLowerCase() &&
+    a.name.toLowerCase() === b.name.toLowerCase()
+  );
+}
 
 /**
  * The write-blocking resolution verdict for one typed reference — the client mirror of the
  * server's rulebook (per-field default kind, allowed target kinds, contextual namespace,
- * case-insensitive). Null = resolves — or unparsable (the grammar rule owns those), or an
- * unavailable pool for the membership half (loading/failed → grammar-and-kind checks only;
- * the server stays the gate).
+ * case-insensitive, and no reference to [self] — the entity being edited). Null = resolves —
+ * or unparsable (the grammar rule owns those), or an unavailable pool for the membership half
+ * (loading/failed → grammar-and-kind checks only; the server stays the gate). The self check
+ * needs no pool, so it runs regardless; a null [self] (blank name) skips it.
  */
 export function refResolutionError(
   raw: string,
   field: RefField,
   currentNamespace: string,
+  self: Identity | null,
   identities: readonly Identity[] | undefined,
 ): RefResolutionError | null {
   const kindSplit = splitOnce(raw, ":");
@@ -98,9 +108,10 @@ export function refResolutionError(
   const kind = rawKind?.toLowerCase() ?? DEFAULT_KINDS[field];
   if (!kind) return "kindRequired";
   if (!TARGET_KINDS[field].includes(kind)) return "wrongKind";
-  if (!identities || identities.length === 0) return null;
   const namespace = (rawNamespace ?? currentNamespace).toLowerCase();
   const name = rawName.toLowerCase();
+  if (self && sameIdentity({ kind, namespace, name }, self)) return "selfReference";
+  if (!identities || identities.length === 0) return null;
   const resolves = identities.some(
     (identity) =>
       identity.kind.toLowerCase() === kind &&
@@ -110,13 +121,19 @@ export function refResolutionError(
   return resolves ? null : "unresolved";
 }
 
-/** Sorted, deduped full-identity picker options for [field]. */
-export function refSuggestions(identities: readonly Identity[] | undefined, field: RefField): string[] {
+/** Sorted, deduped full-identity picker options for [field]; [exclude] (the entity being
+ *  edited) never offers itself — an entity may not reference itself. */
+export function refSuggestions(
+  identities: readonly Identity[] | undefined,
+  field: RefField,
+  exclude?: Identity | null,
+): string[] {
   if (!identities) return [];
   const kinds = new Set(TARGET_KINDS[field]);
   const out = new Set<string>();
   for (const identity of identities) {
     if (!kinds.has(identity.kind.toLowerCase())) continue;
+    if (exclude && sameIdentity(identity, exclude)) continue;
     out.add(fullRef(identity));
   }
   return [...out].sort((a, b) => a.localeCompare(b));

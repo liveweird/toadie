@@ -25,12 +25,24 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
     page.getByRole("button", { name: "Create" }).click(),
   ]);
 
-  // The source: a dangling dependsOn is flagged live AND blocks the submit client-side.
+  // The source: first a SELF-reference — flagged live and blocked inline (an entity may
+  // never reference itself, saved or not).
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(source);
   await page.getByRole("combobox", { name: "Type" }).fill("service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
+  await page.getByRole("combobox", { name: "Depends on" }).fill(`component:${source}`);
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByLabel("References that will block saving").getByText(`component:${source}`, { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page.getByText(`"component:${source}" points at this entity itself`)).toBeVisible();
+
+  // Then a dangling dependsOn — flagged live AND blocking the submit client-side too.
+  await page.getByRole("combobox", { name: "Depends on" }).click();
+  await page.keyboard.press("Backspace");
   await page.getByRole("combobox", { name: "Depends on" }).fill(`component:${ghost}`);
   await page.keyboard.press("Enter");
   // Scoped to the alert — the TagsInput pill carries the same text.

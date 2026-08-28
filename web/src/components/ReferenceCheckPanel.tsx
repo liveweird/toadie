@@ -9,14 +9,7 @@ import { checkCatalogFile, type CatalogFileRequest } from "../api/catalogFiles";
  * files (POST /api/v1/catalog-files/check). Saves ENFORCE resolution, so every finding here
  * means the save will be rejected; errors of the check request itself render nothing.
  */
-export default function ReferenceCheckPanel({
-  document,
-  showSelfNote = false,
-}: {
-  document: CatalogFileRequest;
-  /** Create page only: an unsaved file's self-references read as missing until first save. */
-  showSelfNote?: boolean;
-}) {
+export default function ReferenceCheckPanel({ document }: { document: CatalogFileRequest }) {
   const { t } = useTranslation();
   const json = JSON.stringify(document);
   const [debounced] = useDebouncedValue(json, 500);
@@ -52,11 +45,6 @@ export default function ReferenceCheckPanel({
             {t("crossCheck.panel.allClear")}
           </Text>
         ) : null}
-        {showSelfNote && (
-          <Text size="xs" c="dimmed">
-            {t("crossCheck.panel.selfNote")}
-          </Text>
-        )}
       </Stack>
     </Paper>
   );

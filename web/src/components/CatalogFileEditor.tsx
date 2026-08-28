@@ -21,7 +21,6 @@ export default function CatalogFileEditor({
   onSubmit,
   error,
   submitting,
-  showSelfNote,
 }: {
   title: string;
   submitLabel: string;
@@ -29,7 +28,6 @@ export default function CatalogFileEditor({
   onSubmit: (values: CatalogFileFormValues) => Promise<void>;
   error: string | null;
   submitting: boolean;
-  showSelfNote?: boolean;
 }) {
   const { t } = useTranslation();
   // One mapping per render, shared by the preview and the reference panel. Blank namespace
@@ -65,7 +63,7 @@ export default function CatalogFileEditor({
       <Grid.Col span={{ base: 12, md: 5 }}>
         <Stack style={{ position: "sticky", top: 72 }}>
           <YamlPreviewCard yaml={catalogInfoYaml(requestDocument)} />
-          <ReferenceCheckPanel document={requestDocument} showSelfNote={showSelfNote} />
+          <ReferenceCheckPanel document={requestDocument} />
         </Stack>
       </Grid.Col>
     </Grid>

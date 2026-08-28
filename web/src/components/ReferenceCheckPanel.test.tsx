@@ -64,6 +64,7 @@ describe("ReferenceCheckPanel", () => {
         findings: [
           { field: "spec.owner", reference: "group:default/team-a", status: "MISSING" },
           { field: "spec.dependsOn", reference: "template:default/starter", status: "WRONG_KIND" },
+          { field: "spec.subcomponentOf", reference: "component:default/web-app", status: "SELF_REFERENCE" },
         ],
       }),
     );
@@ -78,6 +79,9 @@ describe("ReferenceCheckPanel", () => {
     expect(
       screen.getByText(/names a kind this field does not allow/),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/an entity cannot reference itself/),
+    ).toBeInTheDocument();
     expect(screen.queryByText("All references resolve.")).not.toBeInTheDocument();
   });
 
@@ -90,13 +94,5 @@ describe("ReferenceCheckPanel", () => {
     expect(screen.getByText("References")).toBeInTheDocument();
     expect(screen.queryByText("References that will block saving")).not.toBeInTheDocument();
     expect(screen.queryByText("All references resolve.")).not.toBeInTheDocument();
-  });
-
-  test("showSelfNote renders the unsaved-file caveat", () => {
-    mockFetch.mockResolvedValue(jsonResponse(200, { findings: [] }));
-    renderWithProviders(<ReferenceCheckPanel document={DOCUMENT} showSelfNote />);
-    expect(
-      screen.getByText(/An unsaved file isn't in the store yet/),
-    ).toBeInTheDocument();
   });
 });

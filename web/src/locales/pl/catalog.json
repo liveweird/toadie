@@ -100,7 +100,8 @@
     "profileEmailLength": "E-mail może mieć najwyżej 254 znaki",
     "refUnresolved": "„{{ref}}\" nie wskazuje na zapisaną encję",
     "refWrongKind": "„{{ref}}\" musi odwoływać się do encji rodzaju {{kinds}}",
-    "refKindRequired": "„{{ref}}\" wymaga jawnego rodzaju, np. component: lub resource:"
+    "refKindRequired": "„{{ref}}\" wymaga jawnego rodzaju, np. component: lub resource:",
+    "refSelf": "„{{ref}}\" wskazuje tę samą encję — encja nie może odwoływać się do samej siebie"
   },
   "validationError": "Błąd walidacji. Sprawdź formularz i spróbuj ponownie.",
   "conflictError": "Aktywny plik o tej przestrzeni nazw i nazwie już istnieje.",

@@ -493,9 +493,16 @@ export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
   const has = (field: SpecFieldName) => fieldApplies(kind, field);
   // The reference pickers' pool — advisory: while loading or on failure the ref fields
   // simply offer no suggestions and stay plain free-text inputs. Options are always the
-  // full `kind:namespace/name` identity; typed short forms remain legal.
+  // full `kind:namespace/name` identity; typed short forms remain legal. The entity being
+  // edited never offers ITSELF (self-references are rejected on save); a blank namespace
+  // matches against the flagged default — the identity a blank save resolves to.
   const identities = useCatalogIdentities();
-  const suggest = (field: RefField) => refSuggestions(identities, field);
+  const { defaultNamespace } = useNamespaceOptions(form.values.namespace);
+  const name = form.values.name.trim().toLowerCase();
+  const self = name
+    ? { kind, namespace: form.values.namespace.trim().toLowerCase() || (defaultNamespace ?? "default"), name }
+    : null;
+  const suggest = (field: RefField) => refSuggestions(identities, field, self);
   const relationFields = RELATION_FIELDS.filter(has);
 
   return (

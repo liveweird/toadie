@@ -261,6 +261,17 @@ describe("reference resolution validation (the pool-backed half)", () => {
     expect(withPool.consumesApis(["team-x/billing-api"], component)).toBeNull();
   });
 
+  test("a reference to the entity itself fails, full and short forms alike", () => {
+    // Editing component "svc-a" (blank namespace → the flagged default): its own identity
+    // is in the pool, but referencing it is the self error — not a pass.
+    const selfish = values({ kind: "Component", name: "svc-a" });
+    expect(withPool.subcomponentOf("component:default/svc-a", selfish)).toMatch(/cannot reference itself/);
+    expect(withPool.subcomponentOf("svc-a", selfish)).toMatch(/cannot reference itself/);
+    expect(withPool.dependsOn(["component:svc-a"], selfish)).toMatch(/cannot reference itself/);
+    // A different name resolves normally against the same pool.
+    expect(withPool.subcomponentOf("component:default/svc-a", values({ kind: "Component", name: "other" }))).toBeNull();
+  });
+
   test("no context or an empty pool degrades to grammar-and-kind checks only", () => {
     const noContext = catalogFileFormValidation(t);
     expect(noContext.owner("ghost-team", component)).toBeNull();
