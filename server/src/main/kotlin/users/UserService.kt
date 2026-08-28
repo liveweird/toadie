@@ -17,6 +17,12 @@ data class UserListFilter(
     val name: String? = null,
     val email: String? = null,
     val role: UserRole? = null,
+    /**
+     * Feature-flag state filter — the pair travels together (the route 400s a lone half):
+     * [feature] names the flag, [featureEnabled] the state to match.
+     */
+    val feature: Feature? = null,
+    val featureEnabled: Boolean? = null,
 )
 
 data class UserListResult(
@@ -49,6 +55,13 @@ class UserService(private val database: R2dbcDatabase) {
         val passwordChangedAt = long("password_changed_at").default(0)
     }
 
+    // Per-user feature flags (V12) — the DISABLED set; no row = enabled.
+    object UserDisabledFeatures : Table("user_disabled_features") {
+        val userId = reference("user_id", Users)
+        val feature = varchar("feature", length = 30)
+        override val primaryKey = PrimaryKey(userId, feature)
+    }
+
     suspend fun create(user: User): UInt = suspendTransaction(database) {
         val newRecord = Users.insert {
             it[name] = user.name
@@ -64,7 +77,7 @@ class UserService(private val database: R2dbcDatabase) {
             .where { (Users.id eq id) and active() }
             .toList()
             .singleOrNull()
-            ?.toUser()
+            ?.let { it.toUser(featuresOf(it[Users.id].value)) }
     }
 
     suspend fun findWithIdByEmail(email: String): Pair<UInt, User>? = suspendTransaction(database) {
@@ -74,7 +87,7 @@ class UserService(private val database: R2dbcDatabase) {
             .where { (Users.email eq canonicalEmail(email)) and active() }
             .toList()
             .singleOrNull()
-            ?.let { it[Users.id].value to it.toUser() }
+            ?.let { it[Users.id].value to it.toUser(featuresOf(it[Users.id].value)) }
     }
 
     suspend fun updatePassword(id: UInt, passwordHash: String): Int = suspendTransaction(database) {
@@ -92,10 +105,36 @@ class UserService(private val database: R2dbcDatabase) {
             val rows = Users.selectAll()
                 .where { predicate }
                 .applyPaging(paging, SORTABLE_COLUMNS)
-                .map { it.toUser().toResponse(it[Users.id].value) }
                 .toList()
-            UserListResult(items = rows, total = total)
+            // One batch query for the page's disabled sets — not a per-row lookup.
+            val featuresByUser = disabledFeaturesByUserIds(rows.map { it[Users.id].value })
+            val items = rows.map { row ->
+                val id = row[Users.id].value
+                row.toUser(featuresByUser[id].orEmpty().toSet()).toResponse(id)
+            }
+            UserListResult(items = items, total = total)
         }
+
+    /**
+     * Wholesale-replace the user's disabled-feature set (V12). Returns 1, or 0 when the id is
+     * unknown or soft-deleted (the route 404s). Idempotent — a same-set re-PUT is a no-op
+     * replace, not a transition.
+     */
+    suspend fun setDisabledFeatures(id: UInt, features: Set<Feature>): Int = suspendTransaction(database) {
+        val exists = Users.select(Users.id)
+            .where { (Users.id eq id) and active() }
+            .toList()
+            .isNotEmpty()
+        if (!exists) return@suspendTransaction 0
+        UserDisabledFeatures.deleteWhere { UserDisabledFeatures.userId eq id }
+        features.forEach { f ->
+            UserDisabledFeatures.insert {
+                it[userId] = id
+                it[feature] = f.name
+            }
+        }
+        1
+    }
 
     /** Outcome of a last-admin-guarded mutation (see [updateGuarded]/[deleteGuarded]). */
     enum class GuardedMutation { DONE, NOT_FOUND, LAST_ADMIN }
@@ -164,6 +203,17 @@ class UserService(private val database: R2dbcDatabase) {
         filter.name?.takeIf { it.isNotBlank() }?.let { op = op and (Users.name.containsNormalized(it)) }
         filter.email?.takeIf { it.isNotBlank() }?.let { op = op and (Users.email.containsNormalized(it)) }
         filter.role?.let { op = op and (Users.role eq it.name) }
+        filter.feature?.let { f ->
+            // The route guarantees featureEnabled is non-null whenever feature is set.
+            val disabled = UserDisabledFeatures
+                .select(UserDisabledFeatures.userId)
+                .where { UserDisabledFeatures.feature eq f.name }
+            op = op and if (filter.featureEnabled == false) {
+                Users.id inSubQuery disabled
+            } else {
+                Users.id notInSubQuery disabled
+            }
+        }
         return op
     }
 
@@ -183,11 +233,26 @@ class UserService(private val database: R2dbcDatabase) {
 
     private fun active(): Op<Boolean> = Users.markedAsDeleted eq false
 
-    private fun ResultRow.toUser(): User = User(
+    private suspend fun featuresOf(id: UInt): Set<Feature> =
+        UserDisabledFeatures.selectAll()
+            .where { UserDisabledFeatures.userId eq id }
+            .map { Feature.valueOf(it[UserDisabledFeatures.feature]) }
+            .toList()
+            .toSet()
+
+    private suspend fun disabledFeaturesByUserIds(ids: List<UInt>): Map<UInt, List<Feature>> =
+        if (ids.isEmpty()) emptyMap()
+        else UserDisabledFeatures.selectAll()
+            .where { UserDisabledFeatures.userId inList ids }
+            .toList()
+            .groupBy({ it[UserDisabledFeatures.userId].value }, { Feature.valueOf(it[UserDisabledFeatures.feature]) })
+
+    private fun ResultRow.toUser(disabledFeatures: Set<Feature> = emptySet()): User = User(
         name = this[Users.name],
         email = this[Users.email],
         passwordHash = this[Users.passwordHash],
         role = UserRole.valueOf(this[Users.role]),
+        disabledFeatures = disabledFeatures,
         passwordChangedAt = this[Users.passwordChangedAt],
     )
 }

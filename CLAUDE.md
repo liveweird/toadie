@@ -77,7 +77,9 @@ ch.nokillswit
 │                       + LoginThrottle + the revoked-token blocklist
 ├── users/              the user domain: ADMIN-only management CRUD (/api/v1/users list/create
 │                       + {id} get/put/delete with the self-delete 403 and last-admin 409
-│                       protections) + PUT /api/v1/users/{id}/password + Validation.kt
+│                       protections) + PUT /api/v1/users/{id}/password + the per-user feature
+│                       flags (Feature enum + PUT {id}/features, the V12 disabled-set model;
+│                       MFA is the inverted-default login-scoped flag) + Validation.kt
 ├── dictionaries/       admin-curated ordered value lists (Lettuce's dictionaries, single-
 │                       valued — no translations): Dictionary.kt (the Dictionary enum whitelist
 │                       + DTOs + validateDictionaryUpdate), DictionaryService.kt (whole-document

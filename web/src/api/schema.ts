@@ -122,6 +122,8 @@ export interface paths {
          *     - Filters (optional, whitelisted):
          *       - `name` / `email` — case- and accent-insensitive substring matches.
          *       - `role` — `ADMIN` (holders of the additional role) or `USER` (plain users).
+         *       - `feature` + `featureEnabled` — feature-flag state (the pair must come
+         *         together, `400` otherwise; `featureEnabled` is a strict boolean).
          */
         get: operations["listUsers"];
         put?: never;
@@ -169,6 +171,35 @@ export interface paths {
          *     active administrator is a `409`.
          */
         delete: operations["deleteUser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a user's disabled-feature set (ADMIN only)
+         * @description Per-user feature flags: a **wholesale replace** of the target user's DISABLED set —
+         *     an empty array re-enables everything (idempotent, a same-set re-PUT is `204` again).
+         *     **ADMIN-only**; changing one's OWN flags is allowed (the users routes themselves are
+         *     never feature-gated, so an admin can always find their way back). `MFA` is the one
+         *     inverted-default flag: users start with it in the disabled set, and a set omitting it
+         *     — the empty "re-enable everything" array included — ENABLES the login second factor.
+         *     The set rides the JWT, so a change takes effect at the target's next token refresh
+         *     (≤15 min) or login. Audited as `user.features_changed` on an actual change.
+         */
+        put: operations["setUserDisabledFeatures"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -656,12 +687,23 @@ export interface components {
             userId: number;
             /** @description Additional roles of the authenticated user — empty for a regular user. */
             roles: components["schemas"]["UserRole"][];
+            /** @description Per-user feature flags — the admin-disabled set; empty = full access. */
+            disabledFeatures: components["schemas"]["Feature"][];
         };
         /**
          * @description An additional role. Every user is implicitly a regular user; the array only ever carries privileges added on top of that baseline.
          * @enum {string}
          */
         UserRole: "ADMIN";
+        /**
+         * @description A per-user gateable feature. Stored as the DISABLED set (no row = enabled). MFA is the one inverted-default, login-scoped flag: users start with it disabled (email MFA is opt-in), and it gates only the login flow.
+         * @enum {string}
+         */
+        Feature: "MFA";
+        UserFeaturesUpdateRequest: {
+            /** @description The complete new DISABLED set — an empty array enables everything. */
+            disabledFeatures: components["schemas"]["Feature"][];
+        };
         RefreshRequest: {
             refreshToken: string;
         };
@@ -689,6 +731,8 @@ export interface components {
             email: string;
             /** @description Additional roles only — empty for a regular user. */
             roles: components["schemas"]["UserRole"][];
+            /** @description Per-user feature flags — the admin-disabled set; empty = full access. */
+            disabledFeatures: components["schemas"]["Feature"][];
         };
         UserPage: {
             items: components["schemas"]["UserResponse"][];
@@ -1256,6 +1300,10 @@ export interface operations {
                 name?: string;
                 email?: string;
                 role?: "ADMIN" | "USER";
+                /** @description Feature-flag state filter — must be paired with `featureEnabled` (400 otherwise). */
+                feature?: components["schemas"]["Feature"];
+                /** @description Strict boolean — only users with `feature` enabled (true) or disabled (false). */
+                featureEnabled?: boolean;
             };
             header?: never;
             path?: never;
@@ -1405,6 +1453,43 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    setUserDisabledFeatures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserFeaturesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Disabled-feature set replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };

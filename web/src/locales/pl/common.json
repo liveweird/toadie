@@ -69,5 +69,11 @@
   "buildInfo": "Wersja aplikacji",
   "role": {
     "ADMIN": "Admin"
+  },
+  "feature": {
+    "MFA": "MFA e-mail"
+  },
+  "featureHint": {
+    "MFA": "6-cyfrowy kod wysyłany e-mailem przy każdym logowaniu (drugi składnik)."
   }
 }

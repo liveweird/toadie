@@ -9,6 +9,7 @@
 - `password_reset.requested` / `password_reset.unknown_email` / `password_reset.throttled` / `password_reset.completed` (email/userId) / `password_reset.send_failed` (email/error) — the self-service reset trail; the async worker's events double as test barriers,
 - `refresh.rejected` (with `reason`: invalid_or_expired/wrong_token_type/revoked/malformed/user_gone/predates_password_change),
 - `password.changed` (targetUserId/byUserId/selfChange) / `password.change_denied` (wrong or missing current password),
+- `user.features_changed` (byUserId/targetUserId/featuresFrom/featuresTo — only on an actual change),
 - `user.created` (byUserId/newUserId/email/roles — roles as STORED, i.e. the folded additional-roles set) / `user.updated` (name/email deltas, only when changed) / `user.roles_changed` (rolesFrom/rolesTo, both as stored) / `user.deleted` (byUserId/targetUserId),
 - `catalog_file.created` / `catalog_file.updated` / `catalog_file.deleted` (byUserId/catalogFileId — every catalog-file mutation; a file created through `POST …/import` carries an additional `import: true`),
 - `catalog_file.fetch_blocked` (byUserId/scheme/host — every SSRF-guard rejection on `POST …/fetch`; deliberately NOT the full URL, which may embed query-string tokens),

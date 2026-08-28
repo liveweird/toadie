@@ -1,12 +1,11 @@
 import type { ReactNode } from "react";
-import { Button, Group, Modal, Stack, Text } from "@mantine/core";
+import { Button, Group, Modal, Stack, Text, type MantineColor } from "@mantine/core";
 
 /**
- * The shared confirm-before-acting modal (discard, and future non-row-deletion confirms):
- * a message plus a neutral cancel and a red confirm. Labels arrive already translated —
- * they differ per flow (Keep editing/Discard, …). Row-deletion flows paired with
- * useDeleteConfirm keep using ConfirmDeleteModal instead. (Lettuce's version also carries
- * a navigation confirm and a color override — re-port those with their first consumer.)
+ * The shared confirm-before-acting modal (Lettuce's, ported with the feature-flags bulk
+ * actions): a message plus a neutral cancel and a confirm button whose `loading` blocks
+ * cancel/close while the action runs. Labels arrive already translated — they differ per
+ * flow. Row-deletion flows paired with useDeleteConfirm keep using ConfirmDeleteModal.
  */
 export default function ConfirmActionModal({
   opened,
@@ -16,6 +15,8 @@ export default function ConfirmActionModal({
   cancelLabel,
   confirmLabel,
   onConfirm,
+  loading = false,
+  confirmColor = "red",
 }: {
   opened: boolean;
   onClose: () => void;
@@ -24,16 +25,25 @@ export default function ConfirmActionModal({
   cancelLabel: string;
   confirmLabel: string;
   onConfirm: () => void;
+  loading?: boolean;
+  confirmColor?: MantineColor;
 }) {
   return (
-    <Modal opened={opened} onClose={onClose} title={title} centered>
+    <Modal
+      opened={opened}
+      onClose={() => {
+        if (!loading) onClose();
+      }}
+      title={title}
+      centered
+    >
       <Stack gap="md">
         <Text>{message}</Text>
         <Group justify="flex-end" gap="sm">
-          <Button variant="default" onClick={onClose}>
+          <Button variant="default" onClick={onClose} disabled={loading}>
             {cancelLabel}
           </Button>
-          <Button color="red" onClick={onConfirm}>
+          <Button color={confirmColor} onClick={onConfirm} loading={loading}>
             {confirmLabel}
           </Button>
         </Group>

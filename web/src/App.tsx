@@ -26,6 +26,7 @@ import {
   IconSun,
   IconTags,
   IconTopologyStar3,
+  IconToggleLeft,
   IconUsers,
 } from "@tabler/icons-react";
 import {
@@ -58,6 +59,8 @@ const Namespaces = lazy(() => import("./pages/Namespaces"));
 const Labels = lazy(() => import("./pages/Labels"));
 const Tags = lazy(() => import("./pages/Tags"));
 const Users = lazy(() => import("./pages/Users"));
+const UserFeatures = lazy(() => import("./pages/UserFeatures"));
+const FeatureFlags = lazy(() => import("./pages/FeatureFlags"));
 const CreateUser = lazy(() => import("./pages/CreateUser"));
 const EditUser = lazy(() => import("./pages/EditUser"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
@@ -93,6 +96,7 @@ const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   { to: "/labels", label: "appShell.nav.labels", icon: IconTag },
   { to: "/tags", label: "appShell.nav.tags", icon: IconHash },
   { to: "/users", label: "appShell.nav.users", icon: IconUsers, adminOnly: true },
+  { to: "/feature-flags", label: "appShell.nav.featureFlags", icon: IconToggleLeft, adminOnly: true },
   { to: "/change-password", label: "appShell.nav.changePassword", icon: IconKey },
 ];
 
@@ -248,6 +252,8 @@ export default function App() {
             <Route path="users" element={<Users />} />
             <Route path="users/new" element={<CreateUser />} />
             <Route path="users/:id/edit" element={<EditUser />} />
+            <Route path="users/:id/features" element={<UserFeatures />} />
+            <Route path="feature-flags" element={<FeatureFlags />} />
             <Route path="change-password" element={<ChangePassword />} />
             {/* The authenticated catch-all — LAST child, never feature-gated. */}
             <Route path="*" element={<NotFound />} />

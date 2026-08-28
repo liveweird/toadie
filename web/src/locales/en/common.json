@@ -69,5 +69,11 @@
   "buildInfo": "Build version",
   "role": {
     "ADMIN": "Admin"
+  },
+  "feature": {
+    "MFA": "Email MFA"
+  },
+  "featureHint": {
+    "MFA": "A 6-digit code emailed at every sign-in (second factor)."
   }
 }

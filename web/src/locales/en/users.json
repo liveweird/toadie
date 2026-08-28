@@ -54,6 +54,33 @@
   "toast": {
     "updated": "User updated",
     "deleted": "User deleted",
-    "passwordChanged": "Password changed"
+    "passwordChanged": "Password changed",
+    "featuresSaved": "Feature flags saved"
+  },
+  "featuresAction": "Features",
+  "featuresAria": "Feature flags for {{name}}",
+  "featuresTitle": "Feature flags",
+  "featuresHint": "Flags for {{name}} ({{email}}). Changes take effect at the user's next sign-in or token refresh (up to 15 minutes).",
+  "featuresFailedStatus": "Saving the flags failed ({{status}})",
+  "featuresFailedNetwork": "Saving the flags failed. Check your connection and try again.",
+  "featureFlags": {
+    "title": "Feature flags",
+    "featureLabel": "Feature",
+    "stateLabel": "State",
+    "stateAny": "Any",
+    "stateEnabled": "Enabled",
+    "stateDisabled": "Disabled",
+    "enabledHeader": "Enabled",
+    "toggleAria": "Toggle {{feature}} for {{name}}",
+    "bulkEnable": "Enable for all matching",
+    "bulkDisable": "Disable for all matching",
+    "bulkTitle": "Apply to every matching user?",
+    "bulkConfirmEnable": "Enable {{feature}} for {{count}} users currently disabled?",
+    "bulkConfirmDisable": "Disable {{feature}} for {{count}} users currently enabled?",
+    "enableAction": "Enable",
+    "disableAction": "Disable",
+    "bulkNoChange": "Every matching user is already in that state",
+    "bulkFailed": "The update failed for {{count}} users",
+    "retryFailed": "Retry the failed users"
   }
 }

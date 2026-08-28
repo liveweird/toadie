@@ -5,8 +5,9 @@ import io.ktor.server.plugins.BadRequestException
 
 // Small helpers for the repeated list-endpoint query-param parsing idioms, so every route stops
 // hand-writing `params["x"]?.takeIf { it.isNotBlank() }` and the numeric variants. Ported from
-// Lettuce minus its view-scoped helpers (optionalIncludeIndirect, uintOnlyForView) and the typed
-// scalar parsers (optionalUInt/Long/Boolean) — each returns with its first Toadie consumer.
+// Lettuce minus its view-scoped helpers (optionalIncludeIndirect, uintOnlyForView) and the
+// remaining typed scalar parsers (optionalUInt/Long) — each returns with its first Toadie
+// consumer (optionalBoolean arrived with the users-list featureEnabled filter).
 
 /**
  * The single value of [name], or null when absent. A repeated key is a 400: repetition is
@@ -21,6 +22,12 @@ fun Parameters.singleValue(name: String): String? {
 
 /** The param's value, or null when absent or blank. */
 fun Parameters.optionalString(name: String): String? = singleValue(name)?.takeIf { it.isNotBlank() }
+
+/** Parses a non-blank param as a strict boolean; null when absent/blank, 400 unless exactly true/false. */
+fun Parameters.optionalBoolean(name: String): Boolean? =
+    optionalString(name)?.let {
+        it.toBooleanStrictOrNull() ?: throw BadRequestException("$name must be true or false")
+    }
 
 /**
  * Parses a non-blank param as an enum constant (exact name match); null when absent/blank,

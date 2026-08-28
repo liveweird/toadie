@@ -83,6 +83,10 @@ class AuditTest {
                     ),
                 )
             }
+            client.put("/api/v1/users/${created.id}/features") {
+                contentType(ContentType.Application.Json)
+                setBody(ch.nokillswit.users.UserFeaturesUpdateRequest(listOf(ch.nokillswit.users.Feature.MFA)))
+            }
             client.delete("/api/v1/users/${created.id}")
 
 
@@ -103,6 +107,12 @@ class AuditTest {
             assertNotNull(rolesEvent)
             assertTrue(rolesEvent.hasKeyValue("rolesFrom", ""))
             assertTrue(rolesEvent.hasKeyValue("rolesTo", "ADMIN"))
+            val featuresEvent = capture.awaitEvent {
+                it.message == "user.features_changed" && it.hasKeyValue("targetUserId", created.id.toLong())
+            }
+            assertNotNull(featuresEvent)
+            assertTrue(featuresEvent.hasKeyValue("featuresFrom", ""))
+            assertTrue(featuresEvent.hasKeyValue("featuresTo", "MFA"))
             assertNotNull(
                 capture.awaitEvent {
                     it.message == "user.deleted" && it.hasKeyValue("targetUserId", created.id.toLong())

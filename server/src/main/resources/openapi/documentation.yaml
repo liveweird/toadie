@@ -165,6 +165,8 @@ paths:
         - Filters (optional, whitelisted):
           - `name` / `email` — case- and accent-insensitive substring matches.
           - `role` — `ADMIN` (holders of the additional role) or `USER` (plain users).
+          - `feature` + `featureEnabled` — feature-flag state (the pair must come
+            together, `400` otherwise; `featureEnabled` is a strict boolean).
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
@@ -181,6 +183,16 @@ paths:
           in: query
           required: false
           schema: { type: string, enum: [ADMIN, USER] }
+        - name: feature
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Feature' }
+          description: Feature-flag state filter — must be paired with `featureEnabled` (400 otherwise).
+        - name: featureEnabled
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: Strict boolean — only users with `feature` enabled (true) or disabled (false).
       responses:
         '200':
           description: A page of users
@@ -290,6 +302,40 @@ paths:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/users/{id}/features:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      tags: [users]
+      operationId: setUserDisabledFeatures
+      summary: Replace a user's disabled-feature set (ADMIN only)
+      description: |
+        Per-user feature flags: a **wholesale replace** of the target user's DISABLED set —
+        an empty array re-enables everything (idempotent, a same-set re-PUT is `204` again).
+        **ADMIN-only**; changing one's OWN flags is allowed (the users routes themselves are
+        never feature-gated, so an admin can always find their way back). `MFA` is the one
+        inverted-default flag: users start with it in the disabled set, and a set omitting it
+        — the empty "re-enable everything" array included — ENABLES the login second factor.
+        The set rides the JWT, so a change takes effect at the target's next token refresh
+        (≤15 min) or login. Audited as `user.features_changed` on an actual change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserFeaturesUpdateRequest'
+      responses:
+        '204': { description: Disabled-feature set replaced }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Caller is not ADMIN
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
   /api/v1/users/{id}/password:
@@ -1021,7 +1067,7 @@ components:
 
     LoginResponse:
       type: object
-      required: [token, expiresAt, refreshToken, refreshExpiresAt, userId, roles]
+      required: [token, expiresAt, refreshToken, refreshExpiresAt, userId, roles, disabledFeatures]
       properties:
         token:
           type: string
@@ -1042,6 +1088,10 @@ components:
           type: array
           items: { $ref: '#/components/schemas/UserRole' }
           description: Additional roles of the authenticated user — empty for a regular user.
+        disabledFeatures:
+          type: array
+          items: { $ref: '#/components/schemas/Feature' }
+          description: Per-user feature flags — the admin-disabled set; empty = full access.
 
     UserRole:
       type: string
@@ -1049,6 +1099,23 @@ components:
       description: >-
         An additional role. Every user is implicitly a regular user; the array only ever
         carries privileges added on top of that baseline.
+
+    Feature:
+      type: string
+      enum: [MFA]
+      description: >-
+        A per-user gateable feature. Stored as the DISABLED set (no row = enabled).
+        MFA is the one inverted-default, login-scoped flag: users start with it disabled
+        (email MFA is opt-in), and it gates only the login flow.
+
+    UserFeaturesUpdateRequest:
+      type: object
+      required: [disabledFeatures]
+      properties:
+        disabledFeatures:
+          type: array
+          items: { $ref: '#/components/schemas/Feature' }
+          description: The complete new DISABLED set — an empty array enables everything.
 
     RefreshRequest:
       type: object
@@ -1092,7 +1159,7 @@ components:
 
     UserResponse:
       type: object
-      required: [id, name, email, roles]
+      required: [id, name, email, roles, disabledFeatures]
       properties:
         id: { type: integer, format: int32, minimum: 0 }
         name: { type: string }
@@ -1101,6 +1168,10 @@ components:
           type: array
           items: { $ref: '#/components/schemas/UserRole' }
           description: Additional roles only — empty for a regular user.
+        disabledFeatures:
+          type: array
+          items: { $ref: '#/components/schemas/Feature' }
+          description: Per-user feature flags — the admin-disabled set; empty = full access.
 
     UserPage:
       type: object

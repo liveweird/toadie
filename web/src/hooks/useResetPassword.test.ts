@@ -6,7 +6,7 @@ import { jsonResponse } from "../test/http";
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
-const TARGET: UserResponse = { id: 2, name: "Bob Basic", email: "bob@example.com", roles: [] };
+const TARGET: UserResponse = { id: 2, name: "Bob Basic", email: "bob@example.com", roles: [], disabledFeatures: [] };
 
 describe("useResetPassword", () => {
   let mockFetch: FetchMock;

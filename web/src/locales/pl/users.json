@@ -54,6 +54,33 @@
   "toast": {
     "updated": "Zaktualizowano konto",
     "deleted": "Usunięto konto",
-    "passwordChanged": "Zmieniono hasło"
+    "passwordChanged": "Zmieniono hasło",
+    "featuresSaved": "Zapisano flagi funkcji"
+  },
+  "featuresAction": "Funkcje",
+  "featuresAria": "Flagi funkcji dla {{name}}",
+  "featuresTitle": "Flagi funkcji",
+  "featuresHint": "Flagi dla {{name}} ({{email}}). Zmiany zaczną obowiązywać przy następnym logowaniu lub odświeżeniu tokenu (do 15 minut).",
+  "featuresFailedStatus": "Zapis flag nie powiódł się ({{status}})",
+  "featuresFailedNetwork": "Zapis flag nie powiódł się. Sprawdź połączenie i spróbuj ponownie.",
+  "featureFlags": {
+    "title": "Flagi funkcji",
+    "featureLabel": "Funkcja",
+    "stateLabel": "Stan",
+    "stateAny": "Dowolny",
+    "stateEnabled": "Włączona",
+    "stateDisabled": "Wyłączona",
+    "enabledHeader": "Włączona",
+    "toggleAria": "Przełącz {{feature}} dla {{name}}",
+    "bulkEnable": "Włącz dla wszystkich pasujących",
+    "bulkDisable": "Wyłącz dla wszystkich pasujących",
+    "bulkTitle": "Zastosować do wszystkich pasujących użytkowników?",
+    "bulkConfirmEnable": "Włączyć {{feature}} dla {{count}} użytkowników z wyłączoną funkcją?",
+    "bulkConfirmDisable": "Wyłączyć {{feature}} dla {{count}} użytkowników z włączoną funkcją?",
+    "enableAction": "Włącz",
+    "disableAction": "Wyłącz",
+    "bulkNoChange": "Wszyscy pasujący użytkownicy są już w tym stanie",
+    "bulkFailed": "Aktualizacja nie powiodła się dla {{count}} użytkowników",
+    "retryFailed": "Ponów dla nieudanych"
   }
 }

@@ -11,6 +11,7 @@
     "labels": "Etykiety",
     "tags": "Tagi",
     "users": "Użytkownicy/czki",
-    "changePassword": "Zmiana hasła"
+    "changePassword": "Zmiana hasła",
+    "featureFlags": "Flagi funkcji"
   }
 }

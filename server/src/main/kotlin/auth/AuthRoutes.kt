@@ -9,6 +9,7 @@ import ch.nokillswit.infra.mail.mailer
 import ch.nokillswit.infra.mail.respondMailUnavailable
 import ch.nokillswit.plugins.JwtConfig
 import ch.nokillswit.plugins.JwtConfigKey
+import ch.nokillswit.users.Feature
 import ch.nokillswit.users.UserRole
 import ch.nokillswit.users.UserServiceKey
 import ch.nokillswit.users.canonicalEmail
@@ -63,6 +64,8 @@ data class LoginResponse(
     val userId: UInt,
     /** Additional roles of the authenticated user — empty for a regular user. */
     val roles: List<UserRole>,
+    /** Per-user feature flags (V12) — the admin-disabled set; empty = full access. */
+    val disabledFeatures: List<Feature>,
 )
 
 // The refresh rejection detail per audited reason — data beside the handler, not control flow
@@ -77,9 +80,14 @@ private val REFRESH_REJECT_MESSAGES = mapOf(
     "predates_password_change" to "Refresh token predates a password change",
 )
 
-private fun JwtConfig.authResponse(userId: UInt, email: String, roles: Set<UserRole>): LoginResponse {
-    val access = issueAccessToken(userId, email, roles)
-    val refresh = issueRefreshToken(userId, email, roles)
+private fun JwtConfig.authResponse(
+    userId: UInt,
+    email: String,
+    roles: Set<UserRole>,
+    disabledFeatures: Set<Feature>,
+): LoginResponse {
+    val access = issueAccessToken(userId, email, roles, disabledFeatures)
+    val refresh = issueRefreshToken(userId, email, roles, disabledFeatures)
     return LoginResponse(
         token = access.token,
         expiresAt = access.expiresAt,
@@ -87,6 +95,7 @@ private fun JwtConfig.authResponse(userId: UInt, email: String, roles: Set<UserR
         refreshExpiresAt = refresh.expiresAt,
         userId = userId,
         roles = roles.sortedBy { it.name },
+        disabledFeatures = disabledFeatures.sortedBy { it.name },
     )
 }
 
@@ -209,7 +218,7 @@ fun Application.configureAuthRoutes() {
                 val (userId, user) = record
                 loginThrottle.recordSuccess(email)
                 audit("login.success", "email" to user.email, "userId" to userId.toLong())
-                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user.email, user.additionalRoles))
+                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user.email, user.additionalRoles, user.disabledFeatures))
             }
         }
         rateLimit(RateLimitName(REFRESH_RATE_LIMIT)) {
@@ -248,7 +257,7 @@ fun Application.configureAuthRoutes() {
                 if (issuedAtSec < user.passwordChangedAt / 1000) {
                     reject("predates_password_change", rawUserId)
                 }
-                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user.email, user.additionalRoles))
+                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user.email, user.additionalRoles, user.disabledFeatures))
             }
         }
         rateLimit(RateLimitName(PASSWORD_RESET_RATE_LIMIT)) {

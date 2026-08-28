@@ -3,7 +3,7 @@ import { Link as RouterLink, Navigate } from "react-router-dom";
 import { Alert, Badge, Button, Group, Modal, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconKey, IconPencil, IconPlus, IconTrash, IconUsers } from "@tabler/icons-react";
+import { IconKey, IconPencil, IconPlus, IconToggleLeft, IconTrash, IconUsers } from "@tabler/icons-react";
 import { deleteUser, listUsers, type UserResponse } from "../api/users";
 import { getUserId, isAdmin } from "../api/session";
 import ClearableTextInput from "../components/ClearableTextInput";
@@ -180,6 +180,16 @@ export default function Users() {
                         aria-label={t("common.action.editAria", { name: user.name })}
                       >
                         {t("common.action.edit")}
+                      </Button>
+                      <Button
+                        component={RouterLink}
+                        to={`/users/${user.id}/features`}
+                        variant="subtle"
+                        size="xs"
+                        leftSection={<IconToggleLeft size={14} />}
+                        aria-label={t("users.featuresAria", { name: user.name })}
+                      >
+                        {t("users.featuresAction")}
                       </Button>
                       {/* Own row: no reset (self-change needs the current password — the
                           Change password page) and no delete (the server 403s it anyway). */}

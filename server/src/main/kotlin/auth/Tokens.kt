@@ -1,6 +1,7 @@
 package ch.nokillswit.auth
 
 import ch.nokillswit.plugins.JwtConfig
+import ch.nokillswit.users.Feature
 import ch.nokillswit.users.UserRole
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
@@ -15,17 +16,28 @@ const val TOKEN_TYPE_REFRESH = "refresh"
 data class IssuedToken(val token: String, val expiresAt: Long)
 
 /** Short-lived token carried as the API bearer. */
-fun JwtConfig.issueAccessToken(userId: UInt, email: String, roles: Set<UserRole>): IssuedToken =
-    issueToken(userId, email, roles, TOKEN_TYPE_ACCESS, accessExpiresInSeconds)
+fun JwtConfig.issueAccessToken(
+    userId: UInt,
+    email: String,
+    roles: Set<UserRole>,
+    disabledFeatures: Set<Feature>,
+): IssuedToken =
+    issueToken(userId, email, roles, disabledFeatures, TOKEN_TYPE_ACCESS, accessExpiresInSeconds)
 
 /** Longer-lived token exchanged at POST /api/v1/refresh for a fresh pair. */
-fun JwtConfig.issueRefreshToken(userId: UInt, email: String, roles: Set<UserRole>): IssuedToken =
-    issueToken(userId, email, roles, TOKEN_TYPE_REFRESH, refreshExpiresInSeconds)
+fun JwtConfig.issueRefreshToken(
+    userId: UInt,
+    email: String,
+    roles: Set<UserRole>,
+    disabledFeatures: Set<Feature>,
+): IssuedToken =
+    issueToken(userId, email, roles, disabledFeatures, TOKEN_TYPE_REFRESH, refreshExpiresInSeconds)
 
 private fun JwtConfig.issueToken(
     userId: UInt,
     email: String,
     roles: Set<UserRole>,
+    disabledFeatures: Set<Feature>,
     typ: String,
     ttlSeconds: Long,
 ): IssuedToken {
@@ -39,6 +51,7 @@ private fun JwtConfig.issueToken(
         .withClaim("email", email)
         .withClaim("userId", userId.toLong())
         .withArrayClaim("roles", roles.map { it.name }.sorted().toTypedArray())
+        .withArrayClaim("disabledFeatures", disabledFeatures.map { it.name }.sorted().toTypedArray())
         .withClaim("typ", typ)
         .withExpiresAt(Date(expiresAt))
         .sign(Algorithm.HMAC256(secret))

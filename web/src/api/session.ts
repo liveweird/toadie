@@ -9,10 +9,15 @@ export const TOKEN_KEY = "toadie.auth.token";
 const REFRESH_TOKEN_KEY = "toadie.auth.refreshToken";
 const ROLES_KEY = "toadie.auth.roles";
 const USER_ID_KEY = "toadie.auth.userId";
+const DISABLED_FEATURES_KEY = "toadie.auth.disabledFeatures";
 
 /** Additional roles — every user is implicitly a regular user; an empty set means no extra privileges. */
 const USER_ROLES = ["ADMIN"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
+
+/** Per-user gateable features — the DISABLED set travels the wire; empty = full access. */
+export const FEATURES = ["MFA"] as const;
+export type Feature = (typeof FEATURES)[number];
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -48,6 +53,19 @@ export function getUserId(): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+export function getDisabledFeatures(): Feature[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(DISABLED_FEATURES_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((f): f is Feature => FEATURES.includes(f)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function hasFeature(feature: Feature): boolean {
+  return !getDisabledFeatures().includes(feature);
+}
+
 export function isAdmin(): boolean {
   return getRoles().includes("ADMIN");
 }
@@ -57,12 +75,17 @@ export function clearSession(): void {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(ROLES_KEY);
   localStorage.removeItem(USER_ID_KEY);
+  localStorage.removeItem(DISABLED_FEATURES_KEY);
 }
 
-/** Persist the access + refresh pair (and the current roles/userId) returned by /login or /refresh. */
+/**
+ * Persist the access + refresh pair (and the current roles/userId/feature flags) returned by
+ * /login or /refresh. `?? []` keeps a mid-deploy older server (no disabledFeatures yet) harmless.
+ */
 export function persistSession(data: LoginSuccess): void {
   setToken(data.token);
   setRefreshToken(data.refreshToken);
   localStorage.setItem(ROLES_KEY, JSON.stringify(data.roles));
   localStorage.setItem(USER_ID_KEY, String(data.userId));
+  localStorage.setItem(DISABLED_FEATURES_KEY, JSON.stringify(data.disabledFeatures ?? []));
 }

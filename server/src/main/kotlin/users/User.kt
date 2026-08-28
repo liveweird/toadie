@@ -15,12 +15,28 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class UserRole { ADMIN, USER }
 
+/**
+ * Per-user feature flags (V12) — stored as the DISABLED set (`user_disabled_features`,
+ * no row = enabled), replaced wholesale by `PUT /users/{id}/features` (ADMIN). The Kotlin
+ * enum is the whitelist — a future gateable feature is just a new value here (no migration).
+ * [MFA] is the one INVERTED-DEFAULT, login-scoped flag: every user starts with the disabled
+ * row present (the V13 seed + the `UserService.create` chokepoint), so email MFA is opt-in;
+ * it gates the LOGIN FLOW only — no route names it in `requireFeatureEnabled` (which awaits
+ * its first area-gating consumer).
+ */
+@Serializable
+enum class Feature { MFA }
+
 @Serializable
 data class User(
     val name: String,
     val email: String,
     val passwordHash: String,
     val role: UserRole = UserRole.USER,
+    // Per-user feature flags (V12) — the DISABLED set, empty = full access. Rides the domain
+    // object like the role so /login and /refresh mint the claim from the same read. Never
+    // client-settable via PUT — replaced only by PUT /users/{id}/features (ADMIN).
+    val disabledFeatures: Set<Feature> = emptySet(),
     // Epoch millis of the last password change (0 = never). Server-internal; used to
     // invalidate refresh tokens minted before the change (see /api/v1/refresh).
     val passwordChangedAt: Long = 0,
@@ -58,6 +74,8 @@ data class UserResponse(
     val email: String,
     /** Additional roles only — empty for a regular user (the standing wire shape). */
     val roles: List<UserRole>,
+    /** Per-user feature flags (V12) — the admin-disabled set; empty = full access. */
+    val disabledFeatures: List<Feature>,
 )
 
 fun User.toResponse(id: UInt) = UserResponse(
@@ -65,7 +83,12 @@ fun User.toResponse(id: UInt) = UserResponse(
     name = name,
     email = email,
     roles = additionalRoles.sortedBy { it.name },
+    disabledFeatures = disabledFeatures.sortedBy { it.name },
 )
+
+/** Wholesale replacement of a user's disabled-feature set (PUT /users/{id}/features). */
+@Serializable
+data class UserFeaturesUpdateRequest(val disabledFeatures: List<Feature>)
 
 typealias UserPageResponse = ch.nokillswit.infra.paging.PageResponse<UserResponse>
 

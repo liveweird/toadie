@@ -14,6 +14,9 @@ type UserUpdateBody =
   paths["/api/v1/users/{id}"]["put"]["requestBody"]["content"]["application/json"];
 type PasswordUpdateBody =
   paths["/api/v1/users/{id}/password"]["put"]["requestBody"]["content"]["application/json"];
+type FeaturesUpdateBody =
+  paths["/api/v1/users/{id}/features"]["put"]["requestBody"]["content"]["application/json"];
+export type Feature = FeaturesUpdateBody["disabledFeatures"][number];
 
 type UserListQuery = {
   page: number;
@@ -22,6 +25,9 @@ type UserListQuery = {
   name?: string;
   email?: string;
   role?: string;
+  /** Feature-flag state filter — the pair must travel together (the server 400s a lone half). */
+  feature?: Feature;
+  featureEnabled?: boolean;
 };
 
 export async function listUsers(q: UserListQuery): Promise<UserPage> {
@@ -32,6 +38,10 @@ export async function listUsers(q: UserListQuery): Promise<UserPage> {
     name: q.name,
     email: q.email,
     role: q.role,
+    feature: q.feature,
+    // buildQuery would keep `false` (deliberately) — but here false must be SENT too, and
+    // undefined omitted, which is exactly its default behavior.
+    featureEnabled: q.featureEnabled,
   });
   return jsonRequest<UserPage>(`/api/v1/users?${params}`);
 }
@@ -53,6 +63,12 @@ export async function updateUser(id: number, body: UserUpdateBody): Promise<void
 
 export async function deleteUser(id: number): Promise<void> {
   await voidRequest(`/api/v1/users/${id}`, { method: "DELETE" });
+}
+
+/** Wholesale-replace the user's disabled-feature set (ADMIN only). */
+export async function updateUserFeatures(id: number, disabledFeatures: Feature[]): Promise<void> {
+  const body: FeaturesUpdateBody = { disabledFeatures };
+  return voidRequest(`/api/v1/users/${id}/features`, { method: "PUT", body: JSON.stringify(body) });
 }
 
 export async function changeUserPassword(id: number, body: PasswordUpdateBody): Promise<void> {

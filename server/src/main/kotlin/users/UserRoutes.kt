@@ -12,6 +12,7 @@ import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
 import ch.nokillswit.authz.requireSelfOrAdmin
+import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalEnum
 import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
@@ -48,8 +49,8 @@ internal fun validatePassword(password: String) {
     }
 }
 
-/** Audit format for a roles set: comma-joined sorted names, "" = the plain-user empty set. */
-private fun Set<UserRole>.joinedNames(): String = map { it.name }.sorted().joinToString(",")
+/** Audit format for a roles/features set: comma-joined sorted names, "" = empty set. */
+private fun <T : Enum<T>> Set<T>.joinedNames(): String = map { it.name }.sorted().joinToString(",")
 
 /**
  * Name and email are identity/security-relevant (email is the login identifier); the
@@ -82,6 +83,10 @@ class Users {
         @Serializable
         @Resource("password")
         class Password(val parent: Id)
+
+        @Serializable
+        @Resource("features")
+        class Features(val parent: Id)
     }
 }
 
@@ -96,10 +101,18 @@ fun Application.configureUserRoutes() {
                 requireAdmin(call.caller())
                 val paging = call.parsePaging(sortable = USER_SORT_FIELDS)
                 val params = call.request.queryParameters
+                val feature = params.optionalEnum<Feature>("feature")
+                val featureEnabled = params.optionalBoolean("featureEnabled")
+                // The pair rule: the flag-state filter is meaningless as a lone half.
+                if ((feature == null) != (featureEnabled == null)) {
+                    throw BadRequestException("feature and featureEnabled must be supplied together")
+                }
                 val filter = UserListFilter(
                     name = params.optionalString("name"),
                     email = params.optionalString("email"),
                     role = params.optionalEnum<UserRole>("role"),
+                    feature = feature,
+                    featureEnabled = featureEnabled,
                 )
                 val result = userService.list(filter, paging)
                 call.respond(HttpStatusCode.OK, paging.toPage(result.items, result.total))
@@ -226,6 +239,31 @@ fun Application.configureUserRoutes() {
                     "byUserId" to caller.userId.toLong(),
                     "selfChange" to (caller.userId == route.parent.id),
                 )
+                call.respond(HttpStatusCode.NoContent)
+            }
+            put<Users.Id.Features> { route ->
+                val caller = call.caller()
+                // Guard before receive: a non-admin's malformed body is 403, not 400. Self-change
+                // is deliberately allowed — the users routes are never feature-gated, so an admin
+                // can always adjust their own flags back. An unknown feature name fails enum
+                // decoding -> BadRequestException -> 400.
+                requireAdmin(caller)
+                val req = call.receive<UserFeaturesUpdateRequest>()
+                val existing = userService.read(route.parent.id).orNotFound("User")
+                val requested = req.disabledFeatures.toSet()
+                if (userService.setDisabledFeatures(route.parent.id, requested) == 0) {
+                    throw NotFoundException("User not found")
+                }
+                if (requested != existing.disabledFeatures) {
+                    audit(
+                        "user.features_changed",
+                        "byUserId" to caller.userId.toLong(),
+                        "targetUserId" to route.parent.id.toLong(),
+                        // Named like user.updated's nameFrom/nameTo (the audit convention).
+                        "featuresFrom" to existing.disabledFeatures.joinedNames(),
+                        "featuresTo" to requested.joinedNames(),
+                    )
+                }
                 call.respond(HttpStatusCode.NoContent)
             }
         }

@@ -23,6 +23,7 @@ import {
   persistSession,
   setToken,
 } from "./session";
+import { getDisabledFeatures, hasFeature } from "./session";
 
 const SESSION = {
   token: "access-1",
@@ -31,6 +32,7 @@ const SESSION = {
   refreshExpiresAt: 2,
   userId: 7,
   roles: ["ADMIN" as const],
+  disabledFeatures: [],
 };
 
 describe("session", () => {
@@ -55,6 +57,20 @@ describe("session", () => {
     localStorage.setItem("toadie.auth.userId", "NaN-ish");
     expect(getRoles()).toEqual([]);
     expect(getUserId()).toBeNull();
+  });
+
+  test("disabled features persist with the session and drive hasFeature", () => {
+    persistSession({ ...SESSION, disabledFeatures: ["MFA"] });
+    expect(getDisabledFeatures()).toEqual(["MFA"]);
+    expect(hasFeature("MFA")).toBe(false);
+
+    persistSession(SESSION); // empty set = full access
+    expect(hasFeature("MFA")).toBe(true);
+
+    // Corrupt storage degrades to the safe default (everything enabled).
+    localStorage.setItem("toadie.auth.disabledFeatures", "{not json");
+    expect(getDisabledFeatures()).toEqual([]);
+    expect(hasFeature("MFA")).toBe(true);
   });
 
   test("unknown role names are filtered out", () => {
