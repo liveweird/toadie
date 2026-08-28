@@ -16,6 +16,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import {
   IconFileDescription,
+  IconHash,
   IconHome,
   IconKey,
   IconListCheck,
@@ -54,6 +55,7 @@ const EditCatalogFile = lazy(() => import("./pages/EditCatalogFile"));
 const CrossCheck = lazy(() => import("./pages/CrossCheck"));
 const Namespaces = lazy(() => import("./pages/Namespaces"));
 const Labels = lazy(() => import("./pages/Labels"));
+const Tags = lazy(() => import("./pages/Tags"));
 const Users = lazy(() => import("./pages/Users"));
 const CreateUser = lazy(() => import("./pages/CreateUser"));
 const EditUser = lazy(() => import("./pages/EditUser"));
@@ -88,6 +90,7 @@ const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   // Visible to everyone: non-admins get the read-only list, ADMINs the editor (the page branches).
   { to: "/namespaces", label: "appShell.nav.namespaces", icon: IconTags },
   { to: "/labels", label: "appShell.nav.labels", icon: IconTag },
+  { to: "/tags", label: "appShell.nav.tags", icon: IconHash },
   { to: "/users", label: "appShell.nav.users", icon: IconUsers, adminOnly: true },
   { to: "/change-password", label: "appShell.nav.changePassword", icon: IconKey },
 ];
@@ -232,6 +235,7 @@ export default function App() {
             <Route path="render" element={<RenderGraph />} />
             <Route path="namespaces" element={<Namespaces />} />
             <Route path="labels" element={<Labels />} />
+            <Route path="tags" element={<Tags />} />
             <Route path="users" element={<Users />} />
             <Route path="users/new" element={<CreateUser />} />
             <Route path="users/:id/edit" element={<EditUser />} />

@@ -24,7 +24,7 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Architecture
 
-Toadie is a Backstage `catalog-info.yaml` helper (visual creation with validation, cross-file reference checks, combined rendering). **All three product pillars are implemented on top of the full stack + tooling + auth: visual creation of catalog files across the seven landscape kinds — Component, API, System, Domain, Resource, Group, User — (stored server-side, per-kind validation, full CRUD + list, live YAML preview/download) with namespaces constrained to the ADMIN-curated `namespaces` dictionary (the `/namespaces` page; strict server-side enforcement on every write, blank/omitted resolving to the entry flagged as DEFAULT) and labels constrained to the ADMIN-curated label registry (the `/labels` page; each label = a key + a CLOSED value list + the kinds it applies to, strictly enforced on every write), cross-checking (a workspace report at `/cross-check` + a live reference panel in the editor; every stored kind resolves — UNVERIFIABLE means Location/Template/custom only; saves never blocked), rendering-together (the `/render` relationship graph — React Flow + dagre over `GET …/graph`), plus the YAML round-trip (client-parsed multi-document import with per-row report-&-skip results at `/catalog-files/import`, and one-file workspace export).** The architecture deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce) — when adding a capability Lettuce already has (mail, encryption at rest, feature flags, MFA…), port Lettuce's implementation rather than inventing a new one.
+Toadie is a Backstage `catalog-info.yaml` helper (visual creation with validation, cross-file reference checks, combined rendering). **All three product pillars are implemented on top of the full stack + tooling + auth: visual creation of catalog files across the seven landscape kinds — Component, API, System, Domain, Resource, Group, User — (stored server-side, per-kind validation, full CRUD + list, live YAML preview/download) with namespaces constrained to the ADMIN-curated `namespaces` dictionary (the `/namespaces` page; strict server-side enforcement on every write, blank/omitted resolving to the entry flagged as DEFAULT) and labels constrained to the ADMIN-curated label registry (the `/labels` page; each label = a key + a CLOSED value list + the kinds it applies to, strictly enforced on every write) and tags constrained to the ADMIN-curated tag categories (the `/tags` page; an internal grouping concept — each category = a name + its tags, each tag in exactly ONE category + the kinds they apply to, strictly enforced on every write), cross-checking (a workspace report at `/cross-check` + a live reference panel in the editor; every stored kind resolves — UNVERIFIABLE means Location/Template/custom only; saves never blocked), rendering-together (the `/render` relationship graph — React Flow + dagre over `GET …/graph`), plus the YAML round-trip (client-parsed multi-document import with per-row report-&-skip results at `/catalog-files/import`, and one-file workspace export).** The architecture deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce) — when adding a capability Lettuce already has (mail, encryption at rest, feature flags, MFA…), port Lettuce's implementation rather than inventing a new one.
 
 Multi-module Gradle build (Kotlin DSL) defined in `settings.gradle.kts` with two Kotlin modules plus a separate JS frontend in `web/`:
 
@@ -90,6 +90,16 @@ ch.nokillswit
 │                       POST/PUT/DELETE (ADMIN). The whitelist every catalog-file write's
 │                       metadata.labels is checked against: key registered, kind allowed,
 │                       value in the label's closed list (strict, no grandfathering)
+├── tags/               the ADMIN-curated tag categories (an INTERNAL Toadie concept — not
+│                       in the Backstage schema; the labels/ template): TagCategory.kt
+│                       (DTOs + sanitized/validateTagCategoryRequest — tag grammar + kinds
+│                       helpers borrowed from catalog's validators), TagCategoryService.kt
+│                       (one row = one category; tags/kinds as JSON arrays in TEXT; the
+│                       one-category-per-tag 409 enforced service-side in-transaction),
+│                       TagCategoryRoutes.kt — GET /api/v1/tag-categories (any
+│                       authenticated, unpaged) + POST/PUT/DELETE (ADMIN). The whitelist
+│                       every catalog-file write's metadata.tags is checked against: tag
+│                       registered, its category's kinds allow the file's kind (strict)
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),
                         CatalogFileValidation.kt (the sanitizer + per-kind required/forbidden

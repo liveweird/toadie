@@ -4,6 +4,7 @@ import {
   Button,
   Fieldset,
   Group,
+  MultiSelect,
   Select,
   Stack,
   TagsInput,
@@ -17,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
 import { useLabels } from "../hooks/useLabels";
 import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
+import { useTagCategories } from "../hooks/useTagCategories";
 import { charCountDescription } from "../utils/charCount";
 import { refSuggestions, type RefField } from "../utils/refSuggestions";
 import {
@@ -98,9 +100,41 @@ function MetadataFieldset({ form }: { form: CatalogForm }) {
           inputWrapperOrder={[...BELOW_INPUT]}
           {...form.getInputProps("description")}
         />
-        <TagsInput label={t("catalog.field.tags")} splitChars={[",", " "]} {...form.getInputProps("tags")} />
+        <TagsMultiSelect form={form} />
       </Stack>
     </Fieldset>
+  );
+}
+
+/**
+ * The tags picker — registry-constrained, NOT free entry: catalog writes accept only tags
+ * belonging to an ADMIN-defined tag category whose kinds include the document's kind
+ * (server-enforced, strict), so the options are the allowed categories' tags GROUPED by
+ * category. Stored tags no longer offered (category removed/narrowed since the file was
+ * saved) are appended under their own group so the file keeps rendering — the server's 400
+ * then names the problem on save. A failed registry load keeps the field rendered (hint only).
+ */
+function TagsMultiSelect({ form }: { form: CatalogForm }) {
+  const { t } = useTranslation();
+  const { categories, error } = useTagCategories();
+  const kind = form.values.kind;
+  const allowed = categories.filter((category) => category.kinds.includes(kind));
+  const offered = new Set(allowed.flatMap((category) => category.tags));
+  const stale = form.values.tags.filter((tag) => !offered.has(tag));
+  let hint: string | undefined;
+  if (error) hint = t("catalog.tagOptionsFailed");
+  else if (allowed.length === 0) hint = t("catalog.noTagsForKind", { kind });
+  return (
+    <MultiSelect
+      label={t("catalog.field.tags")}
+      data={[
+        ...allowed.map((category) => ({ group: category.name, items: [...category.tags] })),
+        ...(stale.length > 0 ? [{ group: t("catalog.staleTagsGroup"), items: stale }] : []),
+      ]}
+      searchable
+      description={hint}
+      {...form.getInputProps("tags")}
+    />
   );
 }
 

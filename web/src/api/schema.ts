@@ -210,9 +210,10 @@ export interface paths {
          *     annotation grammars, entity-reference syntax, the per-kind required/forbidden field
          *     tables); references are checked for FORMAT only here — resolution is the cross-check
          *     endpoints' job and never blocks a save. The namespace must additionally be an active
-         *     entry of the `namespaces` dictionary, and every label must be an ADMIN-registered
-         *     label allowed for the file's kind with a value from its closed list (both strict —
-         *     no grandfathering), else `400`.
+         *     entry of the `namespaces` dictionary, every label must be an ADMIN-registered
+         *     label allowed for the file's kind with a value from its closed list, and every tag
+         *     must belong to an ADMIN-defined tag category allowed for the file's kind (all
+         *     strict — no grandfathering), else `400`.
          *     Entity identity (kind + namespace + name, case-insensitive) must be unique among
          *     active files; a clash is a `409`.
          */
@@ -355,8 +356,8 @@ export interface paths {
          * @description Imports up to 200 structured documents (the SPA parses `catalog-info.yaml` client-side
          *     and ships the parsed documents here). Each document imports INDEPENDENTLY and gets its
          *     own result row: `CREATED` (stored, `fileId` set), `INVALID` (failed the
-         *     descriptor-format validation, the defined-namespace rule, or the registered-label
-         *     rule, `message` names the
+         *     descriptor-format validation or a registry rule — defined namespace, registered
+         *     label, registered tag — `message` names the
          *     problem), `CONFLICT` (an active file
          *     already holds the kind+namespace+name identity — nothing is overwritten), or `ERROR`
          *     (an unexpected storage failure). The response is `200` even when every document failed
@@ -412,10 +413,11 @@ export interface paths {
         get: operations["getCatalogFile"];
         /**
          * Replace a catalog file
-         * @description Full replacement; same validation as create (the defined-namespace and
-         *     registered-label rules included — strict: a file whose namespace or label was removed
-         *     from its registry cannot be saved until it is re-added or changed). Renaming into an
-         *     identity an active file already holds is a `409`.
+         * @description Full replacement; same validation as create (the defined-namespace,
+         *     registered-label, and registered-tag rules included — strict: a file whose
+         *     namespace, label, or tag was removed from its registry cannot be saved until it is
+         *     re-added or changed). Renaming into an identity an active file already holds is a
+         *     `409`.
          */
         put: operations["replaceCatalogFile"];
         post?: never;
@@ -522,6 +524,69 @@ export interface paths {
          *     re-registered or removed from the file.
          */
         delete: operations["deleteLabel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tag-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the tag categories
+         * @description Any authenticated user. Returns every active tag category, name-ordered
+         *     case-insensitively — deliberately unpaged (the registry holds at most 200 categories
+         *     by validation), NOT a standard list endpoint. Categories are an internal Toadie
+         *     concept (not in the Backstage schema): the registry is the whitelist every
+         *     catalog-file write's `metadata.tags` is validated against.
+         */
+        get: operations["listTagCategories"];
+        put?: never;
+        /**
+         * Create a tag category
+         * @description ADMIN only. Registers a category: an internal display name, its allowed tags (each
+         *     following the descriptor-format tag grammar), and the entity kinds those tags may be
+         *     applied to (normalized to canonical casing and order). A name already held by an
+         *     active category (case-insensitively), or a tag already belonging to ANOTHER active
+         *     category (each tag belongs to exactly one), is a `409`.
+         */
+        post: operations["createTagCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tag-categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a tag category
+         * @description ADMIN only — whole-category replacement (rename included: stored files carrying a
+         *     removed tag simply fail the strict check on their next save). Same validation and
+         *     `409` rules as create; moving a tag between categories is remove-then-add in TWO
+         *     saves (adding it while another active category still holds it is the `409`).
+         */
+        put: operations["replaceTagCategory"];
+        post?: never;
+        /**
+         * Delete a tag category
+         * @description ADMIN only — soft delete; the name (and every tag it held) becomes reusable by a NEW
+         *     category. Stored files carrying its tags fail the strict check on their next save
+         *     until the tags are re-registered or removed from the file.
+         */
+        delete: operations["deleteTagCategory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -677,6 +742,7 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             };
+            /** @description On every write, each tag must additionally belong to an ADMIN-defined tag category (`GET /api/v1/tag-categories`) whose kinds include the file's kind (strict — no grandfathering); violations are rejected with `400`. */
             tags?: string[];
             links?: components["schemas"]["CatalogLink"][];
         };
@@ -886,6 +952,28 @@ export interface components {
             key: string;
             /** @description At least one entry; each trimmed and validated against the entity-name grammar; no case-folded duplicates. Array order becomes the stored order. */
             values: string[];
+            /** @description At least one of the seven landscape kinds (case-insensitive input; stored in canonical casing and order); no duplicates. */
+            kinds: string[];
+        };
+        TagCategory: {
+            /** Format: int32 */
+            id: number;
+            /** @description Internal display name (categories are a Toadie concept, not part of the Backstage schema). Unique case-insensitively among active categories. */
+            name: string;
+            /** @description The category's tags (descriptor tag grammar), in the admin's order. Each tag belongs to exactly ONE category. */
+            tags: string[];
+            /** @description The entity kinds the category's tags may be applied to, in canonical casing and order. */
+            kinds: string[];
+        };
+        TagCategoryList: {
+            /** @description Active categories, name-ordered case-insensitively. */
+            items: components["schemas"]["TagCategory"][];
+        };
+        TagCategoryRequest: {
+            /** @description Trimmed; 1–63 characters, no control characters. */
+            name: string;
+            /** @description At least one entry; each trimmed and validated against the tag grammar (`[a-z0-9:+#]` runs with single dash separators); no duplicates. A tag held by ANOTHER active category is a `409`. Array order becomes the stored order. */
+            tags: string[];
             /** @description At least one of the seven landscape kinds (case-insensitive input; stored in canonical casing and order); no duplicates. */
             kinds: string[];
         };
@@ -1757,6 +1845,113 @@ export interface operations {
         };
     };
     deleteLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listTagCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagCategoryList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createTagCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new tag-category resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagCategory"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceTagCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteTagCategory: {
         parameters: {
             query?: never;
             header?: never;

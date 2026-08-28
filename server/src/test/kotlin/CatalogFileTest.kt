@@ -192,6 +192,7 @@ class CatalogFileTest {
         val name = uniqueEntityName("full")
         TestNamespaces.ensure("team-a")
         TestLabels.ensure("example.com/tier", listOf("backend"), listOf("Component"))
+        TestTagCategories.ensure("Languages", listOf("java", "c++"), listOf("Component"))
         val file = CatalogFile(
             metadata = CatalogFileMetadata(
                 name = name,
@@ -459,6 +460,55 @@ class CatalogFileTest {
             "a stored file whose label was removed from the registry must block on save",
         )
         TestLabels.ensure(lbl, listOf("backend"), listOf("Component"))
+        assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", file).status)
+    }
+
+    @Test
+    fun `tags are enforced against the ADMIN tag categories - registration and kind`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("tagenforce")
+
+        fun tagged(name: String, tags: List<String>) =
+            componentFile(name).let { it.copy(metadata = it.metadata.copy(tags = tags)) }
+
+        // Grammar-valid but unregistered tag → 400.
+        val ghost = uniqueTag("tagghost")
+        val unknown = client.postJson("/api/v1/catalog-files", tagged(uniqueEntityName("tgu"), listOf(ghost)))
+        assertEquals(HttpStatusCode.BadRequest, unknown.status)
+        assertTrue(unknown.body<ProblemDetail>().detail!!.contains("is not a defined tag"))
+
+        // Registered, but the category is for another kind → 400 naming tag AND category.
+        val apiTag = uniqueTag("tagapi")
+        val apiCategory = uniqueTagCategory("tagcatapi", tags = listOf(apiTag), kinds = listOf("API"))
+        val wrongKind = client.postJson("/api/v1/catalog-files", tagged(uniqueEntityName("tgk"), listOf(apiTag)))
+        assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
+        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("category '$apiCategory'"))
+        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("cannot be applied to kind"))
+
+        // Registered for the kind → stores and round-trips.
+        val okTag = uniqueTag("tagok")
+        uniqueTagCategory("tagcatok", tags = listOf(okTag), kinds = listOf("Component"))
+        val created = client.createCatalogFile(tagged(uniqueEntityName("tgo"), listOf(okTag)))
+        assertEquals(listOf(okTag), created.metadata.tags)
+    }
+
+    @Test
+    fun `a removed tag category blocks a resave - strict, no grandfathering - until re-added`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("taggone")
+        val t = uniqueTag("taggone")
+        val category = uniqueTagCategory("tagcatgone", tags = listOf(t), kinds = listOf("Component"))
+        val name = uniqueEntityName("tgg")
+        val file = componentFile(name).let { it.copy(metadata = it.metadata.copy(tags = listOf(t))) }
+        val created = client.createCatalogFile(file)
+
+        TestTagCategories.remove(category)
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            client.putJson("/api/v1/catalog-files/${created.id}", file).status,
+            "a stored file whose tag category was removed must block on save",
+        )
+        TestTagCategories.ensure(category, listOf(t), listOf("Component"))
         assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", file).status)
     }
 

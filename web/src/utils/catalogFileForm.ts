@@ -31,7 +31,7 @@ const NAME_RE = /^[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*$/;
 // Exported: utils/namespaceForm.ts validates namespace-dictionary values against the same
 // grammar (the descriptor format owns the rule, the dictionary borrows it — like the server).
 export const NAMESPACE_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const TAG_RE = /^[a-z0-9:+#]+(?:-[a-z0-9:+#]+)*$/;
+export const TAG_RE = /^[a-z0-9:+#]+(?:-[a-z0-9:+#]+)*$/;
 const KEY_PREFIX_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)*$/;
 const KIND_RE = /^[A-Za-z][A-Za-z0-9]*$/;
 

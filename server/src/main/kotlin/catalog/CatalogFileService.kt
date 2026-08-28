@@ -5,6 +5,7 @@ import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.infra.db.containsNormalized
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.labels.LabelService
+import ch.nokillswit.tags.TagCategoryService
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.plugins.isUniqueViolation
 import ch.nokillswit.users.UserService
@@ -174,6 +175,39 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
     }
 
+    /**
+     * The fourth sanctioned cross-feature table read (see persistence.md): STRICT tag
+     * enforcement — every write (create, update, import) checks its tags against the
+     * ADMIN-curated tag categories inside the write's own transaction. Every tag must belong
+     * to an active category whose kinds include the file's kind (matching is byte-exact —
+     * the editor only ever writes registered tags verbatim). No grandfathering: a stored
+     * file whose tag was since removed cannot be saved until it is fixed. An empty registry
+     * means no file may carry tags.
+     */
+    private suspend fun requireAllowedTags(kind: String, tags: List<String>) {
+        if (tags.isEmpty()) return
+        // tag -> (owning category name, its allowed kinds); categories are disjoint by the
+        // one-category-per-tag rule, so a plain map suffices.
+        val registry = mutableMapOf<String, Pair<String, List<String>>>()
+        TagCategoryService.TagCategories.selectAll()
+            .where { TagCategoryService.TagCategories.markedAsDeleted eq false }
+            .toList()
+            .forEach { row ->
+                val category = row[TagCategoryService.TagCategories.name]
+                val kinds = json.decodeFromString<List<String>>(row[TagCategoryService.TagCategories.allowedKinds])
+                json.decodeFromString<List<String>>(row[TagCategoryService.TagCategories.tags])
+                    .forEach { registry[it] = category to kinds }
+            }
+        for (tag in tags) {
+            val (category, allowedKinds) = registry[tag] ?: throw BadRequestException(
+                "metadata.tags entry '$tag' is not a defined tag — define it on the Tags page",
+            )
+            if (kind !in allowedKinds) {
+                throw BadRequestException("Tag '$tag' (category '$category') cannot be applied to kind '$kind'")
+            }
+        }
+    }
+
     private fun CatalogFile.withNamespace(resolved: String): CatalogFile =
         if (metadata.namespace == resolved) this else copy(metadata = metadata.copy(namespace = resolved))
 
@@ -191,6 +225,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         // The stored row AND the content JSON both carry the resolved concrete namespace.
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         requireAllowedLabels(stored.kind, stored.metadata.labels)
+        requireAllowedTags(stored.kind, stored.metadata.tags)
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
             it[kind] = stored.kind
@@ -215,6 +250,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         requireAllowedLabels(stored.kind, stored.metadata.labels)
+        requireAllowedTags(stored.kind, stored.metadata.tags)
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
             it[kind] = stored.kind
             it[name] = stored.metadata.name

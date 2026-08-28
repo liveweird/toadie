@@ -32,6 +32,20 @@ suspend fun uniqueLabel(
     kinds: List<String> = listOf("Component"),
 ): String = uniqueEntityName(prefix).also { TestLabels.ensure(it, values, kinds) }
 
+/** A unique, tag-grammar-valid (lowercase) tag value — NOT registered anywhere by itself. */
+fun uniqueTag(prefix: String) = uniqueEntityName(prefix).lowercase()
+
+/**
+ * A unique throwaway tag category holding [tags], registered first — catalog writes reject
+ * unregistered tags, so a test applying tags to files must go through this. Returns the
+ * category NAME (its tags are what files carry).
+ */
+suspend fun uniqueTagCategory(
+    prefix: String,
+    tags: List<String>,
+    kinds: List<String> = listOf("Component"),
+): String = uniqueEntityName(prefix).also { TestTagCategories.ensure(it, tags, kinds) }
+
 fun componentFile(
     name: String,
     namespace: String = "default",

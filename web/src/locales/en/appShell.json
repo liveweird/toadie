@@ -9,6 +9,7 @@
     "render": "Render",
     "namespaces": "Namespaces",
     "labels": "Labels",
+    "tags": "Tags",
     "users": "Users",
     "changePassword": "Change password"
   }

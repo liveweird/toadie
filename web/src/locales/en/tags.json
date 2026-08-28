@@ -1,0 +1,41 @@
+{
+  "title": "Tags",
+  "intro": "The only tags catalog files may carry, grouped into internal categories. Administrators define each category's name, its tags (a tag belongs to exactly one category), and the entity kinds its tags apply to.",
+  "empty": "No tag categories defined yet",
+  "loadFailed": "Could not load the tag categories",
+  "newCategory": "New category",
+  "createTitle": "New tag category",
+  "editTitle": "Edit tag category",
+  "column": {
+    "name": "Category",
+    "tags": "Tags",
+    "kinds": "Applies to"
+  },
+  "field": {
+    "name": "Category name",
+    "nameHint": "An internal grouping name — not part of the stored YAML",
+    "tags": "Tags",
+    "tagsHint": "Lowercase [a-z0-9:+#] with dashes — press Enter to add each tag; a tag can belong to only one category",
+    "kinds": "Applies to kinds",
+    "kindsHint": "Only files of these kinds may carry this category's tags"
+  },
+  "validation": {
+    "name": "Category name must be 1–63 characters",
+    "tagsRequired": "Add at least one tag",
+    "tagsCount": "At most 100 tags",
+    "tag": "Tag \"{{tag}}\" must be 1–63 characters of [a-z0-9:+#] with single dash separators",
+    "tagsDuplicate": "Tags must not repeat",
+    "kindsRequired": "Pick at least one kind"
+  },
+  "saveConflict": "The category name or one of its tags is already in use",
+  "saveInvalid": "One or more fields are invalid",
+  "saveGone": "This category no longer exists — reload the page",
+  "deleteTitle": "Delete tag category?",
+  "deleteFailed": "Could not delete the tag category",
+  "deleteBody": "Files carrying \"{{name}}\" tags will not save until the tags are re-registered or removed from them.",
+  "toast": {
+    "created": "Tag category created",
+    "saved": "Tag category saved",
+    "deleted": "Tag category deleted"
+  }
+}

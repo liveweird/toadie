@@ -150,5 +150,8 @@
   },
   "namespaceOptionsFailed": "Could not load the namespace list. Reload to try again.",
   "labelOptionsFailed": "Could not load the label list. Reload to try again.",
-  "noLabelsForKind": "No labels are defined for kind {{kind}} — administrators register them on the Labels page."
+  "noLabelsForKind": "No labels are defined for kind {{kind}} — administrators register them on the Labels page.",
+  "tagOptionsFailed": "Could not load the tag categories. Reload to try again.",
+  "noTagsForKind": "No tags are defined for kind {{kind}} — administrators register tag categories on the Tags page.",
+  "staleTagsGroup": "Not registered"
 }

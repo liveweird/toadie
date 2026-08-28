@@ -262,12 +262,36 @@ private fun validateSingleWord(value: String, field: String) {
 
 private fun validateTags(tags: List<String>) {
     if (tags.size > MAX_TAGS) throw BadRequestException("metadata.tags must have at most $MAX_TAGS entries")
-    for (tag in tags) {
-        if (tag.length !in 1..MAX_ENTITY_PART_LENGTH || !TAG_REGEX.matches(tag)) {
-            throw BadRequestException(
-                "metadata.tags entry '$tag' must be 1-$MAX_ENTITY_PART_LENGTH characters of " +
-                    "[a-z0-9:+#] with single dash separators",
-            )
+    for (tag in tags) validateTagValue(tag, "metadata.tags entry '$tag'")
+}
+
+// Internal: the tag-category registry (tags/TagCategory.kt) validates its tag values against
+// the same grammar — the descriptor format owns the rule, the registry borrows it.
+internal fun validateTagValue(value: String, field: String) {
+    if (value.length !in 1..MAX_ENTITY_PART_LENGTH || !TAG_REGEX.matches(value)) {
+        throw BadRequestException(
+            "$field must be 1-$MAX_ENTITY_PART_LENGTH characters of " +
+                "[a-z0-9:+#] with single dash separators",
+        )
+    }
+}
+
+// The allowed-kinds handling shared by the label and tag-category registries: the sanitizer
+// half rebuilds the payload's kinds into canonical casing and SUPPORTED_KINDS order (deduping
+// supported kinds; unknowns survive, trimmed, for the validator to name), the validator half
+// enforces the non-empty ⊆ SUPPORTED_KINDS rule.
+internal fun canonicalizedKinds(raw: List<String>): List<String> {
+    val normalized = raw.map { entry ->
+        SUPPORTED_KINDS.firstOrNull { it.equals(entry.trim(), ignoreCase = true) } ?: entry.trim()
+    }
+    return SUPPORTED_KINDS.filter { it in normalized } + normalized.filterNot { it in SUPPORTED_KINDS }
+}
+
+internal fun validateAllowedKinds(kinds: List<String>) {
+    if (kinds.isEmpty()) throw BadRequestException("kinds must have at least one entry")
+    kinds.forEach {
+        if (it !in SUPPORTED_KINDS) {
+            throw BadRequestException("Unknown kind: $it (allowed: ${SUPPORTED_KINDS.joinToString()})")
         }
     }
 }

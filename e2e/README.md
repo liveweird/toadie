@@ -48,7 +48,8 @@ from Lettuce, that any new or edited spec must satisfy:
   `catalog-files` and `cross-check` own throwaway files (unique names in `default`); `kinds`,
   `render`, and `round-trip` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user;
-  `labels` owns its throwaway label, the one file carrying it, and its user — all
+  `labels` owns its throwaway label, the one file carrying it, and its user; `tags` owns its
+  throwaway tag category, the one file carrying a tag, and its user — all
   deleted by their own spec.
 - **The namespaces dictionary is single-writer state.** Catalog writes accept only
   dictionary-defined namespaces, and the dictionary PUT is a whole-document replace — two
@@ -66,6 +67,10 @@ from Lettuce, that any new or edited spec must satisfy:
   **`labels.spec.ts` is the registry's ONLY in-run writer**, and it only ever creates and
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
   first moving label registration into global-setup (the run-namespace pattern).
+- **The tag-category registry follows the same rule.** Catalog writes accept only tags from
+  registered categories — **`tags.spec.ts` is that registry's ONLY in-run writer**, creating
+  and deleting only its own unique `e2e-tagcat-*` category. No other spec may put tags on
+  files without first moving category registration into global-setup.
 - Seeded accounts are never mutated. The seed admin (`admin@toadie.local`) is a shared
   read-mostly actor: specs sign in as it but must not change its password, roles, or state — a
   future spec that needs a mutated account creates a throwaway.
@@ -87,7 +92,7 @@ the same commit** — this list is the coverage map, the scenario file is the de
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
   authenticated pages (`/`, `/catalog-files`, `/catalog-files/new`, `/catalog-files/import`,
-  `/cross-check`, `/render`, `/labels`, `/users`); `color-contrast` consciously waived theme-wide.
+  `/cross-check`, `/render`, `/labels`, `/tags`, `/users`); `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
@@ -109,6 +114,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   import as Created, export downloads them as one `---`-separated file, and re-importing the
   export reports every row Already exists (nothing overwritten).
+- [`tags.spec.ts`](scenarios/tags.md) — the tag categories: modal validation → create a
+  category (tags + kinds) → edit → the regular user's read-only view → the editor's grouped
+  tags picker on a new Component → cleanup; the tag-category registry's only in-run writer.
 - [`url-import.spec.ts`](scenarios/url-import.md) — fetch-from-URL through the real SSRF
   guard: a loopback URL is refused with the uniform public-https error (the happy network
   path deliberately stays server-tested, no external dependency in CI).

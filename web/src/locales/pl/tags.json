@@ -1,0 +1,41 @@
+{
+  "title": "Tagi",
+  "intro": "Jedyne tagi, jakie mogą nosić pliki katalogu, pogrupowane w wewnętrzne kategorie. Administratorzy i administratorki definiują nazwę każdej kategorii, jej tagi (tag należy dokładnie do jednej kategorii) oraz rodzaje encji, których jej tagi dotyczą.",
+  "empty": "Nie zdefiniowano jeszcze żadnych kategorii tagów",
+  "loadFailed": "Nie udało się wczytać kategorii tagów",
+  "newCategory": "Nowa kategoria",
+  "createTitle": "Nowa kategoria tagów",
+  "editTitle": "Edytuj kategorię tagów",
+  "column": {
+    "name": "Kategoria",
+    "tags": "Tagi",
+    "kinds": "Dotyczy"
+  },
+  "field": {
+    "name": "Nazwa kategorii",
+    "nameHint": "Wewnętrzna nazwa grupująca — nie trafia do zapisanego YAML-a",
+    "tags": "Tagi",
+    "tagsHint": "Małe litery [a-z0-9:+#] z myślnikami — naciśnij Enter, aby dodać każdy tag; tag może należeć tylko do jednej kategorii",
+    "kinds": "Dotyczy rodzajów",
+    "kindsHint": "Tylko pliki tych rodzajów mogą nosić tagi tej kategorii"
+  },
+  "validation": {
+    "name": "Nazwa kategorii musi mieć 1–63 znaki",
+    "tagsRequired": "Dodaj co najmniej jeden tag",
+    "tagsCount": "Najwyżej 100 tagów",
+    "tag": "Tag „{{tag}}\" musi mieć 1–63 znaki z [a-z0-9:+#] z pojedynczymi myślnikami",
+    "tagsDuplicate": "Tagi nie mogą się powtarzać",
+    "kindsRequired": "Wybierz co najmniej jeden rodzaj"
+  },
+  "saveConflict": "Nazwa kategorii lub jeden z jej tagów jest już w użyciu",
+  "saveInvalid": "Co najmniej jedno pole jest nieprawidłowe",
+  "saveGone": "Ta kategoria już nie istnieje — odśwież stronę",
+  "deleteTitle": "Usunąć kategorię tagów?",
+  "deleteFailed": "Nie udało się usunąć kategorii tagów",
+  "deleteBody": "Pliki noszące tagi „{{name}}\" nie zapiszą się, dopóki tagi nie zostaną ponownie zarejestrowane lub z nich usunięte.",
+  "toast": {
+    "created": "Utworzono kategorię tagów",
+    "saved": "Zapisano kategorię tagów",
+    "deleted": "Usunięto kategorię tagów"
+  }
+}

@@ -179,6 +179,29 @@ class RoundTripTest {
     }
 
     @Test
+    fun `import reports an unregistered tag as INVALID and stores a registered one`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("roundtrip")
+
+        fun tagged(name: String, tags: List<String>) =
+            componentFile(name).let { it.copy(metadata = it.metadata.copy(tags = tags)) }
+
+        // Grammar-valid, never registered in any tag category.
+        val ghost = uniqueTag("ghosttag")
+        val rejected = client.import(listOf(tagged(uniqueEntityName("ghosttagdoc"), listOf(ghost))))
+            .results.single()
+        assertEquals(ImportResultStatus.INVALID, rejected.status)
+        assertNull(rejected.fileId)
+        assertTrue(rejected.message!!.contains("is not a defined tag"))
+
+        val t = uniqueTag("rttag")
+        uniqueTagCategory("rttagcat", tags = listOf(t), kinds = listOf("Component"))
+        val stored = client.import(listOf(tagged(uniqueEntityName("rttagdoc"), listOf(t))))
+            .results.single()
+        assertEquals(ImportResultStatus.CREATED, stored.status)
+    }
+
+    @Test
     fun `import sanitizes before reporting — namespace folds and kind canonicalizes`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")

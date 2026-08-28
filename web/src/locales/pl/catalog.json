@@ -154,5 +154,8 @@
   },
   "namespaceOptionsFailed": "Nie udało się wczytać listy przestrzeni nazw. Przeładuj stronę, aby spróbować ponownie.",
   "labelOptionsFailed": "Nie udało się wczytać listy etykiet. Przeładuj stronę, aby spróbować ponownie.",
-  "noLabelsForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych etykiet — administratorzy i administratorki rejestrują je na stronie Etykiety."
+  "noLabelsForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych etykiet — administratorzy i administratorki rejestrują je na stronie Etykiety.",
+  "tagOptionsFailed": "Nie udało się wczytać kategorii tagów. Przeładuj stronę, aby spróbować ponownie.",
+  "noTagsForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych tagów — administratorzy i administratorki rejestrują kategorie tagów na stronie Tagi.",
+  "staleTagsGroup": "Niezarejestrowane"
 }

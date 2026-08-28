@@ -392,6 +392,41 @@ object TestLabels {
     }
 }
 
+/**
+ * Direct access to the SHARED tag-category registry (V11) — like the label registry, suite
+ * state every catalog write is checked against. Tests only ever mint UNIQUE names and tags
+ * (the `uniqueTagCategory` fixture) and remove them when assertions depend on absence.
+ */
+object TestTagCategories {
+    val service: ch.nokillswit.tags.TagCategoryService by lazy {
+        ch.nokillswit.tags.TagCategoryService(sharedTestDatabase)
+    }
+
+    data class RawRow(val id: UInt, val name: String, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.tags.TagCategoryService.TagCategories
+        t.selectAll().map { RawRow(it[t.id].value, it[t.name], it[t.markedAsDeleted]) }.toList()
+    }
+
+    /** Registers [name] (create-if-missing; an existing active category is updated) and returns its id. */
+    suspend fun ensure(name: String, tags: List<String>, kinds: List<String>): UInt {
+        val request = ch.nokillswit.tags.TagCategoryRequest(name = name, tags = tags, kinds = kinds)
+        val existing = service.list().firstOrNull { it.name.equals(name, ignoreCase = true) }
+        if (existing != null) {
+            service.update(existing.id, request)
+            return existing.id
+        }
+        return service.create(request)
+    }
+
+    /** Soft-deletes the active categories holding [names] (a no-op for names not present). */
+    suspend fun remove(vararg names: String) {
+        service.list().filter { category -> names.any { it.equals(category.name, ignoreCase = true) } }
+            .forEach { service.delete(it.id) }
+    }
+}
+
 // Bootstrap tests (and prod-mode boot tests) rotate the seed admin password in the SHARED
 // container. Call this afterwards to put the V3 seed state back so later tests (and re-runs)
 // see the pristine seed.

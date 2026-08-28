@@ -121,6 +121,52 @@ describe("CreateCatalogFile page", () => {
     expect(body.metadata.labels).toEqual({ tier: "backend" });
   });
 
+  test("tags come from the grouped category picker and land in the payload", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url === "/api/v1/tag-categories") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            items: [
+              { id: 1, name: "Languages", tags: ["java", "c++"], kinds: ["Component"] },
+              { id: 2, name: "Teams", tags: ["core"], kinds: ["Group"] },
+            ],
+          }),
+        );
+      }
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files") {
+        return Promise.resolve(
+          jsonResponse(201, {
+            id: 9,
+            kind: "Component",
+            metadata: { name: "my-svc", namespace: "default" },
+            spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
+            createdBy: 1,
+            creatorName: "A",
+            creatorDeleted: false,
+            createdAt: 1,
+            updatedAt: 1,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderCreate();
+
+    await fillMinimalForm(user);
+    // Only the Component category's tags are offered, grouped under its name; the Group
+    // category never appears for a Component document.
+    await user.click(screen.getByRole("combobox", { name: /^tags$/i }));
+    expect(await screen.findByText("Languages")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "core" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "java" }));
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() => expect(findSaveCall(mockFetch)).toBeDefined());
+    const body = JSON.parse((findSaveCall(mockFetch)![1] as RequestInit).body as string);
+    expect(body.metadata.tags).toEqual(["java"]);
+  });
+
   test("with no registry label for the kind, adding is disabled behind the hint", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") === "GET" && url === "/api/v1/labels") {

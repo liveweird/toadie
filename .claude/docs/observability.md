@@ -13,6 +13,7 @@
 - `catalog_file.fetch_blocked` (byUserId/scheme/host — every SSRF-guard rejection on `POST …/fetch`; deliberately NOT the full URL, which may embed query-string tokens),
 - `dictionary.updated` (byUserId/dictionary/added/renamed/removed — every successful whole-document dictionary replace; a rejected save emits nothing),
 - `label.created` (byUserId/labelId/key/values count/kinds) / `label.updated` (same fields) / `label.deleted` (byUserId/labelId) — every label-registry mutation; a rejected save emits nothing,
+- `tag_category.created` (byUserId/categoryId/name/tags count/kinds) / `tag_category.updated` (same fields) / `tag_category.deleted` (byUserId/categoryId) — every tag-category mutation; a rejected save emits nothing,
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/userId/detail).
 
 Never log secrets (passwords, tokens); emails/ids are fine. When adding a security-relevant mutation or denial path, emit an `audit(...)` event alongside it and extend this list in the same change — in Lettuce this catalog grows to every user/team/content mutation, and the convention transfers wholesale. Tested in `AuditTest` via a Logback `ListAppender` on the audit logger (the shared `LogCapture` helper in `TestEnvironment.kt`).

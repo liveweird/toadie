@@ -14,6 +14,7 @@ import enCatalog from "./locales/en/catalog.json";
 import enCrossCheck from "./locales/en/crossCheck.json";
 import enLabels from "./locales/en/labels.json";
 import enNamespaces from "./locales/en/namespaces.json";
+import enTags from "./locales/en/tags.json";
 import enRender from "./locales/en/render.json";
 import enUsers from "./locales/en/users.json";
 
@@ -59,6 +60,7 @@ export const en = {
   crossCheck: enCrossCheck,
   labels: enLabels,
   namespaces: enNamespaces,
+  tags: enTags,
   render: enRender,
   users: enUsers,
 };

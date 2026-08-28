@@ -2,7 +2,8 @@ package ch.nokillswit.labels
 
 import ch.nokillswit.catalog.MAX_ENTITY_PART_LENGTH
 import ch.nokillswit.catalog.MAX_KEY_PREFIX_LENGTH
-import ch.nokillswit.catalog.SUPPORTED_KINDS
+import ch.nokillswit.catalog.canonicalizedKinds
+import ch.nokillswit.catalog.validateAllowedKinds
 import ch.nokillswit.catalog.validateKey
 import ch.nokillswit.catalog.validateNamePart
 import io.ktor.server.plugins.BadRequestException
@@ -46,9 +47,7 @@ const val MAX_LABEL_KEY_LENGTH = MAX_KEY_PREFIX_LENGTH + 1 + MAX_ENTITY_PART_LEN
 fun sanitizedLabelRequest(request: LabelRequest): LabelRequest = LabelRequest(
     key = request.key.trim(),
     values = request.values.map { it.trim() },
-    kinds = request.kinds
-        .map { raw -> SUPPORTED_KINDS.firstOrNull { it.equals(raw.trim(), ignoreCase = true) } ?: raw.trim() }
-        .let { normalized -> SUPPORTED_KINDS.filter { it in normalized } + normalized.filterNot { it in SUPPORTED_KINDS } },
+    kinds = canonicalizedKinds(request.kinds),
 )
 
 /** The registry's validation rules — enforced by the route AND re-checked by the service. */
@@ -64,12 +63,7 @@ fun validateLabelRequest(request: LabelRequest) {
     if (foldedValues.size != foldedValues.toSet().size) {
         throw BadRequestException("values must not contain duplicates")
     }
-    if (request.kinds.isEmpty()) throw BadRequestException("kinds must have at least one entry")
     // No duplicate check needed: the sanitizer's canonical-order rebuild already dedupes
-    // supported kinds (and duplicate UNKNOWN kinds die right here).
-    request.kinds.forEach {
-        if (it !in SUPPORTED_KINDS) {
-            throw BadRequestException("Unknown kind: $it (allowed: ${SUPPORTED_KINDS.joinToString()})")
-        }
-    }
+    // supported kinds (and duplicate UNKNOWN kinds die inside validateAllowedKinds).
+    validateAllowedKinds(request.kinds)
 }
