@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useDebouncedValue } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import {
@@ -38,7 +39,11 @@ export default function ImportCatalogFiles() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [results, setResults] = useState<ImportFileResult[] | null>(null);
 
-  const parsed = useMemo(() => parseCatalogYaml(text), [text]);
+  // Parsing runs on the DEBOUNCED text — a multi-document paste re-parsed per keystroke is
+  // wasted work; the summary/errors lag typing by the debounce, and the submit path re-parses
+  // the live text so a click never imports a stale slice.
+  const [debouncedText] = useDebouncedValue(text, 300);
+  const parsed = useMemo(() => parseCatalogYaml(debouncedText), [debouncedText]);
   const canImport = parsed.documents.length > 0 && parsed.errors.length === 0;
 
   async function handleFile(file: File | null) {
@@ -70,14 +75,17 @@ export default function ImportCatalogFiles() {
   }
 
   async function handleImport() {
+    // Re-parse the LIVE text: the debounced parse above may lag a just-typed edit.
+    const current = parseCatalogYaml(text);
+    if (current.documents.length === 0 || current.errors.length > 0) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await importCatalogFiles(parsed.documents);
+      const response = await importCatalogFiles(current.documents);
       setResults(response.results);
-      // Refreshes what the ["catalogFiles"] prefix covers: the list pages and the
-      // reference-picker identities pool. The graph/cross-check queries use their own
-      // keys and simply refetch on their next mount.
+      // The ["catalogFiles"] prefix covers every catalog-derived query: the list pages,
+      // the reference-picker identities pool, the cross-check report, the graph, and the
+      // editor's live check — all refetch after an import.
       await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
     } catch (err) {
       setSubmitError(

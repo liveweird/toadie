@@ -14,7 +14,8 @@ export default function CrossCheck() {
   const { t } = useTranslation();
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["crossCheck"],
+    // Under the "catalogFiles" prefix so every catalog mutation's invalidation refreshes it.
+    queryKey: ["catalogFiles", "crossCheck"],
     queryFn: getCrossCheckReport,
   });
 

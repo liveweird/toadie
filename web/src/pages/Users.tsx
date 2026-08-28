@@ -159,7 +159,7 @@ export default function Users() {
                     <Text size="sm">{user.email}</Text>
                   </Table.Td>
                   <Table.Td>
-                    {user.roles.length > 0 ? (
+                    {user.roles.includes("ADMIN") ? (
                       <Badge variant="filled" color="grape" size="sm">
                         {t("common.role.ADMIN")}
                       </Badge>

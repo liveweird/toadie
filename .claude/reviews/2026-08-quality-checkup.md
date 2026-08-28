@@ -34,7 +34,7 @@ Legend: **S** server, **W** web, **D** docs/spec, **C** coverage. Status: `fixed
 | S-M5 | `export()` applies its namespace filter in Kotlin after loading the whole workspace | `CatalogFileService.kt:160-167` | fixed |
 | S-M6 | OTel `spanKindExtractor` maps POST→PRODUCER / else→CLIENT on **server** spans (unedited template default) | `plugins/OpenTelemetry.kt:19-25` | fixed |
 | S-M7 | The Dropwizard `Slf4jReporter` is started and never stopped — a leaked thread per `testApplication` (96 of them) and beyond `ApplicationStopped` | `plugins/Monitoring.kt` | fixed |
-| S-M8 | `isRevoked` DB round-trip inside JWT validation on every authenticated request | `plugins/Security.kt:76` | follow-up (a cache delays revocation visibility — a security-behavior change) |
+| S-M8 | `isRevoked` DB round-trip inside JWT validation on every authenticated request | `plugins/Security.kt:76` | fixed (2026-08-28 follow-up batch): 30 s in-memory verdict cache, revoke() seeds its own instance |
 | S-M9 | `REFRESH_REJECT_MESSAGES` expresses one reason as *absence from the map* — any typo in a reason silently yields the password-change wording | `AuthRoutes.kt:56-62` | fixed |
 
 ### Server — DRY / SRP
@@ -78,13 +78,13 @@ Legend: **S** server, **W** web, **D** docs/spec, **C** coverage. Status: `fixed
 | W-M7 | `catalogImport.KINDS` re-lists `ENTITY_KINDS` verbatim with no strict-mirror rationale | `utils/catalogImport.ts:25` | fixed |
 | W-M8 | `Users.tsx` (339 lines) carries the whole reset-password feature bolted onto the list template | `pages/Users.tsx` | fixed (extracted) |
 | W-M9 | `CatalogFileFormFields.tsx` (351 lines): 7 fieldsets + 2 closure renderers + 5 visibility ladders in one component | `components/CatalogFileFormFields.tsx` | fixed (split into fieldset components) |
-| W-M10 | The same 409 handled two ways — `EditUser` sniffs the English detail for "administrator", `Users` maps every 409 to last-admin | `EditUser.tsx:16-19` / `Users.tsx:274-280` | fixed (shared helper; typed error code stays a follow-up) |
-| W-M11 | Import-page comment claims invalidation reaches "list, identities, graph, cross-check", but `["catalogFiles"]` cannot match `["crossCheck"]` / `["catalogGraph"]` / `["catalogFileCheck"]` | `ImportCatalogFiles.tsx:78-79` | comment corrected; the re-keying itself is a follow-up (changes cache/refresh behavior) |
-| W-M12 | `ReferenceCheckPanel` keys the query on the full serialized document — unbounded cache breadth, and re-parses what it just stringified | `ReferenceCheckPanel.tsx:25-26` | follow-up (cache-behavior change) |
-| W-M13 | Export reads the un-debounced namespace filter while the table queries the debounced one — a click within 300 ms exports a different slice than shown | `CatalogFiles.tsx:103` | follow-up (behavior change, arguably a bug — recommend) |
-| W-M14 | Export/download buttons have no loading state; double-clicks duplicate work; graph page has no first-load indicator | `CatalogFiles.tsx`, `RenderGraph.tsx` | follow-up (UI change) |
-| W-M15 | Download/export failures always render the "network" message even for 403/404 | `CatalogFiles.tsx:88-108` | follow-up (UI text change) |
-| W-M16 | Graph node: `aria-label` on a plain `div`, click-only, no keyboard path — the app's one a11y gap | `CatalogGraphNode.tsx:29-41` | follow-up (DOM/interaction change) |
+| W-M10 | The same 409 handled two ways — `EditUser` sniffs the English detail for "administrator", `Users` maps every 409 to last-admin | `EditUser.tsx:16-19` / `Users.tsx:274-280` | fixed (shared helper); per-constraint 409 details landed in the 2026-08-28 follow-up batch |
+| W-M11 | Import-page comment claims invalidation reaches "list, identities, graph, cross-check", but `["catalogFiles"]` cannot match `["crossCheck"]` / `["catalogGraph"]` / `["catalogFileCheck"]` | `ImportCatalogFiles.tsx:78-79` | fixed (2026-08-28 follow-up batch): cross-check/graph/check re-keyed under the ["catalogFiles"] prefix |
+| W-M12 | `ReferenceCheckPanel` keys the query on the full serialized document — unbounded cache breadth, and re-parses what it just stringified | `ReferenceCheckPanel.tsx:25-26` | fixed (2026-08-28 follow-up batch): gcTime 0 + the catalogFiles prefix |
+| W-M13 | Export reads the un-debounced namespace filter while the table queries the debounced one — a click within 300 ms exports a different slice than shown | `CatalogFiles.tsx:103` | fixed (2026-08-28 follow-up batch): export reads the debounced filter |
+| W-M14 | Export/download buttons have no loading state; double-clicks duplicate work; graph page has no first-load indicator | `CatalogFiles.tsx`, `RenderGraph.tsx` | fixed (2026-08-28 follow-up batch): loading states + graph first-load spinner |
+| W-M15 | Download/export failures always render the "network" message even for 403/404 | `CatalogFiles.tsx:88-108` | fixed (2026-08-28 follow-up batch): status-aware loadErrorMessage |
+| W-M16 | Graph node: `aria-label` on a plain `div`, click-only, no keyboard path — the app's one a11y gap | `CatalogGraphNode.tsx:29-41` | fixed (2026-08-28 follow-up batch): stored nodes are keyboard buttons |
 | C-M1 | 21 web modules (all four hooks included) have no direct test — covered only transitively through pages, contradicting the co-location convention | `web/src` | fixed pragmatically (hooks + logic-bearing components; presentational ones stay transitive, accepted below) |
 
 ### Docs / spec (medium)
@@ -118,15 +118,14 @@ public `val database` → private ×3; empty `swaggerUI {}` lambda; redundant
 triple `clock()` read; blocklist row-fetch → `count()`; `EntityProfile` rebuilt by
 constructor inside a `copy()` chain; list `total` counted on the join; `BootstrapTest`
 seed-restore and startup-fails helpers; V1 `BIGSERIAL` vs Exposed `UIntIdTable` documented
-as the V1 exception. **Server, follow-up:** audit field naming drift (`userId`/`byUserId`,
-`from`/`to` vs `nameFrom`/`nameTo`) and roles audited as-requested-not-as-stored (log-schema
-changes); PUT /users validation order (409-before-400 differs from the sibling handlers — a
-status-code change); refresh bucket hardcoded 30/min (new config); CSRF/behindProxy opposite
-boolean idioms (noted); auth 200s without explicit status (fixed — cosmetic);
-`Import.kt.message` vs `ProblemDetail.detail` naming (noted as deliberate: row results are
-not RFC 7807); JS assets uncached (`CachingHeaders` covers only CSS — header change);
-per-table 409 details (wire change); SecurityHeaders' header-presence sentinel (kept — it
-guards double-install, comment clarified).
+as the V1 exception. **Server, follow-up — all landed in the 2026-08-28 follow-up batch:** audit field naming
+(`authz.denied` now `byUserId`; `user.roles_changed` `rolesFrom`/`rolesTo`; roles audited
+as-stored); PUT /users validation order (400 now beats 404/409, like the siblings);
+refresh bucket configurable (`security.rateLimit.refreshPerMinute`, default 30); JS assets
+cached like CSS (both JS media types, hashed assets); per-table 409 details
+(`UNIQUE_CONSTRAINT_DETAILS` in `plugins/ErrorHandling.kt`). Still noted, no action:
+CSRF/behindProxy opposite boolean idioms; `Import.kt.message` vs `ProblemDetail.detail`
+(deliberate: row results are not RFC 7807); SecurityHeaders' header-presence sentinel.
 
 **Web, fixed:** orphan keys deleted; `usePagedSort.initialSortDir` / `ConfirmDeleteModal.confirmLabel`
 / `RevealablePassword.copyLabel`-fallback dead params; `CharCount` double-guard; Lettuce-inherited
@@ -135,11 +134,11 @@ comments in `api/http.ts` retargeted; `toCatalogFileRequest` computed twice per 
 dropped; `RELATION_FIELDS`/`SpecFieldName` exported (three hand-written unions collapsed);
 `useCatalogIdentities` unread flags; `usePagedSort` eslint-disable pair removed;
 `ChangePassword` constants moved to `utils/userForm.ts`; `App.tsx` bare async `onClick`;
-`CrossCheck` `isError` shadow rename. **Web, follow-up:** Login page hand-rolled status
-ladder + stock-blue alert; `loadErrorMessage` adoption in the two edit pages (error-text
-changes); `Users.tsx` roles-badge shows ADMIN for any non-empty roles array (rendering
-change; today's data can't hit it — ADMIN is the only role); `parseCatalogYaml` on every
-keystroke (debounce = timing change); `columnCount` literals (derive or test).
+`CrossCheck` `isError` shadow rename. **Web, follow-up — all landed in the 2026-08-28 follow-up batch:** Login page uses
+`saveErrorMessage` (SaveErrorKeys grew 401/429) and the signed-out alert took the theme
+primary; the two edit pages adopted `loadErrorMessage`; the roles badge checks
+`includes("ADMIN")`; the import parse rides a 300 ms debounce (submit re-parses live text);
+`columnCount` literals are pinned by empty-state colspan tests.
 
 **Docs/spec, fixed:** `EntityKind` self-contradictory description; `ImportFileResult.fileId`
 int64→int32 (generated type unchanged: `number`); `buildQuery` "future list wrappers";

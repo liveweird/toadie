@@ -2,6 +2,10 @@ import type { ParseKeys, TFunction } from "i18next";
 import { ApiError, isTimeoutError } from "../api/http";
 
 export interface SaveErrorKeys {
+  /** 401 — omit to route it through the generic fallbacks (the login page's wrong-credentials). */
+  unauthorized?: ParseKeys;
+  /** 429 — omit to route it through the generic fallbacks (the login page's account lockout). */
+  tooManyRequests?: ParseKeys;
   /** 403. Omit only when the page routes a 403 through the generic fallbacks. */
   forbidden?: ParseKeys;
   /** 404 — omit to route it through the generic fallbacks. */
@@ -19,6 +23,8 @@ export interface SaveErrorKeys {
 /** Maps a mutation failure to the page's fixed vocabulary — never render error.message. */
 export function saveErrorMessage(err: unknown, t: TFunction, keys: SaveErrorKeys): string {
   if (err instanceof ApiError) {
+    if (err.status === 401 && keys.unauthorized) return t(keys.unauthorized);
+    if (err.status === 429 && keys.tooManyRequests) return t(keys.tooManyRequests);
     if (err.status === 403 && keys.forbidden) return t(keys.forbidden);
     if (err.status === 404 && keys.notFound) return t(keys.notFound);
     if (err.status === 409 && keys.conflict) return t(keys.conflict);

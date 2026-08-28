@@ -11,7 +11,6 @@
   "loadFailed": "Nie udało się wczytać plików katalogu",
   "deleteFailed": "Nie udało się usunąć pliku katalogu",
   "downloadFailed": "Nie udało się pobrać pliku katalogu",
-  "loadFileFailed": "Nie udało się wczytać pliku katalogu{{suffix}}",
   "fileNotFound": "Nie znaleziono pliku katalogu.",
   "fileGone": "Plik katalogu już nie istnieje.",
   "backToList": "Wróć do plików katalogu",

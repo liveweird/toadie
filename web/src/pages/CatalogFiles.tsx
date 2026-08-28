@@ -113,7 +113,7 @@ export default function CatalogFiles() {
           {loadErrorMessage(error, t)}
         </Alert>
       )}
-      {downloads.exportError && (
+      {downloads.exportError != null && (
         <Alert
           color="red"
           variant="light"
@@ -122,10 +122,10 @@ export default function CatalogFiles() {
           closeButtonLabel={t("common.action.close")}
           onClose={downloads.dismissExportError}
         >
-          {t("common.error.network")}
+          {loadErrorMessage(downloads.exportError, t)}
         </Alert>
       )}
-      {downloads.downloadError && (
+      {downloads.downloadError != null && (
         <Alert
           color="red"
           variant="light"
@@ -134,7 +134,7 @@ export default function CatalogFiles() {
           closeButtonLabel={t("common.action.close")}
           onClose={downloads.dismissDownloadError}
         >
-          {t("common.error.network")}
+          {loadErrorMessage(downloads.downloadError, t)}
         </Alert>
       )}
 
@@ -250,6 +250,7 @@ export default function CatalogFiles() {
                       size="xs"
                       leftSection={<IconDownload size={14} />}
                       onClick={() => void downloads.handleDownload(file)}
+                      loading={downloads.downloadingId === file.id}
                       aria-label={t("catalog.downloadAria", { name: file.name })}
                     >
                       {t("common.action.download")}
@@ -301,7 +302,10 @@ export default function CatalogFiles() {
         <Button
           variant="default"
           leftSection={<IconFileExport size={16} />}
-          onClick={() => void downloads.handleExport(namespaceFilter.trim() || undefined)}
+          // The DEBOUNCED namespace — the slice the table actually shows; the raw filter
+          // could be ahead of it for 300 ms and export a different slice than displayed.
+          onClick={() => void downloads.handleExport(debouncedNamespace.trim() || undefined)}
+          loading={downloads.exporting}
           disabled={total === 0}
         >
           {t("catalog.export.button")}

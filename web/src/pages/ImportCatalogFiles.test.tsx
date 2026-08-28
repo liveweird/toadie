@@ -55,17 +55,18 @@ describe("ImportCatalogFiles page", () => {
     expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
   });
 
-  test("pasting parseable YAML shows the document count and enables importing", () => {
+  test("pasting parseable YAML shows the document count and enables importing", async () => {
     renderPage();
     pasteYaml(TWO_DOCS);
-    expect(screen.getByText("2 documents ready to import")).toBeInTheDocument();
+    // The parse rides a 300 ms debounce — the summary (and the button) follow it.
+    expect(await screen.findByText("2 documents ready to import")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import" })).toBeEnabled();
   });
 
-  test("a document error is listed with its number and keeps the import disabled", () => {
+  test("a document error is listed with its number and keeps the import disabled", async () => {
     renderPage();
     pasteYaml("kind: Component\nmetadata:\n  name: a\n  color: green\nspec: {}\n");
-    expect(screen.getByText("1 document has problems")).toBeInTheDocument();
+    expect(await screen.findByText("1 document has problems")).toBeInTheDocument();
     expect(screen.getByText(/Document 1: unknown key metadata\.color/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
   });
@@ -101,6 +102,7 @@ describe("ImportCatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
     pasteYaml(TWO_DOCS);
+    await screen.findByText("2 documents ready to import");
 
     await user.click(screen.getByRole("button", { name: "Import" }));
 
@@ -148,6 +150,7 @@ describe("ImportCatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
     pasteYaml(TWO_DOCS);
+    await screen.findByText("2 documents ready to import");
 
     await user.click(screen.getByRole("button", { name: "Import" }));
 
@@ -166,6 +169,7 @@ describe("ImportCatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
     pasteYaml(TWO_DOCS);
+    await screen.findByText("2 documents ready to import");
 
     await user.click(screen.getByRole("button", { name: "Import" }));
 
@@ -190,6 +194,7 @@ describe("ImportCatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
     pasteYaml(TWO_DOCS);
+    await screen.findByText("2 documents ready to import");
     await user.click(screen.getByRole("button", { name: "Import" }));
     expect(await screen.findByText("Imported 2 of 2 documents.")).toBeInTheDocument();
 

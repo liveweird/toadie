@@ -10,7 +10,7 @@ import { isAdmin } from "../api/session";
 import EditPageLoadState from "../components/EditPageLoadState";
 import UserFormFields from "../components/UserFormFields";
 import { EMPTY_USER_FORM, rolesOf, userFormValidation, type UserFormValues } from "../utils/userForm";
-import { isLastAdminConflict, saveErrorMessage } from "../utils/saveError";
+import { isLastAdminConflict, loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
 
 export default function EditUser() {
@@ -83,13 +83,7 @@ export default function EditUser() {
           {isLoading || isError ? (
             <EditPageLoadState
               isLoading={isLoading}
-              message={
-                notFound
-                  ? t("users.userNotFound")
-                  : t("users.loadUserFailed", {
-                      suffix: fetchError instanceof ApiError ? ` (${fetchError.status})` : "",
-                    })
-              }
+              message={notFound ? t("users.userNotFound") : loadErrorMessage(fetchError, t)}
               backTo="/users"
               backLabel={t("users.backToUsers")}
             />

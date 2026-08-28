@@ -1,7 +1,18 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Alert, Chip, Group, Paper, Stack, Text, Title, useComputedColorScheme } from "@mantine/core";
+import {
+  Alert,
+  Center,
+  Chip,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Text,
+  Title,
+  useComputedColorScheme,
+} from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
@@ -44,7 +55,8 @@ export default function RenderGraph() {
   const [debouncedNamespace] = useDebouncedValue(namespaceFilter, 300);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["catalogGraph", debouncedNamespace],
+    // Under the "catalogFiles" prefix so every catalog mutation's invalidation refreshes it.
+    queryKey: ["catalogFiles", "graph", debouncedNamespace],
     queryFn: () => getCatalogGraph(debouncedNamespace.trim() || undefined),
     placeholderData: keepPreviousData,
   });
@@ -105,7 +117,11 @@ export default function RenderGraph() {
         </Alert>
       )}
 
-      {!isLoading && !isError && nodes.length === 0 ? (
+      {isLoading && !data ? (
+        <Center py="xl">
+          <Loader size="sm" />
+        </Center>
+      ) : !isLoading && !isError && nodes.length === 0 ? (
         <EmptyState
           icon={<IconTopologyStar3 size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
           label={t("render.empty")}

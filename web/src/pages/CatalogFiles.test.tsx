@@ -216,7 +216,12 @@ describe("CatalogFiles page", () => {
   test("shows the empty state when the API returns zero items", async () => {
     setupMocks(mockFetch, () => filesPage([], 0));
     renderPage();
-    expect(await screen.findByText("No catalog files")).toBeInTheDocument();
+    const empty = await screen.findByText("No catalog files");
+    // The empty-state cell spans every column — pins the page's columnCount literal.
+    expect(empty.closest("td")).toHaveAttribute(
+      "colspan",
+      String(screen.getAllByRole("columnheader").length),
+    );
   });
 
   test("links to the create and edit pages", async () => {

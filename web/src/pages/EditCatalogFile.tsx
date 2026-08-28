@@ -18,7 +18,7 @@ import {
   toCatalogFileRequest,
   type CatalogFileFormValues,
 } from "../utils/catalogFileForm";
-import { saveErrorMessage } from "../utils/saveError";
+import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
 
 export default function EditCatalogFile() {
@@ -98,13 +98,7 @@ export default function EditCatalogFile() {
           <Title order={2}>{t("catalog.editFile")}</Title>
           <EditPageLoadState
             isLoading={isLoading}
-            message={
-              notFound
-                ? t("catalog.fileNotFound")
-                : t("catalog.loadFileFailed", {
-                    suffix: fetchError instanceof ApiError ? ` (${fetchError.status})` : "",
-                  })
-            }
+            message={notFound ? t("catalog.fileNotFound") : loadErrorMessage(fetchError, t)}
             backTo="/catalog-files"
             backLabel={t("catalog.backToList")}
           />

@@ -22,9 +22,13 @@ export default function ReferenceCheckPanel({
   const [debounced] = useDebouncedValue(json, 500);
 
   const { data } = useQuery({
-    queryKey: ["catalogFileCheck", debounced],
+    // Under the "catalogFiles" prefix so catalog mutations refresh a live check; keyed on
+    // the debounced document with gcTime 0 — superseded documents' entries are dropped as
+    // soon as the key moves on, so typing never accumulates cache entries.
+    queryKey: ["catalogFiles", "check", debounced],
     queryFn: () => checkCatalogFile(JSON.parse(debounced) as CatalogFileRequest),
     placeholderData: keepPreviousData,
+    gcTime: 0,
   });
 
   const findings = data?.findings ?? [];

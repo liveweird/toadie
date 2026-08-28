@@ -25,8 +25,24 @@ const STATUS_STYLE: Record<string, React.CSSProperties> = {
 function CatalogGraphNode({ data }: NodeProps<LaidOutNode>) {
   const { t } = useTranslation();
   const node = data.apiNode;
+  // A stored node navigates to its file, so it must be a real keyboard target: button role,
+  // focusable, and Enter/Space re-dispatched as a DOM click — which bubbles to React Flow's
+  // node wrapper and fires the page's onNodeClick. Virtual (missing) nodes stay plain.
+  const interactive = node.fileId != null;
   return (
     <div
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={
+        interactive
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.currentTarget.click();
+              }
+            }
+          : undefined
+      }
       style={{
         position: "relative",
         width: GRAPH_NODE_WIDTH,
@@ -34,7 +50,7 @@ function CatalogGraphNode({ data }: NodeProps<LaidOutNode>) {
         borderRadius: "var(--mantine-radius-md)",
         padding: "8px 12px",
         overflow: "hidden",
-        cursor: node.fileId != null ? "pointer" : "default",
+        cursor: interactive ? "pointer" : "default",
         ...STATUS_STYLE[node.status],
       }}
       aria-label={t("render.nodeAria", { name: node.name })}

@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Alert, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { isEmail, isNotEmpty, useForm } from "@mantine/form";
-import { ApiError } from "../api/http";
 import { login } from "../api/auth";
+import { saveErrorMessage } from "../utils/saveError";
 import { consumeSignedOut, notifyAuthChange } from "../auth";
 import AuthCard from "../components/AuthCard";
 import { MAX_EMAIL_LENGTH } from "../utils/userForm";
@@ -37,17 +37,14 @@ export default function Login() {
       const from = (location.state as LocationState)?.from?.pathname;
       navigate(from ?? "/", { replace: true });
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(
-          err.status === 401
-            ? t("auth.invalidCredentials")
-            : err.status === 429
-              ? t("auth.accountLocked")
-              : t("auth.loginFailedStatus", { status: err.status }),
-        );
-      } else {
-        setError(t("auth.loginFailedGeneric"));
-      }
+      setError(
+        saveErrorMessage(err, t, {
+          unauthorized: "auth.invalidCredentials",
+          tooManyRequests: "auth.accountLocked",
+          failedStatus: "auth.loginFailedStatus",
+          failed: "auth.loginFailedGeneric",
+        }),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -71,9 +68,8 @@ export default function Login() {
             {...form.getInputProps("password")}
           />
           {signedOut && !form.isDirty() && !error && (
-            <Alert color="blue" variant="light">
-              {t("auth.signedOut")}
-            </Alert>
+            // No explicit color: the theme's primary palette, not Mantine's stock blue.
+            <Alert variant="light">{t("auth.signedOut")}</Alert>
           )}
           {error && (
             <Alert color="red" variant="light">

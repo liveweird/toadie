@@ -69,6 +69,17 @@ describe("Users page", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  test("shows the empty state spanning every column when there are no users", async () => {
+    setupMocks(mockFetch, () => usersPage([], 0));
+    renderPage();
+    const empty = await screen.findByText("No users");
+    // The empty-state cell spans every column — pins the page's columnCount literal.
+    expect(empty.closest("td")).toHaveAttribute(
+      "colspan",
+      String(screen.getAllByRole("columnheader").length),
+    );
+  });
+
   test("renders rows with the admin badge and the own-row You marker", async () => {
     setupMocks(mockFetch, () => usersPage(SEED_USERS));
     renderPage();

@@ -99,8 +99,13 @@ describe("CrossCheck page", () => {
     mockReport(mockFetch, { findings: [], checkedFiles: 3, checkedReferences: 7 });
     renderPage();
 
-    expect(await screen.findByText(/no problems found/i)).toBeInTheDocument();
+    const empty = await screen.findByText(/no problems found/i);
     expect(screen.getByText("0 problems")).toBeInTheDocument();
+    // The empty-state cell spans every column — pins the page's columnCount literal.
+    expect(empty.closest("td")).toHaveAttribute(
+      "colspan",
+      String(screen.getAllByRole("columnheader").length),
+    );
   });
 
   test("shows an alert when the report fails to load", async () => {

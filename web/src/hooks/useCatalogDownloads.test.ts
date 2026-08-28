@@ -45,19 +45,20 @@ describe("useCatalogDownloads", () => {
       spec: FILE.spec,
     });
     expect(downloadYaml).toHaveBeenCalledWith("single-yaml");
-    expect(result.current.downloadError).toBe(false);
+    expect(result.current.downloadError).toBeNull();
+    expect(result.current.downloadingId).toBeNull();
   });
 
-  test("a failed download sets the flag, which dismisses and clears on retry", async () => {
+  test("a failed download stores the error, which dismisses", async () => {
     vi.mocked(getCatalogFile).mockRejectedValueOnce(new Error("boom"));
     const { result } = renderHook(() => useCatalogDownloads());
 
     await act(() => result.current.handleDownload(ROW));
-    expect(result.current.downloadError).toBe(true);
+    expect(result.current.downloadError).toBeInstanceOf(Error);
     expect(downloadYaml).not.toHaveBeenCalled();
 
     act(() => result.current.dismissDownloadError());
-    expect(result.current.downloadError).toBe(false);
+    expect(result.current.downloadError).toBeNull();
   });
 
   test("handleExport downloads the multi-document YAML (namespace passed through)", async () => {
@@ -70,7 +71,8 @@ describe("useCatalogDownloads", () => {
     expect(exportCatalogFiles).toHaveBeenCalledWith("team-a");
     expect(catalogInfoMultiYaml).toHaveBeenCalledWith(files);
     expect(downloadYaml).toHaveBeenCalledWith("multi-yaml");
-    expect(result.current.exportError).toBe(false);
+    expect(result.current.exportError).toBeNull();
+    expect(result.current.exporting).toBe(false);
   });
 
   test("handleExport without a namespace exports the whole workspace", async () => {
@@ -81,15 +83,15 @@ describe("useCatalogDownloads", () => {
     expect(exportCatalogFiles).toHaveBeenCalledWith(undefined);
   });
 
-  test("a failed export sets the flag, which dismisses", async () => {
+  test("a failed export stores the error, which dismisses", async () => {
     vi.mocked(exportCatalogFiles).mockRejectedValueOnce(new Error("boom"));
     const { result } = renderHook(() => useCatalogDownloads());
 
     await act(() => result.current.handleExport());
-    expect(result.current.exportError).toBe(true);
+    expect(result.current.exportError).toBeInstanceOf(Error);
     expect(downloadYaml).not.toHaveBeenCalled();
 
     act(() => result.current.dismissExportError());
-    expect(result.current.exportError).toBe(false);
+    expect(result.current.exportError).toBeNull();
   });
 });
