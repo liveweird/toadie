@@ -76,4 +76,12 @@ describe("Login", () => {
       await screen.findByText("Login failed. Check your connection and try again."),
     ).toBeInTheDocument();
   });
+
+  test("links to the self-service password reset", () => {
+    renderWithProviders(<Login />, { route: "/login" });
+    expect(screen.getByRole("link", { name: /forgot password/i })).toHaveAttribute(
+      "href",
+      "/reset-password",
+    );
+  });
 });

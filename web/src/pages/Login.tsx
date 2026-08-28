@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Alert, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
+import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
+import { Alert, Anchor, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { isEmail, isNotEmpty, useForm } from "@mantine/form";
 import { login } from "../api/auth";
 import { saveErrorMessage } from "../utils/saveError";
@@ -79,6 +79,9 @@ export default function Login() {
           <Button type="submit" loading={submitting} fullWidth>
             {t("auth.signIn")}
           </Button>
+          <Anchor component={RouterLink} to="/reset-password" size="sm" ta="center">
+            {t("auth.forgotPassword")}
+          </Anchor>
         </Stack>
       </form>
     </AuthCard>

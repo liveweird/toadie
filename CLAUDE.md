@@ -71,8 +71,10 @@ ch.nokillswit
 ├── audit/              security audit trail: `audit(event, fields…)` → AUDIT-marked structured logs
 ├── authz/              CallerPrincipal + guards (requireAdmin, requireSelfOrAdmin) + typed
 │                       HTTP exceptions (401/403/404/409/429)
-├── auth/               POST /api/v1/login, /refresh, /logout + token minting + password
-│                       hashing + LoginThrottle + the revoked-token blocklist
+├── auth/               POST /api/v1/login, /refresh, /logout + the self-service
+│                       POST /api/v1/password-reset (uniform 202, async send-before-store,
+│                       PasswordResetThrottle) + token minting + password hashing/generation
+│                       + LoginThrottle + the revoked-token blocklist
 ├── users/              the user domain: ADMIN-only management CRUD (/api/v1/users list/create
 │                       + {id} get/put/delete with the self-delete 403 and last-admin 409
 │                       protections) + PUT /api/v1/users/{id}/password + Validation.kt

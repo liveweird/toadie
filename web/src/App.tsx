@@ -47,6 +47,7 @@ import VersionStamp from "./components/VersionStamp";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
 
 const Login = lazy(() => import("./pages/Login"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Home = lazy(() => import("./pages/Home"));
 const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
@@ -221,6 +222,14 @@ export default function App() {
           element={
             <RedirectIfAuthed>
               <Login />
+            </RedirectIfAuthed>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <RedirectIfAuthed>
+              <ResetPassword />
             </RedirectIfAuthed>
           }
         />

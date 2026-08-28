@@ -6,6 +6,7 @@
 
 - `login.success` / `login.failure` (with `reason`: unknown_email/wrong_password) / `login.lockout` (the throttle tripping) / `login.rejected_locked` (an attempt against a locked account),
 - `logout`,
+- `password_reset.requested` / `password_reset.unknown_email` / `password_reset.throttled` / `password_reset.completed` (email/userId) / `password_reset.send_failed` (email/error) — the self-service reset trail; the async worker's events double as test barriers,
 - `refresh.rejected` (with `reason`: invalid_or_expired/wrong_token_type/revoked/malformed/user_gone/predates_password_change),
 - `password.changed` (targetUserId/byUserId/selfChange) / `password.change_denied` (wrong or missing current password),
 - `user.created` (byUserId/newUserId/email/roles — roles as STORED, i.e. the folded additional-roles set) / `user.updated` (name/email deltas, only when changed) / `user.roles_changed` (rolesFrom/rolesTo, both as stored) / `user.deleted` (byUserId/targetUserId),

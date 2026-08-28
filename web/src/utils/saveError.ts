@@ -14,6 +14,8 @@ export interface SaveErrorKeys {
   conflict?: ParseKeys;
   /** 400 — omit to route it through the generic fallbacks. */
   invalid?: ParseKeys;
+  /** 503 — omit to route it through the generic fallbacks (mail-less deployments answer 503). */
+  unavailable?: ParseKeys;
   /** Any otherwise-unmatched ApiError status; interpolates {{status}}. */
   failedStatus?: ParseKeys;
   /** Generic + network fallback. */
@@ -29,6 +31,7 @@ export function saveErrorMessage(err: unknown, t: TFunction, keys: SaveErrorKeys
     if (err.status === 404 && keys.notFound) return t(keys.notFound);
     if (err.status === 409 && keys.conflict) return t(keys.conflict);
     if (err.status === 400 && keys.invalid) return t(keys.invalid);
+    if (err.status === 503 && keys.unavailable) return t(keys.unavailable);
     if (keys.failedStatus) return t(keys.failedStatus, { status: err.status });
   }
   if (isTimeoutError(err)) return t("common.error.timeout");

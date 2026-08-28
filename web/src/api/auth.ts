@@ -20,6 +20,24 @@ export async function login(credentials: LoginBody): Promise<LoginSuccess> {
   return data;
 }
 
+type PasswordResetBody =
+  paths["/api/v1/password-reset"]["post"]["requestBody"]["content"]["application/json"];
+
+/**
+ * Self-service password reset. Always 202 for a well-formed request (no account enumeration);
+ * throws ApiError on 429 (one request per minute per address) or 503 (deployment without email).
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const body: PasswordResetBody = { email };
+  const res = await fetch(`${API_BASE}/api/v1/password-reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: timeoutSignal(),
+  });
+  if (!res.ok) throw new ApiError(res.status, await safeJson(res));
+}
+
 export async function logout(): Promise<void> {
   const token = getToken();
   if (!token) return;

@@ -48,6 +48,10 @@ security:
     loginPerMinute: "$LOGIN_RATE_LIMIT_PER_MINUTE:"
     # Blank keeps the default 30/min (both modes); a number pins it.
     refreshPerMinute: "$REFRESH_RATE_LIMIT_PER_MINUTE:"
+  # Self-service password reset: at most one request per submitted email per interval,
+  # uniformly whether or not the account exists. In-memory, per-instance, like the lockout.
+  passwordReset:
+    minIntervalSeconds: "$PASSWORD_RESET_MIN_INTERVAL_SECONDS:60"
   csrf:
     # TEMPLATE PLACEHOLDER — CSRF protection is off by default because this API
     # authenticates via bearer JWT in the Authorization header, which browsers

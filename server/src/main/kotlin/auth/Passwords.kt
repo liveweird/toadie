@@ -1,6 +1,7 @@
 package ch.nokillswit.auth
 
 import at.favre.lib.crypto.bcrypt.BCrypt
+import java.security.SecureRandom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -24,3 +25,14 @@ internal suspend fun hashPassword(plain: String, cost: Int = 12): String =
 internal suspend fun verifyPassword(plain: String, hash: String): Boolean =
     !exceedsBcryptLimit(plain) &&
         withContext(Dispatchers.Default) { BCrypt.verifyer().verify(plain.toCharArray(), hash).verified }
+
+// URL-safe alphabet (no ambiguity-prone symbols) for server-generated passwords.
+private const val PASSWORD_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+private val secureRandom = SecureRandom()
+
+/** The server-generated password of the self-service reset: 16 chars × 64-symbol alphabet = 96 bits. */
+internal fun generatePassword(length: Int = 16): String =
+    buildString(length) {
+        repeat(length) { append(PASSWORD_ALPHABET[secureRandom.nextInt(PASSWORD_ALPHABET.length)]) }
+    }

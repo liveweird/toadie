@@ -49,7 +49,9 @@ from Lettuce, that any new or edited spec must satisfy:
   `render`, and `round-trip` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user;
   `labels` owns its throwaway label, the one file carrying it, and its user; `tags` owns its
-  throwaway tag category, the one file carrying a tag, and its user — all
+  throwaway tag category, the one file carrying a tag, and its user; `password-reset` owns
+  its throwaway account (its reset requests use unique per-run emails against the in-memory
+  per-email throttle, and both tests together stay under the per-IP 5/min reset bucket) — all
   deleted by their own spec.
 - **The namespaces dictionary is single-writer state.** Catalog writes accept only
   dictionary-defined namespaces, and the dictionary PUT is a whole-document replace — two
@@ -114,6 +116,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`namespaces.spec.ts`](scenarios/namespaces.md) — the namespaces dictionary: inline grammar
   validation → append two entries → reorder → the regular user's read-only view → removal;
   append-only against the shared document.
+- [`password-reset.spec.ts`](scenarios/password-reset.md) — the forgot-password flow:
+  neutral confirmation + per-email throttle for unknown addresses; the full email roundtrip
+  through the compose stack's Mailpit (new password works, old one is dead — skips itself
+  without Mailpit).
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
   (deletion-orphaned) missing nodes for a throwaway namespace; toggling a relation family
   prunes its virtual nodes.

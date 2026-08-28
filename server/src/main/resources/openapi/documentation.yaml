@@ -114,6 +114,40 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/password-reset:
+    post:
+      tags: [auth]
+      operationId: requestPasswordReset
+      summary: Request a self-service password reset
+      description: |
+        Always answers `202` for a well-formed request, whether or not an account with that
+        email exists (no account enumeration; the actual work happens asynchronously). If the
+        account exists, a new password is generated, its hash replaces the old one (which stops
+        working, and all outstanding refresh tokens are invalidated), and the password is sent
+        to the account's email address. Throttled per submitted email — one request per interval
+        (default 60 s, `PASSWORD_RESET_MIN_INTERVAL_SECONDS`) — uniformly for existing and
+        unknown addresses, and rate-limited per client IP. A soft-deleted account is unknown
+        here (no password is minted, no email sent; the `202` stays uniform). Answers `503` on
+        deployments without outbound email (`MAIL_TRANSPORT=disabled`).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '202':
+          description: Accepted — if the account exists, an email is on its way
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+        '503':
+          description: This deployment cannot send email (password reset unavailable)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
   /api/v1/users:
     get:
       tags: [users]
@@ -972,6 +1006,12 @@ components:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
 
   schemas:
+    PasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+
     LoginRequest:
       type: object
       required: [email, password]
