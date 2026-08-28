@@ -12,12 +12,14 @@ persistence, UI, and testing conventions shared by the project. For API work,
 reviews. If documentation and executable configuration disagree, the configuration and code win;
 update the affected guidance in the same change.
 
-Toadie deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce). The full stack,
-authentication/session machinery, shared paging infrastructure, Component catalog-file CRUD,
-live YAML preview/download, and cross-checking are implemented. When adding another capability
-Lettuce already has (mail, MFA, password reset, encryption at rest, feature flags…), port
-Lettuce's implementation rather than inventing a new one — the docs above mark each such
-capability as a "port from Lettuce" note.
+Toadie deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce). The implemented
+surface includes authentication/session handling, admin-managed users and feature flags, email
+MFA and password reset, shared paging, catalog-file CRUD across the seven landscape kinds,
+strict namespace/label/tag/reference validation, cross-checking, relationship-graph rendering,
+and multi-document YAML import/export. When adding another capability Lettuce already has
+(encryption at rest, history/event logs, teams/management chains, changelog…), port Lettuce's
+implementation rather than inventing a new one — the docs above mark each such capability as a
+"port from Lettuce" note.
 
 `.claude/docs/backstage-descriptor-format.md` is the local domain reference for the catalog
 descriptor envelope, metadata validation, kinds, entity-reference defaults, substitutions, and
@@ -35,10 +37,12 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
 - `core/` is Kotlin Multiplatform (currently JVM-targeted) and owns the shared OpenTelemetry SDK
   bootstrap.
 - `server/` is the Kotlin/JVM Ktor application. Feature packages live directly under
-  `server/src/main/kotlin/`: `auth`, `users`, and `catalog`. `catalog` is the feature reference
-  implementation: stored Component documents, full CRUD + paginated list, and the workspace/live
-  cross-check operations. Cross-cutting wiring and policy live in `plugins/`, `audit/`, and
-  `authz/`; database and shared paging infrastructure live in `infra/`.
+  `server/src/main/kotlin/`: `auth`, `users`, `catalog`, `dictionaries`, `labels`, and `tags`.
+  `catalog` is the feature reference implementation: seven Backstage kinds (Component, API,
+  System, Domain, Resource, Group, User), full CRUD + paginated list, strict reference checking,
+  workspace/live cross-checks, graph, import/export, and SSRF-guarded URL fetch. Cross-cutting
+  wiring and policy live in `plugins/`, `audit/`, and `authz/`; database, mail, paging, and shared
+  validation infrastructure live in `infra/`.
 - `server/src/main/resources/application.yaml` declaratively registers application modules.
   `main.kt` only starts `EngineMain`; do not wire features from it. Module order matters because
   modules publish and consume Ktor application attributes.
@@ -47,8 +51,9 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
   used for runtime queries. Never introduce runtime DDL such as `SchemaUtils.create`.
 - `server/src/main/resources/openapi/documentation.yaml` is the hand-maintained API contract.
 - `web/` is a standalone Vite + React 19 + TypeScript SPA. Gradle does not build it. Source is
-  organized into `pages/`, `components/`, `api/`, `changelog/`, and bilingual resources under
-  `locales/{en,pl}/`.
+  organized into `pages/`, `components/`, `hooks/`, `utils/`, `api/`, `changelog/`, and bilingual
+  resources under `locales/{en,pl}/`. It includes catalog editing/import/export, the render graph,
+  namespace/label/tag administration, user/feature administration, MFA login, and password reset.
 - Backend tests are in `server/src/test/kotlin/`, colocated frontend tests use `*.test.ts(x)`, and
   Playwright journeys are in `e2e/tests/*.spec.ts` with their design artifacts in
   `e2e/scenarios/*.md`.
@@ -59,7 +64,8 @@ registered in `application.yaml`. `plugins/Routing.kt` is only the final SPA/sta
 ## Build, Test, and Development Commands
 
 - `docker compose up --build`: build and run PostgreSQL, the API, and the SPA at
-  `http://localhost:8081` (sign in as `admin@toadie.local` / `changeme`).
+  `http://localhost:8081` (sign in as `admin@toadie.local` / `changeme`); Mailpit captures reset
+  and MFA email at `http://localhost:8026`.
 - `docker compose up postgres`: start only the development database (host port **5433**, not
   5432 — Lettuce may occupy 5432 on the same machine).
 - `./gradlew build`: compile and verify the Gradle modules with the JDK 21 toolchain (the local
@@ -108,6 +114,14 @@ and partial unique indexes where deleted values may be reused); follow the detai
 `.claude/docs/persistence.md` rather than inventing a variant. Emit structured `audit(...)`
 events for security-relevant mutations and denials, and never log passwords or tokens.
 
+Catalog content is a shared authenticated workspace; ADMIN has no extra content privilege.
+Catalog writes are strict: namespaces must exist in the `NAMESPACE` dictionary (blank resolves to
+its flagged default), labels and tags must be allowed for the entity kind by their admin-curated
+registries, and every reference must resolve to an allowed stored kind without targeting the
+entity itself. Cross-check findings normally arise after a referenced entity is deleted and block
+the referencing file's next save until repaired. Keep the server validators, OpenAPI schemas,
+kind-aware frontend form rules, and YAML parser/generator synchronized.
+
 Use four-space indentation, preserve existing package boundaries, PascalCase for Kotlin types,
 and camelCase for functions and variables. Name backend test classes `*Test`.
 
@@ -123,6 +137,12 @@ All user-facing strings must use react-i18next. Keep English and Polish resource
 (enforced by `locales/parity.test.ts`); Polish uses inclusive slash forms. Errors render inline
 as red Alerts; follow `web/CLAUDE.md` for the exact transport, i18n, and theming patterns.
 
+Catalog forms are kind-aware and use the shared identity, namespace, label, and tag hooks; do not
+replace their constrained pickers with free-form clones. Keep `utils/catalogYaml.ts` and the
+strict inverse parser in `utils/catalogImport.ts` in lockstep. The `/render` graph keeps React
+Flow and dagre in its lazy chunk. User creation/reset passwords are generated client-side and
+revealed exactly once; the server never returns plaintext passwords.
+
 `web/src/changelog/version.ts` (`APP_VERSION`) is the sole source of the displayed app version;
 the Gradle snapshot version is unrelated. The Lettuce changelog page/entries system is not yet
 ported — when it arrives, adding the newest entry becomes the release bump.
@@ -136,8 +156,8 @@ markers (`uniqueEmail(...)`) instead of asserting global counts.
 
 Every `/api/` interaction made through the shared backend test clients is checked against OpenAPI.
 Prefer `jsonClient()`/`authedClient()` so tests do not bypass conformance validation. `check`
-enforces Kover floors of 92% lines and 68% branches. Frontend coverage floors in
-`web/vite.config.ts` are 95% lines, 92% statements, 90% functions, and 84% branches. Any test-local
+enforces Kover floors of 95% lines and 70% branches. Frontend coverage floors in
+`web/vite.config.ts` are 97% lines, 94% statements, 92% functions, and 89% branches. Any test-local
 Mantine provider must set `env="test"` so popovers and selects work under happy-dom.
 
 A new or behaviorally changed e2e test lands with its scenario file in `e2e/scenarios/` and its
@@ -154,4 +174,7 @@ synchronized when applicable.
 
 Never commit production JWT or database secrets. Committed `changeme` values and development keys
 are burned demo credentials; production mode deliberately refuses them (the JWT fail-closed check
-in `plugins/Security.kt` and the seed-password check in `infra/db/Bootstrap.kt`).
+in `plugins/Security.kt` and the seed-password check in `infra/db/Bootstrap.kt`). Mail transport is
+also fail-closed: production refuses the `log` transport, and SMTP with a blank host fails in every
+mode. The compose demo uses SMTP through Mailpit; the image defaults to disabled mail, where reset
+and MFA-dependent flows return 503.
