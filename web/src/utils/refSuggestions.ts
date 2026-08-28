@@ -1,8 +1,10 @@
 /**
- * Reference-picker suggestions: which stored kinds each spec field points at, and the shortest
- * reference form that still resolves under the descriptor rules (per-field default kinds,
- * namespaceless refs resolve in the referencing file's own namespace, case-insensitive).
- * Pure — the identity pool comes from useCatalogIdentities.
+ * Reference-picker suggestions: which stored kinds each spec field points at, offered as the
+ * FULL identity form `kind:namespace/name` — unambiguous regardless of the field's default
+ * kind or the referencing file's namespace. Free-typed short forms stay legal (the descriptor
+ * rules resolve them: per-field default kinds, namespaceless refs resolve in the referencing
+ * file's own namespace, case-insensitive). Pure — the identity pool comes from
+ * useCatalogIdentities.
  */
 
 export type RefField =
@@ -38,8 +40,8 @@ export const TARGET_KINDS: Record<RefField, readonly string[]> = {
   subdomainOf: ["domain"],
 };
 
-// The field's default kind — null for dependsOn/dependencyOf (no default in Backstage, so
-// their suggestions always carry an explicit kind). Mirrors the server's REF_FIELD_DEFAULT_KINDS.
+// The field's default kind — null for dependsOn/dependencyOf (no default in Backstage).
+// Feeds the resolution check for typed short forms; mirrors the server's REF_FIELD_DEFAULT_KINDS.
 const DEFAULT_KINDS: Record<RefField, string | null> = {
   owner: "group",
   system: "system",
@@ -60,15 +62,9 @@ const DEFAULT_KINDS: Record<RefField, string | null> = {
 // generated union type narrows into it.
 type Identity = { kind: string; namespace: string; name: string };
 
-/** The shortest reference form that resolves to [target] from a file in [currentNamespace]. */
-export function shortestRef(target: Identity, defaultKind: string | null, currentNamespace: string): string {
-  const kind = target.kind.toLowerCase();
-  const sameKind = defaultKind !== null && kind === defaultKind;
-  const sameNamespace = target.namespace.toLowerCase() === currentNamespace.toLowerCase();
-  if (sameKind && sameNamespace) return target.name;
-  if (sameKind) return `${target.namespace}/${target.name}`;
-  if (sameNamespace) return `${kind}:${target.name}`;
-  return `${kind}:${target.namespace}/${target.name}`;
+/** The full identity form `kind:namespace/name` (canonical lowercase kind). */
+function fullRef(target: Identity): string {
+  return `${target.kind.toLowerCase()}:${target.namespace}/${target.name}`;
 }
 
 /** The single-occurrence split behind the lenient parse (mirror of the server's splitRefOnce). */
@@ -114,19 +110,14 @@ export function refResolutionError(
   return resolves ? null : "unresolved";
 }
 
-/** Sorted, deduped picker options for [field], shortened relative to [currentNamespace]. */
-export function refSuggestions(
-  identities: readonly Identity[] | undefined,
-  field: RefField,
-  currentNamespace: string,
-): string[] {
+/** Sorted, deduped full-identity picker options for [field]. */
+export function refSuggestions(identities: readonly Identity[] | undefined, field: RefField): string[] {
   if (!identities) return [];
-  const namespace = currentNamespace.trim().toLowerCase() || "default";
   const kinds = new Set(TARGET_KINDS[field]);
   const out = new Set<string>();
   for (const identity of identities) {
     if (!kinds.has(identity.kind.toLowerCase())) continue;
-    out.add(shortestRef(identity, DEFAULT_KINDS[field], namespace));
+    out.add(fullRef(identity));
   }
   return [...out].sort((a, b) => a.localeCompare(b));
 }

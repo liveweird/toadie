@@ -54,12 +54,12 @@ test("a group, an API, and a component owned by the group are created and resolv
   await fillIdentity(page, comp, ns);
   await page.getByRole("combobox", { name: "Type" }).fill("service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
-  // The owner PICKER: the just-created group is offered and picking it inserts the
-  // shortened bare name (same namespace + the field's default group kind).
+  // The owner PICKER: the just-created group is offered as its full identity and picking
+  // it inserts that `group:namespace/name` form.
   await page.getByRole("combobox", { name: "Owner" }).click();
   await page.getByRole("combobox", { name: "Owner" }).fill(team.slice(0, 12));
-  await page.getByRole("option", { name: team }).click();
-  await expect(page.getByRole("combobox", { name: "Owner" })).toHaveValue(team);
+  await page.getByRole("option", { name: `group:${ns}/${team}` }).click();
+  await expect(page.getByRole("combobox", { name: "Owner" })).toHaveValue(`group:${ns}/${team}`);
   await page.getByRole("combobox", { name: "Provides APIs" }).fill(api);
   await page.keyboard.press("Enter");
   await expect(page.getByText("All references resolve.")).toBeVisible();

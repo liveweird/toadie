@@ -381,16 +381,16 @@ describe("CreateCatalogFile page", () => {
     await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
     await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
 
-    // Open the owner picker — the stored group is offered as the shortened bare name (same
-    // namespace + the field's default kind); the API is filtered out (wrong kind).
+    // Open the owner picker — the stored group is offered as its full identity;
+    // the API is filtered out (wrong kind).
     fireEvent.click(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }));
-    await user.click(await screen.findByRole("option", { name: "team-a" }));
+    await user.click(await screen.findByRole("option", { name: "group:default/team-a" }));
     expect(screen.queryByRole("option", { name: /billing-api/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^create$/i }));
     await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
     const postCall = findSaveCall(mockFetch);
-    expect(JSON.parse((postCall![1] as RequestInit).body as string).spec.owner).toBe("team-a");
+    expect(JSON.parse((postCall![1] as RequestInit).body as string).spec.owner).toBe("group:default/team-a");
   });
 
   test("the YAML preview follows the form values", async () => {
