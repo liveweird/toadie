@@ -44,6 +44,13 @@ paths:
         attempts for that account — even with the correct password — are rejected with `429`
         for a lockout window (default 15 min, `LOGIN_LOCKOUT_DURATION_SECONDS`). A successful
         login resets the counter.
+
+        **Email MFA (opt-in via the `MFA` feature flag):** when the account has MFA enabled,
+        correct credentials answer `200` with an `MfaChallengeResponse` instead of tokens — a
+        6-digit code is emailed to the account, and the client exchanges it together with the
+        `challengeId` at `POST /api/v1/login/mfa` for the ordinary `LoginResponse`. On a
+        deployment without outbound email (`MAIL_TRANSPORT=disabled`) an MFA-enabled login
+        fails closed with `503`.
       security: []
       requestBody:
         required: true
@@ -51,6 +58,44 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Token issued, or (MFA-enabled accounts) a second-factor challenge
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/LoginResponse'
+                  - $ref: '#/components/schemas/MfaChallengeResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+        '503':
+          description: MFA is enabled for the account but this deployment cannot send email
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  /api/v1/login/mfa:
+    post:
+      tags: [auth]
+      operationId: verifyMfa
+      summary: Exchange an MFA challenge and emailed code for a JWT pair
+      description: |
+        Second login step for MFA-enabled accounts. The `challengeId` comes from the login
+        response, the 6-digit `code` from the email. Challenges are single-use, expire after
+        a short TTL (default 5 min, `MFA_CODE_TTL_SECONDS`), and allow a few attempts
+        (default 5, `MFA_MAX_ATTEMPTS`); every failure mode — unknown challenge, expired,
+        wrong code, attempts exhausted, user gone — answers the uniform `401`. Rate-limited
+        per client IP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaVerifyRequest'
       responses:
         '200':
           description: Token issued
@@ -1116,6 +1161,30 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Feature' }
           description: The complete new DISABLED set — an empty array enables everything.
+
+    MfaChallengeResponse:
+      type: object
+      required: [mfaRequired, challengeId, expiresAt]
+      properties:
+        mfaRequired:
+          type: boolean
+          description: Always true — the discriminator against LoginResponse in the login 200.
+        challengeId:
+          type: string
+          description: Opaque single-use challenge id; send it back with the emailed code.
+        expiresAt:
+          type: integer
+          format: int64
+          description: Challenge (and code) expiry as Unix epoch milliseconds.
+
+    MfaVerifyRequest:
+      type: object
+      required: [challengeId, code]
+      properties:
+        challengeId: { type: string }
+        code:
+          type: string
+          description: The 6-digit code from the sign-in email.
 
     RefreshRequest:
       type: object

@@ -48,10 +48,21 @@ security:
     loginPerMinute: "$LOGIN_RATE_LIMIT_PER_MINUTE:"
     # Blank keeps the default 30/min (both modes); a number pins it.
     refreshPerMinute: "$REFRESH_RATE_LIMIT_PER_MINUTE:"
+    # Per-IP bucket on POST /api/v1/password-reset. Blank FOLLOWS THE MODE (5/min in
+    # production, 100/min in development — the loginPerMinute rationale); a number pins it.
+    # The per-EMAIL reset throttle below is the actual abuse defence in both modes.
+    passwordResetPerMinute: "$PASSWORD_RESET_RATE_LIMIT_PER_MINUTE:"
   # Self-service password reset: at most one request per submitted email per interval,
   # uniformly whether or not the account exists. In-memory, per-instance, like the lockout.
   passwordReset:
     minIntervalSeconds: "$PASSWORD_RESET_MIN_INTERVAL_SECONDS:60"
+  # Email MFA (opt-in per user via the MFA feature flag): a login with correct credentials
+  # mints a challenge and emails a 6-digit code; the code must come back to
+  # POST /api/v1/login/mfa within the TTL and attempt cap. Challenges are in-memory,
+  # per-instance, like the lockout above (a restart just means signing in again).
+  mfa:
+    codeTtlSeconds: "$MFA_CODE_TTL_SECONDS:300"
+    maxAttempts: "$MFA_MAX_ATTEMPTS:5"
   csrf:
     # TEMPLATE PLACEHOLDER — CSRF protection is off by default because this API
     # authenticates via bearer JWT in the Authorization header, which browsers

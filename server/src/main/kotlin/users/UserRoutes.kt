@@ -12,6 +12,7 @@ import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
 import ch.nokillswit.authz.requireSelfOrAdmin
+import ch.nokillswit.infra.db.orVanished
 import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalEnum
 import ch.nokillswit.infra.paging.optionalString
@@ -142,7 +143,10 @@ fun Application.configureUserRoutes() {
                     "roles" to role.asAdditionalRoles().joinedNames(),
                 )
                 call.response.header(HttpHeaders.Location, call.application.href(Users.Id(id = id)))
-                call.respond(HttpStatusCode.Created, user.toResponse(id))
+                // Re-read for the response: create() seeds the inverted-default MFA-disabled
+                // row (V13 semantics), which the in-memory `user` object doesn't carry.
+                val stored = userService.read(id).orVanished("user", id)
+                call.respond(HttpStatusCode.Created, stored.toResponse(id))
             }
             get<Users.Id> { route ->
                 // Guard BEFORE read (the documented users idiom): an unauthorized caller gets a

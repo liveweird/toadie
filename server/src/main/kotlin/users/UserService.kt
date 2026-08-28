@@ -69,7 +69,15 @@ class UserService(private val database: R2dbcDatabase) {
             it[passwordHash] = user.passwordHash
             it[role] = user.role.name
         }
-        newRecord[Users.id].value
+        val id = newRecord[Users.id].value
+        // MFA is the one inverted-default flag (opt-in): every new user starts with the
+        // disabled row present, mirroring the V13 seed for pre-existing users. All creation
+        // paths (admin create, test seeds) funnel through here.
+        UserDisabledFeatures.insert {
+            it[UserDisabledFeatures.userId] = id
+            it[UserDisabledFeatures.feature] = Feature.MFA.name
+        }
+        id
     }
 
     suspend fun read(id: UInt): User? = suspendTransaction(database) {

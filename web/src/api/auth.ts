@@ -1,17 +1,47 @@
 // Auth flows — login and logout (transport in ./http, session state in ./session).
 
 import { API_BASE, ApiError, safeJson, timeoutSignal } from "./http";
-import type { paths } from "./schema";
+import type { components, paths } from "./schema";
 import { clearSession, getRefreshToken, getToken, persistSession } from "./session";
 
 type LoginBody = paths["/api/v1/login"]["post"]["requestBody"]["content"]["application/json"];
-type LoginSuccess = paths["/api/v1/login"]["post"]["responses"]["200"]["content"]["application/json"];
+// Tokens, or (MFA-enabled accounts) a second-factor challenge — discriminate via isMfaChallenge.
+type LoginOk = paths["/api/v1/login"]["post"]["responses"]["200"]["content"]["application/json"];
+type LoginSuccess = components["schemas"]["LoginResponse"];
+export type MfaChallenge = components["schemas"]["MfaChallengeResponse"];
 
-export async function login(credentials: LoginBody): Promise<LoginSuccess> {
+export function isMfaChallenge(data: LoginOk): data is MfaChallenge {
+  return "mfaRequired" in data;
+}
+
+export async function login(credentials: LoginBody): Promise<LoginOk> {
   const res = await fetch(`${API_BASE}/api/v1/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(credentials),
+    signal: timeoutSignal(),
+  });
+  if (!res.ok) throw new ApiError(res.status, await safeJson(res));
+  const data = (await res.json()) as LoginOk;
+  // An MFA challenge carries no tokens — the session starts only after verifyMfa.
+  if (!isMfaChallenge(data)) persistSession(data);
+  return data;
+}
+
+type MfaVerifyBody =
+  paths["/api/v1/login/mfa"]["post"]["requestBody"]["content"]["application/json"];
+
+/**
+ * Second login step for MFA-enabled accounts: exchanges the challenge id + emailed 6-digit
+ * code for the ordinary token pair (persisted like a login). Throws ApiError on 401
+ * (invalid/expired code) or 429 (rate-limited).
+ */
+export async function verifyMfa(challengeId: string, code: string): Promise<LoginSuccess> {
+  const body: MfaVerifyBody = { challengeId, code };
+  const res = await fetch(`${API_BASE}/api/v1/login/mfa`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
     signal: timeoutSignal(),
   });
   if (!res.ok) throw new ApiError(res.status, await safeJson(res));

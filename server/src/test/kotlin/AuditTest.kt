@@ -83,9 +83,11 @@ class AuditTest {
                     ),
                 )
             }
+            // A route-created user starts with the inverted-default MFA row — clearing it
+            // (enabling MFA) is the actual change that must be audited.
             client.put("/api/v1/users/${created.id}/features") {
                 contentType(ContentType.Application.Json)
-                setBody(ch.nokillswit.users.UserFeaturesUpdateRequest(listOf(ch.nokillswit.users.Feature.MFA)))
+                setBody(ch.nokillswit.users.UserFeaturesUpdateRequest(emptyList()))
             }
             client.delete("/api/v1/users/${created.id}")
 
@@ -111,8 +113,8 @@ class AuditTest {
                 it.message == "user.features_changed" && it.hasKeyValue("targetUserId", created.id.toLong())
             }
             assertNotNull(featuresEvent)
-            assertTrue(featuresEvent.hasKeyValue("featuresFrom", ""))
-            assertTrue(featuresEvent.hasKeyValue("featuresTo", "MFA"))
+            assertTrue(featuresEvent.hasKeyValue("featuresFrom", "MFA"))
+            assertTrue(featuresEvent.hasKeyValue("featuresTo", ""))
             assertNotNull(
                 capture.awaitEvent {
                     it.message == "user.deleted" && it.hasKeyValue("targetUserId", created.id.toLong())

@@ -51,7 +51,9 @@ from Lettuce, that any new or edited spec must satisfy:
   `labels` owns its throwaway label, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `password-reset` owns
   its throwaway account (its reset requests use unique per-run emails against the in-memory
-  per-email throttle, and both tests together stay under the per-IP 5/min reset bucket) — all
+  per-email throttle, and both tests together stay under the per-IP 5/min reset bucket);
+  `mfa` owns its throwaway accounts and toggles ONLY their MFA flags (the seed admin's MFA
+  flag is never touched — enabling it would make every spec's login demand a code) — all
   deleted by their own spec.
 - **The namespaces dictionary is single-writer state.** Catalog writes accept only
   dictionary-defined namespaces, and the dictionary PUT is a whole-document replace — two
@@ -113,6 +115,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   label (values + kinds) → edit → the regular user's read-only view → the editor's
   registry-constrained label pickers on a new Component → cleanup; the registry's only
   in-run writer.
+- [`mfa.spec.ts`](scenarios/mfa.md) — email MFA + the flags surfaces: the /feature-flags
+  row switch and per-user editor round-trip a throwaway user's MFA flag; an MFA-enabled
+  account signs in through the emailed 6-digit code via Mailpit (skips itself without it).
 - [`namespaces.spec.ts`](scenarios/namespaces.md) — the namespaces dictionary: inline grammar
   validation → append two entries → reorder → the regular user's read-only view → removal;
   append-only against the shared document.

@@ -92,14 +92,16 @@ class FeatureFlagsTest {
         val json = jsonClient()
         val firstLogin = json.postJson("/api/v1/login", LoginRequest(email, "pw-123456789"))
             .body<LoginResponse>()
-        assertEquals(emptyList(), firstLogin.disabledFeatures)
+        // A fresh user's only disabled flag is the inverted-default MFA (opt-in).
+        assertEquals(listOf(Feature.MFA), firstLogin.disabledFeatures)
 
-        assertEquals(HttpStatusCode.NoContent, admin.setFlags(userId, Feature.MFA).status)
+        assertEquals(HttpStatusCode.NoContent, admin.setFlags(userId).status)
 
-        // A refresh with the PRE-change refresh token re-reads the user and carries the new set.
+        // A refresh with the PRE-change refresh token re-reads the user and carries the new
+        // set — but the now-MFA-enabled account still refreshes fine (MFA gates login only).
         val refreshed = json.postJson("/api/v1/refresh", RefreshRequest(firstLogin.refreshToken))
             .body<LoginResponse>()
-        assertEquals(listOf(Feature.MFA), refreshed.disabledFeatures)
+        assertEquals(emptyList(), refreshed.disabledFeatures)
     }
 
     @Test
@@ -109,7 +111,9 @@ class FeatureFlagsTest {
         val prefix = "FF-${UUID.randomUUID()}"
         val offId = TestUsers.seed(email = uniqueEmail("ff-off"), password = "pw-123456789", name = "$prefix Off")
         val onId = TestUsers.seed(email = uniqueEmail("ff-on"), password = "pw-123456789", name = "$prefix On")
+        // MFA is inverted-default: both start disabled — clear onId's row to make it enabled.
         assertEquals(HttpStatusCode.NoContent, admin.setFlags(offId, Feature.MFA).status)
+        assertEquals(HttpStatusCode.NoContent, admin.setFlags(onId).status)
 
         val disabled = admin.get("/api/v1/users") {
             parameter("name", prefix)

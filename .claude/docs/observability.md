@@ -5,6 +5,7 @@
 **Audit trail.** Security-relevant events are structured INFO logs on the dedicated `ch.nokillswit.audit` logger with the `AUDIT` marker, emitted via `audit("area.event", "key" to value, …)` (`audit/Audit.kt`) — they ride the same Logback→OTel pipeline, so shipping them to a collector/SIEM is env-only. Fields travel as SLF4J key/values, not in the message text (assert with `hasKeyValue` from `TestEnvironment.kt`). Emitted today:
 
 - `login.success` / `login.failure` (with `reason`: unknown_email/wrong_password) / `login.lockout` (the throttle tripping) / `login.rejected_locked` (an attempt against a locked account),
+- `login.mfa_challenge` (email/userId — correct credentials, second factor pending) / `login.mfa_success` / `login.mfa_failure` (with `reason`: unknown_challenge/expired/wrong_code/too_many_attempts/user_gone) / `login.mfa_unavailable` (MFA enabled on a mail-less deployment → 503) / `login.mfa_send_failed` (email/error),
 - `logout`,
 - `password_reset.requested` / `password_reset.unknown_email` / `password_reset.throttled` / `password_reset.completed` (email/userId) / `password_reset.send_failed` (email/error) — the self-service reset trail; the async worker's events double as test barriers,
 - `refresh.rejected` (with `reason`: invalid_or_expired/wrong_token_type/revoked/malformed/user_gone/predates_password_change),

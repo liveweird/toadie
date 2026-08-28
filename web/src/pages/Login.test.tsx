@@ -77,6 +77,59 @@ describe("Login", () => {
     ).toBeInTheDocument();
   });
 
+  test("an MFA challenge switches to the code step; the verified code signs in", async () => {
+    fetchMock()
+      .mockResolvedValueOnce(
+        jsonResponse(200, { mfaRequired: true, challengeId: "ch-9", expiresAt: 99 }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          token: "t", expiresAt: 1, refreshToken: "r", refreshExpiresAt: 2, userId: 7,
+          roles: [], disabledFeatures: [],
+        }),
+      );
+    const user = userEvent.setup();
+    renderWithProviders(<Login />, { route: "/login" });
+    await submit();
+
+    // The card switched to the PIN step — no session yet.
+    expect(await screen.findByText("Enter your sign-in code")).toBeInTheDocument();
+    expect(localStorage.getItem("toadie.auth.token")).toBeNull();
+
+    const pin = screen.getAllByRole("textbox");
+    for (let i = 0; i < 6; i += 1) await user.type(pin[i], String(i + 1));
+    await user.click(screen.getByRole("button", { name: "Verify code" }));
+
+    await waitFor(() => expect(localStorage.getItem("toadie.auth.token")).toBe("t"));
+    const [url, init] = fetchMock().mock.calls.at(-1)!;
+    expect(url).toBe("/api/v1/login/mfa");
+    expect(JSON.parse((init as { body: string }).body)).toEqual({
+      challengeId: "ch-9",
+      code: "123456",
+    });
+  });
+
+  test("a wrong code shows the invalid-code message and stays on the PIN step", async () => {
+    fetchMock()
+      .mockResolvedValueOnce(
+        jsonResponse(200, { mfaRequired: true, challengeId: "ch-9", expiresAt: 99 }),
+      )
+      .mockResolvedValueOnce(jsonResponse(401, { title: "Unauthorized", status: 401 }));
+    const user = userEvent.setup();
+    renderWithProviders(<Login />, { route: "/login" });
+    await submit();
+    await screen.findByText("Enter your sign-in code");
+
+    const pin = screen.getAllByRole("textbox");
+    for (let i = 0; i < 6; i += 1) await user.type(pin[i], "0");
+    await user.click(screen.getByRole("button", { name: "Verify code" }));
+
+    expect(
+      await screen.findByText("That code is invalid or has expired. Sign in again to get a new one."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Verify code" })).toBeInTheDocument();
+  });
+
   test("links to the self-service password reset", () => {
     renderWithProviders(<Login />, { route: "/login" });
     expect(screen.getByRole("link", { name: /forgot password/i })).toHaveAttribute(

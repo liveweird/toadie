@@ -5,8 +5,8 @@
   (`admin@toadie.local`) only to create/delete the throwaway account
 - **Owns** (exclusive server-side state): one throwaway user account (email carries the
   `e2e` marker), deleted at the end. The reset requests use unique per-run emails, so the
-  in-memory per-email throttle never collides across runs; the two scenarios together stay
-  under the per-IP reset bucket (5/min). Delivered messages remain in the Mailpit catcher —
+  in-memory per-email throttle never collides across runs; the dev stack lifts the per-IP
+  reset bucket (100/min, the login-bucket idiom), so back-to-back runs never trip it. Delivered messages remain in the Mailpit catcher —
   that is what a mail catcher is for.
 
 ## Scenario: the forgot-password link leads to the reset form; unknown emails get the neutral answer
@@ -42,5 +42,5 @@ unreachable — the email roundtrip cannot be observed on a log-transport dev st
 - **The 503 on mail-less deployments, malformed-email 400s, audit events, send-before-store
   on delivery failure** — server-tested (`PasswordResetTest`); the SPA's per-status messages
   are unit-tested (`ResetPassword.test.tsx`).
-- **The per-IP reset bucket** — exercising it would poison the rest of the run from one host
-  (the login-lockout precedent).
+- **The per-IP reset bucket** — lifted on dev stacks; exercising the production 5/min from
+  one host would poison the rest of the run (the login-lockout precedent).

@@ -11,7 +11,7 @@ import {
   timeoutSignal,
   voidRequest,
 } from "./http";
-import { login, logout } from "./auth";
+import { login, logout, isMfaChallenge, verifyMfa } from "./auth";
 import {
   TOKEN_KEY,
   clearSession,
@@ -215,9 +215,27 @@ describe("auth flows", () => {
   test("login persists the session on 200", async () => {
     fetchMock().mockResolvedValueOnce(jsonResponse(200, SESSION));
     const data = await login({ email: "a@test", password: "pw" });
-    expect(data.token).toBe("access-1");
+    expect(isMfaChallenge(data)).toBe(false);
+    if (!isMfaChallenge(data)) expect(data.token).toBe("access-1");
     expect(getToken()).toBe("access-1");
     expect(isAdmin()).toBe(true);
+  });
+
+  test("an MFA challenge starts no session; verifyMfa persists the pair", async () => {
+    fetchMock().mockResolvedValueOnce(
+      jsonResponse(200, { mfaRequired: true, challengeId: "ch-1", expiresAt: 99 }),
+    );
+    const data = await login({ email: "a@test", password: "pw" });
+    expect(isMfaChallenge(data)).toBe(true);
+    expect(getToken()).toBeNull();
+
+    fetchMock().mockResolvedValueOnce(jsonResponse(200, SESSION));
+    const tokens = await verifyMfa("ch-1", "123456");
+    expect(tokens.token).toBe("access-1");
+    expect(getToken()).toBe("access-1");
+    const [url, init] = fetchMock().mock.calls.at(-1)!;
+    expect(url).toBe("/api/v1/login/mfa");
+    expect(JSON.parse((init as { body: string }).body)).toEqual({ challengeId: "ch-1", code: "123456" });
   });
 
   test("login throws ApiError with the response body on 401", async () => {

@@ -20,8 +20,40 @@ export interface paths {
          *     attempts for that account — even with the correct password — are rejected with `429`
          *     for a lockout window (default 15 min, `LOGIN_LOCKOUT_DURATION_SECONDS`). A successful
          *     login resets the counter.
+         *
+         *     **Email MFA (opt-in via the `MFA` feature flag):** when the account has MFA enabled,
+         *     correct credentials answer `200` with an `MfaChallengeResponse` instead of tokens — a
+         *     6-digit code is emailed to the account, and the client exchanges it together with the
+         *     `challengeId` at `POST /api/v1/login/mfa` for the ordinary `LoginResponse`. On a
+         *     deployment without outbound email (`MAIL_TRANSPORT=disabled`) an MFA-enabled login
+         *     fails closed with `503`.
          */
         post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/login/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange an MFA challenge and emailed code for a JWT pair
+         * @description Second login step for MFA-enabled accounts. The `challengeId` comes from the login
+         *     response, the 6-digit `code` from the email. Challenges are single-use, expire after
+         *     a short TTL (default 5 min, `MFA_CODE_TTL_SECONDS`), and allow a few attempts
+         *     (default 5, `MFA_MAX_ATTEMPTS`); every failure mode — unknown challenge, expired,
+         *     wrong code, attempts exhausted, user gone — answers the uniform `401`. Rate-limited
+         *     per client IP.
+         */
+        post: operations["verifyMfa"];
         delete?: never;
         options?: never;
         head?: never;
@@ -704,6 +736,22 @@ export interface components {
             /** @description The complete new DISABLED set — an empty array enables everything. */
             disabledFeatures: components["schemas"]["Feature"][];
         };
+        MfaChallengeResponse: {
+            /** @description Always true — the discriminator against LoginResponse in the login 200. */
+            mfaRequired: boolean;
+            /** @description Opaque single-use challenge id; send it back with the emailed code. */
+            challengeId: string;
+            /**
+             * Format: int64
+             * @description Challenge (and code) expiry as Unix epoch milliseconds.
+             */
+            expiresAt: number;
+        };
+        MfaVerifyRequest: {
+            challengeId: string;
+            /** @description The 6-digit code from the sign-in email. */
+            code: string;
+        };
         RefreshRequest: {
             refreshToken: string;
         };
@@ -1179,6 +1227,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Token issued, or (MFA-enabled accounts) a second-factor challenge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"] | components["schemas"]["MfaChallengeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+            /** @description MFA is enabled for the account but this deployment cannot send email */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    verifyMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaVerifyRequest"];
             };
         };
         responses: {

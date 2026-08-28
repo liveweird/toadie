@@ -71,7 +71,8 @@ ch.nokillswit
 ├── audit/              security audit trail: `audit(event, fields…)` → AUDIT-marked structured logs
 ├── authz/              CallerPrincipal + guards (requireAdmin, requireSelfOrAdmin) + typed
 │                       HTTP exceptions (401/403/404/409/429)
-├── auth/               POST /api/v1/login, /refresh, /logout + the self-service
+├── auth/               POST /api/v1/login (+ the email-MFA branch and /login/mfa second
+│                       step — MfaChallenges/MfaEmail), /refresh, /logout + the self-service
 │                       POST /api/v1/password-reset (uniform 202, async send-before-store,
 │                       PasswordResetThrottle) + token minting + password hashing/generation
 │                       + LoginThrottle + the revoked-token blocklist
