@@ -68,7 +68,6 @@ export async function deleteCatalogFile(id: number): Promise<void> {
 
 export type CrossCheckReport =
   paths["/api/v1/catalog-files/cross-check"]["get"]["responses"]["200"]["content"]["application/json"];
-export type CrossCheckStatus = components["schemas"]["CrossCheckStatus"];
 export type DocumentCheckReport =
   paths["/api/v1/catalog-files/check"]["post"]["responses"]["200"]["content"]["application/json"];
 

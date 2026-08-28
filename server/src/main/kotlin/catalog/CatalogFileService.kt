@@ -212,6 +212,36 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         if (metadata.namespace == resolved) this else copy(metadata = metadata.copy(namespace = resolved))
 
     /**
+     * STRICT reference enforcement — every write (create, update, import) resolves every
+     * entity reference against the active workspace inside the write's own transaction,
+     * using the ONE rulebook in CrossCheck.kt (per-field default kinds, allowed target
+     * kinds, contextual namespace). Any finding blocks the save with ONE aggregated 400, so
+     * dangling references can only arise from deletions (allowed by design — the cross-check
+     * report is the net for those) or import batches whose sibling documents failed.
+     * [extraIdentities] is the import path's batch universe (sibling documents resolve
+     * order-independently). Note: a CREATE cannot reference itself (not stored yet); an
+     * UPDATE can (its identity is active).
+     */
+    private suspend fun requireResolvedReferences(stored: CatalogFile, extraIdentities: Set<EntityIdentity>) {
+        val findings = checkDocument(stored, activeIdentities() + extraIdentities).findings
+        if (findings.isEmpty()) return
+        throw BadRequestException(findings.joinToString("; ") { findingMessage(it) })
+    }
+
+    private fun findingMessage(finding: DocumentCheckFinding): String {
+        fun canonical(kind: String) = SUPPORTED_KINDS.first { it.lowercase() == kind }
+        return when (finding.status) {
+            CrossCheckStatus.MISSING ->
+                "${finding.field} reference '${finding.reference}' does not resolve to a stored entity"
+            CrossCheckStatus.WRONG_KIND ->
+                "${finding.field} reference '${finding.reference}' must target " +
+                    REF_FIELD_ALLOWED_KINDS.getValue(finding.field).joinToString(" or ") { canonical(it) }
+            CrossCheckStatus.KIND_REQUIRED ->
+                "${finding.field} reference '${finding.reference}' needs an explicit kind"
+        }
+    }
+
+    /**
      * Resolves a sanitized file's namespace outside a write ([resolvedNamespace] semantics,
      * own transaction) — the import path uses it so each result row reports the CONCRETE
      * namespace a blank one resolved to.
@@ -220,12 +250,17 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         file.withNamespace(resolvedNamespace(file.metadata.namespace))
     }
 
-    suspend fun create(file: CatalogFile, createdByUserId: UInt): UInt = suspendTransaction(database) {
+    suspend fun create(
+        file: CatalogFile,
+        createdByUserId: UInt,
+        extraIdentities: Set<EntityIdentity> = emptySet(),
+    ): UInt = suspendTransaction(database) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         // The stored row AND the content JSON both carry the resolved concrete namespace.
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         requireAllowedLabels(stored.kind, stored.metadata.labels)
         requireAllowedTags(stored.kind, stored.metadata.tags)
+        requireResolvedReferences(stored, extraIdentities)
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
             it[kind] = stored.kind
@@ -251,6 +286,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         requireAllowedLabels(stored.kind, stored.metadata.labels)
         requireAllowedTags(stored.kind, stored.metadata.tags)
+        requireResolvedReferences(stored, emptySet())
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
             it[kind] = stored.kind
             it[name] = stored.metadata.name
@@ -332,10 +368,33 @@ class CatalogFileService(private val database: R2dbcDatabase) {
      * outcome. The route emits the audit events for the CREATED rows (the repo convention:
      * audits live route-side).
      */
-    suspend fun import(files: List<CatalogFile>, createdByUserId: UInt): List<ImportFileResult> =
-        files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId) }
+    suspend fun import(files: List<CatalogFile>, createdByUserId: UInt): List<ImportFileResult> {
+        // The batch universe: sibling documents resolve against each other ORDER-INDEPENDENTLY
+        // (a real export's entities are interdependent — the round trip must survive). Only
+        // documents that sanitize, validate, and namespace-resolve contribute an identity.
+        // Documented residual: a document referencing a sibling that later fails to STORE
+        // (conflict, registry rule) keeps its dangling reference — the same class as a
+        // deletion-created dangling ref, and the cross-check report catches it.
+        val batchIdentities = files.mapNotNull { raw ->
+            val sanitized = sanitizedCatalogFile(raw)
+            try {
+                validateCatalogFile(sanitized)
+                identityOf(resolveNamespace(sanitized))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null // the document will produce its own INVALID/ERROR row below
+            }
+        }.toSet()
+        return files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId, batchIdentities) }
+    }
 
-    private suspend fun importOne(index: Int, raw: CatalogFile, createdByUserId: UInt): ImportFileResult {
+    private suspend fun importOne(
+        index: Int,
+        raw: CatalogFile,
+        createdByUserId: UInt,
+        batchIdentities: Set<EntityIdentity>,
+    ): ImportFileResult {
         val sanitized = sanitizedCatalogFile(raw)
         fun base(f: CatalogFile) = ImportFileResult(
             index = index,
@@ -363,7 +422,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
         val base = base(file)
         return try {
-            base.copy(status = ImportResultStatus.CREATED, fileId = create(file, createdByUserId))
+            base.copy(status = ImportResultStatus.CREATED, fileId = create(file, createdByUserId, batchIdentities))
         } catch (e: CancellationException) {
             // Cancellation is not a per-document failure — a gone client must stop the batch.
             throw e

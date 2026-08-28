@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import userEvent from "@testing-library/user-event";
-import { fireEvent, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import CrossCheck from "./CrossCheck";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
@@ -32,8 +31,8 @@ const REPORT = {
       fileName: "svc-a",
       fileNamespace: "default",
       field: "spec.owner",
-      reference: "team-x",
-      status: "UNVERIFIABLE",
+      reference: "component:team-x",
+      status: "WRONG_KIND",
     },
   ],
   checkedFiles: 2,
@@ -72,39 +71,28 @@ describe("CrossCheck page", () => {
 
     expect(await screen.findByText("2 files checked")).toBeInTheDocument();
     expect(screen.getByText("5 references checked")).toBeInTheDocument();
-    expect(screen.getByText("2 problems")).toBeInTheDocument();
-    expect(screen.getByText("1 not checkable yet")).toBeInTheDocument();
+    expect(screen.getByText("3 problems")).toBeInTheDocument();
   });
 
-  test("defaults to the problems view: errors visible, unverifiable hidden", async () => {
+  test("every finding renders as an error row — saves enforce resolution, so all block", async () => {
     mockReport(mockFetch);
     renderPage();
 
     expect(await screen.findByText("component:ghost")).toBeInTheDocument();
     expect(screen.getByText("orders-db")).toBeInTheDocument();
     expect(screen.getByText("Kind required")).toBeInTheDocument();
-    expect(screen.queryByText("team-x")).not.toBeInTheDocument();
-  });
-
-  test("the filter switches to all findings", async () => {
-    mockReport(mockFetch);
-    renderPage();
-
-    await screen.findByText("component:ghost");
-    fireEvent.click(screen.getByLabelText("Show", { selector: "input" }));
-    fireEvent.click(await screen.findByRole("option", { name: "All findings" }));
-
-    expect(await screen.findByText("team-x")).toBeInTheDocument();
-    expect(screen.getByText("Not checkable yet", { selector: ".mantine-Badge-label" })).toBeInTheDocument();
-    expect(screen.getByText("component:ghost")).toBeInTheDocument();
+    expect(screen.getByText("component:team-x")).toBeInTheDocument();
+    expect(screen.getByText("Wrong kind")).toBeInTheDocument();
   });
 
   test("file names link to the file's editor", async () => {
     mockReport(mockFetch);
     renderPage();
 
-    const link = await screen.findByRole("link", { name: "Edit svc-a" });
-    expect(link).toHaveAttribute("href", "/catalog-files/1/edit");
+    // svc-a carries two findings — two rows, one link each, same target.
+    const links = await screen.findAllByRole("link", { name: "Edit svc-a" });
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute("href", "/catalog-files/1/edit");
   });
 
   test("an all-clear workspace shows the happy empty state", async () => {
@@ -113,19 +101,6 @@ describe("CrossCheck page", () => {
 
     expect(await screen.findByText(/no problems found/i)).toBeInTheDocument();
     expect(screen.getByText("0 problems")).toBeInTheDocument();
-  });
-
-  test("an empty non-default filter shows the neutral empty state", async () => {
-    const onlyErrors = { ...REPORT, findings: REPORT.findings.filter((f) => f.status !== "UNVERIFIABLE") };
-    mockReport(mockFetch, onlyErrors);
-    const user = userEvent.setup();
-    renderPage();
-
-    await screen.findByText("component:ghost");
-    fireEvent.click(screen.getByLabelText("Show", { selector: "input" }));
-    await user.click(await screen.findByRole("option", { name: "Not checkable yet" }));
-
-    expect(await screen.findByText(/nothing to show for this filter/i)).toBeInTheDocument();
   });
 
   test("shows an alert when the report fails to load", async () => {

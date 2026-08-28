@@ -75,6 +75,26 @@ class CatalogFileTest {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
         val ns = uniqueNamespace("kinds")
+        // Reference targets first — writes enforce resolution (all names live in this test's
+        // unique namespace, so fixed values never collide across tests or runs).
+        client.createCatalogFile(groupFile("team-a", namespace = ns))
+        client.createCatalogFile(userFile("someone", namespace = ns))
+        for (domainName in listOf("commerce", "payments")) {
+            client.createCatalogFile(
+                CatalogFile(
+                    kind = "Domain",
+                    metadata = CatalogFileMetadata(name = domainName, namespace = ns),
+                    spec = EntitySpec(owner = "team-a"),
+                ),
+            )
+        }
+        client.createCatalogFile(
+            CatalogFile(
+                kind = "Resource",
+                metadata = CatalogFileMetadata(name = "other-db", namespace = ns),
+                spec = EntitySpec(type = "database", owner = "team-a"),
+            ),
+        )
         val files = listOf(
             componentFile(uniqueEntityName("comp"), namespace = ns),
             apiFile(uniqueEntityName("api"), namespace = ns),
@@ -105,7 +125,7 @@ class CatalogFileTest {
         }
         // Group children and User memberOf survive as PRESENT-and-empty, never null.
         val group = files.first { it.kind == "Group" }
-        val fetchedGroup = client.get("/api/v1/catalog-files?namespace=$ns&kind=group")
+        val fetchedGroup = client.get("/api/v1/catalog-files?namespace=$ns&kind=group&name=${group.metadata.name}")
             .body<CatalogFilePageResponse>()
         assertEquals(listOf(group.metadata.name), fetchedGroup.items.map { it.name })
     }
@@ -193,6 +213,34 @@ class CatalogFileTest {
         TestNamespaces.ensure("team-a")
         TestLabels.ensure("example.com/tier", listOf("backend"), listOf("Component"))
         TestTagCategories.ensure("Languages", listOf("java", "c++"), listOf("Component"))
+        // Every referenced target must be STORED (fixed names in the SHARED team-a/default
+        // namespaces — ensured idempotently, a 409 from an earlier run is fine).
+        suspend fun ensure(target: CatalogFile) {
+            val status = client.postJson("/api/v1/catalog-files", target).status
+            assertTrue(
+                status == HttpStatusCode.Created || status == HttpStatusCode.Conflict,
+                "ensuring ${target.metadata.name}: $status",
+            )
+        }
+        ensure(groupFile("team-a", namespace = "team-a"))
+        ensure(
+            CatalogFile(
+                kind = "System",
+                metadata = CatalogFileMetadata(name = "payments", namespace = "team-a"),
+                spec = EntitySpec(owner = "team-a"),
+            ),
+        )
+        ensure(apiFile("loaded-api", namespace = "team-a", owner = "team-a"))
+        ensure(apiFile("billing-api"))
+        ensure(
+            CatalogFile(
+                kind = "Resource",
+                metadata = CatalogFileMetadata(name = "loaded-db"),
+                spec = EntitySpec(type = "database", owner = "group:default/platform"),
+            ),
+        )
+        ensure(componentFile("parent-svc"))
+        ensure(componentFile("consumer-svc", namespace = "team-a", owner = "team-a"))
         val file = CatalogFile(
             metadata = CatalogFileMetadata(
                 name = name,
@@ -510,6 +558,96 @@ class CatalogFileTest {
         )
         TestTagCategories.ensure(category, listOf(t), listOf("Component"))
         assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", file).status)
+    }
+
+    @Test
+    fun `references are enforced on save - missing, wrong kind, and kind-less all 400`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("refenforce")
+        val ns = uniqueNamespace("refns")
+
+        // MISSING: a grammar-valid owner nobody stores.
+        val ghostOwner = client.postJson(
+            "/api/v1/catalog-files",
+            componentFile(uniqueEntityName("rm"), namespace = ns, owner = uniqueEntityName("ghost-team")),
+        )
+        assertEquals(HttpStatusCode.BadRequest, ghostOwner.status)
+        assertTrue(ghostOwner.body<ProblemDetail>().detail!!.contains("does not resolve to a stored entity"))
+
+        // WRONG_KIND: a stored Component named explicitly in owner (Group/User only).
+        val comp = uniqueEntityName("rc")
+        client.createCatalogFile(componentFile(comp, namespace = ns))
+        val wrongKind = client.postJson(
+            "/api/v1/catalog-files",
+            componentFile(uniqueEntityName("rw"), namespace = ns, owner = "component:$ns/$comp"),
+        )
+        assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
+        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("must target Group or User"))
+
+        // KIND_REQUIRED: a kind-less dependsOn entry, even when a component of that name exists.
+        val kindless = client.postJson(
+            "/api/v1/catalog-files",
+            componentFile(uniqueEntityName("rk"), namespace = ns).let {
+                it.copy(spec = it.spec.copy(dependsOn = listOf(comp)))
+            },
+        )
+        assertEquals(HttpStatusCode.BadRequest, kindless.status)
+        assertTrue(kindless.body<ProblemDetail>().detail!!.contains("needs an explicit kind"))
+
+        // Violations AGGREGATE into one detail.
+        val both = client.postJson(
+            "/api/v1/catalog-files",
+            componentFile(uniqueEntityName("ra"), namespace = ns, owner = uniqueEntityName("nope")).let {
+                it.copy(spec = it.spec.copy(dependsOn = listOf(comp)))
+            },
+        )
+        assertEquals(HttpStatusCode.BadRequest, both.status)
+        val detail = both.body<ProblemDetail>().detail!!
+        assertTrue(detail.contains("spec.owner") && detail.contains("spec.dependsOn"))
+
+        // A User resolves owner too (Group OR User are the allowed kinds).
+        val person = uniqueEntityName("person")
+        client.createCatalogFile(userFile(person, namespace = ns))
+        val userOwned = client.postJson(
+            "/api/v1/catalog-files",
+            componentFile(uniqueEntityName("ru"), namespace = ns, owner = "user:$ns/$person"),
+        )
+        assertEquals(HttpStatusCode.Created, userOwned.status)
+    }
+
+    @Test
+    fun `a deleted reference target blocks the referrer's resave until recreated`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("refgone")
+        val ns = uniqueNamespace("refgns")
+        val team = uniqueEntityName("team")
+        val teamId = client.createCatalogFile(groupFile(team, namespace = ns)).id
+        val file = componentFile(uniqueEntityName("rg"), namespace = ns, owner = team)
+        val created = client.createCatalogFile(file)
+
+        // Deletion is ALLOWED (the ref goes dangling); the referrer blocks on its next save.
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/$teamId").status)
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            client.putJson("/api/v1/catalog-files/${created.id}", file).status,
+            "a stored file whose reference target was deleted must block on save",
+        )
+        client.createCatalogFile(groupFile(team, namespace = ns))
+        assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", file).status)
+    }
+
+    @Test
+    fun `an update may reference the file's own identity`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("refself")
+        val ns = uniqueNamespace("refsns")
+        val name = uniqueEntityName("selfish")
+        val created = client.createCatalogFile(componentFile(name, namespace = ns))
+        // Nonsensical semantically but structurally legal: the file's identity is active.
+        val selfRef = componentFile(name, namespace = ns).let {
+            it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$name"))
+        }
+        assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", selfRef).status)
     }
 
     @Test

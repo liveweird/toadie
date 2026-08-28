@@ -71,6 +71,11 @@ from Lettuce, that any new or edited spec must satisfy:
   registered categories — **`tags.spec.ts` is that registry's ONLY in-run writer**, creating
   and deleting only its own unique `e2e-tagcat-*` category. No other spec may put tags on
   files without first moving category registration into global-setup.
+- **The `group:default/platform` owner Group is a persistent test seed.** Catalog writes
+  enforce reference RESOLUTION, so the shared `owner: group:default/platform` the specs'
+  Component fixtures use must be stored — global-setup seeds it idempotently (201 or 409)
+  and no spec may delete or rename it. It deliberately carries no `e2e` marker: it must
+  survive runs (the volume's own demo files may reference it).
 - Seeded accounts are never mutated. The seed admin (`admin@toadie.local`) is a shared
   read-mostly actor: specs sign in as it but must not change its password, roles, or state — a
   future spec that needs a mutated account creates a throwaway.
@@ -96,9 +101,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
-- [`cross-check.spec.ts`](scenarios/cross-check.md) — a dangling `component:` reference is
-  flagged live in the editor and on the Cross-check page, then resolves once its target file
-  is created.
+- [`cross-check.spec.ts`](scenarios/cross-check.md) — an unresolved reference blocks the save
+  (live panel + inline validation); deleting a referenced target creates the Cross-check
+  finding, which recreating the target clears.
 - [`kinds.spec.ts`](scenarios/kinds.md) — the multi-kind editor journey: a Group (empty
   children), an API (pasted definition), and a Component whose owner/API references resolve
   live; kind badges on the list.
@@ -109,8 +114,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`namespaces.spec.ts`](scenarios/namespaces.md) — the namespaces dictionary: inline grammar
   validation → append two entries → reorder → the regular user's read-only view → removal;
   append-only against the shared document.
-- [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored, missing, and
-  external nodes for a throwaway namespace; toggling a relation family prunes its nodes.
+- [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
+  (deletion-orphaned) missing nodes for a throwaway namespace; toggling a relation family
+  prunes its virtual nodes.
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   import as Created, export downloads them as one `---`-separated file, and re-importing the
   export reports every row Already exists (nothing overwritten).

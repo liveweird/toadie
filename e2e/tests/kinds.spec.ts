@@ -62,7 +62,7 @@ test("a group, an API, and a component owned by the group are created and resolv
   await expect(page.getByRole("combobox", { name: "Owner" })).toHaveValue(team);
   await page.getByRole("combobox", { name: "Provides APIs" }).fill(api);
   await page.keyboard.press("Enter");
-  await expect(page.getByText("All checkable references resolve.")).toBeVisible();
+  await expect(page.getByText("All references resolve.")).toBeVisible();
   await Promise.all([
     page.waitForResponse(
       (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),

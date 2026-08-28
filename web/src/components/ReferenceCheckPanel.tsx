@@ -6,8 +6,8 @@ import { checkCatalogFile, type CatalogFileRequest } from "../api/catalogFiles";
 
 /**
  * The editor's live reference check: the current form document, debounced, against the stored
- * files (POST /api/v1/catalog-files/check). Advisory only — errors of the check request itself
- * render nothing, and findings never block saving.
+ * files (POST /api/v1/catalog-files/check). Saves ENFORCE resolution, so every finding here
+ * means the save will be rejected; errors of the check request itself render nothing.
  */
 export default function ReferenceCheckPanel({
   document,
@@ -28,17 +28,15 @@ export default function ReferenceCheckPanel({
   });
 
   const findings = data?.findings ?? [];
-  const errors = findings.filter((f) => f.status !== "UNVERIFIABLE");
-  const unverifiable = findings.length - errors.length;
 
   return (
     <Paper withBorder shadow="sm" p="lg" radius="md">
       <Stack gap="sm">
         <Title order={3}>{t("crossCheck.panel.title")}</Title>
-        {errors.length > 0 ? (
+        {findings.length > 0 ? (
           <Alert color="red" variant="light" title={t("crossCheck.panel.errorsTitle")}>
             <Stack gap={4}>
-              {errors.map((f, index) => (
+              {findings.map((f, index) => (
                 <Text size="sm" key={`${f.field}-${f.reference}-${index}`}>
                   <Code>{f.reference}</Code> ({f.field}) — {t(`crossCheck.message.${f.status}`)}
                 </Text>
@@ -50,11 +48,6 @@ export default function ReferenceCheckPanel({
             {t("crossCheck.panel.allClear")}
           </Text>
         ) : null}
-        {unverifiable > 0 && (
-          <Text size="xs" c="dimmed">
-            {t("crossCheck.panel.unverifiableCount", { count: unverifiable })}
-          </Text>
-        )}
         {showSelfNote && (
           <Text size="xs" c="dimmed">
             {t("crossCheck.panel.selfNote")}

@@ -5,10 +5,12 @@ import kotlinx.serialization.Serializable
 /**
  * Cross-checking: resolving the entity references stored files make against the workspace.
  * Pure logic — the service supplies the rows, the routes the transport. Semantics follow
- * `.claude/docs/backstage-descriptor-format.md`: per-field default kinds, an omitted namespace
- * defaults to the REFERENCING file's own namespace, and kind/namespace/name all match
- * case-insensitively. Findings never block saves — files legitimately reference entities that
- * arrive later (the Backstage model).
+ * `.claude/docs/backstage-descriptor-format.md`: per-field default kinds AND allowed target
+ * kinds, an omitted namespace defaults to the REFERENCING file's own namespace, and
+ * kind/namespace/name all match case-insensitively. This is ALSO the write-time enforcement
+ * rulebook (CatalogFileService.requireResolvedReferences): every save must resolve every
+ * reference, so findings here arise only from deletions (dangling refs) and imports whose
+ * sibling documents failed — the cross-check report is the net for those.
  */
 @Serializable
 enum class CrossCheckStatus {
@@ -18,8 +20,8 @@ enum class CrossCheckStatus {
     /** A dependsOn/dependencyOf entry without a kind — Backstage cannot ingest those. */
     KIND_REQUIRED,
 
-    /** The target kind is not stored in Toadie (Location, Template, custom kinds). */
-    UNVERIFIABLE,
+    /** The reference names a kind the field does not allow (e.g. a Component in spec.owner). */
+    WRONG_KIND,
 }
 
 /** One problematic reference inside one document (the ad-hoc check's shape). */
@@ -78,6 +80,25 @@ internal val REF_FIELD_DEFAULT_KINDS: Map<String, String?> = mapOf(
     "spec.memberOf" to "group",
     "spec.domain" to "domain",
     "spec.subdomainOf" to "domain",
+)
+
+// The kinds each field may TARGET (the descriptor reference's tables) — a reference naming
+// any other kind is WRONG_KIND even when such an entity exists. Every allowed kind is a
+// stored kind, so nothing is unverifiable: each reference either resolves or is a finding.
+internal val REF_FIELD_ALLOWED_KINDS: Map<String, Set<String>> = mapOf(
+    "spec.owner" to setOf("group", "user"),
+    "spec.system" to setOf("system"),
+    "spec.subcomponentOf" to setOf("component"),
+    "spec.providesApis" to setOf("api"),
+    "spec.consumesApis" to setOf("api"),
+    "spec.dependsOn" to setOf("component", "resource"),
+    "spec.dependencyOf" to setOf("component", "resource"),
+    "spec.parent" to setOf("group"),
+    "spec.children" to setOf("group"),
+    "spec.members" to setOf("user"),
+    "spec.memberOf" to setOf("group"),
+    "spec.domain" to setOf("domain"),
+    "spec.subdomainOf" to setOf("domain"),
 )
 
 /** A lowercased identity a reference can resolve to. */
@@ -157,10 +178,9 @@ fun checkDocument(file: CatalogFile, identities: Set<EntityIdentity>): DocumentC
     val findings = mutableListOf<DocumentCheckFinding>()
     var seen = 0
     for ((field, refs) in file.spec.refFields()) {
-        val defaultKind = REF_FIELD_DEFAULT_KINDS.getValue(field)
         for (raw in refs.filter { it.isNotBlank() }) {
             seen++
-            statusOf(raw, defaultKind, sourceNamespace, identities)?.let {
+            statusOf(raw, field, sourceNamespace, identities)?.let {
                 findings += DocumentCheckFinding(field, raw, it)
             }
         }
@@ -168,17 +188,18 @@ fun checkDocument(file: CatalogFile, identities: Set<EntityIdentity>): DocumentC
     return DocumentCheckResult(findings = findings, referenceCount = seen)
 }
 
-// The per-reference verdict; null = resolved (or unparsable — the form flags those itself).
+// The per-reference verdict; null = resolved (or unparsable — the form flags those itself,
+// and the write path's grammar validation rejects them before enforcement runs).
 private fun statusOf(
     raw: String,
-    defaultKind: String?,
+    field: String,
     sourceNamespace: String,
     identities: Set<EntityIdentity>,
 ): CrossCheckStatus? {
     if (parseRef(raw) == null) return null
-    val target = resolveTarget(raw, defaultKind, sourceNamespace)
+    val target = resolveTarget(raw, REF_FIELD_DEFAULT_KINDS.getValue(field), sourceNamespace)
         ?: return CrossCheckStatus.KIND_REQUIRED // parsable (checked above) but kind-less
-    if (target.kind !in STORED_KINDS) return CrossCheckStatus.UNVERIFIABLE
+    if (target.kind !in REF_FIELD_ALLOWED_KINDS.getValue(field)) return CrossCheckStatus.WRONG_KIND
     return if (target in identities) null else CrossCheckStatus.MISSING
 }
 

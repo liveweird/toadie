@@ -241,3 +241,31 @@ describe("toCatalogFileRequest / fromCatalogFileResponse", () => {
     },
   );
 });
+
+describe("reference resolution validation (the pool-backed half)", () => {
+  const pool = [
+    { kind: "Group", namespace: "default", name: "team-a" },
+    { kind: "Component", namespace: "default", name: "svc-a" },
+    { kind: "API", namespace: "team-x", name: "billing-api" },
+  ];
+  const withPool = catalogFileFormValidation(t, { current: { identities: pool, defaultNamespace: "default" } });
+  const component = values({ kind: "Component" });
+
+  test("resolving references pass; unresolved, wrong-kind, and kind-less ones fail", () => {
+    expect(withPool.owner("team-a", component)).toBeNull();
+    expect(withPool.owner("ghost-team", component)).toMatch(/does not resolve/);
+    expect(withPool.owner("component:default/svc-a", component)).toMatch(/must reference a Group \/ User/);
+    expect(withPool.dependsOn(["svc-a"], component)).toMatch(/needs an explicit kind/);
+    expect(withPool.dependsOn(["component:default/svc-a"], component)).toBeNull();
+    // The blank namespace resolves against the flagged default for bare refs.
+    expect(withPool.consumesApis(["team-x/billing-api"], component)).toBeNull();
+  });
+
+  test("no context or an empty pool degrades to grammar-and-kind checks only", () => {
+    const noContext = catalogFileFormValidation(t);
+    expect(noContext.owner("ghost-team", component)).toBeNull();
+    const emptyPool = catalogFileFormValidation(t, { current: { identities: [], defaultNamespace: undefined } });
+    expect(emptyPool.owner("ghost-team", component)).toBeNull();
+    expect(emptyPool.owner("component:default/svc-a", component)).toMatch(/must reference a/);
+  });
+});

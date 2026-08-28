@@ -158,10 +158,13 @@ describe("EditCatalogFile page", () => {
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
   });
 
-  test("a non-numeric id redirects to the list without fetching", () => {
+  test("a non-numeric id redirects to the list without fetching the file", () => {
     mockGetAndPut(mockFetch);
     renderEdit("/catalog-files/abc/edit");
     expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files");
-    expect(mockFetch).not.toHaveBeenCalled();
+    // The page-level pools (identities, namespaces) may fetch — the DETAIL must not.
+    expect(
+      mockFetch.mock.calls.some(([url]) => /\/api\/v1\/catalog-files\/\w+$/.test(url as string)),
+    ).toBe(false);
   });
 });

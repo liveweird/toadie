@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { Paper, Stack, Title } from "@mantine/core";
@@ -7,11 +7,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCatalogFile, updateCatalogFile } from "../api/catalogFiles";
 import { ApiError } from "../api/http";
 import CatalogFileEditor from "../components/CatalogFileEditor";
+import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
+import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
 import EditPageLoadState from "../components/EditPageLoadState";
 import {
   catalogFileFormValidation,
   emptyCatalogFileForm,
   fromCatalogFileResponse,
+  type RefResolutionContext,
   toCatalogFileRequest,
   type CatalogFileFormValues,
 } from "../utils/catalogFileForm";
@@ -27,10 +30,23 @@ export default function EditCatalogFile() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // The ref rules' resolution context (identity pool + flagged default namespace) — both
+  // load async, so validation reads them through a ref at submit time; while unavailable
+  // the rules degrade to grammar/kind checks and the server stays the gate.
+  const identities = useCatalogIdentities();
+  const { defaultNamespace } = useNamespaceOptions();
+  const resolutionContextRef = useRef<RefResolutionContext | null>(null);
+  useEffect(() => {
+    resolutionContextRef.current = { identities, defaultNamespace };
+  }, [identities, defaultNamespace]);
+
   // The shared form vocabulary (utils/catalogFileForm.ts); the field block owns the sections.
   const form = useForm<CatalogFileFormValues>({
     initialValues: emptyCatalogFileForm(),
-    validate: catalogFileFormValidation(t),
+    // The ref is only READ inside the validation rules, which run in the submit
+    // handler — never during render (a react-hooks/refs false positive).
+    // eslint-disable-next-line react-hooks/refs
+    validate: catalogFileFormValidation(t, resolutionContextRef),
   });
 
   const idIsValid = Number.isFinite(id) && id > 0;

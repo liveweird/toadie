@@ -1,45 +1,33 @@
 {
-  "title": "Weryfikacja referencji",
+  "title": "Weryfikacja odwołań",
   "loadFailed": "Nie udało się wczytać raportu weryfikacji",
   "summary": {
     "files": "Sprawdzone pliki: {{count}}",
-    "references": "Sprawdzone referencje: {{count}}",
-    "errors": "Problemy: {{count}}",
-    "unverifiable": "Jeszcze niesprawdzalne: {{count}}"
-  },
-  "filter": {
-    "label": "Pokaż",
-    "errors": "Problemy",
-    "unverifiable": "Jeszcze niesprawdzalne",
-    "all": "Wszystkie wyniki"
+    "references": "Sprawdzone odwołania: {{count}}",
+    "errors": "Problemy: {{count}}"
   },
   "field": {
     "file": "Plik",
     "namespace": "Przestrzeń nazw",
     "refField": "Pole",
-    "reference": "Referencja",
+    "reference": "Odwołanie",
     "status": "Status"
   },
   "status": {
     "MISSING": "Nie znaleziono",
     "KIND_REQUIRED": "Wymagany rodzaj",
-    "UNVERIFIABLE": "Jeszcze niesprawdzalne"
+    "WRONG_KIND": "Zły rodzaj"
   },
   "message": {
-    "MISSING": "Żaden aktywny plik nie odpowiada tej referencji komponentu.",
+    "MISSING": "Żadna zapisana encja nie odpowiada temu odwołaniu — plik nie zapisze się, dopóki nie zostanie poprawiony.",
     "KIND_REQUIRED": "Wpisy dependsOn/dependencyOf wymagają jawnego rodzaju, np. component: lub resource:.",
-    "UNVERIFIABLE": "Toadie nie przechowuje jeszcze tego rodzaju encji, więc referencji nie da się zweryfikować."
+    "WRONG_KIND": "Odwołanie wskazuje rodzaj, na który to pole nie pozwala."
   },
-  "noFindings": "Nie znaleziono problemów — każda sprawdzalna referencja się rozwiązuje.",
-  "noFindingsFiltered": "Brak wyników dla tego filtra.",
+  "noFindings": "Nie znaleziono problemów — każde odwołanie się rozwiązuje.",
   "panel": {
-    "title": "Referencje",
-    "errorsTitle": "Nierozwiązane referencje",
-    "allClear": "Wszystkie sprawdzalne referencje się rozwiązują.",
-    "unverifiableCount_one": "{{count}} referencja wskazuje rodzaj encji, którego Toadie jeszcze nie przechowuje.",
-    "unverifiableCount_few": "{{count}} referencje wskazują rodzaje encji, których Toadie jeszcze nie przechowuje.",
-    "unverifiableCount_many": "{{count}} referencji wskazuje rodzaje encji, których Toadie jeszcze nie przechowuje.",
-    "unverifiableCount_other": "{{count}} referencji wskazuje rodzaje encji, których Toadie jeszcze nie przechowuje.",
-    "selfNote": "Niezapisany plik nie jest jeszcze w magazynie — referencje do niego samego pokazują się jako nieznalezione do pierwszego zapisu."
+    "title": "Odwołania",
+    "errorsTitle": "Odwołania, które zablokują zapis",
+    "allClear": "Wszystkie odwołania się rozwiązują.",
+    "selfNote": "Niezapisany plik nie jest jeszcze w magazynie — odwołania do samego siebie pokazują się jako nieznalezione do pierwszego zapisu."
   }
 }

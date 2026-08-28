@@ -20,8 +20,9 @@ export type RefField =
   | "domain"
   | "subdomainOf";
 
-// What a field may point at (owner: Backstage allows a group OR a user).
-const TARGET_KINDS: Record<RefField, readonly string[]> = {
+// What a field may point at (owner: Backstage allows a group OR a user). Exported for the
+// wrong-kind validation message; mirrors the server's REF_FIELD_ALLOWED_KINDS.
+export const TARGET_KINDS: Record<RefField, readonly string[]> = {
   owner: ["group", "user"],
   system: ["system"],
   subcomponentOf: ["component"],
@@ -68,6 +69,49 @@ export function shortestRef(target: Identity, defaultKind: string | null, curren
   if (sameKind) return `${target.namespace}/${target.name}`;
   if (sameNamespace) return `${kind}:${target.name}`;
   return `${kind}:${target.namespace}/${target.name}`;
+}
+
+/** The single-occurrence split behind the lenient parse (mirror of the server's splitRefOnce). */
+function splitOnce(value: string, sep: string): [string | null, string] | null {
+  const first = value.indexOf(sep);
+  if (first !== value.lastIndexOf(sep)) return null;
+  return first >= 0 ? [value.slice(0, first), value.slice(first + 1)] : [null, value];
+}
+
+export type RefResolutionError = "unresolved" | "wrongKind" | "kindRequired";
+
+/**
+ * The write-blocking resolution verdict for one typed reference — the client mirror of the
+ * server's rulebook (per-field default kind, allowed target kinds, contextual namespace,
+ * case-insensitive). Null = resolves — or unparsable (the grammar rule owns those), or an
+ * unavailable pool for the membership half (loading/failed → grammar-and-kind checks only;
+ * the server stays the gate).
+ */
+export function refResolutionError(
+  raw: string,
+  field: RefField,
+  currentNamespace: string,
+  identities: readonly Identity[] | undefined,
+): RefResolutionError | null {
+  const kindSplit = splitOnce(raw, ":");
+  if (!kindSplit) return null;
+  const nameSplit = splitOnce(kindSplit[1], "/");
+  if (!nameSplit) return null;
+  const [rawKind, [rawNamespace, rawName]] = [kindSplit[0], nameSplit];
+  if (rawKind === "" || rawNamespace === "" || rawName === "") return null;
+  const kind = rawKind?.toLowerCase() ?? DEFAULT_KINDS[field];
+  if (!kind) return "kindRequired";
+  if (!TARGET_KINDS[field].includes(kind)) return "wrongKind";
+  if (!identities || identities.length === 0) return null;
+  const namespace = (rawNamespace ?? currentNamespace).toLowerCase();
+  const name = rawName.toLowerCase();
+  const resolves = identities.some(
+    (identity) =>
+      identity.kind.toLowerCase() === kind &&
+      identity.namespace.toLowerCase() === namespace &&
+      identity.name.toLowerCase() === name,
+  );
+  return resolves ? null : "unresolved";
 }
 
 /** Sorted, deduped picker options for [field], shortened relative to [currentNamespace]. */

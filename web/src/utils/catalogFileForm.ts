@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 import type { CatalogFileRequest, CatalogFileResponse } from "../api/catalogFiles";
+import { refResolutionError, TARGET_KINDS, type RefField } from "./refSuggestions";
 
 // Server limits (catalog/CatalogFile.kt) mirrored client-side.
 export const MAX_ENTITY_PART_LENGTH = 63;
@@ -230,25 +231,74 @@ function singleWordRule(field: SpecFieldName, t: TFunction) {
   };
 }
 
-function refRule(field: SpecFieldName, t: TFunction) {
+/** What the resolution half of ref validation needs — supplied by the pages as a REF-like
+ *  holder (the pool and the flagged default namespace both arrive async, after the form
+ *  exists; validation reads the holder's current value at submit time). */
+export type RefResolutionContext = {
+  identities: readonly { kind: string; namespace: string; name: string }[] | undefined;
+  defaultNamespace: string | undefined;
+};
+
+export type RefResolutionContextHolder = { readonly current: RefResolutionContext | null };
+
+function allowedKindsLabel(field: SpecFieldName): string {
+  return TARGET_KINDS[field as RefField]
+    .map((kind) => ENTITY_KINDS.find((canonical) => canonical.toLowerCase() === kind) ?? kind)
+    .join(" / ");
+}
+
+// The resolution half (server-mirroring, advisory): null when no context is available yet —
+// grammar-only then, the server stays the gate.
+function resolutionError(
+  ref: string,
+  field: SpecFieldName,
+  values: CatalogFileFormValues,
+  t: TFunction,
+  refContext?: RefResolutionContextHolder,
+): string | null {
+  const ctx = refContext?.current;
+  if (!ctx) return null;
+  const namespace = values.namespace.trim().toLowerCase() || (ctx.defaultNamespace ?? "default");
+  const error = refResolutionError(ref, field as RefField, namespace, ctx.identities);
+  if (error === "kindRequired") return t("catalog.validation.refKindRequired", { ref });
+  if (error === "wrongKind") {
+    return t("catalog.validation.refWrongKind", { ref, kinds: allowedKindsLabel(field) });
+  }
+  if (error === "unresolved") return t("catalog.validation.refUnresolved", { ref });
+  return null;
+}
+
+function refRule(field: SpecFieldName, t: TFunction, refContext?: RefResolutionContextHolder) {
   return (value: string, values: CatalogFileFormValues) => {
     if (!fieldApplies(values.kind, field)) return null;
     const v = value.trim();
     if (!v) return fieldRequired(values.kind, field) ? t("catalog.validation.required") : null;
-    return isValidEntityRef(v) ? null : t("catalog.validation.ref");
+    if (!isValidEntityRef(v)) return t("catalog.validation.ref");
+    return resolutionError(v, field, values, t, refContext);
   };
 }
 
-function refArrayRule(field: SpecFieldName, t: TFunction) {
+function refArrayRule(field: SpecFieldName, t: TFunction, refContext?: RefResolutionContextHolder) {
   return (values_: string[], values: CatalogFileFormValues) => {
     if (!fieldApplies(values.kind, field)) return null;
-    const bad = values_.map((r) => r.trim()).find((r) => r && !isValidEntityRef(r));
-    return bad === undefined ? null : t("catalog.validation.refEntry", { ref: bad });
+    const trimmed = values_.map((r) => r.trim()).filter(Boolean);
+    const bad = trimmed.find((r) => !isValidEntityRef(r));
+    if (bad !== undefined) return t("catalog.validation.refEntry", { ref: bad });
+    for (const ref of trimmed) {
+      const error = resolutionError(ref, field, values, t, refContext);
+      if (error) return error;
+    }
+    return null;
   };
 }
 
-/** Validation rules shared by the create and edit pages (mirrors the server's checks). */
-export function catalogFileFormValidation(t: TFunction) {
+/**
+ * Validation rules shared by the create and edit pages (mirrors the server's checks).
+ * [refContext] supplies the identity pool + flagged default namespace for the RESOLUTION
+ * half of the ref rules; omitted or returning null, refs are checked by grammar (and
+ * per-field kind rules) only — the server remains authoritative.
+ */
+export function catalogFileFormValidation(t: TFunction, refContext?: RefResolutionContextHolder) {
   return {
     name: (value: string) => (isValidName(value.trim()) ? null : t("catalog.validation.name")),
     namespace: (value: string) => {
@@ -289,13 +339,13 @@ export function catalogFileFormValidation(t: TFunction) {
     },
     type: singleWordRule("type", t),
     lifecycle: singleWordRule("lifecycle", t),
-    owner: refRule("owner", t),
-    system: refRule("system", t),
-    subcomponentOf: refRule("subcomponentOf", t),
-    providesApis: refArrayRule("providesApis", t),
-    consumesApis: refArrayRule("consumesApis", t),
-    dependsOn: refArrayRule("dependsOn", t),
-    dependencyOf: refArrayRule("dependencyOf", t),
+    owner: refRule("owner", t, refContext),
+    system: refRule("system", t, refContext),
+    subcomponentOf: refRule("subcomponentOf", t, refContext),
+    providesApis: refArrayRule("providesApis", t, refContext),
+    consumesApis: refArrayRule("consumesApis", t, refContext),
+    dependsOn: refArrayRule("dependsOn", t, refContext),
+    dependencyOf: refArrayRule("dependencyOf", t, refContext),
     definition: (value: string, values: CatalogFileFormValues) => {
       if (!fieldApplies(values.kind, "definition")) return null;
       const v = value.trim();
@@ -313,12 +363,12 @@ export function catalogFileFormValidation(t: TFunction) {
       const v = value.trim();
       return !v || isAbsoluteUri(v) ? null : t("catalog.validation.url");
     },
-    parent: refRule("parent", t),
-    children: refArrayRule("children", t),
-    members: refArrayRule("members", t),
-    memberOf: refArrayRule("memberOf", t),
-    domain: refRule("domain", t),
-    subdomainOf: refRule("subdomainOf", t),
+    parent: refRule("parent", t, refContext),
+    children: refArrayRule("children", t, refContext),
+    members: refArrayRule("members", t, refContext),
+    memberOf: refArrayRule("memberOf", t, refContext),
+    domain: refRule("domain", t, refContext),
+    subdomainOf: refRule("subdomainOf", t, refContext),
   };
 }
 

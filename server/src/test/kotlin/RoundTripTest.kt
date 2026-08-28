@@ -202,6 +202,32 @@ class RoundTripTest {
     }
 
     @Test
+    fun `import resolves sibling references within the batch order-independently`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("roundtrip")
+        val ns = uniqueNamespace("sibns")
+        val team = uniqueEntityName("sibteam")
+        val comp = uniqueEntityName("sibcomp")
+
+        // The component comes FIRST and references the group that only appears later in the
+        // same batch — the batch universe makes the order irrelevant.
+        val results = client.import(
+            listOf(
+                componentFile(comp, namespace = ns, owner = team),
+                groupFile(team, namespace = ns),
+            ),
+        ).results
+        assertEquals(listOf(ImportResultStatus.CREATED, ImportResultStatus.CREATED), results.map { it.status })
+
+        // A reference to an entity in NEITHER the workspace nor the batch stays INVALID.
+        val rejected = client.import(
+            listOf(componentFile(uniqueEntityName("sibghost"), namespace = ns, owner = uniqueEntityName("nowhere"))),
+        ).results.single()
+        assertEquals(ImportResultStatus.INVALID, rejected.status)
+        assertTrue(rejected.message!!.contains("does not resolve to a stored entity"))
+    }
+
+    @Test
     fun `import sanitizes before reporting — namespace folds and kind canonicalizes`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")

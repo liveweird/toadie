@@ -5,6 +5,7 @@ import ch.nokillswit.auth.LoginResponse
 import ch.nokillswit.auth.hashPassword
 import ch.nokillswit.infra.db.SEED_ADMIN_EMAIL
 import ch.nokillswit.infra.db.SEED_PASSWORD_HASH
+import ch.nokillswit.plugins.isUniqueViolation
 import ch.nokillswit.users.User
 import ch.nokillswit.users.UserRole
 import ch.nokillswit.users.UserService
@@ -58,6 +59,7 @@ fun ApplicationTestBuilder.configureApp(vararg overrides: Pair<String, String>) 
 suspend fun ApplicationTestBuilder.usePostgresTestcontainer() {
     configureApp()
     startApplication()
+    TestRefTargets.ensure()
 }
 
 /**
@@ -244,6 +246,30 @@ object TestUsers {
 object TestCatalogFiles {
     val service: ch.nokillswit.catalog.CatalogFileService by lazy {
         ch.nokillswit.catalog.CatalogFileService(sharedTestDatabase)
+    }
+}
+
+/**
+ * The well-known reference targets the catalog fixtures point at — catalog writes reject
+ * unresolved references, so the fixtures' default `owner = "group:default/platform"` needs
+ * that Group STORED (a test seed analogous to the V3 admin). [ensure] is idempotent across
+ * tests (JVM once-guard) and runs (create races lose to the identity index and are fine);
+ * invoked from [usePostgresTestcontainer], so every ordinary test can rely on it.
+ */
+object TestRefTargets {
+    @Volatile
+    private var seeded = false
+
+    suspend fun ensure() {
+        if (seeded) return
+        val creator = TestUsers.service.findWithIdByEmail("ref-targets@toadie.test")?.first
+            ?: TestUsers.seed(email = "ref-targets@toadie.test", password = "pw", name = "Ref Targets")
+        try {
+            TestCatalogFiles.service.create(groupFile("platform"), createdByUserId = creator)
+        } catch (e: Exception) {
+            if (!e.isUniqueViolation()) throw e // already stored by an earlier run
+        }
+        seeded = true
     }
 }
 

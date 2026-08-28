@@ -33,7 +33,7 @@ describe("ReferenceCheckPanel", () => {
 
     expect(screen.getByText("References")).toBeInTheDocument();
 
-    expect(await screen.findByText("All checkable references resolve.", undefined, { timeout: 3000 }))
+    expect(await screen.findByText("All references resolve.", undefined, { timeout: 3000 }))
       .toBeInTheDocument();
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/catalog-files/check");
@@ -58,27 +58,27 @@ describe("ReferenceCheckPanel", () => {
     expect(JSON.parse(init.body as string)).toEqual(edited);
   });
 
-  test("renders unresolved-reference findings and the unverifiable count", async () => {
+  test("renders the blocking findings with their status messages", async () => {
     mockFetch.mockResolvedValue(
       jsonResponse(200, {
         findings: [
           { field: "spec.owner", reference: "group:default/team-a", status: "MISSING" },
-          { field: "spec.dependsOn", reference: "template:default/starter", status: "UNVERIFIABLE" },
+          { field: "spec.dependsOn", reference: "template:default/starter", status: "WRONG_KIND" },
         ],
       }),
     );
     renderWithProviders(<ReferenceCheckPanel document={DOCUMENT} />);
 
-    expect(await screen.findByText("Unresolved references", undefined, { timeout: 3000 }))
+    expect(await screen.findByText("References that will block saving", undefined, { timeout: 3000 }))
       .toBeInTheDocument();
     expect(screen.getByText("group:default/team-a")).toBeInTheDocument();
     expect(
-      screen.getByText(/No active file matches this component reference\./),
+      screen.getByText(/No stored entity matches this reference/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("1 reference points at a kind Toadie doesn't store yet."),
+      screen.getByText(/names a kind this field does not allow/),
     ).toBeInTheDocument();
-    expect(screen.queryByText("All checkable references resolve.")).not.toBeInTheDocument();
+    expect(screen.queryByText("All references resolve.")).not.toBeInTheDocument();
   });
 
   test("a failed check stays silent — the panel is advisory", async () => {
@@ -88,8 +88,8 @@ describe("ReferenceCheckPanel", () => {
     await waitFor(() => expect(mockFetch).toHaveBeenCalled(), { timeout: 3000 });
 
     expect(screen.getByText("References")).toBeInTheDocument();
-    expect(screen.queryByText("Unresolved references")).not.toBeInTheDocument();
-    expect(screen.queryByText("All checkable references resolve.")).not.toBeInTheDocument();
+    expect(screen.queryByText("References that will block saving")).not.toBeInTheDocument();
+    expect(screen.queryByText("All references resolve.")).not.toBeInTheDocument();
   });
 
   test("showSelfNote renders the unsaved-file caveat", () => {

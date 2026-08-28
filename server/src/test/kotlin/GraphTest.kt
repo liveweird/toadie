@@ -31,7 +31,8 @@ class GraphTest {
         val ns = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
-        // Both files share the namespaceless owner, so it collapses into ONE virtual node.
+        // Both files share the namespaceless owner, so it collapses into ONE node.
+        client.createCatalogFile(groupFile("team-x", namespace = ns))
         client.createCatalogFile(componentFile(b, namespace = ns, title = "Target B", owner = "team-x"))
         client.createCatalogFile(
             componentFile(a, namespace = ns).let {
@@ -47,9 +48,8 @@ class GraphTest {
         assertEquals("Target B", nodeB.title)
         assertNotNull(nodeB.fileId)
         val owner = graph.nodes.single { it.id == "group:$ns/team-x" }
-        // Groups are a stored kind now — an absent one is MISSING, not external.
-        assertEquals(GraphNodeStatus.MISSING, owner.status)
-        assertNull(owner.fileId)
+        assertEquals(GraphNodeStatus.STORED, owner.status)
+        assertNotNull(owner.fileId)
         assertEquals(3, graph.nodes.size)
 
         assertTrue(graph.edges.any { it.sourceId == nodeA.id && it.targetId == nodeB.id && it.field == "spec.dependsOn" })
@@ -57,20 +57,21 @@ class GraphTest {
     }
 
     @Test
-    fun `a dangling component reference draws a MISSING node`() = testApplication {
+    fun `a deletion-orphaned reference draws a MISSING node`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
         val ns = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
-        val ghost = uniqueEntityName("ghost")
+        val doomed = uniqueEntityName("doomed")
+        // Saves enforce resolution — the dangling ref is MADE by deleting its target.
+        val doomedId = client.createCatalogFile(componentFile(doomed, namespace = ns)).id
         client.createCatalogFile(
-            componentFile(a, namespace = ns).let {
-                it.copy(spec = it.spec.copy(subcomponentOf = ghost, owner = "group:default/x"))
-            },
+            componentFile(a, namespace = ns).let { it.copy(spec = it.spec.copy(subcomponentOf = doomed)) },
         )
+        client.delete("/api/v1/catalog-files/$doomedId")
 
         val graph = client.graph(namespace = ns)
-        val ghostNode = graph.nodes.single { it.name == ghost }
+        val ghostNode = graph.nodes.single { it.name == doomed }
         assertEquals(GraphNodeStatus.MISSING, ghostNode.status)
         // Namespaceless subcomponentOf resolves in the file's OWN namespace.
         assertEquals(ns, ghostNode.namespace)
@@ -79,20 +80,16 @@ class GraphTest {
     }
 
     @Test
-    fun `kind-less dependsOn entries draw neither node nor edge`() = testApplication {
-        usePostgresTestcontainer()
-        val client = seededClient("graph")
-        val ns = uniqueNamespace("gns")
-        val a = uniqueEntityName("a")
-        val bare = uniqueEntityName("bare")
-        client.createCatalogFile(
-            componentFile(a, namespace = ns).let {
-                it.copy(spec = it.spec.copy(dependsOn = listOf(bare), owner = "team-x"))
-            },
+    fun `kind-less dependsOn entries draw neither node nor edge`() {
+        // Such a document can no longer be STORED (saves enforce resolution) — the drawing
+        // rule is pinned on the pure builder with an in-memory source instead.
+        val file = componentFile("bare-holder").let {
+            it.copy(spec = it.spec.copy(dependsOn = listOf("bare-target")))
+        }
+        val graph = ch.nokillswit.catalog.buildGraph(
+            sources = listOf(ch.nokillswit.catalog.CrossCheckSource(id = 1u, file = file)),
         )
-
-        val graph = client.graph(namespace = ns)
-        assertTrue(graph.nodes.none { it.name == bare })
+        assertTrue(graph.nodes.none { it.name == "bare-target" })
         assertTrue(graph.edges.none { it.field == "spec.dependsOn" })
     }
 
@@ -103,22 +100,22 @@ class GraphTest {
         val ns = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
+        client.createCatalogFile(componentFile(b, namespace = ns))
         client.createCatalogFile(
             componentFile(a, namespace = ns).let {
                 it.copy(
                     spec = it.spec.copy(
                         dependsOn = listOf("component:$ns/${b.uppercase()}"),
                         dependencyOf = listOf("Component:${ns.uppercase()}/$b"),
-                        owner = "team-x",
                     ),
                 )
             },
         )
 
         val graph = client.graph(namespace = ns)
-        val targets = graph.nodes.filter { it.name == b.lowercase() }
+        val targets = graph.nodes.filter { it.name == b }
         assertEquals(1, targets.size)
-        assertEquals(GraphNodeStatus.MISSING, targets.single().status)
+        assertEquals(GraphNodeStatus.STORED, targets.single().status)
         assertEquals(2, graph.edges.count { it.targetId == targets.single().id })
     }
 
@@ -133,7 +130,7 @@ class GraphTest {
         val bId = client.createCatalogFile(componentFile(b, namespace = nsB)).id
         client.createCatalogFile(
             componentFile(a, namespace = nsA).let {
-                it.copy(spec = it.spec.copy(dependsOn = listOf("component:$nsB/$b"), owner = "team-x"))
+                it.copy(spec = it.spec.copy(dependsOn = listOf("component:$nsB/$b")))
             },
         )
 
@@ -156,7 +153,7 @@ class GraphTest {
         val bId = client.createCatalogFile(componentFile(b, namespace = ns)).id
         client.createCatalogFile(
             componentFile(a, namespace = ns).let {
-                it.copy(spec = it.spec.copy(dependsOn = listOf("component:$ns/$b"), owner = "team-x"))
+                it.copy(spec = it.spec.copy(dependsOn = listOf("component:$ns/$b")))
             },
         )
         client.delete("/api/v1/catalog-files/$bId")
@@ -174,8 +171,10 @@ class GraphTest {
         val ns = uniqueNamespace("gns")
         val team = uniqueEntityName("team")
         val person = uniqueEntityName("person")
+        // members ↔ memberOf is circular — built as create-memberless → create → update.
+        val personId = client.createCatalogFile(userFile(person, namespace = ns)).id
         client.createCatalogFile(groupFile(team, namespace = ns, members = listOf("user:$ns/$person")))
-        client.createCatalogFile(userFile(person, namespace = ns, memberOf = listOf(team)))
+        client.putJson("/api/v1/catalog-files/$personId", userFile(person, namespace = ns, memberOf = listOf(team)))
 
         val graph = client.graph(namespace = ns)
         val teamNode = graph.nodes.single { it.name == team }

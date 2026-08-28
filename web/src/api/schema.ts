@@ -208,12 +208,14 @@ export interface paths {
          *     landscape kinds (Component, API, System, Domain, Resource, Group, User). The payload
          *     is validated against the Backstage descriptor format (name/namespace/tag/label/
          *     annotation grammars, entity-reference syntax, the per-kind required/forbidden field
-         *     tables); references are checked for FORMAT only here — resolution is the cross-check
-         *     endpoints' job and never blocks a save. The namespace must additionally be an active
+         *     tables). The namespace must additionally be an active
          *     entry of the `namespaces` dictionary, every label must be an ADMIN-registered
-         *     label allowed for the file's kind with a value from its closed list, and every tag
-         *     must belong to an ADMIN-defined tag category allowed for the file's kind (all
-         *     strict — no grandfathering), else `400`.
+         *     label allowed for the file's kind with a value from its closed list, every tag
+         *     must belong to an ADMIN-defined tag category allowed for the file's kind, and every
+         *     entity reference must RESOLVE to a stored active entity of a kind the field allows
+         *     (e.g. `spec.owner` → Group or User; namespaceless references resolve within the
+         *     file's own namespace, matching is case-insensitive) — all strict, no grandfathering,
+         *     else `400` (reference violations aggregate into one detail).
          *     Entity identity (kind + namespace + name, case-insensitive) must be unique among
          *     active files; a clash is a `409`.
          */
@@ -237,16 +239,17 @@ export interface paths {
          *     `subcomponentOf`, `providesApis`, `consumesApis`, `dependsOn`, `dependencyOf`) against
          *     the workspace and reports three tiers of findings:
          *
-         *     - `MISSING` (error) — the reference targets one of the stored kinds (Component, API,
-         *       System, Domain, Resource, Group, User — explicitly or via the field's default kind)
-         *       but no active file matches. Namespaceless references resolve within the REFERENCING
+         *     - `MISSING` (error) — no active file matches the referenced identity (explicit or via
+         *       the field's default kind). Namespaceless references resolve within the REFERENCING
          *       file's own namespace; matching is case-insensitive throughout.
          *     - `KIND_REQUIRED` (error) — a `dependsOn`/`dependencyOf` entry without a kind; those
          *       fields have no default kind, so Backstage itself cannot ingest such a reference.
-         *     - `UNVERIFIABLE` (info) — the target kind is not stored in Toadie (Location, Template,
-         *       custom kinds).
+         *     - `WRONG_KIND` (error) — the reference names a kind the field does not allow (e.g. a
+         *       Component in `spec.owner`, which accepts only Group or User).
          *
-         *     Findings never block saving — files legitimately reference entities that arrive later.
+         *     Saves themselves enforce resolution (an unresolved reference is a `400`), so findings
+         *     here arise from DELETIONS (dangling references are allowed to appear that way — this
+         *     report is the net for them) and from import batches whose sibling documents failed.
          */
         get: operations["crossCheckCatalogFiles"];
         put?: never;
@@ -270,7 +273,8 @@ export interface paths {
          * Check one document's references against the stored files
          * @description The editor's live companion to the workspace cross-check: takes one (possibly unsaved,
          *     possibly not-yet-valid) document and returns its reference findings against the stored
-         *     identities — same three-tier semantics as the workspace report. The document is
+         *     identities — same statuses as the workspace report, and since saves enforce
+         *     resolution, every finding here means the save WILL be rejected. The document is
          *     sanitized but deliberately NOT validated (in-progress documents are legal here;
          *     unparsable references are skipped — the form flags them itself). A pure computation:
          *     nothing is stored; POST only because the document travels in the body. Note an unsaved
@@ -356,9 +360,10 @@ export interface paths {
          * @description Imports up to 200 structured documents (the SPA parses `catalog-info.yaml` client-side
          *     and ships the parsed documents here). Each document imports INDEPENDENTLY and gets its
          *     own result row: `CREATED` (stored, `fileId` set), `INVALID` (failed the
-         *     descriptor-format validation or a registry rule — defined namespace, registered
-         *     label, registered tag — `message` names the
-         *     problem), `CONFLICT` (an active file
+         *     descriptor-format validation, a registry rule — defined namespace, registered
+         *     label, registered tag — or reference resolution, `message` names the
+         *     problem; sibling documents in the SAME batch count as resolution targets, order
+         *     independent), `CONFLICT` (an active file
          *     already holds the kind+namespace+name identity — nothing is overwritten), or `ERROR`
          *     (an unexpected storage failure). The response is `200` even when every document failed
          *     — the result rows are the outcome; a `400` covers only the batch itself (an
@@ -414,10 +419,10 @@ export interface paths {
         /**
          * Replace a catalog file
          * @description Full replacement; same validation as create (the defined-namespace,
-         *     registered-label, and registered-tag rules included — strict: a file whose
-         *     namespace, label, or tag was removed from its registry cannot be saved until it is
-         *     re-added or changed). Renaming into an identity an active file already holds is a
-         *     `409`.
+         *     registered-label, registered-tag, and resolved-reference rules included — strict: a
+         *     file whose namespace, label, or tag was removed from its registry, or whose
+         *     referenced entity was deleted, cannot be saved until it is fixed). Renaming into an
+         *     identity an active file already holds is a `409`.
          */
         put: operations["replaceCatalogFile"];
         post?: never;
@@ -838,10 +843,10 @@ export interface components {
             updatedAt: number;
         };
         /**
-         * @description MISSING and KIND_REQUIRED are errors; UNVERIFIABLE is informational (the target kind is not stored in Toadie yet).
+         * @description All three are errors that BLOCK the referencing document's next save: MISSING (no stored entity matches), KIND_REQUIRED (a kind-less dependsOn/dependencyOf entry), WRONG_KIND (the reference names a kind the field does not allow).
          * @enum {string}
          */
-        CrossCheckStatus: "MISSING" | "KIND_REQUIRED" | "UNVERIFIABLE";
+        CrossCheckStatus: "MISSING" | "KIND_REQUIRED" | "WRONG_KIND";
         CrossCheckFinding: {
             /** Format: int32 */
             fileId: number;

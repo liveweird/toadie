@@ -98,7 +98,10 @@
     "ref": "Musi być referencją encji: [kind:][namespace/]name",
     "refEntry": "\"{{ref}}\" nie jest poprawną referencją encji",
     "definitionLength": "Definicja może mieć najwyżej 100000 znaków",
-    "profileEmailLength": "E-mail może mieć najwyżej 254 znaki"
+    "profileEmailLength": "E-mail może mieć najwyżej 254 znaki",
+    "refUnresolved": "„{{ref}}\" nie wskazuje na zapisaną encję",
+    "refWrongKind": "„{{ref}}\" musi odwoływać się do encji rodzaju {{kinds}}",
+    "refKindRequired": "„{{ref}}\" wymaga jawnego rodzaju, np. component: lub resource:"
   },
   "validationError": "Błąd walidacji. Sprawdź formularz i spróbuj ponownie.",
   "conflictError": "Aktywny plik o tej przestrzeni nazw i nazwie już istnieje.",

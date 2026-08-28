@@ -44,6 +44,27 @@ export async function adminApiHeaders(): Promise<Record<string, string>> {
 export type DictionaryItems = { items: { id: number; value: string; isDefault: boolean }[] };
 
 /**
+ * The well-known owner Group (`group:default/platform`) the specs' Component fixtures
+ * reference — catalog writes enforce reference RESOLUTION, so it must be stored. Idempotent
+ * (a 409 means an earlier run seeded it) and deliberately PERSISTENT: it carries no `e2e`
+ * marker because it must survive runs (the volume's own demo files may reference it too).
+ */
+async function ensurePlatformGroup(headers: Record<string, string>): Promise<void> {
+  const post = await fetch(`${BASE_URL}/api/v1/catalog-files`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "Group",
+      metadata: { name: "platform", namespace: "default" },
+      spec: { type: "team", children: [] },
+    }),
+  });
+  if (post.status !== 201 && post.status !== 409) {
+    throw new Error(`[e2e] platform-group seed failed: ${post.status}`);
+  }
+}
+
+/**
  * Registers this run's throwaway namespaces (catalog writes accept only dictionary-defined
  * namespaces) and hands them to the workers via process.env — the setup process is the ONE
  * dictionary writer besides namespaces.spec.ts, because the PUT is a whole-document replace
@@ -51,6 +72,7 @@ export type DictionaryItems = { items: { id: number; value: string; isDefault: b
  */
 async function registerRunNamespaces(): Promise<void> {
   const headers = await adminApiHeaders();
+  await ensurePlatformGroup(headers);
   const uniq = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
   const minted: Record<string, string> = {
     KINDS: `e2e-kns-${uniq}`,

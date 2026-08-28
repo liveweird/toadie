@@ -121,6 +121,51 @@ describe("CreateCatalogFile page", () => {
     expect(body.metadata.labels).toEqual({ tier: "backend" });
   });
 
+  test("with the identity pool loaded, an unresolved owner blocks submission inline", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url.startsWith("/api/v1/catalog-files?")) {
+        return Promise.resolve(
+          jsonResponse(200, {
+            items: [
+              {
+                id: 1,
+                kind: "Group",
+                name: "team-a",
+                namespace: "default",
+                title: null,
+                type: "team",
+                lifecycle: null,
+                owner: null,
+                creatorName: "A",
+                creatorDeleted: false,
+                updatedAt: 1,
+              },
+            ],
+            page: 1,
+            pageSize: 100,
+            total: 1,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderCreate();
+
+    await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
+    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
+    await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
+    await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "ghost-team");
+    // Wait for the pool so the resolution half of validation is armed.
+    await waitFor(() =>
+      expect(mockFetch.mock.calls.some(([u]) => (u as string).startsWith("/api/v1/catalog-files?"))).toBe(true),
+    );
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(await screen.findByText(/"ghost-team" does not resolve to a stored entity/)).toBeInTheDocument();
+    expect(findSaveCall(mockFetch)).toBeUndefined();
+  });
+
   test("tags come from the grouped category picker and land in the payload", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") === "GET" && url === "/api/v1/tag-categories") {
@@ -360,7 +405,7 @@ describe("CreateCatalogFile page", () => {
     expect(preview).toHaveTextContent("name: preview-svc");
   });
 
-  test("the reference panel lists unresolved refs and the unverifiable count", async () => {
+  test("the reference panel lists the blocking findings", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files/check") {
         return Promise.resolve(
@@ -368,7 +413,7 @@ describe("CreateCatalogFile page", () => {
             findings: [
               { field: "spec.dependsOn", reference: "component:ghost", status: "MISSING" },
               { field: "spec.dependsOn", reference: "orders-db", status: "KIND_REQUIRED" },
-              { field: "spec.owner", reference: "team-x", status: "UNVERIFIABLE" },
+              { field: "spec.owner", reference: "component:team-x", status: "WRONG_KIND" },
             ],
           }),
         );
@@ -377,10 +422,10 @@ describe("CreateCatalogFile page", () => {
     });
     renderCreate();
 
-    expect(await screen.findByText("Unresolved references")).toBeInTheDocument();
+    expect(await screen.findByText("References that will block saving")).toBeInTheDocument();
     expect(screen.getByText("component:ghost")).toBeInTheDocument();
     expect(screen.getByText("orders-db")).toBeInTheDocument();
-    expect(screen.getByText(/1 reference points at a kind/)).toBeInTheDocument();
+    expect(screen.getByText("component:team-x")).toBeInTheDocument();
     // The create page carries the unsaved-self-reference note.
     expect(screen.getByText(/references to itself show as not found/i)).toBeInTheDocument();
   });
@@ -394,8 +439,8 @@ describe("CreateCatalogFile page", () => {
     });
     renderCreate();
 
-    expect(await screen.findByText("All checkable references resolve.")).toBeInTheDocument();
-    expect(screen.queryByText("Unresolved references")).not.toBeInTheDocument();
+    expect(await screen.findByText("All references resolve.")).toBeInTheDocument();
+    expect(screen.queryByText("References that will block saving")).not.toBeInTheDocument();
   });
 
   test.each([

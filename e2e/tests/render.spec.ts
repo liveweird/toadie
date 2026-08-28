@@ -3,17 +3,19 @@ import { expect, login, openFilters, pickNamespace, runNamespace, test, uniqueTe
 // The render-graph journey in this run's throwaway NAMESPACE (registered by global-setup —
 // the form accepts only defined namespaces): the namespace filter isolates this spec's nodes
 // from other files in the shared database, and per-attempt-unique node names keep retries
-// honest against their own residue.
-test("the graph renders stored, missing, and external nodes for a namespace", async ({ page }) => {
+// honest against their own residue. Saves enforce reference resolution, so the MISSING node
+// is MADE by deleting a stored target after its referrer saved.
+test("the graph renders stored and missing nodes for a namespace", async ({ page }) => {
   await login(page);
   const ns = runNamespace("render");
   const a = uniqueText("e2e-rnode-a");
   const b = uniqueText("e2e-rnode-b");
   const ghost = uniqueText("e2e-rnode-ghost");
 
-  // B first (the resolvable target), then A depending on B and on a missing component.
+  // The targets first (B and the doomed ghost), then A depending on both.
   for (const [name, dependsOn] of [
     [b, []],
+    [ghost, []],
     [a, [`component:${ns}/${b}`, `component:${ns}/${ghost}`]],
   ] as [string, string[]][]) {
     await page.goto("/catalog-files/new");
@@ -34,7 +36,17 @@ test("the graph renders stored, missing, and external nodes for a namespace", as
     ]);
   }
 
-  // Render the namespace: A and B are stored nodes, the ghost a missing one, the owner external.
+  // Deleting the ghost leaves A's reference dangling — the graph's MISSING node.
+  await page.goto("/catalog-files");
+  await openFilters(page);
+  await page.getByLabel("Name", { exact: true }).fill(ghost);
+  await page.getByRole("button", { name: `Delete ${ghost}` }).click();
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "DELETE" && r.ok()),
+    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
+  ]);
+
+  // Render the namespace: A and B stored, the ghost missing, the (stored) owner group too.
   await page.goto("/render");
   await page.getByLabel("Namespace", { exact: true }).fill(ns);
   await expect(page.getByText(a, { exact: true })).toBeVisible();
@@ -42,11 +54,13 @@ test("the graph renders stored, missing, and external nodes for a namespace", as
   await expect(page.getByText(ghost, { exact: true })).toBeVisible();
   await expect(page.getByText("platform", { exact: true })).toBeVisible();
 
-  // Disabling the Owner relation prunes the external owner node; the rest stay.
-  // (The Chip's checkbox input is visually hidden — click its label.)
-  await page.getByText("Owner", { exact: true }).click();
-  await expect(page.getByText("platform", { exact: true })).toHaveCount(0);
-  await expect(page.getByText(ghost, { exact: true })).toBeVisible();
+  // Disabling the Depends-on relation prunes the orphaned VIRTUAL ghost node; stored nodes
+  // (B, the platform owner) always stay. (The Chip's checkbox input is visually hidden —
+  // click its label.)
+  await page.getByText("Depends on", { exact: true }).click();
+  await expect(page.getByText(ghost, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(b, { exact: true })).toBeVisible();
+  await expect(page.getByText("platform", { exact: true })).toBeVisible();
 
   // Cleanup: delete both throwaway files.
   for (const name of [a, b]) {
