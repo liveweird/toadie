@@ -304,9 +304,11 @@ export default function CatalogFiles() {
           leftSection={<IconFileExport size={16} />}
           // The DEBOUNCED namespace — the slice the table actually shows; the raw filter
           // could be ahead of it for 300 ms and export a different slice than displayed.
+          // While the filter is settling the button is disabled: exporting mid-transition
+          // is ambiguous (and an automated click would race the debounce).
           onClick={() => void downloads.handleExport(debouncedNamespace.trim() || undefined)}
           loading={downloads.exporting}
-          disabled={total === 0}
+          disabled={total === 0 || namespaceFilter.trim() !== debouncedNamespace.trim()}
         >
           {t("catalog.export.button")}
         </Button>
