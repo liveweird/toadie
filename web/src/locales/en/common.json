@@ -26,7 +26,8 @@
     "contains": "Contains…",
     "exact": "Exact value…",
     "clearName": "Clear name filter",
-    "clearNamespace": "Clear namespace filter"
+    "clearNamespace": "Clear namespace filter",
+    "clearTag": "Clear tag filter"
   },
   "table": {
     "rowsPerPage": "Rows per page",

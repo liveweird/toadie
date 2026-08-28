@@ -284,6 +284,8 @@ export interface paths {
          *       - `name` — case- and accent-insensitive substring match against the entity name.
          *       - `namespace` — exact match (case-insensitive; namespaces are stored lowercase).
          *       - `kind` — one of the supported kinds (case-insensitive; unknown values are a `400`).
+         *       - `tag` — exact membership match against the file's `metadata.tags` entries
+         *         (case-insensitive; tags are stored lowercase).
          *
          *     Each returned item includes the creator's `creatorName` resolved via join so the UI
          *     does not need an N+1 lookup.
@@ -963,6 +965,7 @@ export interface components {
             type: string | null;
             lifecycle: string | null;
             owner: string | null;
+            tags: string[];
             creatorName: string;
             /** @description True when the creating user has been soft-deleted. */
             creatorDeleted: boolean;
@@ -1649,6 +1652,8 @@ export interface operations {
                 namespace?: string;
                 /** @description One of the supported kinds (case-insensitive); unknown values are a 400. */
                 kind?: string;
+                /** @description Exact membership match against the file's metadata.tags entries (case-insensitive; tags are stored lowercase). */
+                tag?: string;
             };
             header?: never;
             path?: never;

@@ -29,6 +29,8 @@ import io.ktor.server.config.mergeWith
 import io.ktor.server.testing.ApplicationTestBuilder
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.selectAll
@@ -250,6 +252,20 @@ object TestUsers {
 object TestCatalogFiles {
     val service: ch.nokillswit.catalog.CatalogFileService by lazy {
         ch.nokillswit.catalog.CatalogFileService(sharedTestDatabase)
+    }
+
+    /**
+     * Direct content overwrite bypassing the write path's validation (the TestUsers.softDelete
+     * bypass precedent) — for planting legacy rows the API can no longer produce, e.g. a
+     * stored self-reference for the cross-check report tests.
+     */
+    suspend fun overwriteContent(id: UInt, file: ch.nokillswit.catalog.CatalogFile) {
+        val table = ch.nokillswit.catalog.CatalogFileService.CatalogFiles
+        suspendTransaction(sharedTestDatabase) {
+            table.update({ table.id eq id }) {
+                it[table.content] = Json.encodeToString(file)
+            }
+        }
     }
 }
 

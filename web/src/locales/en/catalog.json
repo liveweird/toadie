@@ -4,7 +4,6 @@
   "editFile": "Edit catalog file",
   "noFiles": "No catalog files",
   "downloadAria": "Download {{name}}",
-  "deletedSuffix": " (deleted)",
   "deleteModalTitle": "Delete catalog file?",
   "deleteTitle": "Delete catalog file \"{{name}}\" (namespace {{namespace}})?",
   "deleteUndone": "This cannot be undone.",

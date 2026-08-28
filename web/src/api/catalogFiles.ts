@@ -18,6 +18,7 @@ type CatalogFileListQuery = {
   name?: string;
   namespace?: string;
   kind?: string;
+  tag?: string;
 };
 
 export async function listCatalogFiles(q: CatalogFileListQuery): Promise<CatalogFilePage> {
@@ -28,6 +29,7 @@ export async function listCatalogFiles(q: CatalogFileListQuery): Promise<Catalog
     name: q.name,
     namespace: q.namespace,
     kind: q.kind,
+    tag: q.tag,
   });
   return jsonRequest<CatalogFilePage>(`/api/v1/catalog-files?${params}`);
 }

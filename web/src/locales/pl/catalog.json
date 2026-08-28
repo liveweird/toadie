@@ -4,7 +4,6 @@
   "editFile": "Edytuj plik katalogu",
   "noFiles": "Brak plików katalogu",
   "downloadAria": "Pobierz {{name}}",
-  "deletedSuffix": " (konto usunięte)",
   "deleteModalTitle": "Usunąć plik katalogu?",
   "deleteTitle": "Usunąć plik katalogu \"{{name}}\" (przestrzeń nazw {{namespace}})?",
   "deleteUndone": "Tej operacji nie można cofnąć.",

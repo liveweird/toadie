@@ -3,6 +3,7 @@ package ch.nokillswit.catalog
 import ch.nokillswit.dictionaries.Dictionary
 import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.infra.db.containsNormalized
+import ch.nokillswit.infra.db.jsonArrayContains
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.labels.LabelService
 import ch.nokillswit.tags.TagCategoryService
@@ -28,6 +29,8 @@ data class CatalogFileListFilter(
     val namespace: String? = null,
     /** Canonical-cased kind (the route validates against SUPPORTED_KINDS). */
     val kind: String? = null,
+    /** Exact tag membership against metadata.tags (folded — tags are stored lowercase). */
+    val tag: String? = null,
 )
 
 data class CatalogFileListResult(
@@ -483,6 +486,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         type = file.spec.type,
         lifecycle = file.spec.lifecycle,
         owner = file.spec.owner,
+        tags = file.metadata.tags,
         creatorName = creatorName,
         creatorDeleted = creatorDeleted,
         updatedAt = updatedAt,
@@ -499,6 +503,10 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
         filter.kind?.let {
             op = op and (CatalogFiles.kind eq it)
+        }
+        filter.tag?.takeIf { it.isNotBlank() }?.let {
+            // Exact membership inside the content JSON (tags are stored lowercase — fold).
+            op = op and CatalogFiles.content.jsonArrayContains(listOf("metadata", "tags"), it.lowercase())
         }
         return op
     }

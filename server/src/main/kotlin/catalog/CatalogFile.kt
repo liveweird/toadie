@@ -105,6 +105,7 @@ data class CatalogFileListItem(
     val type: String?,
     val lifecycle: String?,
     val owner: String?,
+    val tags: List<String>,
     val creatorName: String,
     val creatorDeleted: Boolean,
     val updatedAt: Long,

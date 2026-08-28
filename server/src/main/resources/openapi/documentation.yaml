@@ -436,6 +436,8 @@ paths:
           - `name` — case- and accent-insensitive substring match against the entity name.
           - `namespace` — exact match (case-insensitive; namespaces are stored lowercase).
           - `kind` — one of the supported kinds (case-insensitive; unknown values are a `400`).
+          - `tag` — exact membership match against the file's `metadata.tags` entries
+            (case-insensitive; tags are stored lowercase).
 
         Each returned item includes the creator's `creatorName` resolved via join so the UI
         does not need an N+1 lookup.
@@ -461,6 +463,13 @@ paths:
           required: false
           schema: { type: string }
           description: One of the supported kinds (case-insensitive); unknown values are a 400.
+        - name: tag
+          in: query
+          required: false
+          schema: { type: string }
+          description: >-
+            Exact membership match against the file's metadata.tags entries
+            (case-insensitive; tags are stored lowercase).
       responses:
         '200':
           description: A page of catalog files
@@ -1585,7 +1594,7 @@ components:
 
     CatalogFileListItem:
       type: object
-      required: [id, kind, name, namespace, title, type, lifecycle, owner, creatorName, creatorDeleted, updatedAt]
+      required: [id, kind, name, namespace, title, type, lifecycle, owner, tags, creatorName, creatorDeleted, updatedAt]
       properties:
         id: { type: integer, format: int32, minimum: 0 }
         kind: { $ref: '#/components/schemas/EntityKind' }
@@ -1595,6 +1604,9 @@ components:
         type: { type: string, nullable: true }
         lifecycle: { type: string, nullable: true }
         owner: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
         creatorName: { type: string }
         creatorDeleted:
           type: boolean

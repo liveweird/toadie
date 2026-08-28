@@ -41,23 +41,37 @@ export default function CatalogFiles() {
     isString,
   );
   const [kindFilter, setKindFilter] = useStoredState(`${SETTINGS_KEY}.filter.kind`, "", isString);
+  const [tagFilter, setTagFilter] = useStoredState(`${SETTINGS_KEY}.filter.tag`, "", isString);
   const activeFilterCount =
-    (nameFilter.trim() ? 1 : 0) + (namespaceFilter.trim() ? 1 : 0) + (kindFilter ? 1 : 0);
+    (nameFilter.trim() ? 1 : 0) +
+    (namespaceFilter.trim() ? 1 : 0) +
+    (kindFilter ? 1 : 0) +
+    (tagFilter.trim() ? 1 : 0);
 
   const queryClient = useQueryClient();
   const downloads = useCatalogDownloads();
 
   const [debouncedName] = useDebouncedValue(nameFilter, 300);
   const [debouncedNamespace] = useDebouncedValue(namespaceFilter, 300);
+  const [debouncedTag] = useDebouncedValue(tagFilter, 300);
 
   const { page, setPage, pageSize, setPageSize, sortField, sortDir, sortParam, toggleSort } =
-    usePagedSort<SortField>("name", [debouncedName, debouncedNamespace, kindFilter], {
+    usePagedSort<SortField>("name", [debouncedName, debouncedNamespace, kindFilter, debouncedTag], {
       key: SETTINGS_KEY,
       sortFields: SORT_FIELDS,
     });
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["catalogFiles", page, pageSize, sortParam, debouncedName, debouncedNamespace, kindFilter],
+    queryKey: [
+      "catalogFiles",
+      page,
+      pageSize,
+      sortParam,
+      debouncedName,
+      debouncedNamespace,
+      kindFilter,
+      debouncedTag,
+    ],
     queryFn: () =>
       listCatalogFiles({
         page,
@@ -66,6 +80,7 @@ export default function CatalogFiles() {
         name: debouncedName || undefined,
         namespace: debouncedNamespace || undefined,
         kind: kindFilter || undefined,
+        tag: debouncedTag || undefined,
       }),
     placeholderData: keepPreviousData,
   });
@@ -77,7 +92,7 @@ export default function CatalogFiles() {
   });
 
   const total = data?.total ?? 0;
-  const columnCount = 8;
+  const columnCount = 7;
 
   return (
     <Stack gap="md">
@@ -105,6 +120,13 @@ export default function CatalogFiles() {
           onChange={(v) => setKindFilter(v ?? "")}
           clearable
           clearButtonProps={{ "aria-label": t("catalog.clearKindFilter") }}
+        />
+        <ClearableTextInput
+          label={t("catalog.field.tags")}
+          value={tagFilter}
+          onChange={setTagFilter}
+          clearLabel={t("common.filter.clearTag")}
+          placeholder={t("common.filter.exact")}
         />
       </FilterPanel>
 
@@ -150,6 +172,7 @@ export default function CatalogFiles() {
                 onToggle={toggleSort}
               />
             </Table.Th>
+            <Table.Th>{t("catalog.field.title")}</Table.Th>
             <Table.Th>
               <SortHeader
                 field="kind"
@@ -168,9 +191,7 @@ export default function CatalogFiles() {
                 onToggle={toggleSort}
               />
             </Table.Th>
-            <Table.Th>{t("catalog.field.type")}</Table.Th>
-            <Table.Th>{t("catalog.field.owner")}</Table.Th>
-            <Table.Th>{t("catalog.field.createdBy")}</Table.Th>
+            <Table.Th>{t("catalog.field.tags")}</Table.Th>
             <Table.Th>
               <SortHeader
                 field="updatedAt"
@@ -193,11 +214,9 @@ export default function CatalogFiles() {
                   <Text size="sm" fw={500}>
                     {file.name}
                   </Text>
-                  {file.title && (
-                    <Text size="xs" c="dimmed">
-                      {file.title}
-                    </Text>
-                  )}
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm">{file.title ?? ""}</Text>
                 </Table.Td>
                 <Table.Td>
                   <Badge variant="light" size="sm">
@@ -208,27 +227,13 @@ export default function CatalogFiles() {
                   <Text size="sm">{file.namespace}</Text>
                 </Table.Td>
                 <Table.Td>
-                  <Group gap={6} wrap="nowrap">
-                    {file.type && (
-                      <Badge variant="outline" size="sm" color="gray">
-                        {file.type}
+                  <Group gap={4} wrap="wrap">
+                    {file.tags.map((tag) => (
+                      <Badge key={tag} variant="outline" size="sm" color="gray">
+                        {tag}
                       </Badge>
-                    )}
-                    {file.lifecycle && (
-                      <Badge variant="outline" size="sm" color="gray">
-                        {file.lifecycle}
-                      </Badge>
-                    )}
+                    ))}
                   </Group>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm">{file.owner ?? ""}</Text>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm" c={file.creatorDeleted ? "dimmed" : undefined}>
-                    {file.creatorName}
-                    {file.creatorDeleted ? t("catalog.deletedSuffix") : ""}
-                  </Text>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{new Date(file.updatedAt).toLocaleDateString(i18n.language)}</Text>

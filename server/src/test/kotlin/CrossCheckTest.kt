@@ -1,6 +1,5 @@
 package ch.nokillswit
 
-import ch.nokillswit.catalog.CatalogFileService
 import ch.nokillswit.catalog.CrossCheckReport
 import ch.nokillswit.catalog.CrossCheckStatus
 import ch.nokillswit.catalog.DocumentCheckReport
@@ -14,10 +13,6 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
-import org.jetbrains.exposed.v1.r2dbc.update
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -278,11 +273,7 @@ class CrossCheckTest {
         val selfRef = componentFile(name, namespace = ns).let {
             it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$name"))
         }
-        suspendTransaction(sharedTestDatabase) {
-            CatalogFileService.CatalogFiles.update({ CatalogFileService.CatalogFiles.id eq id }) {
-                it[CatalogFileService.CatalogFiles.content] = Json.encodeToString(selfRef)
-            }
-        }
+        TestCatalogFiles.overwriteContent(id, selfRef)
 
         val findings = client.report().findings.filter { it.fileName == name && it.fileNamespace == ns }
         assertEquals(

@@ -80,6 +80,7 @@ fun Application.configureCatalogFileRoutes() {
                                 "Unknown kind: $raw (allowed: ${SUPPORTED_KINDS.joinToString()})",
                             )
                     },
+                    tag = call.request.queryParameters.optionalString("tag"),
                 )
                 val result = catalogFileService.list(filter, paging)
                 call.respond(HttpStatusCode.OK, paging.toPage(result.items, result.total))

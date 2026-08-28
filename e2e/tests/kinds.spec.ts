@@ -70,17 +70,13 @@ test("a group, an API, and a component owned by the group are created and resolv
     page.getByRole("button", { name: "Create" }).click(),
   ]);
 
-  // The list shows the three kind badges for the namespace. Row-scoped asserts: the owner
-  // cells repeat the team name, and the Kind filter's hidden options also contain kind words.
+  // The list shows the three kind badges for the namespace. Row-scoped asserts (the Kind
+  // filter's hidden options also contain kind words, so a page-wide getByText would clash).
   await openFilters(page);
   await page.getByLabel("Namespace", { exact: true }).fill(ns);
   const apiRow = page.getByRole("row").filter({ hasText: api });
   const compRow = page.getByRole("row").filter({ hasText: comp });
-  const teamRow = page
-    .getByRole("row")
-    .filter({ hasText: team })
-    .filter({ hasNotText: api })
-    .filter({ hasNotText: comp });
+  const teamRow = page.getByRole("row").filter({ hasText: team });
   await expect(apiRow.getByText("API", { exact: true })).toBeVisible();
   await expect(compRow.getByText("Component", { exact: true })).toBeVisible();
   await expect(teamRow.getByText("Group", { exact: true })).toBeVisible();

@@ -206,6 +206,41 @@ class CatalogFileTest {
     }
 
     @Test
+    fun `the list filters by exact tag and items carry their tags`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("cataloguser")
+        val prefix = uniqueEntityName("tagf")
+        val ns = uniqueNamespace("tagfns")
+        val tagA = uniqueTag("tf-a")
+        val tagB = uniqueTag("tf-b")
+        uniqueTagCategory("tagfcat", tags = listOf(tagA, tagB), kinds = listOf("Component"))
+        suspend fun tagged(name: String, tags: List<String>) = client.createCatalogFile(
+            componentFile(name, namespace = ns).let { it.copy(metadata = it.metadata.copy(tags = tags)) },
+        )
+        tagged("$prefix-a", listOf(tagA))
+        tagged("$prefix-b", listOf(tagA, tagB))
+        client.createCatalogFile(componentFile("$prefix-c", namespace = ns))
+
+        // Exact membership: only the file carrying tagB; the item ships its full tag list.
+        val byTagB = client.get("/api/v1/catalog-files?namespace=$ns&tag=$tagB&sort=name")
+            .body<CatalogFilePageResponse>()
+        assertEquals(listOf("$prefix-b"), byTagB.items.map { it.name })
+        assertEquals(listOf(tagA, tagB), byTagB.items.single().tags)
+
+        // Case-folded (tags are stored lowercase); a shared tag matches both carriers.
+        val byTagA = client.get("/api/v1/catalog-files?namespace=$ns&tag=${tagA.uppercase()}&sort=name")
+            .body<CatalogFilePageResponse>()
+        assertEquals(listOf("$prefix-a", "$prefix-b"), byTagA.items.map { it.name })
+
+        // An unregistered-nowhere tag matches nothing; blank is ignored (all three rows).
+        val none = client.get("/api/v1/catalog-files?namespace=$ns&tag=${uniqueTag("tf-none")}")
+            .body<CatalogFilePageResponse>()
+        assertEquals(0, none.items.size)
+        val blank = client.get("/api/v1/catalog-files?namespace=$ns&tag=").body<CatalogFilePageResponse>()
+        assertEquals(3, blank.items.size)
+    }
+
+    @Test
     fun `the full metadata surface round-trips`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")

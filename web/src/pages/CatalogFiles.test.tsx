@@ -19,6 +19,7 @@ type FileRow = {
   type: string;
   lifecycle: string;
   owner: string;
+  tags: string[];
   creatorName: string;
   creatorDeleted: boolean;
   updatedAt: number;
@@ -34,6 +35,7 @@ const SEED_FILES: FileRow[] = [
     type: "service",
     lifecycle: "production",
     owner: "group:platform",
+    tags: ["java", "billing"],
     creatorName: "Alice Creator",
     creatorDeleted: false,
     updatedAt: 1755900000000,
@@ -47,6 +49,7 @@ const SEED_FILES: FileRow[] = [
     type: "website",
     lifecycle: "experimental",
     owner: "team-a",
+    tags: [],
     creatorName: "Bob Builder",
     creatorDeleted: true,
     updatedAt: 1755900000000,
@@ -93,17 +96,18 @@ describe("CatalogFiles page", () => {
     localStorage.clear();
   });
 
-  test("renders rows with title, badges, creator, and the deleted-creator suffix", async () => {
+  test("renders rows with title and tag badges; type/owner/creator are gone from the list", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     renderPage();
 
     expect(await screen.findByText("payments-svc")).toBeInTheDocument();
     expect(screen.getByText("Payments")).toBeInTheDocument();
-    expect(screen.getByText("service")).toBeInTheDocument();
-    expect(screen.getByText("production")).toBeInTheDocument();
-    expect(screen.getByText("group:platform")).toBeInTheDocument();
-    expect(screen.getByText("Alice Creator")).toBeInTheDocument();
-    expect(screen.getByText(/Bob Builder\s*\(deleted\)/)).toBeInTheDocument();
+    expect(screen.getByText("java")).toBeInTheDocument();
+    expect(screen.getByText("billing")).toBeInTheDocument();
+    // The type/lifecycle, owner, and created-by columns were deliberately removed.
+    expect(screen.queryByText("service")).not.toBeInTheDocument();
+    expect(screen.queryByText("group:platform")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alice Creator")).not.toBeInTheDocument();
   });
 
   test("filters are collapsed by default and the toggle reveals them", async () => {
@@ -166,6 +170,18 @@ describe("CatalogFiles page", () => {
     await user.type(screen.getByLabelText("Namespace"), "team-a");
 
     await calledWith(mockFetch, "namespace=team-a");
+  });
+
+  test("typing in the Tags filter triggers a refetch with tag=", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    await user.click(screen.getByRole("button", { name: /filters/i }));
+    await user.type(screen.getByLabelText("Tags"), "java");
+
+    await calledWith(mockFetch, "tag=java");
   });
 
   test("clicking the Name sort header toggles to sort=-name", async () => {

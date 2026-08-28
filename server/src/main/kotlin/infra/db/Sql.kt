@@ -6,6 +6,7 @@ import org.jetbrains.exposed.v1.core.LikeEscapeOp
 import org.jetbrains.exposed.v1.core.LikePattern
 import org.jetbrains.exposed.v1.core.LowerCase
 import org.jetbrains.exposed.v1.core.Op
+import org.jetbrains.exposed.v1.core.QueryBuilder
 import org.jetbrains.exposed.v1.core.TextColumnType
 import org.jetbrains.exposed.v1.core.stringParam
 
@@ -48,6 +49,33 @@ internal fun containsPattern(raw: String): LikePattern {
         .replace("%", "\\%")
         .replace("_", "\\_")
     return LikePattern("%$escaped%", escapeChar = '\\')
+}
+
+/**
+ * Exact membership test against a JSON string ARRAY nested inside a TEXT column holding a
+ * JSON document: renders `jsonb_exists(CAST(col AS jsonb) #> '{a,b}', ?)` — the value is a
+ * bound parameter, never interpolated, and `jsonb_exists` (the function form of jsonb's `?`
+ * operator) matches whole array elements only, so no LIKE-style false positives from other
+ * strings in the document. The cast is a per-row seq-scan cost — fine at this scale; the day
+ * a filter here needs an index is the day the field gets a denormalized column instead.
+ * [path] segments are compile-time constants by contract (guarded — they land inside a SQL
+ * literal).
+ */
+fun Expression<String>.jsonArrayContains(path: List<String>, value: String): Op<Boolean> {
+    require(path.isNotEmpty() && path.all { it.matches(Regex("[A-Za-z0-9_]+")) }) {
+        "jsonArrayContains path segments must be simple identifiers"
+    }
+    return object : Op<Boolean>() {
+        // Chained single-arg appends on purpose — the vararg overload is absent from the
+        // QueryBuilder this resolves against in a cold (Docker) build.
+        override fun toQueryBuilder(queryBuilder: QueryBuilder) {
+            queryBuilder.append("jsonb_exists(CAST(")
+            queryBuilder.append(this@jsonArrayContains)
+            queryBuilder.append(" AS jsonb) #> '{${path.joinToString(",")}}', ")
+            queryBuilder.append(stringParam(value))
+            queryBuilder.append(")")
+        }
+    }
 }
 
 /**
