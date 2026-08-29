@@ -1,4 +1,4 @@
-import { createUserViaUi, expect, login, logoutButton, openFilters, pickType, rowOperation, test, uniqueText } from "./helpers";
+import { createUserViaUi, expect, login, logoutButton, openFilters, pickLifecycle, pickType, rowOperation, test, uniqueText } from "./helpers";
 
 // The tag-category journey on a throwaway category (unique name and tags per attempt, so
 // retries never collide): create → validation → edit → the read-only view → applying a tag
@@ -73,7 +73,7 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
   await pickType(page, "service");
-  await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
+  await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   const tagsPicker = page.getByRole("combobox", { name: "Tags", exact: true });
   await tagsPicker.click({ force: true });

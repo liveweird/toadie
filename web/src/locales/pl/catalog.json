@@ -59,8 +59,6 @@
   },
   "hint": {
     "namespace": "Wybierz zdefiniowaną przestrzeń nazw; puste pole oznacza \"{{default}}\"",
-    "type": "np. service, website, library",
-    "lifecycle": "np. experimental, production, deprecated",
     "owner": "Zespół-właściciel. Domyślny rodzaj to group — „team-platform” oznacza group:team-platform; osoba wymaga prefiksu user:.",
     "system": "System, do którego należy ten komponent. Domyślny rodzaj to system, np. „payments”.",
     "subcomponentOf": "Komponent nadrzędny. Domyślny rodzaj to component, np. „parent-svc”.",
@@ -164,5 +162,7 @@
   "noTagsForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych tagów — administratorzy i administratorki rejestrują kategorie tagów na stronie Tagi.",
   "typeOptionsFailed": "Nie udało się wczytać słowników typów. Przeładuj stronę, aby spróbować ponownie.",
   "noTypesForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych typów — administratorzy i administratorki definiują je na stronie Typy.",
+  "lifecycleOptionsFailed": "Nie udało się wczytać cykli życia. Przeładuj stronę, aby spróbować ponownie.",
+  "noLifecyclesDefined": "Nie zdefiniowano żadnych cykli życia — administratorzy i administratorki definiują je na stronie Cykle życia.",
   "staleTagsGroup": "Niezarejestrowane"
 }

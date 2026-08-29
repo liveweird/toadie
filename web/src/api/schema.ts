@@ -304,7 +304,10 @@ export interface paths {
          *     tables). The namespace must additionally be an active
          *     entry of the `namespaces` dictionary, every label must be an ADMIN-registered
          *     label allowed for the file's kind with a value from its closed list, every tag
-         *     must belong to an ADMIN-defined tag category allowed for the file's kind, and every
+         *     must belong to an ADMIN-defined tag category allowed for the file's kind, a
+         *     non-blank `spec.type` must be in the file's kind's ADMIN-defined type dictionary,
+         *     a non-blank `spec.lifecycle` must be an active entry of the `lifecycles`
+         *     dictionary, and every
          *     entity reference must RESOLVE to a stored active entity of a kind the field allows
          *     (e.g. `spec.owner` → Group or User; namespaceless references resolve within the
          *     file's own namespace, matching is case-insensitive) and must NOT reference the
@@ -517,11 +520,11 @@ export interface paths {
         /**
          * Replace a catalog file
          * @description Full replacement; same validation as create (the defined-namespace,
-         *     registered-label, registered-tag, and resolved-reference rules included — strict: a
-         *     file whose namespace, label, or tag was removed from its registry, or whose
-         *     referenced entity was deleted, cannot be saved until it is fixed; a reference to the
-         *     file's own identity is a `400`). Renaming into an
-         *     identity an active file already holds is a `409`.
+         *     registered-label, registered-tag, registered-type, registered-lifecycle, and
+         *     resolved-reference rules included — strict: a file whose namespace, label, tag,
+         *     type, or lifecycle was removed from its registry, or whose referenced entity was
+         *     deleted, cannot be saved until it is fixed; a reference to the file's own identity
+         *     is a `400`). Renaming into an identity an active file already holds is a `409`.
          */
         put: operations["replaceCatalogFile"];
         post?: never;
@@ -540,8 +543,8 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The dictionary's URL slug. `namespaces` is the only dictionary today. */
-                dictionary: "namespaces";
+                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to) or `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry). */
+                dictionary: "namespaces" | "lifecycles";
             };
             cookie?: never;
         };
@@ -549,8 +552,9 @@ export interface paths {
          * Read a dictionary's entries
          * @description Any authenticated user. Returns the active entries in the admin-curated order —
          *     deliberately unpaged (a dictionary holds at most 200 entries by validation), NOT a
-         *     standard list endpoint. The `namespaces` dictionary is the allowlist every
-         *     catalog-file write is validated against.
+         *     standard list endpoint. Each dictionary is an allowlist every catalog-file write is
+         *     validated against: `namespaces` for `metadata.namespace`, `lifecycles` for
+         *     `spec.lifecycle`.
          */
         get: operations["getDictionary"];
         /**
@@ -559,8 +563,11 @@ export interface paths {
          *     order (there is no reorder endpoint). An item carrying an `id` renames/repositions
          *     that active entry in place (rename keeps identity); an id-less item inserts; an
          *     active entry missing from the payload is soft-deleted. Values are trimmed and folded
-         *     to lowercase, and must satisfy the namespace grammar; a non-empty document must mark
-         *     EXACTLY one item `isDefault` (what blank catalog-file namespaces resolve to).
+         *     to lowercase, and must satisfy the shared value grammar (lowercase alphanumerics
+         *     with single dashes). The default flag branches per dictionary: a non-empty
+         *     `namespaces` document must mark EXACTLY one item `isDefault` (what blank
+         *     catalog-file namespaces resolve to), while `lifecycles` has no default — any
+         *     flagged item there is a `400`.
          *     Swapping two values in one save is a `409` (the value uniqueness index) — rename
          *     through a temporary value in two saves.
          */
@@ -955,9 +962,9 @@ export interface components {
         };
         /** @description The superset of every supported kind's spec fields — required/forbidden per kind: Component needs type/lifecycle/owner; API additionally definition; System and Domain need owner; Resource type/owner; Group type plus a PRESENT children list (may be empty); User a PRESENT memberOf list. Fields foreign to the document's kind are rejected. */
         EntitySpec: {
-            /** @description Classification, e.g. `service` (Component), `openapi` (API), `team` (Group). */
+            /** @description Classification, e.g. `service` (Component), `openapi` (API), `team` (Group). On every write a non-blank value must be in the file's kind's type dictionary (`GET /api/v1/entity-types`) — unregistered types are rejected with `400`. */
             type?: string | null;
-            /** @description Lifecycle state, e.g. `experimental`, `production`, `deprecated`. */
+            /** @description Lifecycle state, e.g. `experimental`, `production`, `deprecated`. On every write a non-blank value must be an active entry of the `lifecycles` dictionary (`GET /api/v1/dictionaries/lifecycles`) — unregistered lifecycles are rejected with `400`. */
             lifecycle?: string | null;
             /** @description Entity reference `[kind:][namespace/]name` of the owning group/user (format-checked here; resolution is the cross-check's job). */
             owner?: string | null;
@@ -2042,8 +2049,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The dictionary's URL slug. `namespaces` is the only dictionary today. */
-                dictionary: "namespaces";
+                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to) or `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry). */
+                dictionary: "namespaces" | "lifecycles";
             };
             cookie?: never;
         };
@@ -2068,8 +2075,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The dictionary's URL slug. `namespaces` is the only dictionary today. */
-                dictionary: "namespaces";
+                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to) or `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry). */
+                dictionary: "namespaces" | "lifecycles";
             };
             cookie?: never;
         };

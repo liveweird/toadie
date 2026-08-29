@@ -242,6 +242,33 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
     }
 
+    /**
+     * The sixth sanctioned cross-feature table read (see persistence.md): STRICT
+     * spec.lifecycle enforcement — every write (create, update, import) with a non-blank
+     * lifecycle checks it against the GLOBAL `LIFECYCLE` dictionary inside the write's own
+     * transaction (matching is byte-exact — entries are stored lowercase-folded, and the
+     * editor only ever writes stored values). One list for every lifecycle-bearing kind
+     * (the per-kind field tables already forbid the field elsewhere). No grandfathering: a
+     * stored file whose lifecycle was since removed cannot be saved until it is fixed. An
+     * empty dictionary allows none. Blank/absent lifecycles are the per-kind requiredness
+     * tables' business (validateCatalogFile), not this check's.
+     */
+    private suspend fun requireAllowedLifecycle(lifecycle: String?) {
+        if (lifecycle.isNullOrBlank()) return
+        val defined = DictionaryService.Entries.selectAll()
+            .where {
+                (DictionaryService.Entries.dictionary eq Dictionary.LIFECYCLE.name) and
+                    (DictionaryService.Entries.value eq lifecycle) and
+                    (DictionaryService.Entries.markedAsDeleted eq false)
+            }
+            .count() > 0
+        if (!defined) {
+            throw BadRequestException(
+                "spec.lifecycle '$lifecycle' is not an allowed lifecycle — define it on the Lifecycles page",
+            )
+        }
+    }
+
     private fun CatalogFile.withNamespace(resolved: String): CatalogFile =
         if (metadata.namespace == resolved) this else copy(metadata = metadata.copy(namespace = resolved))
 
@@ -298,6 +325,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         requireAllowedLabels(stored.kind, stored.metadata.labels)
         requireAllowedTags(stored.kind, stored.metadata.tags)
         requireAllowedType(stored.kind, stored.spec.type)
+        requireAllowedLifecycle(stored.spec.lifecycle)
         requireResolvedReferences(stored, extraIdentities)
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
@@ -325,6 +353,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         requireAllowedLabels(stored.kind, stored.metadata.labels)
         requireAllowedTags(stored.kind, stored.metadata.tags)
         requireAllowedType(stored.kind, stored.spec.type)
+        requireAllowedLifecycle(stored.spec.lifecycle)
         requireResolvedReferences(stored, emptySet())
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
             it[kind] = stored.kind

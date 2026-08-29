@@ -45,7 +45,8 @@ async function fillMinimalForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
   await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
   await user.click(await screen.findByRole("option", { name: "service" }));
-  await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
+  await user.click(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }));
+  await user.click(await screen.findByRole("option", { name: "production" }));
   await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "group:default/platform");
 }
 
@@ -58,6 +59,16 @@ describe("CreateCatalogFile page", () => {
     // every existing mockImplementation (and findSaveCall over mockFetch.mock.calls) is
     // untouched by the registry traffic.
     vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url === "/api/v1/dictionaries/lifecycles") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            items: [
+              { id: 1, value: "experimental", isDefault: false },
+              { id: 2, value: "production", isDefault: false },
+            ],
+          }),
+        );
+      }
       if ((init?.method ?? "GET") === "GET" && url === "/api/v1/entity-types") {
         return Promise.resolve(
           jsonResponse(200, {
@@ -172,7 +183,8 @@ describe("CreateCatalogFile page", () => {
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
     await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
     await user.click(await screen.findByRole("option", { name: "service" }));
-    await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
+    await user.click(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "production" }));
     await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "ghost-team");
     // Wait for the pool so the resolution half of validation is armed.
     await waitFor(() =>
@@ -192,7 +204,8 @@ describe("CreateCatalogFile page", () => {
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
     await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
     await user.click(await screen.findByRole("option", { name: "service" }));
-    await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
+    await user.click(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "production" }));
     await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "group:default/platform");
     // The short form resolves via the default kind (component) to this very document — the
     // self check needs no identity pool, so it fires even though every fetch 404s here.
@@ -367,7 +380,8 @@ describe("CreateCatalogFile page", () => {
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "billing-api");
     await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
     await user.click(await screen.findByRole("option", { name: "openapi" }));
-    await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
+    await user.click(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "production" }));
     await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "team-a");
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
@@ -419,7 +433,8 @@ describe("CreateCatalogFile page", () => {
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
     await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
     await user.click(await screen.findByRole("option", { name: "service" }));
-    await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
+    await user.click(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "production" }));
 
     // Open the owner picker — the stored group is offered as its full identity;
     // the API is filtered out (wrong kind).

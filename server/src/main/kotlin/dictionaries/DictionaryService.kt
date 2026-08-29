@@ -66,7 +66,7 @@ class DictionaryService(private val database: R2dbcDatabase) {
      */
     suspend fun replace(dict: Dictionary, request: DictionaryUpdateRequest): DictionaryReplaceCounts =
         suspendTransaction(database) {
-            validateDictionaryUpdate(request)
+            validateDictionaryUpdate(dict, request)
 
             // Snapshot the ACTIVE rows only (id -> stored value): a payload id pointing at a
             // soft-deleted entry is a foreign id (400) — deleted entries are never

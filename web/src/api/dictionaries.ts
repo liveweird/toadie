@@ -12,7 +12,7 @@ type DictionaryEntryList =
   paths["/api/v1/dictionaries/{dictionary}"]["get"]["responses"]["200"]["content"]["application/json"];
 
 /** The dictionary URL slugs — grows with the server's `Dictionary` enum. */
-export type DictionarySlug = "namespaces";
+export type DictionarySlug = "namespaces" | "lifecycles";
 
 export async function getDictionary(slug: DictionarySlug): Promise<DictionaryEntry[]> {
   return (await jsonRequest<DictionaryEntryList>(`/api/v1/dictionaries/${slug}`)).items;

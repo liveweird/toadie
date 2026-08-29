@@ -1,0 +1,29 @@
+{
+  "title": "Cykle życia",
+  "intro": "Jedyne wartości spec.lifecycle, jakich mogą używać pliki katalogu — jedna globalna lista dla każdego rodzaju z tym polem. Administratorzy i administratorki zarządzają listą i jej kolejnością.",
+  "empty": "Nie zdefiniowano jeszcze cykli życia",
+  "loadFailed": "Nie udało się wczytać cykli życia",
+  "addEntry": "Dodaj cykl życia",
+  "entryAria": "Cykl życia {{position}}",
+  "moveUp": "Przesuń cykl życia {{position}} w górę",
+  "moveDown": "Przesuń cykl życia {{position}} w dół",
+  "removeEntry": "Usuń cykl życia {{position}}",
+  "valueRequired": "Cykl życia jest wymagany",
+  "valueInvalid": "Musi mieć 1–63 małe znaki alfanumeryczne z pojedynczymi myślnikami",
+  "valueDuplicate": "Ten cykl życia jest już na liście",
+  "discardTitle": "Odrzucić zmiany?",
+  "discardMessage": "Niezapisane zmiany cykli życia zostaną utracone.",
+  "keepEditing": "Kontynuuj edycję",
+  "discard": "Odrzuć",
+  "savedButStale": "Zapisano — ale ponowne wczytanie edytora nie powiodło się. Przeładuj stronę przed dalszymi zmianami.",
+  "toast": {
+    "saved": "Cykle życia zapisane"
+  },
+  "error": {
+    "permission": "Tylko administratorzy i administratorki mogą edytować cykle życia",
+    "conflict": "Konflikt zapisu — zamiana dwóch wartości wymaga dwóch zapisów; zmień nazwę przez wartość tymczasową",
+    "validation": "Co najmniej jedna wartość jest nieprawidłowa",
+    "saveFailedStatus": "Zapis nie powiódł się ({{status}})",
+    "saveFailed": "Zapis nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
+  }
+}

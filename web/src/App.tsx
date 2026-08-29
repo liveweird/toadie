@@ -21,6 +21,7 @@ import {
   IconKey,
   IconListCheck,
   IconCategory,
+  IconRecycle,
   IconTag,
   IconLogout,
   IconMoon,
@@ -60,6 +61,7 @@ const Namespaces = lazy(() => import("./pages/Namespaces"));
 const Labels = lazy(() => import("./pages/Labels"));
 const Tags = lazy(() => import("./pages/Tags"));
 const Types = lazy(() => import("./pages/Types"));
+const Lifecycles = lazy(() => import("./pages/Lifecycles"));
 const Users = lazy(() => import("./pages/Users"));
 const UserFeatures = lazy(() => import("./pages/UserFeatures"));
 const FeatureFlags = lazy(() => import("./pages/FeatureFlags"));
@@ -98,6 +100,7 @@ const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   { to: "/labels", label: "appShell.nav.labels", icon: IconTag },
   { to: "/tags", label: "appShell.nav.tags", icon: IconHash },
   { to: "/types", label: "appShell.nav.types", icon: IconCategory },
+  { to: "/lifecycles", label: "appShell.nav.lifecycles", icon: IconRecycle },
   { to: "/users", label: "appShell.nav.users", icon: IconUsers, adminOnly: true },
   { to: "/feature-flags", label: "appShell.nav.featureFlags", icon: IconToggleLeft, adminOnly: true },
   { to: "/change-password", label: "appShell.nav.changePassword", icon: IconKey },
@@ -253,6 +256,7 @@ export default function App() {
             <Route path="labels" element={<Labels />} />
             <Route path="tags" element={<Tags />} />
             <Route path="types" element={<Types />} />
+            <Route path="lifecycles" element={<Lifecycles />} />
             <Route path="users" element={<Users />} />
             <Route path="users/new" element={<CreateUser />} />
             <Route path="users/:id/edit" element={<EditUser />} />

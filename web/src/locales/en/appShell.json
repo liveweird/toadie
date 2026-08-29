@@ -11,6 +11,7 @@
     "labels": "Labels",
     "tags": "Tags",
     "types": "Types",
+    "lifecycles": "Lifecycles",
     "users": "Users",
     "changePassword": "Change password",
     "featureFlags": "Feature flags"

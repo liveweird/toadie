@@ -404,6 +404,45 @@ object TestNamespaces {
 }
 
 /**
+ * The lifecycles dictionary is SHARED suite state too (V16 seeds experimental/production/
+ * deprecated — every catalog fixture's lifecycle rides those): tests append unique
+ * throwaway values via [ensure] and remove only what they added, so the seeds and other
+ * tests' values survive. No default-flag plumbing — the LIFECYCLE dictionary has none.
+ */
+object TestLifecycles {
+    val service: ch.nokillswit.dictionaries.DictionaryService by lazy {
+        ch.nokillswit.dictionaries.DictionaryService(sharedTestDatabase)
+    }
+
+    private val DICT = ch.nokillswit.dictionaries.Dictionary.LIFECYCLE
+
+    private suspend fun currentInputs(): List<ch.nokillswit.dictionaries.DictionaryEntryInput> =
+        service.read(DICT).map { ch.nokillswit.dictionaries.DictionaryEntryInput(it.id, it.value) }
+
+    /** Ensures every value in [values] is an active lifecycle entry (append-preserving replace). */
+    suspend fun ensure(vararg values: String) {
+        val current = service.read(DICT)
+        val missing = values.filterNot { v -> current.any { it.value == v } }
+        if (missing.isNotEmpty()) {
+            service.replace(
+                DICT,
+                ch.nokillswit.dictionaries.DictionaryUpdateRequest(
+                    currentInputs() + missing.map { ch.nokillswit.dictionaries.DictionaryEntryInput(value = it) },
+                ),
+            )
+        }
+    }
+
+    /** Removes [values] from the active document (a no-op for values not present). */
+    suspend fun remove(vararg values: String) {
+        service.replace(
+            DICT,
+            ch.nokillswit.dictionaries.DictionaryUpdateRequest(currentInputs().filterNot { it.value in values }),
+        )
+    }
+}
+
+/**
  * Direct access to the SHARED label registry (V10) — like the namespaces dictionary, suite
  * state every catalog write is checked against. Tests only ever mint UNIQUE keys (the
  * `uniqueLabel` fixture) and remove them when a test's assertions depend on absence.

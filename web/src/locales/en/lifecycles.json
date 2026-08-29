@@ -1,0 +1,29 @@
+{
+  "title": "Lifecycles",
+  "intro": "The only spec.lifecycle values catalog files may use — one global list for every kind that carries the field. Administrators curate the list and its order.",
+  "empty": "No lifecycles defined yet",
+  "loadFailed": "Could not load the lifecycles",
+  "addEntry": "Add lifecycle",
+  "entryAria": "Lifecycle {{position}}",
+  "moveUp": "Move lifecycle {{position}} up",
+  "moveDown": "Move lifecycle {{position}} down",
+  "removeEntry": "Remove lifecycle {{position}}",
+  "valueRequired": "Lifecycle is required",
+  "valueInvalid": "Must be 1–63 lowercase alphanumeric characters with single dashes",
+  "valueDuplicate": "This lifecycle is already in the list",
+  "discardTitle": "Discard changes?",
+  "discardMessage": "Your unsaved lifecycle changes will be lost.",
+  "keepEditing": "Keep editing",
+  "discard": "Discard",
+  "savedButStale": "Saved — but reloading the editor failed. Reload the page before making further changes.",
+  "toast": {
+    "saved": "Lifecycles saved"
+  },
+  "error": {
+    "permission": "Only administrators can edit lifecycles",
+    "conflict": "Save conflict — swapping two values needs two saves; rename through a temporary value first",
+    "validation": "One or more values are invalid",
+    "saveFailedStatus": "Save failed ({{status}})",
+    "saveFailed": "Save failed. Check your connection and try again."
+  }
+}

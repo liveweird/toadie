@@ -42,6 +42,7 @@ const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/labels", heading: "Labels" },
   { path: "/tags", heading: "Tags" },
   { path: "/types", heading: "Types" },
+  { path: "/lifecycles", heading: "Lifecycles" },
   { path: "/users", heading: "Users" },
 ];
 

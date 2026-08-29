@@ -11,6 +11,7 @@
     "labels": "Etykiety",
     "tags": "Tagi",
     "types": "Typy",
+    "lifecycles": "Cykle życia",
     "users": "Użytkownicy/czki",
     "changePassword": "Zmiana hasła",
     "featureFlags": "Flagi funkcji"

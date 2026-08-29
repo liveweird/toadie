@@ -19,7 +19,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The dictionaries surface (namespaces is the only dictionary today): whole-document replace
+ * The dictionaries surface (namespaces + lifecycles): whole-document replace
  * semantics, the payload rules, and the authz split. The namespaces document is SHARED suite
  * state — document-replacing tests run inside [withNamespacesDocument], which snapshots the
  * active values and restores them afterwards (ids are reminted; nothing keys on them).
@@ -373,4 +373,46 @@ class DictionaryTest {
             }
         }
     }
+    @Test
+    fun `the lifecycles dictionary is seeded with the well-known values and carries no default`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("lcseed")
+            val entries = client.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items
+            val values = entries.map { it.value }
+            assertTrue(listOf("experimental", "production", "deprecated").all { it in values })
+            assertTrue(entries.none { it.isDefault }, "lifecycles have no default entry")
+        }
+
+    @Test
+    fun `the lifecycles document round-trips appends and removals without default flags`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("lccrud", UserRole.ADMIN)
+        val value = ns("test-lc").lowercase()
+        TestLifecycles.ensure(value)
+        try {
+            val listed = admin.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items
+            assertTrue(listed.any { it.value == value })
+        } finally {
+            TestLifecycles.remove(value)
+        }
+        val after = admin.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items
+        assertTrue(after.none { it.value == value })
+    }
+
+    @Test
+    fun `a default flag on the lifecycles dictionary is 400 - the namespaces rule does not leak`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val admin = seededClient("lcflag", UserRole.ADMIN)
+            val current = admin.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items
+            val flagged = DictionaryUpdateRequest(
+                current.mapIndexed { i, e -> DictionaryEntryInput(e.id, e.value, isDefault = i == 0) },
+            )
+            val response = admin.putJson("/api/v1/dictionaries/lifecycles", flagged)
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            // The document is untouched — the same entries still read back unflagged.
+            val after = admin.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items
+            assertTrue(after.none { it.isDefault })
+        }
 }

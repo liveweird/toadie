@@ -12,10 +12,18 @@ import kotlinx.serialization.Serializable
  * the enum name is the value stored in `dictionary_entries.dictionary` (the application enum
  * is the whitelist — no DB CHECK).
  */
-enum class Dictionary(val slug: String) {
+enum class Dictionary(val slug: String, val usesDefault: Boolean) {
     // The allowed catalog-file namespaces: every catalog-file write (create, update, import)
     // requires its namespace to be an ACTIVE entry here (CatalogFileService enforces it).
-    NAMESPACE("namespaces");
+    // The one dictionary with a DEFAULT entry — what blank namespaces resolve to.
+    NAMESPACE("namespaces", usesDefault = true),
+
+    // The GLOBAL allowed spec.lifecycle values (one list for every lifecycle-bearing kind —
+    // Component and API; the per-kind field tables already forbid the field elsewhere):
+    // every catalog-file write with a non-blank lifecycle requires it to be an ACTIVE entry
+    // here (CatalogFileService enforces it). No default — a blank lifecycle is the per-kind
+    // requiredness tables' business, never resolved.
+    LIFECYCLE("lifecycles", usesDefault = false);
 
     companion object {
         fun fromSlug(slug: String): Dictionary? = entries.firstOrNull { it.slug == slug }
@@ -41,13 +49,14 @@ const val MAX_DICTIONARY_ENTRIES = 200
 /**
  * Single home of the payload rules — enforced by the route and re-checked by the service
  * (the validateCatalogFile pattern). Values are compared in their STORED form — trimmed and
- * folded to lowercase, the namespace convention (a second dictionary with different value
- * rules branches per [Dictionary] here). Because the PUT is a whole-document replace,
- * payload-level uniqueness IS post-save active-set uniqueness; the partial unique index
- * stays as the DB backstop. The value grammar is the catalog's namespace grammar
- * ([NAMESPACE_REGEX], ≤[MAX_ENTITY_PART_LENGTH] chars — also the column width).
+ * folded to lowercase, the namespace convention. Because the PUT is a whole-document
+ * replace, payload-level uniqueness IS post-save active-set uniqueness; the partial unique
+ * index stays as the DB backstop. The value grammar is shared by both dictionaries — the
+ * catalog's namespace grammar ([NAMESPACE_REGEX], ≤[MAX_ENTITY_PART_LENGTH] chars — also
+ * the column width), which the well-known lifecycles fit too; only the DEFAULT rule
+ * branches per [Dictionary.usesDefault].
  */
-fun validateDictionaryUpdate(request: DictionaryUpdateRequest) {
+fun validateDictionaryUpdate(dictionary: Dictionary, request: DictionaryUpdateRequest) {
     if (request.items.size > MAX_DICTIONARY_ENTRIES) {
         throw BadRequestException("A dictionary may hold at most $MAX_DICTIONARY_ENTRIES entries")
     }
@@ -63,10 +72,15 @@ fun validateDictionaryUpdate(request: DictionaryUpdateRequest) {
     if (normalized.size != normalized.toSet().size) {
         throw BadRequestException("Dictionary values must be unique")
     }
-    // Exactly one DEFAULT per non-empty document (the empty document legally has none —
-    // blank-namespace catalog writes then 400 until an entry is flagged).
-    if (request.items.isNotEmpty() && request.items.count { it.isDefault } != 1) {
-        throw BadRequestException("Exactly one dictionary entry must be marked as the default")
+    if (dictionary.usesDefault) {
+        // Exactly one DEFAULT per non-empty document (the empty document legally has none —
+        // blank-namespace catalog writes then 400 until an entry is flagged).
+        if (request.items.isNotEmpty() && request.items.count { it.isDefault } != 1) {
+            throw BadRequestException("Exactly one dictionary entry must be marked as the default")
+        }
+    } else if (request.items.any { it.isDefault }) {
+        // Rejected rather than silently dropped — a flagged entry here is a client bug.
+        throw BadRequestException("The ${dictionary.slug} dictionary has no default entry")
     }
 }
 

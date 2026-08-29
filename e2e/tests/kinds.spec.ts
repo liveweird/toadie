@@ -1,4 +1,4 @@
-import { expect, login, openFilters, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickLifecycle, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
 
 async function fillIdentity(page: import("@playwright/test").Page, name: string, ns: string) {
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
@@ -38,7 +38,7 @@ test("a group, an API, and a component owned by the group are created and resolv
   await page.getByRole("option", { name: "API", exact: true }).click();
   await fillIdentity(page, api, ns);
   await pickType(page, "openapi");
-  await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
+  await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill(team);
   await page.getByRole("textbox", { name: "Definition" }).fill("openapi: 3.0.0");
   await Promise.all([
@@ -53,7 +53,7 @@ test("a group, an API, and a component owned by the group are created and resolv
   await page.goto("/catalog-files/new");
   await fillIdentity(page, comp, ns);
   await pickType(page, "service");
-  await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
+  await pickLifecycle(page, "production");
   // The owner PICKER: the just-created group is offered as its full identity and picking
   // it inserts that `group:namespace/name` form.
   await page.getByRole("combobox", { name: "Owner" }).click();

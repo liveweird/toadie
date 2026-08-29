@@ -1,4 +1,4 @@
-import { expect, login, openFilters, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickLifecycle, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
 
 // The render-graph journey in this run's throwaway NAMESPACE (registered by global-setup —
 // the form accepts only defined namespaces): the namespace filter isolates this spec's nodes
@@ -22,7 +22,7 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
     await pickNamespace(page, ns);
     await pickType(page, "service");
-    await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
+    await pickLifecycle(page, "production");
     await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
     for (const ref of dependsOn) {
       await page.getByRole("combobox", { name: "Depends on" }).fill(ref);

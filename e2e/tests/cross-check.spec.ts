@@ -1,4 +1,4 @@
-import { expect, login, openFilters, pickType, rowOperation, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickLifecycle, pickType, rowOperation, test, uniqueText } from "./helpers";
 
 // The cross-check journey on two throwaway unique-named files. Saves ENFORCE reference
 // resolution now, so a dangling reference can only be MADE by deleting its target — the
@@ -16,7 +16,7 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(target);
   await pickType(page, "service");
-  await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
+  await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await Promise.all([
     page.waitForResponse(
@@ -30,7 +30,7 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(source);
   await pickType(page, "service");
-  await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
+  await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await page.getByRole("combobox", { name: "Depends on" }).fill(`component:${source}`);
   await page.keyboard.press("Enter");
@@ -85,7 +85,7 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(target);
   await pickType(page, "service");
-  await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
+  await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await Promise.all([
     page.waitForResponse(

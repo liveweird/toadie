@@ -14,9 +14,9 @@ const MAX_PROFILE_EMAIL_LENGTH = 254;
 export const ENTITY_KINDS = ["Component", "API", "System", "Domain", "Resource", "Group", "User"] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
-// (The per-kind well-known TYPE lists moved server-side: V15 seeds them into the admin-
-// curated type dictionaries, and the editor's Type picker reads those via useEntityTypes.)
-export const WELL_KNOWN_LIFECYCLES = ["experimental", "production", "deprecated"] as const;
+// (The well-known TYPE and LIFECYCLE value lists moved server-side: V15/V16 seed them into
+// the admin-curated registries, and the editor's pickers read those via useEntityTypes /
+// useLifecycleOptions.)
 
 // The grammars from .claude/docs/backstage-descriptor-format.md, identical to the server's
 // validateCatalogFile (catalog/CatalogFile.kt) — keep the two in sync.

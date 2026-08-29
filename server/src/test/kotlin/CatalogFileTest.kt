@@ -878,6 +878,36 @@ class CatalogFileTest {
     }
 
     @Test
+    fun `spec lifecycle is enforced against the global dictionary - strict, on create and update`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("lcenf")
+
+            // An unregistered lifecycle is a 400 naming the rule (the V16 seed is the gate).
+            val bad = client.postJson(
+                "/api/v1/catalog-files",
+                componentFile(uniqueEntityName("lcenf"), lifecycle = "never-registered-xyz"),
+            )
+            assertEquals(HttpStatusCode.BadRequest, bad.status)
+            assertTrue(bad.body<ProblemDetail>().detail!!.contains("not an allowed lifecycle"))
+
+            // A value appended to the dictionary becomes saveable; once removed again, the
+            // STORED file goes strict-invalid on its next save (no grandfathering).
+            val extra = uniqueEntityName("lcx").lowercase()
+            TestLifecycles.ensure(extra)
+            try {
+                val file = componentFile(uniqueEntityName("lcok"), lifecycle = extra)
+                val created = client.createCatalogFile(file)
+                TestLifecycles.remove(extra)
+                val update = client.putJson("/api/v1/catalog-files/${created.id}", file)
+                assertEquals(HttpStatusCode.BadRequest, update.status)
+                assertTrue(update.body<ProblemDetail>().detail!!.contains("not an allowed lifecycle"))
+            } finally {
+                TestLifecycles.remove(extra)
+            }
+        }
+
+    @Test
     fun `a kind without a dictionary allows no type at all - but an optional type may stay absent`() =
         testApplication {
             usePostgresTestcontainer()

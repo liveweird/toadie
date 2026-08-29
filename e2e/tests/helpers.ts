@@ -110,6 +110,19 @@ export async function pickType(page: Page, type: string): Promise<void> {
 }
 
 /**
+ * Pick a spec.lifecycle in the catalog form's Lifecycle Select (free text is not accepted —
+ * the field offers only the global lifecycles dictionary, seeded by V16 with the well-known
+ * values). Same shape as [pickType].
+ */
+export async function pickLifecycle(page: Page, lifecycle: string): Promise<void> {
+  const select = page.getByRole("combobox", { name: "Lifecycle" });
+  await select.click();
+  await select.fill(lifecycle);
+  await page.getByRole("option", { name: lifecycle, exact: true }).click();
+  await expect(select).toHaveValue(lifecycle);
+}
+
+/**
  * Drive a catalog-files list row's action through its Operations dropdown (the per-row
  * Edit/Download/Delete buttons are bundled under one menu button since the list reshape).
  */

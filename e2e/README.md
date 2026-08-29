@@ -51,7 +51,8 @@ from Lettuce, that any new or edited spec must satisfy:
   `labels` owns its throwaway label, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
   value it appends to the Domain type dictionary, the one Domain file carrying it, and its
-  user; `password-reset` owns
+  user; `lifecycles` owns the one value it appends to the lifecycles dictionary, the one
+  Component file carrying it, and its user; `password-reset` owns
   its throwaway account (its reset requests use unique per-run emails against the in-memory
   per-email throttle, and both tests together stay under the per-IP 5/min reset bucket);
   `mfa` owns its throwaway accounts and toggles ONLY their MFA flags (the seed admin's MFA
@@ -68,6 +69,11 @@ from Lettuce, that any new or edited spec must satisfy:
   DEFAULT flag is doubly shared-critical: blank-namespace creates resolve against it, so no
   spec may flip which entry is flagged (`namespaces.spec` only asserts it; flipping is pinned
   server-/unit-side).
+- **The lifecycles dictionary is single-writer state the same way** (a whole-document PUT):
+  **global-setup does not touch it** — the V16 seed provides the well-known values every
+  spec's `pickLifecycle` relies on — and **`lifecycles.spec.ts` is the ONLY in-run writer**,
+  appending and removing only its own unique `e2e-lc-*` value; no spec may remove or rename
+  a seeded lifecycle.
 - **The label registry is single-writer state too.** Catalog writes accept only registered
   labels, so a concurrently deleted/edited label breaks parallel specs' saves —
   **`labels.spec.ts` is the registry's ONLY in-run writer**, and it only ever creates and
@@ -109,7 +115,7 @@ the same commit** — this list is the coverage map, the scenario file is the de
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
   authenticated pages (`/`, `/catalog-files`, `/catalog-files/new`, `/catalog-files/import`,
-  `/cross-check`, `/render`, `/labels`, `/tags`, `/types`, `/users`); `color-contrast` consciously waived theme-wide.
+  `/cross-check`, `/render`, `/labels`, `/tags`, `/types`, `/lifecycles`, `/users`); `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
@@ -123,6 +129,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
   label (values + kinds) → edit → the regular user's read-only view → the editor's
   registry-constrained label pickers on a new Component → cleanup; the registry's only
   in-run writer.
+- [`lifecycles.spec.ts`](scenarios/lifecycles.md) — the lifecycles dictionary: seeded values
+  → inline grammar validation → append a unique value → the regular user's read-only view →
+  the editor's Lifecycle Select on a new Component → removal; the dictionary's only in-run
+  writer (append-and-remove, the seeds survive).
 - [`mfa.spec.ts`](scenarios/mfa.md) — email MFA + the flags surfaces: the /feature-flags
   row switch and per-user editor round-trip a throwaway user's MFA flag; an MFA-enabled
   account signs in through the emailed 6-digit code via Mailpit (skips itself without it).

@@ -38,7 +38,7 @@ fun Application.configureDictionaryRoutes() {
                 val dict = Dictionary.fromSlug(route.dictionary)
                     ?: throw NotFoundException("Unknown dictionary")
                 val request = call.receive<DictionaryUpdateRequest>()
-                validateDictionaryUpdate(request)
+                validateDictionaryUpdate(dict, request)
                 val counts = dictionaryService.replace(dict, request)
                 audit(
                     "dictionary.updated",

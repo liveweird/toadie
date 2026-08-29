@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
 import { useEntityTypes } from "../hooks/useEntityTypes";
 import { useLabels } from "../hooks/useLabels";
+import { useLifecycleOptions } from "../hooks/useLifecycleOptions";
 import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
 import { useTagCategories } from "../hooks/useTagCategories";
 import { charCountDescription } from "../utils/charCount";
@@ -32,7 +33,6 @@ import {
   MAX_LINK_TITLE_LENGTH,
   MAX_TITLE_LENGTH,
   RELATION_FIELDS,
-  WELL_KNOWN_LIFECYCLES,
   type CatalogFileFormValues,
   type EntityKind,
   type SpecFieldName,
@@ -174,6 +174,34 @@ function TypeSelect({ form }: { form: CatalogForm }) {
   );
 }
 
+/**
+ * The lifecycle picker — registry-constrained like [TypeSelect], but against the GLOBAL
+ * lifecycles dictionary (one list for every lifecycle-bearing kind; server-enforced,
+ * strict). A stored value no longer in the dictionary is appended so the file keeps
+ * rendering — the server's 400 then names the problem on save. Not clearable: every kind
+ * that renders the field requires it.
+ */
+function LifecycleSelect({ form }: { form: CatalogForm }) {
+  const { t } = useTranslation();
+  const current = form.values.lifecycle.trim();
+  const { options, error } = useLifecycleOptions(current);
+  let hint: string | undefined;
+  if (error) hint = t("catalog.lifecycleOptionsFailed");
+  else if (options.length === 0) hint = t("catalog.noLifecyclesDefined");
+  return (
+    <Select
+      label={t("catalog.field.lifecycle")}
+      required
+      data={options}
+      searchable
+      description={hint}
+      value={current || null}
+      onChange={(value) => form.setFieldValue("lifecycle", value ?? "")}
+      error={form.getInputProps("lifecycle").error}
+    />
+  );
+}
+
 function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }) {
   const { t } = useTranslation();
   const kind = form.values.kind;
@@ -184,16 +212,7 @@ function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }
         {(has("type") || has("lifecycle")) && (
           <Group grow align="flex-start">
             {has("type") && <TypeSelect form={form} />}
-            {has("lifecycle") && (
-              <Autocomplete
-                label={t("catalog.field.lifecycle")}
-                required
-                data={[...WELL_KNOWN_LIFECYCLES]}
-                placeholder={t("catalog.hint.lifecycle")}
-                maxLength={MAX_ENTITY_PART_LENGTH}
-                {...form.getInputProps("lifecycle")}
-              />
-            )}
+            {has("lifecycle") && <LifecycleSelect form={form} />}
           </Group>
         )}
         {has("owner") && (

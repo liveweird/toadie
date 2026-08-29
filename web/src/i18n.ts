@@ -13,6 +13,7 @@ import enAuth from "./locales/en/auth.json";
 import enCatalog from "./locales/en/catalog.json";
 import enCrossCheck from "./locales/en/crossCheck.json";
 import enLabels from "./locales/en/labels.json";
+import enLifecycles from "./locales/en/lifecycles.json";
 import enNamespaces from "./locales/en/namespaces.json";
 import enTags from "./locales/en/tags.json";
 import enTypes from "./locales/en/types.json";
@@ -60,6 +61,7 @@ export const en = {
   catalog: enCatalog,
   crossCheck: enCrossCheck,
   labels: enLabels,
+  lifecycles: enLifecycles,
   namespaces: enNamespaces,
   tags: enTags,
   types: enTypes,
