@@ -16,6 +16,12 @@
     "missing": "Brakująca encja",
     "external": "Nieprzechowywane w Toadie"
   },
+  "layoutMode": {
+    "label": "Układ",
+    "auto": "Automatyczny",
+    "manual": "Ręczny"
+  },
+  "resetLayout": "Resetuj układ",
   "empty": "Nie ma czego renderować — żaden zapisany plik nie pasuje.",
   "nodeAria": "Otwórz {{name}}"
 }

@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.7.0",
+    date: "2026-08-30",
+    en: `Arrange the graph your way.
+
+- The Graph page now has two layout modes: **Auto** (the computed layout, as before) and **Manual** — drag nodes wherever you like and they stay put.
+- Your arrangement is saved to your account, so it follows you across browsers and devices; **Reset layout** starts you over from the computed layout.`,
+    pl: `Ułóż graf po swojemu.
+
+- Strona Grafu ma teraz dwa tryby układu: **Automatyczny** (wyliczany układ, jak dotychczas) i **Ręczny** — przeciągnij węzły, gdzie chcesz, a zostaną na miejscu.
+- Twój układ zapisuje się na koncie, więc podąża za Tobą między przeglądarkami i urządzeniami; **Resetuj układ** zaczyna od nowa od wyliczonego układu.`,
+  },
+  {
     version: "1.6.0",
     date: "2026-08-30",
     en: `Try an import before committing.

@@ -16,6 +16,12 @@
     "missing": "Missing entity",
     "external": "Not stored in Toadie"
   },
+  "layoutMode": {
+    "label": "Layout",
+    "auto": "Auto",
+    "manual": "Manual"
+  },
+  "resetLayout": "Reset layout",
   "empty": "Nothing to render — no stored files match.",
   "nodeAria": "Open {{name}}"
 }

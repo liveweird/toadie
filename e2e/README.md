@@ -105,7 +105,9 @@ from Lettuce, that any new or edited spec must satisfy:
   survive runs (the volume's own demo files may reference it).
 - Seeded accounts are never mutated. The seed admin (`admin@toadie.local`) is a shared
   read-mostly actor: specs sign in as it but must not change its password, roles, or state — a
-  future spec that needs a mutated account creates a throwaway.
+  future spec that needs a mutated account creates a throwaway. The ONE sanctioned exception:
+  `render.spec.ts` owns the admin's per-user graph LAYOUT document (pure view state no other
+  spec reads) and restores the pristine default (Auto, no positions) before it ends.
 - E2e-created entities carry a sweepable marker — every e2e-created file's name/namespace and
   every e2e-created user's email contains `e2e`, and nothing that must SURVIVE runs is ever
   named that way. Each spec deletes its own state, so the rule is currently satisfied by
@@ -172,7 +174,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
   without Mailpit).
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
   (deletion-orphaned) missing nodes for a throwaway namespace; toggling a relation family
-  prunes its virtual nodes.
+  prunes its virtual nodes; the Manual layout mode drags a node, the position survives a
+  reload (server-side per user), and Reset + Auto restore the pristine layout document.
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   dry-run as Would-be-created (the Check button, nothing stored), import as Created, export
   downloads them as one `---`-separated file, and re-importing the export reports every row

@@ -267,6 +267,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/graph-layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a user's Graph-page layout (target user or ADMIN)
+         * @description The per-user Graph layout document: the layout mode (`auto` = dagre computed on
+         *     every render, `manual` = the dragged positions apply) plus every manually dragged
+         *     node's canvas position, keyed by node id (`kind:namespace/name`). A user who never
+         *     saved gets the default (`auto`, no positions) — never a 404 for a live target.
+         *     **Target user or ADMIN**, guard-before-read (a forbidden caller gets a uniform 403
+         *     whether or not the id exists).
+         */
+        get: operations["getUserGraphLayout"];
+        /**
+         * Replace a user's Graph-page layout (target user or ADMIN)
+         * @description A **wholesale replace** of the whole layout document — the client merges (it holds
+         *     the full positions map from the GET and updates only dragged entries), so a PUT
+         *     carrying only the currently visible nodes' positions would silently drop the rest.
+         *     Written by the Graph page on every mode switch, drag stop (debounced), and layout
+         *     reset. Idempotent; **target user or ADMIN**. Deliberately unaudited (pure
+         *     high-frequency view state); denials still emit `authz.denied`.
+         */
+        put: operations["setUserGraphLayout"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/password": {
         parameters: {
             query?: never;
@@ -950,6 +986,31 @@ export interface components {
         Language: "en" | "pl";
         UserLanguageUpdateRequest: {
             language: components["schemas"]["Language"];
+        };
+        GraphPosition: {
+            /**
+             * Format: double
+             * @description React Flow canvas x coordinate (top-left of the node).
+             */
+            x: number;
+            /**
+             * Format: double
+             * @description React Flow canvas y coordinate (top-left of the node).
+             */
+            y: number;
+        };
+        /** @description The per-user Graph-page layout (V19): the mode plus every manually dragged node's position, keyed by node id (kind:namespace/name). The PUT replaces it wholesale; both fields default (auto / empty) when omitted. */
+        GraphLayoutDocument: {
+            /**
+             * @description auto = the dagre layout computed on every render; manual = the stored dragged positions apply (nodes without a stored position keep their dagre spot).
+             * @default auto
+             * @enum {string}
+             */
+            mode: "auto" | "manual";
+            /** @description Dragged node positions by node id — at most 1000 entries, keys non-blank and at most 400 characters. */
+            positions?: {
+                [key: string]: components["schemas"]["GraphPosition"];
+            };
         };
         UserFeaturesUpdateRequest: {
             /** @description The complete new DISABLED set — an empty array enables everything. */
@@ -1888,6 +1949,78 @@ export interface operations {
         };
         responses: {
             /** @description Language set */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not the target user and not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getUserGraphLayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stored (or default) layout document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphLayoutDocument"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not the target user and not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    setUserGraphLayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphLayoutDocument"];
+            };
+        };
+        responses: {
+            /** @description Layout replaced */
             204: {
                 headers: {
                     [name: string]: unknown;

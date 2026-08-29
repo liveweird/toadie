@@ -64,6 +64,56 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
   await expect(page.getByText(b, { exact: true })).toBeVisible();
   await expect(page.getByText("platform", { exact: true })).toBeVisible();
 
+  // Manual layout: node canvas positions read via the React Flow wrapper's translate()
+  // transform — viewport-independent, unlike boundingBox (fitView rescales after reload).
+  const nodeB = page.locator(`.react-flow__node[data-id="component:${ns}/${b}"]`);
+  const transformOfB = () => nodeB.evaluate((el) => (el as HTMLElement).style.transform);
+  const layoutPut = () =>
+    page.waitForResponse(
+      (r) => r.url().includes("/graph-layout") && r.request().method() === "PUT" && r.ok(),
+    );
+
+  // Switch to Manual (the SegmentedControl input is visually hidden — click its label).
+  // Assert the radio state rather than awaiting the mode PUT: a retry inheriting a
+  // manual-mode residue would fire no change event (and so no PUT) on this click.
+  await page.getByText("Manual", { exact: true }).click();
+  await expect(page.getByRole("radio", { name: "Manual" })).toBeChecked();
+  const dagreTransform = await transformOfB();
+
+  // Drag B and wait for the debounced position save; the drag must NOT navigate to the
+  // editor (a stored node's click is swallowed when it rides a drag gesture). hover()
+  // scrolls the node into view, waits for it to be stable, and parks the pointer on it —
+  // page.mouse alone would neither scroll nor wait for the canvas to settle.
+  await nodeB.hover();
+  const box = (await nodeB.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await Promise.all([
+    layoutPut(),
+    (async () => {
+      await page.mouse.down();
+      await page.mouse.move(cx + 140, cy - 60, { steps: 8 });
+      await page.mouse.up();
+    })(),
+  ]);
+  const draggedTransform = await transformOfB();
+  expect(draggedTransform).not.toBe(dagreTransform);
+  await expect(page).toHaveURL(/\/graph$/);
+
+  // Reload: the filter persists locally, the dragged position SERVER-side per user.
+  await page.reload();
+  await expect(page.getByText(b, { exact: true })).toBeVisible();
+  await expect.poll(transformOfB).toBe(draggedTransform);
+
+  // Reset layout drops the stored positions — B returns to a computed dagre spot.
+  await Promise.all([layoutPut(), page.getByRole("button", { name: "Reset layout" }).click()]);
+  await expect.poll(transformOfB).not.toBe(draggedTransform);
+
+  // Back to Auto — the seed admin's layout document ends the run pristine (auto, no
+  // positions), so parallel/later runs start from the default.
+  await Promise.all([layoutPut(), page.getByText("Auto", { exact: true }).click()]);
+  await expect(page.getByRole("button", { name: "Reset layout" })).toHaveCount(0);
+
   // Cleanup: delete both throwaway files.
   for (const name of [a, b]) {
     await page.goto("/files");

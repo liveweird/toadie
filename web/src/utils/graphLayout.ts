@@ -83,3 +83,18 @@ export function layoutGraph(graph: CatalogGraph): { nodes: LaidOutNode[]; edges:
   }));
   return { nodes, edges };
 }
+
+/** The manual-mode position overlay: dragged positions by node id (`kind:namespace/name`). */
+export type GraphPositions = Record<string, { x: number; y: number }>;
+
+/**
+ * Manual mode's overlay over the dagre output: nodes the user dragged take their stored
+ * position, everything else keeps its dagre spot (so new entities appear laid out), and
+ * stored positions for ids not in the graph are simply not consulted — never pruned.
+ */
+export function applyManualPositions(nodes: LaidOutNode[], positions: GraphPositions): LaidOutNode[] {
+  return nodes.map((n) => {
+    const p = positions[n.id];
+    return p ? { ...n, position: { x: p.x, y: p.y } } : n;
+  });
+}

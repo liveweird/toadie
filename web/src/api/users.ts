@@ -82,3 +82,22 @@ export async function setUserLanguage(id: number, language: string): Promise<voi
 export async function changeUserPassword(id: number, body: PasswordUpdateBody): Promise<void> {
   await voidRequest(`/api/v1/users/${id}/password`, { method: "PUT", body: JSON.stringify(body) });
 }
+
+export type GraphLayoutDocument =
+  paths["/api/v1/users/{id}/graph-layout"]["get"]["responses"]["200"]["content"]["application/json"];
+
+/** The per-user Graph-page layout: the mode + every dragged node's position. */
+export async function getGraphLayout(id: number): Promise<GraphLayoutDocument> {
+  return jsonRequest<GraphLayoutDocument>(`/api/v1/users/${id}/graph-layout`);
+}
+
+/**
+ * Wholesale replace — send the FULL merged document (the page merges over its GET copy;
+ * a PUT carrying only the visible nodes' positions would drop the rest server-side).
+ */
+export async function setGraphLayout(id: number, doc: GraphLayoutDocument): Promise<void> {
+  await voidRequest(`/api/v1/users/${id}/graph-layout`, {
+    method: "PUT",
+    body: JSON.stringify(doc),
+  });
+}

@@ -14,6 +14,8 @@ import ch.nokillswit.tags.TagCategoryService
 import ch.nokillswit.tags.TagCategoryServiceKey
 import ch.nokillswit.types.EntityTypesService
 import ch.nokillswit.types.EntityTypesServiceKey
+import ch.nokillswit.users.GraphLayoutService
+import ch.nokillswit.users.GraphLayoutServiceKey
 import ch.nokillswit.users.UserService
 import ch.nokillswit.users.UserServiceKey
 import io.ktor.server.application.*
@@ -31,6 +33,7 @@ suspend fun Application.configureDatabase() {
         password = environment.config.property("postgres.password").getString(),
     )
     attributes.put(UserServiceKey, UserService(database))
+    attributes.put(GraphLayoutServiceKey, GraphLayoutService(database))
     attributes.put(CatalogFileServiceKey, CatalogFileService(database))
     attributes.put(DictionaryServiceKey, DictionaryService(database))
     attributes.put(LabelServiceKey, LabelService(database))

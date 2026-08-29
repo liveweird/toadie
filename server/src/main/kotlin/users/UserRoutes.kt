@@ -93,11 +93,16 @@ class Users {
         @Serializable
         @Resource("language")
         class Language(val parent: Id)
+
+        @Serializable
+        @Resource("graph-layout")
+        class GraphLayout(val parent: Id)
     }
 }
 
 fun Application.configureUserRoutes() {
     val userService = attributes[UserServiceKey]
+    val graphLayoutService = attributes[GraphLayoutServiceKey]
 
     routing {
         authenticate {
@@ -307,6 +312,23 @@ fun Application.configureUserRoutes() {
                         "to" to req.language,
                     )
                 }
+                call.respond(HttpStatusCode.NoContent)
+            }
+            // Per-user Graph layout (V19): self or ADMIN, guard-before-read (uniform 403).
+            // Deliberately UNAUDITED (the documented exception): pure view state written on
+            // every drag stop — an event per drag would be spam; the 403 path still emits
+            // authz.denied for free.
+            get<Users.Id.GraphLayout> { route ->
+                requireSelfOrAdmin(call.caller(), route.parent.id)
+                userService.read(route.parent.id).orNotFound("User")
+                call.respond(HttpStatusCode.OK, graphLayoutService.read(route.parent.id))
+            }
+            put<Users.Id.GraphLayout> { route ->
+                requireSelfOrAdmin(call.caller(), route.parent.id)
+                val req = call.receive<GraphLayoutDocument>()
+                validateGraphLayout(req)
+                userService.read(route.parent.id).orNotFound("User")
+                graphLayoutService.replace(route.parent.id, req)
                 call.respond(HttpStatusCode.NoContent)
             }
         }

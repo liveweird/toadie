@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { CatalogGraph } from "../api/catalogFiles";
-import { filterGraph, layoutGraph, RELATION_FAMILIES } from "./graphLayout";
+import { applyManualPositions, filterGraph, layoutGraph, RELATION_FAMILIES } from "./graphLayout";
 
 const GRAPH: CatalogGraph = {
   nodes: [
@@ -86,5 +86,25 @@ describe("layoutGraph", () => {
   test("carries the API node through as data for the custom node", () => {
     const { nodes } = layoutGraph(GRAPH);
     expect(nodes.find((n) => n.id === "component:default/ghost")!.data.apiNode.status).toBe("MISSING");
+  });
+});
+
+describe("applyManualPositions", () => {
+  test("overrides stored ids, keeps dagre spots for the rest, ignores unknown ids", () => {
+    const { nodes } = layoutGraph(GRAPH);
+    const dagreB = nodes.find((n) => n.id === "component:default/b")!.position;
+    const overlaid = applyManualPositions(nodes, {
+      "component:default/a": { x: 42, y: -7 },
+      // An id not in the graph (renamed/filtered entity) is simply not consulted.
+      "component:default/gone": { x: 1, y: 1 },
+    });
+    expect(overlaid).toHaveLength(nodes.length);
+    expect(overlaid.find((n) => n.id === "component:default/a")!.position).toEqual({ x: 42, y: -7 });
+    expect(overlaid.find((n) => n.id === "component:default/b")!.position).toEqual(dagreB);
+  });
+
+  test("an empty map returns every node at its dagre position", () => {
+    const { nodes } = layoutGraph(GRAPH);
+    expect(applyManualPositions(nodes, {}).map((n) => n.position)).toEqual(nodes.map((n) => n.position));
   });
 });

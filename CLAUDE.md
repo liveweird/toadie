@@ -82,7 +82,10 @@ ch.nokillswit
 │                       flags (Feature enum + PUT {id}/features, the V12 disabled-set model;
 │                       MFA is the inverted-default login-scoped flag) + the per-user
 │                       language (V18: PUT {id}/language, self-or-admin — the ONE synced
-│                       UI+email language) + Validation.kt
+│                       UI+email language) + the per-user Graph layout (V19: GET/PUT
+│                       {id}/graph-layout, self-or-admin — the Graph page's Auto/Manual
+│                       modes + dragged positions; GraphLayout.kt/GraphLayoutService.kt,
+│                       deliberately unaudited) + Validation.kt
 ├── dictionaries/       admin-curated ordered value lists (Lettuce's dictionaries, single-
 │                       valued — no translations): Dictionary.kt (the Dictionary enum whitelist
 │                       + DTOs + validateDictionaryUpdate), DictionaryService.kt (whole-document

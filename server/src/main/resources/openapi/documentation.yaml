@@ -420,6 +420,64 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/users/{id}/graph-layout:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [users]
+      operationId: getUserGraphLayout
+      summary: Read a user's Graph-page layout (target user or ADMIN)
+      description: |
+        The per-user Graph layout document: the layout mode (`auto` = dagre computed on
+        every render, `manual` = the dragged positions apply) plus every manually dragged
+        node's canvas position, keyed by node id (`kind:namespace/name`). A user who never
+        saved gets the default (`auto`, no positions) — never a 404 for a live target.
+        **Target user or ADMIN**, guard-before-read (a forbidden caller gets a uniform 403
+        whether or not the id exists).
+      responses:
+        '200':
+          description: The stored (or default) layout document
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphLayoutDocument' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Caller is not the target user and not ADMIN
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    put:
+      tags: [users]
+      operationId: setUserGraphLayout
+      summary: Replace a user's Graph-page layout (target user or ADMIN)
+      description: |
+        A **wholesale replace** of the whole layout document — the client merges (it holds
+        the full positions map from the GET and updates only dragged entries), so a PUT
+        carrying only the currently visible nodes' positions would silently drop the rest.
+        Written by the Graph page on every mode switch, drag stop (debounced), and layout
+        reset. Idempotent; **target user or ADMIN**. Deliberately unaudited (pure
+        high-frequency view state); denials still emit `authz.denied`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphLayoutDocument'
+      responses:
+        '204': { description: Layout replaced }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Caller is not the target user and not ADMIN
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/users/{id}/password:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -1561,6 +1619,41 @@ components:
       properties:
         language:
           $ref: '#/components/schemas/Language'
+
+    GraphPosition:
+      type: object
+      required: [x, y]
+      properties:
+        x:
+          type: number
+          format: double
+          description: React Flow canvas x coordinate (top-left of the node).
+        y:
+          type: number
+          format: double
+          description: React Flow canvas y coordinate (top-left of the node).
+
+    GraphLayoutDocument:
+      type: object
+      description: >-
+        The per-user Graph-page layout (V19): the mode plus every manually dragged node's
+        position, keyed by node id (kind:namespace/name). The PUT replaces it wholesale;
+        both fields default (auto / empty) when omitted.
+      properties:
+        mode:
+          type: string
+          enum: [auto, manual]
+          default: auto
+          description: >-
+            auto = the dagre layout computed on every render; manual = the stored dragged
+            positions apply (nodes without a stored position keep their dagre spot).
+        positions:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/GraphPosition'
+          description: >-
+            Dragged node positions by node id — at most 1000 entries, keys non-blank and
+            at most 400 characters.
 
     UserFeaturesUpdateRequest:
       type: object
