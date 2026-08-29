@@ -16,6 +16,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import {
   IconFileDescription,
+  IconFolders,
   IconHash,
   IconHome,
   IconKey,
@@ -27,7 +28,6 @@ import {
   IconLogout,
   IconMoon,
   IconSun,
-  IconTags,
   IconTopologyStar3,
   IconToggleLeft,
   IconUsers,
@@ -98,7 +98,7 @@ const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   { to: "/cross-check", label: "appShell.nav.crossCheck", icon: IconListCheck },
   { to: "/render", label: "appShell.nav.render", icon: IconTopologyStar3 },
   // Visible to everyone: non-admins get the read-only list, ADMINs the editor (the page branches).
-  { to: "/namespaces", label: "appShell.nav.namespaces", icon: IconTags },
+  { to: "/namespaces", label: "appShell.nav.namespaces", icon: IconFolders },
   { to: "/labels", label: "appShell.nav.labels", icon: IconTag },
   { to: "/tags", label: "appShell.nav.tags", icon: IconHash },
   { to: "/types", label: "appShell.nav.types", icon: IconCategory },

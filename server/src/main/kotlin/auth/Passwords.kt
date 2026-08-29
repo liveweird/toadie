@@ -26,6 +26,14 @@ internal suspend fun verifyPassword(plain: String, hash: String): Boolean =
     !exceedsBcryptLimit(plain) &&
         withContext(Dispatchers.Default) { BCrypt.verifyer().verify(plain.toCharArray(), hash).verified }
 
+/**
+ * A real cost-12 hash of a throwaway string, verified against when a login's email matches no
+ * account: the unknown-email branch must pay the same bcrypt price as the wrong-password one,
+ * or the fast 401 becomes a timing oracle distinguishing unknown from existing accounts.
+ * The verify result is always discarded — this hash can never authenticate anyone.
+ */
+internal const val TIMING_EQUALIZER_HASH = "\$2a\$12\$x7ALsPyiaDt.5FQcrfQSlOmsT7xycnGCanTeSTKCFqcBWW5K43GO6"
+
 // URL-safe alphabet (no ambiguity-prone symbols) for server-generated passwords.
 private const val PASSWORD_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 

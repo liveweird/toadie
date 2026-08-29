@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
+// -- test scaffolding: the wrapper exports helpers beside the component; fast-refresh is irrelevant under vitest
 import { type ReactElement } from "react";
 import { render, type RenderOptions } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";

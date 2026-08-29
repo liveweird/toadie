@@ -151,6 +151,25 @@ class MfaLoginTest {
     }
 
     @Test
+    fun `a malformed body is 400 and the exhausted per-IP bucket is 429`() = testApplication {
+        usePostgresTestcontainer()
+        val client = jsonClient()
+        assertEquals(HttpStatusCode.BadRequest, client.postJson("/api/v1/login/mfa", "{ not json").status)
+        // The mfa bucket is hardcoded 10/min in every mode; the 400 above consumed one slot,
+        // nine uniform 401s exhaust the rest, and the eleventh request trips the limit.
+        repeat(9) {
+            assertEquals(
+                HttpStatusCode.Unauthorized,
+                client.postJson("/api/v1/login/mfa", MfaVerifyRequest("no-such-challenge", "000000")).status,
+            )
+        }
+        assertEquals(
+            HttpStatusCode.TooManyRequests,
+            client.postJson("/api/v1/login/mfa", MfaVerifyRequest("no-such-challenge", "000000")).status,
+        )
+    }
+
+    @Test
     fun `an expired challenge answers the same uniform 401`() = testApplication {
         // TTL 0: the challenge is born expired — no sleeping in tests.
         configureApp("security.mfa.codeTtlSeconds" to "0")

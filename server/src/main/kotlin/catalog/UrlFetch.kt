@@ -74,12 +74,36 @@ fun requirePublicHost(host: String) {
 
 internal fun InetAddress.isBlockedAddress(): Boolean =
     isLoopbackAddress || isSiteLocalAddress || isLinkLocalAddress || isAnyLocalAddress ||
-        isMulticastAddress || isUniqueLocalIpv6()
+        isMulticastAddress || isUniqueLocalIpv6() || isSpecialIpv4() || isNat64()
 
 // fc00::/7 — NOT covered by isSiteLocalAddress (that is the deprecated fec0::/10).
 private fun InetAddress.isUniqueLocalIpv6(): Boolean {
     val bytes = address
     return bytes.size == 16 && (bytes[0].toInt() and 0xFE) == 0xFC
+}
+
+// IPv4 ranges the JDK predicates miss but that are never public internet: 100.64.0.0/10
+// (CGNAT — used by cloud VPC/metadata setups), 192.0.0.0/24 (IETF protocol assignments,
+// incl. DS-Lite), 198.18.0.0/15 (benchmarking). IPv4-mapped IPv6 arrives here as
+// Inet4Address (the JDK folds it), so these cover ::ffff: forms too.
+private fun InetAddress.isSpecialIpv4(): Boolean {
+    val bytes = address
+    if (bytes.size != 4) return false
+    val b0 = bytes[0].toInt() and 0xFF
+    val b1 = bytes[1].toInt() and 0xFF
+    return (b0 == 100 && b1 in 64..127) ||
+        (b0 == 192 && b1 == 0 && (bytes[2].toInt() and 0xFF) == 0) ||
+        (b0 == 198 && (b1 == 18 || b1 == 19))
+}
+
+// 64:ff9b::/96 — the NAT64 well-known prefix; its tail embeds an IPv4 address that a NAT64
+// gateway would connect to, so judge the embedded IPv4 the same as a native one.
+private fun InetAddress.isNat64(): Boolean {
+    val bytes = address
+    if (bytes.size != 16) return false
+    val prefix = byteArrayOf(0x00, 0x64, 0xFF.toByte(), 0x9B.toByte(), 0, 0, 0, 0, 0, 0, 0, 0)
+    return bytes.copyOfRange(0, 12).contentEquals(prefix) &&
+        InetAddress.getByAddress(bytes.copyOfRange(12, 16)).isBlockedAddress()
 }
 
 /** The full guard chain: static rules, then the resolved-address check. */

@@ -93,7 +93,7 @@ export default function Labels() {
                   <Table.Th>{t("labels.column.key")}</Table.Th>
                   <Table.Th>{t("labels.column.values")}</Table.Th>
                   <Table.Th>{t("labels.column.kinds")}</Table.Th>
-                  {isAdmin() && <Table.Th />}
+                  {isAdmin() && <Table.Th aria-label={t("common.table.operations")} />}
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>

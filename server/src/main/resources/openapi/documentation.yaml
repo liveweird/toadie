@@ -531,6 +531,7 @@ paths:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
   /api/v1/catalog-files/cross-check:
@@ -1296,6 +1297,14 @@ components:
         Throttled — either the per-IP rate-limit bucket is exhausted (generic detail) or, on
         /login, the per-account lockout is active (account-specific detail). Both carry a
         ProblemDetail body.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    PayloadTooLarge:
+      description: >-
+        Request body exceeds the global 10 MiB ceiling — a memory-DoS backstop shared by
+        every endpoint (declared here on the largest-bodied operation; field-level maxLength
+        rules reject oversized values far earlier on ordinary payloads).
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetail' }

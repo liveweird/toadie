@@ -113,6 +113,26 @@ describe("CreateCatalogFile page", () => {
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
   });
 
+  test("empty registries surface every none-defined hint once loaded", async () => {
+    // Every registry answers an EMPTY list (not an error): the pickers must say "none
+    // defined" — and only after loading resolves, never during the fetch.
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") !== "GET") return Promise.resolve(jsonResponse(404, {}));
+      if (url.startsWith("/api/v1/catalog-files")) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, pageSize: 100, total: 0 }));
+      }
+      return Promise.resolve(jsonResponse(200, { items: [] }));
+    });
+    renderCreate();
+
+    expect(await screen.findByText(/no namespaces are defined/i)).toBeInTheDocument();
+    expect(screen.getByText(/no types are defined for kind Component/i)).toBeInTheDocument();
+    expect(screen.getByText(/no lifecycles are defined/i)).toBeInTheDocument();
+    expect(screen.getByText(/no labels are defined for kind Component/i)).toBeInTheDocument();
+    expect(screen.getByText(/no annotation keys are/i)).toBeInTheDocument();
+    expect(screen.getByText(/no tags are defined for kind Component/i)).toBeInTheDocument();
+  });
+
   test("labels come from the registry pickers and land in the payload", async () => {
     // The registry offers one Component label; the row's two Selects are the only way in.
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {

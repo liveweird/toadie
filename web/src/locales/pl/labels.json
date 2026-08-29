@@ -27,6 +27,7 @@
     "valuesDuplicate": "Wartości nie mogą się powtarzać",
     "kindsRequired": "Wybierz co najmniej jeden rodzaj"
   },
+  "saveForbidden": "Tylko administratorzy/ki mogą edytować etykiety",
   "saveConflict": "Etykieta o tym kluczu już istnieje",
   "saveInvalid": "Co najmniej jedno pole jest nieprawidłowe",
   "saveGone": "Ta etykieta już nie istnieje — odśwież stronę",

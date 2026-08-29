@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
@@ -36,6 +37,20 @@ class PayloadValidationTest {
     }
 
     @Test
+    fun `a request body over the global ceiling is a 413 problem`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("bodycap")
+        TestUsers.seed(email = email, password = "pw")
+        val client = authedClient(email, "pw")
+        // 1 byte over MAX_REQUEST_BODY_BYTES (10 MiB): the RequestBodyLimit backstop rejects
+        // it before any receive/validation work, with the RFC 7807 body like every error.
+        val oversized = """{"kind":"Component","content":"""" + "x".repeat(10 * 1024 * 1024) + "\"}"
+        val response = client.postJson("/api/v1/catalog-files", oversized)
+        assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
+        assertContains(response.bodyAsText(), "size limit")
+    }
+
+    @Test
     fun `a negative path id is rejected with 400 before routing`() = testApplication {
         usePostgresTestcontainer()
         // kotlinx UInt decoding would silently wrap /users/-1 to 4294967295 — the pre-routing
@@ -43,6 +58,8 @@ class PayloadValidationTest {
         val response = jsonClient().putJson("/api/v1/users/-1/password", """{"password":"whatever-works"}""")
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertContains(response.bodyAsText(), "non-negative")
+        // The intercept runs pre-routing, so it covers every verb — DELETE included.
+        assertEquals(HttpStatusCode.BadRequest, jsonClient().delete("/api/v1/users/-1").status)
     }
 
     @Test

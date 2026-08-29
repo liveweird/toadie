@@ -49,12 +49,15 @@ type Suggest = (field: RefField) => string[];
  * dictionary, so free text became a Select over the active entries (blank still means
  * `default`). A stored value no longer in the dictionary is appended by the hook so it keeps
  * displaying — the server's strict 400 then names the problem on save. A failed options load
- * shows its own error (never an empty-looking list) but leaves the field enabled: the server
- * is the actual gate.
+ * shows its own hint (never an empty-looking list) and leaves the field enabled: the server
+ * is the actual gate. The hint/never-disabled presentation matches the sibling pickers.
  */
 function NamespaceSelect({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
   const { options, defaultNamespace, loading, error } = useNamespaceOptions(form.values.namespace);
+  let hint: string | undefined;
+  if (error) hint = t("catalog.namespaceOptionsFailed");
+  else if (!loading && options.length === 0) hint = t("catalog.noNamespacesDefined");
   return (
     <Select
       label={t("catalog.field.namespace")}
@@ -62,11 +65,10 @@ function NamespaceSelect({ form }: { form: CatalogForm }) {
       data={options}
       searchable
       clearable
-      disabled={loading}
-      description={t("catalog.hint.namespace", { default: defaultNamespace ?? "default" })}
+      description={hint ?? t("catalog.hint.namespace", { default: defaultNamespace ?? "default" })}
       value={form.values.namespace.trim().toLowerCase() || null}
       onChange={(value) => form.setFieldValue("namespace", value ?? "")}
-      error={form.getInputProps("namespace").error ?? (error ? t("catalog.namespaceOptionsFailed") : undefined)}
+      error={form.getInputProps("namespace").error}
     />
   );
 }
@@ -118,14 +120,15 @@ function MetadataFieldset({ form }: { form: CatalogForm }) {
  */
 function TagsMultiSelect({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
-  const { categories, error } = useTagCategories();
+  const { categories, loading, error } = useTagCategories();
   const kind = form.values.kind;
   const allowed = categories.filter((category) => category.kinds.includes(kind));
   const offered = new Set(allowed.flatMap((category) => category.tags));
   const stale = form.values.tags.filter((tag) => !offered.has(tag));
   let hint: string | undefined;
   if (error) hint = t("catalog.tagOptionsFailed");
-  else if (allowed.length === 0) hint = t("catalog.noTagsForKind", { kind });
+  // Not while loading — an in-flight registry fetch is not "none defined".
+  else if (!loading && allowed.length === 0) hint = t("catalog.noTagsForKind", { kind });
   return (
     <MultiSelect
       label={t("catalog.field.tags")}
@@ -151,7 +154,7 @@ function TagsMultiSelect({ form }: { form: CatalogForm }) {
  */
 function TypeSelect({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
-  const { dictionaries, error } = useEntityTypes();
+  const { dictionaries, loading, error } = useEntityTypes();
   const kind = form.values.kind;
   const optional = !fieldRequired(kind, "type");
   const offered = dictionaries.find((dictionary) => dictionary.kind === kind)?.types ?? [];
@@ -159,7 +162,8 @@ function TypeSelect({ form }: { form: CatalogForm }) {
   const options = current && !offered.includes(current) ? [...offered, current] : [...offered];
   let hint: string | undefined;
   if (error) hint = t("catalog.typeOptionsFailed");
-  else if (offered.length === 0) hint = t("catalog.noTypesForKind", { kind });
+  // Not while loading — an in-flight registry fetch is not "none defined".
+  else if (!loading && offered.length === 0) hint = t("catalog.noTypesForKind", { kind });
   return (
     <Select
       label={t("catalog.field.type")}
@@ -185,10 +189,11 @@ function TypeSelect({ form }: { form: CatalogForm }) {
 function LifecycleSelect({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
   const current = form.values.lifecycle.trim();
-  const { options, error } = useLifecycleOptions(current);
+  const { options, loading, error } = useLifecycleOptions(current);
   let hint: string | undefined;
   if (error) hint = t("catalog.lifecycleOptionsFailed");
-  else if (options.length === 0) hint = t("catalog.noLifecyclesDefined");
+  // Not while loading — an in-flight registry fetch is not "none defined".
+  else if (!loading && options.length === 0) hint = t("catalog.noLifecyclesDefined");
   return (
     <Select
       label={t("catalog.field.lifecycle")}
@@ -347,20 +352,20 @@ function LinksFieldset({ form }: { form: CatalogForm }) {
           <Group key={`link-${index}`} align="flex-start" gap="sm" wrap="nowrap">
             <TextInput
               style={{ flex: 2 }}
-              aria-label={`${t("catalog.field.url")} ${index + 1}`}
+              aria-label={t("catalog.linkUrlAria", { index: index + 1 })}
               placeholder={t("catalog.field.url")}
               {...form.getInputProps(`links.${index}.url`)}
             />
             <TextInput
               style={{ flex: 1 }}
-              aria-label={`${t("catalog.field.linkTitle")} ${index + 1}`}
+              aria-label={t("catalog.linkTitleAria", { index: index + 1 })}
               placeholder={t("catalog.field.linkTitle")}
               maxLength={MAX_LINK_TITLE_LENGTH}
               {...form.getInputProps(`links.${index}.title`)}
             />
             <TextInput
               style={{ flex: 1 }}
-              aria-label={`${t("catalog.field.icon")} ${index + 1}`}
+              aria-label={t("catalog.linkIconAria", { index: index + 1 })}
               placeholder={t("catalog.field.icon")}
               maxLength={MAX_ENTITY_PART_LENGTH}
               {...form.getInputProps(`links.${index}.icon`)}
@@ -400,7 +405,7 @@ function LinksFieldset({ form }: { form: CatalogForm }) {
  */
 function LabelsFieldset({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
-  const { labels, error } = useLabels();
+  const { labels, loading, error } = useLabels();
   const kind = form.values.kind;
   const allowed = labels.filter((label) => label.kinds.includes(kind));
   const usedKeys = new Set(form.values.labels.map((row) => row.key));
@@ -422,7 +427,7 @@ function LabelsFieldset({ form }: { form: CatalogForm }) {
             <Group key={`labels-${index}`} align="flex-start" gap="sm" wrap="nowrap">
               <Select
                 style={{ flex: 1 }}
-                aria-label={`${t("catalog.section.labels")} ${t("catalog.field.key")} ${index + 1}`}
+                aria-label={t("catalog.labelKeyAria", { index: index + 1 })}
                 placeholder={t("catalog.field.key")}
                 data={keyData}
                 searchable
@@ -436,7 +441,7 @@ function LabelsFieldset({ form }: { form: CatalogForm }) {
               />
               <Select
                 style={{ flex: 1 }}
-                aria-label={`${t("catalog.section.labels")} ${t("catalog.field.value")} ${index + 1}`}
+                aria-label={t("catalog.labelValueAria", { index: index + 1 })}
                 placeholder={t("catalog.field.value")}
                 data={valueData}
                 searchable
@@ -461,6 +466,8 @@ function LabelsFieldset({ form }: { form: CatalogForm }) {
             {t("catalog.labelOptionsFailed")}
           </Text>
         ) : (
+          // Not while loading — an in-flight registry fetch is not "none defined".
+          !loading &&
           allowed.length === 0 && (
             <Text size="sm" c="dimmed">
               {t("catalog.noLabelsForKind", { kind })}
@@ -492,7 +499,7 @@ function LabelsFieldset({ form }: { form: CatalogForm }) {
  */
 function AnnotationsFieldset({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
-  const { annotationKeys, error } = useAnnotationKeys();
+  const { annotationKeys, loading, error } = useAnnotationKeys();
   const kind = form.values.kind;
   const allowed = annotationKeys.filter((row) => row.kinds.includes(kind));
   const usedKeys = new Set(form.values.annotations.map((row) => row.key));
@@ -510,7 +517,7 @@ function AnnotationsFieldset({ form }: { form: CatalogForm }) {
           <Group key={`annotations-${index}`} align="flex-start" gap="sm" wrap="nowrap">
             <Select
               style={{ flex: 1 }}
-              aria-label={`${t("catalog.section.annotations")} ${t("catalog.field.key")} ${index + 1}`}
+              aria-label={t("catalog.annotationKeyAria", { index: index + 1 })}
               placeholder={t("catalog.field.key")}
               data={keyData}
               searchable
@@ -520,7 +527,7 @@ function AnnotationsFieldset({ form }: { form: CatalogForm }) {
             />
             <TextInput
               style={{ flex: 1 }}
-              aria-label={`${t("catalog.section.annotations")} ${t("catalog.field.value")} ${index + 1}`}
+              aria-label={t("catalog.annotationValueAria", { index: index + 1 })}
               placeholder={t("catalog.field.value")}
               {...form.getInputProps(`annotations.${index}.value`)}
             />
@@ -541,6 +548,8 @@ function AnnotationsFieldset({ form }: { form: CatalogForm }) {
             {t("catalog.annotationKeyOptionsFailed")}
           </Text>
         ) : (
+          // Not while loading — an in-flight registry fetch is not "none defined".
+          !loading &&
           allowed.length === 0 && (
             <Text size="sm" c="dimmed">
               {t("catalog.noAnnotationKeysForKind", { kind })}

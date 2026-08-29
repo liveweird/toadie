@@ -38,12 +38,12 @@ kover {
     reports {
         verify {
             rule {
-                // Line-coverage floor (actual ~96.7%, 2026-08-27 labels-feature re-measure).
-                minBound(95)
-                // Branch-coverage floor (actual ~73.6%, 2026-08-27 labels-feature re-measure; the gap to 100% is dominated by
+                // Line-coverage floor (actual ~96.7%, 2026-08-29 check-up re-measure).
+                minBound(96)
+                // Branch-coverage floor (actual ~73.7%, 2026-08-29 check-up re-measure; the gap to 100% is dominated by
                 // kotlinx-serialization synthetic branches in @Serializable data classes). NOTE:
                 // `check` runs only koverVerify — run `:server:koverXmlReport` for fresh actuals.
-                minBound(70, coverageUnits = kotlinx.kover.gradle.plugin.dsl.CoverageUnit.BRANCH)
+                minBound(73, coverageUnits = kotlinx.kover.gradle.plugin.dsl.CoverageUnit.BRANCH)
             }
         }
     }
@@ -65,6 +65,7 @@ dependencies {
     implementation(ktorLibs.server.auth)
     implementation(ktorLibs.server.auth.jwt)
     implementation(ktorLibs.server.autoHeadResponse)
+    implementation(ktorLibs.server.bodyLimit)
     implementation(ktorLibs.server.cachingHeaders)
     implementation(ktorLibs.server.callId)
     implementation(ktorLibs.server.callLogging)

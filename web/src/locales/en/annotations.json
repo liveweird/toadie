@@ -20,6 +20,7 @@
     "key": "Must be an optional lowercase-domain prefix plus a 1–63 character name of letters, digits, and single [-_.] separators",
     "kindsRequired": "Pick at least one kind"
   },
+  "saveForbidden": "Only administrators can edit annotation keys",
   "saveConflict": "An annotation key with this name already exists",
   "saveInvalid": "One or more fields are invalid",
   "saveGone": "This annotation key no longer exists — reload the page",

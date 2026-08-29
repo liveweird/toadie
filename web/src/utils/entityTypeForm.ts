@@ -51,6 +51,7 @@ export function entityTypesFormValidation(t: TFunction) {
  */
 export function entityTypesSaveErrorMessage(err: unknown, t: TFunction): string {
   return saveErrorMessage(err, t, {
+    forbidden: "types.saveForbidden",
     conflict: "types.saveConflict",
     invalid: "types.saveInvalid",
     notFound: "types.saveGone",

@@ -42,4 +42,27 @@ class AnonymousAccessTest {
         }
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
+
+    @Test
+    fun `a correctly signed access token without a jti is 401`() = testApplication {
+        usePostgresTestcontainer()
+        // Signed with the real dev secret but missing the jti — un-blocklistable, so the
+        // verifier rejects it rather than skipping the revocation check.
+        val jtiLess = com.auth0.jwt.JWT.create()
+            .withAudience("toadie-api")
+            .withIssuer("http://0.0.0.0:8081/")
+            .withClaim("email", "nobody@test")
+            .withClaim("userId", 1L)
+            .withArrayClaim("roles", arrayOf<String>())
+            .withClaim("typ", "access")
+            .withExpiresAt(java.util.Date(System.currentTimeMillis() + 60_000))
+            .sign(com.auth0.jwt.algorithms.Algorithm.HMAC256("secret"))
+
+        val response = jsonClient().put("/api/v1/users/1/password") {
+            header(HttpHeaders.Authorization, "Bearer $jtiLess")
+            contentType(ContentType.Application.Json)
+            setBody(PasswordUpdateRequest(password = "whatever-works"))
+        }
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
 }

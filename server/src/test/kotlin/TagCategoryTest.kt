@@ -115,6 +115,14 @@ class TagCategoryTest {
         assertEquals(HttpStatusCode.NoContent, admin.delete("/api/v1/tag-categories/$id").status)
         assertEquals(HttpStatusCode.NotFound, admin.delete("/api/v1/tag-categories/$id").status)
         assertEquals(HttpStatusCode.NotFound, admin.putJson("/api/v1/tag-categories/$id", request(name("tcb"))).status)
+        // The family contract: a missing target is 404 even when the payload would ALSO
+        // conflict (a tag another active category holds) — existence is checked first.
+        val claimed = tag("tcheld")
+        TestTagCategories.ensure(name("tc404holder"), listOf(claimed), listOf("Component"))
+        assertEquals(
+            HttpStatusCode.NotFound,
+            admin.putJson("/api/v1/tag-categories/$id", request(name("tcc"), tags = listOf(claimed))).status,
+        )
     }
 
     @Test
@@ -157,6 +165,11 @@ class TagCategoryTest {
                 "expected 400 for $case",
             )
         }
+        // The PUT path validates before the id lookup, so the same rejection fires there too.
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            admin.putJson("/api/v1/tag-categories/999999", cases.first()).status,
+        )
     }
 
     @Test
@@ -174,6 +187,12 @@ class TagCategoryTest {
         val second = admin.postJson("/api/v1/tag-categories", request(n, tags = listOf(t)))
         assertEquals(HttpStatusCode.Created, second.status)
         assertTrue(second.body<TagCategoryResponse>().id != first.id, "re-adding a freed name mints a NEW id")
+        // The PUT path hits the same partial index: renaming onto an active name is 409 too.
+        val otherId = TestTagCategories.ensure(name("tcdupother"), listOf(tag("tcdo")), listOf("Component"))
+        assertEquals(
+            HttpStatusCode.Conflict,
+            admin.putJson("/api/v1/tag-categories/$otherId", request(n, tags = listOf(tag("tcdo2")))).status,
+        )
     }
 
     @Test

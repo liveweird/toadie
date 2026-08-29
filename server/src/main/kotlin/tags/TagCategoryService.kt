@@ -119,6 +119,13 @@ class TagCategoryService(private val database: R2dbcDatabase) {
      */
     suspend fun update(id: UInt, request: TagCategoryRequest): Int = suspendTransaction(database) {
         validateTagCategoryRequest(request) // re-checked service-side so direct callers stay guarded
+        // Existence first: a missing/deleted target must 404 like every sibling registry —
+        // without this check, a claimed tag in the payload would answer 409 for a row that
+        // isn't there (the tag-claim check is service-side, not index-raised like the others).
+        val exists = TagCategories.selectAll()
+            .where { (TagCategories.id eq id) and active() }
+            .count() > 0
+        if (!exists) return@suspendTransaction 0
         requireTagsUnclaimed(request, excludeId = id)
         TagCategories.update({ (TagCategories.id eq id) and (TagCategories.markedAsDeleted eq false) }) {
             it[name] = request.name

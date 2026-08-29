@@ -142,6 +142,8 @@ class LabelTest {
                 "expected 400 for $case",
             )
         }
+        // The PUT path validates before the id lookup, so the same rejection fires there too.
+        assertEquals(HttpStatusCode.BadRequest, admin.putJson("/api/v1/labels/999999", cases.first()).status)
     }
 
     @Test

@@ -99,7 +99,7 @@ export default function Tags() {
                   <Table.Th>{t("tags.column.name")}</Table.Th>
                   <Table.Th>{t("tags.column.tags")}</Table.Th>
                   <Table.Th>{t("tags.column.kinds")}</Table.Th>
-                  {isAdmin() && <Table.Th />}
+                  {isAdmin() && <Table.Th aria-label={t("common.table.operations")} />}
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>

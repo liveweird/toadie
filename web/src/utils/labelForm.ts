@@ -51,6 +51,7 @@ export function labelFormValidation(t: TFunction) {
 /** The label save's fixed error vocabulary (409 = an active label already holds the key). */
 export function labelSaveErrorMessage(err: unknown, t: TFunction): string {
   return saveErrorMessage(err, t, {
+    forbidden: "labels.saveForbidden",
     conflict: "labels.saveConflict",
     invalid: "labels.saveInvalid",
     notFound: "labels.saveGone",

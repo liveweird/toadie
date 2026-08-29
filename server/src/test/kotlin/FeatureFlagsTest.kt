@@ -35,6 +35,13 @@ class FeatureFlagsTest {
         putJson("/api/v1/users/$userId/features", UserFeaturesUpdateRequest(features.toList()))
 
     @Test
+    fun `changing flags without a token is 401`() = testApplication {
+        usePostgresTestcontainer()
+        val response = jsonClient().putJson("/api/v1/users/1/features", UserFeaturesUpdateRequest(emptyList()))
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
     fun `admin replaces, reads back, and clears a user's disabled set - idempotent wholesale PUT`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("ff-admin", role = ch.nokillswit.users.UserRole.ADMIN)

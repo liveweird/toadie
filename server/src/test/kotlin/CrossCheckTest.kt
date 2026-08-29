@@ -298,4 +298,11 @@ class CrossCheckTest {
         val check = client.postJson("/api/v1/catalog-files/check", componentFile("x"))
         assertEquals(HttpStatusCode.Unauthorized, check.status)
     }
+
+    @Test
+    fun `a malformed check body is a 400 problem`() = testApplication {
+        usePostgresTestcontainer()
+        val response = seededClient("crosscheck400").postJson("/api/v1/catalog-files/check", "{ not json")
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
 }

@@ -23,6 +23,7 @@
     "type": "Type \"{{type}}\" must be 1–63 characters without whitespace",
     "typesDuplicate": "Types must not repeat"
   },
+  "saveForbidden": "Only administrators can edit type dictionaries",
   "saveConflict": "This kind already has a type dictionary",
   "saveInvalid": "One or more fields are invalid",
   "saveGone": "This dictionary no longer exists — reload the page",

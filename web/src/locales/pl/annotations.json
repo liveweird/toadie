@@ -20,6 +20,7 @@
     "key": "Musi być opcjonalnym prefiksem domenowym małymi literami plus nazwą 1–63 znaków z liter, cyfr i pojedynczych separatorów [-_.]",
     "kindsRequired": "Wybierz co najmniej jeden rodzaj"
   },
+  "saveForbidden": "Tylko administratorzy/ki mogą edytować klucze adnotacji",
   "saveConflict": "Klucz adnotacji o tej nazwie już istnieje",
   "saveInvalid": "Co najmniej jedno pole jest nieprawidłowe",
   "saveGone": "Ten klucz adnotacji już nie istnieje — odśwież stronę",

@@ -660,7 +660,7 @@ prioritized. Reviewers cite these as "registered gap"; the Spectral ruleset carr
 | Rule | Gap | Adoption pointer |
 |---|---|---|
 | API-ERR-004 | `X-Request-Id` is read but not echoed or generated | `CallId` config in `plugins/Monitoring.kt`: add `replyToHeader(HttpHeaders.XRequestId)` + `generate { ... }`; declare the header on responses in the spec |
-| API-ERR-007 | Generic unique-violation `409`s carry no `instance` URI | `ConflictException.instance` already rides `ProblemDetail.instance` (`plugins/ErrorHandling.kt`); populated today by the feedback-duplicate and days-off-overlap `409`s — extend other domain conflict sites where the service knows the conflicting row's id (the generic 23505 handler never can, and existence-disclosure rules apply per API-ERR-006) |
+| API-ERR-007 | Generic unique-violation `409`s carry no `instance` URI | `ConflictException` rides `ProblemDetail` (`plugins/ErrorHandling.kt`); no Toadie conflict site populates `instance` yet — adopt it where the service knows the conflicting row's id (the tag-claim and last-admin `409`s could; the generic 23505 handler never can, and existence-disclosure rules apply per API-ERR-006) |
 | API-RATE-001 | No `Retry-After` / `RateLimit-*` headers on `429`s | Set `Retry-After` where the wait is known (login lockout knows its window); add headers to the shared `TooManyRequests` response |
 | API-CACHE-001/002 | No `ETag`/`304`; `Cache-Control` only on CSS | Install `ConditionalHeaders`; extend the `CachingHeaders` config in `plugins/Http.kt` with deliberate per-class policies (`no-store` on API responses) |
 | API-CACHE-003 | No `If-Match`/`ETag`/`412` conditional writes anywhere; unguarded full-document writes are last-write-wins (see the inventory below) | Add `ETag` + `If-Match` handling to the concurrency-sensitive `PUT`s if contention ever materializes; a `version` column + `409` is the R2DBC-friendly alternative |
@@ -671,19 +671,16 @@ prioritized. Reviewers cite these as "registered gap"; the Spectral ruleset carr
 
 ### Lost-update inventory (the API-CACHE-003 row's per-write record)
 
-Per API-CACHE-003, each concurrency-sensitive write documents its defense (audited 2026-08-11):
+Per API-CACHE-003, each concurrency-sensitive write documents its defense (audited 2026-08-29
+against Toadie's write surface — the previous inventory described Lettuce's):
 
-- **Domain-guarded** — a stale write is rejected by a state rule, not a validator: 1:1 meetings
-  (only the pair's *latest* meeting is editable/deletable → `409`), goals (definition edits
-  DRAFT-only, progress ACTIVE-only), team KPIs (same split; data-point mutations ACTIVE-only),
-  performance reviews (PUT in DRAFT/CALIBRATION only, PUBLISHED read-only → `409`; delete
-  DRAFT-only), pulse `my-response` (cycle OPEN only), feedbacks (PUT edits content/visibility by
-  the provider only; status moves only via transition POSTs with source-status `409`s), days-off
-  requests (no PUT at all — lifecycle POSTs with source-status `409`s).
-- **Accepted last-write-wins** — full-document/config writes with no version check, accepted
-  because writers are few and scoped (admin- or self-only) and the documents are small: users
-  PUT, teams PUT (roster + manager delta rules still apply), templates PUT, dictionaries
-  whole-document PUT, alerts PUT, per-user features PUT (wholesale replace by design),
-  email-notifications PUT, pulse settings PUT, days-off correction PUT (single-manager writes),
-  review-period/public-holiday registries (create/delete only). Two admins editing the same template simultaneously can overwrite each
-  other — a deliberate, documented trade-off at this scale.
+- **Accepted last-write-wins** — every Toadie full-replace write, accepted because writers are
+  few and scoped (the registries are single-ADMIN-curated, users PUT is ADMIN-only, and the
+  catalog workspace's documents are small with per-entity identity conflicts caught by the
+  partial unique indexes → `409`): catalog-files PUT, users PUT, per-user features PUT
+  (wholesale replace by design), the dictionaries whole-document PUT (namespaces, lifecycles),
+  and the labels / annotation-keys / tag-categories / entity-types PUTs. Two admins editing the
+  same registry entry simultaneously can overwrite each other — a deliberate, documented
+  trade-off at this scale.
+- **Domain-guarded** — none yet: Toadie has no lifecycle-status resources; the class returns
+  with the first workflow-shaped feature (port Lettuce's source-status `409` pattern).

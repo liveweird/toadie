@@ -2,7 +2,8 @@
 
 > **Ported.** `server/src/main/kotlin/infra/paging/` (`Paging.kt` + `QueryParams.kt` +
 > `PageResponse.kt` — `PageRequest`, `parsePaging`, `applyPaging`, `toPage`, the strict
-> `singleValue` param reader and the `optionalString/UInt/Long/Boolean/Enum` parsers) is
+> `singleValue` param reader and the `optionalString/Boolean/Enum` parsers — Lettuce's
+> `optionalUInt`/`optionalLong` return with their first Toadie consumer) is
 > Lettuce's implementation, ported with the first list endpoint (`GET /api/v1/catalog-files` —
 > the reference implementation). Lettuce's view-scoped helpers (`optionalIncludeIndirect`,
 > `uintOnlyForView`) were deliberately left behind; re-port them with their first consumer.

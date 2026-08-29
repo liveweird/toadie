@@ -99,6 +99,27 @@ class RefreshTest {
     }
 
     @Test
+    fun `a refresh token without a jti is rejected as malformed`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("nojti")
+        val userId = TestUsers.seed(email = email, password = "pw")
+        // Correctly signed and typed, but missing the jti — such a token could never be
+        // blocklisted, so the refresh path refuses it outright.
+        val jtiLess = com.auth0.jwt.JWT.create()
+            .withAudience("toadie-api")
+            .withIssuer("http://0.0.0.0:8081/")
+            .withIssuedAt(java.util.Date())
+            .withExpiresAt(java.util.Date(System.currentTimeMillis() + 60_000))
+            .withClaim("email", email)
+            .withClaim("userId", userId.toLong())
+            .withClaim("typ", "refresh")
+            .sign(com.auth0.jwt.algorithms.Algorithm.HMAC256("secret"))
+
+        val response = jsonClient().postJson("/api/v1/refresh", RefreshRequest(jtiLess))
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
     fun `refresh for a soft-deleted user is rejected`() = testApplication {
         usePostgresTestcontainer()
         val email = uniqueEmail("gone")

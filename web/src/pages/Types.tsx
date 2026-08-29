@@ -96,7 +96,7 @@ export default function Types() {
                 <Table.Tr>
                   <Table.Th>{t("types.column.kind")}</Table.Th>
                   <Table.Th>{t("types.column.types")}</Table.Th>
-                  {isAdmin() && <Table.Th />}
+                  {isAdmin() && <Table.Th aria-label={t("common.table.operations")} />}
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>

@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
+// -- the auth store helpers (signIn/signOut/useAuthed) live beside the route guards on purpose; a mixed file opts out of fast-refresh, which is fine for this rarely-edited module
 import { useSyncExternalStore, type ReactElement } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { getToken, TOKEN_KEY } from "./api/session";

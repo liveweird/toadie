@@ -35,7 +35,8 @@
     "firstPage": "Pierwsza strona",
     "previousPage": "Poprzednia strona",
     "nextPage": "Następna strona",
-    "lastPage": "Ostatnia strona"
+    "lastPage": "Ostatnia strona",
+    "operations": "Operacje"
   },
   "error": {
     "timeout": "Przekroczono limit czasu żądania. Spróbuj ponownie.",

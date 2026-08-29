@@ -46,6 +46,7 @@ describe("entityTypeForm", () => {
   test("save errors map to the fixed vocabulary", () => {
     const problem = { title: "x", status: 0 };
     expect(entityTypesSaveErrorMessage(new ApiError(409, problem), t)).toBe("types.saveConflict");
+    expect(entityTypesSaveErrorMessage(new ApiError(403, problem), t)).toBe("types.saveForbidden");
     expect(entityTypesSaveErrorMessage(new ApiError(400, problem), t)).toBe("types.saveInvalid");
     expect(entityTypesSaveErrorMessage(new ApiError(404, problem), t)).toBe("types.saveGone");
     expect(entityTypesSaveErrorMessage(new ApiError(500, problem), t)).toBe("common.error.actionFailedStatus");

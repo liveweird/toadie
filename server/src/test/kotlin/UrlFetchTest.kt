@@ -59,11 +59,17 @@ class UrlFetchTest {
         val blocked = listOf(
             "127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.1.1",
             "0.0.0.0", "224.0.0.1", "::1", "::", "fe80::1", "fc00::1", "fd12:3456::1", "ff02::1",
+            // The JDK-predicate gaps: CGNAT, IETF protocol assignments, benchmarking, and
+            // NAT64 embedding a private IPv4 (a NAT64 gateway would connect to 10.0.0.1).
+            "100.64.0.1", "100.127.255.254", "192.0.0.170", "198.18.0.1", "198.19.255.1",
+            "64:ff9b::10.0.0.1", "64:ff9b::7f00:1",
         )
         for (literal in blocked) {
             assertTrue(InetAddress.getByName(literal).isBlockedAddress(), "expected blocked: $literal")
         }
-        val public = listOf("1.1.1.1", "140.82.121.3", "2606:4700::1111")
+        // 64:ff9b:: embedding a PUBLIC IPv4 stays allowed — IPv6-only networks reach the
+        // public internet through NAT64, and the embedded target is judged like a native one.
+        val public = listOf("1.1.1.1", "140.82.121.3", "2606:4700::1111", "100.128.0.1", "198.20.0.1", "64:ff9b::101:101")
         for (literal in public) {
             assertTrue(!InetAddress.getByName(literal).isBlockedAddress(), "expected public: $literal")
         }

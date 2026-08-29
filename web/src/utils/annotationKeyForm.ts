@@ -39,6 +39,7 @@ export function annotationKeyFormValidation(t: TFunction) {
 /** The save's fixed error vocabulary (409 = an active row already holds the key). */
 export function annotationKeySaveErrorMessage(err: unknown, t: TFunction): string {
   return saveErrorMessage(err, t, {
+    forbidden: "annotations.saveForbidden",
     conflict: "annotations.saveConflict",
     invalid: "annotations.saveInvalid",
     notFound: "annotations.saveGone",

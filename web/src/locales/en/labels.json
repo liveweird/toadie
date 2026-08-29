@@ -27,6 +27,7 @@
     "valuesDuplicate": "Values must not repeat",
     "kindsRequired": "Pick at least one kind"
   },
+  "saveForbidden": "Only administrators can edit labels",
   "saveConflict": "A label with this key already exists",
   "saveInvalid": "One or more fields are invalid",
   "saveGone": "This label no longer exists — reload the page",

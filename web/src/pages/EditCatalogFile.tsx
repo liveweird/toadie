@@ -52,7 +52,7 @@ export default function EditCatalogFile() {
   const idIsValid = Number.isFinite(id) && id > 0;
 
   const { data, isLoading, isError, error: fetchError } = useQuery({
-    queryKey: ["catalogFile", id],
+    queryKey: ["catalogFiles", "detail", id],
     queryFn: () => getCatalogFile(id),
     enabled: idIsValid,
     retry: false,
@@ -71,7 +71,7 @@ export default function EditCatalogFile() {
     try {
       await updateCatalogFile(id, toCatalogFileRequest(values));
       await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
-      await queryClient.invalidateQueries({ queryKey: ["catalogFile", id] });
+      await queryClient.invalidateQueries({ queryKey: ["catalogFiles", "detail", id] });
       showSuccessToast(t("catalog.toast.updated"));
       navigate("/catalog-files", { replace: true });
     } catch (err) {

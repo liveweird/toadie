@@ -23,6 +23,7 @@
     "type": "Typ „{{type}}” musi mieć 1–63 znaki bez białych znaków",
     "typesDuplicate": "Typy nie mogą się powtarzać"
   },
+  "saveForbidden": "Tylko administratorzy/ki mogą edytować słowniki typów",
   "saveConflict": "Ten rodzaj ma już słownik typów",
   "saveInvalid": "Co najmniej jedno pole jest nieprawidłowe",
   "saveGone": "Ten słownik już nie istnieje — odśwież stronę",

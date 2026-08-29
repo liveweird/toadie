@@ -208,4 +208,19 @@ class GraphTest {
         // Would be a 400 ("id must be a UInt") if {id} captured the literal segment.
         assertEquals(HttpStatusCode.OK, seededClient("graph").get("/api/v1/catalog-files/graph").status)
     }
+
+    @Test
+    fun `a repeated namespace parameter is 400 on graph and export`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("graphrep")
+        // The singleValue rule (API-LIST-004): repetition is reserved for documented IN semantics.
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            client.get("/api/v1/catalog-files/graph?namespace=a&namespace=b").status,
+        )
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            client.get("/api/v1/catalog-files/export?namespace=a&namespace=b").status,
+        )
+    }
 }

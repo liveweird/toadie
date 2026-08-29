@@ -33,6 +33,7 @@ describe("tagCategoryForm", () => {
     expect(rules.name("Languages")).toBeNull();
     expect(rules.name("")).toBe("tags.validation.name");
     expect(rules.name("x".repeat(64))).toBe("tags.validation.name");
+    expect(rules.name("has\ttab")).toBe("tags.validation.name");
 
     expect(rules.tags(["java", "c++", "csharp:v2"])).toBeNull();
     expect(rules.tags([])).toBe("tags.validation.tagsRequired");
@@ -48,6 +49,7 @@ describe("tagCategoryForm", () => {
   test("save errors map to the fixed vocabulary", () => {
     const problem = { title: "x", status: 0 };
     expect(tagCategorySaveErrorMessage(new ApiError(409, problem), t)).toBe("tags.saveConflict");
+    expect(tagCategorySaveErrorMessage(new ApiError(403, problem), t)).toBe("tags.saveForbidden");
     expect(tagCategorySaveErrorMessage(new ApiError(400, problem), t)).toBe("tags.saveInvalid");
     expect(tagCategorySaveErrorMessage(new ApiError(404, problem), t)).toBe("tags.saveGone");
     expect(tagCategorySaveErrorMessage(new ApiError(500, problem), t)).toBe("common.error.actionFailedStatus");

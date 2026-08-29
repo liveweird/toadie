@@ -97,7 +97,7 @@ export default function Annotations() {
                 <Table.Tr>
                   <Table.Th>{t("annotations.column.key")}</Table.Th>
                   <Table.Th>{t("annotations.column.kinds")}</Table.Th>
-                  {isAdmin() && <Table.Th />}
+                  {isAdmin() && <Table.Th aria-label={t("common.table.operations")} />}
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>

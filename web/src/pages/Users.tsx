@@ -132,7 +132,7 @@ export default function Users() {
               />
             </Table.Th>
             <Table.Th>{t("common.field.role")}</Table.Th>
-            <Table.Th aria-label={t("common.action.edit")} style={{ width: 1 }} />
+            <Table.Th aria-label={t("common.table.operations")} style={{ width: 1 }} />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>

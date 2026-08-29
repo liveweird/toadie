@@ -57,17 +57,27 @@ class MfaChallenges(
             return Outcome.Failure("expired")
         }
         if (MessageDigest.isEqual(challenge.code.toByteArray(), code.toByteArray())) {
-            challenges.remove(challengeId, challenge)
-            return Outcome.Success(challenge.userId)
+            // Single-use is a CAS, not a courtesy: only the submission that actually removes
+            // the entry wins — a concurrent duplicate with the same correct code loses.
+            return if (challenges.remove(challengeId, challenge)) {
+                Outcome.Success(challenge.userId)
+            } else {
+                Outcome.Failure("unknown_challenge")
+            }
         }
-        val attempts = challenge.attempts + 1
-        return if (attempts >= maxAttempts) {
-            challenges.remove(challengeId, challenge)
-            Outcome.Failure("too_many_attempts")
-        } else {
-            challenges.replace(challengeId, challenge, challenge.copy(attempts = attempts))
-            Outcome.Failure("wrong_code")
+        // The attempt bump is atomic (computeIfPresent) so parallel wrong guesses can never
+        // lose an increment and sneak past the cap; reaching the cap drops the entry.
+        var capped = false
+        challenges.computeIfPresent(challengeId) { _, current ->
+            val attempts = current.attempts + 1
+            if (attempts >= maxAttempts) {
+                capped = true
+                null
+            } else {
+                current.copy(attempts = attempts)
+            }
         }
+        return Outcome.Failure(if (capped) "too_many_attempts" else "wrong_code")
     }
 
     // Memory bound: unauthenticated logins mint challenges, so the map must not grow without

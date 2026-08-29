@@ -18,7 +18,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { IconPlus, IconTags } from "@tabler/icons-react";
+import { IconFolders, IconPlus } from "@tabler/icons-react";
 import { isAdmin } from "../api/session";
 import { getDictionary, updateDictionary, type DictionaryEntry } from "../api/dictionaries";
 import { showSuccessToast } from "../utils/toast";
@@ -85,7 +85,7 @@ function ReadOnlyEntries({ items }: { items: DictionaryEntry[] }) {
   if (items.length === 0) {
     return (
       <EmptyState
-        icon={<IconTags size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+        icon={<IconFolders size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
         label={t("namespaces.empty")}
       />
     );

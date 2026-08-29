@@ -140,7 +140,9 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             }
             .count() > 0
         if (!defined) {
-            throw BadRequestException("metadata.namespace '$namespace' is not a defined namespace")
+            throw BadRequestException(
+                "metadata.namespace '$namespace' is not a defined namespace — define it on the Namespaces page",
+            )
         }
         return namespace
     }
@@ -172,10 +174,14 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                 "metadata.labels key '$key' is not a defined label — define it on the Labels page",
             )
             if (kind !in allowedKinds) {
-                throw BadRequestException("Label '$key' cannot be applied to kind '$kind'")
+                throw BadRequestException(
+                    "Label '$key' cannot be applied to kind '$kind' — adjust its kinds on the Labels page",
+                )
             }
             if (value !in allowedValues) {
-                throw BadRequestException("Value '$value' is not allowed for label '$key'")
+                throw BadRequestException(
+                    "Value '$value' is not allowed for label '$key' — adjust its values on the Labels page",
+                )
             }
         }
     }
@@ -208,7 +214,10 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                 "metadata.tags entry '$tag' is not a defined tag — define it on the Tags page",
             )
             if (kind !in allowedKinds) {
-                throw BadRequestException("Tag '$tag' (category '$category') cannot be applied to kind '$kind'")
+                throw BadRequestException(
+                    "Tag '$tag' (category '$category') cannot be applied to kind '$kind'" +
+                        " — adjust the category's kinds on the Tags page",
+                )
             }
         }
     }
@@ -297,7 +306,9 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                 "metadata.annotations key '$key' is not a registered annotation key — define it on the Annotations page",
             )
             if (kind !in allowedKinds) {
-                throw BadRequestException("Annotation '$key' cannot be applied to kind '$kind'")
+                throw BadRequestException(
+                    "Annotation '$key' cannot be applied to kind '$kind' — adjust its kinds on the Annotations page",
+                )
             }
         }
     }

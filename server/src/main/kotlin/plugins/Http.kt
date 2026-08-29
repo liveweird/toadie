@@ -13,8 +13,20 @@ import io.ktor.server.plugins.hsts.*
 import io.ktor.server.plugins.httpsredirect.*
 import io.ktor.server.routing.*
 import io.ktor.server.plugins.swagger.*
+import io.ktor.server.plugins.bodylimit.*
+
+/**
+ * Global request-body ceiling: a memory-DoS backstop, not a business rule — every payload
+ * field already carries its own maxLength, and the largest legitimate body (a bulk
+ * catalog-file import) sits orders of magnitude below this. Exceeding it answers 413
+ * (problem body via ErrorHandling.kt).
+ */
+const val MAX_REQUEST_BODY_BYTES: Long = 10L * 1024 * 1024
 
 fun Application.configureHttp() {
+    install(RequestBodyLimit) {
+        bodyLimit { MAX_REQUEST_BODY_BYTES }
+    }
     install(CachingHeaders) {
         options { call, outgoingContent ->
             when (outgoingContent.contentType?.withoutParameters()) {

@@ -27,6 +27,7 @@
     "tagsDuplicate": "Tags must not repeat",
     "kindsRequired": "Pick at least one kind"
   },
+  "saveForbidden": "Only administrators can edit tag categories",
   "saveConflict": "The category name or one of its tags is already in use",
   "saveInvalid": "One or more fields are invalid",
   "saveGone": "This category no longer exists — reload the page",

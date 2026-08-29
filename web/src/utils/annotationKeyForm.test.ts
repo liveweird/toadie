@@ -41,6 +41,7 @@ describe("annotationKeyForm", () => {
   test("save errors map to the fixed vocabulary", () => {
     const problem = { title: "x", status: 0 };
     expect(annotationKeySaveErrorMessage(new ApiError(409, problem), t)).toBe("annotations.saveConflict");
+    expect(annotationKeySaveErrorMessage(new ApiError(403, problem), t)).toBe("annotations.saveForbidden");
     expect(annotationKeySaveErrorMessage(new ApiError(400, problem), t)).toBe("annotations.saveInvalid");
     expect(annotationKeySaveErrorMessage(new ApiError(404, problem), t)).toBe("annotations.saveGone");
     expect(annotationKeySaveErrorMessage(new ApiError(500, problem), t)).toBe("common.error.actionFailedStatus");

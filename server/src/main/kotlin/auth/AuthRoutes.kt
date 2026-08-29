@@ -148,6 +148,7 @@ fun Application.configureAuthRoutes() {
     // findWithIdByEmail filters active rows. Recipient language is "en" until a per-user
     // language preference exists (see infra/mail/LocalizedText.kt).
     suspend fun processPasswordReset(app: Application, resetMailer: Mailer, email: String) {
+        var delivered = false
         try {
             val record = userService.findWithIdByEmail(email)
             if (record == null) {
@@ -158,18 +159,25 @@ fun Application.configureAuthRoutes() {
             val newPassword = generatePassword()
             // Send FIRST, then store: a delivery failure leaves the old password
             // working; a storage failure after delivery is recoverable by retrying.
+            // The two halves audit under distinct events — a store_failed means the
+            // recipient now holds an emailed password that does NOT work yet.
             resetMailer.send(
                 to = user.email,
                 subject = PASSWORD_RESET_EMAIL_SUBJECT.of("en"),
                 body = passwordResetEmailBody(user.name, newPassword, mailAppUrl, "en"),
             )
+            delivered = true
             userService.updatePassword(userId, hashPassword(newPassword))
             audit("password_reset.completed", "email" to user.email, "userId" to userId.toLong())
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            audit("password_reset.send_failed", "email" to email, "error" to e.message)
-            app.log.error("Password-reset email delivery failed for $email", e)
+            audit(
+                if (delivered) "password_reset.store_failed" else "password_reset.send_failed",
+                "email" to email,
+                "error" to e.message,
+            )
+            app.log.error("Password reset failed for $email (delivered=$delivered)", e)
         }
     }
 
@@ -286,7 +294,17 @@ fun Application.configureAuthRoutes() {
                     )
                 }
                 val record = userService.findWithIdByEmail(email)
-                if (record == null || !verifyPassword(req.password, record.second.passwordHash)) {
+                // The unknown-email branch pays a full (discarded) bcrypt verify so its latency
+                // matches the wrong-password branch — without it the fast 401 is a timing oracle
+                // for account enumeration (the reset path equalizes the same way, via async work).
+                val credentialsValid =
+                    if (record == null) {
+                        verifyPassword(req.password, TIMING_EQUALIZER_HASH)
+                        false
+                    } else {
+                        verifyPassword(req.password, record.second.passwordHash)
+                    }
+                if (record == null || !credentialsValid) {
                     val tripped = loginThrottle.recordFailure(email)
                     audit(
                         "login.failure",
@@ -358,8 +376,10 @@ fun Application.configureAuthRoutes() {
                     reject("wrong_token_type")
                 }
                 val rawUserId = decoded.getClaim("userId").asLong()
-                val jti = decoded.id
-                if (jti != null && blocklist.isRevoked(jti)) {
+                // A jti-less token could never be blocklisted, so it is malformed by definition
+                // (every server-minted token carries one).
+                val jti = decoded.id ?: reject("malformed", rawUserId)
+                if (blocklist.isRevoked(jti)) {
                     reject("revoked", rawUserId)
                 }
                 val userId = rawUserId?.toUInt() ?: reject("malformed")

@@ -50,6 +50,7 @@ describe("labelForm", () => {
   test("save errors map to the fixed vocabulary", () => {
     const problem = { title: "x", status: 0 };
     expect(labelSaveErrorMessage(new ApiError(409, problem), t)).toBe("labels.saveConflict");
+    expect(labelSaveErrorMessage(new ApiError(403, problem), t)).toBe("labels.saveForbidden");
     expect(labelSaveErrorMessage(new ApiError(400, problem), t)).toBe("labels.saveInvalid");
     expect(labelSaveErrorMessage(new ApiError(404, problem), t)).toBe("labels.saveGone");
     expect(labelSaveErrorMessage(new ApiError(500, problem), t)).toBe("common.error.actionFailedStatus");

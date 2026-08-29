@@ -18,6 +18,7 @@ import io.ktor.serialization.ContentConvertException
 import io.ktor.server.application.*
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.CannotTransformContentToTypeException
+import io.ktor.server.plugins.PayloadTooLargeException
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
@@ -182,6 +183,11 @@ fun Application.configureErrorHandling() {
         exception<TooManyRequestsException> { call, cause ->
             call.respondProblem(HttpStatusCode.TooManyRequests, cause.message ?: "Too many requests")
         }
+        // The global RequestBodyLimit plugin (plugins/Http.kt) rejects oversized bodies with
+        // this exception; give the 413 the RFC 7807 body every other error carries.
+        exception<PayloadTooLargeException> { call, _ ->
+            call.respondProblem(HttpStatusCode.PayloadTooLarge, "Request body exceeds the size limit")
+        }
         exception<BadRequestException> { call, cause ->
             call.respondProblem(HttpStatusCode.BadRequest, clientSafeBadRequestDetail(cause))
         }
@@ -190,7 +196,8 @@ fun Application.configureErrorHandling() {
         // this instead of the BadRequestException the converter path wraps malformed JSON in —
         // and it used to escape to the 500 catch-all (v2.34.0; the 22021 central-mapping
         // precedent). Deliberately NOT the abstract ContentTransformationException parent:
-        // that would mislabel a future PayloadTooLarge (413) / UnsupportedMediaType (415).
+        // that would mislabel PayloadTooLarge (413, mapped above) / a future
+        // UnsupportedMediaType (415).
         exception<CannotTransformContentToTypeException> { call, _ ->
             call.respondProblem(HttpStatusCode.BadRequest, "Request body is missing or not JSON")
         }

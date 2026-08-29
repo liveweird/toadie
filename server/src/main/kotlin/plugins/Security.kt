@@ -72,9 +72,11 @@ fun Application.configureSecurity() {
                 val audOk = credential.payload.audience.contains(jwtConfig.audience)
                 // Only access tokens authenticate API calls; a refresh token used as a bearer is rejected.
                 val typOk = credential.payload.getClaim("typ").asString() == TOKEN_TYPE_ACCESS
+                // Every server-minted token carries a jti; one without it could never be
+                // blocklisted, so it is rejected outright rather than skipping the check.
                 val jti = credential.payload.id
-                val revoked = jti != null && application.attributes[TokenBlocklistServiceKey].isRevoked(jti)
-                if (audOk && typOk && !revoked) JWTPrincipal(credential.payload) else null
+                val revocable = jti != null && !application.attributes[TokenBlocklistServiceKey].isRevoked(jti)
+                if (audOk && typOk && revocable) JWTPrincipal(credential.payload) else null
             }
             // The challenge runs outside StatusPages, so emit the RFC 7807 body here too.
             challenge { _, _ ->

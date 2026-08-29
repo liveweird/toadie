@@ -27,6 +27,7 @@
     "tagsDuplicate": "Tagi nie mogą się powtarzać",
     "kindsRequired": "Wybierz co najmniej jeden rodzaj"
   },
+  "saveForbidden": "Tylko administratorzy/ki mogą edytować kategorie tagów",
   "saveConflict": "Nazwa kategorii lub jeden z jej tagów jest już w użyciu",
   "saveInvalid": "Co najmniej jedno pole jest nieprawidłowe",
   "saveGone": "Ta kategoria już nie istnieje — odśwież stronę",

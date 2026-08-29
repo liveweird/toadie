@@ -24,8 +24,10 @@ fun Application.configureMonitoring() {
     monitor.subscribe(ApplicationStopped) { reporter?.stop() }
     install(CallId) {
         header(HttpHeaders.XRequestId)
+        // Client-supplied ids reach logs and OTel attributes, so cap them: ≤64 URL-safe
+        // chars (UUIDs and trace ids fit); anything else is ignored, not an error.
         verify { callId: String ->
-            callId.isNotEmpty()
+            callId.length in 1..64 && callId.all { it.isLetterOrDigit() || it in "-_." }
         }
     }
 }

@@ -34,7 +34,13 @@ export function tagCategoryFormValidation(t: TFunction) {
   return {
     name: (value: string) => {
       const v = value.trim();
-      return v.length >= 1 && v.length <= MAX_CATEGORY_NAME_LENGTH ? null : t("tags.validation.name");
+      // Mirrors the server's sanitizeSingleLine: control characters are rejected there
+      // with a 400, so the client flags them inline instead of surfacing a generic error.
+      // eslint-disable-next-line no-control-regex -- matching control chars is the point
+      const hasControlChars = /[\u0000-\u001f\u007f]/.test(v);
+      return v.length >= 1 && v.length <= MAX_CATEGORY_NAME_LENGTH && !hasControlChars
+        ? null
+        : t("tags.validation.name");
     },
     tags: (values: string[]) => {
       if (values.length === 0) return t("tags.validation.tagsRequired");
@@ -56,6 +62,7 @@ export function tagCategoryFormValidation(t: TFunction) {
  */
 export function tagCategorySaveErrorMessage(err: unknown, t: TFunction): string {
   return saveErrorMessage(err, t, {
+    forbidden: "tags.saveForbidden",
     conflict: "tags.saveConflict",
     invalid: "tags.saveInvalid",
     notFound: "tags.saveGone",
