@@ -15,17 +15,20 @@
    two-document `catalog-info.yaml` — a Component and its owning Group, separated by `---`,
    both in the throwaway namespace.
    - *Expected*: the live parse summary reads "2 documents ready to import".
-2. They click **Import**.
+2. They click **Check** first (the import's dry-run).
+   - *Expected*: the same per-row report, predicted — both rows **Would be created**, the
+     summary reads "2 of 2 documents would import.", and nothing is stored.
+3. They click **Import** on the same batch.
    - *Expected*: the results table reports both rows **Created** and the summary reads
      "Imported 2 of 2 documents.".
-3. On the Files list, filtered to the namespace, both files appear.
-4. They click **Export YAML** while the namespace filter is active.
+4. On the Files list, filtered to the namespace, both files appear.
+5. They click **Export YAML** while the namespace filter is active.
    - *Expected*: the browser downloads `catalog-info.yaml`; the file contains both entity
      names and a `---` document separator.
-5. Back on the import page they paste the exported text verbatim and import again.
+6. Back on the import page they paste the exported text verbatim and import again.
    - *Expected*: identity survived the trip intact — both rows report **Already exists**
      ("Imported 0 of 2 documents."); nothing is overwritten (report & skip).
-6. They delete both files.
+7. They delete both files.
 
 ## Not covered here (and why)
 

@@ -41,6 +41,84 @@ class RoundTripTest {
             setBody(ImportRequest(files = files))
         }.body()
 
+    private suspend fun HttpClient.importCheck(files: List<CatalogFile>): ImportResponse =
+        post("$CATALOG_FILES_PATH/import/check") {
+            contentType(ContentType.Application.Json)
+            setBody(ImportRequest(files = files))
+        }.body()
+
+    @Test
+    fun `the dry-run predicts every row, stores nothing, audits nothing - and the real import matches`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("dryrun")
+            val ns = uniqueNamespace("dryns")
+            val existing = uniqueEntityName("dup")
+            // The pre-existing identity (created BEFORE the audit capture — its own created
+            // event must not pollute the silence assert below).
+            client.createCatalogFile(componentFile(existing, namespace = ns))
+
+            val good = componentFile(uniqueEntityName("good"), namespace = ns)
+            val invalid = CatalogFile(
+                metadata = CatalogFileMetadata(name = uniqueEntityName("bad"), namespace = ns),
+                spec = EntitySpec(), // a Component without type/lifecycle/owner
+            )
+            val clash = componentFile(existing, namespace = ns)
+            val ghostly = componentFile(uniqueEntityName("ghostly"), namespace = ns).let {
+                it.copy(spec = it.spec.copy(dependsOn = listOf("component:$ns/${uniqueEntityName("ghost")}")))
+            }
+            val twinName = uniqueEntityName("twin")
+            val twinA = componentFile(twinName, namespace = ns)
+            val twinB = componentFile(twinName, namespace = ns, title = "the second twin")
+            val batch = listOf(good, invalid, clash, ghostly, twinA, twinB)
+
+            val predicted = withAuditCapture { capture ->
+                val response = client.importCheck(batch)
+                assertEquals(
+                    listOf(
+                        ImportResultStatus.CREATED,
+                        ImportResultStatus.INVALID,
+                        ImportResultStatus.CONFLICT,
+                        ImportResultStatus.CREATED_WITH_FINDINGS,
+                        ImportResultStatus.CREATED,
+                        // The intra-batch twin: the real run stores the first and 23505s
+                        // the second — the prediction mirrors that ordering.
+                        ImportResultStatus.CONFLICT,
+                    ),
+                    response.results.map { it.status },
+                )
+                assertTrue(response.results.all { it.fileId == null }, "predicted rows carry no fileId")
+                assertTrue(response.results[3].message!!.contains("does not resolve"))
+                // Nothing stored: the namespace still holds only the pre-existing file…
+                assertEquals(listOf(existing), client.export(namespace = ns).files.map { it.metadata.name })
+                // …and nothing audited (a pure computation, like the other check endpoints).
+                assertEquals(0, capture.events.count { it.message == "catalog_file.created" })
+                response.results
+            }
+
+            // The fidelity pin: the REAL import of the same batch matches the predictions.
+            val real = client.import(batch)
+            assertEquals(predicted.map { it.status }, real.results.map { it.status })
+        }
+
+    @Test
+    fun `the dry-run shares the batch cap and requires authentication`() = testApplication {
+        usePostgresTestcontainer()
+        val tooMany = List(MAX_IMPORT_FILES + 1) { componentFile(uniqueEntityName("cap")) }
+        val capped = seededClient("dryruncap").post("$CATALOG_FILES_PATH/import/check") {
+            contentType(ContentType.Application.Json)
+            setBody(ImportRequest(files = tooMany))
+        }
+        assertEquals(HttpStatusCode.BadRequest, capped.status)
+        assertEquals(
+            HttpStatusCode.Unauthorized,
+            jsonClient().post("$CATALOG_FILES_PATH/import/check") {
+                contentType(ContentType.Application.Json)
+                setBody(ImportRequest(files = emptyList()))
+            }.status,
+        )
+    }
+
     @Test
     fun `export returns the namespace's active files ordered by name`() = testApplication {
         usePostgresTestcontainer()

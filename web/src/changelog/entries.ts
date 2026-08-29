@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.6.0",
+    date: "2026-08-30",
+    en: `Try an import before committing.
+
+- The import page gains a **Check** button: the same per-document report the real import gives — would be created, would carry findings, already exists, invalid — computed without storing anything.
+- Happy with the preview? Import follows with one click on the same batch.`,
+    pl: `Wypróbuj import, zanim się zdecydujesz.
+
+- Strona importu zyskuje przycisk **Sprawdź**: ten sam raport dla każdego dokumentu, który daje prawdziwy import — zostałby utworzony, miałby zastrzeżenia, już istnieje, nieprawidłowy — policzony bez zapisywania czegokolwiek.
+- Podgląd się zgadza? Import robisz jednym kliknięciem na tej samej partii.`,
+  },
+  {
     version: "1.5.0",
     date: "2026-08-30",
     en: `Toadie speaks your language.

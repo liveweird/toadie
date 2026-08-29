@@ -34,10 +34,18 @@ test("two pasted documents import, export as one YAML, and re-import as conflict
     "",
   ].join("\n");
 
-  // Import the pasted documents — both rows report Created.
+  // The dry-run first: the same per-row report, predicted — nothing is stored yet.
   await page.goto("/files/import");
   await page.getByRole("textbox", { name: "YAML content" }).fill(yaml);
   await expect(page.getByText("2 documents ready to import")).toBeVisible();
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/v1/files/import/check") && r.ok()),
+    page.getByRole("button", { name: "Check", exact: true }).click(),
+  ]);
+  await expect(page.getByText("2 of 2 documents would import.")).toBeVisible();
+  await expect(page.getByText("Would be created").first()).toBeVisible();
+
+  // The real import of the same batch — both rows report Created.
   await Promise.all([
     page.waitForResponse(
       (r) => r.url().endsWith("/api/v1/files/import") && r.ok(),

@@ -177,6 +177,14 @@ export async function importCatalogFiles(files: CatalogFileRequest[]): Promise<I
   });
 }
 
+/** The import's dry-run: the same per-row report, predicted — nothing is stored. */
+export async function checkImportCatalogFiles(files: CatalogFileRequest[]): Promise<ImportResult> {
+  return jsonRequest<ImportResult>("/api/v1/files/import/check", {
+    method: "POST",
+    body: JSON.stringify({ files }),
+  });
+}
+
 export type FetchUrlResult =
   paths["/api/v1/files/fetch"]["post"]["responses"]["200"]["content"]["application/json"];
 

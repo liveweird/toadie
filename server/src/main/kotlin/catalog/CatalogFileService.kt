@@ -24,6 +24,10 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 
 val CatalogFileServiceKey = AttributeKey<CatalogFileService>("CatalogFileService")
 
+/** The identity-clash row message, shared by the real import and its dry-run. */
+internal const val IMPORT_CONFLICT_MESSAGE =
+    "An active catalog file with this kind, namespace, and name already exists"
+
 data class CatalogFileListResult(
     val items: List<CatalogFileListItem>,
     val total: Long,
@@ -383,7 +387,13 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         // Documented residual: a document referencing a sibling that later fails to STORE
         // (identity conflict) keeps its dangling reference — the same class as a
         // deletion-created dangling ref, and the cross-check report catches it.
-        val batchIdentities = files.mapNotNull { raw ->
+        val batchIdentities = batchIdentities(files)
+        return files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId, batchIdentities) }
+    }
+
+    /** The identities every batch document may reference (shared by import and its dry-run). */
+    private suspend fun batchIdentities(files: List<CatalogFile>): Set<EntityIdentity> =
+        files.mapNotNull { raw ->
             val sanitized = sanitizedCatalogFile(raw)
             try {
                 validateCatalogFile(sanitized)
@@ -391,10 +401,72 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                null // the document will produce its own INVALID/ERROR row below
+                null // the document will produce its own INVALID/ERROR row
             }
         }.toSet()
-        return files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId, batchIdentities) }
+
+    /**
+     * The import's DRY-RUN (`POST …/import/check`): the identical classification —
+     * structural validation, namespace resolution, identity conflicts against the workspace
+     * AND within the batch, soft findings — with the insert replaced by prediction. Nothing
+     * is stored, nothing is audited; every row's `fileId` stays null and the statuses read
+     * as predictions (CREATED = would be created). One snapshot transaction (the crossCheck
+     * shape) — cheaper than the real run, semantically equal; the result is a snapshot, so
+     * a concurrent write can change the real outcome.
+     */
+    suspend fun importCheck(files: List<CatalogFile>): List<ImportFileResult> {
+        val batchIdentities = batchIdentities(files)
+        return suspendTransaction(database) {
+            val active = activeIdentities()
+            val registries = loadRegistrySnapshot()
+            // The running seen-set predicts INTRA-batch duplicates: the real run stores the
+            // first occurrence and 23505-CONFLICTs the second — mirror that ordering.
+            val seen = mutableSetOf<EntityIdentity>()
+            files.mapIndexed { index, raw -> checkOne(index, raw, batchIdentities, active, registries, seen) }
+        }
+    }
+
+    private suspend fun checkOne(
+        index: Int,
+        raw: CatalogFile,
+        batchIdentities: Set<EntityIdentity>,
+        active: Set<EntityIdentity>,
+        registries: RegistrySnapshot,
+        seen: MutableSet<EntityIdentity>,
+    ): ImportFileResult {
+        val sanitized = sanitizedCatalogFile(raw)
+        fun base(f: CatalogFile) = ImportFileResult(
+            index = index,
+            kind = f.kind,
+            namespace = f.metadata.namespace,
+            name = f.metadata.name,
+            status = ImportResultStatus.ERROR,
+        )
+        try {
+            validateCatalogFile(sanitized)
+        } catch (e: BadRequestException) {
+            return base(sanitized).copy(status = ImportResultStatus.INVALID, message = e.message)
+        }
+        val stored = try {
+            sanitized.withNamespace(resolvedNamespace(sanitized.metadata.namespace))
+        } catch (e: BadRequestException) {
+            return base(sanitized).copy(status = ImportResultStatus.INVALID, message = e.message)
+        }
+        val identity = identityOf(stored)
+        if (identity in active || !seen.add(identity)) {
+            return base(stored).copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
+        }
+        val findings = checkDocument(stored, active + batchIdentities).findings
+            .map { SoftFinding(it, referenceFindingMessage(it)) } +
+            registryFindings(stored, registries)
+        return if (findings.isEmpty()) {
+            base(stored).copy(status = ImportResultStatus.CREATED)
+        } else {
+            base(stored).copy(
+                status = ImportResultStatus.CREATED_WITH_FINDINGS,
+                message = findings.joinToString("; ") { it.message },
+            )
+        }
     }
 
     private suspend fun importOne(
@@ -451,7 +523,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             if (e.isUniqueViolation()) {
                 base.copy(
                     status = ImportResultStatus.CONFLICT,
-                    message = "An active catalog file with this kind, namespace, and name already exists",
+                    message = IMPORT_CONFLICT_MESSAGE,
                 )
             } else {
                 base.copy(status = ImportResultStatus.ERROR, message = e.message ?: "Storage failed")

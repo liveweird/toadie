@@ -150,8 +150,9 @@ ch.nokillswit
                         Graph.kt — the same resolution machinery as a node/edge graph
                         (GET …/graph, the /graph page's backend);
                         Import.kt — the round-trip DTOs (GET …/export ships structured
-                        documents, POST …/import stores each independently, report & skip;
-                        YAML parsing/rendering stays a client concern);
+                        documents, POST …/import stores each independently, report & skip,
+                        POST …/import/check is the store-nothing dry-run of the same
+                        classification; YAML parsing/rendering stays a client concern);
                         UrlFetch.kt — POST …/fetch, the SSRF-guarded server-side fetch of a
                         catalog-info.yaml URL (guards documented in security.md)
 ```

@@ -16,8 +16,13 @@ import {
   Title,
 } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { IconArrowLeft, IconDownload, IconFileImport, IconUpload } from "@tabler/icons-react";
-import { fetchCatalogUrl, importCatalogFiles, type ImportFileResult } from "../api/catalogFiles";
+import { IconArrowLeft, IconDownload, IconFileImport, IconListCheck, IconUpload } from "@tabler/icons-react";
+import {
+  checkImportCatalogFiles,
+  fetchCatalogUrl,
+  importCatalogFiles,
+  type ImportFileResult,
+} from "../api/catalogFiles";
 import { normalizeCatalogUrl, parseCatalogYaml } from "../utils/catalogImport";
 import { saveErrorMessage } from "../utils/saveError";
 import { catalogFilesPath } from "../utils/catalogFileLinks";
@@ -39,8 +44,11 @@ export default function ImportCatalogFiles() {
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [results, setResults] = useState<ImportFileResult[] | null>(null);
+  // The mode discriminates the report: a dry-run's rows are PREDICTIONS ("Would be
+  // created"), never to be mislabeled as stored.
+  const [results, setResults] = useState<{ mode: "import" | "check"; rows: ImportFileResult[] } | null>(null);
 
   // Parsing runs on the DEBOUNCED text — a multi-document paste re-parsed per keystroke is
   // wasted work; the summary/errors lag typing by the debounce, and the submit path re-parses
@@ -77,19 +85,25 @@ export default function ImportCatalogFiles() {
     }
   }
 
-  async function handleImport() {
+  async function runBatch(mode: "import" | "check") {
     // Re-parse the LIVE text: the debounced parse above may lag a just-typed edit.
     const current = parseCatalogYaml(text);
     if (current.documents.length === 0 || current.errors.length > 0) return;
-    setSubmitting(true);
+    const setBusy = mode === "import" ? setSubmitting : setChecking;
+    setBusy(true);
     setSubmitError(null);
     try {
-      const response = await importCatalogFiles(current.documents);
-      setResults(response.results);
-      // The ["catalogFiles"] prefix covers every catalog-derived query: the list pages,
-      // the reference-picker identities pool, the cross-check report, the graph, and the
-      // editor's live check — all refetch after an import.
-      await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
+      const response =
+        mode === "import"
+          ? await importCatalogFiles(current.documents)
+          : await checkImportCatalogFiles(current.documents);
+      setResults({ mode, rows: response.results });
+      if (mode === "import") {
+        // The ["catalogFiles"] prefix covers every catalog-derived query: the list pages,
+        // the reference-picker identities pool, the cross-check report, the graph, and the
+        // editor's live check — all refetch after an import. A dry-run changed nothing.
+        await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
+      }
     } catch (err) {
       setSubmitError(
         saveErrorMessage(err, t, {
@@ -99,13 +113,13 @@ export default function ImportCatalogFiles() {
         }),
       );
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
-  // Both stored statuses count as imported — the summary reports what landed.
+  // Both stored statuses count as imported (or would-import) — the summary reports them.
   const createdCount =
-    results?.filter((r) => r.status === "CREATED" || r.status === "CREATED_WITH_FINDINGS").length ?? 0;
+    results?.rows.filter((r) => r.status === "CREATED" || r.status === "CREATED_WITH_FINDINGS").length ?? 0;
 
   return (
     <Stack gap="md">
@@ -191,7 +205,12 @@ export default function ImportCatalogFiles() {
       {results && (
         <Stack gap="xs">
           <Text size="sm" fw={500}>
-            {t("catalog.import.resultSummary", { created: createdCount, total: results.length })}
+            {t(
+              results.mode === "check"
+                ? "catalog.import.checkResultSummary"
+                : "catalog.import.resultSummary",
+              { created: createdCount, total: results.rows.length },
+            )}
           </Text>
           <Table withTableBorder>
             <Table.Thead>
@@ -204,7 +223,7 @@ export default function ImportCatalogFiles() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {results.map((result) => (
+              {results.rows.map((result) => (
                 <Table.Tr key={result.index}>
                   <Table.Td>
                     <Badge variant="light" size="sm">
@@ -221,7 +240,11 @@ export default function ImportCatalogFiles() {
                   </Table.Td>
                   <Table.Td>
                     <Badge variant="light" size="sm" color={STATUS_COLOR[result.status]}>
-                      {t(`catalog.import.status.${result.status}`)}
+                      {t(
+                        results.mode === "check"
+                          ? `catalog.import.checkStatus.${result.status}`
+                          : `catalog.import.status.${result.status}`,
+                      )}
                     </Badge>
                   </Table.Td>
                   <Table.Td>
@@ -245,14 +268,25 @@ export default function ImportCatalogFiles() {
         >
           {t("catalog.backToList")}
         </Button>
-        <Button
-          leftSection={<IconFileImport size={16} />}
-          onClick={() => void handleImport()}
-          disabled={!canImport}
-          loading={submitting}
-        >
-          {t("catalog.import.importButton")}
-        </Button>
+        <Group gap="xs">
+          <Button
+            variant="default"
+            leftSection={<IconListCheck size={16} />}
+            onClick={() => void runBatch("check")}
+            disabled={!canImport}
+            loading={checking}
+          >
+            {t("catalog.import.checkButton")}
+          </Button>
+          <Button
+            leftSection={<IconFileImport size={16} />}
+            onClick={() => void runBatch("import")}
+            disabled={!canImport}
+            loading={submitting}
+          >
+            {t("catalog.import.importButton")}
+          </Button>
+        </Group>
       </Group>
     </Stack>
   );

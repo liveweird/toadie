@@ -148,12 +148,21 @@
     "parseErrorsTitle": "Popraw te dokumenty przed importem",
     "documentLabel": "Dokument {{number}}",
     "importButton": "Importuj",
+    "checkButton": "Sprawdź",
     "statusHeader": "Wynik",
     "messageHeader": "Szczegóły",
     "resultSummary": "Zaimportowano {{created}} z {{total}} dokumentów.",
+    "checkResultSummary": "{{created}} z {{total}} dokumentów zostałoby zaimportowanych.",
     "status": {
       "CREATED": "Utworzony",
       "CREATED_WITH_FINDINGS": "Utworzono z zastrzeżeniami",
+      "CONFLICT": "Już istnieje",
+      "INVALID": "Nieprawidłowy",
+      "ERROR": "Niepowodzenie"
+    },
+    "checkStatus": {
+      "CREATED": "Zostałby utworzony",
+      "CREATED_WITH_FINDINGS": "Zostałby utworzony z zastrzeżeniami",
       "CONFLICT": "Już istnieje",
       "INVALID": "Nieprawidłowy",
       "ERROR": "Niepowodzenie"

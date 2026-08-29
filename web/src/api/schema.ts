@@ -518,6 +518,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/files/import/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dry-run an import batch (nothing is stored)
+         * @description The import's dry-run: runs the IDENTICAL per-document classification — structural
+         *     validation, namespace resolution, identity conflicts against the workspace AND
+         *     within the batch, soft findings — and returns the same result rows, storing
+         *     nothing. Statuses read as PREDICTIONS: `CREATED` = would be created, `CREATED_WITH_
+         *     FINDINGS` = would be created carrying the listed findings; `fileId` is always null.
+         *     A pure computation: nothing is stored, nothing is audited; POST only because the
+         *     batch travels in the body. The report is a snapshot — a concurrent write between
+         *     the check and the real import can change the actual outcome. The same `400` covers
+         *     only the batch itself (an undecodable body or more than 200 entries).
+         */
+        post: operations["checkCatalogImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/files/fetch": {
         parameters: {
             query?: never;
@@ -1043,7 +1071,7 @@ export interface components {
             status: "CREATED" | "CREATED_WITH_FINDINGS" | "INVALID" | "CONFLICT" | "ERROR";
             /**
              * Format: int32
-             * @description The new file's id, only when the document was stored.
+             * @description The new file's id, only when the document was stored (always null on the dry-run's predicted rows).
              */
             fileId?: number | null;
             /** @description The failure or finding detail, absent on CREATED. */
@@ -2158,6 +2186,33 @@ export interface operations {
         };
         responses: {
             /** @description One result per submitted document, in order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    checkCatalogImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportRequest"];
+            };
+        };
+        responses: {
+            /** @description One predicted result per submitted document, in order */
             200: {
                 headers: {
                     [name: string]: unknown;

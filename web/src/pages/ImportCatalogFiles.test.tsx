@@ -121,6 +121,42 @@ describe("ImportCatalogFiles page", () => {
     expect(body.files.map((f) => f.metadata.name)).toEqual(["payments-svc", "team-a"]);
   });
 
+  test("checking runs the dry-run: predicted labels, no import POST, and Import still works after", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const rows = (status1: string, status2: string, fileIds: (number | null)[]) => ({
+        results: [
+          { index: 0, kind: "Component", namespace: "default", name: "payments-svc", status: status1, fileId: fileIds[0] },
+          { index: 1, kind: "Group", namespace: "default", name: "team-a", status: status2, fileId: fileIds[1] },
+        ],
+      });
+      if (url === "/api/v1/files/import/check" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse(200, rows("CREATED", "CREATED_WITH_FINDINGS", [null, null])));
+      }
+      if (url === "/api/v1/files/import" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse(200, rows("CREATED", "CREATED_WITH_FINDINGS", [7, 8])));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderPage();
+    pasteYaml(TWO_DOCS);
+    await screen.findByText("2 documents ready to import");
+
+    await user.click(screen.getByRole("button", { name: "Check" }));
+
+    // The dry-run report speaks in predictions — and nothing hit the real import.
+    expect(await screen.findByText("2 of 2 documents would import.")).toBeInTheDocument();
+    expect(screen.getByText("Would be created")).toBeInTheDocument();
+    expect(screen.getByText("Would be created with findings")).toBeInTheDocument();
+    expect(mockFetch.mock.calls.some(([url]) => url === "/api/v1/files/import")).toBe(false);
+
+    // The real import follows straight from the same text and relabels the report.
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    expect(await screen.findByText("Imported 2 of 2 documents.")).toBeInTheDocument();
+    expect(screen.getByText("Created")).toBeInTheDocument();
+    expect(screen.queryByText("Would be created")).not.toBeInTheDocument();
+  });
+
   test("INVALID and ERROR rows render with their messages", async () => {
     mockFetch.mockImplementation((url: string) =>
       url === "/api/v1/files/import"

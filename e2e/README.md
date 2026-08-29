@@ -174,8 +174,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   (deletion-orphaned) missing nodes for a throwaway namespace; toggling a relation family
   prunes its virtual nodes.
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
-  import as Created, export downloads them as one `---`-separated file, and re-importing the
-  export reports every row Already exists (nothing overwritten).
+  dry-run as Would-be-created (the Check button, nothing stored), import as Created, export
+  downloads them as one `---`-separated file, and re-importing the export reports every row
+  Already exists (nothing overwritten).
 - [`tags.spec.ts`](scenarios/tags.md) — the tag categories: modal validation → create a
   category (tags + kinds) → edit → the regular user's read-only view → the editor's grouped
   tags picker on a new Component → cleanup; the tag-category registry's only in-run writer.

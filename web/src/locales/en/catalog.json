@@ -144,12 +144,21 @@
     "parseErrorsTitle": "Fix these documents before importing",
     "documentLabel": "Document {{number}}",
     "importButton": "Import",
+    "checkButton": "Check",
     "statusHeader": "Result",
     "messageHeader": "Detail",
     "resultSummary": "Imported {{created}} of {{total}} documents.",
+    "checkResultSummary": "{{created}} of {{total}} documents would import.",
     "status": {
       "CREATED": "Created",
       "CREATED_WITH_FINDINGS": "Created with findings",
+      "CONFLICT": "Already exists",
+      "INVALID": "Invalid",
+      "ERROR": "Failed"
+    },
+    "checkStatus": {
+      "CREATED": "Would be created",
+      "CREATED_WITH_FINDINGS": "Would be created with findings",
       "CONFLICT": "Already exists",
       "INVALID": "Invalid",
       "ERROR": "Failed"

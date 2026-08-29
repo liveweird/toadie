@@ -738,6 +738,38 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/files/import/check:
+    post:
+      tags: [catalog-files]
+      operationId: checkCatalogImport
+      summary: Dry-run an import batch (nothing is stored)
+      description: |
+        The import's dry-run: runs the IDENTICAL per-document classification — structural
+        validation, namespace resolution, identity conflicts against the workspace AND
+        within the batch, soft findings — and returns the same result rows, storing
+        nothing. Statuses read as PREDICTIONS: `CREATED` = would be created, `CREATED_WITH_
+        FINDINGS` = would be created carrying the listed findings; `fileId` is always null.
+        A pure computation: nothing is stored, nothing is audited; POST only because the
+        batch travels in the body. The report is a snapshot — a concurrent write between
+        the check and the real import can change the actual outcome. The same `400` covers
+        only the batch itself (an undecodable body or more than 200 entries).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportRequest'
+      responses:
+        '200':
+          description: One predicted result per submitted document, in order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/files/fetch:
     post:
       tags: [catalog-files]
@@ -1755,7 +1787,9 @@ components:
           format: int32
           minimum: 0
           nullable: true
-          description: The new file's id, only when the document was stored.
+          description: >-
+            The new file's id, only when the document was stored (always null on the
+            dry-run's predicted rows).
         message:
           type: string
           nullable: true

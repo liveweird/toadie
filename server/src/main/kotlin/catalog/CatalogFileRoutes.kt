@@ -54,7 +54,11 @@ class CatalogFiles {
 
     @Serializable
     @Resource("import")
-    class Import(val parent: CatalogFiles = CatalogFiles())
+    class Import(val parent: CatalogFiles = CatalogFiles()) {
+        @Serializable
+        @Resource("check")
+        class Check(val parent: Import = Import())
+    }
 
     @Serializable
     @Resource("fetch")
@@ -157,6 +161,17 @@ fun Application.configureCatalogFileRoutes() {
                 call.caller()
                 val namespace = call.request.queryParameters.optionalString("namespace")
                 call.respond(HttpStatusCode.OK, catalogFileService.export(namespace))
+            }
+            post<CatalogFiles.Import.Check> {
+                call.caller()
+                val request = call.receive<ImportRequest>()
+                if (request.files.size > MAX_IMPORT_FILES) {
+                    throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
+                }
+                // The import's dry-run: the same per-row report, nothing stored. A pure
+                // computation like the other check endpoints — no audit events (and no
+                // created-audit loop: predicted rows have no fileId).
+                call.respond(HttpStatusCode.OK, ImportResponse(results = catalogFileService.importCheck(request.files)))
             }
             post<CatalogFiles.Import> {
                 val caller = call.caller()
