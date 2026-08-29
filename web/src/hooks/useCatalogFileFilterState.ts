@@ -1,6 +1,13 @@
 import { useDebouncedValue } from "@mantine/hooks";
 import type { CatalogFileFilterValues } from "../api/catalogFiles";
+import { ENTITY_KINDS } from "../utils/catalogFileForm";
 import { isString, isStringArray, useStoredState } from "./useStoredState";
+
+// The visible-kinds guard: only real kinds may restore (junk — or a leftover from the
+// pre-visible-set semantics where [] meant "no filter" — falls back to all-on, and a bad
+// stored value can never produce a 400ing kind= param).
+const isKindArray = (v: unknown): v is string[] =>
+  isStringArray(v) && v.every((entry) => (ENTITY_KINDS as readonly string[]).includes(entry));
 
 /** The raw control values + setters CatalogFileFilterControls renders. */
 export type CatalogFileFilterControlsState = {
@@ -36,13 +43,28 @@ export function useCatalogFileFilterState(viewKey: string): {
   values: CatalogFileFilterValues;
   deps: unknown[];
   activeFilterCount: number;
+  /** Every kind pill toggled OFF — the page shows NO entities and must not fetch. */
+  noKinds: boolean;
   controls: CatalogFileFilterControlsState;
 } {
   const [name, setName] = useStoredState(`${viewKey}.filter.name`, "", isString);
   const [namespace, setNamespace] = useStoredState(`${viewKey}.filter.namespace`, "", isString);
-  // Multi-select pills (any-of/IN server-side); a pre-pills persisted STRING fails the
-  // array guard and falls back to [] cleanly.
-  const [kinds, setKinds] = useStoredState<string[]>(`${viewKey}.filter.kind`, [], isStringArray);
+  // The VISIBLE-kinds set behind the always-on pills: all kinds start visible, the state
+  // persists per view, and an EMPTY set means "show nothing" (short-circuited client-side
+  // via noKinds — the API cannot express match-nothing). Fresh storage key: the retired
+  // filter.kind slot's [] meant the opposite ("no filter").
+  const [kinds, setKindsRaw] = useStoredState<string[]>(
+    `${viewKey}.filter.visibleKinds`,
+    [...ENTITY_KINDS],
+    isKindArray,
+  );
+  // Chip.Group reports values in CLICK order — normalize so URLs/query keys stay stable.
+  const setKinds = (next: string[]) =>
+    setKindsRaw(
+      [...next].sort(
+        (a, b) => (ENTITY_KINDS as readonly string[]).indexOf(a) - (ENTITY_KINDS as readonly string[]).indexOf(b),
+      ),
+    );
   const [tag, setTag] = useStoredState(`${viewKey}.filter.tag`, "", isString);
   const [type, setType] = useStoredState(`${viewKey}.filter.type`, "", isString);
   const [lifecycle, setLifecycle] = useStoredState(`${viewKey}.filter.lifecycle`, "", isString);
@@ -64,7 +86,9 @@ export function useCatalogFileFilterState(viewKey: string): {
   const values: CatalogFileFilterValues = {
     name: debouncedName || undefined,
     namespace: namespace || undefined,
-    kind: kinds.length > 0 ? kinds : undefined,
+    // All-on sends NO param (the server's empty-means-no-filter contract); none-on sends
+    // none either — the page checks noKinds and never fetches.
+    kind: kinds.length > 0 && kinds.length < ENTITY_KINDS.length ? kinds : undefined,
     tag: tag || undefined,
     type: type || undefined,
     lifecycle: lifecycle || undefined,
@@ -74,10 +98,10 @@ export function useCatalogFileFilterState(viewKey: string): {
     labelValue: label && labelValues.length > 0 ? labelValues : undefined,
   };
 
+  // The pills are always visible, so kinds never counts into the hidden-filter badge.
   const activeFilterCount =
     (name.trim() ? 1 : 0) +
     (namespace.trim() ? 1 : 0) +
-    (kinds.length > 0 ? 1 : 0) +
     (tag.trim() ? 1 : 0) +
     (type ? 1 : 0) +
     (lifecycle ? 1 : 0) +
@@ -89,6 +113,7 @@ export function useCatalogFileFilterState(viewKey: string): {
     values,
     deps: [debouncedName, namespace, kinds, tag, type, lifecycle, owner, label, labelValues],
     activeFilterCount,
+    noKinds: kinds.length === 0,
     controls: {
       name,
       setName,

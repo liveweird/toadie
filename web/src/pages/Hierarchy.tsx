@@ -19,6 +19,7 @@ import { IconChevronDown, IconChevronRight, IconSitemap } from "@tabler/icons-re
 import { deleteCatalogFile, getCatalogGraph, type GraphNode } from "../api/catalogFiles";
 import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogFileOperations from "../components/CatalogFileOperations";
+import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
@@ -147,9 +148,12 @@ export default function Hierarchy() {
     queryKey: ["catalogFiles", "graph", filters.values],
     queryFn: () => getCatalogGraph(filters.values),
     placeholderData: keepPreviousData,
+    // Every kind pill off = show nothing — never fetch (the API can't say match-nothing).
+    enabled: !filters.noKinds,
   });
 
-  const roots = useMemo(() => (data ? buildHierarchy(data) : []), [data]);
+  const noKinds = filters.noKinds;
+  const roots = useMemo(() => (data && !noKinds ? buildHierarchy(data) : []), [data, noKinds]);
 
   const deleteConfirm = useDeleteConfirm<DeleteTarget>({
     mutationFn: (row) => deleteCatalogFile(row.id),
@@ -190,6 +194,8 @@ export default function Hierarchy() {
         <CatalogFileFilterControls controls={filters.controls} />
       </FilterPanel>
 
+      <CatalogKindPills kinds={filters.controls.kinds} setKinds={filters.controls.setKinds} />
+
       <Group gap="lg">
         <Button variant="default" size="xs" onClick={() => setCollapsed(new Set())}>
           {t("hierarchy.expandAll")}
@@ -222,7 +228,8 @@ export default function Hierarchy() {
       )}
 
       <Paper withBorder p="md">
-        {isPending && !data ? (
+        {/* A disabled (noKinds) query stays pending forever — fall through to the empty state. */}
+        {isPending && !data && !noKinds ? (
           <Center py="md">
             <Loader size="sm" />
           </Center>

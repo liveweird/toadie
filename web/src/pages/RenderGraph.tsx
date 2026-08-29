@@ -20,6 +20,7 @@ import { IconTopologyStar3 } from "@tabler/icons-react";
 import { getCatalogGraph } from "../api/catalogFiles";
 import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogGraphNode from "../components/CatalogGraphNode";
+import CatalogKindPills from "../components/CatalogKindPills";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
 import {
@@ -55,12 +56,15 @@ export default function RenderGraph() {
     queryKey: ["catalogFiles", "graph", filters.values],
     queryFn: () => getCatalogGraph(filters.values),
     placeholderData: keepPreviousData,
+    // Every kind pill off = show nothing — never fetch (the API can't say match-nothing).
+    enabled: !filters.noKinds,
   });
 
+  const noKinds = filters.noKinds;
   const { nodes, edges } = useMemo(() => {
-    if (!data) return { nodes: [], edges: [] };
+    if (!data || noKinds) return { nodes: [], edges: [] };
     return layoutGraph(filterGraph(data, enabled));
-  }, [data, enabled]);
+  }, [data, enabled, noKinds]);
 
   function onNodeClick(_event: React.MouseEvent, node: LaidOutNode) {
     const fileId = node.data.apiNode.fileId;
@@ -74,6 +78,8 @@ export default function RenderGraph() {
       <FilterPanel activeFilterCount={filters.activeFilterCount} storageKey="renderGraph">
         <CatalogFileFilterControls controls={filters.controls} />
       </FilterPanel>
+
+      <CatalogKindPills kinds={filters.controls.kinds} setKinds={filters.controls.setKinds} />
 
       {/* Which RELATIONSHIP families draw edges — captioned so the pills never read as
           entity kinds (the Kind filter pills live in the panel above). */}

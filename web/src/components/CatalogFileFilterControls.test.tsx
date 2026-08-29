@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import CatalogFileFilterControls from "./CatalogFileFilterControls";
+import CatalogKindPills from "./CatalogKindPills";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
@@ -58,13 +59,15 @@ function stubFetch(mockFetch: FetchMock) {
   });
 }
 
-/** The controls rendered over the real filter-state hook, with the derived outputs probed. */
+/** The full filter surface (pills + controls) over the real hook, derived outputs probed. */
 function Harness() {
   const filters = useCatalogFileFilterState(VIEW_KEY);
   return (
     <>
+      <CatalogKindPills kinds={filters.controls.kinds} setKinds={filters.controls.setKinds} />
       <CatalogFileFilterControls controls={filters.controls} />
       <div data-testid="count">{filters.activeFilterCount}</div>
+      <div data-testid="noKinds">{String(filters.noKinds)}</div>
       <div data-testid="values">{JSON.stringify(filters.values)}</div>
     </>
   );
@@ -92,10 +95,11 @@ describe("CatalogFileFilterControls + useCatalogFileFilterState", () => {
     localStorage.clear();
   });
 
-  test("the Type options group by kind (duplicates allowed) and the kind pills narrow them", async () => {
+  test("the Type options group by kind (duplicates allowed) and follow the visible kinds", async () => {
     renderWithProviders(<Harness />);
 
-    // One group per kind — "service" legally appears under BOTH (kind-prefixed values).
+    // All kinds visible by default — one group per kind; "service" legally appears under
+    // BOTH (kind-prefixed values).
     fireEvent.click(screen.getByLabelText("Type", { selector: "input" }));
     await screen.findByRole("option", { name: "library" });
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
@@ -108,24 +112,42 @@ describe("CatalogFileFilterControls + useCatalogFileFilterState", () => {
     fireEvent.click(screen.getAllByRole("option", { name: "service" })[1]);
     await waitFor(() => expect(values().type).toBe("service"));
 
-    // A kind pill narrows the groups to that kind's dictionary.
-    fireEvent.click(screen.getByRole("checkbox", { name: "API" }));
+    // Hiding a kind drops its group from the Type options.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Component" }));
     fireEvent.click(screen.getByLabelText("Type", { selector: "input" }));
     await screen.findByRole("option", { name: "openapi" });
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["openapi", "service"]);
   });
 
-  test("the kind pills are any-of and land as a repeated kind param", async () => {
+  test("the kind pills are a visible set: all on by default, subsets travel, none means noKinds", async () => {
     renderWithProviders(<Harness />);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Group" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Component" }));
-    await waitFor(() => expect(values().kind).toEqual(["Group", "Component"]));
-    expect(screen.getByTestId("count")).toHaveTextContent("1");
+    // All seven start ON and — being the no-filter default — send NO kind param.
+    expect(screen.getAllByRole("checkbox", { checked: true })).toHaveLength(7);
+    expect(values().kind).toBeUndefined();
+    expect(screen.getByTestId("noKinds")).toHaveTextContent("false");
 
-    // Clicking an active pill deselects it.
+    // Toggling one OFF sends the remaining six, in canonical kind order.
     fireEvent.click(screen.getByRole("checkbox", { name: "Group" }));
-    await waitFor(() => expect(values().kind).toEqual(["Component"]));
+    await waitFor(() =>
+      expect(values().kind).toEqual(["Component", "API", "System", "Domain", "Resource", "User"]),
+    );
+    // The pills are always visible — they never count into the hidden-filter badge.
+    expect(screen.getByTestId("count")).toHaveTextContent("0");
+
+    // Toggling everything OFF flips noKinds (the page shows nothing and must not fetch).
+    for (const kind of ["Component", "API", "System", "Domain", "Resource", "User"]) {
+      fireEvent.click(screen.getByRole("checkbox", { name: kind }));
+    }
+    await waitFor(() => expect(screen.getByTestId("noKinds")).toHaveTextContent("true"));
+    expect(values().kind).toBeUndefined();
+  });
+
+  test("a junk persisted visible-kinds value falls back to all-on", () => {
+    localStorage.setItem(`${STORE_PREFIX}.visibleKinds`, JSON.stringify(["Component", "Gadget"]));
+    renderWithProviders(<Harness />);
+    expect(screen.getAllByRole("checkbox", { checked: true })).toHaveLength(7);
+    expect(values().kind).toBeUndefined();
   });
 
   test("filter picks land in the normalized values and the active count", async () => {

@@ -52,6 +52,15 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await page.getByLabel("Clear owner filter").click();
   await expect(page.getByText(name, { exact: true })).toBeVisible();
 
+  // The always-visible Kind pills (outside the panel, above the table) gate what shows:
+  // hiding Component hides the row, showing it again brings it back. Scoped to the pills
+  // group — the row's kind badge carries the same word.
+  const kindPills = page.getByRole("group", { name: "Kind" });
+  await kindPills.getByText("Component", { exact: true }).click();
+  await expect(page.getByText("No catalog files")).toBeVisible();
+  await kindPills.getByText("Component", { exact: true }).click();
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+
   // Edit: retitle and deprecate — via the row's Operations menu (auto-waiting locators).
   await rowOperation(page, name, "Edit");
   await expect(page).toHaveURL(new RegExp(`/files/${fileId}/edit`));

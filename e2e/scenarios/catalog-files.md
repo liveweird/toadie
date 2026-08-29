@@ -22,14 +22,18 @@
    - *Expected*: the row stays (its type matches, and its short-form owner RESOLVES to the
      picked entity). Switching the Type filter to `library` hides it ("No catalog files");
      clearing both filters brings it back.
-5. They open the row's **Edit** form through its **Operations** menu, change the title and
+5. They toggle the **Component** pill off in the always-visible Kind row above the table
+   (no filter panel needed), then back on.
+   - *Expected*: the pills are a visibility switch — every kind starts ON; with Component
+     hidden the row disappears ("No catalog files"), and re-enabling it brings it back.
+6. They open the row's **Edit** form through its **Operations** menu, change the title and
    set lifecycle `deprecated`, and click **Save**.
-6. They reopen the edit form directly.
+7. They reopen the edit form directly.
    - *Expected*: the new title and lifecycle persisted.
-7. Back on the filtered list they pick **Download** from the row's **Operations** menu.
+8. Back on the filtered list they pick **Download** from the row's **Operations** menu.
    - *Expected*: the browser receives a file named `catalog-info.yaml`.
-8. They pick **Delete** from the row's **Operations** menu and confirm in the modal.
-9. They load the list fresh and filter by the name again.
+9. They pick **Delete** from the row's **Operations** menu and confirm in the modal.
+10. They load the list fresh and filter by the name again.
    - *Expected*: "No catalog files" — the file is gone.
 
 ## Not covered here (and why)

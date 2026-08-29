@@ -193,17 +193,44 @@ describe("CatalogFiles page", () => {
     await calledWith(mockFetch, "name=paym");
   });
 
-  test("toggling Kind pills refetches with repeated kind= (any-of)", async () => {
+  test("the always-visible Kind pills are a visible set driving repeated kind=", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
-    const user = userEvent.setup();
     renderPage();
 
     await screen.findByText("payments-svc");
-    await user.click(screen.getByRole("button", { name: /filters/i }));
+    // No panel-opening needed — the pills live above the table; all-on sends NO kind param.
+    expect(
+      mockFetch.mock.calls.some(
+        ([url]) => typeof url === "string" && url.startsWith("/api/v1/files?") && url.includes("kind="),
+      ),
+    ).toBe(false);
+
+    // Hiding Group sends the six still-visible kinds — Group itself never travels.
     fireEvent.click(screen.getByRole("checkbox", { name: "Group" }));
-    await calledWith(mockFetch, "kind=Group");
-    fireEvent.click(screen.getByRole("checkbox", { name: "API" }));
-    await calledWith(mockFetch, "kind=Group&kind=API");
+    await calledWith(mockFetch, "kind=Component&kind=API&kind=System&kind=Domain&kind=Resource&kind=User");
+    expect(
+      mockFetch.mock.calls.some(
+        ([url]) => typeof url === "string" && url.includes("kind=Group"),
+      ),
+    ).toBe(false);
+  });
+
+  test("with every Kind pill off the list is empty and nothing is fetched", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    const before = mockFetch.mock.calls.length;
+    for (const kind of ["Component", "API", "System", "Domain", "Resource", "Group", "User"]) {
+      fireEvent.click(screen.getByRole("checkbox", { name: kind }));
+    }
+    expect(await screen.findByText("No catalog files")).toBeInTheDocument();
+    // The API cannot express match-nothing — the page never asks (six subset fetches at
+    // most while toggling down, none for the empty set).
+    const listCallsAfter = mockFetch.mock.calls
+      .slice(before)
+      .filter(([url]) => typeof url === "string" && url.startsWith("/api/v1/files?"));
+    expect(listCallsAfter.every(([url]) => (url as string).includes("kind="))).toBe(true);
   });
 
   test("rows show their kind badge", async () => {
@@ -211,8 +238,10 @@ describe("CatalogFiles page", () => {
     renderPage();
 
     await screen.findByText("payments-svc");
-    expect(screen.getByText("Component")).toBeInTheDocument();
-    expect(screen.getByText("API")).toBeInTheDocument();
+    // Scoped to the table — the always-visible Kind pills carry the same words.
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Component")).toBeInTheDocument();
+    expect(within(table).getByText("API")).toBeInTheDocument();
   });
 
   test("picking a Namespace filter option triggers a refetch with namespace=", async () => {

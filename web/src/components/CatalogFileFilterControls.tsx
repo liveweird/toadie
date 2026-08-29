@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Chip, Group, MultiSelect, Select, Stack, Text } from "@mantine/core";
+import { MultiSelect, Select } from "@mantine/core";
 import type { CatalogFileFilterControlsState } from "../hooks/useCatalogFileFilterState";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
 import { useEntityTypes } from "../hooks/useEntityTypes";
@@ -109,22 +109,6 @@ export default function CatalogFileFilterControls({
         clearLabel={t("common.filter.clearName")}
       />
       <NamespaceFilterSelect value={controls.namespace} onChange={controls.setNamespace} />
-      <Stack gap={4}>
-        <Text size="sm" fw={500} component="label">
-          {t("catalog.field.kind")}
-        </Text>
-        {/* Multi-select pills — any-of/IN server-side; the min height keeps the row
-            bottom-aligned with the 36px Select inputs beside it. */}
-        <Chip.Group multiple value={controls.kinds} onChange={controls.setKinds}>
-          <Group gap="xs" role="group" aria-label={t("catalog.field.kind")} mih={36} align="center">
-            {ENTITY_KINDS.map((kind) => (
-              <Chip key={kind} value={kind} size="xs">
-                {kind}
-              </Chip>
-            ))}
-          </Group>
-        </Chip.Group>
-      </Stack>
       <Select
         label={t("catalog.field.type")}
         placeholder={t("catalog.anyType")}

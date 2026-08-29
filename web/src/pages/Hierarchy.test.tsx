@@ -127,18 +127,21 @@ describe("Hierarchy page", () => {
     });
   });
 
-  test("the filter panel drives the graph query with the shared filter set", async () => {
+  test("the always-visible Kind pills drive the graph query as a visible set", async () => {
     mockGraph(mockFetch);
     renderPage();
 
     await screen.findByText("core");
-    // The Files list's filter surface, collapsed by default, on this page too.
-    fireEvent.click(screen.getByRole("button", { name: /filters/i }));
+    // The pills sit above the tree, outside the collapsed FilterPanel — hiding Component
+    // sends the six kinds that stay visible.
     fireEvent.click(screen.getByRole("checkbox", { name: "Component" }));
 
     await waitFor(() => {
       const called = mockFetch.mock.calls.some(
-        ([url]) => typeof url === "string" && url.includes("/api/v1/files/graph?kind=Component"),
+        ([url]) =>
+          typeof url === "string" &&
+          url.includes("/api/v1/files/graph?kind=API") &&
+          !url.includes("kind=Component"),
       );
       expect(called).toBe(true);
     });

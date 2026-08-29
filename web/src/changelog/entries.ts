@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.4.0",
+    date: "2026-08-29",
+    en: `Kind pills, always at hand.
+
+- The **Kind** pills moved out of the collapsible filter panel — they now sit right above the Files list, the Hierarchy tree, and the Graph canvas, always visible.
+- They work as a visibility switch: every kind starts ON, each view remembers your choice, and with all pills off the view simply shows nothing.`,
+    pl: `Pigułki rodzajów zawsze pod ręką.
+
+- Pigułki **Rodzaj** wyprowadziły się ze zwijanego panelu filtrów — siedzą teraz tuż nad listą Plików, drzewem Hierarchii i płótnem Grafu, zawsze widoczne.
+- Działają jak przełącznik widoczności: każdy rodzaj startuje włączony, każdy widok pamięta Twój wybór, a przy wszystkich pigułkach wyłączonych widok po prostu nic nie pokazuje.`,
+  },
+  {
     version: "1.3.0",
     date: "2026-08-29",
     en: `Tidier filters, lists, and menu.

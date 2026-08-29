@@ -11,6 +11,7 @@ import {
 import { deleteCatalogFile, listCatalogFiles, type CatalogFileListItem } from "../api/catalogFiles";
 import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogFileOperations from "../components/CatalogFileOperations";
+import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
@@ -43,11 +44,17 @@ export default function CatalogFiles() {
       sortFields: SORT_FIELDS,
     });
 
-  const { data, isLoading, isError, error } = useQuery({
+  const query = useQuery({
     queryKey: ["catalogFiles", page, pageSize, sortParam, filters.values],
     queryFn: () => listCatalogFiles({ page, pageSize, sort: sortParam, ...filters.values }),
     placeholderData: keepPreviousData,
+    // Every kind pill off = show nothing — never fetch (the API can't say match-nothing).
+    enabled: !filters.noKinds,
   });
+  // keepPreviousData would keep showing the stale rows while disabled — override, don't
+  // rely on the query emptying itself.
+  const data = filters.noKinds ? undefined : query.data;
+  const { isLoading, isError, error } = query;
 
   const deleteConfirm = useDeleteConfirm<CatalogFileListItem>({
     mutationFn: (row) => deleteCatalogFile(row.id),
@@ -65,6 +72,8 @@ export default function CatalogFiles() {
       <FilterPanel activeFilterCount={filters.activeFilterCount} storageKey={SETTINGS_KEY}>
         <CatalogFileFilterControls controls={filters.controls} />
       </FilterPanel>
+
+      <CatalogKindPills kinds={filters.controls.kinds} setKinds={filters.controls.setKinds} />
 
       {isError && (
         <Alert color="red" variant="light" title={t("catalog.loadFailed")}>
