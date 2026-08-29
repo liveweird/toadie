@@ -18,7 +18,7 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     [ghost, []],
     [a, [`component:${ns}/${b}`, `component:${ns}/${ghost}`]],
   ] as [string, string[]][]) {
-    await page.goto("/catalog-files/new");
+    await page.goto("/files/new");
     await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
     await pickNamespace(page, ns);
     await pickType(page, "service");
@@ -30,14 +30,14 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     }
     await Promise.all([
       page.waitForResponse(
-        (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+        (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
       ),
       page.getByRole("button", { name: "Create" }).click(),
     ]);
   }
 
   // Deleting the ghost leaves A's reference dangling — the graph's MISSING node.
-  await page.goto("/catalog-files");
+  await page.goto("/files");
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(ghost);
   await rowOperation(page, ghost, "Delete");
@@ -48,6 +48,8 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
 
   // Render the namespace: A and B stored, the ghost missing, the (stored) owner group too.
   await page.goto("/render");
+  // The graph shares the Files list's filter panel now (collapsed by default).
+  await openFilters(page);
   await pickNamespace(page, ns);
   await expect(page.getByText(a, { exact: true })).toBeVisible();
   await expect(page.getByText(b, { exact: true })).toBeVisible();
@@ -64,7 +66,7 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
 
   // Cleanup: delete both throwaway files.
   for (const name of [a, b]) {
-    await page.goto("/catalog-files");
+    await page.goto("/files");
     await openFilters(page);
     await page.getByLabel("Name", { exact: true }).fill(name);
     await rowOperation(page, name, "Delete");

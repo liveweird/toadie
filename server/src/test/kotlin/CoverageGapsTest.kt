@@ -28,8 +28,8 @@ class CoverageGapsTest {
         // The pre-routing intercept fires before authentication, so no token is needed —
         // exactly the spec's promise (minimum: 0) for every /api/ path.
         val client = jsonClient()
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files/-1").status)
-        assertEquals(HttpStatusCode.BadRequest, client.delete("/api/v1/catalog-files/-1").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH/-1").status)
+        assertEquals(HttpStatusCode.BadRequest, client.delete("$CATALOG_FILES_PATH/-1").status)
         assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/users/-5").status)
     }
 

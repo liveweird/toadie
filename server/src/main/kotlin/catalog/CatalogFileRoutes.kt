@@ -7,6 +7,7 @@ import ch.nokillswit.infra.db.orVanished
 import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
+import ch.nokillswit.infra.paging.repeatedValues
 import ch.nokillswit.infra.paging.toPage
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -25,8 +26,10 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
 
+// The URL says /files (the SPA's route name); the domain keeps its CatalogFile naming —
+// classes, DTOs, audit events, and the OpenAPI operationIds all stay catalog-file-shaped.
 @Serializable
-@Resource("/api/v1/catalog-files")
+@Resource("/api/v1/files")
 class CatalogFiles {
     @Serializable
     @Resource("{id}")
@@ -69,6 +72,39 @@ private fun createdAuditFields(byUserId: UInt, catalogFileId: UInt, waived: Int)
         if (waived > 0) add("waivedFindings" to waived)
     }.toTypedArray()
 
+/**
+ * The ONE filter parser shared by the list GET and the graph GET (the two endpoints declare
+ * the same filter set): kind canonicalized against the whitelist, owner parsed to the entity
+ * identity it targets, labelValue the repeated any-of param that requires label.
+ */
+private fun ApplicationCall.catalogFileFilter(): CatalogFileListFilter {
+    val params = request.queryParameters
+    val labelKey = params.optionalString("label")
+    val labelValues = params.repeatedValues("labelValue")
+    if (labelValues.isNotEmpty() && labelKey == null) {
+        throw BadRequestException("labelValue requires the label parameter")
+    }
+    return CatalogFileListFilter(
+        name = params.optionalString("name"),
+        namespace = params.optionalString("namespace"),
+        kind = params.optionalString("kind")?.let { raw ->
+            SUPPORTED_KINDS.firstOrNull { it.equals(raw, ignoreCase = true) }
+                ?: throw BadRequestException(
+                    "Unknown kind: $raw (allowed: ${SUPPORTED_KINDS.joinToString()})",
+                )
+        },
+        tag = params.optionalString("tag"),
+        type = params.optionalString("type"),
+        lifecycle = params.optionalString("lifecycle"),
+        owner = params.optionalString("owner")?.let { raw ->
+            ownerFilterTarget(raw)
+                ?: throw BadRequestException("owner must be an entity reference ([kind:][namespace/]name)")
+        },
+        label = labelKey,
+        labelValues = labelValues,
+    )
+}
+
 fun Application.configureCatalogFileRoutes() {
     val catalogFileService = attributes[CatalogFileServiceKey]
     // Stateless, no DB — constructed here rather than in the composition root. Lazy so the
@@ -83,18 +119,7 @@ fun Application.configureCatalogFileRoutes() {
             get<CatalogFiles> {
                 call.caller()
                 val paging = call.parsePaging(sortable = CATALOG_FILE_SORT_FIELDS)
-                val filter = CatalogFileListFilter(
-                    name = call.request.queryParameters.optionalString("name"),
-                    namespace = call.request.queryParameters.optionalString("namespace"),
-                    kind = call.request.queryParameters.optionalString("kind")?.let { raw ->
-                        SUPPORTED_KINDS.firstOrNull { it.equals(raw, ignoreCase = true) }
-                            ?: throw BadRequestException(
-                                "Unknown kind: $raw (allowed: ${SUPPORTED_KINDS.joinToString()})",
-                            )
-                    },
-                    tag = call.request.queryParameters.optionalString("tag"),
-                )
-                val result = catalogFileService.list(filter, paging)
+                val result = catalogFileService.list(call.catalogFileFilter(), paging)
                 call.respond(HttpStatusCode.OK, paging.toPage(result.items, result.total))
             }
             post<CatalogFiles> {
@@ -125,8 +150,7 @@ fun Application.configureCatalogFileRoutes() {
             }
             get<CatalogFiles.Graph> {
                 call.caller()
-                val namespace = call.request.queryParameters.optionalString("namespace")
-                call.respond(HttpStatusCode.OK, catalogFileService.graph(namespace))
+                call.respond(HttpStatusCode.OK, catalogFileService.graph(call.catalogFileFilter()))
             }
             get<CatalogFiles.Export> {
                 call.caller()

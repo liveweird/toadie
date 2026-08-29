@@ -79,6 +79,65 @@ fun Expression<String>.jsonArrayContains(path: List<String>, value: String): Op<
 }
 
 /**
+ * Case-folded exact match against a scalar STRING field nested inside a TEXT column holding a
+ * JSON document: renders `LOWER(CAST(col AS jsonb) #>> '{a,b}') = ?` with the value bound
+ * lowercased. An absent field extracts to SQL NULL, which never equals — exactly what a filter
+ * over an optional field should do (encodeDefaults=false stores absent fields as absent).
+ * Same seq-scan/denormalization trade-off as [jsonArrayContains]; [path] segments are
+ * compile-time constants by contract (guarded — they land inside a SQL literal).
+ */
+fun Expression<String>.jsonTextEqualsFolded(path: List<String>, value: String): Op<Boolean> {
+    requireSimplePath(path)
+    return object : Op<Boolean>() {
+        override fun toQueryBuilder(queryBuilder: QueryBuilder) {
+            queryBuilder.append("LOWER(CAST(")
+            queryBuilder.append(this@jsonTextEqualsFolded)
+            queryBuilder.append(" AS jsonb) #>> '{${path.joinToString(",")}}') = ")
+            queryBuilder.append(stringParam(value.lowercase()))
+        }
+    }
+}
+
+/**
+ * Key-presence test against a JSON OBJECT nested inside a TEXT column: `jsonb_exists` on an
+ * object checks key membership (the same function [jsonArrayContains] uses for array
+ * elements), so this is the same rendering under an honest name. The KEY is a bound
+ * parameter — label keys legally carry `.`/`-`/`/` and must never travel as path segments.
+ */
+fun Expression<String>.jsonObjectHasKey(path: List<String>, key: String): Op<Boolean> =
+    jsonArrayContains(path, key)
+
+/**
+ * Any-of match of the value stored under a caller-supplied KEY of a JSON object: renders
+ * `LOWER((CAST(col AS jsonb) #> '{a,b}') ->> ?) IN (?, …)` — the key AND every value bound,
+ * values folded on both sides. A missing object or key extracts to SQL NULL → no match.
+ */
+fun Expression<String>.jsonObjectValueIn(path: List<String>, key: String, values: List<String>): Op<Boolean> {
+    requireSimplePath(path)
+    require(values.isNotEmpty()) { "jsonObjectValueIn needs at least one value" }
+    return object : Op<Boolean>() {
+        override fun toQueryBuilder(queryBuilder: QueryBuilder) {
+            queryBuilder.append("LOWER((CAST(")
+            queryBuilder.append(this@jsonObjectValueIn)
+            queryBuilder.append(" AS jsonb) #> '{${path.joinToString(",")}}') ->> ")
+            queryBuilder.append(stringParam(key))
+            queryBuilder.append(") IN (")
+            values.forEachIndexed { index, value ->
+                if (index > 0) queryBuilder.append(", ")
+                queryBuilder.append(stringParam(value.lowercase()))
+            }
+            queryBuilder.append(")")
+        }
+    }
+}
+
+private fun requireSimplePath(path: List<String>) {
+    require(path.isNotEmpty() && path.all { it.matches(Regex("[A-Za-z0-9_]+")) }) {
+        "JSON path segments must be simple identifiers"
+    }
+}
+
+/**
  * Post-commit read-back guard: the create/transition already committed (Location set, audit
  * emitted), so a missing re-read is a server-side anomaly (500 via [error]), never a client
  * 404. Reads `X.read(id).orVanished("CatalogFile", id)`; transitions pass a phase like

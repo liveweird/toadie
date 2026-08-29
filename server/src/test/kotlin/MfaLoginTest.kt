@@ -101,7 +101,7 @@ class MfaLoginTest {
                 )
 
                 // The pair is a real session: the bearer works on an authenticated route.
-                val files = client.get("/api/v1/catalog-files") {
+                val files = client.get(CATALOG_FILES_PATH) {
                     header(HttpHeaders.Authorization, "Bearer ${tokens.token}")
                 }
                 assertEquals(HttpStatusCode.OK, files.status)

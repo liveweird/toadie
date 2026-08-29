@@ -421,7 +421,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
-  /api/v1/catalog-files:
+  /api/v1/files:
     get:
       tags: [catalog-files]
       operationId: listCatalogFiles
@@ -434,12 +434,9 @@ paths:
 
         - Sortable fields: `id`, `kind`, `name`, `namespace`, `updatedAt`. Default sort is
           `id` ascending; `id` ascending is always appended as a deterministic tiebreaker.
-        - Filters (optional, whitelisted):
-          - `name` — case- and accent-insensitive substring match against the entity name.
-          - `namespace` — exact match (case-insensitive; namespaces are stored lowercase).
-          - `kind` — one of the supported kinds (case-insensitive; unknown values are a `400`).
-          - `tag` — exact membership match against the file's `metadata.tags` entries
-            (case-insensitive; tags are stored lowercase).
+        - Filters (optional, whitelisted; the shared catalog-file filter set — the graph
+          endpoint declares the same one): `name`, `namespace`, `kind`, `tag`, `type`,
+          `lifecycle`, `owner`, `label` + `labelValue` — see each parameter's description.
 
         Each returned item includes the creator's `creatorName` resolved via join so the UI
         does not need an N+1 lookup.
@@ -450,28 +447,15 @@ paths:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
         - $ref: '#/components/parameters/Sort'
-        - name: name
-          in: query
-          required: false
-          schema: { type: string }
-          description: Case- and accent-insensitive substring match against the entity name.
-        - name: namespace
-          in: query
-          required: false
-          schema: { type: string }
-          description: Exact (case-insensitive) namespace match.
-        - name: kind
-          in: query
-          required: false
-          schema: { type: string }
-          description: One of the supported kinds (case-insensitive); unknown values are a 400.
-        - name: tag
-          in: query
-          required: false
-          schema: { type: string }
-          description: >-
-            Exact membership match against the file's metadata.tags entries
-            (case-insensitive; tags are stored lowercase).
+        - $ref: '#/components/parameters/CatalogNameFilter'
+        - $ref: '#/components/parameters/CatalogNamespaceFilter'
+        - $ref: '#/components/parameters/CatalogKindFilter'
+        - $ref: '#/components/parameters/CatalogTagFilter'
+        - $ref: '#/components/parameters/CatalogTypeFilter'
+        - $ref: '#/components/parameters/CatalogLifecycleFilter'
+        - $ref: '#/components/parameters/CatalogOwnerFilter'
+        - $ref: '#/components/parameters/CatalogLabelFilter'
+        - $ref: '#/components/parameters/CatalogLabelValueFilter'
       responses:
         '200':
           description: A page of catalog files
@@ -539,7 +523,7 @@ paths:
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
-  /api/v1/catalog-files/cross-check:
+  /api/v1/files/cross-check:
     get:
       tags: [catalog-files]
       operationId: crossCheckCatalogFiles
@@ -579,7 +563,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
-  /api/v1/catalog-files/check:
+  /api/v1/files/check:
     post:
       tags: [catalog-files]
       operationId: checkCatalogFile
@@ -612,7 +596,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
-  /api/v1/catalog-files/graph:
+  /api/v1/files/graph:
     get:
       tags: [catalog-files]
       operationId: getCatalogGraph
@@ -629,16 +613,21 @@ paths:
           custom kinds).
 
         Kind-less `dependsOn`/`dependencyOf` entries (cross-check errors) are not drawable and
-        are omitted. The optional `namespace` filter narrows which files' references are
-        EXPANDED; targets still resolve against the whole workspace, so a stored file outside
-        the filter appears as a STORED node when something points at it. Unpaged by design —
-        a report-style computation over the workspace.
+        are omitted. The optional filters (the SAME whitelisted set as the list endpoint, same
+        semantics) narrow which files' references are EXPANDED; targets still resolve against
+        the whole workspace, so a stored file outside the filter appears as a STORED node when
+        something points at it. Unpaged by design — a report-style computation over the
+        workspace.
       parameters:
-        - name: namespace
-          in: query
-          required: false
-          schema: { type: string }
-          description: Exact (case-insensitive) namespace of the files to expand.
+        - $ref: '#/components/parameters/CatalogNameFilter'
+        - $ref: '#/components/parameters/CatalogNamespaceFilter'
+        - $ref: '#/components/parameters/CatalogKindFilter'
+        - $ref: '#/components/parameters/CatalogTagFilter'
+        - $ref: '#/components/parameters/CatalogTypeFilter'
+        - $ref: '#/components/parameters/CatalogLifecycleFilter'
+        - $ref: '#/components/parameters/CatalogOwnerFilter'
+        - $ref: '#/components/parameters/CatalogLabelFilter'
+        - $ref: '#/components/parameters/CatalogLabelValueFilter'
       responses:
         '200':
           description: The graph
@@ -650,7 +639,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
-  /api/v1/catalog-files/export:
+  /api/v1/files/export:
     get:
       tags: [catalog-files]
       operationId: exportCatalogFiles
@@ -678,7 +667,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
-  /api/v1/catalog-files/import:
+  /api/v1/files/import:
     post:
       tags: [catalog-files]
       operationId: importCatalogFiles
@@ -714,7 +703,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
-  /api/v1/catalog-files/fetch:
+  /api/v1/files/fetch:
     post:
       tags: [catalog-files]
       operationId: fetchCatalogUrl
@@ -748,7 +737,7 @@ paths:
         '502': { $ref: '#/components/responses/BadGateway' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
-  /api/v1/catalog-files/{id}:
+  /api/v1/files/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
     get:
@@ -1292,6 +1281,84 @@ components:
         comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
         sortable-field whitelist; unknown fields are rejected with `400`. `id` ascending is
         always appended as a deterministic tiebreaker.
+    # The shared catalog-file filter set — declared identically by the list and graph
+    # endpoints (the list applies it in SQL, the graph in memory; one semantics).
+    CatalogNameFilter:
+      name: name
+      in: query
+      required: false
+      schema: { type: string }
+      description: Case- and accent-insensitive substring match against the entity name.
+    CatalogNamespaceFilter:
+      name: namespace
+      in: query
+      required: false
+      schema: { type: string }
+      description: Exact (case-insensitive) namespace match.
+    CatalogKindFilter:
+      name: kind
+      in: query
+      required: false
+      schema: { type: string }
+      description: One of the supported kinds (case-insensitive); unknown values are a 400.
+    CatalogTagFilter:
+      name: tag
+      in: query
+      required: false
+      schema: { type: string }
+      description: >-
+        Exact membership match against the file's metadata.tags entries
+        (case-insensitive; tags are stored lowercase).
+    CatalogTypeFilter:
+      name: type
+      in: query
+      required: false
+      schema: { type: string }
+      description: >-
+        Case-insensitive exact match against spec.type. An open match — values are not
+        validated against the type registry (waived/imported files may carry unregistered
+        types), and there is no interplay with the kind filter.
+    CatalogLifecycleFilter:
+      name: lifecycle
+      in: query
+      required: false
+      schema: { type: string }
+      description: >-
+        Case-insensitive exact match against spec.lifecycle. An open match — values are not
+        validated against the lifecycles dictionary.
+    CatalogOwnerFilter:
+      name: owner
+      in: query
+      required: false
+      schema: { type: string }
+      description: >-
+        An entity reference (`[kind:][namespace/]name`; defaults kind `group`, namespace
+        `default`) naming the owner to filter by. A file matches when its stored spec.owner —
+        whatever short form it uses — RESOLVES to that entity under the descriptor defaulting
+        rules (default kind group, default namespace = the file's own namespace),
+        case-insensitively. An unparsable reference is a 400.
+    CatalogLabelFilter:
+      name: label
+      in: query
+      required: false
+      schema: { type: string }
+      description: >-
+        A metadata.labels KEY that must be present on the file. Byte-exact key match (the
+        label registry forbids case-twin keys). Combine with labelValue to also constrain the
+        key's value.
+    CatalogLabelValueFilter:
+      name: labelValue
+      in: query
+      required: false
+      schema:
+        type: array
+        items: { type: string }
+      style: form
+      explode: true
+      description: >-
+        Any-of (IN) match over the selected label's value, case-insensitive — the one
+        parameter where repetition is the documented IN idiom (API-LIST-004). Requires the
+        label parameter (labelValue without label is a 400).
 
   responses:
     BadRequest:

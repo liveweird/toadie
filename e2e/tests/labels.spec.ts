@@ -67,7 +67,7 @@ test("admin curates the label registry; a regular user reads it; the editor enfo
   // key offered for a Component document, the value from the label's closed list.
   await login(page);
   const name = uniqueText("e2e-lbl-comp");
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
   await pickType(page, "service");
   await pickLifecycle(page, "production");
@@ -82,20 +82,34 @@ test("admin curates the label registry; a regular user reads it; the editor enfo
   await expect(page.getByLabel("YAML preview")).toContainText(`${key}: backend`);
   const [created] = await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
   const fileId: number = (await created.json()).id;
 
-  // Cleanup: the file, the label, and the throwaway user.
+  // The list's label filters find the file: the key alone keeps it, a non-matching value
+  // from the closed list hides it, and adding the matching value (any-of) restores it.
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(name);
+  const labelFilter = page.getByRole("combobox", { name: "Label", exact: true });
+  await labelFilter.click();
+  await labelFilter.fill(key);
+  await page.getByRole("option", { name: key, exact: true }).click();
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: "Label values" }).click();
+  await page.getByRole("option", { name: "edge", exact: true }).click();
+  await expect(page.getByText("No catalog files")).toBeVisible();
+  await page.getByRole("option", { name: "backend", exact: true }).click();
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // Cleanup: the file, the label, and the throwaway user.
   await rowOperation(page, name, "Delete");
   await Promise.all([
     page.waitForResponse(
       (r) =>
-        r.url().endsWith(`/api/v1/catalog-files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
+        r.url().endsWith(`/api/v1/files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
     ),
     page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
   ]);

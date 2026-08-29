@@ -33,10 +33,10 @@ class RoundTripTest {
 
 
     private suspend fun HttpClient.export(namespace: String? = null): ExportResponse =
-        get("/api/v1/catalog-files/export" + (namespace?.let { "?namespace=$it" } ?: "")).body()
+        get("$CATALOG_FILES_PATH/export" + (namespace?.let { "?namespace=$it" } ?: "")).body()
 
     private suspend fun HttpClient.import(files: List<CatalogFile>): ImportResponse =
-        post("/api/v1/catalog-files/import") {
+        post("$CATALOG_FILES_PATH/import") {
             contentType(ContentType.Application.Json)
             setBody(ImportRequest(files = files))
         }.body()
@@ -84,7 +84,7 @@ class RoundTripTest {
         val deleted = client.createCatalogFile(componentFile(uniqueEntityName("gone"), namespace = ns))
         assertEquals(
             HttpStatusCode.NoContent,
-            client.delete("/api/v1/catalog-files/${deleted.id}").status,
+            client.delete("$CATALOG_FILES_PATH/${deleted.id}").status,
         )
 
         val export = client.export(namespace = ns)
@@ -116,7 +116,7 @@ class RoundTripTest {
         assertNotNull(created.fileId)
         assertNull(created.message)
         // The valid document is genuinely stored despite its failing neighbors.
-        assertEquals(HttpStatusCode.OK, client.get("/api/v1/catalog-files/${created.fileId}").status)
+        assertEquals(HttpStatusCode.OK, client.get("$CATALOG_FILES_PATH/${created.fileId}").status)
 
         val rejected = response.results[1]
         assertEquals(ImportResultStatus.INVALID, rejected.status)
@@ -265,7 +265,7 @@ class RoundTripTest {
         val client = seededClient("roundtrip")
         val ns = uniqueNamespace("capns")
         val batch = (0..MAX_IMPORT_FILES).map { componentFile(uniqueEntityName("cap$it"), namespace = ns) }
-        val response = client.postJson("/api/v1/catalog-files/import", ImportRequest(files = batch))
+        val response = client.postJson("$CATALOG_FILES_PATH/import", ImportRequest(files = batch))
         assertEquals(HttpStatusCode.BadRequest, response.status)
         // Nothing from the oversized batch was stored.
         assertTrue(client.export(namespace = ns).files.isEmpty())
@@ -313,8 +313,8 @@ class RoundTripTest {
     fun `export and import require authentication`() = testApplication {
         usePostgresTestcontainer()
         val client = jsonClient()
-        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/catalog-files/export").status)
-        val response = client.postJson("/api/v1/catalog-files/import", ImportRequest(files = emptyList()))
+        assertEquals(HttpStatusCode.Unauthorized, client.get("$CATALOG_FILES_PATH/export").status)
+        val response = client.postJson("$CATALOG_FILES_PATH/import", ImportRequest(files = emptyList()))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 

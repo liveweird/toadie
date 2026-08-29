@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.catalog.CatalogFilePageResponse
 import ch.nokillswit.catalog.CatalogGraph
 import ch.nokillswit.catalog.GraphNodeStatus
 import io.ktor.client.HttpClient
@@ -22,7 +23,7 @@ class GraphTest {
 
 
     private suspend fun HttpClient.graph(namespace: String? = null): CatalogGraph =
-        get("/api/v1/catalog-files/graph" + (namespace?.let { "?namespace=$it" } ?: "")).body()
+        get("$CATALOG_FILES_PATH/graph" + (namespace?.let { "?namespace=$it" } ?: "")).body()
 
     @Test
     fun `stored files and their resolved references become STORED nodes and edges`() = testApplication {
@@ -68,7 +69,7 @@ class GraphTest {
         client.createCatalogFile(
             componentFile(a, namespace = ns).let { it.copy(spec = it.spec.copy(subcomponentOf = doomed)) },
         )
-        client.delete("/api/v1/catalog-files/$doomedId")
+        client.delete("$CATALOG_FILES_PATH/$doomedId")
 
         val graph = client.graph(namespace = ns)
         val ghostNode = graph.nodes.single { it.name == doomed }
@@ -156,7 +157,7 @@ class GraphTest {
                 it.copy(spec = it.spec.copy(dependsOn = listOf("component:$ns/$b")))
             },
         )
-        client.delete("/api/v1/catalog-files/$bId")
+        client.delete("$CATALOG_FILES_PATH/$bId")
 
         val graph = client.graph(namespace = ns)
         val nodeB = graph.nodes.single { it.name == b }
@@ -174,7 +175,7 @@ class GraphTest {
         // members ↔ memberOf is circular — built as create-memberless → create → update.
         val personId = client.createCatalogFile(userFile(person, namespace = ns)).id
         client.createCatalogFile(groupFile(team, namespace = ns, members = listOf("user:$ns/$person")))
-        client.putJson("/api/v1/catalog-files/$personId", userFile(person, namespace = ns, memberOf = listOf(team)))
+        client.putJson("$CATALOG_FILES_PATH/$personId", userFile(person, namespace = ns, memberOf = listOf(team)))
 
         val graph = client.graph(namespace = ns)
         val teamNode = graph.nodes.single { it.name == team }
@@ -204,9 +205,9 @@ class GraphTest {
     @Test
     fun `the graph endpoint requires authentication and dodges the id route`() = testApplication {
         usePostgresTestcontainer()
-        assertEquals(HttpStatusCode.Unauthorized, jsonClient().get("/api/v1/catalog-files/graph").status)
+        assertEquals(HttpStatusCode.Unauthorized, jsonClient().get("$CATALOG_FILES_PATH/graph").status)
         // Would be a 400 ("id must be a UInt") if {id} captured the literal segment.
-        assertEquals(HttpStatusCode.OK, seededClient("graph").get("/api/v1/catalog-files/graph").status)
+        assertEquals(HttpStatusCode.OK, seededClient("graph").get("$CATALOG_FILES_PATH/graph").status)
     }
 
     @Test
@@ -216,11 +217,60 @@ class GraphTest {
         // The singleValue rule (API-LIST-004): repetition is reserved for documented IN semantics.
         assertEquals(
             HttpStatusCode.BadRequest,
-            client.get("/api/v1/catalog-files/graph?namespace=a&namespace=b").status,
+            client.get("$CATALOG_FILES_PATH/graph?namespace=a&namespace=b").status,
         )
         assertEquals(
             HttpStatusCode.BadRequest,
-            client.get("/api/v1/catalog-files/export?namespace=a&namespace=b").status,
+            client.get("$CATALOG_FILES_PATH/export?namespace=a&namespace=b").status,
         )
+    }
+
+    @Test
+    fun `the graph declares the list's filter set and matches its verdicts`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("graphfilters")
+        val ns = uniqueNamespace("gfil")
+        val key = uniqueLabel("gfil", values = listOf("v1", "v2"))
+        val a = uniqueEntityName("gfa")
+        val b = uniqueEntityName("gfb")
+        client.createCatalogFile(groupFile("team-y", namespace = ns))
+        client.createCatalogFile(
+            componentFile(a, namespace = ns, type = "service", owner = "team-y").let {
+                it.copy(metadata = it.metadata.copy(labels = mapOf(key to "v1")))
+            },
+        )
+        client.createCatalogFile(
+            componentFile(b, namespace = ns, type = "library", owner = "group:$ns/team-y").let {
+                it.copy(spec = it.spec.copy(dependsOn = listOf("component:$ns/$a")))
+            },
+        )
+
+        suspend fun graphFor(query: String): CatalogGraph =
+            client.get("$CATALOG_FILES_PATH/graph?namespace=$ns&$query").body()
+        // Every source here carries at least an owner edge, so the edge sourceIds ARE the
+        // files the filter EXPANDED — the graph half of the list-vs-graph parity assert.
+        suspend fun expandedNames(query: String): Set<String> =
+            graphFor(query).edges.map { it.sourceId.substringAfterLast('/') }.toSet()
+        suspend fun listedNames(query: String): Set<String> =
+            client.get("$CATALOG_FILES_PATH?namespace=$ns&kind=Component&$query")
+                .body<CatalogFilePageResponse>().items.map { it.name }.toSet()
+
+        // Parity: the graph expands exactly the files the list returns, filter by filter.
+        for (query in listOf("type=library", "owner=group:$ns/team-y", "label=$key&labelValue=v1", "name=$a")) {
+            assertEquals(listedNames(query), expandedNames(query), "list/graph parity for $query")
+        }
+
+        // Narrowing to B still keeps its STORED targets: A stays a STORED node with a fileId
+        // even though the filter excluded it from expansion (the allSources contract).
+        val narrowed = graphFor("type=library")
+        val nodeA = narrowed.nodes.single { it.name == a }
+        assertEquals(GraphNodeStatus.STORED, nodeA.status)
+        assertNotNull(nodeA.fileId)
+        assertTrue(narrowed.edges.none { it.sourceId == nodeA.id })
+
+        // The graph shares the list's parameter validation: unparsable owner and orphaned
+        // labelValue are 400s here too.
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH/graph?owner=a:b:c").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH/graph?labelValue=v1").status)
     }
 }

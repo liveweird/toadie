@@ -51,14 +51,14 @@ describe("catalogFiles API wrappers", () => {
       kind: "Component",
     });
     expect(lastCall()[0]).toBe(
-      "/api/v1/catalog-files?page=2&pageSize=40&sort=-name&name=web&namespace=team-a&kind=Component",
+      "/api/v1/files?page=2&pageSize=40&sort=-name&name=web&namespace=team-a&kind=Component",
     );
   });
 
   test("listCatalogFiles omits absent filters", async () => {
     mockFetch.mockResolvedValue(jsonResponse(200, { items: [], page: 1, pageSize: 20, total: 0 }));
     await listCatalogFiles({ page: 1, pageSize: 20 });
-    expect(lastCall()[0]).toBe("/api/v1/catalog-files?page=1&pageSize=20");
+    expect(lastCall()[0]).toBe("/api/v1/files?page=1&pageSize=20");
   });
 
   test("listAllCatalogFiles stops on an empty page even when the total claims more", async () => {
@@ -71,7 +71,7 @@ describe("catalogFiles API wrappers", () => {
     mockFetch.mockResolvedValue(jsonResponse(200, { id: 5 }));
     await getCatalogFile(5);
     const [url, init] = lastCall();
-    expect(url).toBe("/api/v1/catalog-files/5");
+    expect(url).toBe("/api/v1/files/5");
     expect(init.method).toBeUndefined(); // GET
   });
 
@@ -79,7 +79,7 @@ describe("catalogFiles API wrappers", () => {
     mockFetch.mockResolvedValue(jsonResponse(200, { id: 9 }));
     await createCatalogFile(REQUEST);
     const [url, init] = lastCall();
-    expect(url).toBe("/api/v1/catalog-files");
+    expect(url).toBe("/api/v1/files");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual(REQUEST);
   });
@@ -88,7 +88,7 @@ describe("catalogFiles API wrappers", () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
     await updateCatalogFile(5, REQUEST);
     const [url, init] = lastCall();
-    expect(url).toBe("/api/v1/catalog-files/5");
+    expect(url).toBe("/api/v1/files/5");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body as string)).toEqual(REQUEST);
   });
@@ -97,7 +97,7 @@ describe("catalogFiles API wrappers", () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
     await deleteCatalogFile(5);
     const [url, init] = lastCall();
-    expect(url).toBe("/api/v1/catalog-files/5");
+    expect(url).toBe("/api/v1/files/5");
     expect(init.method).toBe("DELETE");
   });
 
@@ -106,22 +106,40 @@ describe("catalogFiles API wrappers", () => {
       jsonResponse(200, { findings: [], checkedFiles: 0, checkedReferences: 0 }),
     );
     await getCrossCheckReport();
-    expect(lastCall()[0]).toBe("/api/v1/catalog-files/cross-check");
+    expect(lastCall()[0]).toBe("/api/v1/files/cross-check");
   });
 
-  test("getCatalogGraph appends the namespace only when given", async () => {
+  test("getCatalogGraph appends only the populated filters", async () => {
     mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(200, { nodes: [], edges: [] })));
     await getCatalogGraph();
-    expect(lastCall()[0]).toBe("/api/v1/catalog-files/graph");
-    await getCatalogGraph("team-a");
-    expect(lastCall()[0]).toBe("/api/v1/catalog-files/graph?namespace=team-a");
+    expect(lastCall()[0]).toBe("/api/v1/files/graph");
+    await getCatalogGraph({ namespace: "team-a", type: "service" });
+    expect(lastCall()[0]).toBe("/api/v1/files/graph?namespace=team-a&type=service");
+  });
+
+  test("the label filter pair travels as repeated labelValue keys on list and graph", async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(jsonResponse(200, { items: [], page: 1, pageSize: 20, total: 0 })),
+    );
+    await listCatalogFiles({
+      page: 1,
+      pageSize: 20,
+      label: "example.com/tier",
+      labelValue: ["backend", "edge"],
+    });
+    expect(lastCall()[0]).toBe(
+      "/api/v1/files?page=1&pageSize=20&label=example.com%2Ftier&labelValue=backend&labelValue=edge",
+    );
+    mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(200, { nodes: [], edges: [] })));
+    await getCatalogGraph({ label: "example.com/tier", labelValue: ["backend"] });
+    expect(lastCall()[0]).toBe("/api/v1/files/graph?label=example.com%2Ftier&labelValue=backend");
   });
 
   test("checkCatalogFile POSTs the document to the check endpoint", async () => {
     mockFetch.mockResolvedValue(jsonResponse(200, { findings: [] }));
     await checkCatalogFile(REQUEST);
     const [url, init] = lastCall();
-    expect(url).toBe("/api/v1/catalog-files/check");
+    expect(url).toBe("/api/v1/files/check");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual(REQUEST);
   });
@@ -129,16 +147,16 @@ describe("catalogFiles API wrappers", () => {
   test("exportCatalogFiles appends the namespace only when given", async () => {
     mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(200, { files: [] })));
     await exportCatalogFiles();
-    expect(lastCall()[0]).toBe("/api/v1/catalog-files/export");
+    expect(lastCall()[0]).toBe("/api/v1/files/export");
     await exportCatalogFiles("team-a");
-    expect(lastCall()[0]).toBe("/api/v1/catalog-files/export?namespace=team-a");
+    expect(lastCall()[0]).toBe("/api/v1/files/export?namespace=team-a");
   });
 
   test("importCatalogFiles POSTs the files array wrapped in the request envelope", async () => {
     mockFetch.mockResolvedValue(jsonResponse(200, { results: [] }));
     await importCatalogFiles([REQUEST]);
     const [url, init] = lastCall();
-    expect(url).toBe("/api/v1/catalog-files/import");
+    expect(url).toBe("/api/v1/files/import");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ files: [REQUEST] });
   });
@@ -147,7 +165,7 @@ describe("catalogFiles API wrappers", () => {
     mockFetch.mockResolvedValue(jsonResponse(200, { content: "kind: Component" }));
     await fetchCatalogUrl("https://example.com/catalog-info.yaml");
     const [url, init] = lastCall();
-    expect(url).toBe("/api/v1/catalog-files/fetch");
+    expect(url).toBe("/api/v1/files/fetch");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({
       url: "https://example.com/catalog-info.yaml",

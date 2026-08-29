@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { Button, Menu } from "@mantine/core";
 import { IconChevronDown, IconDownload, IconPencil, IconTrash } from "@tabler/icons-react";
+import { editCatalogFilePath } from "../utils/catalogFileLinks";
 
 /**
  * The per-entity Operations menu shared by the Files list and the Hierarchy tree: Edit
@@ -40,7 +41,7 @@ export default function CatalogFileOperations({
       <Menu.Dropdown>
         <Menu.Item
           component={RouterLink}
-          to={`/catalog-files/${id}/edit`}
+          to={editCatalogFilePath(id)}
           leftSection={<IconPencil size={14} />}
         >
           {t("common.action.edit")}

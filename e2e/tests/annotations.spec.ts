@@ -66,7 +66,7 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
   // keys for the kind are offered) while the VALUE stays free text.
   await login(page);
   const name = uniqueText("e2e-ann-comp");
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
   await pickType(page, "service");
   await pickLifecycle(page, "production");
@@ -80,7 +80,7 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
   await expect(page.getByLabel("YAML preview")).toContainText(key);
   const [created] = await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
@@ -93,7 +93,7 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
   await Promise.all([
     page.waitForResponse(
       (r) =>
-        r.url().endsWith(`/api/v1/catalog-files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
+        r.url().endsWith(`/api/v1/files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
     ),
     page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
   ]);

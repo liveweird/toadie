@@ -25,7 +25,7 @@ class CrossCheckTest {
 
 
     private suspend fun HttpClient.report(): CrossCheckReport =
-        get("/api/v1/catalog-files/cross-check").body()
+        get("$CATALOG_FILES_PATH/cross-check").body()
 
     @Test
     fun `resolved component references produce no findings, deletion-orphaned ones are MISSING`() = testApplication {
@@ -45,7 +45,7 @@ class CrossCheckTest {
             },
         )
         // Saves enforce resolution, so the dangling ref is MADE by deleting its target.
-        client.delete("/api/v1/catalog-files/$doomedId")
+        client.delete("$CATALOG_FILES_PATH/$doomedId")
 
         val report = client.report()
         assertTrue(report.checkedFiles >= 3)
@@ -78,7 +78,7 @@ class CrossCheckTest {
         client.createCatalogFile(
             componentFile(inDefault).let { it.copy(spec = it.spec.copy(subcomponentOf = parent)) },
         )
-        client.delete("/api/v1/catalog-files/$defaultParentId")
+        client.delete("$CATALOG_FILES_PATH/$defaultParentId")
 
         val findings = client.report().findings.filter { it.reference == parent }
         // team-a still holds its parent → resolves; the default-namespace child lost its own.
@@ -117,7 +117,7 @@ class CrossCheckTest {
             // Such a document cannot be STORED (saves enforce resolution) — the ad-hoc check
             // is where the finding surfaces, as the editor types.
             val response = client.postJson(
-                "/api/v1/catalog-files/check",
+                "$CATALOG_FILES_PATH/check",
                 componentFile(uniqueEntityName("kindless")).let {
                     it.copy(spec = it.spec.copy(dependsOn = listOf(target)))
                 },
@@ -134,7 +134,7 @@ class CrossCheckTest {
         // Non-stored kinds (Template, custom) and a stored-but-disallowed kind are all
         // WRONG_KIND for dependsOn (Component/Resource only); un-storable → checked ad hoc.
         val response = client.postJson(
-            "/api/v1/catalog-files/check",
+            "$CATALOG_FILES_PATH/check",
             componentFile(uniqueEntityName("external")).let {
                 it.copy(
                     spec = it.spec.copy(
@@ -169,10 +169,10 @@ class CrossCheckTest {
             groupFile(team, namespace = ns, members = listOf("user:$ns/$person"), parent = parent),
         )
         client.putJson(
-            "/api/v1/catalog-files/$personId",
+            "$CATALOG_FILES_PATH/$personId",
             userFile(person, namespace = ns, memberOf = listOf(team)),
         )
-        client.delete("/api/v1/catalog-files/$parentId")
+        client.delete("$CATALOG_FILES_PATH/$parentId")
 
         val findings = client.report().findings.filter { it.fileNamespace == ns }
         // memberOf → the stored group, members → the stored user: both resolve. The group's
@@ -199,7 +199,7 @@ class CrossCheckTest {
                 it.fileName == source && it.field == "spec.dependsOn" && it.status == CrossCheckStatus.MISSING
             },
         )
-        client.delete("/api/v1/catalog-files/$targetId")
+        client.delete("$CATALOG_FILES_PATH/$targetId")
         val after = client.report().findings.filter { it.fileName == source }
         assertEquals(listOf(CrossCheckStatus.MISSING), after.filter { it.field == "spec.dependsOn" }.map { it.status })
     }
@@ -214,7 +214,7 @@ class CrossCheckTest {
 
         // Blank name + a half-typed (unparsable) ref: save validation would 400 this document;
         // the check answers 200 with findings for what IS parsable.
-        val response = client.post("/api/v1/catalog-files/check") {
+        val response = client.post("$CATALOG_FILES_PATH/check") {
             contentType(ContentType.Application.Json)
             setBody(
                 componentFile("x").let {
@@ -244,7 +244,7 @@ class CrossCheckTest {
         // Unsaved document (nothing stored): the self identity comes from the payload, so the
         // verdict is SELF_REFERENCE — not MISSING — for full and short forms alike.
         val response = client.postJson(
-            "/api/v1/catalog-files/check",
+            "$CATALOG_FILES_PATH/check",
             componentFile(name, namespace = ns).let {
                 it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$name", dependsOn = listOf("component:$name")))
             },
@@ -287,22 +287,22 @@ class CrossCheckTest {
         usePostgresTestcontainer()
         val client = seededClient("crosscheck")
         // Would be a 400 ("id must be a UInt") if {id} captured the literal segment.
-        assertEquals(HttpStatusCode.OK, client.get("/api/v1/catalog-files/cross-check").status)
+        assertEquals(HttpStatusCode.OK, client.get("$CATALOG_FILES_PATH/cross-check").status)
     }
 
     @Test
     fun `cross-check endpoints require authentication`() = testApplication {
         usePostgresTestcontainer()
         val client = jsonClient()
-        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/catalog-files/cross-check").status)
-        val check = client.postJson("/api/v1/catalog-files/check", componentFile("x"))
+        assertEquals(HttpStatusCode.Unauthorized, client.get("$CATALOG_FILES_PATH/cross-check").status)
+        val check = client.postJson("$CATALOG_FILES_PATH/check", componentFile("x"))
         assertEquals(HttpStatusCode.Unauthorized, check.status)
     }
 
     @Test
     fun `a malformed check body is a 400 problem`() = testApplication {
         usePostgresTestcontainer()
-        val response = seededClient("crosscheck400").postJson("/api/v1/catalog-files/check", "{ not json")
+        val response = seededClient("crosscheck400").postJson("$CATALOG_FILES_PATH/check", "{ not json")
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
@@ -314,7 +314,7 @@ class CrossCheckTest {
         val file = componentFile(uniqueEntityName("chkdoc"), type = "no-such-type")
             .let { it.copy(metadata = it.metadata.copy(labels = mapOf(ghostLabel to "x"))) }
 
-        val response = client.postJson("/api/v1/catalog-files/check", file)
+        val response = client.postJson("$CATALOG_FILES_PATH/check", file)
         assertEquals(HttpStatusCode.OK, response.status)
         val findings = response.body<DocumentCheckReport>().findings
         assertTrue(
@@ -339,7 +339,7 @@ class CrossCheckTest {
         val name = uniqueEntityName("xwaived")
         val file = componentFile(name)
             .let { it.copy(metadata = it.metadata.copy(tags = listOf(ghostTag))) }
-        val created = client.postJson("/api/v1/catalog-files?allowInvalid=true", file)
+        val created = client.postJson("$CATALOG_FILES_PATH?allowInvalid=true", file)
         assertEquals(HttpStatusCode.Created, created.status)
         val id = created.body<ch.nokillswit.catalog.CatalogFileResponse>().id
 
@@ -351,6 +351,6 @@ class CrossCheckTest {
             },
         )
 
-        client.delete("/api/v1/catalog-files/$id")
+        client.delete("$CATALOG_FILES_PATH/$id")
     }
 }

@@ -69,8 +69,8 @@ describe("useCatalogIdentities", () => {
 
     const urls = mockFetch.mock.calls.map(([url]) => url as string);
     expect(urls).toEqual([
-      "/api/v1/catalog-files?page=1&pageSize=100&sort=name",
-      "/api/v1/catalog-files?page=2&pageSize=100&sort=name",
+      "/api/v1/files?page=1&pageSize=100&sort=name",
+      "/api/v1/files?page=2&pageSize=100&sort=name",
     ]);
   });
 

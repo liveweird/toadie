@@ -1,8 +1,6 @@
-import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Badge, Button, Group, Select, Stack, Table, Text, Title } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
+import { Alert, Badge, Button, Group, Stack, Table, Text, Title } from "@mantine/core";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconFileDescription,
@@ -11,22 +9,20 @@ import {
   IconPlus,
 } from "@tabler/icons-react";
 import { deleteCatalogFile, listCatalogFiles, type CatalogFileListItem } from "../api/catalogFiles";
-import { ENTITY_KINDS } from "../utils/catalogFileForm";
+import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogFileOperations from "../components/CatalogFileOperations";
-import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
-import NamespaceFilterSelect from "../components/NamespaceFilterSelect";
 import PaginationBar from "../components/PaginationBar";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
+import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
-import { isString, useStoredState } from "../hooks/useStoredState";
-import { useTagCategories } from "../hooks/useTagCategories";
 import { loadErrorMessage } from "../utils/saveError";
+import { importCatalogFilesPath, newCatalogFilePath } from "../utils/catalogFileLinks";
 
 const SORT_FIELDS = ["name", "kind", "namespace", "updatedAt"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
@@ -35,64 +31,21 @@ const SETTINGS_KEY = "catalogFiles";
 
 export default function CatalogFiles() {
   const { t, i18n } = useTranslation();
-  const [nameFilter, setNameFilter] = useStoredState(`${SETTINGS_KEY}.filter.name`, "", isString);
-  const [namespaceFilter, setNamespaceFilter] = useStoredState(
-    `${SETTINGS_KEY}.filter.namespace`,
-    "",
-    isString,
-  );
-  const [kindFilter, setKindFilter] = useStoredState(`${SETTINGS_KEY}.filter.kind`, "", isString);
-  const [tagFilter, setTagFilter] = useStoredState(`${SETTINGS_KEY}.filter.tag`, "", isString);
-  const activeFilterCount =
-    (nameFilter.trim() ? 1 : 0) +
-    (namespaceFilter.trim() ? 1 : 0) +
-    (kindFilter ? 1 : 0) +
-    (tagFilter.trim() ? 1 : 0);
+  // The shared filter surface (Hierarchy and Graph carry the same set, per-view persisted).
+  const filters = useCatalogFileFilterState(SETTINGS_KEY);
 
   const queryClient = useQueryClient();
   const downloads = useCatalogDownloads();
-  const { categories } = useTagCategories();
-
-  // Only the freetext Name filter debounces — the Select filters change discretely.
-  const [debouncedName] = useDebouncedValue(nameFilter, 300);
-
-  const tagOptions = useMemo(() => {
-    const groups = categories.map((c) => ({ group: c.name, items: c.tags }));
-    const known = categories.some((c) => c.tags.includes(tagFilter));
-    // A persisted filter for a since-removed tag keeps displaying (the editor's stale-tag
-    // idiom); it still filters server-side — files may carry it from before the removal.
-    return tagFilter && !known
-      ? [...groups, { group: t("catalog.staleTagsGroup"), items: [tagFilter] }]
-      : groups;
-  }, [categories, tagFilter, t]);
 
   const { page, setPage, pageSize, setPageSize, sortField, sortDir, sortParam, toggleSort } =
-    usePagedSort<SortField>("name", [debouncedName, namespaceFilter, kindFilter, tagFilter], {
+    usePagedSort<SortField>("name", filters.deps, {
       key: SETTINGS_KEY,
       sortFields: SORT_FIELDS,
     });
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: [
-      "catalogFiles",
-      page,
-      pageSize,
-      sortParam,
-      debouncedName,
-      namespaceFilter,
-      kindFilter,
-      tagFilter,
-    ],
-    queryFn: () =>
-      listCatalogFiles({
-        page,
-        pageSize,
-        sort: sortParam,
-        name: debouncedName || undefined,
-        namespace: namespaceFilter || undefined,
-        kind: kindFilter || undefined,
-        tag: tagFilter || undefined,
-      }),
+    queryKey: ["catalogFiles", page, pageSize, sortParam, filters.values],
+    queryFn: () => listCatalogFiles({ page, pageSize, sort: sortParam, ...filters.values }),
     placeholderData: keepPreviousData,
   });
 
@@ -109,33 +62,8 @@ export default function CatalogFiles() {
     <Stack gap="md">
       <Title order={2}>{t("catalog.title")}</Title>
 
-      <FilterPanel activeFilterCount={activeFilterCount} storageKey={SETTINGS_KEY}>
-        <ClearableTextInput
-          label={t("common.field.name")}
-          value={nameFilter}
-          onChange={setNameFilter}
-          clearLabel={t("common.filter.clearName")}
-        />
-        <NamespaceFilterSelect value={namespaceFilter} onChange={setNamespaceFilter} />
-        <Select
-          label={t("catalog.field.kind")}
-          placeholder={t("catalog.anyKind")}
-          data={[...ENTITY_KINDS]}
-          value={kindFilter || null}
-          onChange={(v) => setKindFilter(v ?? "")}
-          clearable
-          clearButtonProps={{ "aria-label": t("catalog.clearKindFilter") }}
-        />
-        <Select
-          label={t("catalog.field.tags")}
-          placeholder={t("catalog.anyTag")}
-          data={tagOptions}
-          value={tagFilter || null}
-          onChange={(v) => setTagFilter(v ?? "")}
-          searchable
-          clearable
-          clearButtonProps={{ "aria-label": t("common.filter.clearTag") }}
-        />
+      <FilterPanel activeFilterCount={filters.activeFilterCount} storageKey={SETTINGS_KEY}>
+        <CatalogFileFilterControls controls={filters.controls} />
       </FilterPanel>
 
       {isError && (
@@ -281,7 +209,7 @@ export default function CatalogFiles() {
       <Group justify="flex-end">
         <Button
           component={RouterLink}
-          to="/catalog-files/import"
+          to={importCatalogFilesPath}
           variant="default"
           leftSection={<IconFileImport size={16} />}
         >
@@ -290,13 +218,13 @@ export default function CatalogFiles() {
         <Button
           variant="default"
           leftSection={<IconFileExport size={16} />}
-          onClick={() => void downloads.handleExport(namespaceFilter.trim() || undefined)}
+          onClick={() => void downloads.handleExport(filters.values.namespace)}
           loading={downloads.exporting}
           disabled={total === 0}
         >
           {t("catalog.export.button")}
         </Button>
-        <Button component={RouterLink} to="/catalog-files/new" leftSection={<IconPlus size={16} />}>
+        <Button component={RouterLink} to={newCatalogFilePath} leftSection={<IconPlus size={16} />}>
           {t("catalog.createFile")}
         </Button>
       </Group>

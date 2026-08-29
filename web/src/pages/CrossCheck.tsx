@@ -7,6 +7,7 @@ import { getCrossCheckReport } from "../api/catalogFiles";
 import EmptyState from "../components/EmptyState";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { loadErrorMessage } from "../utils/saveError";
+import { editCatalogFilePath } from "../utils/catalogFileLinks";
 
 // Saves enforce resolution, so every finding is an error (dangling refs arise from
 // deletions) — the report needs no severity filter anymore.
@@ -65,7 +66,7 @@ export default function CrossCheck() {
                 <Table.Td>
                   <Anchor
                     component={RouterLink}
-                    to={`/catalog-files/${f.fileId}/edit`}
+                    to={editCatalogFilePath(f.fileId)}
                     size="sm"
                     fw={500}
                     aria-label={t("common.action.editAria", { name: f.fileName })}

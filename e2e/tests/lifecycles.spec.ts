@@ -89,14 +89,14 @@ test("admin curates the global lifecycles list; a regular user reads it; the edi
   // value is offered for a new Component and the save passes the strict server check.
   await login(page);
   const name = uniqueText("e2e-lc-comp");
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
   await pickType(page, "service");
   await pickLifecycle(page, extra);
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   const [created] = await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
@@ -109,7 +109,7 @@ test("admin curates the global lifecycles list; a regular user reads it; the edi
   await Promise.all([
     page.waitForResponse(
       (r) =>
-        r.url().endsWith(`/api/v1/catalog-files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
+        r.url().endsWith(`/api/v1/files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
     ),
     page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
   ]);

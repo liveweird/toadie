@@ -15,14 +15,14 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
   const ghost = uniqueText("e2e-xchk-ghost");
 
   // The target component first — the repaired reference will point at it.
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(target);
   await pickType(page, "service");
   await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
@@ -30,7 +30,7 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
   // The source: first a SELF-reference — flagged live, and the strict save opens the
   // Save-anyway modal (an entity may never reference itself, saved or not). Cancel keeps
   // the document unsaved.
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(source);
   await pickType(page, "service");
   await pickLifecycle(page, "production");
@@ -68,7 +68,7 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
     ),
     page.getByRole("dialog").getByRole("button", { name: "Save anyway" }).click(),
   ]);
-  await expect(page).toHaveURL(/\/catalog-files$/);
+  await expect(page).toHaveURL(/\/files$/);
 
   // The workspace report shows the waived MISSING finding, linking back to the source file.
   await page.goto("/cross-check");
@@ -90,7 +90,7 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
   ]);
 
   // Deleting the target is allowed — and creates the dangling reference.
-  await page.goto("/catalog-files");
+  await page.goto("/files");
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(target);
   await rowOperation(page, target, "Delete");
@@ -104,14 +104,14 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
   await expect(page.getByText(`component:${target}`, { exact: true })).toBeVisible();
 
   // Recreate the target — the finding disappears from a fresh report.
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(target);
   await pickType(page, "service");
   await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
@@ -124,7 +124,7 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
   // Cleanup: the source first (the target is still referenced — deletable anyway, but
   // removing the referrer first leaves no dangling residue behind).
   for (const name of [source, target]) {
-    await page.goto("/catalog-files");
+    await page.goto("/files");
     await openFilters(page);
     await page.getByLabel("Name", { exact: true }).fill(name);
     await rowOperation(page, name, "Delete");

@@ -41,7 +41,7 @@ const REPORT = {
 
 function mockReport(mockFetch: FetchMock, body: unknown = REPORT, status = 200) {
   mockFetch.mockImplementation((url: string) =>
-    url === "/api/v1/catalog-files/cross-check"
+    url === "/api/v1/files/cross-check"
       ? Promise.resolve(jsonResponse(status, body))
       : Promise.resolve(jsonResponse(404, {})),
   );
@@ -92,7 +92,7 @@ describe("CrossCheck page", () => {
     // svc-a carries two findings — two rows, one link each, same target.
     const links = await screen.findAllByRole("link", { name: "Edit svc-a" });
     expect(links).toHaveLength(2);
-    expect(links[0]).toHaveAttribute("href", "/catalog-files/1/edit");
+    expect(links[0]).toHaveAttribute("href", "/files/1/edit");
   });
 
   test("an all-clear workspace shows the happy empty state", async () => {

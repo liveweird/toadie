@@ -18,9 +18,10 @@ import { Background, Controls, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { IconTopologyStar3 } from "@tabler/icons-react";
 import { getCatalogGraph } from "../api/catalogFiles";
+import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogGraphNode from "../components/CatalogGraphNode";
 import EmptyState from "../components/EmptyState";
-import NamespaceFilterSelect from "../components/NamespaceFilterSelect";
+import FilterPanel from "../components/FilterPanel";
 import {
   filterGraph,
   layoutGraph,
@@ -28,8 +29,9 @@ import {
   type LaidOutNode,
   type RelationFamily,
 } from "../utils/graphLayout";
-import { isString, useStoredState } from "../hooks/useStoredState";
+import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { loadErrorMessage } from "../utils/saveError";
+import { editCatalogFilePath } from "../utils/catalogFileLinks";
 
 const NODE_TYPES = { catalog: CatalogGraphNode };
 
@@ -43,18 +45,15 @@ export default function RenderGraph() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const colorScheme = useComputedColorScheme("light");
-  const [namespaceFilter, setNamespaceFilter] = useStoredState(
-    "renderGraph.filter.namespace",
-    "",
-    isString,
-  );
+  // The Files list's full filter set (per-view persisted under renderGraph.filter.*).
+  const filters = useCatalogFileFilterState("renderGraph");
   // Deliberately not persisted: all relations on is the right starting view.
   const [enabled, setEnabled] = useState<RelationFamily[]>([...RELATION_FAMILIES]);
 
   const { data, isLoading, isError, error } = useQuery({
     // Under the "catalogFiles" prefix so every catalog mutation's invalidation refreshes it.
-    queryKey: ["catalogFiles", "graph", namespaceFilter],
-    queryFn: () => getCatalogGraph(namespaceFilter.trim() || undefined),
+    queryKey: ["catalogFiles", "graph", filters.values],
+    queryFn: () => getCatalogGraph(filters.values),
     placeholderData: keepPreviousData,
   });
 
@@ -65,15 +64,18 @@ export default function RenderGraph() {
 
   function onNodeClick(_event: React.MouseEvent, node: LaidOutNode) {
     const fileId = node.data.apiNode.fileId;
-    if (fileId != null) navigate(`/catalog-files/${fileId}/edit`);
+    if (fileId != null) navigate(editCatalogFilePath(fileId));
   }
 
   return (
     <Stack gap="md" h="100%">
       <Title order={2}>{t("render.title")}</Title>
 
+      <FilterPanel activeFilterCount={filters.activeFilterCount} storageKey="renderGraph">
+        <CatalogFileFilterControls controls={filters.controls} />
+      </FilterPanel>
+
       <Group align="flex-end" gap="lg">
-        <NamespaceFilterSelect value={namespaceFilter} onChange={setNamespaceFilter} />
         <Chip.Group
           multiple
           value={enabled}

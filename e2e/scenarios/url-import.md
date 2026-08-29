@@ -8,7 +8,7 @@
 
 ## Scenario: fetching a private URL is refused with the public-https message
 
-1. The admin signs in and opens the import page (`/catalog-files/import`).
+1. The admin signs in and opens the import page (`/files/import`).
 2. They paste `https://127.0.0.1/catalog-info.yaml` into the **Fetch from URL** field and
    click **Fetch**.
    - *Expected*: the server's SSRF guard answers a uniform `400`; the page shows the fixed

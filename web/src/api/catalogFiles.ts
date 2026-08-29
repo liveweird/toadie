@@ -5,20 +5,44 @@ import { ApiError, buildQuery, jsonRequest, voidRequest } from "./http";
 import type { components, paths } from "./schema";
 
 export type CatalogFilePage =
-  paths["/api/v1/catalog-files"]["get"]["responses"]["200"]["content"]["application/json"];
+  paths["/api/v1/files"]["get"]["responses"]["200"]["content"]["application/json"];
 export type CatalogFileListItem = components["schemas"]["CatalogFileListItem"];
 export type CatalogFileRequest = components["schemas"]["CatalogFileRequest"];
 export type CatalogFileResponse =
-  paths["/api/v1/catalog-files/{id}"]["get"]["responses"]["200"]["content"]["application/json"];
+  paths["/api/v1/files/{id}"]["get"]["responses"]["200"]["content"]["application/json"];
 
-type CatalogFileListQuery = {
-  page: number;
-  pageSize: number;
-  sort?: string;
+/**
+ * The shared catalog-file filter set — the list and graph endpoints declare the same
+ * whitelisted params (labelValue repeats as the server's documented IN idiom).
+ */
+export type CatalogFileFilterValues = {
   name?: string;
   namespace?: string;
   kind?: string;
   tag?: string;
+  type?: string;
+  lifecycle?: string;
+  owner?: string;
+  label?: string;
+  labelValue?: readonly string[];
+};
+
+const filterParams = (f: CatalogFileFilterValues) => ({
+  name: f.name,
+  namespace: f.namespace,
+  kind: f.kind,
+  tag: f.tag,
+  type: f.type,
+  lifecycle: f.lifecycle,
+  owner: f.owner,
+  label: f.label,
+  labelValue: f.labelValue,
+});
+
+type CatalogFileListQuery = CatalogFileFilterValues & {
+  page: number;
+  pageSize: number;
+  sort?: string;
 };
 
 export async function listCatalogFiles(q: CatalogFileListQuery): Promise<CatalogFilePage> {
@@ -26,12 +50,9 @@ export async function listCatalogFiles(q: CatalogFileListQuery): Promise<Catalog
     page: q.page,
     pageSize: q.pageSize,
     sort: q.sort,
-    name: q.name,
-    namespace: q.namespace,
-    kind: q.kind,
-    tag: q.tag,
+    ...filterParams(q),
   });
-  return jsonRequest<CatalogFilePage>(`/api/v1/catalog-files?${params}`);
+  return jsonRequest<CatalogFilePage>(`/api/v1/files?${params}`);
 }
 
 /** Every stored file's list row, paging until the server total is reached (the pool loop). */
@@ -47,7 +68,7 @@ export async function listAllCatalogFiles(): Promise<CatalogFilePage["items"]> {
 }
 
 export async function getCatalogFile(id: number): Promise<CatalogFileResponse> {
-  return jsonRequest<CatalogFileResponse>(`/api/v1/catalog-files/${id}`);
+  return jsonRequest<CatalogFileResponse>(`/api/v1/files/${id}`);
 }
 
 /** The write options: `allowInvalid` waives the soft checks (the editor's Save-anyway flow). */
@@ -62,7 +83,7 @@ export async function createCatalogFile(
   opts?: CatalogSaveOptions,
 ): Promise<CatalogFileResponse> {
   const params = saveQuery(opts);
-  return jsonRequest<CatalogFileResponse>(`/api/v1/catalog-files${params ? `?${params}` : ""}`, {
+  return jsonRequest<CatalogFileResponse>(`/api/v1/files${params ? `?${params}` : ""}`, {
     method: "POST",
     body: JSON.stringify(req),
   });
@@ -74,40 +95,43 @@ export async function updateCatalogFile(
   opts?: CatalogSaveOptions,
 ): Promise<void> {
   const params = saveQuery(opts);
-  await voidRequest(`/api/v1/catalog-files/${id}${params ? `?${params}` : ""}`, {
+  await voidRequest(`/api/v1/files/${id}${params ? `?${params}` : ""}`, {
     method: "PUT",
     body: JSON.stringify(req),
   });
 }
 
 export async function deleteCatalogFile(id: number): Promise<void> {
-  await voidRequest(`/api/v1/catalog-files/${id}`, { method: "DELETE" });
+  await voidRequest(`/api/v1/files/${id}`, { method: "DELETE" });
 }
 
 export type CrossCheckReport =
-  paths["/api/v1/catalog-files/cross-check"]["get"]["responses"]["200"]["content"]["application/json"];
+  paths["/api/v1/files/cross-check"]["get"]["responses"]["200"]["content"]["application/json"];
 export type DocumentCheckReport =
-  paths["/api/v1/catalog-files/check"]["post"]["responses"]["200"]["content"]["application/json"];
+  paths["/api/v1/files/check"]["post"]["responses"]["200"]["content"]["application/json"];
 export type DocumentCheckFinding = components["schemas"]["DocumentCheckFinding"];
 
 /** The workspace report: every stored file's references resolved against the store. */
 export async function getCrossCheckReport(): Promise<CrossCheckReport> {
-  return jsonRequest<CrossCheckReport>("/api/v1/catalog-files/cross-check");
+  return jsonRequest<CrossCheckReport>("/api/v1/files/cross-check");
 }
 
 export type CatalogGraph =
-  paths["/api/v1/catalog-files/graph"]["get"]["responses"]["200"]["content"]["application/json"];
+  paths["/api/v1/files/graph"]["get"]["responses"]["200"]["content"]["application/json"];
 export type GraphNode = components["schemas"]["GraphNode"];
 
-/** The rendered-together graph; a namespace narrows which files' references are expanded. */
-export async function getCatalogGraph(namespace?: string): Promise<CatalogGraph> {
-  const params = buildQuery({ namespace });
-  return jsonRequest<CatalogGraph>(`/api/v1/catalog-files/graph${params ? `?${params}` : ""}`);
+/**
+ * The rendered-together graph; the filters (the list's shared set) narrow which files'
+ * references are expanded — targets still resolve against the whole workspace.
+ */
+export async function getCatalogGraph(filters: CatalogFileFilterValues = {}): Promise<CatalogGraph> {
+  const params = buildQuery(filterParams(filters));
+  return jsonRequest<CatalogGraph>(`/api/v1/files/graph${params ? `?${params}` : ""}`);
 }
 
 /** The editor's live check of one (possibly unsaved) document against the store. */
 export async function checkCatalogFile(req: CatalogFileRequest): Promise<DocumentCheckReport> {
-  return jsonRequest<DocumentCheckReport>("/api/v1/catalog-files/check", {
+  return jsonRequest<DocumentCheckReport>("/api/v1/files/check", {
     method: "POST",
     body: JSON.stringify(req),
   });
@@ -133,31 +157,31 @@ export async function softRejectionFindings(
 }
 
 export type CatalogExport =
-  paths["/api/v1/catalog-files/export"]["get"]["responses"]["200"]["content"]["application/json"];
+  paths["/api/v1/files/export"]["get"]["responses"]["200"]["content"]["application/json"];
 export type ImportResult =
-  paths["/api/v1/catalog-files/import"]["post"]["responses"]["200"]["content"]["application/json"];
+  paths["/api/v1/files/import"]["post"]["responses"]["200"]["content"]["application/json"];
 export type ImportFileResult = components["schemas"]["ImportFileResult"];
 
 /** The workspace (or one namespace) as structured documents — the SPA renders the YAML. */
 export async function exportCatalogFiles(namespace?: string): Promise<CatalogExport> {
   const params = buildQuery({ namespace });
-  return jsonRequest<CatalogExport>(`/api/v1/catalog-files/export${params ? `?${params}` : ""}`);
+  return jsonRequest<CatalogExport>(`/api/v1/files/export${params ? `?${params}` : ""}`);
 }
 
 /** Report & skip: one result row per document, 200 even when every document failed. */
 export async function importCatalogFiles(files: CatalogFileRequest[]): Promise<ImportResult> {
-  return jsonRequest<ImportResult>("/api/v1/catalog-files/import", {
+  return jsonRequest<ImportResult>("/api/v1/files/import", {
     method: "POST",
     body: JSON.stringify({ files }),
   });
 }
 
 export type FetchUrlResult =
-  paths["/api/v1/catalog-files/fetch"]["post"]["responses"]["200"]["content"]["application/json"];
+  paths["/api/v1/files/fetch"]["post"]["responses"]["200"]["content"]["application/json"];
 
 /** Server-side fetch of a catalog-info.yaml URL (SSRF-guarded); returns the raw text. */
 export async function fetchCatalogUrl(url: string): Promise<FetchUrlResult> {
-  return jsonRequest<FetchUrlResult>("/api/v1/catalog-files/fetch", {
+  return jsonRequest<FetchUrlResult>("/api/v1/files/fetch", {
     method: "POST",
     body: JSON.stringify({ url }),
   });

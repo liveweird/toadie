@@ -60,7 +60,7 @@ function filesPage(items: FileRow[], total = items.length) {
   return jsonResponse(200, { items, page: 1, pageSize: 20, total });
 }
 
-// The namespace and tag filter combos load their options from the admin-curated registries.
+// The filter combos load their options from the admin-curated registries/dictionaries.
 const NAMESPACE_ENTRIES = {
   items: [
     { id: 1, value: "default", isDefault: true },
@@ -70,10 +70,29 @@ const NAMESPACE_ENTRIES = {
 const TAG_CATEGORIES = {
   items: [{ id: 1, name: "Tech", tags: ["java", "billing"], kinds: ["Component"] }],
 };
+const LIFECYCLE_ENTRIES = {
+  items: [
+    { id: 1, value: "production", isDefault: false },
+    { id: 2, value: "experimental", isDefault: false },
+  ],
+};
+const ENTITY_TYPES = {
+  items: [
+    { id: 1, kind: "Component", types: ["service", "library"] },
+    { id: 2, kind: "API", types: ["openapi"] },
+  ],
+};
+const LABELS = {
+  items: [{ id: 1, key: "example.com/tier", values: ["backend", "edge"], kinds: ["Component"] }],
+};
 
 function registryResponse(url: string): Response | null {
   if (url.startsWith("/api/v1/dictionaries/namespaces"))
     return jsonResponse(200, NAMESPACE_ENTRIES);
+  if (url.startsWith("/api/v1/dictionaries/lifecycles"))
+    return jsonResponse(200, LIFECYCLE_ENTRIES);
+  if (url.startsWith("/api/v1/entity-types")) return jsonResponse(200, ENTITY_TYPES);
+  if (url.startsWith("/api/v1/labels")) return jsonResponse(200, LABELS);
   if (url.startsWith("/api/v1/tag-categories")) return jsonResponse(200, TAG_CATEGORIES);
   return null;
 }
@@ -82,7 +101,7 @@ function setupMocks(mockFetch: FetchMock, byUrl: (url: string) => Response) {
   mockFetch.mockImplementation((url: string) => {
     const registry = registryResponse(url);
     if (registry) return Promise.resolve(registry);
-    return url.startsWith("/api/v1/catalog-files")
+    return url.startsWith("/api/v1/files")
       ? Promise.resolve(byUrl(url))
       : Promise.resolve(jsonResponse(404, {}));
   });
@@ -104,14 +123,14 @@ async function rowOperation(
 }
 
 function renderPage() {
-  return renderWithProviders(<CatalogFiles />, { route: "/catalog-files" });
+  return renderWithProviders(<CatalogFiles />, { route: "/files" });
 }
 
 async function calledWith(mockFetch: FetchMock, fragment: string) {
   await waitFor(() => {
     const called = mockFetch.mock.calls.some(
       ([url]) =>
-        typeof url === "string" && url.startsWith("/api/v1/catalog-files?") && url.includes(fragment),
+        typeof url === "string" && url.startsWith("/api/v1/files?") && url.includes(fragment),
     );
     expect(called).toBe(true);
   });
@@ -219,6 +238,63 @@ describe("CatalogFiles page", () => {
     await calledWith(mockFetch, "tag=java");
   });
 
+  test("picking Type and Lifecycle filters refetches with type= and lifecycle=", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    await user.click(screen.getByRole("button", { name: /filters/i }));
+    await pickFilterOption("Type", "library");
+    await calledWith(mockFetch, "type=library");
+    await pickFilterOption("Lifecycle", "experimental");
+    await calledWith(mockFetch, "lifecycle=experimental");
+  });
+
+  test("picking an Owner refetches with the full entity reference", async () => {
+    // The owner options come from the identity pool (the pageSize=100 loop), which offers
+    // stored Groups/Users as full refs.
+    const groupRow: FileRow = {
+      id: 7,
+      kind: "Group",
+      name: "platform",
+      namespace: "default",
+      title: null,
+      type: "team",
+      lifecycle: "production",
+      owner: "group:platform",
+      tags: [],
+      creatorName: "A",
+      creatorDeleted: false,
+      updatedAt: 1755900000000,
+    };
+    setupMocks(mockFetch, (url) =>
+      url.includes("pageSize=100") ? filesPage([groupRow]) : filesPage(SEED_FILES),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    await user.click(screen.getByRole("button", { name: /filters/i }));
+    await pickFilterOption("Owner", "group:default/platform");
+    await calledWith(mockFetch, "owner=group%3Adefault%2Fplatform");
+  });
+
+  test("the label pair refetches with label= and repeated labelValue=", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    await user.click(screen.getByRole("button", { name: /filters/i }));
+    expect(screen.getByLabelText("Label values", { selector: "input" })).toBeDisabled();
+    await pickFilterOption("Label", "example.com/tier");
+    await calledWith(mockFetch, "label=example.com%2Ftier");
+    await pickFilterOption("Label values", "backend");
+    await pickFilterOption("Label values", "edge");
+    await calledWith(mockFetch, "labelValue=backend&labelValue=edge");
+  });
+
   test("clicking the Name sort header toggles to sort=-name", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     const user = userEvent.setup();
@@ -250,7 +326,7 @@ describe("CatalogFiles page", () => {
       const called = mockFetch.mock.calls.some(
         ([url]) =>
           typeof url === "string" &&
-          url.startsWith("/api/v1/catalog-files?") &&
+          url.startsWith("/api/v1/files?") &&
           url.includes("pageSize=40") &&
           url.includes("page=1"),
       );
@@ -283,12 +359,12 @@ describe("CatalogFiles page", () => {
     await screen.findByText("payments-svc");
     expect(screen.getByRole("link", { name: /new catalog file/i })).toHaveAttribute(
       "href",
-      "/catalog-files/new",
+      "/files/new",
     );
     await user.click(screen.getByRole("button", { name: "Operations for payments-svc" }));
     expect(await screen.findByRole("menuitem", { name: "Edit" })).toHaveAttribute(
       "href",
-      "/catalog-files/1/edit",
+      "/files/1/edit",
     );
   });
 
@@ -306,10 +382,10 @@ describe("CatalogFiles page", () => {
     let listCount = 0;
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
-      if (method === "DELETE" && /^\/api\/v1\/catalog-files\/\d+$/.test(url)) {
+      if (method === "DELETE" && /^\/api\/v1\/files\/\d+$/.test(url)) {
         return Promise.resolve(new Response(null, { status: 204 }));
       }
-      if (url.startsWith("/api/v1/catalog-files?")) {
+      if (url.startsWith("/api/v1/files?")) {
         listCount++;
         return Promise.resolve(filesPage(listCount === 1 ? SEED_FILES : [SEED_FILES[0]]));
       }
@@ -325,7 +401,7 @@ describe("CatalogFiles page", () => {
     await waitFor(() => expect(screen.queryByText("web-portal")).not.toBeInTheDocument());
     const deleteCall = mockFetch.mock.calls.find(
       ([url, init]) =>
-        (init as RequestInit | undefined)?.method === "DELETE" && url === "/api/v1/catalog-files/2",
+        (init as RequestInit | undefined)?.method === "DELETE" && url === "/api/v1/files/2",
     );
     expect(deleteCall).toBeDefined();
     expect(listCount).toBeGreaterThanOrEqual(2);
@@ -353,8 +429,8 @@ describe("CatalogFiles page", () => {
 
   test("a failed download shows the dismissible download alert", async () => {
     mockFetch.mockImplementation((url: string) => {
-      if (url === "/api/v1/catalog-files/1") return Promise.resolve(jsonResponse(500, {}));
-      if (url.startsWith("/api/v1/catalog-files?")) return Promise.resolve(filesPage(SEED_FILES));
+      if (url === "/api/v1/files/1") return Promise.resolve(jsonResponse(500, {}));
+      if (url.startsWith("/api/v1/files?")) return Promise.resolve(filesPage(SEED_FILES));
       return Promise.resolve(jsonResponse(404, {}));
     });
     const user = userEvent.setup();
@@ -375,7 +451,7 @@ describe("CatalogFiles page", () => {
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL }));
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     mockFetch.mockImplementation((url: string) => {
-      if (url === "/api/v1/catalog-files/1") {
+      if (url === "/api/v1/files/1") {
         return Promise.resolve(
           jsonResponse(200, {
             id: 1,
@@ -390,7 +466,7 @@ describe("CatalogFiles page", () => {
           }),
         );
       }
-      if (url.startsWith("/api/v1/catalog-files?")) return Promise.resolve(filesPage(SEED_FILES));
+      if (url.startsWith("/api/v1/files?")) return Promise.resolve(filesPage(SEED_FILES));
       return Promise.resolve(jsonResponse(404, {}));
     });
     const user = userEvent.setup();
@@ -407,7 +483,7 @@ describe("CatalogFiles page", () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     renderPage();
     const link = await screen.findByRole("link", { name: "Import YAML" });
-    expect(link).toHaveAttribute("href", "/catalog-files/import");
+    expect(link).toHaveAttribute("href", "/files/import");
   });
 
   test("export fetches the workspace and downloads one multi-document YAML", async () => {
@@ -416,7 +492,7 @@ describe("CatalogFiles page", () => {
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL }));
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     mockFetch.mockImplementation((url: string) => {
-      if (url === "/api/v1/catalog-files/export") {
+      if (url === "/api/v1/files/export") {
         return Promise.resolve(
           jsonResponse(200, {
             files: [
@@ -434,7 +510,7 @@ describe("CatalogFiles page", () => {
           }),
         );
       }
-      if (url.startsWith("/api/v1/catalog-files?")) return Promise.resolve(filesPage(SEED_FILES));
+      if (url.startsWith("/api/v1/files?")) return Promise.resolve(filesPage(SEED_FILES));
       return Promise.resolve(jsonResponse(404, {}));
     });
     const user = userEvent.setup();
@@ -455,10 +531,10 @@ describe("CatalogFiles page", () => {
     mockFetch.mockImplementation((url: string) => {
       const registry = registryResponse(url);
       if (registry) return Promise.resolve(registry);
-      if (url.startsWith("/api/v1/catalog-files/export")) {
+      if (url.startsWith("/api/v1/files/export")) {
         return Promise.resolve(jsonResponse(500, {}));
       }
-      if (url.startsWith("/api/v1/catalog-files?")) return Promise.resolve(filesPage(SEED_FILES));
+      if (url.startsWith("/api/v1/files?")) return Promise.resolve(filesPage(SEED_FILES));
       return Promise.resolve(jsonResponse(404, {}));
     });
     const user = userEvent.setup();
@@ -472,9 +548,9 @@ describe("CatalogFiles page", () => {
 
     expect(await screen.findByText("Failed to export catalog files")).toBeInTheDocument();
     const exportCall = mockFetch.mock.calls.find(
-      ([url]) => typeof url === "string" && url.startsWith("/api/v1/catalog-files/export"),
+      ([url]) => typeof url === "string" && url.startsWith("/api/v1/files/export"),
     );
-    expect(exportCall?.[0]).toBe("/api/v1/catalog-files/export?namespace=team-a");
+    expect(exportCall?.[0]).toBe("/api/v1/files/export?namespace=team-a");
   });
 
   test("the export button is disabled while the list is empty", async () => {

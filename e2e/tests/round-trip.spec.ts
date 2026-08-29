@@ -35,12 +35,12 @@ test("two pasted documents import, export as one YAML, and re-import as conflict
   ].join("\n");
 
   // Import the pasted documents — both rows report Created.
-  await page.goto("/catalog-files/import");
+  await page.goto("/files/import");
   await page.getByRole("textbox", { name: "YAML content" }).fill(yaml);
   await expect(page.getByText("2 documents ready to import")).toBeVisible();
   await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files/import") && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files/import") && r.ok(),
     ),
     page.getByRole("button", { name: "Import", exact: true }).click(),
   ]);
@@ -51,7 +51,7 @@ test("two pasted documents import, export as one YAML, and re-import as conflict
   await expect(teamResult.getByText("Created")).toBeVisible();
 
   // Both files appear on the list under the namespace filter.
-  await page.goto("/catalog-files");
+  await page.goto("/files");
   await openFilters(page);
   await pickNamespace(page, ns);
   await expect(page.getByRole("row").filter({ hasText: comp })).toBeVisible();
@@ -72,12 +72,12 @@ test("two pasted documents import, export as one YAML, and re-import as conflict
 
   // Re-import the export verbatim: every identity already exists — report & skip.
   // Counts by regex, not literals: a CI retry's export can carry the failed attempt's rows.
-  await page.goto("/catalog-files/import");
+  await page.goto("/files/import");
   await page.getByRole("textbox", { name: "YAML content" }).fill(exported);
   await expect(page.getByText(/\d+ documents ready to import/)).toBeVisible();
   await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files/import") && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files/import") && r.ok(),
     ),
     page.getByRole("button", { name: "Import", exact: true }).click(),
   ]);
@@ -95,7 +95,7 @@ test("two pasted documents import, export as one YAML, and re-import as conflict
 
   // Cleanup: delete both throwaway files.
   for (const name of [comp, team]) {
-    await page.goto("/catalog-files");
+    await page.goto("/files");
     await openFilters(page);
     await page.getByLabel("Name", { exact: true }).fill(name);
     await rowOperation(page, name, "Delete");

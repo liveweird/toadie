@@ -54,7 +54,9 @@
     "subdomainOf": "Subdomain of",
     "profileDisplayName": "Display name",
     "profileEmail": "Email",
-    "profilePicture": "Picture URL"
+    "profilePicture": "Picture URL",
+    "label": "Label",
+    "labelValues": "Label values"
   },
   "hint": {
     "namespace": "Pick a defined namespace; blank means \"{{default}}\"",
@@ -114,6 +116,11 @@
   "anyKind": "Any kind",
   "anyNamespace": "Any namespace",
   "anyTag": "Any tag",
+  "anyType": "Any type",
+  "anyLifecycle": "Any lifecycle",
+  "anyOwner": "Any owner",
+  "anyLabel": "Any label",
+  "anyLabelValue": "Any value",
   "clearKindFilter": "Clear kind filter",
   "export": {
     "button": "Export YAML",

@@ -29,7 +29,11 @@
    key picked from the registry-constrained Select (only labels allowed for the kind are
    offered), the value from the label's closed list.
    - *Expected*: the YAML preview shows the `key: backend` line and the create succeeds.
-7. Cleanup: the file is deleted from the filtered list, the label from the Labels page (both
+7. On the Files list, they filter by the label's key alone, then add the value `edge`, then
+   also the value `backend`.
+   - *Expected*: the key alone finds the file; `edge` (a closed-list value the file does not
+     carry) hides it; adding `backend` (any-of over the chosen values) brings it back.
+8. Cleanup: the file is deleted from the filtered list, the label from the Labels page (both
    through their confirm modals), and the throwaway user through the Users list.
 
 ## Not covered here (and why)

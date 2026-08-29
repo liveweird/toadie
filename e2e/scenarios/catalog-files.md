@@ -16,15 +16,20 @@
      before anything is saved.
 3. They click **Create**.
    - *Expected*: the file is stored (a successful create round-trip) and the app lands on the
-     **Files** list; filtered by the unique name, the row shows the name and title.
-4. They open the row's **Edit** form through its **Operations** menu, change the title and
+     **Files** list (`/files`); filtered by the unique name, the row shows the name and title.
+4. Still on the filtered list, they add the **Type** filter `service` and pick the stored
+   group's full reference in the **Owner** filter.
+   - *Expected*: the row stays (its type matches, and its short-form owner RESOLVES to the
+     picked entity). Switching the Type filter to `library` hides it ("No catalog files");
+     clearing both filters brings it back.
+5. They open the row's **Edit** form through its **Operations** menu, change the title and
    set lifecycle `deprecated`, and click **Save**.
-5. They reopen the edit form directly.
+6. They reopen the edit form directly.
    - *Expected*: the new title and lifecycle persisted.
-6. Back on the filtered list they pick **Download** from the row's **Operations** menu.
+7. Back on the filtered list they pick **Download** from the row's **Operations** menu.
    - *Expected*: the browser receives a file named `catalog-info.yaml`.
-7. They pick **Delete** from the row's **Operations** menu and confirm in the modal.
-8. They load the list fresh and filter by the name again.
+8. They pick **Delete** from the row's **Operations** menu and confirm in the modal.
+9. They load the list fresh and filter by the name again.
    - *Expected*: "No catalog files" — the file is gone.
 
 ## Not covered here (and why)

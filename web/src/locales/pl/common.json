@@ -26,7 +26,12 @@
     "contains": "Zawiera…",
     "clearName": "Wyczyść filtr nazwy",
     "clearNamespace": "Wyczyść filtr przestrzeni nazw",
-    "clearTag": "Wyczyść filtr tagu"
+    "clearTag": "Wyczyść filtr tagu",
+    "clearType": "Wyczyść filtr typu",
+    "clearLifecycle": "Wyczyść filtr cyklu życia",
+    "clearOwner": "Wyczyść filtr właściciela",
+    "clearLabel": "Wyczyść filtr etykiety",
+    "clearLabelValues": "Wyczyść filtr wartości etykiety"
   },
   "table": {
     "rowsPerPage": "Wierszy na stronę",

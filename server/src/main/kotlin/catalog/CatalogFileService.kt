@@ -3,8 +3,6 @@ package ch.nokillswit.catalog
 import ch.nokillswit.annotations.AnnotationKeyService
 import ch.nokillswit.dictionaries.Dictionary
 import ch.nokillswit.dictionaries.DictionaryService
-import ch.nokillswit.infra.db.containsNormalized
-import ch.nokillswit.infra.db.jsonArrayContains
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.labels.LabelService
 import ch.nokillswit.tags.TagCategoryService
@@ -25,15 +23,6 @@ import org.jetbrains.exposed.v1.r2dbc.*
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 
 val CatalogFileServiceKey = AttributeKey<CatalogFileService>("CatalogFileService")
-
-data class CatalogFileListFilter(
-    val name: String? = null,
-    val namespace: String? = null,
-    /** Canonical-cased kind (the route validates against SUPPORTED_KINDS). */
-    val kind: String? = null,
-    /** Exact tag membership against metadata.tags (folded — tags are stored lowercase). */
-    val tag: String? = null,
-)
 
 data class CatalogFileListResult(
     val items: List<CatalogFileListItem>,
@@ -350,15 +339,14 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             .toSet()
 
     /**
-     * The rendered-together graph — all active files in one transaction. A [namespace] narrows
-     * which files' references are EXPANDED; targets still resolve against the whole workspace
-     * (a stored file elsewhere appears as a STORED node when pointed at).
+     * The rendered-together graph — all active files in one transaction. The [filter] (the
+     * list endpoint's filter set, matched in-memory over the decoded sources) narrows which
+     * files' references are EXPANDED; targets still resolve against the whole workspace
+     * (a stored file filtered out elsewhere appears as a STORED node when pointed at).
      */
-    suspend fun graph(namespace: String?): CatalogGraph = suspendTransaction(database) {
+    suspend fun graph(filter: CatalogFileListFilter): CatalogGraph = suspendTransaction(database) {
         val all = activeSources()
-        val folded = namespace?.lowercase()
-        val rendered = if (folded == null) all else all.filter { it.file.metadata.namespace.lowercase() == folded }
-        buildGraph(sources = rendered, allSources = all)
+        buildGraph(sources = all.filter { filter.matches(it.file) }, allSources = all)
     }
 
     /** The export payload: active documents, (namespace, name)-ordered, optionally one namespace. */
@@ -480,7 +468,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
     suspend fun list(filter: CatalogFileListFilter, paging: PageRequest): CatalogFileListResult =
         suspendTransaction(database) {
             // Counted on the same join as the rows, so the two can never disagree.
-            val predicate: Op<Boolean> = buildPredicate(filter) and active()
+            val predicate: Op<Boolean> = buildCatalogFilePredicate(filter) and active()
             val total = joined().selectAll().where { predicate }.count()
             val rows = joined().selectAll()
                 .where { predicate }
@@ -515,22 +503,4 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         updatedAt = updatedAt,
     )
 
-    private fun buildPredicate(filter: CatalogFileListFilter): Op<Boolean> {
-        var op: Op<Boolean> = Op.TRUE
-        filter.name?.takeIf { it.isNotBlank() }?.let {
-            op = op and (CatalogFiles.name.containsNormalized(it))
-        }
-        filter.namespace?.takeIf { it.isNotBlank() }?.let {
-            // Stored namespaces are lowercase (sanitizedCatalogFile) — fold the filter too.
-            op = op and (CatalogFiles.namespace eq it.lowercase())
-        }
-        filter.kind?.let {
-            op = op and (CatalogFiles.kind eq it)
-        }
-        filter.tag?.takeIf { it.isNotBlank() }?.let {
-            // Exact membership inside the content JSON (tags are stored lowercase — fold).
-            op = op and CatalogFiles.content.jsonArrayContains(listOf("metadata", "tags"), it.lowercase())
-        }
-        return op
-    }
 }

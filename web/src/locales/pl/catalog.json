@@ -54,7 +54,9 @@
     "subdomainOf": "Poddomena",
     "profileDisplayName": "Wyświetlana nazwa",
     "profileEmail": "E-mail",
-    "profilePicture": "URL obrazka"
+    "profilePicture": "URL obrazka",
+    "label": "Etykieta",
+    "labelValues": "Wartości etykiety"
   },
   "hint": {
     "namespace": "Wybierz zdefiniowaną przestrzeń nazw; puste pole oznacza \"{{default}}\"",
@@ -114,6 +116,11 @@
   "anyKind": "Dowolny rodzaj",
   "anyNamespace": "Dowolna przestrzeń nazw",
   "anyTag": "Dowolny tag",
+  "anyType": "Dowolny typ",
+  "anyLifecycle": "Dowolny cykl życia",
+  "anyOwner": "Dowolny właściciel",
+  "anyLabel": "Dowolna etykieta",
+  "anyLabelValue": "Dowolna wartość",
   "clearKindFilter": "Wyczyść filtr rodzaju",
   "export": {
     "button": "Eksportuj YAML",

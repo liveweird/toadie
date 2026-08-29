@@ -11,6 +11,9 @@ import java.util.UUID
 // The shared catalog test fixtures — grammar-valid, collision-free by unique suffix, consumed
 // by every catalog-adjacent suite (files/cross-check/graph/round-trip/audit).
 
+/** The catalog-files API base path — every suite builds its URLs from this one constant. */
+const val CATALOG_FILES_PATH = "/api/v1/files"
+
 /** Unique, grammar-valid entity name so parallel tests and re-runs never collide on identity. */
 fun uniqueEntityName(prefix: String) = "$prefix-${UUID.randomUUID().toString().substring(0, 8)}"
 
@@ -93,4 +96,4 @@ fun apiFile(name: String, namespace: String = "default", owner: String = "group:
 )
 
 suspend fun HttpClient.createCatalogFile(file: CatalogFile): CatalogFileResponse =
-    postJson("/api/v1/catalog-files", file).body()
+    postJson(CATALOG_FILES_PATH, file).body()

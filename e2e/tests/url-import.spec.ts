@@ -6,14 +6,14 @@ import { expect, login, test } from "./helpers";
 // external dependency in CI) — UrlFetchTest covers it against a local fixture server.
 test("fetching a private URL is refused with the public-https message", async ({ page }) => {
   await login(page);
-  await page.goto("/catalog-files/import");
+  await page.goto("/files/import");
 
   await page
     .getByRole("textbox", { name: "Fetch from URL" })
     .fill("https://127.0.0.1/catalog-info.yaml");
   await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files/fetch") && r.status() === 400,
+      (r) => r.url().endsWith("/api/v1/files/fetch") && r.status() === 400,
     ),
     page.getByRole("button", { name: "Fetch" }).click(),
   ]);

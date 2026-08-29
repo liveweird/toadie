@@ -151,7 +151,7 @@ class UrlFetchTest {
                 val client = authedClient(email, "pw")
 
                 for (url in listOf("http://example.com/x.yaml", "https://127.0.0.1/x.yaml")) {
-                    val response = client.postJson("/api/v1/catalog-files/fetch", FetchUrlRequest(url = url))
+                    val response = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = url))
                     assertEquals(HttpStatusCode.BadRequest, response.status)
                     assertEquals(FETCH_URL_INVALID_DETAIL, response.body<ProblemDetail>().detail)
                 }
@@ -166,7 +166,7 @@ class UrlFetchTest {
     @Test
     fun `the fetch route requires authentication`() = testApplication {
         usePostgresTestcontainer()
-        val response = jsonClient().postJson("/api/v1/catalog-files/fetch", FetchUrlRequest(url = "https://example.com/catalog-info.yaml"))
+        val response = jsonClient().postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "https://example.com/catalog-info.yaml"))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
@@ -186,11 +186,11 @@ class UrlFetchTest {
                 startApplication()
                 val client = seededClient("fetchroute")
 
-                val ok = client.postJson("/api/v1/catalog-files/fetch", FetchUrlRequest(url = "$base/ok"))
+                val ok = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/ok"))
                 assertEquals(HttpStatusCode.OK, ok.status)
                 assertTrue(ok.body<FetchUrlResponse>().content.contains("name: fetched"))
 
-                val bad = client.postJson("/api/v1/catalog-files/fetch", FetchUrlRequest(url = "$base/missing"))
+                val bad = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/missing"))
                 assertEquals(HttpStatusCode.BadGateway, bad.status)
                 assertTrue(bad.body<ProblemDetail>().detail!!.contains("HTTP 404"))
             }

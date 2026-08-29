@@ -45,7 +45,7 @@ class PayloadValidationTest {
         // 1 byte over MAX_REQUEST_BODY_BYTES (10 MiB): the RequestBodyLimit backstop rejects
         // it before any receive/validation work, with the RFC 7807 body like every error.
         val oversized = """{"kind":"Component","content":"""" + "x".repeat(10 * 1024 * 1024) + "\"}"
-        val response = client.postJson("/api/v1/catalog-files", oversized)
+        val response = client.postJson(CATALOG_FILES_PATH, oversized)
         assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
         assertContains(response.bodyAsText(), "size limit")
     }
@@ -70,13 +70,13 @@ class PayloadValidationTest {
         val client = authedClient(email, "pw")
         // Repetition is reserved for per-endpoint documented IN semantics (API-LIST-004) —
         // silently first-winning would hide the caller's conflicting input.
-        val paging = client.get("/api/v1/catalog-files?page=1&page=2")
+        val paging = client.get("$CATALOG_FILES_PATH?page=1&page=2")
         assertEquals(HttpStatusCode.BadRequest, paging.status)
         assertContains(paging.bodyAsText(), "Parameter 'page' must not be repeated")
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?sort=id&sort=name").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?sort=id&sort=name").status)
         assertEquals(
             HttpStatusCode.BadRequest,
-            client.get("/api/v1/catalog-files?name=a&name=b").status,
+            client.get("$CATALOG_FILES_PATH?name=a&name=b").status,
         )
     }
 

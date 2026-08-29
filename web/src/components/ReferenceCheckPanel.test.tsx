@@ -36,7 +36,7 @@ describe("ReferenceCheckPanel", () => {
     expect(await screen.findByText("No findings — the document passes every check.", undefined, { timeout: 3000 }))
       .toBeInTheDocument();
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/v1/catalog-files/check");
+    expect(url).toBe("/api/v1/files/check");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual(DOCUMENT);
   });

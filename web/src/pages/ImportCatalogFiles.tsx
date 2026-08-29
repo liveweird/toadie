@@ -20,6 +20,7 @@ import { IconArrowLeft, IconDownload, IconFileImport, IconUpload } from "@tabler
 import { fetchCatalogUrl, importCatalogFiles, type ImportFileResult } from "../api/catalogFiles";
 import { normalizeCatalogUrl, parseCatalogYaml } from "../utils/catalogImport";
 import { saveErrorMessage } from "../utils/saveError";
+import { catalogFilesPath } from "../utils/catalogFileLinks";
 
 const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
   CREATED: "teal",
@@ -238,7 +239,7 @@ export default function ImportCatalogFiles() {
       <Group justify="space-between">
         <Button
           component={RouterLink}
-          to="/catalog-files"
+          to={catalogFilesPath}
           variant="default"
           leftSection={<IconArrowLeft size={16} />}
         >

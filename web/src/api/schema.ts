@@ -264,7 +264,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/catalog-files": {
+    "/api/v1/files": {
         parameters: {
             query?: never;
             header?: never;
@@ -280,12 +280,9 @@ export interface paths {
          *
          *     - Sortable fields: `id`, `kind`, `name`, `namespace`, `updatedAt`. Default sort is
          *       `id` ascending; `id` ascending is always appended as a deterministic tiebreaker.
-         *     - Filters (optional, whitelisted):
-         *       - `name` — case- and accent-insensitive substring match against the entity name.
-         *       - `namespace` — exact match (case-insensitive; namespaces are stored lowercase).
-         *       - `kind` — one of the supported kinds (case-insensitive; unknown values are a `400`).
-         *       - `tag` — exact membership match against the file's `metadata.tags` entries
-         *         (case-insensitive; tags are stored lowercase).
+         *     - Filters (optional, whitelisted; the shared catalog-file filter set — the graph
+         *       endpoint declares the same one): `name`, `namespace`, `kind`, `tag`, `type`,
+         *       `lifecycle`, `owner`, `label` + `labelValue` — see each parameter's description.
          *
          *     Each returned item includes the creator's `creatorName` resolved via join so the UI
          *     does not need an N+1 lookup.
@@ -328,7 +325,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/catalog-files/cross-check": {
+    "/api/v1/files/cross-check": {
         parameters: {
             query?: never;
             header?: never;
@@ -371,7 +368,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/catalog-files/check": {
+    "/api/v1/files/check": {
         parameters: {
             query?: never;
             header?: never;
@@ -400,7 +397,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/catalog-files/graph": {
+    "/api/v1/files/graph": {
         parameters: {
             query?: never;
             header?: never;
@@ -420,10 +417,11 @@ export interface paths {
          *       custom kinds).
          *
          *     Kind-less `dependsOn`/`dependencyOf` entries (cross-check errors) are not drawable and
-         *     are omitted. The optional `namespace` filter narrows which files' references are
-         *     EXPANDED; targets still resolve against the whole workspace, so a stored file outside
-         *     the filter appears as a STORED node when something points at it. Unpaged by design —
-         *     a report-style computation over the workspace.
+         *     are omitted. The optional filters (the SAME whitelisted set as the list endpoint, same
+         *     semantics) narrow which files' references are EXPANDED; targets still resolve against
+         *     the whole workspace, so a stored file outside the filter appears as a STORED node when
+         *     something points at it. Unpaged by design — a report-style computation over the
+         *     workspace.
          */
         get: operations["getCatalogGraph"];
         put?: never;
@@ -434,7 +432,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/catalog-files/export": {
+    "/api/v1/files/export": {
         parameters: {
             query?: never;
             header?: never;
@@ -458,7 +456,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/catalog-files/import": {
+    "/api/v1/files/import": {
         parameters: {
             query?: never;
             header?: never;
@@ -490,7 +488,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/catalog-files/fetch": {
+    "/api/v1/files/fetch": {
         parameters: {
             query?: never;
             header?: never;
@@ -519,7 +517,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/catalog-files/{id}": {
+    "/api/v1/files/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1418,6 +1416,24 @@ export interface components {
          *     always appended as a deterministic tiebreaker.
          */
         Sort: string;
+        /** @description Case- and accent-insensitive substring match against the entity name. */
+        CatalogNameFilter: string;
+        /** @description Exact (case-insensitive) namespace match. */
+        CatalogNamespaceFilter: string;
+        /** @description One of the supported kinds (case-insensitive); unknown values are a 400. */
+        CatalogKindFilter: string;
+        /** @description Exact membership match against the file's metadata.tags entries (case-insensitive; tags are stored lowercase). */
+        CatalogTagFilter: string;
+        /** @description Case-insensitive exact match against spec.type. An open match — values are not validated against the type registry (waived/imported files may carry unregistered types), and there is no interplay with the kind filter. */
+        CatalogTypeFilter: string;
+        /** @description Case-insensitive exact match against spec.lifecycle. An open match — values are not validated against the lifecycles dictionary. */
+        CatalogLifecycleFilter: string;
+        /** @description An entity reference (`[kind:][namespace/]name`; defaults kind `group`, namespace `default`) naming the owner to filter by. A file matches when its stored spec.owner — whatever short form it uses — RESOLVES to that entity under the descriptor defaulting rules (default kind group, default namespace = the file's own namespace), case-insensitively. An unparsable reference is a 400. */
+        CatalogOwnerFilter: string;
+        /** @description A metadata.labels KEY that must be present on the file. Byte-exact key match (the label registry forbids case-twin keys). Combine with labelValue to also constrain the key's value. */
+        CatalogLabelFilter: string;
+        /** @description Any-of (IN) match over the selected label's value, case-insensitive — the one parameter where repetition is the documented IN idiom (API-LIST-004). Requires the label parameter (labelValue without label is a 400). */
+        CatalogLabelValueFilter: string[];
     };
     requestBodies: never;
     headers: never;
@@ -1846,13 +1862,23 @@ export interface operations {
                  */
                 sort?: components["parameters"]["Sort"];
                 /** @description Case- and accent-insensitive substring match against the entity name. */
-                name?: string;
+                name?: components["parameters"]["CatalogNameFilter"];
                 /** @description Exact (case-insensitive) namespace match. */
-                namespace?: string;
+                namespace?: components["parameters"]["CatalogNamespaceFilter"];
                 /** @description One of the supported kinds (case-insensitive); unknown values are a 400. */
-                kind?: string;
+                kind?: components["parameters"]["CatalogKindFilter"];
                 /** @description Exact membership match against the file's metadata.tags entries (case-insensitive; tags are stored lowercase). */
-                tag?: string;
+                tag?: components["parameters"]["CatalogTagFilter"];
+                /** @description Case-insensitive exact match against spec.type. An open match — values are not validated against the type registry (waived/imported files may carry unregistered types), and there is no interplay with the kind filter. */
+                type?: components["parameters"]["CatalogTypeFilter"];
+                /** @description Case-insensitive exact match against spec.lifecycle. An open match — values are not validated against the lifecycles dictionary. */
+                lifecycle?: components["parameters"]["CatalogLifecycleFilter"];
+                /** @description An entity reference (`[kind:][namespace/]name`; defaults kind `group`, namespace `default`) naming the owner to filter by. A file matches when its stored spec.owner — whatever short form it uses — RESOLVES to that entity under the descriptor defaulting rules (default kind group, default namespace = the file's own namespace), case-insensitively. An unparsable reference is a 400. */
+                owner?: components["parameters"]["CatalogOwnerFilter"];
+                /** @description A metadata.labels KEY that must be present on the file. Byte-exact key match (the label registry forbids case-twin keys). Combine with labelValue to also constrain the key's value. */
+                label?: components["parameters"]["CatalogLabelFilter"];
+                /** @description Any-of (IN) match over the selected label's value, case-insensitive — the one parameter where repetition is the documented IN idiom (API-LIST-004). Requires the label parameter (labelValue without label is a 400). */
+                labelValue?: components["parameters"]["CatalogLabelValueFilter"];
             };
             header?: never;
             path?: never;
@@ -1974,8 +2000,24 @@ export interface operations {
     getCatalogGraph: {
         parameters: {
             query?: {
-                /** @description Exact (case-insensitive) namespace of the files to expand. */
-                namespace?: string;
+                /** @description Case- and accent-insensitive substring match against the entity name. */
+                name?: components["parameters"]["CatalogNameFilter"];
+                /** @description Exact (case-insensitive) namespace match. */
+                namespace?: components["parameters"]["CatalogNamespaceFilter"];
+                /** @description One of the supported kinds (case-insensitive); unknown values are a 400. */
+                kind?: components["parameters"]["CatalogKindFilter"];
+                /** @description Exact membership match against the file's metadata.tags entries (case-insensitive; tags are stored lowercase). */
+                tag?: components["parameters"]["CatalogTagFilter"];
+                /** @description Case-insensitive exact match against spec.type. An open match — values are not validated against the type registry (waived/imported files may carry unregistered types), and there is no interplay with the kind filter. */
+                type?: components["parameters"]["CatalogTypeFilter"];
+                /** @description Case-insensitive exact match against spec.lifecycle. An open match — values are not validated against the lifecycles dictionary. */
+                lifecycle?: components["parameters"]["CatalogLifecycleFilter"];
+                /** @description An entity reference (`[kind:][namespace/]name`; defaults kind `group`, namespace `default`) naming the owner to filter by. A file matches when its stored spec.owner — whatever short form it uses — RESOLVES to that entity under the descriptor defaulting rules (default kind group, default namespace = the file's own namespace), case-insensitively. An unparsable reference is a 400. */
+                owner?: components["parameters"]["CatalogOwnerFilter"];
+                /** @description A metadata.labels KEY that must be present on the file. Byte-exact key match (the label registry forbids case-twin keys). Combine with labelValue to also constrain the key's value. */
+                label?: components["parameters"]["CatalogLabelFilter"];
+                /** @description Any-of (IN) match over the selected label's value, case-insensitive — the one parameter where repetition is the documented IN idiom (API-LIST-004). Requires the label parameter (labelValue without label is a 400). */
+                labelValue?: components["parameters"]["CatalogLabelValueFilter"];
             };
             header?: never;
             path?: never;

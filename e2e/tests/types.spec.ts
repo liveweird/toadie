@@ -54,7 +54,7 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   // is offered for a Domain document and the save passes the strict server check.
   await login(page);
   const name = uniqueText("e2e-type-domain");
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("combobox", { name: "Kind" }).click();
   await page.getByRole("option", { name: "Domain" }).click();
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
@@ -62,7 +62,7 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   const [created] = await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
@@ -76,7 +76,7 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   await Promise.all([
     page.waitForResponse(
       (r) =>
-        r.url().endsWith(`/api/v1/catalog-files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
+        r.url().endsWith(`/api/v1/files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
     ),
     page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
   ]);

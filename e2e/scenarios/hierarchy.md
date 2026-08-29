@@ -13,22 +13,28 @@
 1. The admin signs in and creates, through the editor, a System, a Component in that System,
    and a second Component that is both in the System and a subcomponent of the first.
    - *Expected*: all three saves succeed (references resolve against the just-stored files).
-2. They open **Hierarchy** (the root nav entry) and scope the namespace filter to the run
-   namespace.
+2. They open **Hierarchy** (the root nav entry), expand the filter panel (the Files list's
+   full filter set lives here too), and scope the namespace filter to the run namespace.
    - *Expected*: the System renders as a root with the Component nested under it and the
      subcomponent nested under the Component — most-specific placement: the subcomponent sits
      under its parent component, NOT directly under the System.
-3. They collapse the parent Component's branch, reopen it, then collapse the System's branch.
+3. They add the **Type** filter `service`, then swap it for **Lifecycle** `experimental`,
+   then clear both.
+   - *Expected*: with Type `service` the components stay AND the type-less System stays too
+     (it is their referenced container — filters narrow what is EXPANDED, referenced targets
+     keep rendering); with Lifecycle `experimental` nothing expands and the tree empties;
+     cleared, the chain returns.
+4. They collapse the parent Component's branch, reopen it, then collapse the System's branch.
    - *Expected*: collapsing the Component hides only the subcomponent; collapsing the System
      hides the whole chain; expanding restores it.
-4. They download the subcomponent's YAML from its row's **Operations** menu.
+5. They download the subcomponent's YAML from its row's **Operations** menu.
    - *Expected*: a `catalog-info.yaml` download starts — the same operation surface as the
      Files list.
-5. They delete the System from its tree row (through the confirm modal).
+6. They delete the System from its tree row (through the confirm modal).
    - *Expected*: the System stays visible as a dimmed MISSING placeholder (no Operations
      menu) with the components still nested under it — deletions create dangling references
      by design, and the tree shows them.
-6. Cleanup: the subcomponent and the component are deleted from their tree rows.
+7. Cleanup: the subcomponent and the component are deleted from their tree rows.
    - *Expected*: with its last children gone, the placeholder disappears too; nothing owned
      by the spec remains.
 

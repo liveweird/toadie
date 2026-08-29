@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.2.0",
+    date: "2026-08-29",
+    en: `Find your files faster.
+
+- The Files list gains **type**, **lifecycle**, **owner**, and **label** filters beside the existing name, namespace, kind, and tag ones — the owner picker understands every way a file may spell its owner, and a label can be filtered by key alone or by chosen values.
+- The **Hierarchy** and **Graph** views carry the same full filter panel now, narrowing which files are expanded while everything they reference stays visible.
+- Shorter addresses: the app now lives under */files* (the API moved to */api/v1/files* with it).`,
+    pl: `Szybciej znajduj swoje pliki.
+
+- Lista Pliki zyskuje filtry **typu**, **cyklu życia**, **właściciela/ki** i **etykiet** obok dotychczasowych: nazwy, przestrzeni nazw, rodzaju i tagu — wybór właściciela/ki rozumie każdy zapis odwołania, a etykietę można filtrować samym kluczem albo wybranymi wartościami.
+- Widoki **Hierarchia** i **Graf** mają teraz ten sam pełny panel filtrów, zawężający rozwijane pliki, podczas gdy wszystko, do czego się odwołują, pozostaje widoczne.
+- Krótsze adresy: aplikacja mieszka teraz pod */files* (API przeniosło się razem z nią pod */api/v1/files*).`,
+  },
+  {
     version: "1.1.0",
     date: "2026-08-29",
     en: `Saving with findings, and this very page.

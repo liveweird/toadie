@@ -52,6 +52,7 @@ import LanguageSwitcher from "./components/LanguageSwitcher";
 import VersionStamp from "./components/VersionStamp";
 import { useChangelogUnseen } from "./hooks/useChangelogSeen";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
+import { catalogFilesPath } from "./utils/catalogFileLinks";
 
 const Login = lazy(() => import("./pages/Login"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
@@ -98,7 +99,7 @@ type NavLeaf = {
 // files, cross-checks, rendering) append here as they are built.
 const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   { to: "/", label: "appShell.nav.home", icon: IconSitemap },
-  { to: "/catalog-files", label: "appShell.nav.catalogFiles", icon: IconFileDescription },
+  { to: catalogFilesPath, label: "appShell.nav.catalogFiles", icon: IconFileDescription },
   { to: "/cross-check", label: "appShell.nav.crossCheck", icon: IconListCheck },
   { to: "/render", label: "appShell.nav.render", icon: IconTopologyStar3 },
   // Visible to everyone: non-admins get the read-only list, ADMINs the editor (the page branches).
@@ -266,10 +267,10 @@ export default function App() {
         <Route element={<RequireAuth />}>
           <Route element={<Shell />}>
             <Route index element={<Hierarchy />} />
-            <Route path="catalog-files" element={<CatalogFiles />} />
-            <Route path="catalog-files/new" element={<CreateCatalogFile />} />
-            <Route path="catalog-files/import" element={<ImportCatalogFiles />} />
-            <Route path="catalog-files/:id/edit" element={<EditCatalogFile />} />
+            <Route path="files" element={<CatalogFiles />} />
+            <Route path="files/new" element={<CreateCatalogFile />} />
+            <Route path="files/import" element={<ImportCatalogFiles />} />
+            <Route path="files/:id/edit" element={<EditCatalogFile />} />
             <Route path="cross-check" element={<CrossCheck />} />
             <Route path="render" element={<RenderGraph />} />
             <Route path="namespaces" element={<Namespaces />} />

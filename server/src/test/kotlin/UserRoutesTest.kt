@@ -271,7 +271,7 @@ class UserRoutesTest {
         val file = creatorClient.createCatalogFile(componentFile(uniqueEntityName("legacy")))
 
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/users/${created.id}").status)
-        val fetched = client.get("/api/v1/catalog-files/${file.id}")
+        val fetched = client.get("$CATALOG_FILES_PATH/${file.id}")
             .body<ch.nokillswit.catalog.CatalogFileResponse>()
         assertEquals("Departing Creator", fetched.creatorName)
         assertTrue(fetched.creatorDeleted)

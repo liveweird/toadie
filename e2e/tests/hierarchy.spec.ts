@@ -1,4 +1,4 @@
-import { expect, login, pickLifecycle, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickLifecycle, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
 
 // The Hierarchy journey in this run's throwaway namespace (parallel-safe): seed a
 // System ⊃ Component ⊃ subcomponent chain through the editor, verify the nesting and
@@ -16,13 +16,13 @@ test("the hierarchy nests the containment chain and carries the file operations"
   const create = async () =>
     Promise.all([
       page.waitForResponse(
-        (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+        (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
       ),
       page.getByRole("button", { name: "Create" }).click(),
     ]);
 
   // The System (type is optional for Systems — left blank).
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("combobox", { name: "Kind" }).click();
   await page.getByRole("option", { name: "System", exact: true }).click();
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(sys);
@@ -31,7 +31,7 @@ test("the hierarchy nests the containment chain and carries the file operations"
   await create();
 
   // A Component in the System.
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(core);
   await pickNamespace(page, ns);
   await pickType(page, "service");
@@ -42,7 +42,7 @@ test("the hierarchy nests the containment chain and carries the file operations"
 
   // A subcomponent of that Component (also in the System — most-specific placement
   // must nest it under the parent component, not directly under the system).
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(worker);
   await pickNamespace(page, ns);
   await pickType(page, "service");
@@ -55,9 +55,25 @@ test("the hierarchy nests the containment chain and carries the file operations"
   // The tree at /, scoped to the run namespace: all three visible, nested.
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Hierarchy" })).toBeVisible();
+  // The Files list's filter panel (collapsed by default) scopes the tree to the run namespace.
+  await openFilters(page);
   await pickNamespace(page, ns);
   await expect(page.getByText(sys, { exact: true })).toBeVisible();
   await expect(page.getByText(core, { exact: true })).toBeVisible();
+  await expect(page.getByText(worker, { exact: true })).toBeVisible();
+
+  // The Files list's filters narrow which files are EXPANDED: with Type "service" the
+  // components stay AND the type-less System stays too — it is their referenced container.
+  await pickType(page, "service");
+  await expect(page.getByText(worker, { exact: true })).toBeVisible();
+  await expect(page.getByText(sys, { exact: true })).toBeVisible();
+  // No service-typed file is experimental, so the tree empties — the System goes with its
+  // referrers; clearing the filters restores the chain.
+  await pickLifecycle(page, "experimental");
+  await expect(page.getByText(core, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(sys, { exact: true })).toHaveCount(0);
+  await page.getByLabel("Clear lifecycle filter").click();
+  await page.getByLabel("Clear type filter").click();
   await expect(page.getByText(worker, { exact: true })).toBeVisible();
 
   // Collapsing the parent COMPONENT hides only the subcomponent…
@@ -87,7 +103,7 @@ test("the hierarchy nests the containment chain and carries the file operations"
   await expect(page.getByRole("dialog")).toContainText(sys);
   await Promise.all([
     page.waitForResponse(
-      (r) => /\/api\/v1\/catalog-files\/\d+$/.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
+      (r) => /\/api\/v1\/files\/\d+$/.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
     ),
     page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
   ]);
@@ -101,7 +117,7 @@ test("the hierarchy nests the containment chain and carries the file operations"
     await expect(page.getByRole("dialog")).toContainText(name);
     await Promise.all([
       page.waitForResponse(
-        (r) => /\/api\/v1\/catalog-files\/\d+$/.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
+        (r) => /\/api\/v1\/files\/\d+$/.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
       ),
       page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
     ]);

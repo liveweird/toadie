@@ -70,7 +70,7 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   // category's tags offered under its name for a Component document.
   await login(page);
   const name = uniqueText("e2e-tag-comp");
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
   await pickType(page, "service");
   await pickLifecycle(page, "production");
@@ -82,7 +82,7 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   await expect(page.getByLabel("YAML preview")).toContainText(`- ${tagA}`);
   const [created] = await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
@@ -95,7 +95,7 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   await Promise.all([
     page.waitForResponse(
       (r) =>
-        r.url().endsWith(`/api/v1/catalog-files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
+        r.url().endsWith(`/api/v1/files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
     ),
     page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
   ]);

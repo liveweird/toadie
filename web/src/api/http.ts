@@ -171,12 +171,22 @@ export async function voidRequest(input: string, init?: RequestInit): Promise<vo
  * The query-string builder behind the list/export wrappers (`listUsers`, `listCatalogFiles`,
  * `exportCatalogFiles`). Skips null/undefined/"" (an absent or cleared filter); `false` and
  * `0` ARE sent — a param that must be OMITTED rather than sent as false/empty is passed as
- * `value || undefined` at the call site (the pages' `filter || undefined` idiom).
+ * `value || undefined` at the call site (the pages' `filter || undefined` idiom). An array
+ * value appends one repeated key per non-empty entry (the server's documented IN idiom —
+ * `labelValue`); an empty array is an absent filter.
  */
-export function buildQuery(params: Record<string, string | number | boolean | null | undefined>): string {
+export function buildQuery(
+  params: Record<string, string | number | boolean | readonly string[] | null | undefined>,
+): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value == null || value === "") continue;
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (entry !== "") search.append(key, entry);
+      }
+      continue;
+    }
     search.set(key, String(value));
   }
   return search.toString();

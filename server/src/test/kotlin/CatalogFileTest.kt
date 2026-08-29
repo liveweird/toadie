@@ -35,7 +35,7 @@ class CatalogFileTest {
         val client = seededClient("cataloguser")
         val name = uniqueEntityName("svc")
 
-        val created = client.postJson("/api/v1/catalog-files", componentFile(name, title = "My Service"))
+        val created = client.postJson(CATALOG_FILES_PATH, componentFile(name, title = "My Service"))
         assertEquals(HttpStatusCode.Created, created.status)
         val body = created.body<CatalogFileResponse>()
         assertEquals(name, body.metadata.name)
@@ -46,13 +46,13 @@ class CatalogFileTest {
         assertFalse(body.creatorDeleted)
         assertTrue(body.createdAt > 0)
         assertEquals(body.createdAt, body.updatedAt)
-        assertEquals("/api/v1/catalog-files/${body.id}", created.headers[HttpHeaders.Location])
+        assertEquals("$CATALOG_FILES_PATH/${body.id}", created.headers[HttpHeaders.Location])
 
-        val fetched = client.get("/api/v1/catalog-files/${body.id}")
+        val fetched = client.get("$CATALOG_FILES_PATH/${body.id}")
         assertEquals(HttpStatusCode.OK, fetched.status)
         assertEquals(name, fetched.body<CatalogFileResponse>().metadata.name)
 
-        val listed = client.get("/api/v1/catalog-files?name=$name").body<CatalogFilePageResponse>()
+        val listed = client.get("$CATALOG_FILES_PATH?name=$name").body<CatalogFilePageResponse>()
         assertEquals(1L, listed.total)
         val row = listed.items.single()
         assertEquals(body.id, row.id)
@@ -60,15 +60,15 @@ class CatalogFileTest {
         assertEquals("production", row.lifecycle)
         assertEquals(body.creatorName, row.creatorName)
 
-        val updated = client.putJson("/api/v1/catalog-files/${body.id}", componentFile(name, title = "Renamed", lifecycle = "deprecated"))
+        val updated = client.putJson("$CATALOG_FILES_PATH/${body.id}", componentFile(name, title = "Renamed", lifecycle = "deprecated"))
         assertEquals(HttpStatusCode.NoContent, updated.status)
-        val reFetched = client.get("/api/v1/catalog-files/${body.id}").body<CatalogFileResponse>()
+        val reFetched = client.get("$CATALOG_FILES_PATH/${body.id}").body<CatalogFileResponse>()
         assertEquals("Renamed", reFetched.metadata.title)
         assertEquals("deprecated", reFetched.spec.lifecycle)
         assertTrue(reFetched.updatedAt >= reFetched.createdAt)
 
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/${body.id}").status)
-        assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/catalog-files/${body.id}").status)
+        assertEquals(HttpStatusCode.NoContent, client.delete("$CATALOG_FILES_PATH/${body.id}").status)
+        assertEquals(HttpStatusCode.NotFound, client.get("$CATALOG_FILES_PATH/${body.id}").status)
     }
 
     @Test
@@ -120,13 +120,13 @@ class CatalogFileTest {
         for (file in files) {
             val created = client.createCatalogFile(file)
             assertEquals(file.kind, created.kind)
-            val fetched = client.get("/api/v1/catalog-files/${created.id}").body<CatalogFileResponse>()
+            val fetched = client.get("$CATALOG_FILES_PATH/${created.id}").body<CatalogFileResponse>()
             assertEquals(file.spec, fetched.spec, "spec must round-trip for kind ${file.kind}")
             assertEquals(file.kind, fetched.kind)
         }
         // Group children and User memberOf survive as PRESENT-and-empty, never null.
         val group = files.first { it.kind == "Group" }
-        val fetchedGroup = client.get("/api/v1/catalog-files?namespace=$ns&kind=group&name=${group.metadata.name}")
+        val fetchedGroup = client.get("$CATALOG_FILES_PATH?namespace=$ns&kind=group&name=${group.metadata.name}")
             .body<CatalogFilePageResponse>()
         assertEquals(listOf(group.metadata.name), fetchedGroup.items.map { it.name })
     }
@@ -136,7 +136,7 @@ class CatalogFileTest {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
 
-        suspend fun status(file: CatalogFile): HttpStatusCode = client.postJson("/api/v1/catalog-files", file).status
+        suspend fun status(file: CatalogFile): HttpStatusCode = client.postJson(CATALOG_FILES_PATH, file).status
 
         val n = { uniqueEntityName("bad") }
         // Unknown kind.
@@ -166,7 +166,7 @@ class CatalogFileTest {
             ),
         )
         // A case-variant kind is canonicalized, not rejected.
-        val created = client.postJson("/api/v1/catalog-files", groupFile(uniqueEntityName("cased")).copy(kind = "gRoUp"))
+        val created = client.postJson(CATALOG_FILES_PATH, groupFile(uniqueEntityName("cased")).copy(kind = "gRoUp"))
         assertEquals(HttpStatusCode.Created, created.status)
         assertEquals("Group", created.body<CatalogFileResponse>().kind)
     }
@@ -180,14 +180,14 @@ class CatalogFileTest {
         val id = client.createCatalogFile(componentFile(name, namespace = ns)).id
 
         // Component → API (a full replace with a new kind).
-        val flipped = client.putJson("/api/v1/catalog-files/$id", apiFile(name, namespace = ns))
+        val flipped = client.putJson("$CATALOG_FILES_PATH/$id", apiFile(name, namespace = ns))
         assertEquals(HttpStatusCode.NoContent, flipped.status)
-        assertEquals("API", client.get("/api/v1/catalog-files/$id").body<CatalogFileResponse>().kind)
+        assertEquals("API", client.get("$CATALOG_FILES_PATH/$id").body<CatalogFileResponse>().kind)
 
         // Same name, kind Group — a DIFFERENT identity, so it coexists…
         val groupId = client.createCatalogFile(groupFile(name, namespace = ns)).id
         // …but flipping the group to kind API collides with the flipped file's identity.
-        val collision = client.putJson("/api/v1/catalog-files/$groupId", apiFile(name, namespace = ns))
+        val collision = client.putJson("$CATALOG_FILES_PATH/$groupId", apiFile(name, namespace = ns))
         assertEquals(HttpStatusCode.Conflict, collision.status)
     }
 
@@ -199,11 +199,11 @@ class CatalogFileTest {
         client.createCatalogFile(componentFile(uniqueEntityName("c"), namespace = ns))
         client.createCatalogFile(groupFile(uniqueEntityName("g"), namespace = ns))
 
-        val groups = client.get("/api/v1/catalog-files?namespace=$ns&kind=GROUP").body<CatalogFilePageResponse>()
+        val groups = client.get("$CATALOG_FILES_PATH?namespace=$ns&kind=GROUP").body<CatalogFilePageResponse>()
         assertEquals(listOf("Group"), groups.items.map { it.kind })
-        val all = client.get("/api/v1/catalog-files?namespace=$ns&sort=kind").body<CatalogFilePageResponse>()
+        val all = client.get("$CATALOG_FILES_PATH?namespace=$ns&sort=kind").body<CatalogFilePageResponse>()
         assertEquals(listOf("Component", "Group"), all.items.map { it.kind })
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?kind=Gadget").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?kind=Gadget").status)
     }
 
     @Test
@@ -223,22 +223,111 @@ class CatalogFileTest {
         client.createCatalogFile(componentFile("$prefix-c", namespace = ns))
 
         // Exact membership: only the file carrying tagB; the item ships its full tag list.
-        val byTagB = client.get("/api/v1/catalog-files?namespace=$ns&tag=$tagB&sort=name")
+        val byTagB = client.get("$CATALOG_FILES_PATH?namespace=$ns&tag=$tagB&sort=name")
             .body<CatalogFilePageResponse>()
         assertEquals(listOf("$prefix-b"), byTagB.items.map { it.name })
         assertEquals(listOf(tagA, tagB), byTagB.items.single().tags)
 
         // Case-folded (tags are stored lowercase); a shared tag matches both carriers.
-        val byTagA = client.get("/api/v1/catalog-files?namespace=$ns&tag=${tagA.uppercase()}&sort=name")
+        val byTagA = client.get("$CATALOG_FILES_PATH?namespace=$ns&tag=${tagA.uppercase()}&sort=name")
             .body<CatalogFilePageResponse>()
         assertEquals(listOf("$prefix-a", "$prefix-b"), byTagA.items.map { it.name })
 
         // An unregistered-nowhere tag matches nothing; blank is ignored (all three rows).
-        val none = client.get("/api/v1/catalog-files?namespace=$ns&tag=${uniqueTag("tf-none")}")
+        val none = client.get("$CATALOG_FILES_PATH?namespace=$ns&tag=${uniqueTag("tf-none")}")
             .body<CatalogFilePageResponse>()
         assertEquals(0, none.items.size)
-        val blank = client.get("/api/v1/catalog-files?namespace=$ns&tag=").body<CatalogFilePageResponse>()
+        val blank = client.get("$CATALOG_FILES_PATH?namespace=$ns&tag=").body<CatalogFilePageResponse>()
         assertEquals(3, blank.items.size)
+    }
+
+    @Test
+    fun `the list filters by type and lifecycle, case-folded, absent fields never matching`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("cataloguser")
+        val ns = uniqueNamespace("tlfilter")
+        val svc = uniqueEntityName("svc")
+        val lib = uniqueEntityName("lib")
+        val grp = uniqueEntityName("grp")
+        client.createCatalogFile(componentFile(svc, namespace = ns, type = "service", lifecycle = "production"))
+        client.createCatalogFile(componentFile(lib, namespace = ns, type = "library", lifecycle = "experimental"))
+        client.createCatalogFile(groupFile(grp, namespace = ns)) // type "team", NO lifecycle
+
+        suspend fun names(query: String): List<String> =
+            client.get("$CATALOG_FILES_PATH?namespace=$ns&sort=name&$query")
+                .body<CatalogFilePageResponse>().items.map { it.name }
+
+        assertEquals(listOf(svc), names("type=SERVICE"))
+        assertEquals(listOf(grp), names("type=team"))
+        assertEquals(listOf(lib), names("lifecycle=EXPERIMENTAL"))
+        // No file carries this lifecycle — the group's ABSENT lifecycle matches nothing.
+        assertEquals(emptyList(), names("lifecycle=deprecated"))
+        // Blank filter values mean "no filter".
+        assertEquals(3, names("type=&lifecycle=").size)
+    }
+
+    @Test
+    fun `the owner filter resolves every stored spelling to the picked entity`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("cataloguser")
+        val ns = uniqueNamespace("ownfa")
+        val otherNs = uniqueNamespace("ownfb")
+        client.createCatalogFile(groupFile("owners-team", namespace = ns))
+        client.createCatalogFile(groupFile("owners-team", namespace = otherNs))
+        client.createCatalogFile(userFile("someone", namespace = ns))
+        val p = uniqueEntityName("ow")
+        // The four spellings that all RESOLVE to group:$ns/owners-team…
+        client.createCatalogFile(componentFile("$p-bare", namespace = ns, owner = "owners-team"))
+        client.createCatalogFile(componentFile("$p-nsname", namespace = ns, owner = "$ns/owners-team"))
+        client.createCatalogFile(componentFile("$p-kindname", namespace = ns, owner = "group:owners-team"))
+        client.createCatalogFile(componentFile("$p-full", namespace = ns, owner = "group:$ns/owners-team"))
+        // …the SAME bare spelling in another namespace resolves to a DIFFERENT entity…
+        client.createCatalogFile(componentFile("$p-elsewhere", namespace = otherNs, owner = "owners-team"))
+        // …and a user owner is its own identity.
+        client.createCatalogFile(componentFile("$p-usr", namespace = ns, owner = "user:someone"))
+        client.createCatalogFile(componentFile("$p-usrfull", namespace = ns, owner = "user:$ns/someone"))
+
+        suspend fun names(query: String): List<String> =
+            client.get("$CATALOG_FILES_PATH?sort=name&$query").body<CatalogFilePageResponse>().items.map { it.name }
+
+        val spellings = listOf("$p-bare", "$p-full", "$p-kindname", "$p-nsname")
+        assertEquals(spellings, names("owner=group:$ns/owners-team"))
+        // Case-insensitive, and the param itself may use a short form (kind defaults to group).
+        assertEquals(spellings, names("owner=GROUP:${ns.uppercase()}/OWNERS-TEAM"))
+        assertEquals(listOf("$p-elsewhere"), names("owner=$otherNs/owners-team"))
+        assertEquals(listOf("$p-usr", "$p-usrfull"), names("owner=user:$ns/someone"))
+        // Unparsable reference → 400.
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?owner=a:b:c").status)
+    }
+
+    @Test
+    fun `the label filters check key presence and any-of values`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("cataloguser")
+        val ns = uniqueNamespace("lblf")
+        val key = uniqueLabel("lblf", values = listOf("v1", "v2"))
+        val p = uniqueEntityName("lf")
+        suspend fun labeled(name: String, value: String?) = client.createCatalogFile(
+            componentFile(name, namespace = ns).let {
+                it.copy(metadata = it.metadata.copy(labels = value?.let { v -> mapOf(key to v) } ?: emptyMap()))
+            },
+        )
+        labeled("$p-v1", "v1")
+        labeled("$p-v2", "v2")
+        labeled("$p-none", null)
+
+        suspend fun names(query: String): List<String> =
+            client.get("$CATALOG_FILES_PATH?namespace=$ns&sort=name&$query")
+                .body<CatalogFilePageResponse>().items.map { it.name }
+
+        assertEquals(listOf("$p-v1", "$p-v2"), names("label=$key"))
+        assertEquals(listOf("$p-v1"), names("label=$key&labelValue=v1"))
+        // Repetition is the documented IN idiom on labelValue, case-folded.
+        assertEquals(listOf("$p-v1", "$p-v2"), names("label=$key&labelValue=V1&labelValue=v2"))
+        assertEquals(emptyList(), names("label=$key&labelValue=v3"))
+        // labelValue without label → 400; a repeated label key stays the scalar-param 400.
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?labelValue=v1").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?label=a&label=b").status)
     }
 
     @Test
@@ -253,7 +342,7 @@ class CatalogFileTest {
         // Every referenced target must be STORED (fixed names in the SHARED team-a/default
         // namespaces — ensured idempotently, a 409 from an earlier run is fine).
         suspend fun ensure(target: CatalogFile) {
-            val status = client.postJson("/api/v1/catalog-files", target).status
+            val status = client.postJson(CATALOG_FILES_PATH, target).status
             assertTrue(
                 status == HttpStatusCode.Created || status == HttpStatusCode.Conflict,
                 "ensuring ${target.metadata.name}: $status",
@@ -308,14 +397,14 @@ class CatalogFileTest {
     }
 
     private suspend fun jsonClientBody(client: HttpClient, id: UInt): CatalogFileResponse =
-        client.get("/api/v1/catalog-files/$id").body()
+        client.get("$CATALOG_FILES_PATH/$id").body()
 
     @Test
     fun `create and update reject payloads violating the descriptor format`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
 
-        suspend fun createStatus(file: CatalogFile): HttpStatusCode = client.postJson("/api/v1/catalog-files", file).status
+        suspend fun createStatus(file: CatalogFile): HttpStatusCode = client.postJson(CATALOG_FILES_PATH, file).status
 
         val ok = uniqueEntityName("valid")
         // metadata.name grammar
@@ -387,7 +476,7 @@ class CatalogFileTest {
 
         // The same validation guards PUT.
         val existing = client.createCatalogFile(componentFile(uniqueEntityName("put")))
-        val put = client.putJson("/api/v1/catalog-files/${existing.id}", componentFile("has space"))
+        val put = client.putJson("$CATALOG_FILES_PATH/${existing.id}", componentFile("has space"))
         assertEquals(HttpStatusCode.BadRequest, put.status)
     }
 
@@ -400,21 +489,21 @@ class CatalogFileTest {
         val first = client.createCatalogFile(componentFile(name))
 
         // Case-variant duplicate in the same namespace → 409 via the partial unique index.
-        val duplicate = client.postJson("/api/v1/catalog-files", componentFile(name.lowercase()))
+        val duplicate = client.postJson(CATALOG_FILES_PATH, componentFile(name.lowercase()))
         assertEquals(HttpStatusCode.Conflict, duplicate.status)
 
         // Same name in another namespace is a different identity.
         TestNamespaces.ensure("team-b")
-        val otherNamespace = client.postJson("/api/v1/catalog-files", componentFile(name, namespace = "team-b"))
+        val otherNamespace = client.postJson(CATALOG_FILES_PATH, componentFile(name, namespace = "team-b"))
         assertEquals(HttpStatusCode.Created, otherNamespace.status)
 
         // Renaming onto an active identity conflicts too.
-        val renamed = client.putJson("/api/v1/catalog-files/${otherNamespace.body<CatalogFileResponse>().id}", componentFile(name))
+        val renamed = client.putJson("$CATALOG_FILES_PATH/${otherNamespace.body<CatalogFileResponse>().id}", componentFile(name))
         assertEquals(HttpStatusCode.Conflict, renamed.status)
 
         // Soft-deleting frees the identity for reuse.
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/${first.id}").status)
-        val reused = client.postJson("/api/v1/catalog-files", componentFile(name))
+        assertEquals(HttpStatusCode.NoContent, client.delete("$CATALOG_FILES_PATH/${first.id}").status)
+        val reused = client.postJson(CATALOG_FILES_PATH, componentFile(name))
         assertEquals(HttpStatusCode.Created, reused.status)
     }
 
@@ -450,7 +539,7 @@ class CatalogFileTest {
         try {
             TestNamespaces.replaceDocument(emptyList()) // the empty document has no default
             val response = client.postJson(
-                "/api/v1/catalog-files",
+                CATALOG_FILES_PATH,
                 componentFile(uniqueEntityName("nodflt"), namespace = ""),
             )
             assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -468,7 +557,7 @@ class CatalogFileTest {
         // Grammar-valid but not a dictionary entry → 400 on create.
         val undefined = uniqueEntityName("ghost")
         val create = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             componentFile(uniqueEntityName("nsc"), namespace = undefined),
         )
         assertEquals(HttpStatusCode.BadRequest, create.status)
@@ -480,13 +569,13 @@ class CatalogFileTest {
         val created = client.createCatalogFile(componentFile(uniqueEntityName("nsu"), namespace = ns))
         TestNamespaces.remove(ns)
         val update = client.putJson(
-            "/api/v1/catalog-files/${created.id}",
+            "$CATALOG_FILES_PATH/${created.id}",
             componentFile(created.metadata.name, namespace = ns),
         )
         assertEquals(HttpStatusCode.BadRequest, update.status)
         TestNamespaces.ensure(ns)
         val unblocked = client.putJson(
-            "/api/v1/catalog-files/${created.id}",
+            "$CATALOG_FILES_PATH/${created.id}",
             componentFile(created.metadata.name, namespace = ns),
         )
         assertEquals(HttpStatusCode.NoContent, unblocked.status)
@@ -502,14 +591,14 @@ class CatalogFileTest {
 
         // Grammar-valid but unregistered key → 400.
         val ghost = uniqueEntityName("lblghost")
-        val unknown = client.postJson("/api/v1/catalog-files", labeled(uniqueEntityName("lku"), mapOf(ghost to "x")))
+        val unknown = client.postJson(CATALOG_FILES_PATH, labeled(uniqueEntityName("lku"), mapOf(ghost to "x")))
         assertEquals(HttpStatusCode.BadRequest, unknown.status)
         assertTrue(unknown.body<ProblemDetail>().detail!!.contains("not a defined label"))
 
         // Registered, but for another kind → 400.
         val apiOnly = uniqueLabel("lblapi", values = listOf("backend"), kinds = listOf("API"))
         val wrongKind = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             labeled(uniqueEntityName("lkk"), mapOf(apiOnly to "backend")),
         )
         assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
@@ -518,7 +607,7 @@ class CatalogFileTest {
         // Registered for the kind, but a value outside the closed list → 400.
         val lbl = uniqueLabel("lblok", values = listOf("backend", "frontend"), kinds = listOf("Component"))
         val wrongValue = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             labeled(uniqueEntityName("lkv"), mapOf(lbl to "database")),
         )
         assertEquals(HttpStatusCode.BadRequest, wrongValue.status)
@@ -541,11 +630,11 @@ class CatalogFileTest {
         TestLabels.remove(lbl)
         assertEquals(
             HttpStatusCode.BadRequest,
-            client.putJson("/api/v1/catalog-files/${created.id}", file).status,
+            client.putJson("$CATALOG_FILES_PATH/${created.id}", file).status,
             "a stored file whose label was removed from the registry must block on save",
         )
         TestLabels.ensure(lbl, listOf("backend"), listOf("Component"))
-        assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", file).status)
+        assertEquals(HttpStatusCode.NoContent, client.putJson("$CATALOG_FILES_PATH/${created.id}", file).status)
     }
 
     @Test
@@ -558,14 +647,14 @@ class CatalogFileTest {
 
         // Grammar-valid but unregistered tag → 400.
         val ghost = uniqueTag("tagghost")
-        val unknown = client.postJson("/api/v1/catalog-files", tagged(uniqueEntityName("tgu"), listOf(ghost)))
+        val unknown = client.postJson(CATALOG_FILES_PATH, tagged(uniqueEntityName("tgu"), listOf(ghost)))
         assertEquals(HttpStatusCode.BadRequest, unknown.status)
         assertTrue(unknown.body<ProblemDetail>().detail!!.contains("is not a defined tag"))
 
         // Registered, but the category is for another kind → 400 naming tag AND category.
         val apiTag = uniqueTag("tagapi")
         val apiCategory = uniqueTagCategory("tagcatapi", tags = listOf(apiTag), kinds = listOf("API"))
-        val wrongKind = client.postJson("/api/v1/catalog-files", tagged(uniqueEntityName("tgk"), listOf(apiTag)))
+        val wrongKind = client.postJson(CATALOG_FILES_PATH, tagged(uniqueEntityName("tgk"), listOf(apiTag)))
         assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
         assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("category '$apiCategory'"))
         assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("cannot be applied to kind"))
@@ -590,11 +679,11 @@ class CatalogFileTest {
         TestTagCategories.remove(category)
         assertEquals(
             HttpStatusCode.BadRequest,
-            client.putJson("/api/v1/catalog-files/${created.id}", file).status,
+            client.putJson("$CATALOG_FILES_PATH/${created.id}", file).status,
             "a stored file whose tag category was removed must block on save",
         )
         TestTagCategories.ensure(category, listOf(t), listOf("Component"))
-        assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", file).status)
+        assertEquals(HttpStatusCode.NoContent, client.putJson("$CATALOG_FILES_PATH/${created.id}", file).status)
     }
 
     @Test
@@ -605,7 +694,7 @@ class CatalogFileTest {
 
         // MISSING: a grammar-valid owner nobody stores.
         val ghostOwner = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             componentFile(uniqueEntityName("rm"), namespace = ns, owner = uniqueEntityName("ghost-team")),
         )
         assertEquals(HttpStatusCode.BadRequest, ghostOwner.status)
@@ -615,7 +704,7 @@ class CatalogFileTest {
         val comp = uniqueEntityName("rc")
         client.createCatalogFile(componentFile(comp, namespace = ns))
         val wrongKind = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             componentFile(uniqueEntityName("rw"), namespace = ns, owner = "component:$ns/$comp"),
         )
         assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
@@ -623,7 +712,7 @@ class CatalogFileTest {
 
         // KIND_REQUIRED: a kind-less dependsOn entry, even when a component of that name exists.
         val kindless = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             componentFile(uniqueEntityName("rk"), namespace = ns).let {
                 it.copy(spec = it.spec.copy(dependsOn = listOf(comp)))
             },
@@ -633,7 +722,7 @@ class CatalogFileTest {
 
         // Violations AGGREGATE into one detail.
         val both = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             componentFile(uniqueEntityName("ra"), namespace = ns, owner = uniqueEntityName("nope")).let {
                 it.copy(spec = it.spec.copy(dependsOn = listOf(comp)))
             },
@@ -646,7 +735,7 @@ class CatalogFileTest {
         val person = uniqueEntityName("person")
         client.createCatalogFile(userFile(person, namespace = ns))
         val userOwned = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             componentFile(uniqueEntityName("ru"), namespace = ns, owner = "user:$ns/$person"),
         )
         assertEquals(HttpStatusCode.Created, userOwned.status)
@@ -654,7 +743,7 @@ class CatalogFileTest {
         // SELF_REFERENCE on create: the self message, not MISSING (the identity isn't stored yet).
         val selfName = uniqueEntityName("rs")
         val selfCreate = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             componentFile(selfName, namespace = ns).let {
                 it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$selfName"))
             },
@@ -674,14 +763,14 @@ class CatalogFileTest {
         val created = client.createCatalogFile(file)
 
         // Deletion is ALLOWED (the ref goes dangling); the referrer blocks on its next save.
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/$teamId").status)
+        assertEquals(HttpStatusCode.NoContent, client.delete("$CATALOG_FILES_PATH/$teamId").status)
         assertEquals(
             HttpStatusCode.BadRequest,
-            client.putJson("/api/v1/catalog-files/${created.id}", file).status,
+            client.putJson("$CATALOG_FILES_PATH/${created.id}", file).status,
             "a stored file whose reference target was deleted must block on save",
         )
         client.createCatalogFile(groupFile(team, namespace = ns))
-        assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/catalog-files/${created.id}", file).status)
+        assertEquals(HttpStatusCode.NoContent, client.putJson("$CATALOG_FILES_PATH/${created.id}", file).status)
     }
 
     @Test
@@ -697,7 +786,7 @@ class CatalogFileTest {
             val selfRef = componentFile(name, namespace = ns).let {
                 it.copy(spec = it.spec.copy(subcomponentOf = ref))
             }
-            val response = client.putJson("/api/v1/catalog-files/${created.id}", selfRef)
+            val response = client.putJson("$CATALOG_FILES_PATH/${created.id}", selfRef)
             assertEquals(HttpStatusCode.BadRequest, response.status, "self-reference '$ref' must 400")
             assertTrue(response.body<ProblemDetail>().detail!!.contains("must not point at the entity itself"))
         }
@@ -713,22 +802,22 @@ class CatalogFileTest {
         client.createCatalogFile(componentFile("$prefix-b", namespace = "ns-two"))
         client.createCatalogFile(componentFile("$prefix-c", namespace = "ns-one"))
 
-        val all = client.get("/api/v1/catalog-files?name=$prefix&sort=name").body<CatalogFilePageResponse>()
+        val all = client.get("$CATALOG_FILES_PATH?name=$prefix&sort=name").body<CatalogFilePageResponse>()
         assertEquals(3L, all.total)
         assertEquals(listOf("$prefix-a", "$prefix-b", "$prefix-c"), all.items.map { it.name })
 
         // The namespace filter is exact and case-insensitive (stored lowercase, query folded).
-        val nsOne = client.get("/api/v1/catalog-files?name=$prefix&namespace=NS-ONE&sort=name")
+        val nsOne = client.get("$CATALOG_FILES_PATH?name=$prefix&namespace=NS-ONE&sort=name")
             .body<CatalogFilePageResponse>()
         assertEquals(listOf("$prefix-a", "$prefix-c"), nsOne.items.map { it.name })
 
-        val desc = client.get("/api/v1/catalog-files?name=$prefix&sort=-name&page=1&pageSize=2")
+        val desc = client.get("$CATALOG_FILES_PATH?name=$prefix&sort=-name&page=1&pageSize=2")
             .body<CatalogFilePageResponse>()
         assertEquals(3L, desc.total)
         assertEquals(1, desc.page)
         assertEquals(2, desc.pageSize)
         assertEquals(listOf("$prefix-c", "$prefix-b"), desc.items.map { it.name })
-        val page2 = client.get("/api/v1/catalog-files?name=$prefix&sort=-name&page=2&pageSize=2")
+        val page2 = client.get("$CATALOG_FILES_PATH?name=$prefix&sort=-name&page=2&pageSize=2")
             .body<CatalogFilePageResponse>()
         assertEquals(listOf("$prefix-a"), page2.items.map { it.name })
     }
@@ -742,7 +831,7 @@ class CatalogFileTest {
         val name = "zolw-${uniqueEntityName("dia")}"
         client.createCatalogFile(componentFile(name))
 
-        val page = client.get("/api/v1/catalog-files") {
+        val page = client.get(CATALOG_FILES_PATH) {
             url.parameters.append("name", name.replace("zolw", "żółw"))
         }.body<CatalogFilePageResponse>()
         assertEquals(1L, page.total)
@@ -754,13 +843,13 @@ class CatalogFileTest {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
 
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?page=0").status)
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?page=abc").status)
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?pageSize=0").status)
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?pageSize=101").status)
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?pageSize=abc").status)
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?sort=owner").status)
-        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/catalog-files?sort=,name").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?page=0").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?page=abc").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?pageSize=0").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?pageSize=101").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?pageSize=abc").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?sort=owner").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?sort=,name").status)
     }
 
     @Test
@@ -770,14 +859,14 @@ class CatalogFileTest {
         val name = uniqueEntityName("gone")
         val created = client.createCatalogFile(componentFile(name))
 
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/catalog-files/${created.id}").status)
+        assertEquals(HttpStatusCode.NoContent, client.delete("$CATALOG_FILES_PATH/${created.id}").status)
 
-        assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/catalog-files/${created.id}").status)
-        val put = client.putJson("/api/v1/catalog-files/${created.id}", componentFile(name))
+        assertEquals(HttpStatusCode.NotFound, client.get("$CATALOG_FILES_PATH/${created.id}").status)
+        val put = client.putJson("$CATALOG_FILES_PATH/${created.id}", componentFile(name))
         assertEquals(HttpStatusCode.NotFound, put.status)
         // Idempotent: a second delete finds no active row → 404.
-        assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/catalog-files/${created.id}").status)
-        val page = client.get("/api/v1/catalog-files?name=$name").body<CatalogFilePageResponse>()
+        assertEquals(HttpStatusCode.NotFound, client.delete("$CATALOG_FILES_PATH/${created.id}").status)
+        val page = client.get("$CATALOG_FILES_PATH?name=$name").body<CatalogFilePageResponse>()
         assertEquals(0L, page.total)
         assertTrue(page.items.isEmpty())
     }
@@ -786,9 +875,9 @@ class CatalogFileTest {
     fun `update and delete of a non-existent file return 404`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")
-        val put = client.putJson("/api/v1/catalog-files/999999", componentFile(uniqueEntityName("ghost")))
+        val put = client.putJson("$CATALOG_FILES_PATH/999999", componentFile(uniqueEntityName("ghost")))
         assertEquals(HttpStatusCode.NotFound, put.status)
-        assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/catalog-files/999999").status)
+        assertEquals(HttpStatusCode.NotFound, client.delete("$CATALOG_FILES_PATH/999999").status)
     }
 
     @Test
@@ -796,11 +885,11 @@ class CatalogFileTest {
         usePostgresTestcontainer()
         val client = jsonClient()
         val endpoints = listOf(
-            HttpMethod.Get to "/api/v1/catalog-files",
-            HttpMethod.Post to "/api/v1/catalog-files",
-            HttpMethod.Get to "/api/v1/catalog-files/1",
-            HttpMethod.Put to "/api/v1/catalog-files/1",
-            HttpMethod.Delete to "/api/v1/catalog-files/1",
+            HttpMethod.Get to CATALOG_FILES_PATH,
+            HttpMethod.Post to CATALOG_FILES_PATH,
+            HttpMethod.Get to "$CATALOG_FILES_PATH/1",
+            HttpMethod.Put to "$CATALOG_FILES_PATH/1",
+            HttpMethod.Delete to "$CATALOG_FILES_PATH/1",
         )
         for ((verb, path) in endpoints) {
             val response: HttpResponse = client.request(path) { method = verb }
@@ -822,10 +911,10 @@ class CatalogFileTest {
         TestUsers.softDelete(creatorId)
 
         val reader = seededClient("reader")
-        val fetched = reader.get("/api/v1/catalog-files/${created.id}").body<CatalogFileResponse>()
+        val fetched = reader.get("$CATALOG_FILES_PATH/${created.id}").body<CatalogFileResponse>()
         assertEquals("Casey Creator", fetched.creatorName)
         assertTrue(fetched.creatorDeleted)
-        val row = reader.get("/api/v1/catalog-files?name=$name").body<CatalogFilePageResponse>().items.single()
+        val row = reader.get("$CATALOG_FILES_PATH?name=$name").body<CatalogFilePageResponse>().items.single()
         assertTrue(row.creatorDeleted)
     }
 
@@ -857,7 +946,7 @@ class CatalogFileTest {
 
         // An unregistered type is a 400 naming the rule (the seeded Component list is the gate).
         val bad = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             componentFile(uniqueEntityName("typenf"), type = "never-registered-xyz"),
         )
         assertEquals(HttpStatusCode.BadRequest, bad.status)
@@ -872,7 +961,7 @@ class CatalogFileTest {
             val created = client.createCatalogFile(file)
 
             TestEntityTypes.withKindTypes("Component", seededTypes) {
-                val update = client.putJson("/api/v1/catalog-files/${created.id}", file)
+                val update = client.putJson("$CATALOG_FILES_PATH/${created.id}", file)
                 assertEquals(HttpStatusCode.BadRequest, update.status)
                 assertTrue(update.body<ProblemDetail>().detail!!.contains("not an allowed type"))
             }
@@ -889,7 +978,7 @@ class CatalogFileTest {
 
         // An unregistered key is a 400 naming the rule.
         val bad = client.postJson(
-            "/api/v1/catalog-files",
+            CATALOG_FILES_PATH,
             annotated(uniqueEntityName("annenf"), "never-registered.example.com/${uniqueEntityName("k")}"),
         )
         assertEquals(HttpStatusCode.BadRequest, bad.status)
@@ -897,7 +986,7 @@ class CatalogFileTest {
 
         // A registered key whose kinds exclude the file's kind is a 400 too.
         val groupOnly = uniqueAnnotationKey("anngrp", kinds = listOf("Group"))
-        val wrongKind = client.postJson("/api/v1/catalog-files", annotated(uniqueEntityName("annwk"), groupOnly))
+        val wrongKind = client.postJson(CATALOG_FILES_PATH, annotated(uniqueEntityName("annwk"), groupOnly))
         assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
         assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("cannot be applied to kind"))
 
@@ -907,7 +996,7 @@ class CatalogFileTest {
         val file = annotated(uniqueEntityName("annok"), allowed)
         val created = client.createCatalogFile(file)
         TestAnnotationKeys.remove(allowed)
-        val update = client.putJson("/api/v1/catalog-files/${created.id}", file)
+        val update = client.putJson("$CATALOG_FILES_PATH/${created.id}", file)
         assertEquals(HttpStatusCode.BadRequest, update.status)
         assertTrue(update.body<ProblemDetail>().detail!!.contains("not a registered annotation key"))
     }
@@ -920,7 +1009,7 @@ class CatalogFileTest {
 
             // An unregistered lifecycle is a 400 naming the rule (the V16 seed is the gate).
             val bad = client.postJson(
-                "/api/v1/catalog-files",
+                CATALOG_FILES_PATH,
                 componentFile(uniqueEntityName("lcenf"), lifecycle = "never-registered-xyz"),
             )
             assertEquals(HttpStatusCode.BadRequest, bad.status)
@@ -934,7 +1023,7 @@ class CatalogFileTest {
                 val file = componentFile(uniqueEntityName("lcok"), lifecycle = extra)
                 val created = client.createCatalogFile(file)
                 TestLifecycles.remove(extra)
-                val update = client.putJson("/api/v1/catalog-files/${created.id}", file)
+                val update = client.putJson("$CATALOG_FILES_PATH/${created.id}", file)
                 assertEquals(HttpStatusCode.BadRequest, update.status)
                 assertTrue(update.body<ProblemDetail>().detail!!.contains("not an allowed lifecycle"))
             } finally {
@@ -954,7 +1043,7 @@ class CatalogFileTest {
             )
             TestEntityTypes.withKindTypes("System", null) {
                 val withType = client.postJson(
-                    "/api/v1/catalog-files",
+                    CATALOG_FILES_PATH,
                     systemFile(uniqueEntityName("typeless"), type = "product"),
                 )
                 assertEquals(HttpStatusCode.BadRequest, withType.status)
@@ -962,7 +1051,7 @@ class CatalogFileTest {
 
                 // System's type is OPTIONAL — a type-less file saves fine without a dictionary.
                 val without = client.postJson(
-                    "/api/v1/catalog-files",
+                    CATALOG_FILES_PATH,
                     systemFile(uniqueEntityName("typeless"), type = null),
                 )
                 assertEquals(HttpStatusCode.Created, without.status)
@@ -991,7 +1080,7 @@ class CatalogFileTest {
         }
 
         // Strict default: ONE aggregated 400 naming every soft finding.
-        val strict = client.postJson("/api/v1/catalog-files", file)
+        val strict = client.postJson(CATALOG_FILES_PATH, file)
         assertEquals(HttpStatusCode.BadRequest, strict.status)
         val detail = strict.body<ProblemDetail>().detail!!
         assertTrue(detail.contains("does not resolve to a stored entity"))
@@ -1002,15 +1091,15 @@ class CatalogFileTest {
         assertTrue(detail.contains("is not an allowed lifecycle"))
 
         // Waived: the identical document stores; strict update still rejects, waived passes.
-        val created = client.postJson("/api/v1/catalog-files?allowInvalid=true", file)
+        val created = client.postJson("$CATALOG_FILES_PATH?allowInvalid=true", file)
         assertEquals(HttpStatusCode.Created, created.status)
         val id = created.body<CatalogFileResponse>().id
-        assertEquals(HttpStatusCode.BadRequest, client.putJson("/api/v1/catalog-files/$id", file).status)
+        assertEquals(HttpStatusCode.BadRequest, client.putJson("$CATALOG_FILES_PATH/$id", file).status)
         assertEquals(
             HttpStatusCode.NoContent,
-            client.putJson("/api/v1/catalog-files/$id?allowInvalid=true", file).status,
+            client.putJson("$CATALOG_FILES_PATH/$id?allowInvalid=true", file).status,
         )
-        client.delete("/api/v1/catalog-files/$id")
+        client.delete("$CATALOG_FILES_PATH/$id")
     }
 
     @Test
@@ -1020,7 +1109,7 @@ class CatalogFileTest {
 
         // Structural: a missing required spec.type is a 400 regardless of the waiver.
         val structural = componentFile(uniqueEntityName("hardstruct")).let { it.copy(spec = it.spec.copy(type = null)) }
-        val structuralResponse = client.postJson("/api/v1/catalog-files?allowInvalid=true", structural)
+        val structuralResponse = client.postJson("$CATALOG_FILES_PATH?allowInvalid=true", structural)
         assertEquals(HttpStatusCode.BadRequest, structuralResponse.status)
         assertTrue(structuralResponse.body<ProblemDetail>().detail!!.contains("spec.type is required"))
 
@@ -1029,7 +1118,7 @@ class CatalogFileTest {
             uniqueEntityName("hardns"),
             namespace = uniqueEntityName("ghostns").lowercase(),
         )
-        val namespaceResponse = client.postJson("/api/v1/catalog-files?allowInvalid=true", undefinedNamespace)
+        val namespaceResponse = client.postJson("$CATALOG_FILES_PATH?allowInvalid=true", undefinedNamespace)
         assertEquals(HttpStatusCode.BadRequest, namespaceResponse.status)
         assertTrue(namespaceResponse.body<ProblemDetail>().detail!!.contains("not a defined namespace"))
     }
@@ -1040,7 +1129,7 @@ class CatalogFileTest {
         val client = seededClient("catalogwaudit")
         withAuditCapture { capture ->
             val waived = client.postJson(
-                "/api/v1/catalog-files?allowInvalid=true",
+                "$CATALOG_FILES_PATH?allowInvalid=true",
                 componentFile(uniqueEntityName("wauditsvc"), owner = uniqueEntityName("wauditghost")),
             )
             assertEquals(HttpStatusCode.Created, waived.status)
@@ -1051,7 +1140,7 @@ class CatalogFileTest {
             assertNotNull(waivedEvent)
             assertTrue(waivedEvent.hasKeyValue("waivedFindings", 1))
 
-            val clean = client.postJson("/api/v1/catalog-files", componentFile(uniqueEntityName("wauditclean")))
+            val clean = client.postJson(CATALOG_FILES_PATH, componentFile(uniqueEntityName("wauditclean")))
             assertEquals(HttpStatusCode.Created, clean.status)
             val cleanId = clean.body<CatalogFileResponse>().id
             val cleanEvent = capture.awaitEvent {
@@ -1060,8 +1149,8 @@ class CatalogFileTest {
             assertNotNull(cleanEvent)
             assertFalse(cleanEvent.keyValuePairs.orEmpty().any { it.key == "waivedFindings" })
 
-            client.delete("/api/v1/catalog-files/$waivedId")
-            client.delete("/api/v1/catalog-files/$cleanId")
+            client.delete("$CATALOG_FILES_PATH/$waivedId")
+            client.delete("$CATALOG_FILES_PATH/$cleanId")
         }
     }
 }

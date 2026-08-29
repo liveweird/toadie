@@ -41,8 +41,8 @@ class AuditTest {
             val client = authedClient(email, "pw")
             val name = uniqueEntityName("audited")
             val fileId = client.createCatalogFile(componentFile(name)).id
-            client.putJson("/api/v1/catalog-files/$fileId", componentFile(name, title = "Edited"))
-            client.delete("/api/v1/catalog-files/$fileId")
+            client.putJson("$CATALOG_FILES_PATH/$fileId", componentFile(name, title = "Edited"))
+            client.delete("$CATALOG_FILES_PATH/$fileId")
 
 
             for (eventName in listOf("catalog_file.created", "catalog_file.updated", "catalog_file.deleted")) {

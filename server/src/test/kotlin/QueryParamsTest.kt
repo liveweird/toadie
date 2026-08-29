@@ -2,6 +2,7 @@ package ch.nokillswit
 
 import ch.nokillswit.infra.paging.optionalEnum
 import ch.nokillswit.infra.paging.optionalString
+import ch.nokillswit.infra.paging.repeatedValues
 import ch.nokillswit.infra.paging.singleValue
 import io.ktor.http.parametersOf
 import io.ktor.server.plugins.BadRequestException
@@ -34,6 +35,14 @@ class QueryParamsTest {
         val params = parametersOf("blank" to listOf("   "), "real" to listOf(" x "))
         assertNull(params.optionalString("blank"))
         assertEquals(" x ", params.optionalString("real"))
+    }
+
+    @Test
+    fun `repeatedValues collects every non-blank value and is empty when absent`() {
+        val params = parametersOf("v" to listOf("a", " ", "b"), "blank" to listOf("", "  "))
+        assertEquals(listOf("a", "b"), params.repeatedValues("v"))
+        assertEquals(emptyList(), params.repeatedValues("blank"))
+        assertEquals(emptyList(), params.repeatedValues("missing"))
     }
 
     @Test

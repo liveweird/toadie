@@ -28,7 +28,7 @@ const TWO_DOCS = [
 ].join("\n");
 
 function renderPage() {
-  return renderWithProviders(<ImportCatalogFiles />, { route: "/catalog-files/import" });
+  return renderWithProviders(<ImportCatalogFiles />, { route: "/files/import" });
 }
 
 function pasteYaml(text: string) {
@@ -73,7 +73,7 @@ describe("ImportCatalogFiles page", () => {
 
   test("importing posts the parsed documents and renders the per-row results", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-      if (url === "/api/v1/catalog-files/import" && init?.method === "POST") {
+      if (url === "/api/v1/files/import" && init?.method === "POST") {
         return Promise.resolve(
           jsonResponse(200, {
             results: [
@@ -114,7 +114,7 @@ describe("ImportCatalogFiles page", () => {
     expect(
       screen.getByText("spec.owner reference 'ghost' does not resolve to a stored entity"),
     ).toBeInTheDocument();
-    const [, init] = mockFetch.mock.calls.find(([url]) => url === "/api/v1/catalog-files/import")!;
+    const [, init] = mockFetch.mock.calls.find(([url]) => url === "/api/v1/files/import")!;
     const body = JSON.parse((init as RequestInit).body as string) as {
       files: { kind: string; metadata: { name: string } }[];
     };
@@ -123,7 +123,7 @@ describe("ImportCatalogFiles page", () => {
 
   test("INVALID and ERROR rows render with their messages", async () => {
     mockFetch.mockImplementation((url: string) =>
-      url === "/api/v1/catalog-files/import"
+      url === "/api/v1/files/import"
         ? Promise.resolve(
             jsonResponse(200, {
               results: [
@@ -163,7 +163,7 @@ describe("ImportCatalogFiles page", () => {
 
   test("a rejected batch shows the fixed-vocabulary error", async () => {
     mockFetch.mockImplementation((url: string) =>
-      url === "/api/v1/catalog-files/import"
+      url === "/api/v1/files/import"
         ? Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }))
         : Promise.resolve(jsonResponse(404, {})),
     );
@@ -181,7 +181,7 @@ describe("ImportCatalogFiles page", () => {
 
   test("editing the text clears stale results", async () => {
     mockFetch.mockImplementation((url: string) =>
-      url === "/api/v1/catalog-files/import"
+      url === "/api/v1/files/import"
         ? Promise.resolve(
             jsonResponse(200, {
               results: [
@@ -207,7 +207,7 @@ describe("ImportCatalogFiles page", () => {
 
   test("fetching a URL loads the text, normalizing GitHub blob links first", async () => {
     mockFetch.mockImplementation((fetchUrl: string, init?: RequestInit) =>
-      fetchUrl === "/api/v1/catalog-files/fetch" && init?.method === "POST"
+      fetchUrl === "/api/v1/files/fetch" && init?.method === "POST"
         ? Promise.resolve(jsonResponse(200, { content: TWO_DOCS }))
         : Promise.resolve(jsonResponse(404, {})),
     );
@@ -224,14 +224,14 @@ describe("ImportCatalogFiles page", () => {
     expect(await screen.findByText("2 documents ready to import")).toBeInTheDocument();
     expect(screen.getByLabelText("YAML content")).toHaveValue(TWO_DOCS);
 
-    const [, init] = mockFetch.mock.calls.find(([u]) => u === "/api/v1/catalog-files/fetch")!;
+    const [, init] = mockFetch.mock.calls.find(([u]) => u === "/api/v1/files/fetch")!;
     const body = JSON.parse((init as RequestInit).body as string) as { url: string };
     expect(body.url).toBe("https://raw.githubusercontent.com/acme/service/main/catalog-info.yaml");
   });
 
   test("a blocked URL shows the fixed public-https message", async () => {
     mockFetch.mockImplementation((fetchUrl: string) =>
-      fetchUrl === "/api/v1/catalog-files/fetch"
+      fetchUrl === "/api/v1/files/fetch"
         ? Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }))
         : Promise.resolve(jsonResponse(404, {})),
     );
@@ -252,7 +252,7 @@ describe("ImportCatalogFiles page", () => {
 
   test("an upstream failure shows the status-tagged fetch message", async () => {
     mockFetch.mockImplementation((fetchUrl: string) =>
-      fetchUrl === "/api/v1/catalog-files/fetch"
+      fetchUrl === "/api/v1/files/fetch"
         ? Promise.resolve(jsonResponse(502, { title: "Bad Gateway", status: 502 }))
         : Promise.resolve(jsonResponse(404, {})),
     );

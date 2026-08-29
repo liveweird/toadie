@@ -61,7 +61,7 @@ function mockGraph(mockFetch: FetchMock, body: unknown = GRAPH, status = 200) {
   mockFetch.mockImplementation((url: string) => {
     if (url.startsWith("/api/v1/dictionaries/namespaces"))
       return Promise.resolve(jsonResponse(200, NAMESPACE_ENTRIES));
-    return url.startsWith("/api/v1/catalog-files/graph")
+    return url.startsWith("/api/v1/files/graph")
       ? Promise.resolve(jsonResponse(status, body))
       : Promise.resolve(jsonResponse(404, {}));
   });
@@ -76,7 +76,7 @@ function renderPage() {
   return renderWithProviders(
     <Routes>
       <Route path="/render" element={<RenderGraph />} />
-      <Route path="/catalog-files/:id/edit" element={<PathProbe />} />
+      <Route path="/files/:id/edit" element={<PathProbe />} />
     </Routes>,
     { route: "/render" },
   );
@@ -110,6 +110,8 @@ describe("RenderGraph page", () => {
     renderPage();
 
     await screen.findByText(/svc-a/);
+    // The filter set lives behind the collapsed FilterPanel now (the Files list's surface).
+    fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
     fireEvent.click(screen.getByLabelText("Namespace", { selector: "input" }));
     fireEvent.click(await screen.findByRole("option", { name: "team-a" }));
 
@@ -145,7 +147,7 @@ describe("RenderGraph page", () => {
 
     await user.click(screen.getByText(/svc-a \[STORED\]/));
     await waitFor(() =>
-      expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files/7/edit"),
+      expect(screen.getByTestId("probe")).toHaveTextContent("/files/7/edit"),
     );
   });
 

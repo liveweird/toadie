@@ -24,6 +24,7 @@ import {
 } from "../utils/catalogFileForm";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
+import { catalogFilesPath } from "../utils/catalogFileLinks";
 
 export default function EditCatalogFile() {
   const { t } = useTranslation();
@@ -60,14 +61,14 @@ export default function EditCatalogFile() {
     form.initialize(fromCatalogFileResponse(data));
   }
 
-  if (!idIsValid) return <Navigate to="/catalog-files" replace />;
+  if (!idIsValid) return <Navigate to={catalogFilesPath} replace />;
 
   async function save(request: CatalogFileRequest, allowInvalid: boolean) {
     await updateCatalogFile(id, request, allowInvalid ? { allowInvalid: true } : undefined);
     await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
     await queryClient.invalidateQueries({ queryKey: ["catalogFiles", "detail", id] });
     showSuccessToast(t("catalog.toast.updated"));
-    navigate("/catalog-files", { replace: true });
+    navigate(catalogFilesPath, { replace: true });
   }
 
   const mapError = (err: unknown) =>
@@ -117,7 +118,7 @@ export default function EditCatalogFile() {
           <EditPageLoadState
             isLoading={isLoading}
             message={notFound ? t("catalog.fileNotFound") : loadErrorMessage(fetchError, t)}
-            backTo="/catalog-files"
+            backTo={catalogFilesPath}
             backLabel={t("catalog.backToList")}
           />
         </Stack>

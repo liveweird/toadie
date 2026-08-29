@@ -4,7 +4,7 @@
 > `PageResponse.kt` — `PageRequest`, `parsePaging`, `applyPaging`, `toPage`, the strict
 > `singleValue` param reader and the `optionalString/Boolean/Enum` parsers — Lettuce's
 > `optionalUInt`/`optionalLong` return with their first Toadie consumer) is
-> Lettuce's implementation, ported with the first list endpoint (`GET /api/v1/catalog-files` —
+> Lettuce's implementation, ported with the first list endpoint (`GET /api/v1/files` —
 > the reference implementation). Lettuce's view-scoped helpers (`optionalIncludeIndirect`,
 > `uintOnlyForView`) were deliberately left behind; re-port them with their first consumer.
 > The conventions below are the contract the package enforces.
@@ -13,7 +13,7 @@
 
 - Offset pagination `page`/`pageSize` (1-based, default 20, max 100; out-of-range → `400`) in the `{items, page, pageSize, total}` envelope; `total` is computed after filters, before pagination, with count + page rows in the **same `suspendTransaction`**; cursor paging is a documented per-endpoint opt-in [API-LIST-001/002, API-STRUCT-004].
 - Sorting: `sort=field`/`-field`, comma-separated multi-field, validated against a per-endpoint whitelist → `400`; `id` asc always appended as tiebreaker; default `id` asc documented [API-LIST-003].
-- Filtering: whitelisted equality filters on the field's own name plus `field[gte|gt|lte|lt]` bracket operators only where needed; strict `true`/`false` booleans; enums by string name; repeated key reserved for `IN` — and until an endpoint implements `IN`, a repeated scalar key is a `400` (Lettuce's `singleValue` rule — never silent first-value-wins; unknown parameter *names* stay ignored by deliberate leniency) [API-LIST-004].
+- Filtering: whitelisted equality filters on the field's own name plus `field[gte|gt|lte|lt]` bracket operators only where needed; strict `true`/`false` booleans; enums by string name; repeated key reserved for `IN` — the ONE param with documented `IN` semantics today is the catalog list/graph's `labelValue` (read via `repeatedValues`, any-of over the selected label's value); on every other scalar key repetition stays a `400` (Lettuce's `singleValue` rule — never silent first-value-wins; unknown parameter *names* stay ignored by deliberate leniency) [API-LIST-004].
 - Free text: `q` first, per-column substring only when a UI requires it [API-LIST-005].
 - Naming: camelCase params; reusable `Page`/`PageSize`/`Sort` under `#/components/parameters` `$ref`'d from each list path; one `*Page` envelope schema per resource; sortable/filterable whitelists documented per path [API-NAME-001..004].
 

@@ -8,6 +8,7 @@ import YamlPreviewCard from "./YamlPreviewCard";
 import { toCatalogFileRequest, type CatalogFileFormValues } from "../utils/catalogFileForm";
 import { catalogInfoYaml } from "../utils/catalogYaml";
 import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
+import { catalogFilesPath } from "../utils/catalogFileLinks";
 
 /**
  * The editor shell shared by the create and edit catalog-file pages: the app's document
@@ -49,7 +50,7 @@ export default function CatalogFileEditor({
                 </Alert>
               )}
               <Group justify="flex-end" gap="sm">
-                <Button component={RouterLink} to="/catalog-files" variant="default">
+                <Button component={RouterLink} to={catalogFilesPath} variant="default">
                   {t("common.action.cancel")}
                 </Button>
                 <Button type="submit" loading={submitting}>

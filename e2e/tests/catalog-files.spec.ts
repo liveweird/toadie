@@ -11,7 +11,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   const name = uniqueText("e2e-comp");
 
   // Create: the minimal Component (name/type/lifecycle/owner) plus a title.
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
   await pickType(page, "service");
   await pickLifecycle(page, "production");
@@ -25,40 +25,54 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
 
   const [created] = await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
   const fileId: number = (await created.json()).id;
 
   // The filtered list shows the new file.
-  await expect(page).toHaveURL(/\/catalog-files$/);
+  await expect(page).toHaveURL(/\/files$/);
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(name);
   await expect(page.getByText(name, { exact: true })).toBeVisible();
   await expect(page.getByText("E2E Component", { exact: true })).toBeVisible();
 
+  // The new dropdown filters: matching type + owner keep the row (the owner option is the
+  // stored group's full reference), a different type hides it; cleared, it returns.
+  await pickType(page, "service");
+  const ownerFilter = page.getByRole("combobox", { name: "Owner" });
+  await ownerFilter.click();
+  await ownerFilter.fill("group:default/platform");
+  await page.getByRole("option", { name: "group:default/platform", exact: true }).click();
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+  await pickType(page, "library");
+  await expect(page.getByText("No catalog files")).toBeVisible();
+  await page.getByLabel("Clear type filter").click();
+  await page.getByLabel("Clear owner filter").click();
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+
   // Edit: retitle and deprecate — via the row's Operations menu (auto-waiting locators).
   await rowOperation(page, name, "Edit");
-  await expect(page).toHaveURL(new RegExp(`/catalog-files/${fileId}/edit`));
+  await expect(page).toHaveURL(new RegExp(`/files/${fileId}/edit`));
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("E2E Component Renamed");
   await pickLifecycle(page, "deprecated");
   await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith(`/api/v1/catalog-files/${fileId}`) && r.request().method() === "PUT" && r.ok(),
+      (r) => r.url().endsWith(`/api/v1/files/${fileId}`) && r.request().method() === "PUT" && r.ok(),
     ),
     page.getByRole("button", { name: "Save" }).click(),
   ]);
 
   // Reopen the editor — the changes persisted.
-  await page.goto(`/catalog-files/${fileId}/edit`);
+  await page.goto(`/files/${fileId}/edit`);
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
     "E2E Component Renamed",
   );
   await expect(page.getByRole("combobox", { name: "Lifecycle" })).toHaveValue("deprecated");
 
   // Download hands over Backstage's canonical filename.
-  await page.goto("/catalog-files");
+  await page.goto("/files");
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(name);
   const [download] = await Promise.all([
@@ -72,14 +86,14 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await Promise.all([
     page.waitForResponse(
       (r) =>
-        r.url().endsWith(`/api/v1/catalog-files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
+        r.url().endsWith(`/api/v1/files/${fileId}`) && r.request().method() === "DELETE" && r.ok(),
     ),
     page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
   ]);
 
   // Verify against a fresh load — the in-place list can lose a refetch race with a stale
   // in-flight response.
-  await page.goto("/catalog-files");
+  await page.goto("/files");
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(name);
   await expect(page.getByText("No catalog files")).toBeVisible();

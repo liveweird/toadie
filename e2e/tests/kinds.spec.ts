@@ -19,7 +19,7 @@ test("a group, an API, and a component owned by the group are created and resolv
   const comp = uniqueText("e2e-comp");
 
   // A Group (children stays empty — Backstage requires the list, not entries).
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("combobox", { name: "Kind" }).click();
   await page.getByRole("option", { name: "Group" }).click();
   await fillIdentity(page, team, ns);
@@ -27,13 +27,13 @@ test("a group, an API, and a component owned by the group are created and resolv
   await expect(page.getByLabel("YAML preview")).toContainText("children: []");
   await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
 
   // An API with its pasted definition.
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await page.getByRole("combobox", { name: "Kind" }).click();
   await page.getByRole("option", { name: "API", exact: true }).click();
   await fillIdentity(page, api, ns);
@@ -43,14 +43,14 @@ test("a group, an API, and a component owned by the group are created and resolv
   await page.getByRole("textbox", { name: "Definition" }).fill("openapi: 3.0.0");
   await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
 
   // A Component owned by the group and providing the API — the live panel stays clean
   // (every reference resolves against the two files just stored).
-  await page.goto("/catalog-files/new");
+  await page.goto("/files/new");
   await fillIdentity(page, comp, ns);
   await pickType(page, "service");
   await pickLifecycle(page, "production");
@@ -65,7 +65,7 @@ test("a group, an API, and a component owned by the group are created and resolv
   await expect(page.getByText("No findings — the document passes every check.")).toBeVisible();
   await Promise.all([
     page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
     ),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
@@ -83,7 +83,7 @@ test("a group, an API, and a component owned by the group are created and resolv
 
   // Cleanup: delete all three throwaway files.
   for (const name of [comp, api, team]) {
-    await page.goto("/catalog-files");
+    await page.goto("/files");
     await openFilters(page);
     await page.getByLabel("Name", { exact: true }).fill(name);
     await rowOperation(page, name, "Delete");

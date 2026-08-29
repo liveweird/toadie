@@ -11,7 +11,7 @@
 
 ## Scenario: two pasted documents import, export as one YAML, and re-import as conflicts
 
-1. The admin signs in and opens the import page (`/catalog-files/import`). They paste a
+1. The admin signs in and opens the import page (`/files/import`). They paste a
    two-document `catalog-info.yaml` — a Component and its owning Group, separated by `---`,
    both in the throwaway namespace.
    - *Expected*: the live parse summary reads "2 documents ready to import".

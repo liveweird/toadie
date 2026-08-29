@@ -120,7 +120,7 @@ outcomes). **A new or behaviorally changed test lands with its scenario file and
 the same commit** — this list is the coverage map, the scenario file is the design.
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
-  authenticated pages (`/`, `/catalog-files`, `/catalog-files/new`, `/catalog-files/import`,
+  authenticated pages (`/`, `/files`, `/files/new`, `/files/import`,
   `/cross-check`, `/render`, `/labels`, `/annotations`, `/tags`, `/types`, `/lifecycles`, `/users`); `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`annotations.spec.ts`](scenarios/annotations.md) — the annotation-key registry: modal
@@ -128,7 +128,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
   read-only view → the editor's registry key Select with a free-text value on a new
   Component → cleanup; the registry's only in-run writer.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
-  create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
+  create with live YAML preview → filtered list (name, plus the type/owner dropdown filters
+  with owner-reference resolution) → edit → download `catalog-info.yaml` → delete.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp, clears once read, and the page follows
   the UI language.
@@ -140,13 +141,14 @@ the same commit** — this list is the coverage map, the scenario file is the de
   children), an API (pasted definition), and a Component whose owner/API references resolve
   live; kind badges on the list.
 - [`hierarchy.spec.ts`](scenarios/hierarchy.md) — the Hierarchy view at `/`: a
-  System ⊃ Component ⊃ subcomponent chain nests by most-specific placement, branches
+  System ⊃ Component ⊃ subcomponent chain nests by most-specific placement, the Files
+  filter panel narrows what is expanded (referenced containers stay), branches
   collapse/expand, the tree rows carry the Files Operations menu (download, delete), and a
   deleted parent becomes a MISSING placeholder; throwaway files in this run's namespace.
 - [`labels.spec.ts`](scenarios/labels.md) — the label registry: modal validation → create a
   label (values + kinds) → edit → the regular user's read-only view → the editor's
-  registry-constrained label pickers on a new Component → cleanup; the registry's only
-  in-run writer.
+  registry-constrained label pickers on a new Component → the list's label/label-value
+  filters (key presence, any-of values) → cleanup; the registry's only in-run writer.
 - [`lifecycles.spec.ts`](scenarios/lifecycles.md) — the lifecycles dictionary: seeded values
   → inline grammar validation → append a unique value → the regular user's read-only view →
   the editor's Lifecycle Select on a new Component → removal; the dictionary's only in-run

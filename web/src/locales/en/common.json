@@ -26,7 +26,12 @@
     "contains": "Contains…",
     "clearName": "Clear name filter",
     "clearNamespace": "Clear namespace filter",
-    "clearTag": "Clear tag filter"
+    "clearTag": "Clear tag filter",
+    "clearType": "Clear type filter",
+    "clearLifecycle": "Clear lifecycle filter",
+    "clearOwner": "Clear owner filter",
+    "clearLabel": "Clear label filter",
+    "clearLabelValues": "Clear label value filter"
   },
   "table": {
     "rowsPerPage": "Rows per page",

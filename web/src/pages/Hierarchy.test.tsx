@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Route, Routes } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
@@ -34,9 +34,9 @@ function mockGraph(mockFetch: FetchMock, body: unknown = GRAPH, status = 200) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url.startsWith("/api/v1/dictionaries/namespaces"))
       return Promise.resolve(jsonResponse(200, NAMESPACE_ENTRIES));
-    if ((init?.method ?? "GET") === "DELETE" && url.startsWith("/api/v1/catalog-files/"))
+    if ((init?.method ?? "GET") === "DELETE" && url.startsWith("/api/v1/files/"))
       return Promise.resolve(new Response(null, { status: 204 }));
-    return url.startsWith("/api/v1/catalog-files/graph")
+    return url.startsWith("/api/v1/files/graph")
       ? Promise.resolve(jsonResponse(status, body))
       : Promise.resolve(jsonResponse(404, {}));
   });
@@ -121,9 +121,27 @@ describe("Hierarchy page", () => {
     await waitFor(() => {
       const deleted = mockFetch.mock.calls.find(
         ([url, init]) =>
-          (init as RequestInit | undefined)?.method === "DELETE" && url === "/api/v1/catalog-files/4",
+          (init as RequestInit | undefined)?.method === "DELETE" && url === "/api/v1/files/4",
       );
       expect(deleted).toBeTruthy();
+    });
+  });
+
+  test("the filter panel drives the graph query with the shared filter set", async () => {
+    mockGraph(mockFetch);
+    renderPage();
+
+    await screen.findByText("core");
+    // The Files list's filter surface, collapsed by default, on this page too.
+    fireEvent.click(screen.getByRole("button", { name: /filters/i }));
+    fireEvent.click(screen.getByLabelText("Kind", { selector: "input" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Component" }));
+
+    await waitFor(() => {
+      const called = mockFetch.mock.calls.some(
+        ([url]) => typeof url === "string" && url.includes("/api/v1/files/graph?kind=Component"),
+      );
+      expect(called).toBe(true);
     });
   });
 

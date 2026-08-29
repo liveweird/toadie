@@ -19,6 +19,7 @@ import {
 } from "../utils/catalogFileForm";
 import { saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
+import { catalogFilesPath } from "../utils/catalogFileLinks";
 
 export default function CreateCatalogFile() {
   const { t } = useTranslation();
@@ -43,7 +44,7 @@ export default function CreateCatalogFile() {
     await createCatalogFile(request, allowInvalid ? { allowInvalid: true } : undefined);
     await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
     showSuccessToast(t("catalog.toast.created"));
-    navigate("/catalog-files", { replace: true });
+    navigate(catalogFilesPath, { replace: true });
   }
 
   const mapError = (err: unknown) =>

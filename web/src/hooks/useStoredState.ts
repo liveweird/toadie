@@ -55,6 +55,10 @@ export const isString = (v: unknown): v is string => typeof v === "string";
 /** Validator for plain boolean state (e.g. the FilterPanel open flag). */
 export const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
 
+/** Validator for string-array state (e.g. a persisted MultiSelect filter). */
+export const isStringArray = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.every((entry) => typeof entry === "string");
+
 /** Validator factory for single-select state persisted from a closed value list. */
 export function isOneOf<T extends string>(values: readonly T[]) {
   return (v: unknown): v is T => values.includes(v as T);

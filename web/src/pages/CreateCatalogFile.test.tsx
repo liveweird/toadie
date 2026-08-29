@@ -19,16 +19,16 @@ function PathProbe() {
 function renderCreate() {
   return renderWithProviders(
     <Routes>
-      <Route path="/catalog-files/new" element={<CreateCatalogFile />} />
-      <Route path="/catalog-files" element={<PathProbe />} />
+      <Route path="/files/new" element={<CreateCatalogFile />} />
+      <Route path="/files" element={<PathProbe />} />
     </Routes>,
-    { route: "/catalog-files/new" },
+    { route: "/files/new" },
   );
 }
 
 function mockPostStatus(mockFetch: FetchMock, status: number, body: unknown = { title: "x", status }) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-    if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files") {
+    if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files") {
       return Promise.resolve(jsonResponse(status, body));
     }
     return Promise.resolve(jsonResponse(404, {}));
@@ -37,7 +37,7 @@ function mockPostStatus(mockFetch: FetchMock, status: number, body: unknown = { 
 
 function findSaveCall(mockFetch: FetchMock) {
   return mockFetch.mock.calls.find(
-    ([url, init]) => (init as RequestInit | undefined)?.method === "POST" && url === "/api/v1/catalog-files",
+    ([url, init]) => (init as RequestInit | undefined)?.method === "POST" && url === "/api/v1/files",
   );
 }
 
@@ -118,7 +118,7 @@ describe("CreateCatalogFile page", () => {
     // defined" — and only after loading resolves, never during the fetch.
     vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") !== "GET") return Promise.resolve(jsonResponse(404, {}));
-      if (url.startsWith("/api/v1/catalog-files")) {
+      if (url.startsWith("/api/v1/files")) {
         return Promise.resolve(jsonResponse(200, { items: [], page: 1, pageSize: 100, total: 0 }));
       }
       return Promise.resolve(jsonResponse(200, { items: [] }));
@@ -141,7 +141,7 @@ describe("CreateCatalogFile page", () => {
           jsonResponse(200, { items: [{ id: 1, key: "tier", values: ["backend", "frontend"], kinds: ["Component"] }] }),
         );
       }
-      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files") {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files") {
         return Promise.resolve(
           jsonResponse(201, {
             id: 9,
@@ -179,13 +179,13 @@ describe("CreateCatalogFile page", () => {
   test("a soft-rejected create opens the Save-anyway modal; confirming retries with allowInvalid", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
-      if (method === "POST" && url === "/api/v1/catalog-files") {
+      if (method === "POST" && url === "/api/v1/files") {
         return Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }));
       }
-      if (method === "POST" && url === "/api/v1/catalog-files?allowInvalid=true") {
+      if (method === "POST" && url === "/api/v1/files?allowInvalid=true") {
         return Promise.resolve(jsonResponse(201, { id: 9 }));
       }
-      if (method === "POST" && url === "/api/v1/catalog-files/check") {
+      if (method === "POST" && url === "/api/v1/files/check") {
         return Promise.resolve(
           jsonResponse(200, {
             findings: [{ field: "spec.owner", reference: "ghost-team", status: "MISSING" }],
@@ -208,11 +208,11 @@ describe("CreateCatalogFile page", () => {
     expect(within(modal).getByText(/No stored entity matches this reference/)).toBeInTheDocument();
 
     await user.click(within(modal).getByRole("button", { name: /save anyway/i }));
-    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/files"));
     const waived = mockFetch.mock.calls.find(
       ([url, init]) =>
         (init as RequestInit | undefined)?.method === "POST" &&
-        url === "/api/v1/catalog-files?allowInvalid=true",
+        url === "/api/v1/files?allowInvalid=true",
     );
     expect(waived).toBeDefined();
   });
@@ -220,10 +220,10 @@ describe("CreateCatalogFile page", () => {
   test("a 400 the check cannot explain falls back to the validation alert — no modal", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
-      if (method === "POST" && url === "/api/v1/catalog-files") {
+      if (method === "POST" && url === "/api/v1/files") {
         return Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }));
       }
-      if (method === "POST" && url === "/api/v1/catalog-files/check") {
+      if (method === "POST" && url === "/api/v1/files/check") {
         return Promise.resolve(jsonResponse(200, { findings: [] }));
       }
       return Promise.resolve(jsonResponse(404, {}));
@@ -250,7 +250,7 @@ describe("CreateCatalogFile page", () => {
           }),
         );
       }
-      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files") {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files") {
         return Promise.resolve(
           jsonResponse(201, {
             id: 9,
@@ -323,9 +323,9 @@ describe("CreateCatalogFile page", () => {
     await fillMinimalForm(user);
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
-    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/files"));
     const postCall = mockFetch.mock.calls.find(
-      ([url, init]) => (init as RequestInit | undefined)?.method === "POST" && url === "/api/v1/catalog-files",
+      ([url, init]) => (init as RequestInit | undefined)?.method === "POST" && url === "/api/v1/files",
     );
     expect(postCall).toBeDefined();
     expect(JSON.parse((postCall![1] as RequestInit).body as string)).toEqual({
@@ -379,9 +379,9 @@ describe("CreateCatalogFile page", () => {
     await user.click(await screen.findByRole("option", { name: "team" }));
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
-    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/files"));
     const postCall = mockFetch.mock.calls.find(
-      ([url, init]) => (init as RequestInit | undefined)?.method === "POST" && url === "/api/v1/catalog-files",
+      ([url, init]) => (init as RequestInit | undefined)?.method === "POST" && url === "/api/v1/files",
     );
     expect(JSON.parse((postCall![1] as RequestInit).body as string)).toEqual({
       kind: "Group",
@@ -433,7 +433,7 @@ describe("CreateCatalogFile page", () => {
 
   test("the owner picker suggests stored groups and inserts the shortened ref", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files") {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files") {
         return Promise.resolve(jsonResponse(201, {
           id: 12, kind: "Component",
           metadata: { name: "my-svc", namespace: "default" },
@@ -441,7 +441,7 @@ describe("CreateCatalogFile page", () => {
           createdBy: 1, creatorName: "A", creatorDeleted: false, createdAt: 1, updatedAt: 1,
         }));
       }
-      if (url.startsWith("/api/v1/catalog-files?")) {
+      if (url.startsWith("/api/v1/files?")) {
         // The identity pool behind the pickers.
         return Promise.resolve(jsonResponse(200, {
           items: [
@@ -469,7 +469,7 @@ describe("CreateCatalogFile page", () => {
     expect(screen.queryByRole("option", { name: /billing-api/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^create$/i }));
-    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/files"));
     const postCall = findSaveCall(mockFetch);
     expect(JSON.parse((postCall![1] as RequestInit).body as string).spec.owner).toBe("group:default/team-a");
   });
@@ -488,7 +488,7 @@ describe("CreateCatalogFile page", () => {
 
   test("the check panel lists the findings", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files/check") {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files/check") {
         return Promise.resolve(
           jsonResponse(200, {
             findings: [
@@ -511,7 +511,7 @@ describe("CreateCatalogFile page", () => {
 
   test("the check panel shows the all-clear line when everything passes", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files/check") {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files/check") {
         return Promise.resolve(jsonResponse(200, { findings: [] }));
       }
       return Promise.resolve(jsonResponse(404, {}));

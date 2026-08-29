@@ -17,13 +17,14 @@ import {
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconChevronDown, IconChevronRight, IconSitemap } from "@tabler/icons-react";
 import { deleteCatalogFile, getCatalogGraph, type GraphNode } from "../api/catalogFiles";
+import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogFileOperations from "../components/CatalogFileOperations";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
-import NamespaceFilterSelect from "../components/NamespaceFilterSelect";
+import FilterPanel from "../components/FilterPanel";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
+import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
-import { isString, useStoredState } from "../hooks/useStoredState";
 import { buildHierarchy, type HierarchyNode } from "../utils/hierarchy";
 import { loadErrorMessage } from "../utils/saveError";
 
@@ -136,13 +137,15 @@ function TreeItem({
 export default function Hierarchy() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [namespaceFilter, setNamespaceFilter] = useStoredState("hierarchy.filter.namespace", "", isString);
+  // The Files list's full filter set (per-view persisted under hierarchy.filter.*) — the
+  // graph endpoint declares the same params and narrows which files are EXPANDED.
+  const filters = useCatalogFileFilterState("hierarchy");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const downloads = useCatalogDownloads();
 
   const { data, isPending, isError, error } = useQuery({
-    queryKey: ["catalogFiles", "graph", namespaceFilter],
-    queryFn: () => getCatalogGraph(namespaceFilter.trim() || undefined),
+    queryKey: ["catalogFiles", "graph", filters.values],
+    queryFn: () => getCatalogGraph(filters.values),
     placeholderData: keepPreviousData,
   });
 
@@ -183,8 +186,11 @@ export default function Hierarchy() {
     <Stack gap="md">
       <Title order={2}>{t("hierarchy.title")}</Title>
 
-      <Group align="flex-end" gap="lg">
-        <NamespaceFilterSelect value={namespaceFilter} onChange={setNamespaceFilter} />
+      <FilterPanel activeFilterCount={filters.activeFilterCount} storageKey="hierarchy">
+        <CatalogFileFilterControls controls={filters.controls} />
+      </FilterPanel>
+
+      <Group gap="lg">
         <Button variant="default" size="xs" onClick={() => setCollapsed(new Set())}>
           {t("hierarchy.expandAll")}
         </Button>

@@ -6,7 +6,7 @@ import { checkCatalogFile, type CatalogFileRequest } from "../api/catalogFiles";
 
 /**
  * The editor's live check: the current form document, debounced, against the stored files
- * AND the registries (POST /api/v1/catalog-files/check — references plus label/annotation/
+ * AND the registries (POST /api/v1/files/check — references plus label/annotation/
  * tag/type/lifecycle findings). Every finding here makes a strict save ask for the
  * Save-anyway confirmation; errors of the check request itself render nothing.
  */

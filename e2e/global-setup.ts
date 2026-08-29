@@ -50,7 +50,7 @@ export type DictionaryItems = { items: { id: number; value: string; isDefault: b
  * marker because it must survive runs (the volume's own demo files may reference it too).
  */
 async function ensurePlatformGroup(headers: Record<string, string>): Promise<void> {
-  const post = await fetch(`${BASE_URL}/api/v1/catalog-files`, {
+  const post = await fetch(`${BASE_URL}/api/v1/files`, {
     method: "POST",
     headers,
     body: JSON.stringify({

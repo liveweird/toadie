@@ -46,11 +46,11 @@ function PathProbe() {
   return <div data-testid="probe">{location.pathname}</div>;
 }
 
-function renderEdit(route = "/catalog-files/7/edit") {
+function renderEdit(route = "/files/7/edit") {
   return renderWithProviders(
     <Routes>
-      <Route path="/catalog-files/:id/edit" element={<EditCatalogFile />} />
-      <Route path="/catalog-files" element={<PathProbe />} />
+      <Route path="/files/:id/edit" element={<EditCatalogFile />} />
+      <Route path="/files" element={<PathProbe />} />
     </Routes>,
     { route },
   );
@@ -59,10 +59,10 @@ function renderEdit(route = "/catalog-files/7/edit") {
 function mockGetAndPut(mockFetch: FetchMock, putStatus = 204) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
-    if (method === "GET" && url === "/api/v1/catalog-files/7") {
+    if (method === "GET" && url === "/api/v1/files/7") {
       return Promise.resolve(jsonResponse(200, STORED_FILE));
     }
-    if (method === "PUT" && url === "/api/v1/catalog-files/7") {
+    if (method === "PUT" && url === "/api/v1/files/7") {
       return Promise.resolve(
         putStatus === 204
           ? new Response(null, { status: 204 })
@@ -100,9 +100,9 @@ describe("EditCatalogFile page", () => {
     await user.type(screen.getByLabelText("Title"), "Renamed");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
-    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/files"));
     const putCall = mockFetch.mock.calls.find(
-      ([url, init]) => (init as RequestInit | undefined)?.method === "PUT" && url === "/api/v1/catalog-files/7",
+      ([url, init]) => (init as RequestInit | undefined)?.method === "PUT" && url === "/api/v1/files/7",
     );
     expect(putCall).toBeDefined();
     expect(JSON.parse((putCall![1] as RequestInit).body as string)).toEqual({
@@ -136,7 +136,7 @@ describe("EditCatalogFile page", () => {
     expect(await screen.findByText("Catalog file not found.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /back to catalog files/i })).toHaveAttribute(
       "href",
-      "/catalog-files",
+      "/files",
     );
     expect(screen.queryByRole("button", { name: /^save$/i })).not.toBeInTheDocument();
   });
@@ -161,16 +161,16 @@ describe("EditCatalogFile page", () => {
   test("a soft-rejected save opens the Save-anyway modal; confirming retries with allowInvalid", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
-      if (method === "GET" && url === "/api/v1/catalog-files/7") {
+      if (method === "GET" && url === "/api/v1/files/7") {
         return Promise.resolve(jsonResponse(200, STORED_FILE));
       }
-      if (method === "PUT" && url === "/api/v1/catalog-files/7") {
+      if (method === "PUT" && url === "/api/v1/files/7") {
         return Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }));
       }
-      if (method === "PUT" && url === "/api/v1/catalog-files/7?allowInvalid=true") {
+      if (method === "PUT" && url === "/api/v1/files/7?allowInvalid=true") {
         return Promise.resolve(new Response(null, { status: 204 }));
       }
-      if (method === "POST" && url === "/api/v1/catalog-files/check") {
+      if (method === "POST" && url === "/api/v1/files/check") {
         return Promise.resolve(
           jsonResponse(200, {
             findings: [
@@ -203,22 +203,22 @@ describe("EditCatalogFile page", () => {
     expect(within(modal).getByText(/an entity cannot reference itself/)).toBeInTheDocument();
 
     await user.click(within(modal).getByRole("button", { name: /save anyway/i }));
-    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/files"));
     const waived = mockFetch.mock.calls.find(
       ([url, init]) =>
         (init as RequestInit | undefined)?.method === "PUT" &&
-        url === "/api/v1/catalog-files/7?allowInvalid=true",
+        url === "/api/v1/files/7?allowInvalid=true",
     );
     expect(waived).toBeDefined();
   });
 
   test("a non-numeric id redirects to the list without fetching the file", () => {
     mockGetAndPut(mockFetch);
-    renderEdit("/catalog-files/abc/edit");
-    expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files");
+    renderEdit("/files/abc/edit");
+    expect(screen.getByTestId("probe")).toHaveTextContent("/files");
     // The page-level pools (identities, namespaces) may fetch — the DETAIL must not.
     expect(
-      mockFetch.mock.calls.some(([url]) => /\/api\/v1\/catalog-files\/\w+$/.test(url as string)),
+      mockFetch.mock.calls.some(([url]) => /\/api\/v1\/files\/\w+$/.test(url as string)),
     ).toBe(false);
   });
 });
