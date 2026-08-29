@@ -105,7 +105,10 @@ export async function pickType(page: Page, type: string): Promise<void> {
   const select = page.getByRole("combobox", { name: "Type" });
   await select.click();
   await select.fill(type);
-  await page.getByRole("option", { name: type, exact: true }).click();
+  // The FILTER Type Select groups options by kind and the same type may appear under
+  // several kinds ("service" for Component AND System) — any of them sets the same bare
+  // type, so the first match is always correct (the form's Select has unique options).
+  await page.getByRole("option", { name: type, exact: true }).first().click();
   await expect(select).toHaveValue(type);
 }
 

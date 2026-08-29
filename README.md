@@ -19,7 +19,7 @@ generated-password reveal, self-service password change):
   kind-less `dependsOn` entries as errors; only Location/Template/custom kinds stay
   not-checkable) — plus a live reference panel in the editor; findings never block saving,
   and
-- **rendering together**: the `/render` relationship graph — every stored file and the
+- **rendering together**: the `/graph` relationship graph — every stored file and the
   reference edges between them (missing and external targets drawn as virtual nodes), with a
   namespace filter and per-relation toggles, and
 - **the YAML round-trip**: import existing (multi-document) `catalog-info.yaml` files —

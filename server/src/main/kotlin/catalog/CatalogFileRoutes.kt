@@ -87,12 +87,13 @@ private fun ApplicationCall.catalogFileFilter(): CatalogFileListFilter {
     return CatalogFileListFilter(
         name = params.optionalString("name"),
         namespace = params.optionalString("namespace"),
-        kind = params.optionalString("kind")?.let { raw ->
+        // Repetition is the documented any-of/IN idiom on kind (like labelValue below).
+        kinds = params.repeatedValues("kind").map { raw ->
             SUPPORTED_KINDS.firstOrNull { it.equals(raw, ignoreCase = true) }
                 ?: throw BadRequestException(
                     "Unknown kind: $raw (allowed: ${SUPPORTED_KINDS.joinToString()})",
                 )
-        },
+        }.distinct(),
         tag = params.optionalString("tag"),
         type = params.optionalString("type"),
         lifecycle = params.optionalString("lifecycle"),

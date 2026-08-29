@@ -75,10 +75,10 @@ function PathProbe() {
 function renderPage() {
   return renderWithProviders(
     <Routes>
-      <Route path="/render" element={<RenderGraph />} />
+      <Route path="/graph" element={<RenderGraph />} />
       <Route path="/files/:id/edit" element={<PathProbe />} />
     </Routes>,
-    { route: "/render" },
+    { route: "/graph" },
   );
 }
 
@@ -129,7 +129,7 @@ describe("RenderGraph page", () => {
     renderPage();
 
     await screen.findByText(/team-x \[EXTERNAL\]/);
-    await user.click(screen.getByRole("checkbox", { name: "Owner" }));
+    await user.click(screen.getByRole("checkbox", { name: "Owned by" }));
 
     expect(screen.queryByText(/team-x/)).not.toBeInTheDocument();
     // The other family's virtual node and the stored node stay.

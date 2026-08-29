@@ -1420,8 +1420,8 @@ export interface components {
         CatalogNameFilter: string;
         /** @description Exact (case-insensitive) namespace match. */
         CatalogNamespaceFilter: string;
-        /** @description One of the supported kinds (case-insensitive); unknown values are a 400. */
-        CatalogKindFilter: string;
+        /** @description Any-of (IN) match over the supported kinds (case-insensitive) — repetition is the documented IN idiom on this parameter. An unknown value is a 400. */
+        CatalogKindFilter: string[];
         /** @description Exact membership match against the file's metadata.tags entries (case-insensitive; tags are stored lowercase). */
         CatalogTagFilter: string;
         /** @description Case-insensitive exact match against spec.type. An open match — values are not validated against the type registry (waived/imported files may carry unregistered types), and there is no interplay with the kind filter. */
@@ -1865,7 +1865,7 @@ export interface operations {
                 name?: components["parameters"]["CatalogNameFilter"];
                 /** @description Exact (case-insensitive) namespace match. */
                 namespace?: components["parameters"]["CatalogNamespaceFilter"];
-                /** @description One of the supported kinds (case-insensitive); unknown values are a 400. */
+                /** @description Any-of (IN) match over the supported kinds (case-insensitive) — repetition is the documented IN idiom on this parameter. An unknown value is a 400. */
                 kind?: components["parameters"]["CatalogKindFilter"];
                 /** @description Exact membership match against the file's metadata.tags entries (case-insensitive; tags are stored lowercase). */
                 tag?: components["parameters"]["CatalogTagFilter"];
@@ -2004,7 +2004,7 @@ export interface operations {
                 name?: components["parameters"]["CatalogNameFilter"];
                 /** @description Exact (case-insensitive) namespace match. */
                 namespace?: components["parameters"]["CatalogNamespaceFilter"];
-                /** @description One of the supported kinds (case-insensitive); unknown values are a 400. */
+                /** @description Any-of (IN) match over the supported kinds (case-insensitive) — repetition is the documented IN idiom on this parameter. An unknown value is a 400. */
                 kind?: components["parameters"]["CatalogKindFilter"];
                 /** @description Exact membership match against the file's metadata.tags entries (case-insensitive; tags are stored lowercase). */
                 tag?: components["parameters"]["CatalogTagFilter"];

@@ -18,7 +18,8 @@ export type CatalogFileResponse =
 export type CatalogFileFilterValues = {
   name?: string;
   namespace?: string;
-  kind?: string;
+  /** Any-of over the supported kinds — repeats as the server's documented IN idiom. */
+  kind?: readonly string[];
   tag?: string;
   type?: string;
   lifecycle?: string;

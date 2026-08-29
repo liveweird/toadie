@@ -49,6 +49,26 @@ describe("App shell", () => {
       expect(await screen.findByText(new RegExp(`v${APP_VERSION.replace(/\./g, "\\.")}`))).toBeInTheDocument();
     });
 
+    test("the nav groups render open with their child links addressable", async () => {
+      renderApp("/");
+      // Group parents are toggle buttons, not links…
+      expect(await screen.findByRole("button", { name: "Dictionaries" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Metadata" })).toBeInTheDocument();
+      // …and start OPEN, so every child link is in the DOM immediately.
+      for (const [name, href] of [
+        ["Namespaces", "/namespaces"],
+        ["Types", "/types"],
+        ["Lifecycles", "/lifecycles"],
+        ["Labels", "/labels"],
+        ["Tags", "/tags"],
+        ["Annotations", "/annotations"],
+      ] as const) {
+        expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
+      }
+      // The Graph leaf follows the renamed route.
+      expect(screen.getByRole("link", { name: "Graph" })).toHaveAttribute("href", "/graph");
+    });
+
     test("shows a Changelog nav link and a linked version stamp with the what's-new dot", async () => {
       renderApp("/");
       expect(await screen.findByRole("link", { name: "Changelog" })).toHaveAttribute(

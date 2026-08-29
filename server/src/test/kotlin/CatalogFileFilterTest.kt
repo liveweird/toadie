@@ -62,10 +62,12 @@ class CatalogFileFilterTest {
             labels = mapOf("example.com/tier" to "Backend"),
         )
         assertTrue(CatalogFileListFilter().matches(f))
-        assertTrue(CatalogFileListFilter(name = "VC-", namespace = "DEFAULT", kind = "Component").matches(f))
+        assertTrue(CatalogFileListFilter(name = "VC-", namespace = "DEFAULT", kinds = listOf("Component")).matches(f))
         assertFalse(CatalogFileListFilter(name = "other").matches(f))
         assertFalse(CatalogFileListFilter(namespace = "elsewhere").matches(f))
-        assertFalse(CatalogFileListFilter(kind = "Group").matches(f))
+        assertFalse(CatalogFileListFilter(kinds = listOf("Group")).matches(f))
+        // kinds is any-of: a set containing the file's kind matches.
+        assertTrue(CatalogFileListFilter(kinds = listOf("Group", "Component")).matches(f))
         assertTrue(CatalogFileListFilter(tag = "JAVA").matches(f))
         assertFalse(CatalogFileListFilter(tag = "rust").matches(f))
         assertTrue(CatalogFileListFilter(type = "SERVICE", lifecycle = "Production").matches(f))

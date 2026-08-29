@@ -9,6 +9,7 @@ import java.text.Normalizer
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.or
 
 // The catalog-file filter set, shared by the list endpoint (SQL, via
@@ -20,8 +21,8 @@ import org.jetbrains.exposed.v1.core.or
 data class CatalogFileListFilter(
     val name: String? = null,
     val namespace: String? = null,
-    /** Canonical-cased kind (the route validates against SUPPORTED_KINDS). */
-    val kind: String? = null,
+    /** Canonical-cased kinds, any-of/IN (the route validates each against SUPPORTED_KINDS). */
+    val kinds: List<String> = emptyList(),
     /** Exact tag membership against metadata.tags (folded — tags are stored lowercase). */
     val tag: String? = null,
     /** Case-folded exact match against spec.type. */
@@ -61,8 +62,8 @@ internal fun buildCatalogFilePredicate(filter: CatalogFileListFilter): Op<Boolea
         // Stored namespaces are lowercase (sanitizedCatalogFile) — fold the filter too.
         op = op and (files.namespace eq it.lowercase())
     }
-    filter.kind?.let {
-        op = op and (files.kind eq it)
+    if (filter.kinds.isNotEmpty()) {
+        op = op and (files.kind inList filter.kinds)
     }
     filter.tag?.takeIf { it.isNotBlank() }?.let {
         // Exact membership inside the content JSON (tags are stored lowercase — fold).
@@ -112,7 +113,7 @@ private fun ownerPredicate(target: EntityIdentity): Op<Boolean> {
 internal fun CatalogFileListFilter.matches(file: CatalogFile): Boolean =
     matchesName(file) &&
         (namespace?.takeIf { it.isNotBlank() }?.let { file.metadata.namespace.lowercase() == it.lowercase() } ?: true) &&
-        (kind?.let { file.kind == it } ?: true) &&
+        (kinds.isEmpty() || file.kind in kinds) &&
         (tag?.takeIf { it.isNotBlank() }?.let { it.lowercase() in file.metadata.tags } ?: true) &&
         (type?.takeIf { it.isNotBlank() }?.let { file.spec.type?.lowercase() == it.lowercase() } ?: true) &&
         (lifecycle?.takeIf { it.isNotBlank() }?.let { file.spec.lifecycle?.lowercase() == it.lowercase() } ?: true) &&

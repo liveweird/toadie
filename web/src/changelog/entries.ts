@@ -17,6 +17,24 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.3.0",
+    date: "2026-08-29",
+    en: `Tidier filters, lists, and menu.
+
+- The **Kind** filter is a row of pills now — pick any combination of kinds at once (Files, Hierarchy, and Graph alike).
+- The **Type** filter groups its options by kind, the way tags group by category.
+- The Files table drops its Tags column — tags stay a filter, the rows get the width back.
+- The Graph page's relation pills carry a caption and speak in relationships ("Owned by", "Part of system") instead of entity names, and the page moved to */graph*.
+- The side menu is grouped: **Dictionaries** (Namespaces, Types, Lifecycles) and **Metadata** (Labels, Tags, Annotations).`,
+    pl: `Porządek w filtrach, listach i menu.
+
+- Filtr **Rodzaj** to teraz rząd pigułek — wybierasz dowolną kombinację rodzajów naraz (Pliki, Hierarchia i Graf tak samo).
+- Filtr **Typ** grupuje opcje według rodzaju, tak jak tagi grupują się według kategorii.
+- Tabela Plików traci kolumnę tagów — tagi pozostają filtrem, a wiersze odzyskują szerokość.
+- Pigułki relacji na stronie Grafu mają podpis i mówią relacjami („Własność", „Należy do systemu") zamiast nazwami encji, a strona przeniosła się pod */graph*.
+- Menu boczne jest pogrupowane: **Słowniki** (Przestrzenie nazw, Typy, Cykle życia) i **Metadane** (Etykiety, Tagi, Adnotacje).`,
+  },
+  {
     version: "1.2.0",
     date: "2026-08-29",
     en: `Find your files faster.

@@ -4,12 +4,12 @@
   "relationsLabel": "Relations",
   "relation": {
     "dependsOn": "Depends on",
-    "subcomponentOf": "Subcomponent",
-    "apis": "APIs",
-    "owner": "Owner",
-    "system": "System",
-    "domain": "Domain",
-    "membership": "Membership"
+    "subcomponentOf": "Subcomponent of",
+    "apis": "Provides/consumes APIs",
+    "owner": "Owned by",
+    "system": "Part of system",
+    "domain": "Part of domain",
+    "membership": "Group membership"
   },
   "legend": {
     "stored": "Stored file",

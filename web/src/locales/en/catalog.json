@@ -113,7 +113,6 @@
     "deleted": "Catalog file deleted"
   },
   "refHelp": "Each field suggests the stored entities it may point at — picking one inserts its full kind:namespace/name identity. Typed references work too (kind and namespace may usually be omitted); every reference must resolve to a stored entity.",
-  "anyKind": "Any kind",
   "anyNamespace": "Any namespace",
   "anyTag": "Any tag",
   "anyType": "Any type",
@@ -121,7 +120,6 @@
   "anyOwner": "Any owner",
   "anyLabel": "Any label",
   "anyLabelValue": "Any value",
-  "clearKindFilter": "Clear kind filter",
   "export": {
     "button": "Export YAML",
     "failed": "Failed to export catalog files"

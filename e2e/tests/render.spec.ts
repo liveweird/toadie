@@ -47,7 +47,7 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
   ]);
 
   // Render the namespace: A and B stored, the ghost missing, the (stored) owner group too.
-  await page.goto("/render");
+  await page.goto("/graph");
   // The graph shares the Files list's filter panel now (collapsed by default).
   await openFilters(page);
   await pickNamespace(page, ns);

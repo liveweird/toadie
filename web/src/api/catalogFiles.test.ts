@@ -48,10 +48,10 @@ describe("catalogFiles API wrappers", () => {
       sort: "-name",
       name: "web",
       namespace: "team-a",
-      kind: "Component",
+      kind: ["Component", "API"],
     });
     expect(lastCall()[0]).toBe(
-      "/api/v1/files?page=2&pageSize=40&sort=-name&name=web&namespace=team-a&kind=Component",
+      "/api/v1/files?page=2&pageSize=40&sort=-name&name=web&namespace=team-a&kind=Component&kind=API",
     );
   });
 

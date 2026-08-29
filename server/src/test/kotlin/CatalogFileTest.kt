@@ -203,7 +203,12 @@ class CatalogFileTest {
         assertEquals(listOf("Group"), groups.items.map { it.kind })
         val all = client.get("$CATALOG_FILES_PATH?namespace=$ns&sort=kind").body<CatalogFilePageResponse>()
         assertEquals(listOf("Component", "Group"), all.items.map { it.kind })
+        // Repetition is the any-of/IN idiom on kind; an unknown value 400s wherever it sits.
+        val union = client.get("$CATALOG_FILES_PATH?namespace=$ns&kind=Group&kind=Component&sort=kind")
+            .body<CatalogFilePageResponse>()
+        assertEquals(listOf("Component", "Group"), union.items.map { it.kind })
         assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?kind=Gadget").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH?kind=Group&kind=Gadget").status)
     }
 
     @Test

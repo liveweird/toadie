@@ -150,15 +150,16 @@ describe("CatalogFiles page", () => {
     localStorage.clear();
   });
 
-  test("renders rows with title and tag badges; type/owner/creator are gone from the list", async () => {
+  test("renders rows with title; tags/type/owner/creator are gone from the list", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     renderPage();
 
     expect(await screen.findByText("payments-svc")).toBeInTheDocument();
     expect(screen.getByText("Payments")).toBeInTheDocument();
-    expect(screen.getByText("java")).toBeInTheDocument();
-    expect(screen.getByText("billing")).toBeInTheDocument();
-    // The type/lifecycle, owner, and created-by columns were deliberately removed.
+    // The tags, type/lifecycle, owner, and created-by columns were deliberately removed
+    // (tags remain a FILTER — the rows just don't spend width on the badges any more).
+    expect(screen.queryByText("java")).not.toBeInTheDocument();
+    expect(screen.queryByText("billing")).not.toBeInTheDocument();
     expect(screen.queryByText("service")).not.toBeInTheDocument();
     expect(screen.queryByText("group:platform")).not.toBeInTheDocument();
     expect(screen.queryByText("Alice Creator")).not.toBeInTheDocument();
@@ -192,17 +193,17 @@ describe("CatalogFiles page", () => {
     await calledWith(mockFetch, "name=paym");
   });
 
-  test("picking a Kind filter triggers a refetch with kind=", async () => {
+  test("toggling Kind pills refetches with repeated kind= (any-of)", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     const user = userEvent.setup();
     renderPage();
 
     await screen.findByText("payments-svc");
     await user.click(screen.getByRole("button", { name: /filters/i }));
-    fireEvent.click(screen.getByLabelText("Kind", { selector: "input" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Group" }));
-
+    fireEvent.click(screen.getByRole("checkbox", { name: "Group" }));
     await calledWith(mockFetch, "kind=Group");
+    fireEvent.click(screen.getByRole("checkbox", { name: "API" }));
+    await calledWith(mockFetch, "kind=Group&kind=API");
   });
 
   test("rows show their kind badge", async () => {
@@ -368,13 +369,13 @@ describe("CatalogFiles page", () => {
     );
   });
 
-  test("columns are ordered Name, Namespace, Kind, Title, Tags, Updated", async () => {
+  test("columns are ordered Name, Namespace, Kind, Title, Updated", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     renderPage();
 
     await screen.findByText("payments-svc");
     const headers = screen.getAllByRole("columnheader").map((th) => th.textContent);
-    expect(headers.slice(0, 6)).toEqual(["Name", "Namespace", "Kind", "Title", "Tags", "Updated"]);
+    expect(headers.slice(0, 5)).toEqual(["Name", "Namespace", "Kind", "Title", "Updated"]);
   });
 
   test("confirming a delete triggers DELETE, refetches, and toasts", async () => {

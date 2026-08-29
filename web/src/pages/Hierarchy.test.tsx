@@ -134,8 +134,7 @@ describe("Hierarchy page", () => {
     await screen.findByText("core");
     // The Files list's filter surface, collapsed by default, on this page too.
     fireEvent.click(screen.getByRole("button", { name: /filters/i }));
-    fireEvent.click(screen.getByLabelText("Kind", { selector: "input" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Component" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Component" }));
 
     await waitFor(() => {
       const called = mockFetch.mock.calls.some(

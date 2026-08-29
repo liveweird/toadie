@@ -38,7 +38,7 @@ const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/files/new", heading: "New catalog file" },
   { path: "/files/import", heading: "Import catalog files" },
   { path: "/cross-check", heading: "Cross-check" },
-  { path: "/render", heading: "Graph" },
+  { path: "/graph", heading: "Graph" },
   { path: "/labels", heading: "Labels" },
   { path: "/annotations", heading: "Annotations" },
   { path: "/tags", heading: "Tags" },

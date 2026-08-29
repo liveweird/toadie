@@ -92,22 +92,40 @@ describe("CatalogFileFilterControls + useCatalogFileFilterState", () => {
     localStorage.clear();
   });
 
-  test("the Type options union every kind's dictionary and narrow to the picked kind", async () => {
+  test("the Type options group by kind (duplicates allowed) and the kind pills narrow them", async () => {
     renderWithProviders(<Harness />);
 
-    // Union of both dictionaries, deduped ("service" is allowed for two kinds) and sorted.
+    // One group per kind — "service" legally appears under BOTH (kind-prefixed values).
     fireEvent.click(screen.getByLabelText("Type", { selector: "input" }));
     await screen.findByRole("option", { name: "library" });
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
       "library",
+      "service",
       "openapi",
       "service",
     ]);
+    // Picking the duplicate label sets the BARE type (the prefix never leaks).
+    fireEvent.click(screen.getAllByRole("option", { name: "service" })[1]);
+    await waitFor(() => expect(values().type).toBe("service"));
 
-    await pickOption("Kind", "API");
+    // A kind pill narrows the groups to that kind's dictionary.
+    fireEvent.click(screen.getByRole("checkbox", { name: "API" }));
     fireEvent.click(screen.getByLabelText("Type", { selector: "input" }));
     await screen.findByRole("option", { name: "openapi" });
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["openapi", "service"]);
+  });
+
+  test("the kind pills are any-of and land as a repeated kind param", async () => {
+    renderWithProviders(<Harness />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Group" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Component" }));
+    await waitFor(() => expect(values().kind).toEqual(["Group", "Component"]));
+    expect(screen.getByTestId("count")).toHaveTextContent("1");
+
+    // Clicking an active pill deselects it.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Group" }));
+    await waitFor(() => expect(values().kind).toEqual(["Component"]));
   });
 
   test("filter picks land in the normalized values and the active count", async () => {

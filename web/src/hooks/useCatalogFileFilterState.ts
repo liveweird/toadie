@@ -8,8 +8,8 @@ export type CatalogFileFilterControlsState = {
   setName: (v: string) => void;
   namespace: string;
   setNamespace: (v: string) => void;
-  kind: string;
-  setKind: (v: string) => void;
+  kinds: string[];
+  setKinds: (v: string[]) => void;
   tag: string;
   setTag: (v: string) => void;
   type: string;
@@ -40,7 +40,9 @@ export function useCatalogFileFilterState(viewKey: string): {
 } {
   const [name, setName] = useStoredState(`${viewKey}.filter.name`, "", isString);
   const [namespace, setNamespace] = useStoredState(`${viewKey}.filter.namespace`, "", isString);
-  const [kind, setKind] = useStoredState(`${viewKey}.filter.kind`, "", isString);
+  // Multi-select pills (any-of/IN server-side); a pre-pills persisted STRING fails the
+  // array guard and falls back to [] cleanly.
+  const [kinds, setKinds] = useStoredState<string[]>(`${viewKey}.filter.kind`, [], isStringArray);
   const [tag, setTag] = useStoredState(`${viewKey}.filter.tag`, "", isString);
   const [type, setType] = useStoredState(`${viewKey}.filter.type`, "", isString);
   const [lifecycle, setLifecycle] = useStoredState(`${viewKey}.filter.lifecycle`, "", isString);
@@ -62,7 +64,7 @@ export function useCatalogFileFilterState(viewKey: string): {
   const values: CatalogFileFilterValues = {
     name: debouncedName || undefined,
     namespace: namespace || undefined,
-    kind: kind || undefined,
+    kind: kinds.length > 0 ? kinds : undefined,
     tag: tag || undefined,
     type: type || undefined,
     lifecycle: lifecycle || undefined,
@@ -75,7 +77,7 @@ export function useCatalogFileFilterState(viewKey: string): {
   const activeFilterCount =
     (name.trim() ? 1 : 0) +
     (namespace.trim() ? 1 : 0) +
-    (kind ? 1 : 0) +
+    (kinds.length > 0 ? 1 : 0) +
     (tag.trim() ? 1 : 0) +
     (type ? 1 : 0) +
     (lifecycle ? 1 : 0) +
@@ -85,15 +87,15 @@ export function useCatalogFileFilterState(viewKey: string): {
 
   return {
     values,
-    deps: [debouncedName, namespace, kind, tag, type, lifecycle, owner, label, labelValues],
+    deps: [debouncedName, namespace, kinds, tag, type, lifecycle, owner, label, labelValues],
     activeFilterCount,
     controls: {
       name,
       setName,
       namespace,
       setNamespace,
-      kind,
-      setKind,
+      kinds,
+      setKinds,
       tag,
       setTag,
       type,

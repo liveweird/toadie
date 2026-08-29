@@ -139,7 +139,7 @@ as red Alerts; follow `web/CLAUDE.md` for the exact transport, i18n, and theming
 
 Catalog forms are kind-aware and use the shared identity, namespace, label, and tag hooks; do not
 replace their constrained pickers with free-form clones. Keep `utils/catalogYaml.ts` and the
-strict inverse parser in `utils/catalogImport.ts` in lockstep. The `/render` graph keeps React
+strict inverse parser in `utils/catalogImport.ts` in lockstep. The `/graph` graph page keeps React
 Flow and dagre in its lazy chunk. User creation/reset passwords are generated client-side and
 revealed exactly once; the server never returns plaintext passwords.
 

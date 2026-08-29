@@ -4,12 +4,12 @@
   "relationsLabel": "Relacje",
   "relation": {
     "dependsOn": "Zależy od",
-    "subcomponentOf": "Podkomponent",
-    "apis": "API",
-    "owner": "Właściciel/ka",
-    "system": "System",
-    "domain": "Domena",
-    "membership": "Członkostwo"
+    "subcomponentOf": "Jest podkomponentem",
+    "apis": "Dostarcza/konsumuje API",
+    "owner": "Własność",
+    "system": "Należy do systemu",
+    "domain": "Należy do domeny",
+    "membership": "Członkostwo w grupie"
   },
   "legend": {
     "stored": "Zapisany plik",

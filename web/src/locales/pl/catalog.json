@@ -113,7 +113,6 @@
     "deleted": "Usunięto plik katalogu"
   },
   "refHelp": "Każde pole podpowiada zapisane encje, na które może wskazywać — wybór wstawia pełną tożsamość kind:namespace/name. Referencje wpisywane ręcznie też działają (rodzaj i przestrzeń nazw zwykle można pominąć); każda referencja musi wskazywać zapisaną encję.",
-  "anyKind": "Dowolny rodzaj",
   "anyNamespace": "Dowolna przestrzeń nazw",
   "anyTag": "Dowolny tag",
   "anyType": "Dowolny typ",
@@ -121,7 +120,6 @@
   "anyOwner": "Dowolny właściciel",
   "anyLabel": "Dowolna etykieta",
   "anyLabelValue": "Dowolna wartość",
-  "clearKindFilter": "Wyczyść filtr rodzaju",
   "export": {
     "button": "Eksportuj YAML",
     "failed": "Nie udało się wyeksportować plików katalogu"

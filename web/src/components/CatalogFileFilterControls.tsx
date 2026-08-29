@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { MultiSelect, Select } from "@mantine/core";
+import { Chip, Group, MultiSelect, Select, Stack, Text } from "@mantine/core";
 import type { CatalogFileFilterControlsState } from "../hooks/useCatalogFileFilterState";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
 import { useEntityTypes } from "../hooks/useEntityTypes";
@@ -17,6 +17,9 @@ import NamespaceFilterSelect from "./NamespaceFilterSelect";
 function withStale(options: string[], current: string): string[] {
   return current && !options.includes(current) ? [...options, current] : options;
 }
+
+// The nav/pills display order for the type groups (ENTITY_KINDS widened for indexOf).
+const KIND_ORDER: readonly string[] = ENTITY_KINDS;
 
 /**
  * The shared filter controls (Files list, Hierarchy, Graph): the whole catalog-file filter
@@ -45,14 +48,41 @@ export default function CatalogFileFilterControls({
   }, [categories, controls.tag, t]);
 
   const typeOptions = useMemo(() => {
-    // A picked kind narrows the options to that kind's dictionary; otherwise the union of
-    // every dictionary (deduped — the same type may be allowed for several kinds).
-    const source = controls.kind
-      ? dictionaries.filter((d) => d.kind === controls.kind)
-      : dictionaries;
-    const union = [...new Set(source.flatMap((d) => d.types))].sort((a, b) => a.localeCompare(b));
-    return withStale(union, controls.type);
-  }, [dictionaries, controls.kind, controls.type]);
+    // Grouped by kind (the tags Select's separator idiom); picked kind pills narrow which
+    // groups appear. Option VALUES are kind-prefixed because the same type may legally be
+    // allowed for several kinds ("service" in Component AND System) and Mantine requires
+    // unique values across groups — labels stay the bare type, and onChange strips the
+    // prefix back off. The stale item keeps its raw (prefix-less) value.
+    const source = (
+      controls.kinds.length > 0
+        ? dictionaries.filter((d) => controls.kinds.includes(d.kind))
+        : dictionaries
+    )
+      .filter((d) => d.types.length > 0)
+      .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
+    const groups = source.map((d) => ({
+      group: d.kind,
+      items: [...d.types]
+        .sort((a, b) => a.localeCompare(b))
+        .map((type) => ({ value: `${d.kind}:${type}`, label: type })),
+    }));
+    const known = source.some((d) => d.types.includes(controls.type));
+    return controls.type && !known
+      ? [...groups, { group: t("catalog.staleTagsGroup"), items: [{ value: controls.type, label: controls.type }] }]
+      : groups;
+  }, [dictionaries, controls.kinds, controls.type, t]);
+
+  // The Select needs an option VALUE; the filter stores the bare type — resolve it to the
+  // first group offering that label (which group is irrelevant: the server has no
+  // type↔kind interplay).
+  const selectedType = useMemo(() => {
+    if (!controls.type) return null;
+    for (const group of typeOptions) {
+      const hit = group.items.find((item) => item.label === controls.type);
+      if (hit) return hit.value;
+    }
+    return null;
+  }, [typeOptions, controls.type]);
 
   const ownerOptions = useMemo(
     () => withStale(refSuggestions(identities, "owner"), controls.owner),
@@ -79,21 +109,28 @@ export default function CatalogFileFilterControls({
         clearLabel={t("common.filter.clearName")}
       />
       <NamespaceFilterSelect value={controls.namespace} onChange={controls.setNamespace} />
-      <Select
-        label={t("catalog.field.kind")}
-        placeholder={t("catalog.anyKind")}
-        data={[...ENTITY_KINDS]}
-        value={controls.kind || null}
-        onChange={(v) => controls.setKind(v ?? "")}
-        clearable
-        clearButtonProps={{ "aria-label": t("catalog.clearKindFilter") }}
-      />
+      <Stack gap={4}>
+        <Text size="sm" fw={500} component="label">
+          {t("catalog.field.kind")}
+        </Text>
+        {/* Multi-select pills — any-of/IN server-side; the min height keeps the row
+            bottom-aligned with the 36px Select inputs beside it. */}
+        <Chip.Group multiple value={controls.kinds} onChange={controls.setKinds}>
+          <Group gap="xs" role="group" aria-label={t("catalog.field.kind")} mih={36} align="center">
+            {ENTITY_KINDS.map((kind) => (
+              <Chip key={kind} value={kind} size="xs">
+                {kind}
+              </Chip>
+            ))}
+          </Group>
+        </Chip.Group>
+      </Stack>
       <Select
         label={t("catalog.field.type")}
         placeholder={t("catalog.anyType")}
         data={typeOptions}
-        value={controls.type || null}
-        onChange={(v) => controls.setType(v ?? "")}
+        value={selectedType}
+        onChange={(v) => controls.setType(v ? v.slice(v.indexOf(":") + 1) : "")}
         searchable
         clearable
         clearButtonProps={{ "aria-label": t("common.filter.clearType") }}

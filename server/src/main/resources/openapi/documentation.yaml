@@ -1299,8 +1299,14 @@ components:
       name: kind
       in: query
       required: false
-      schema: { type: string }
-      description: One of the supported kinds (case-insensitive); unknown values are a 400.
+      schema:
+        type: array
+        items: { type: string }
+      style: form
+      explode: true
+      description: >-
+        Any-of (IN) match over the supported kinds (case-insensitive) — repetition is the
+        documented IN idiom on this parameter. An unknown value is a 400.
     CatalogTagFilter:
       name: tag
       in: query

@@ -16,6 +16,7 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
+  IconBook2,
   IconFileDescription,
   IconFolders,
   IconHash,
@@ -27,6 +28,7 @@ import {
   IconNote,
   IconRecycle,
   IconTag,
+  IconTags,
   IconLogout,
   IconMoon,
   IconSun,
@@ -95,20 +97,44 @@ type NavLeaf = {
   adminOnly?: boolean;
 };
 
+// A collapsible second level (Dictionaries, Metadata). Groups start OPEN — children stay
+// in the DOM, so tests and deep links keep addressing the leaf links directly.
+type NavGroup = {
+  label: ParseKeys;
+  icon: typeof IconSitemap;
+  children: ReadonlyArray<NavLeaf>;
+};
+
+type NavEntry = NavLeaf | NavGroup;
+
+const isNavGroup = (entry: NavEntry): entry is NavGroup => "children" in entry;
+
 // `label` holds an i18n key, resolved with t() at render time. Feature entries (catalog
 // files, cross-checks, rendering) append here as they are built.
-const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
+const NAV_ITEMS: ReadonlyArray<NavEntry> = [
   { to: "/", label: "appShell.nav.home", icon: IconSitemap },
   { to: catalogFilesPath, label: "appShell.nav.catalogFiles", icon: IconFileDescription },
   { to: "/cross-check", label: "appShell.nav.crossCheck", icon: IconListCheck },
-  { to: "/render", label: "appShell.nav.render", icon: IconTopologyStar3 },
-  // Visible to everyone: non-admins get the read-only list, ADMINs the editor (the page branches).
-  { to: "/namespaces", label: "appShell.nav.namespaces", icon: IconFolders },
-  { to: "/labels", label: "appShell.nav.labels", icon: IconTag },
-  { to: "/tags", label: "appShell.nav.tags", icon: IconHash },
-  { to: "/types", label: "appShell.nav.types", icon: IconCategory },
-  { to: "/lifecycles", label: "appShell.nav.lifecycles", icon: IconRecycle },
-  { to: "/annotations", label: "appShell.nav.annotations", icon: IconNote },
+  { to: "/graph", label: "appShell.nav.graph", icon: IconTopologyStar3 },
+  // Visible to everyone: non-admins get the read-only lists, ADMINs the editors (the pages branch).
+  {
+    label: "appShell.nav.dictionaries",
+    icon: IconBook2,
+    children: [
+      { to: "/namespaces", label: "appShell.nav.namespaces", icon: IconFolders },
+      { to: "/types", label: "appShell.nav.types", icon: IconCategory },
+      { to: "/lifecycles", label: "appShell.nav.lifecycles", icon: IconRecycle },
+    ],
+  },
+  {
+    label: "appShell.nav.metadata",
+    icon: IconTags,
+    children: [
+      { to: "/labels", label: "appShell.nav.labels", icon: IconTag },
+      { to: "/tags", label: "appShell.nav.tags", icon: IconHash },
+      { to: "/annotations", label: "appShell.nav.annotations", icon: IconNote },
+    ],
+  },
   { to: "/users", label: "appShell.nav.users", icon: IconUsers, adminOnly: true },
   { to: "/feature-flags", label: "appShell.nav.featureFlags", icon: IconToggleLeft, adminOnly: true },
   { to: "/change-password", label: "appShell.nav.changePassword", icon: IconKey },
@@ -143,15 +169,27 @@ function Shell() {
   const queryClient = useQueryClient();
   const { pathname } = useLocation();
 
-  // Admin-gated leaves render only for ADMIN sessions (the routes are guarded too).
-  const visibleItems = [...NAV_ITEMS.filter((entry) => !entry.adminOnly || isAdmin()), CHANGELOG_NAV];
+  // Admin-gated leaves render only for ADMIN sessions (the routes are guarded too);
+  // a group whose children all filtered away would disappear with them.
+  const visibleLeaf = (leaf: NavLeaf) => !leaf.adminOnly || isAdmin();
+  const visibleItems: NavEntry[] = [
+    ...NAV_ITEMS.flatMap<NavEntry>((entry) => {
+      if (isNavGroup(entry)) {
+        const children = entry.children.filter(visibleLeaf);
+        return children.length > 0 ? [{ ...entry, children }] : [];
+      }
+      return visibleLeaf(entry) ? [entry] : [];
+    }),
+    CHANGELOG_NAV,
+  ];
+  const leaves = visibleItems.flatMap((entry) => (isNavGroup(entry) ? entry.children : [entry]));
   const changelogUnseen = useChangelogUnseen();
 
   // Longest-matching-prefix active-link resolution — "/" only matches exactly.
   const matches = (to: string) =>
     to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`);
   const activeTo =
-    visibleItems.map((e) => e.to)
+    leaves.map((e) => e.to)
       .filter(matches)
       .sort((a, b) => b.length - a.length)[0] ?? null;
 
@@ -201,20 +239,42 @@ function Shell() {
         {/* The link list scrolls when it outgrows the viewport; the version stamp stays pinned. */}
         <AppShell.Section grow component={ScrollArea} type="hover" scrollbarSize={6} offsetScrollbars>
           {visibleItems.map((entry) => {
-            const active = entry.to === activeTo;
-            const Icon = entry.icon;
-            return (
-              <NavLink
-                key={entry.to}
-                component={RouterLink}
-                to={entry.to}
-                active={active}
-                aria-current={active ? "page" : undefined}
-                label={t(entry.label)}
-                leftSection={<Icon size={18} stroke={1.5} />}
-                onClick={close}
-              />
-            );
+            const renderLeaf = (leaf: NavLeaf) => {
+              const active = leaf.to === activeTo;
+              const Icon = leaf.icon;
+              return (
+                <NavLink
+                  key={leaf.to}
+                  component={RouterLink}
+                  to={leaf.to}
+                  active={active}
+                  aria-current={active ? "page" : undefined}
+                  label={t(leaf.label)}
+                  leftSection={<Icon size={18} stroke={1.5} />}
+                  onClick={close}
+                />
+              );
+            };
+            if (isNavGroup(entry)) {
+              const Icon = entry.icon;
+              // A group parent is a real toggle BUTTON (NavLink's default root is an
+              // href-less <a> with no accessible role), not a link — and it must NOT
+              // close the mobile drawer; only leaf clicks do.
+              return (
+                <NavLink
+                  key={entry.label}
+                  component="button"
+                  type="button"
+                  label={t(entry.label)}
+                  leftSection={<Icon size={18} stroke={1.5} />}
+                  childrenOffset={28}
+                  defaultOpened
+                >
+                  {entry.children.map(renderLeaf)}
+                </NavLink>
+              );
+            }
+            return renderLeaf(entry);
           })}
         </AppShell.Section>
         {/* The title carries the accessible "what's new" name only while the dot is shown. */}
@@ -272,7 +332,7 @@ export default function App() {
             <Route path="files/import" element={<ImportCatalogFiles />} />
             <Route path="files/:id/edit" element={<EditCatalogFile />} />
             <Route path="cross-check" element={<CrossCheck />} />
-            <Route path="render" element={<RenderGraph />} />
+            <Route path="graph" element={<RenderGraph />} />
             <Route path="namespaces" element={<Namespaces />} />
             <Route path="labels" element={<Labels />} />
             <Route path="tags" element={<Tags />} />

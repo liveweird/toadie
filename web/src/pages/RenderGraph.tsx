@@ -75,7 +75,12 @@ export default function RenderGraph() {
         <CatalogFileFilterControls controls={filters.controls} />
       </FilterPanel>
 
-      <Group align="flex-end" gap="lg">
+      {/* Which RELATIONSHIP families draw edges — captioned so the pills never read as
+          entity kinds (the Kind filter pills live in the panel above). */}
+      <Stack gap={4}>
+        <Text size="sm" fw={500} component="label">
+          {t("render.relationsLabel")}
+        </Text>
         <Chip.Group
           multiple
           value={enabled}
@@ -89,7 +94,7 @@ export default function RenderGraph() {
             ))}
           </Group>
         </Chip.Group>
-      </Group>
+      </Stack>
 
       <Group gap="lg">
         {LEGEND.map(({ key, style }) => (

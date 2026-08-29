@@ -56,7 +56,7 @@ export default function CatalogFiles() {
   });
 
   const total = data?.total ?? 0;
-  const columnCount = 7;
+  const columnCount = 6;
 
   return (
     <Stack gap="md">
@@ -127,7 +127,6 @@ export default function CatalogFiles() {
               />
             </Table.Th>
             <Table.Th>{t("catalog.field.title")}</Table.Th>
-            <Table.Th>{t("catalog.field.tags")}</Table.Th>
             <Table.Th>
               <SortHeader
                 field="updatedAt"
@@ -161,15 +160,6 @@ export default function CatalogFiles() {
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{file.title ?? ""}</Text>
-                </Table.Td>
-                <Table.Td>
-                  <Group gap={4} wrap="wrap">
-                    {file.tags.map((tag) => (
-                      <Badge key={tag} variant="outline" size="sm" color="gray">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </Group>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{new Date(file.updatedAt).toLocaleDateString(i18n.language)}</Text>
