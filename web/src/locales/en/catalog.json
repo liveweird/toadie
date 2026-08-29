@@ -111,6 +111,8 @@
   },
   "refHelp": "References point at other catalog entities as [kind:][namespace/]name. Kind is the target's kind — component, api, group, user, resource, system or domain (case-insensitive); each field assumes a default kind when you omit it. An omitted namespace means this file's own namespace.",
   "anyKind": "Any kind",
+  "anyNamespace": "Any namespace",
+  "anyTag": "Any tag",
   "clearKindFilter": "Clear kind filter",
   "export": {
     "button": "Export YAML",

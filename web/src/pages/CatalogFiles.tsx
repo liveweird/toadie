@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { Alert, Badge, Button, Group, Select, Stack, Table, Text, Title } from "@mantine/core";
@@ -18,6 +19,7 @@ import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
+import NamespaceFilterSelect from "../components/NamespaceFilterSelect";
 import PaginationBar from "../components/PaginationBar";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
@@ -25,6 +27,7 @@ import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { isString, useStoredState } from "../hooks/useStoredState";
+import { useTagCategories } from "../hooks/useTagCategories";
 import { loadErrorMessage } from "../utils/saveError";
 
 const SORT_FIELDS = ["name", "kind", "namespace", "updatedAt"] as const;
@@ -50,13 +53,23 @@ export default function CatalogFiles() {
 
   const queryClient = useQueryClient();
   const downloads = useCatalogDownloads();
+  const { categories } = useTagCategories();
 
+  // Only the freetext Name filter debounces — the Select filters change discretely.
   const [debouncedName] = useDebouncedValue(nameFilter, 300);
-  const [debouncedNamespace] = useDebouncedValue(namespaceFilter, 300);
-  const [debouncedTag] = useDebouncedValue(tagFilter, 300);
+
+  const tagOptions = useMemo(() => {
+    const groups = categories.map((c) => ({ group: c.name, items: c.tags }));
+    const known = categories.some((c) => c.tags.includes(tagFilter));
+    // A persisted filter for a since-removed tag keeps displaying (the editor's stale-tag
+    // idiom); it still filters server-side — files may carry it from before the removal.
+    return tagFilter && !known
+      ? [...groups, { group: t("catalog.staleTagsGroup"), items: [tagFilter] }]
+      : groups;
+  }, [categories, tagFilter, t]);
 
   const { page, setPage, pageSize, setPageSize, sortField, sortDir, sortParam, toggleSort } =
-    usePagedSort<SortField>("name", [debouncedName, debouncedNamespace, kindFilter, debouncedTag], {
+    usePagedSort<SortField>("name", [debouncedName, namespaceFilter, kindFilter, tagFilter], {
       key: SETTINGS_KEY,
       sortFields: SORT_FIELDS,
     });
@@ -68,9 +81,9 @@ export default function CatalogFiles() {
       pageSize,
       sortParam,
       debouncedName,
-      debouncedNamespace,
+      namespaceFilter,
       kindFilter,
-      debouncedTag,
+      tagFilter,
     ],
     queryFn: () =>
       listCatalogFiles({
@@ -78,9 +91,9 @@ export default function CatalogFiles() {
         pageSize,
         sort: sortParam,
         name: debouncedName || undefined,
-        namespace: debouncedNamespace || undefined,
+        namespace: namespaceFilter || undefined,
         kind: kindFilter || undefined,
-        tag: debouncedTag || undefined,
+        tag: tagFilter || undefined,
       }),
     placeholderData: keepPreviousData,
   });
@@ -105,13 +118,7 @@ export default function CatalogFiles() {
           onChange={setNameFilter}
           clearLabel={t("common.filter.clearName")}
         />
-        <ClearableTextInput
-          label={t("catalog.field.namespace")}
-          value={namespaceFilter}
-          onChange={setNamespaceFilter}
-          clearLabel={t("common.filter.clearNamespace")}
-          placeholder={t("common.filter.exact")}
-        />
+        <NamespaceFilterSelect value={namespaceFilter} onChange={setNamespaceFilter} />
         <Select
           label={t("catalog.field.kind")}
           placeholder={t("catalog.anyKind")}
@@ -121,12 +128,15 @@ export default function CatalogFiles() {
           clearable
           clearButtonProps={{ "aria-label": t("catalog.clearKindFilter") }}
         />
-        <ClearableTextInput
+        <Select
           label={t("catalog.field.tags")}
-          value={tagFilter}
-          onChange={setTagFilter}
-          clearLabel={t("common.filter.clearTag")}
-          placeholder={t("common.filter.exact")}
+          placeholder={t("catalog.anyTag")}
+          data={tagOptions}
+          value={tagFilter || null}
+          onChange={(v) => setTagFilter(v ?? "")}
+          searchable
+          clearable
+          clearButtonProps={{ "aria-label": t("common.filter.clearTag") }}
         />
       </FilterPanel>
 
@@ -307,13 +317,9 @@ export default function CatalogFiles() {
         <Button
           variant="default"
           leftSection={<IconFileExport size={16} />}
-          // The DEBOUNCED namespace — the slice the table actually shows; the raw filter
-          // could be ahead of it for 300 ms and export a different slice than displayed.
-          // While the filter is settling the button is disabled: exporting mid-transition
-          // is ambiguous (and an automated click would race the debounce).
-          onClick={() => void downloads.handleExport(debouncedNamespace.trim() || undefined)}
+          onClick={() => void downloads.handleExport(namespaceFilter.trim() || undefined)}
           loading={downloads.exporting}
-          disabled={total === 0 || namespaceFilter.trim() !== debouncedNamespace.trim()}
+          disabled={total === 0}
         >
           {t("catalog.export.button")}
         </Button>

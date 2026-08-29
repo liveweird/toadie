@@ -24,7 +24,6 @@
   "filter": {
     "title": "Filtry",
     "contains": "Zawiera…",
-    "exact": "Dokładna wartość…",
     "clearName": "Wyczyść filtr nazwy",
     "clearNamespace": "Wyczyść filtr przestrzeni nazw",
     "clearTag": "Wyczyść filtr tagu"

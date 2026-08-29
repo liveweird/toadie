@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, login, openFilters, runNamespace, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickNamespace, runNamespace, test, uniqueText } from "./helpers";
 
 // The YAML round-trip end to end: paste-import two documents in this run's throwaway
 // namespace (registered by global-setup — imports of undefined namespaces report INVALID),
@@ -53,7 +53,7 @@ test("two pasted documents import, export as one YAML, and re-import as conflict
   // Both files appear on the list under the namespace filter.
   await page.goto("/catalog-files");
   await openFilters(page);
-  await page.getByLabel("Namespace", { exact: true }).fill(ns);
+  await pickNamespace(page, ns);
   await expect(page.getByRole("row").filter({ hasText: comp })).toBeVisible();
   await expect(
     page.getByRole("row").filter({ hasText: team }).filter({ hasNotText: comp }),

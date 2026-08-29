@@ -97,9 +97,10 @@ export function runNamespace(key: "kinds" | "render" | "roundTrip"): string {
 }
 
 /**
- * Pick a namespace in the catalog form's Select (free text is no longer accepted there —
- * the field offers only the dictionary's entries). Mantine Select inputs carry the
- * combobox role; searchable filtering narrows the dropdown before the option click.
+ * Pick a namespace in a namespace Select — the catalog form's field AND the list/render
+ * pages' filter combo (both offer only the dictionary's entries; free text is not
+ * accepted). Mantine Select inputs carry the combobox role; searchable filtering narrows
+ * the dropdown before the option click.
  */
 export async function pickNamespace(page: Page, ns: string): Promise<void> {
   const select = page.getByRole("combobox", { name: "Namespace" });

@@ -13,15 +13,14 @@ import {
   Title,
   useComputedColorScheme,
 } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { IconTopologyStar3 } from "@tabler/icons-react";
 import { getCatalogGraph } from "../api/catalogFiles";
 import CatalogGraphNode from "../components/CatalogGraphNode";
-import ClearableTextInput from "../components/ClearableTextInput";
 import EmptyState from "../components/EmptyState";
+import NamespaceFilterSelect from "../components/NamespaceFilterSelect";
 import {
   filterGraph,
   layoutGraph,
@@ -52,12 +51,10 @@ export default function RenderGraph() {
   // Deliberately not persisted: all relations on is the right starting view.
   const [enabled, setEnabled] = useState<RelationFamily[]>([...RELATION_FAMILIES]);
 
-  const [debouncedNamespace] = useDebouncedValue(namespaceFilter, 300);
-
   const { data, isLoading, isError, error } = useQuery({
     // Under the "catalogFiles" prefix so every catalog mutation's invalidation refreshes it.
-    queryKey: ["catalogFiles", "graph", debouncedNamespace],
-    queryFn: () => getCatalogGraph(debouncedNamespace.trim() || undefined),
+    queryKey: ["catalogFiles", "graph", namespaceFilter],
+    queryFn: () => getCatalogGraph(namespaceFilter.trim() || undefined),
     placeholderData: keepPreviousData,
   });
 
@@ -76,13 +73,7 @@ export default function RenderGraph() {
       <Title order={2}>{t("render.title")}</Title>
 
       <Group align="flex-end" gap="lg">
-        <ClearableTextInput
-          label={t("catalog.field.namespace")}
-          value={namespaceFilter}
-          onChange={setNamespaceFilter}
-          clearLabel={t("common.filter.clearNamespace")}
-          placeholder={t("common.filter.exact")}
-        />
+        <NamespaceFilterSelect value={namespaceFilter} onChange={setNamespaceFilter} />
         <Chip.Group
           multiple
           value={enabled}

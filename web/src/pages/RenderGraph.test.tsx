@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
@@ -49,12 +49,22 @@ const GRAPH = {
   ],
 };
 
+// The namespace filter combo loads its options from the namespaces dictionary.
+const NAMESPACE_ENTRIES = {
+  items: [
+    { id: 1, value: "default", isDefault: true },
+    { id: 2, value: "team-a", isDefault: false },
+  ],
+};
+
 function mockGraph(mockFetch: FetchMock, body: unknown = GRAPH, status = 200) {
-  mockFetch.mockImplementation((url: string) =>
-    url.startsWith("/api/v1/catalog-files/graph")
+  mockFetch.mockImplementation((url: string) => {
+    if (url.startsWith("/api/v1/dictionaries/namespaces"))
+      return Promise.resolve(jsonResponse(200, NAMESPACE_ENTRIES));
+    return url.startsWith("/api/v1/catalog-files/graph")
       ? Promise.resolve(jsonResponse(status, body))
-      : Promise.resolve(jsonResponse(404, {})),
-  );
+      : Promise.resolve(jsonResponse(404, {}));
+  });
 }
 
 function PathProbe() {
@@ -97,21 +107,18 @@ describe("RenderGraph page", () => {
 
   test("the namespace filter refetches with namespace=", async () => {
     mockGraph(mockFetch);
-    const user = userEvent.setup();
     renderPage();
 
     await screen.findByText(/svc-a/);
-    await user.type(screen.getByLabelText("Namespace"), "team-a");
+    fireEvent.click(screen.getByLabelText("Namespace", { selector: "input" }));
+    fireEvent.click(await screen.findByRole("option", { name: "team-a" }));
 
-    await waitFor(
-      () => {
-        const called = mockFetch.mock.calls.some(
-          ([url]) => typeof url === "string" && url.includes("graph?namespace=team-a"),
-        );
-        expect(called).toBe(true);
-      },
-      { timeout: 1500 },
-    );
+    await waitFor(() => {
+      const called = mockFetch.mock.calls.some(
+        ([url]) => typeof url === "string" && url.includes("graph?namespace=team-a"),
+      );
+      expect(called).toBe(true);
+    });
   });
 
   test("toggling a relation family off prunes its virtual nodes", async () => {

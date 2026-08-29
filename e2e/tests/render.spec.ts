@@ -48,7 +48,7 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
 
   // Render the namespace: A and B stored, the ghost missing, the (stored) owner group too.
   await page.goto("/render");
-  await page.getByLabel("Namespace", { exact: true }).fill(ns);
+  await pickNamespace(page, ns);
   await expect(page.getByText(a, { exact: true })).toBeVisible();
   await expect(page.getByText(b, { exact: true })).toBeVisible();
   await expect(page.getByText(ghost, { exact: true })).toBeVisible();

@@ -60,12 +60,37 @@ function filesPage(items: FileRow[], total = items.length) {
   return jsonResponse(200, { items, page: 1, pageSize: 20, total });
 }
 
+// The namespace and tag filter combos load their options from the admin-curated registries.
+const NAMESPACE_ENTRIES = {
+  items: [
+    { id: 1, value: "default", isDefault: true },
+    { id: 2, value: "team-a", isDefault: false },
+  ],
+};
+const TAG_CATEGORIES = {
+  items: [{ id: 1, name: "Tech", tags: ["java", "billing"], kinds: ["Component"] }],
+};
+
+function registryResponse(url: string): Response | null {
+  if (url.startsWith("/api/v1/dictionaries/namespaces"))
+    return jsonResponse(200, NAMESPACE_ENTRIES);
+  if (url.startsWith("/api/v1/tag-categories")) return jsonResponse(200, TAG_CATEGORIES);
+  return null;
+}
+
 function setupMocks(mockFetch: FetchMock, byUrl: (url: string) => Response) {
-  mockFetch.mockImplementation((url: string) =>
-    url.startsWith("/api/v1/catalog-files")
+  mockFetch.mockImplementation((url: string) => {
+    const registry = registryResponse(url);
+    if (registry) return Promise.resolve(registry);
+    return url.startsWith("/api/v1/catalog-files")
       ? Promise.resolve(byUrl(url))
-      : Promise.resolve(jsonResponse(404, {})),
-  );
+      : Promise.resolve(jsonResponse(404, {}));
+  });
+}
+
+async function pickFilterOption(label: string, option: string) {
+  fireEvent.click(screen.getByLabelText(label, { selector: "input" }));
+  fireEvent.click(await screen.findByRole("option", { name: option }));
 }
 
 function renderPage() {
@@ -123,7 +148,7 @@ describe("CatalogFiles page", () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByLabelText("Name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Namespace")).toBeInTheDocument();
+    expect(screen.getByLabelText("Namespace", { selector: "input" })).toBeInTheDocument();
   });
 
   test("typing in the Name filter triggers a refetch with name=", async () => {
@@ -160,26 +185,26 @@ describe("CatalogFiles page", () => {
     expect(screen.getByText("API")).toBeInTheDocument();
   });
 
-  test("typing in the Namespace filter triggers a refetch with namespace=", async () => {
+  test("picking a Namespace filter option triggers a refetch with namespace=", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     const user = userEvent.setup();
     renderPage();
 
     await screen.findByText("payments-svc");
     await user.click(screen.getByRole("button", { name: /filters/i }));
-    await user.type(screen.getByLabelText("Namespace"), "team-a");
+    await pickFilterOption("Namespace", "team-a");
 
     await calledWith(mockFetch, "namespace=team-a");
   });
 
-  test("typing in the Tags filter triggers a refetch with tag=", async () => {
+  test("picking a Tags filter option triggers a refetch with tag=", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     const user = userEvent.setup();
     renderPage();
 
     await screen.findByText("payments-svc");
     await user.click(screen.getByRole("button", { name: /filters/i }));
-    await user.type(screen.getByLabelText("Tags"), "java");
+    await pickFilterOption("Tags", "java");
 
     await calledWith(mockFetch, "tag=java");
   });
@@ -407,6 +432,8 @@ describe("CatalogFiles page", () => {
 
   test("export passes the exact-namespace filter through and errors show the alert", async () => {
     mockFetch.mockImplementation((url: string) => {
+      const registry = registryResponse(url);
+      if (registry) return Promise.resolve(registry);
       if (url.startsWith("/api/v1/catalog-files/export")) {
         return Promise.resolve(jsonResponse(500, {}));
       }
@@ -417,7 +444,7 @@ describe("CatalogFiles page", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: /filters/i }));
-    fireEvent.change(screen.getByLabelText("Namespace"), { target: { value: "team-a" } });
+    await pickFilterOption("Namespace", "team-a");
     await calledWith(mockFetch, "namespace=team-a");
 
     await user.click(screen.getByRole("button", { name: "Export YAML" }));
