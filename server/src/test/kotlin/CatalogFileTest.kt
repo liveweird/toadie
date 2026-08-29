@@ -247,6 +247,7 @@ class CatalogFileTest {
         val name = uniqueEntityName("full")
         TestNamespaces.ensure("team-a")
         TestLabels.ensure("example.com/tier", listOf("backend"), listOf("Component"))
+        TestAnnotationKeys.ensure("github.com/project-slug", listOf("Component"))
         TestTagCategories.ensure("Languages", listOf("java", "c++"), listOf("Component"))
         // Every referenced target must be STORED (fixed names in the SHARED team-a/default
         // namespaces — ensured idempotently, a 409 from an earlier run is fine).
@@ -875,6 +876,39 @@ class CatalogFileTest {
                 assertTrue(update.body<ProblemDetail>().detail!!.contains("not an allowed type"))
             }
         }
+    }
+
+    @Test
+    fun `annotation keys are enforced against the registry - strict, on create and update`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("annenf")
+        fun annotated(name: String, key: String) = componentFile(name).let {
+            it.copy(metadata = it.metadata.copy(annotations = mapOf(key to "free value, any format!")))
+        }
+
+        // An unregistered key is a 400 naming the rule.
+        val bad = client.postJson(
+            "/api/v1/catalog-files",
+            annotated(uniqueEntityName("annenf"), "never-registered.example.com/${uniqueEntityName("k")}"),
+        )
+        assertEquals(HttpStatusCode.BadRequest, bad.status)
+        assertTrue(bad.body<ProblemDetail>().detail!!.contains("not a registered annotation key"))
+
+        // A registered key whose kinds exclude the file's kind is a 400 too.
+        val groupOnly = uniqueAnnotationKey("anngrp", kinds = listOf("Group"))
+        val wrongKind = client.postJson("/api/v1/catalog-files", annotated(uniqueEntityName("annwk"), groupOnly))
+        assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
+        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("cannot be applied to kind"))
+
+        // A registered Component key works; once removed, the STORED file goes strict-invalid
+        // on its next save (no grandfathering). Values stay free — no registry check on them.
+        val allowed = uniqueAnnotationKey("annok")
+        val file = annotated(uniqueEntityName("annok"), allowed)
+        val created = client.createCatalogFile(file)
+        TestAnnotationKeys.remove(allowed)
+        val update = client.putJson("/api/v1/catalog-files/${created.id}", file)
+        assertEquals(HttpStatusCode.BadRequest, update.status)
+        assertTrue(update.body<ProblemDetail>().detail!!.contains("not a registered annotation key"))
     }
 
     @Test

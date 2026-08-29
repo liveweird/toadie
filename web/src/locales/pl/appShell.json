@@ -12,6 +12,7 @@
     "tags": "Tagi",
     "types": "Typy",
     "lifecycles": "Cykle życia",
+    "annotations": "Adnotacje",
     "users": "Użytkownicy/czki",
     "changePassword": "Zmiana hasła",
     "featureFlags": "Flagi funkcji"

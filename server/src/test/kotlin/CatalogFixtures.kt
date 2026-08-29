@@ -32,6 +32,16 @@ suspend fun uniqueLabel(
     kinds: List<String> = listOf("Component"),
 ): String = uniqueEntityName(prefix).also { TestLabels.ensure(it, values, kinds) }
 
+/**
+ * A unique throwaway annotation key, registered in the annotation-key registry first —
+ * catalog writes reject unregistered keys, so a test putting annotations on files must go
+ * through this.
+ */
+suspend fun uniqueAnnotationKey(
+    prefix: String,
+    kinds: List<String> = listOf("Component"),
+): String = uniqueEntityName(prefix).also { TestAnnotationKeys.ensure(it, kinds) }
+
 /** A unique, tag-grammar-valid (lowercase) tag value — NOT registered anywhere by itself. */
 fun uniqueTag(prefix: String) = uniqueEntityName(prefix).lowercase()
 

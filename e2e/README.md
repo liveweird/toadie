@@ -48,7 +48,8 @@ from Lettuce, that any new or edited spec must satisfy:
   `catalog-files` and `cross-check` own throwaway files (unique names in `default`); `kinds`,
   `render`, and `round-trip` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user;
-  `labels` owns its throwaway label, the one file carrying it, and its user; `tags` owns its
+  `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
+  owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
   value it appends to the Domain type dictionary, the one Domain file carrying it, and its
   user; `lifecycles` owns the one value it appends to the lifecycles dictionary, the one
@@ -79,6 +80,10 @@ from Lettuce, that any new or edited spec must satisfy:
   **`labels.spec.ts` is the registry's ONLY in-run writer**, and it only ever creates and
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
   first moving label registration into global-setup (the run-namespace pattern).
+- **The annotation-key registry follows the same rule.** Catalog writes accept only
+  registered annotation keys — **`annotations.spec.ts` is that registry's ONLY in-run
+  writer**, creating and deleting only its own unique `e2e-ann-*` key. No other spec may
+  put annotations on files without first moving key registration into global-setup.
 - **The tag-category registry follows the same rule.** Catalog writes accept only tags from
   registered categories — **`tags.spec.ts` is that registry's ONLY in-run writer**, creating
   and deleting only its own unique `e2e-tagcat-*` category. No other spec may put tags on
@@ -115,8 +120,12 @@ the same commit** — this list is the coverage map, the scenario file is the de
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
   authenticated pages (`/`, `/catalog-files`, `/catalog-files/new`, `/catalog-files/import`,
-  `/cross-check`, `/render`, `/labels`, `/tags`, `/types`, `/lifecycles`, `/users`); `color-contrast` consciously waived theme-wide.
+  `/cross-check`, `/render`, `/labels`, `/annotations`, `/tags`, `/types`, `/lifecycles`, `/users`); `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
+- [`annotations.spec.ts`](scenarios/annotations.md) — the annotation-key registry: modal
+  validation → register a key (kinds only — values stay free) → edit → the regular user's
+  read-only view → the editor's registry key Select with a free-text value on a new
+  Component → cleanup; the registry's only in-run writer.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
 - [`cross-check.spec.ts`](scenarios/cross-check.md) — an unresolved reference blocks the save

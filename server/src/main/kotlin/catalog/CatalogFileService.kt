@@ -1,5 +1,6 @@
 package ch.nokillswit.catalog
 
+import ch.nokillswit.annotations.AnnotationKeyService
 import ch.nokillswit.dictionaries.Dictionary
 import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.infra.db.containsNormalized
@@ -269,6 +270,38 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
     }
 
+    /**
+     * The seventh sanctioned cross-feature table read (see persistence.md): STRICT
+     * annotation-KEY enforcement — every write (create, update, import) checks its
+     * `metadata.annotations` keys against the ADMIN-curated annotation-key registry inside
+     * the write's own transaction. Every key must be an active registered row whose kinds
+     * include the file's kind (matching is byte-exact — the editor only ever writes
+     * registered keys verbatim); VALUES stay free strings (the descriptor grammar/length
+     * rules only). No grandfathering: a stored file whose key was since removed or narrowed
+     * cannot be saved until it is fixed. An empty registry means no file may carry
+     * annotations. (The server-written keys are rejected earlier, by validateCatalogFile.)
+     */
+    private suspend fun requireAllowedAnnotations(kind: String, annotations: Map<String, String>) {
+        if (annotations.isEmpty()) return
+        val registry: Map<String, List<String>> =
+            AnnotationKeyService.AnnotationKeys.selectAll()
+                .where { AnnotationKeyService.AnnotationKeys.markedAsDeleted eq false }
+                .map {
+                    it[AnnotationKeyService.AnnotationKeys.key] to
+                        json.decodeFromString<List<String>>(it[AnnotationKeyService.AnnotationKeys.allowedKinds])
+                }
+                .toList()
+                .toMap()
+        for (key in annotations.keys) {
+            val allowedKinds = registry[key] ?: throw BadRequestException(
+                "metadata.annotations key '$key' is not a registered annotation key — define it on the Annotations page",
+            )
+            if (kind !in allowedKinds) {
+                throw BadRequestException("Annotation '$key' cannot be applied to kind '$kind'")
+            }
+        }
+    }
+
     private fun CatalogFile.withNamespace(resolved: String): CatalogFile =
         if (metadata.namespace == resolved) this else copy(metadata = metadata.copy(namespace = resolved))
 
@@ -323,6 +356,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         // The stored row AND the content JSON both carry the resolved concrete namespace.
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         requireAllowedLabels(stored.kind, stored.metadata.labels)
+        requireAllowedAnnotations(stored.kind, stored.metadata.annotations)
         requireAllowedTags(stored.kind, stored.metadata.tags)
         requireAllowedType(stored.kind, stored.spec.type)
         requireAllowedLifecycle(stored.spec.lifecycle)
@@ -351,6 +385,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         requireAllowedLabels(stored.kind, stored.metadata.labels)
+        requireAllowedAnnotations(stored.kind, stored.metadata.annotations)
         requireAllowedTags(stored.kind, stored.metadata.tags)
         requireAllowedType(stored.kind, stored.spec.type)
         requireAllowedLifecycle(stored.spec.lifecycle)

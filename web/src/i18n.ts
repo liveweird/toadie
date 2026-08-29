@@ -9,6 +9,7 @@ import LanguageDetector from "i18next-browser-languagedetector";
 // auto-discovered from its `locales/<lang>/` folder by the glob further down.
 import enCommon from "./locales/en/common.json";
 import enAppShell from "./locales/en/appShell.json";
+import enAnnotations from "./locales/en/annotations.json";
 import enAuth from "./locales/en/auth.json";
 import enCatalog from "./locales/en/catalog.json";
 import enCrossCheck from "./locales/en/crossCheck.json";
@@ -57,6 +58,7 @@ const LANGUAGE_STORAGE_KEY = "toadie.lang";
 export const en = {
   common: enCommon,
   appShell: enAppShell,
+  annotations: enAnnotations,
   auth: enAuth,
   catalog: enCatalog,
   crossCheck: enCrossCheck,

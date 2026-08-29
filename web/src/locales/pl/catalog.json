@@ -164,5 +164,7 @@
   "noTypesForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych typów — administratorzy i administratorki definiują je na stronie Typy.",
   "lifecycleOptionsFailed": "Nie udało się wczytać cykli życia. Przeładuj stronę, aby spróbować ponownie.",
   "noLifecyclesDefined": "Nie zdefiniowano żadnych cykli życia — administratorzy i administratorki definiują je na stronie Cykle życia.",
+  "annotationKeyOptionsFailed": "Nie udało się wczytać kluczy adnotacji. Przeładuj stronę, aby spróbować ponownie.",
+  "noAnnotationKeysForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych kluczy adnotacji — administratorzy i administratorki rejestrują je na stronie Adnotacje.",
   "staleTagsGroup": "Niezarejestrowane"
 }

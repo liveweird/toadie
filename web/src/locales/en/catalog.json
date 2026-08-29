@@ -160,5 +160,7 @@
   "noTypesForKind": "No types are defined for kind {{kind}} — administrators define them on the Types page.",
   "lifecycleOptionsFailed": "Could not load the lifecycles. Reload to try again.",
   "noLifecyclesDefined": "No lifecycles are defined — administrators define them on the Lifecycles page.",
+  "annotationKeyOptionsFailed": "Could not load the annotation keys. Reload to try again.",
+  "noAnnotationKeysForKind": "No annotation keys are defined for kind {{kind}} — administrators register them on the Annotations page.",
   "staleTagsGroup": "Not registered"
 }

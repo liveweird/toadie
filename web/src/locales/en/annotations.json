@@ -1,0 +1,34 @@
+{
+  "title": "Annotations",
+  "intro": "The only annotation keys catalog files may carry — values stay free-form. Administrators define each allowed key and the entity kinds it applies to.",
+  "empty": "No annotation keys defined yet",
+  "loadFailed": "Could not load the annotation keys",
+  "newKey": "New annotation key",
+  "createTitle": "New annotation key",
+  "editTitle": "Edit annotation key",
+  "column": {
+    "key": "Key",
+    "kinds": "Applies to"
+  },
+  "field": {
+    "key": "Key",
+    "keyHint": "Optional lowercase domain prefix, a slash, then the name — e.g. github.com/project-slug",
+    "kinds": "Applies to kinds",
+    "kindsHint": "Only files of these kinds may carry this annotation"
+  },
+  "validation": {
+    "key": "Must be an optional lowercase-domain prefix plus a 1–63 character name of letters, digits, and single [-_.] separators",
+    "kindsRequired": "Pick at least one kind"
+  },
+  "saveConflict": "An annotation key with this name already exists",
+  "saveInvalid": "One or more fields are invalid",
+  "saveGone": "This annotation key no longer exists — reload the page",
+  "deleteTitle": "Delete annotation key?",
+  "deleteFailed": "Could not delete the annotation key",
+  "deleteBody": "Files carrying \"{{key}}\" will not save until the key is re-registered or removed from them.",
+  "toast": {
+    "created": "Annotation key created",
+    "saved": "Annotation key saved",
+    "deleted": "Annotation key deleted"
+  }
+}

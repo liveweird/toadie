@@ -12,6 +12,7 @@
     "tags": "Tags",
     "types": "Types",
     "lifecycles": "Lifecycles",
+    "annotations": "Annotations",
     "users": "Users",
     "changePassword": "Change password",
     "featureFlags": "Feature flags"

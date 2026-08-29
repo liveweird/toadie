@@ -15,6 +15,7 @@ import {
 import { type UseFormReturnType } from "@mantine/form";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { useAnnotationKeys } from "../hooks/useAnnotationKeys";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
 import { useEntityTypes } from "../hooks/useEntityTypes";
 import { useLabels } from "../hooks/useLabels";
@@ -481,20 +482,41 @@ function LabelsFieldset({ form }: { form: CatalogForm }) {
   );
 }
 
-/** The annotations key-value editor — free-form (key grammar aside), index-addressed rows. */
+/**
+ * The annotations editor — the KEY is a registry-constrained picker (catalog writes accept
+ * only ADMIN-registered annotation keys allowed for the document's kind — server-enforced,
+ * strict) while the VALUE stays a free text input (values are not registry-checked). A
+ * stored key no longer offered is appended to its own row's options so it keeps displaying
+ * — the server's 400 then names the problem on save. A failed registry load disables
+ * adding but keeps existing rows rendered.
+ */
 function AnnotationsFieldset({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
+  const { annotationKeys, error } = useAnnotationKeys();
+  const kind = form.values.kind;
+  const allowed = annotationKeys.filter((row) => row.kinds.includes(kind));
+  const usedKeys = new Set(form.values.annotations.map((row) => row.key));
   return (
     <Fieldset legend={t("catalog.section.annotations")}>
       <Stack gap="sm">
-        {form.values.annotations.map((_row, index) => (
+        {form.values.annotations.map((row, index) => {
+          // A key stays offered to the row that holds it; other rows can't duplicate it.
+          const keyOptions = allowed
+            .map((registered) => registered.key)
+            .filter((key) => key === row.key || !usedKeys.has(key));
+          const keyData = row.key && !keyOptions.includes(row.key) ? [...keyOptions, row.key] : keyOptions;
+          return (
           // Rows have no identity beyond position — Mantine's form list helpers are index-addressed.
           <Group key={`annotations-${index}`} align="flex-start" gap="sm" wrap="nowrap">
-            <TextInput
+            <Select
               style={{ flex: 1 }}
               aria-label={`${t("catalog.section.annotations")} ${t("catalog.field.key")} ${index + 1}`}
               placeholder={t("catalog.field.key")}
-              {...form.getInputProps(`annotations.${index}.key`)}
+              data={keyData}
+              searchable
+              value={row.key || null}
+              onChange={(value) => form.setFieldValue(`annotations.${index}.key`, value ?? "")}
+              error={form.getInputProps(`annotations.${index}.key`).error}
             />
             <TextInput
               style={{ flex: 1 }}
@@ -512,12 +534,25 @@ function AnnotationsFieldset({ form }: { form: CatalogForm }) {
               <IconTrash size={16} />
             </ActionIcon>
           </Group>
-        ))}
+          );
+        })}
+        {error ? (
+          <Text size="sm" c="dimmed">
+            {t("catalog.annotationKeyOptionsFailed")}
+          </Text>
+        ) : (
+          allowed.length === 0 && (
+            <Text size="sm" c="dimmed">
+              {t("catalog.noAnnotationKeysForKind", { kind })}
+            </Text>
+          )
+        )}
         <Button
           variant="light"
           size="xs"
           leftSection={<IconPlus size={14} />}
           style={{ alignSelf: "flex-start" }}
+          disabled={allowed.length === 0}
           onClick={() => form.insertListItem("annotations", { key: "", value: "" })}
         >
           {t("catalog.addAnnotation")}

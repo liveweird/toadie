@@ -1,0 +1,34 @@
+{
+  "title": "Adnotacje",
+  "intro": "Jedyne klucze adnotacji, jakie mogą mieć pliki katalogu — wartości pozostają dowolne. Administratorzy i administratorki definiują każdy dozwolony klucz i rodzaje encji, których dotyczy.",
+  "empty": "Nie zdefiniowano jeszcze kluczy adnotacji",
+  "loadFailed": "Nie udało się wczytać kluczy adnotacji",
+  "newKey": "Nowy klucz adnotacji",
+  "createTitle": "Nowy klucz adnotacji",
+  "editTitle": "Edytuj klucz adnotacji",
+  "column": {
+    "key": "Klucz",
+    "kinds": "Dotyczy"
+  },
+  "field": {
+    "key": "Klucz",
+    "keyHint": "Opcjonalny prefiks domenowy małymi literami, ukośnik, potem nazwa — np. github.com/project-slug",
+    "kinds": "Dotyczy rodzajów",
+    "kindsHint": "Tylko pliki tych rodzajów mogą mieć tę adnotację"
+  },
+  "validation": {
+    "key": "Musi być opcjonalnym prefiksem domenowym małymi literami plus nazwą 1–63 znaków z liter, cyfr i pojedynczych separatorów [-_.]",
+    "kindsRequired": "Wybierz co najmniej jeden rodzaj"
+  },
+  "saveConflict": "Klucz adnotacji o tej nazwie już istnieje",
+  "saveInvalid": "Co najmniej jedno pole jest nieprawidłowe",
+  "saveGone": "Ten klucz adnotacji już nie istnieje — odśwież stronę",
+  "deleteTitle": "Usunąć klucz adnotacji?",
+  "deleteFailed": "Nie udało się usunąć klucza adnotacji",
+  "deleteBody": "Pliki z kluczem „{{key}}” nie zapiszą się, dopóki klucz nie zostanie ponownie zarejestrowany albo z nich usunięty.",
+  "toast": {
+    "created": "Klucz adnotacji utworzony",
+    "saved": "Klucz adnotacji zapisany",
+    "deleted": "Klucz adnotacji usunięty"
+  }
+}

@@ -303,7 +303,9 @@ export interface paths {
          *     annotation grammars, entity-reference syntax, the per-kind required/forbidden field
          *     tables). The namespace must additionally be an active
          *     entry of the `namespaces` dictionary, every label must be an ADMIN-registered
-         *     label allowed for the file's kind with a value from its closed list, every tag
+         *     label allowed for the file's kind with a value from its closed list, every
+         *     annotation KEY must be an ADMIN-registered annotation key allowed for the file's
+         *     kind (values stay free), every tag
          *     must belong to an ADMIN-defined tag category allowed for the file's kind, a
          *     non-blank `spec.type` must be in the file's kind's ADMIN-defined type dictionary,
          *     a non-blank `spec.lifecycle` must be an active entry of the `lifecycles`
@@ -520,11 +522,12 @@ export interface paths {
         /**
          * Replace a catalog file
          * @description Full replacement; same validation as create (the defined-namespace,
-         *     registered-label, registered-tag, registered-type, registered-lifecycle, and
-         *     resolved-reference rules included — strict: a file whose namespace, label, tag,
-         *     type, or lifecycle was removed from its registry, or whose referenced entity was
-         *     deleted, cannot be saved until it is fixed; a reference to the file's own identity
-         *     is a `400`). Renaming into an identity an active file already holds is a `409`.
+         *     registered-label, registered-annotation-key, registered-tag, registered-type,
+         *     registered-lifecycle, and resolved-reference rules included — strict: a file whose
+         *     namespace, label, annotation key, tag, type, or lifecycle was removed from its
+         *     registry, or whose referenced entity was deleted, cannot be saved until it is
+         *     fixed; a reference to the file's own identity is a `400`). Renaming into an
+         *     identity an active file already holds is a `409`.
          */
         put: operations["replaceCatalogFile"];
         post?: never;
@@ -766,6 +769,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/annotation-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the annotation-key registry
+         * @description Any authenticated user. Returns every active annotation key, ordered
+         *     case-insensitively — deliberately unpaged (the registry holds at most 200 keys by
+         *     validation), NOT a standard list endpoint. The registry is the whitelist every
+         *     catalog-file write's `metadata.annotations` KEYS are validated against; annotation
+         *     VALUES stay free strings.
+         */
+        get: operations["listAnnotationKeys"];
+        put?: never;
+        /**
+         * Register an annotation key
+         * @description ADMIN only. Registers one allowed `metadata.annotations` key (the descriptor-format
+         *     key grammar) with the entity kinds it may be applied to (normalized to canonical
+         *     casing and order). A key already held by an active row (case-insensitively) is a
+         *     `409`; the keys the catalog server writes itself cannot be registered (`400`).
+         */
+        post: operations["createAnnotationKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/annotation-keys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace an annotation key
+         * @description ADMIN only — whole-row replacement, key rename included (stored files carrying the
+         *     old key simply fail the strict check on their next save). Same validation and `409`
+         *     rules as create.
+         */
+        put: operations["replaceAnnotationKey"];
+        post?: never;
+        /**
+         * Delete an annotation key
+         * @description ADMIN only — soft delete; the key becomes reusable by a NEW registration. Stored
+         *     files carrying it fail the strict check on their next save until it is re-registered
+         *     or removed from them.
+         */
+        delete: operations["deleteAnnotationKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -945,7 +1009,7 @@ export interface components {
             labels?: {
                 [key: string]: string;
             };
-            /** @description Non-identifying key/value pairs (key grammar as labels; values free-form). Keys the catalog server writes itself (`backstage.io/managed-by-location`, `backstage.io/managed-by-origin-location`, `backstage.io/orphan`) are rejected. */
+            /** @description Non-identifying key/value pairs (key grammar as labels; values free-form). Keys the catalog server writes itself (`backstage.io/managed-by-location`, `backstage.io/managed-by-origin-location`, `backstage.io/orphan`) are rejected. On every write, each key must additionally be an ADMIN-registered annotation key (`GET /api/v1/annotation-keys`) allowed for the file's kind — unregistered keys are rejected with `400`; values are not registry-checked. */
             annotations?: {
                 [key: string]: string;
             };
@@ -1202,6 +1266,24 @@ export interface components {
             kind: string;
             /** @description At least one entry; each trimmed and validated with the exact `spec.type` rule (1–63 characters, no whitespace); no case-folded duplicates. Array order becomes the stored order. */
             types: string[];
+        };
+        AnnotationKey: {
+            /** Format: int32 */
+            id: number;
+            /** @description The allowed `metadata.annotations` key (descriptor key grammar — optional lowercase-domain prefix + `/` + name part). Unique case-insensitively among active rows. Values are not constrained by the registry. */
+            key: string;
+            /** @description The entity kinds the key may be applied to, in canonical casing and order. */
+            kinds: string[];
+        };
+        AnnotationKeyList: {
+            /** @description Active annotation keys, ordered case-insensitively. */
+            items: components["schemas"]["AnnotationKey"][];
+        };
+        AnnotationKeyRequest: {
+            /** @description Trimmed; the descriptor key grammar. The keys the catalog server writes itself are rejected. A key held by another active row (case-insensitively) is a `409`. */
+            key: string;
+            /** @description At least one of the seven landscape kinds (case-insensitive input; stored in canonical casing and order); no duplicates. */
+            kinds: string[];
         };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
@@ -2399,6 +2481,113 @@ export interface operations {
         };
     };
     deleteEntityTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAnnotationKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationKeyList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createAnnotationKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new annotation-key resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationKey"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceAnnotationKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteAnnotationKey: {
         parameters: {
             query?: never;
             header?: never;

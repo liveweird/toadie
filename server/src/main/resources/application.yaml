@@ -29,6 +29,7 @@ ktor:
       - ch.nokillswit.labels.LabelRoutesKt.configureLabelRoutes
       - ch.nokillswit.tags.TagCategoryRoutesKt.configureTagCategoryRoutes
       - ch.nokillswit.types.EntityTypesRoutesKt.configureEntityTypesRoutes
+      - ch.nokillswit.annotations.AnnotationKeyRoutesKt.configureAnnotationKeyRoutes
       - ch.nokillswit.auth.AuthRoutesKt.configureAuthRoutes
       # — catch-all router
       - ch.nokillswit.plugins.RoutingKt.configureRouting

@@ -1,5 +1,7 @@
 package ch.nokillswit.infra.db
 
+import ch.nokillswit.annotations.AnnotationKeyService
+import ch.nokillswit.annotations.AnnotationKeyServiceKey
 import ch.nokillswit.auth.TokenBlocklistService
 import ch.nokillswit.auth.TokenBlocklistServiceKey
 import ch.nokillswit.catalog.CatalogFileService
@@ -34,5 +36,6 @@ suspend fun Application.configureDatabase() {
     attributes.put(LabelServiceKey, LabelService(database))
     attributes.put(TagCategoryServiceKey, TagCategoryService(database))
     attributes.put(EntityTypesServiceKey, EntityTypesService(database))
+    attributes.put(AnnotationKeyServiceKey, AnnotationKeyService(database))
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
 }

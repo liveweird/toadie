@@ -59,6 +59,13 @@ describe("CreateCatalogFile page", () => {
     // every existing mockImplementation (and findSaveCall over mockFetch.mock.calls) is
     // untouched by the registry traffic.
     vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url === "/api/v1/annotation-keys") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            items: [{ id: 1, key: "github.com/project-slug", kinds: ["Component"] }],
+          }),
+        );
+      }
       if ((init?.method ?? "GET") === "GET" && url === "/api/v1/dictionaries/lifecycles") {
         return Promise.resolve(
           jsonResponse(200, {
@@ -394,10 +401,14 @@ describe("CreateCatalogFile page", () => {
     const user = userEvent.setup();
     renderCreate();
 
+    // Adding is gated on the registry offering a key for this kind.
+    await waitFor(() => expect(screen.getByRole("button", { name: /add annotation/i })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: /add annotation/i }));
-    await user.type(screen.getByLabelText("Annotations Key 1"), "github.com/project-slug");
+    await user.click(screen.getByRole("combobox", { name: "Annotations Key 1" }));
+    await user.click(await screen.findByRole("option", { name: "github.com/project-slug" }));
+    await user.type(screen.getByLabelText("Annotations Value 1"), "acme/repo — any text");
     await user.click(screen.getByRole("button", { name: "Remove annotation 1" }));
-    expect(screen.queryByLabelText("Annotations Key 1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Annotations Key 1" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /add link/i }));
     await user.type(screen.getByLabelText("URL 1"), "https://example.com");

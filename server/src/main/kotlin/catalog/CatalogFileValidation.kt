@@ -46,7 +46,9 @@ private val KEY_PREFIX_REGEX = Regex("[a-z0-9]+(?:-[a-z0-9]+)*(?:\\.[a-z0-9]+(?:
 private val KIND_REGEX = Regex("[A-Za-z][A-Za-z0-9]*")
 
 // Annotations the catalog server writes itself — a creation UI must never emit them.
-private val SERVER_WRITTEN_ANNOTATIONS = setOf(
+// Internal: the annotation-key registry (annotations/AnnotationKey.kt) rejects these keys
+// too — registering a key the file writes always refuse would be a trap.
+internal val SERVER_WRITTEN_ANNOTATIONS = setOf(
     "backstage.io/managed-by-location",
     "backstage.io/managed-by-origin-location",
     "backstage.io/orphan",

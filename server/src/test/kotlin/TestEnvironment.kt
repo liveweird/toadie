@@ -478,6 +478,42 @@ object TestLabels {
 }
 
 /**
+ * Direct access to the SHARED annotation-key registry (V17) — the label registry's sibling
+ * (keys + kinds, no values), suite state every catalog write's annotation keys are checked
+ * against. Tests only ever mint UNIQUE keys (the `uniqueAnnotationKey` fixture) and remove
+ * them when a test's assertions depend on absence.
+ */
+object TestAnnotationKeys {
+    val service: ch.nokillswit.annotations.AnnotationKeyService by lazy {
+        ch.nokillswit.annotations.AnnotationKeyService(sharedTestDatabase)
+    }
+
+    data class RawRow(val id: UInt, val key: String, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.annotations.AnnotationKeyService.AnnotationKeys
+        t.selectAll().map { RawRow(it[t.id].value, it[t.key], it[t.markedAsDeleted]) }.toList()
+    }
+
+    /** Registers [key] (create-if-missing; an existing active row is updated) and returns its id. */
+    suspend fun ensure(key: String, kinds: List<String>): UInt {
+        val request = ch.nokillswit.annotations.AnnotationKeyRequest(key = key, kinds = kinds)
+        val existing = service.list().firstOrNull { it.key.equals(key, ignoreCase = true) }
+        if (existing != null) {
+            service.update(existing.id, request)
+            return existing.id
+        }
+        return service.create(request)
+    }
+
+    /** Soft-deletes the active rows holding [keys] (a no-op for keys not present). */
+    suspend fun remove(vararg keys: String) {
+        service.list().filter { row -> keys.any { it.equals(row.key, ignoreCase = true) } }
+            .forEach { service.delete(it.id) }
+    }
+}
+
+/**
  * Direct access to the SHARED tag-category registry (V11) — like the label registry, suite
  * state every catalog write is checked against. Tests only ever mint UNIQUE names and tags
  * (the `uniqueTagCategory` fixture) and remove them when assertions depend on absence.

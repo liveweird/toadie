@@ -32,6 +32,7 @@ tags:
   - name: labels
   - name: tag-categories
   - name: entity-types
+  - name: annotation-keys
 
 paths:
   /api/v1/login:
@@ -492,7 +493,9 @@ paths:
         annotation grammars, entity-reference syntax, the per-kind required/forbidden field
         tables). The namespace must additionally be an active
         entry of the `namespaces` dictionary, every label must be an ADMIN-registered
-        label allowed for the file's kind with a value from its closed list, every tag
+        label allowed for the file's kind with a value from its closed list, every
+        annotation KEY must be an ADMIN-registered annotation key allowed for the file's
+        kind (values stay free), every tag
         must belong to an ADMIN-defined tag category allowed for the file's kind, a
         non-blank `spec.type` must be in the file's kind's ADMIN-defined type dictionary,
         a non-blank `spec.lifecycle` must be an active entry of the `lifecycles`
@@ -755,11 +758,12 @@ paths:
       summary: Replace a catalog file
       description: |
         Full replacement; same validation as create (the defined-namespace,
-        registered-label, registered-tag, registered-type, registered-lifecycle, and
-        resolved-reference rules included — strict: a file whose namespace, label, tag,
-        type, or lifecycle was removed from its registry, or whose referenced entity was
-        deleted, cannot be saved until it is fixed; a reference to the file's own identity
-        is a `400`). Renaming into an identity an active file already holds is a `409`.
+        registered-label, registered-annotation-key, registered-tag, registered-type,
+        registered-lifecycle, and resolved-reference rules included — strict: a file whose
+        namespace, label, annotation key, tag, type, or lifecycle was removed from its
+        registry, or whose referenced entity was deleted, cannot be saved until it is
+        fixed; a reference to the file's own identity is a `400`). Renaming into an
+        identity an active file already holds is a `409`.
       requestBody:
         required: true
         content:
@@ -1125,6 +1129,98 @@ paths:
         ADMIN only — soft delete; the kind becomes definable again by a NEW dictionary.
         Until then the kind allows NO types, so files of a required-type kind cannot be
         saved (a deliberate admin choice — the strict no-grandfathering rule).
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/annotation-keys:
+    get:
+      tags: [annotation-keys]
+      operationId: listAnnotationKeys
+      summary: List the annotation-key registry
+      description: |
+        Any authenticated user. Returns every active annotation key, ordered
+        case-insensitively — deliberately unpaged (the registry holds at most 200 keys by
+        validation), NOT a standard list endpoint. The registry is the whitelist every
+        catalog-file write's `metadata.annotations` KEYS are validated against; annotation
+        VALUES stay free strings.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnotationKeyList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    post:
+      tags: [annotation-keys]
+      operationId: createAnnotationKey
+      summary: Register an annotation key
+      description: |
+        ADMIN only. Registers one allowed `metadata.annotations` key (the descriptor-format
+        key grammar) with the entity kinds it may be applied to (normalized to canonical
+        casing and order). A key already held by an active row (case-insensitively) is a
+        `409`; the keys the catalog server writes itself cannot be registered (`400`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnotationKeyRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema: { type: string }
+              description: URL of the new annotation-key resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnotationKey'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/annotation-keys/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      tags: [annotation-keys]
+      operationId: replaceAnnotationKey
+      summary: Replace an annotation key
+      description: |
+        ADMIN only — whole-row replacement, key rename included (stored files carrying the
+        old key simply fail the strict check on their next save). Same validation and `409`
+        rules as create.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnotationKeyRequest'
+      responses:
+        '204': { description: Replaced }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    delete:
+      tags: [annotation-keys]
+      operationId: deleteAnnotationKey
+      summary: Delete an annotation key
+      description: |
+        ADMIN only — soft delete; the key becomes reusable by a NEW registration. Stored
+        files carrying it fail the strict check on their next save until it is re-registered
+        or removed from them.
       responses:
         '204': { description: Deleted }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -1543,6 +1639,9 @@ components:
             Non-identifying key/value pairs (key grammar as labels; values free-form). Keys the
             catalog server writes itself (`backstage.io/managed-by-location`,
             `backstage.io/managed-by-origin-location`, `backstage.io/orphan`) are rejected.
+            On every write, each key must additionally be an ADMIN-registered annotation key
+            (`GET /api/v1/annotation-keys`) allowed for the file's kind — unregistered keys
+            are rejected with `400`; values are not registry-checked.
         tags:
           type: array
           maxItems: 50
@@ -2080,6 +2179,57 @@ components:
             At least one entry; each trimmed and validated with the exact `spec.type` rule
             (1–63 characters, no whitespace); no case-folded duplicates. Array order becomes
             the stored order.
+
+    AnnotationKey:
+      type: object
+      required: [id, key, kinds]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 0
+        key:
+          type: string
+          maxLength: 317
+          description: >-
+            The allowed `metadata.annotations` key (descriptor key grammar — optional
+            lowercase-domain prefix + `/` + name part). Unique case-insensitively among
+            active rows. Values are not constrained by the registry.
+        kinds:
+          type: array
+          maxItems: 7
+          items: { type: string, maxLength: 63 }
+          description: >-
+            The entity kinds the key may be applied to, in canonical casing and order.
+
+    AnnotationKeyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnotationKey'
+          description: Active annotation keys, ordered case-insensitively.
+
+    AnnotationKeyRequest:
+      type: object
+      required: [key, kinds]
+      properties:
+        key:
+          type: string
+          maxLength: 317
+          description: >-
+            Trimmed; the descriptor key grammar. The keys the catalog server writes itself
+            are rejected. A key held by another active row (case-insensitively) is a `409`.
+        kinds:
+          type: array
+          minItems: 1
+          maxItems: 7
+          items: { type: string, maxLength: 63 }
+          description: >-
+            At least one of the seven landscape kinds (case-insensitive input; stored in
+            canonical casing and order); no duplicates.
 
     ProblemDetail:
       type: object

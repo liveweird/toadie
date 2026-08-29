@@ -16,6 +16,7 @@
 - `catalog_file.fetch_blocked` (byUserId/scheme/host — every SSRF-guard rejection on `POST …/fetch`; deliberately NOT the full URL, which may embed query-string tokens),
 - `dictionary.updated` (byUserId/dictionary/added/renamed/removed — every successful whole-document dictionary replace; a rejected save emits nothing),
 - `label.created` (byUserId/labelId/key/values count/kinds) / `label.updated` (same fields) / `label.deleted` (byUserId/labelId) — every label-registry mutation; a rejected save emits nothing,
+- `annotation_key.created` (byUserId/annotationKeyId/key/kinds) / `annotation_key.updated` (same fields) / `annotation_key.deleted` (byUserId/annotationKeyId) — every annotation-key-registry mutation; a rejected save emits nothing,
 - `tag_category.created` (byUserId/categoryId/name/tags count/kinds) / `tag_category.updated` (same fields) / `tag_category.deleted` (byUserId/categoryId) — every tag-category mutation; a rejected save emits nothing,
 - `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail).
