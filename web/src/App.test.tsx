@@ -49,6 +49,37 @@ describe("App shell", () => {
       expect(await screen.findByText(new RegExp(`v${APP_VERSION.replace(/\./g, "\\.")}`))).toBeInTheDocument();
     });
 
+    test("shows a Changelog nav link and a linked version stamp with the what's-new dot", async () => {
+      renderApp("/");
+      expect(await screen.findByRole("link", { name: "Changelog" })).toHaveAttribute(
+        "href",
+        "/changelog",
+      );
+      expect(screen.getByTitle("Build version")).toHaveAttribute("href", "/changelog");
+      expect(screen.getByTitle("What's new")).toBeInTheDocument();
+    });
+
+    test("opening the changelog clears the what's-new dot immediately", async () => {
+      const user = userEvent.setup();
+      renderApp("/");
+      await user.click(await screen.findByRole("link", { name: "Changelog" }));
+      // Explicit timeout — the Changelog chunk is lazy.
+      expect(
+        await screen.findByRole("heading", { level: 2, name: "Changelog" }, { timeout: 5000 }),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByTitle("What's new")).not.toBeInTheDocument());
+      expect(JSON.parse(localStorage.getItem("toadie.changelog")!)).toEqual({
+        seenVersion: APP_VERSION,
+      });
+    });
+
+    test("shows no dot when the current version was already seen", async () => {
+      localStorage.setItem("toadie.changelog", JSON.stringify({ seenVersion: APP_VERSION }));
+      renderApp("/");
+      await screen.findByRole("heading", { level: 2, name: "Hierarchy" });
+      expect(screen.queryByTitle("What's new")).not.toBeInTheDocument();
+    });
+
     test("an unmatched URL renders the not-found page inside the shell", async () => {
       renderApp("/definitely/not-a-page");
       expect(

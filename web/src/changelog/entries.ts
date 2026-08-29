@@ -1,0 +1,161 @@
+// The changelog is a build-time artifact: entries are authored here (newest first) and bundled
+// into the SPA, so it can only change with a deploy — never at runtime. The newest entry's
+// version must equal APP_VERSION in ./version.ts (the shell's eager import — this file stays
+// out of the main bundle): a release adds the entry AND bumps that literal; entries.test.ts
+// pins the pair. Bodies are markdown, one per language (content, not chrome — hence not in
+// locales/); keep the phrases tests assert on in plain text runs, and follow the Polish style
+// conventions (inclusive slash forms, active voice).
+interface ChangelogEntry {
+  version: string;
+  /** Release date, YYYY-MM-DD. Keep the array strictly descending by date. */
+  date: string;
+  /** Markdown body, English. */
+  en: string;
+  /** Markdown body, Polish. */
+  pl: string;
+}
+
+export const CHANGELOG: readonly ChangelogEntry[] = [
+  {
+    version: "1.1.0",
+    date: "2026-08-29",
+    en: `Saving with findings, and this very page.
+
+- A save that fails the reference or registry checks now asks for confirmation instead of refusing outright — *Save anyway* stores the file, and the Cross-check page tracks every waived finding until you fix it.
+- Import always stores flawed documents ("Created with findings"), so a big batch can land first and be repaired incrementally.
+- Cross-check now covers the label, annotation, tag, type, and lifecycle rules too — one workspace health report.
+- The changelog you are reading, with the what's-new dot on the version stamp.`,
+    pl: `Zapisywanie z zastrzeżeniami — oraz ta właśnie strona.
+
+- Zapis, który nie przechodzi kontroli odwołań lub rejestrów, prosi teraz o potwierdzenie zamiast odmawiać — *Zapisz mimo to* zachowuje plik, a strona Weryfikacja śledzi każde zastrzeżenie, dopóki go nie poprawisz.
+- Import zawsze zapisuje wadliwe dokumenty („Utworzono z zastrzeżeniami"), więc duża partia może najpierw trafić do środka, a poprawki robisz stopniowo.
+- Weryfikacja obejmuje teraz także reguły etykiet, adnotacji, tagów, typów i cykli życia — jeden raport zdrowia przestrzeni roboczej.
+- Historia zmian, którą właśnie czytasz, z kropką nowości na stemplu wersji.`,
+  },
+  {
+    version: "1.0.0",
+    date: "2026-08-29",
+    en: `The 1.0 milestone.
+
+- The new **Hierarchy** view at the root: the workspace as collapsible containment trees (systems holding components, components holding subcomponents, groups holding members) with the full file operations on every row.
+- Clearer navigation: *Files*, *Graph*, and *Hierarchy*.
+- A security and consistency check-up across the whole stack: request size limits, hardened login timing, stricter token rules, and uniform error hints.`,
+    pl: `Kamień milowy 1.0.
+
+- Nowy widok **Hierarchia** na stronie głównej: przestrzeń robocza jako zwijane drzewa zawierania (systemy z komponentami, komponenty z podkomponentami, grupy z członkiniami/członkami) z pełnymi operacjami na plikach w każdym wierszu.
+- Czytelniejsza nawigacja: *Pliki*, *Graf* i *Hierarchia*.
+- Przegląd bezpieczeństwa i spójności całego stosu: limity wielkości żądań, utwardzone czasy logowania, ostrzejsze reguły tokenów i ujednolicone podpowiedzi błędów.`,
+  },
+  {
+    version: "0.9.0",
+    date: "2026-08-29",
+    en: `The last three registries, and list polish.
+
+- Per-kind **type** dictionaries, the global **lifecycles** list, and the **annotation key** registry — every constrained field now has its admin page.
+- No entity may reference itself any more.
+- The Files list shows titles and tags, filters by tag, and bundles row actions under one Operations menu.`,
+    pl: `Trzy ostatnie rejestry i szlif listy.
+
+- Słowniki **typów** per rodzaj, globalna lista **cykli życia** i rejestr **kluczy adnotacji** — każde ograniczone pole ma teraz swoją stronę administracyjną.
+- Żadna encja nie może już odwoływać się do samej siebie.
+- Lista Pliki pokazuje tytuły i tagi, filtruje po tagu i zbiera akcje wiersza w jednym menu Operacje.`,
+  },
+  {
+    version: "0.8.0",
+    date: "2026-08-28",
+    en: `Per-user feature flags and a second factor.
+
+- Administrators can enable or disable features per user, singly or in bulk.
+- Opt-in email MFA: with the flag on, signing in asks for a 6-digit code delivered to your inbox.`,
+    pl: `Flagi funkcji per użytkowniczka/użytkownik i drugi składnik.
+
+- Administratorki/administratorzy mogą włączać i wyłączać funkcje pojedynczo lub hurtowo.
+- Opcjonalne MFA e-mailem: z włączoną flagą logowanie prosi o 6-cyfrowy kod dostarczony na skrzynkę.`,
+  },
+  {
+    version: "0.7.0",
+    date: "2026-08-28",
+    en: `Tags, strict references, and email.
+
+- Admin-curated **tag categories**: files may carry only registered tags allowed for their kind.
+- Every entity reference must now resolve to a stored entity of an allowed kind, and the pickers insert full identities.
+- Outbound email arrived, and with it self-service password reset from the sign-in page.`,
+    pl: `Tagi, ścisłe odwołania i e-mail.
+
+- **Kategorie tagów** pod opieką administracji: pliki mogą nosić tylko zarejestrowane tagi dozwolone dla ich rodzaju.
+- Każde odwołanie do encji musi teraz rozwiązywać się do zapisanej encji dozwolonego rodzaju, a wybieraki wstawiają pełne tożsamości.
+- Pojawił się e-mail wychodzący, a wraz z nim samodzielny reset hasła ze strony logowania.`,
+  },
+  {
+    version: "0.6.0",
+    date: "2026-08-27",
+    en: `Namespaces and labels get their registries.
+
+- The **namespaces** dictionary: catalog files live only in admin-defined namespaces, with one flagged as the default for blank entries.
+- The **label** registry: each label is a key with a closed value list and the kinds it applies to.`,
+    pl: `Przestrzenie nazw i etykiety dostają rejestry.
+
+- Słownik **przestrzeni nazw**: pliki katalogu żyją tylko w przestrzeniach zdefiniowanych przez administrację, z jedną oznaczoną jako domyślna dla pustych wpisów.
+- Rejestr **etykiet**: każda etykieta to klucz z zamkniętą listą wartości i rodzajami, których dotyczy.`,
+  },
+  {
+    version: "0.5.0",
+    date: "2026-08-23",
+    en: `The YAML round trip.
+
+- Import a multi-document catalog-info.yaml — each document reports its own result row.
+- Export the whole workspace (or one namespace) as a single YAML file.
+- Fetch a catalog file straight from a public URL, with the server guarding the request.`,
+    pl: `Podróż YAML w obie strony.
+
+- Import wielodokumentowego catalog-info.yaml — każdy dokument raportuje własny wiersz wyniku.
+- Eksport całej przestrzeni roboczej (albo jednej przestrzeni nazw) jako pojedynczy plik YAML.
+- Pobieranie pliku katalogu wprost z publicznego adresu URL, z żądaniem chronionym po stronie serwera.`,
+  },
+  {
+    version: "0.4.0",
+    date: "2026-08-23",
+    en: `All seven kinds, and people management.
+
+- The editor speaks every landscape kind: Component, API, System, Domain, Resource, Group, and User, with per-kind fields and rules.
+- Reference fields suggest the stored entities they may point at.
+- User management for administrators, with client-generated one-time-reveal passwords.`,
+    pl: `Wszystkie siedem rodzajów i zarządzanie ludźmi.
+
+- Edytor zna każdy rodzaj krajobrazu: Component, API, System, Domain, Resource, Group i User, z polami i regułami per rodzaj.
+- Pola odwołań podpowiadają zapisane encje, na które mogą wskazywać.
+- Zarządzanie użytkowniczkami/użytkownikami dla administracji, z hasłami generowanymi po stronie klienta i pokazywanymi jednorazowo.`,
+  },
+  {
+    version: "0.3.0",
+    date: "2026-08-23",
+    en: `Cross-checking and the graph.
+
+- The Cross-check report resolves every reference in the workspace, and the editor gained a live findings panel.
+- The relationship graph draws the whole workspace as nodes and reference edges.`,
+    pl: `Weryfikacja i graf.
+
+- Raport Weryfikacja rozwiązuje każde odwołanie w przestrzeni roboczej, a edytor zyskał panel zastrzeżeń na żywo.
+- Graf relacji rysuje całą przestrzeń roboczą jako węzły i krawędzie odwołań.`,
+  },
+  {
+    version: "0.2.0",
+    date: "2026-08-23",
+    en: `The visual catalog editor.
+
+- Create Backstage Component files in a form with a live YAML preview, browse them in a filterable list, and download the rendered catalog-info.yaml.`,
+    pl: `Wizualny edytor katalogu.
+
+- Tworzenie plików Component Backstage w formularzu z podglądem YAML na żywo, przeglądanie ich na filtrowanej liście i pobieranie wyrenderowanego catalog-info.yaml.`,
+  },
+  {
+    version: "0.1.0",
+    date: "2026-08-22",
+    en: `The skeleton.
+
+- The full stack: a Kotlin/Ktor server, a React SPA, sign-in with token refresh, a bootstrap administrator, quality gates on every layer, and a one-command Docker Compose stack.`,
+    pl: `Szkielet.
+
+- Pełny stos: serwer Kotlin/Ktor, SPA w React, logowanie z odświeżaniem tokenów, startowe konto administracyjne, bramki jakości na każdej warstwie i stos Docker Compose na jedną komendę.`,
+  },
+];

@@ -15,6 +15,7 @@
     "annotations": "Annotations",
     "users": "Users",
     "changePassword": "Change password",
-    "featureFlags": "Feature flags"
+    "featureFlags": "Feature flags",
+    "changelog": "Changelog"
   }
 }

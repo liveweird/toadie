@@ -12,6 +12,7 @@ import enAppShell from "./locales/en/appShell.json";
 import enAnnotations from "./locales/en/annotations.json";
 import enAuth from "./locales/en/auth.json";
 import enCatalog from "./locales/en/catalog.json";
+import enChangelog from "./locales/en/changelog.json";
 import enCrossCheck from "./locales/en/crossCheck.json";
 import enHierarchy from "./locales/en/hierarchy.json";
 import enLabels from "./locales/en/labels.json";
@@ -62,6 +63,7 @@ export const en = {
   annotations: enAnnotations,
   auth: enAuth,
   catalog: enCatalog,
+  changelog: enChangelog,
   crossCheck: enCrossCheck,
   hierarchy: enHierarchy,
   labels: enLabels,

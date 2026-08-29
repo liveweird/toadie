@@ -116,13 +116,23 @@ The SPA is **N-language by architecture** via react-i18next (`src/i18n.ts`); the
 - Inter is bundled (`@fontsource-variable/inter`, imported in `main.tsx`) so it loads same-origin and satisfies the CSP `font-src 'self'`; the system stack is the fallback.
 - The logo SVGs (`public/logo-*.svg`, rendered by `components/BrandLogo.tsx`) are the brand mark. Restyle rule: keep aria-labels, roles, and real semantic elements stable — e2e and unit tests locate by role/name.
 
-## App versioning
+## Changelog & app versioning
 
-The app's only human-readable version is `APP_VERSION` in **`src/changelog/version.ts`** — its own tiny module so the shell's eager imports (VersionStamp) stay lean; the Gradle `1.0.0-SNAPSHOT` is unrelated. The Lettuce changelog page (`changelog/entries.ts`, the `/changelog` route, the "what's new" navbar dot) is **not yet ported** — when it is, a release becomes: the newest EN+PL entry at the top of `entries.ts` + the bump of this one literal, pinned by the `CHANGELOG[0].version === APP_VERSION` test.
+The user-facing changelog is a **build-time artifact** — no DB, no API, changes only with a deploy. `src/changelog/entries.ts` holds `ChangelogEntry` rows (`version`, `date` `YYYY-MM-DD`, `en`/`pl` **markdown** bodies), newest first; the app's only human-readable version is `APP_VERSION` in **`src/changelog/version.ts`** — its own tiny module so the shell's eager imports (VersionStamp, the what's-new dot) never pull the bilingual entries into the main bundle (the entries ride the lazy Changelog chunk only). **A release = the new entry at the top of entries.ts + the bump of that one literal** (the Gradle `1.0.0-SNAPSHOT` is unrelated); `entries.test.ts` pins `CHANGELOG[0].version === APP_VERSION`, so forgetting either half fails the suite. Release convention:
+
+- Write both language bodies by hand (or LLM) — never derive them from commit messages. Bodies are *content*, so they live in the data file, not `locales/`; the PL body follows the Polish voice conventions (inclusive slash forms, active voice).
+- Keep dates descending (same-day releases are fine — newest stays on top), versions unique, and both bodies non-empty — pinned by `src/changelog/entries.test.ts`.
+- Keep phrases that tests assert on in plain text runs: markdown formatting splits text nodes, and testing-library's `getByText` matches direct text nodes only.
+
+Rendering & UI wiring:
+
+- `pages/Changelog.tsx` (`/changelog`, authenticated, lazy) renders the entries as a Mantine `Timeline` with `MarkdownView` bodies in the viewer's language, and calls `markChangelogSeen()` on mount. **Bodies are authored EN+PL only, by policy** — a new shipped UI language does NOT add changelog fields; non-authored languages read the English body (`AUTHORED_LANGUAGES` in the page). `components/MarkdownView.tsx` (Typography + react-markdown + remark-gfm/gemoji, all lazy-chunk-only deps) is the one markdown renderer — reuse it for future markdown content.
+- `components/VersionStamp.tsx` shows `v<APP_VERSION> · <sha> · <time>`; its optional `to` prop renders it as a router link — the navbar instance links to `/changelog`, the Login/AuthCard instance deliberately stays plain (the route is behind auth). A "Changelog" nav item (`CHANGELOG_NAV` in `App.tsx`) is pinned last, directly above the stamp.
+- The **"what's new" dot** is a red Mantine `Indicator` around the navbar stamp in `App.tsx`, shown while localStorage `toadie.changelog` (`{seenVersion}`) differs from `APP_VERSION`. It's driven by `hooks/useChangelogSeen.ts` via `useSyncExternalStore` over a module-level listener set — do **not** replace that with a plain localStorage read in state: the shell renders before the page's mark-seen effect, so the dot would only clear on the next navigation. The seen-state is device-level (survives logout, like `toadie.lang`) and hand-rolls its guarded read/write, not `useStoredState` (that hook owns the `toadie.viewSettings.*` namespace).
+- Tests: `pages/Changelog.test.tsx`, `changelog/entries.test.ts`, the dot/nav cases in `App.test.tsx`, the link/prefix cases in `components/VersionStamp.test.tsx`, and the e2e `changelog.spec.ts` (device-local state only — owns nothing server-side).
 
 ## Not yet ported from Lettuce (port, don't reinvent)
 
 When a feature needs one of these, port Lettuce's `web/` implementation and its `web/CLAUDE.md` section wholesale:
 
-- **Changelog entries + page** (see "App versioning").
 - **Link builders** (`utils/*Links.ts` — never hand-assemble app URLs once a second surface links to a screen) and the `safeBackParam` open-redirect guard for any future `?back=` param.

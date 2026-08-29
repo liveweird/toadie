@@ -44,7 +44,8 @@ tests may be order-dependent); different files run concurrently. That is only so
 from Lettuce, that any new or edited spec must satisfy:
 
 - Each spec's scenario file declares its **Owns** line (exclusive server-side state; "nothing —
-  read-only" when applicable). Today: `auth`, `accessibility`, and `url-import` are read-only;
+  read-only" when applicable). Today: `auth`, `accessibility`, `url-import`, and `changelog`
+  (device-local localStorage only) are read-only;
   `catalog-files` and `cross-check` own throwaway files (unique names in `default`); `kinds`,
   `render`, `round-trip`, and `hierarchy` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user;
@@ -128,6 +129,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   Component → cleanup; the registry's only in-run writer.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
+- [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
+  leads to the changelog via the version stamp, clears once read, and the page follows
+  the UI language.
 - [`cross-check.spec.ts`](scenarios/cross-check.md) — an unresolved reference opens the
   Save-anyway modal (cancel and confirm paths); the waived save's finding shows on
   Cross-check and is repaired in the editor; deleting a referenced target creates a finding,

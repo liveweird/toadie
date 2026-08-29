@@ -6,6 +6,7 @@ import {
   Burger,
   Center,
   Group,
+  Indicator,
   Loader,
   NavLink,
   ScrollArea,
@@ -18,6 +19,7 @@ import {
   IconFileDescription,
   IconFolders,
   IconHash,
+  IconHistory,
   IconSitemap,
   IconKey,
   IconListCheck,
@@ -48,6 +50,7 @@ import { RedirectIfAuthed, RequireAuth, flagSignedOut, notifyAuthChange } from "
 import BrandLogo from "./components/BrandLogo";
 import LanguageSwitcher from "./components/LanguageSwitcher";
 import VersionStamp from "./components/VersionStamp";
+import { useChangelogUnseen } from "./hooks/useChangelogSeen";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
 
 const Login = lazy(() => import("./pages/Login"));
@@ -71,6 +74,7 @@ const CreateUser = lazy(() => import("./pages/CreateUser"));
 const EditUser = lazy(() => import("./pages/EditUser"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
 const RenderGraph = lazy(() => import("./pages/RenderGraph"));
+const Changelog = lazy(() => import("./pages/Changelog"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function RouteFallback() {
@@ -109,6 +113,10 @@ const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
   { to: "/change-password", label: "appShell.nav.changePassword", icon: IconKey },
 ];
 
+// Rendered last, directly above the version stamp it pairs with, rather than inside
+// NAV_ITEMS (the Lettuce placement).
+const CHANGELOG_NAV: NavLeaf = { to: "/changelog", label: "appShell.nav.changelog", icon: IconHistory };
+
 function ColorSchemeToggle() {
   const { t } = useTranslation();
   const { setColorScheme } = useMantineColorScheme();
@@ -135,7 +143,8 @@ function Shell() {
   const { pathname } = useLocation();
 
   // Admin-gated leaves render only for ADMIN sessions (the routes are guarded too).
-  const visibleItems = NAV_ITEMS.filter((entry) => !entry.adminOnly || isAdmin());
+  const visibleItems = [...NAV_ITEMS.filter((entry) => !entry.adminOnly || isAdmin()), CHANGELOG_NAV];
+  const changelogUnseen = useChangelogUnseen();
 
   // Longest-matching-prefix active-link resolution — "/" only matches exactly.
   const matches = (to: string) =>
@@ -207,8 +216,16 @@ function Shell() {
             );
           })}
         </AppShell.Section>
+        {/* The title carries the accessible "what's new" name only while the dot is shown. */}
         <AppShell.Section pt="xs" style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
-          <VersionStamp ta="center" pt={4} />
+          <Indicator
+            color="red"
+            size={8}
+            disabled={!changelogUnseen}
+            title={changelogUnseen ? t("changelog.whatsNew") : undefined}
+          >
+            <VersionStamp to="/changelog" ta="center" pt={4} />
+          </Indicator>
         </AppShell.Section>
       </AppShell.Navbar>
 
@@ -267,6 +284,7 @@ export default function App() {
             <Route path="users/:id/features" element={<UserFeatures />} />
             <Route path="feature-flags" element={<FeatureFlags />} />
             <Route path="change-password" element={<ChangePassword />} />
+            <Route path="changelog" element={<Changelog />} />
             {/* The authenticated catch-all — LAST child, never feature-gated. */}
             <Route path="*" element={<NotFound />} />
           </Route>
