@@ -16,7 +16,7 @@
      before anything is saved.
 3. They click **Create**.
    - *Expected*: the file is stored (a successful create round-trip) and the app lands on the
-     **Catalog files** list; filtered by the unique name, the row shows the name and title.
+     **Files** list; filtered by the unique name, the row shows the name and title.
 4. They open the row's **Edit** form through its **Operations** menu, change the title and
    set lifecycle `deprecated`, and click **Save**.
 5. They reopen the edit form directly.

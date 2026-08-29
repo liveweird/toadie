@@ -18,7 +18,7 @@
 2. They click **Import**.
    - *Expected*: the results table reports both rows **Created** and the summary reads
      "Imported 2 of 2 documents.".
-3. On the Catalog files list, filtered to the namespace, both files appear.
+3. On the Files list, filtered to the namespace, both files appear.
 4. They click **Export YAML** while the namespace filter is active.
    - *Expected*: the browser downloads `catalog-info.yaml`; the file contains both entity
      names and a `---` document separator.

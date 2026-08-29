@@ -46,7 +46,7 @@ from Lettuce, that any new or edited spec must satisfy:
 - Each spec's scenario file declares its **Owns** line (exclusive server-side state; "nothing —
   read-only" when applicable). Today: `auth`, `accessibility`, and `url-import` are read-only;
   `catalog-files` and `cross-check` own throwaway files (unique names in `default`); `kinds`,
-  `render`, and `round-trip` own throwaway files in this RUN's namespaces (below); `users` owns
+  `render`, `round-trip`, and `hierarchy` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user;
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
@@ -62,7 +62,7 @@ from Lettuce, that any new or edited spec must satisfy:
 - **The namespaces dictionary is single-writer state.** Catalog writes accept only
   dictionary-defined namespaces, and the dictionary PUT is a whole-document replace — two
   parallel writers silently drop each other's entries. The writers are: **global-setup**
-  (registers the three per-run namespaces `e2e-kns-*`/`e2e-rns-*`/`e2e-rtns-*` before any
+  (registers the four per-run namespaces `e2e-kns-*`/`e2e-rns-*`/`e2e-rtns-*`/`e2e-hns-*` before any
   worker starts and exposes them via `runNamespace()` in `helpers.ts`; global-teardown removes
   them) and **`namespaces.spec.ts`** (the ONLY in-run writer — it appends/removes its own
   unique entries through the real editor). A new spec needing a throwaway namespace adds a
@@ -134,6 +134,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`kinds.spec.ts`](scenarios/kinds.md) — the multi-kind editor journey: a Group (empty
   children), an API (pasted definition), and a Component whose owner/API references resolve
   live; kind badges on the list.
+- [`hierarchy.spec.ts`](scenarios/hierarchy.md) — the Hierarchy view at `/`: a
+  System ⊃ Component ⊃ subcomponent chain nests by most-specific placement, branches
+  collapse/expand, the tree rows carry the Files Operations menu (download, delete), and a
+  deleted parent becomes a MISSING placeholder; throwaway files in this run's namespace.
 - [`labels.spec.ts`](scenarios/labels.md) — the label registry: modal validation → create a
   label (values + kinds) → edit → the regular user's read-only view → the editor's
   registry-constrained label pickers on a new Component → cleanup; the registry's only

@@ -18,7 +18,7 @@ import {
   IconFileDescription,
   IconFolders,
   IconHash,
-  IconHome,
+  IconSitemap,
   IconKey,
   IconListCheck,
   IconCategory,
@@ -52,7 +52,7 @@ import { RouteErrorBoundary } from "./components/ErrorBoundary";
 
 const Login = lazy(() => import("./pages/Login"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
-const Home = lazy(() => import("./pages/Home"));
+const Hierarchy = lazy(() => import("./pages/Hierarchy"));
 const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
 const ImportCatalogFiles = lazy(() => import("./pages/ImportCatalogFiles"));
@@ -84,7 +84,7 @@ function RouteFallback() {
 type NavLeaf = {
   to: string;
   label: ParseKeys;
-  icon: typeof IconHome;
+  icon: typeof IconSitemap;
   // When set, the leaf renders only for ADMIN sessions (the Lettuce feature/role-filter
   // machinery slots back in here as features arrive).
   adminOnly?: boolean;
@@ -93,7 +93,7 @@ type NavLeaf = {
 // `label` holds an i18n key, resolved with t() at render time. Feature entries (catalog
 // files, cross-checks, rendering) append here as they are built.
 const NAV_ITEMS: ReadonlyArray<NavLeaf> = [
-  { to: "/", label: "appShell.nav.home", icon: IconHome },
+  { to: "/", label: "appShell.nav.home", icon: IconSitemap },
   { to: "/catalog-files", label: "appShell.nav.catalogFiles", icon: IconFileDescription },
   { to: "/cross-check", label: "appShell.nav.crossCheck", icon: IconListCheck },
   { to: "/render", label: "appShell.nav.render", icon: IconTopologyStar3 },
@@ -248,7 +248,7 @@ export default function App() {
         />
         <Route element={<RequireAuth />}>
           <Route element={<Shell />}>
-            <Route index element={<Home />} />
+            <Route index element={<Hierarchy />} />
             <Route path="catalog-files" element={<CatalogFiles />} />
             <Route path="catalog-files/new" element={<CreateCatalogFile />} />
             <Route path="catalog-files/import" element={<ImportCatalogFiles />} />

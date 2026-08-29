@@ -1,0 +1,12 @@
+{
+  "title": "Hierarchia",
+  "loadFailed": "Nie udało się wczytać hierarchii",
+  "empty": "Nie ma nic do pokazania — żadne zapisane pliki nie pasują.",
+  "expandAll": "Rozwiń wszystko",
+  "collapseAll": "Zwiń wszystko",
+  "toggleAria": "Przełącz elementy podrzędne {{name}}",
+  "badge": {
+    "missing": "Brakujący",
+    "external": "Zewnętrzny"
+  }
+}

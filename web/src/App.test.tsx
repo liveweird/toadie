@@ -38,9 +38,9 @@ describe("App shell", () => {
       localStorage.setItem(TOKEN_KEY, "fake-token");
     });
 
-    test("renders the brand and the home page at /", async () => {
+    test("renders the brand and the hierarchy page at /", async () => {
       renderApp("/");
-      expect(await screen.findByRole("heading", { level: 2, name: "Home" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { level: 2, name: "Hierarchy" })).toBeInTheDocument();
       expect(screen.getByText("Toadie")).toBeInTheDocument();
     });
 

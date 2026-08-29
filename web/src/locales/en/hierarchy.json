@@ -1,0 +1,12 @@
+{
+  "title": "Hierarchy",
+  "loadFailed": "Could not load the hierarchy",
+  "empty": "Nothing to show — no stored files match.",
+  "expandAll": "Expand all",
+  "collapseAll": "Collapse all",
+  "toggleAria": "Toggle children of {{name}}",
+  "badge": {
+    "missing": "Missing",
+    "external": "External"
+  }
+}

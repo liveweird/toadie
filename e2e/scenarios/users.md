@@ -16,7 +16,7 @@
    reveal modal shows the generated 16-character password (masked until **Show password**),
    which the journey captures before deliberately closing the modal.
 3. The new user signs in with the revealed password.
-   - *Expected*: no **Users** item in the nav, and `/users` bounces to Home — the management
+   - *Expected*: no **Users** item in the nav, and `/users` bounces to the Hierarchy page — the management
      surface is ADMIN-only.
 4. They change their own password on the **Change password** page (current + new + confirm).
 5. Back as the admin: the throwaway user is promoted to **Administrator** via the edit form

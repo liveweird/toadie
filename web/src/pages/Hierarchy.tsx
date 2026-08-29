@@ -1,0 +1,255 @@
+import { useMemo, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Center,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Text,
+  Title,
+} from "@mantine/core";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconChevronDown, IconChevronRight, IconSitemap } from "@tabler/icons-react";
+import { deleteCatalogFile, getCatalogGraph, type GraphNode } from "../api/catalogFiles";
+import CatalogFileOperations from "../components/CatalogFileOperations";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
+import EmptyState from "../components/EmptyState";
+import NamespaceFilterSelect from "../components/NamespaceFilterSelect";
+import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
+import { isString, useStoredState } from "../hooks/useStoredState";
+import { buildHierarchy, type HierarchyNode } from "../utils/hierarchy";
+import { loadErrorMessage } from "../utils/saveError";
+
+/** The delete confirm's target — the tree row's identity, shaped like a list row. */
+interface DeleteTarget {
+  id: number;
+  name: string;
+  namespace: string;
+}
+
+/** Collapse-state keys are PATHS, not node ids — a User under two Groups folds independently. */
+function pathKey(path: string, node: GraphNode): string {
+  return `${path}/${node.id}`;
+}
+
+function branchKeys(items: HierarchyNode[], path: string, into: string[]): string[] {
+  for (const item of items) {
+    const key = pathKey(path, item.node);
+    if (item.children.length > 0) {
+      into.push(key);
+      branchKeys(item.children, key, into);
+    }
+  }
+  return into;
+}
+
+function TreeItem({
+  item,
+  path,
+  collapsed,
+  onToggle,
+  operations,
+}: {
+  item: HierarchyNode;
+  path: string;
+  collapsed: ReadonlySet<string>;
+  onToggle: (key: string) => void;
+  operations: (node: GraphNode) => ReactNode;
+}) {
+  const { t } = useTranslation();
+  const { node, children } = item;
+  const key = pathKey(path, node);
+  const isCollapsed = collapsed.has(key);
+  const virtual = node.status !== "STORED";
+  return (
+    <Box>
+      <Group gap="xs" wrap="nowrap" py={4}>
+        {children.length > 0 ? (
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            aria-label={t("hierarchy.toggleAria", { name: node.name })}
+            aria-expanded={!isCollapsed}
+            onClick={() => onToggle(key)}
+          >
+            {isCollapsed ? <IconChevronRight size={16} /> : <IconChevronDown size={16} />}
+          </ActionIcon>
+        ) : (
+          <Box w={22} />
+        )}
+        <Badge variant="light" size="sm" color={virtual ? "gray" : undefined}>
+          {node.kind}
+        </Badge>
+        <Text size="sm" fw={virtual ? 400 : 500} c={virtual ? "dimmed" : undefined} fs={virtual ? "italic" : undefined}>
+          {node.name}
+        </Text>
+        {node.title ? (
+          <Text size="sm" c="dimmed" truncate>
+            {node.title}
+          </Text>
+        ) : null}
+        {node.status === "MISSING" && (
+          <Badge variant="outline" size="sm" color="red">
+            {t("hierarchy.badge.missing")}
+          </Badge>
+        )}
+        {node.status === "EXTERNAL" && (
+          <Badge variant="outline" size="sm" color="gray">
+            {t("hierarchy.badge.external")}
+          </Badge>
+        )}
+        {operations(node)}
+      </Group>
+      {children.length > 0 && !isCollapsed && (
+        <Box pl={26} style={{ borderLeft: "1px solid var(--mantine-color-default-border)" }} ml={10}>
+          {children.map((child) => (
+            <TreeItem
+              key={pathKey(key, child.node)}
+              item={child}
+              path={key}
+              collapsed={collapsed}
+              onToggle={onToggle}
+              operations={operations}
+            />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * The Hierarchy view at `/`: the workspace's entities as collapsible containment trees
+ * (Domain ⊃ Systems ⊃ Components/APIs/Resources, subcomponents nested, Groups with their
+ * member Users). Data is the Graph page's endpoint — same query key, same cache, refreshed
+ * by every catalog mutation; the shaping lives in utils/hierarchy.ts. STORED rows carry the
+ * Files list's Operations menu; MISSING/EXTERNAL placeholders render dimmed without one.
+ */
+export default function Hierarchy() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [namespaceFilter, setNamespaceFilter] = useStoredState("hierarchy.filter.namespace", "", isString);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const downloads = useCatalogDownloads();
+
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ["catalogFiles", "graph", namespaceFilter],
+    queryFn: () => getCatalogGraph(namespaceFilter.trim() || undefined),
+    placeholderData: keepPreviousData,
+  });
+
+  const roots = useMemo(() => (data ? buildHierarchy(data) : []), [data]);
+
+  const deleteConfirm = useDeleteConfirm<DeleteTarget>({
+    mutationFn: (row) => deleteCatalogFile(row.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catalogFiles"] }),
+    successMessage: t("catalog.toast.deleted"),
+  });
+
+  function toggle(key: string) {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  const operations = (node: GraphNode) => {
+    const fileId = node.fileId;
+    if (fileId == null) return null;
+    return (
+      <CatalogFileOperations
+        id={fileId}
+        name={node.name}
+        downloading={downloads.downloadingId === fileId}
+        onDownload={() => void downloads.handleDownload({ id: fileId })}
+        onDelete={() =>
+          deleteConfirm.requestDelete({ id: fileId, name: node.name, namespace: node.namespace })
+        }
+      />
+    );
+  };
+
+  return (
+    <Stack gap="md">
+      <Title order={2}>{t("hierarchy.title")}</Title>
+
+      <Group align="flex-end" gap="lg">
+        <NamespaceFilterSelect value={namespaceFilter} onChange={setNamespaceFilter} />
+        <Button variant="default" size="xs" onClick={() => setCollapsed(new Set())}>
+          {t("hierarchy.expandAll")}
+        </Button>
+        <Button
+          variant="default"
+          size="xs"
+          onClick={() => setCollapsed(new Set(branchKeys(roots, "", [])))}
+        >
+          {t("hierarchy.collapseAll")}
+        </Button>
+      </Group>
+
+      {isError && (
+        <Alert color="red" variant="light" title={t("hierarchy.loadFailed")}>
+          {loadErrorMessage(error, t)}
+        </Alert>
+      )}
+      {downloads.downloadError != null && (
+        <Alert
+          color="red"
+          variant="light"
+          title={t("catalog.downloadFailed")}
+          withCloseButton
+          closeButtonLabel={t("common.action.close")}
+          onClose={downloads.dismissDownloadError}
+        >
+          {loadErrorMessage(downloads.downloadError, t)}
+        </Alert>
+      )}
+
+      <Paper withBorder p="md">
+        {isPending && !data ? (
+          <Center py="md">
+            <Loader size="sm" />
+          </Center>
+        ) : roots.length > 0 ? (
+          roots.map((root) => (
+            <TreeItem
+              key={pathKey("", root.node)}
+              item={root}
+              path=""
+              collapsed={collapsed}
+              onToggle={toggle}
+              operations={operations}
+            />
+          ))
+        ) : !isError ? (
+          <EmptyState
+            icon={<IconSitemap size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+            label={t("hierarchy.empty")}
+          />
+        ) : null}
+      </Paper>
+
+      <ConfirmDeleteModal
+        confirm={deleteConfirm}
+        title={t("catalog.deleteModalTitle")}
+        errorTitle={t("catalog.deleteFailed")}
+        body={(target) => (
+          <>
+            {t("catalog.deleteTitle", { name: target.name, namespace: target.namespace })}{" "}
+            {t("catalog.deleteUndone")}
+          </>
+        )}
+      />
+    </Stack>
+  );
+}

@@ -15,7 +15,8 @@ export function useCatalogDownloads() {
   const [exporting, setExporting] = useState(false);
 
   // The list row carries only the display fields — fetch the full document for the YAML.
-  async function handleDownload(row: CatalogFileListItem) {
+  // Only the id is read, so any row shape carrying one qualifies (the Hierarchy tree's rows).
+  async function handleDownload(row: Pick<CatalogFileListItem, "id">) {
     if (downloadingId !== null) return;
     setDownloadError(null);
     setDownloadingId(row.id);

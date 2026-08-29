@@ -1,21 +1,18 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Badge, Button, Group, Menu, Select, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Button, Group, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  IconChevronDown,
-  IconDownload,
   IconFileDescription,
   IconFileExport,
   IconFileImport,
-  IconPencil,
   IconPlus,
-  IconTrash,
 } from "@tabler/icons-react";
 import { deleteCatalogFile, listCatalogFiles, type CatalogFileListItem } from "../api/catalogFiles";
 import { ENTITY_KINDS } from "../utils/catalogFileForm";
+import CatalogFileOperations from "../components/CatalogFileOperations";
 import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
@@ -250,41 +247,13 @@ export default function CatalogFiles() {
                   <Text size="sm">{new Date(file.updatedAt).toLocaleDateString(i18n.language)}</Text>
                 </Table.Td>
                 <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
-                  <Menu position="bottom-end">
-                    <Menu.Target>
-                      <Button
-                        variant="subtle"
-                        size="xs"
-                        rightSection={<IconChevronDown size={14} />}
-                        loading={downloads.downloadingId === file.id}
-                        aria-label={t("catalog.operationsAria", { name: file.name })}
-                      >
-                        {t("catalog.operations")}
-                      </Button>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Item
-                        component={RouterLink}
-                        to={`/catalog-files/${file.id}/edit`}
-                        leftSection={<IconPencil size={14} />}
-                      >
-                        {t("common.action.edit")}
-                      </Menu.Item>
-                      <Menu.Item
-                        leftSection={<IconDownload size={14} />}
-                        onClick={() => void downloads.handleDownload(file)}
-                      >
-                        {t("common.action.download")}
-                      </Menu.Item>
-                      <Menu.Item
-                        color="red"
-                        leftSection={<IconTrash size={14} />}
-                        onClick={() => deleteConfirm.requestDelete(file)}
-                      >
-                        {t("common.action.delete")}
-                      </Menu.Item>
-                    </Menu.Dropdown>
-                  </Menu>
+                  <CatalogFileOperations
+                    id={file.id}
+                    name={file.name}
+                    downloading={downloads.downloadingId === file.id}
+                    onDownload={() => void downloads.handleDownload(file)}
+                    onDelete={() => deleteConfirm.requestDelete(file)}
+                  />
                 </Table.Td>
               </Table.Tr>
             ))

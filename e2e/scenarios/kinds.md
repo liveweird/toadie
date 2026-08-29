@@ -24,7 +24,7 @@
    `group:namespace/name` — and providing the API.
    - *Expected*: the editor's live References panel shows the all-clear — the owner and the
      provided API both resolve against the files just stored.
-4. On the Catalog files list, filtered by the namespace, all three rows show their kind badges
+4. On the Files list, filtered by the namespace, all three rows show their kind badges
    (Group, API, Component).
 5. They delete all three files.
 

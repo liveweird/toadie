@@ -23,14 +23,14 @@
      resolve to a stored entity") — no save request is sent.
 4. They replace the dangling entry with a reference to the real target.
    - *Expected*: the panel reads "All references resolve." and the create succeeds.
-5. They delete the target from the filtered Catalog files list.
+5. They delete the target from the filtered Files list.
    - *Expected*: deletion is allowed — dangling references arise exactly this way.
 6. They open the **Cross-check** page.
    - *Expected*: the report shows the now-missing reference, and its row links to the source
      file's editor.
 7. They recreate the target and reload the Cross-check page.
    - *Expected*: the finding for that unique reference is gone.
-8. They delete both throwaway files (source first) from the filtered Catalog files list.
+8. They delete both throwaway files (source first) from the filtered Files list.
 
 ## Not covered here (and why)
 

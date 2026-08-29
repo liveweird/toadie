@@ -90,7 +90,7 @@ export async function openFilters(page: Page): Promise<void> {
  * concurrently, so the setup process is the one writer and specs just read these values
  * (namespaces.spec.ts, the sole in-run writer, appends/removes only its own entries).
  */
-export function runNamespace(key: "kinds" | "render" | "roundTrip"): string {
+export function runNamespace(key: "kinds" | "render" | "roundTrip" | "hierarchy"): string {
   const value = process.env[`E2E_NS_${key.toUpperCase()}`];
   if (!value) throw new Error(`global-setup did not register the "${key}" run namespace`);
   return value;
@@ -131,8 +131,16 @@ export async function rowOperation(
   name: string,
   operation: "Edit" | "Download" | "Delete",
 ): Promise<void> {
-  await page.getByRole("button", { name: `Operations for ${name}` }).click();
-  await page.getByRole("menuitem", { name: operation }).click();
+  const trigger = page.getByRole("button", { name: `Operations for ${name}` });
+  // Ensure THIS row's menu actually opened: a previous row's still-fading dropdown treats
+  // the first click as its outside-click and swallows it, leaving the WRONG menu mounted —
+  // an unscoped menuitem click would then drive the other row's operation.
+  await expect(async () => {
+    if ((await trigger.getAttribute("aria-expanded")) !== "true") await trigger.click();
+    expect(await trigger.getAttribute("aria-expanded")).toBe("true");
+  }).toPass();
+  const dropdownId = await trigger.getAttribute("aria-controls");
+  await page.locator(`[id="${dropdownId}"]`).getByRole("menuitem", { name: operation }).click();
 }
 
 /**

@@ -2,7 +2,7 @@ import { ADMIN, expect, login, logoutButton, test } from "./helpers";
 
 test("admin can log in and log out", async ({ page }) => {
   await login(page);
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hierarchy" })).toBeVisible();
 
   await logoutButton(page).click();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();

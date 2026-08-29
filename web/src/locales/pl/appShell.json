@@ -3,10 +3,10 @@
   "toggleColorScheme": "Przełącz motyw kolorystyczny",
   "skipToContent": "Przejdź do treści",
   "nav": {
-    "home": "Strona główna",
-    "catalogFiles": "Pliki katalogu",
+    "home": "Hierarchia",
+    "catalogFiles": "Pliki",
     "crossCheck": "Weryfikacja referencji",
-    "render": "Renderowanie",
+    "render": "Graf",
     "namespaces": "Przestrzenie nazw",
     "labels": "Etykiety",
     "tags": "Tagi",

@@ -14,15 +14,15 @@
 1. The admin signs in and creates three components in the run namespace (picked from the
    Namespace select): B, the doomed ghost, then A with **Depends on** entries for both —
    saves enforce reference resolution, so targets exist first.
-2. They delete the ghost from the filtered Catalog files list.
+2. They delete the ghost from the filtered Files list.
    - *Expected*: deletion is allowed; A's reference to it is now dangling.
-3. They open the **Render** page and filter by the namespace.
+3. They open the **Graph** page and filter by the namespace.
    - *Expected*: nodes for A and B (stored), the ghost (missing), and the stored shared
      owner group (`platform`) are all drawn on the canvas.
 4. They toggle the **Depends on** relation chip off.
    - *Expected*: the orphaned virtual ghost node disappears; the stored nodes (B, the owner
      group) remain — stored nodes are never pruned.
-5. They delete the two remaining throwaway files from the filtered Catalog files list.
+5. They delete the two remaining throwaway files from the filtered Files list.
 
 ## Not covered here (and why)
 

@@ -63,10 +63,6 @@
     "message": "Ten adres nie pasuje do żadnej strony. Mogła zostać przeniesiona albo link zawiera literówkę.",
     "backHome": "Wróć do strony głównej"
   },
-  "home": {
-    "title": "Strona główna",
-    "placeholder": "Toadie pomoże Ci tworzyć, weryfikować i renderować pliki catalog-info.yaml Backstage. Pierwsze funkcje już wkrótce."
-  },
   "buildInfo": "Wersja aplikacji",
   "role": {
     "ADMIN": "Admin"

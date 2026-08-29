@@ -26,7 +26,7 @@ test("admin creates a user who signs in, changes their password, and is finally 
   await login(page, throwaway.email, throwaway.password);
   await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
   await page.goto("/users");
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hierarchy" })).toBeVisible();
   const newPassword = `${uniqueText("self-pw")}`;
   await page.goto("/change-password");
   await page.getByLabel(/^Current password/).fill(throwaway.password);

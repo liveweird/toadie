@@ -78,6 +78,7 @@ async function registerRunNamespaces(): Promise<void> {
     KINDS: `e2e-kns-${uniq}`,
     RENDER: `e2e-rns-${uniq}`,
     ROUNDTRIP: `e2e-rtns-${uniq}`,
+    HIERARCHY: `e2e-hns-${uniq}`,
   };
   const current = (await (
     await fetch(`${BASE_URL}/api/v1/dictionaries/namespaces`, { headers })

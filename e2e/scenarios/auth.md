@@ -8,7 +8,7 @@
 ## Scenario: admin can log in and log out
 
 1. The admin signs in through the real login form — email, password, "Sign in".
-   - *Expected*: the app shell is up — the **Home** heading and the header Logout button are
+   - *Expected*: the app shell is up — the **Hierarchy** heading and the header Logout button are
      visible.
 2. The admin clicks **Logout** in the header.
    - *Expected*: they are back on the login screen — the **Sign in** button and the

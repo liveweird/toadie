@@ -63,10 +63,6 @@
     "message": "This address doesn't match any page. It may have moved, or the link is mistyped.",
     "backHome": "Back to home"
   },
-  "home": {
-    "title": "Home",
-    "placeholder": "Toadie will help you create, cross-check, and render Backstage catalog-info.yaml files. The first features are on their way."
-  },
   "buildInfo": "Build version",
   "role": {
     "ADMIN": "Admin"
