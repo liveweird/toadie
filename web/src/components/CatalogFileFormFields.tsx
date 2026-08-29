@@ -16,6 +16,7 @@ import { type UseFormReturnType } from "@mantine/form";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
+import { useEntityTypes } from "../hooks/useEntityTypes";
 import { useLabels } from "../hooks/useLabels";
 import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
 import { useTagCategories } from "../hooks/useTagCategories";
@@ -24,6 +25,7 @@ import { refSuggestions, type RefField } from "../utils/refSuggestions";
 import {
   ENTITY_KINDS,
   fieldApplies,
+  fieldRequired,
   MAX_DEFINITION_LENGTH,
   MAX_DESCRIPTION_LENGTH,
   MAX_ENTITY_PART_LENGTH,
@@ -31,7 +33,6 @@ import {
   MAX_TITLE_LENGTH,
   RELATION_FIELDS,
   WELL_KNOWN_LIFECYCLES,
-  WELL_KNOWN_TYPES,
   type CatalogFileFormValues,
   type EntityKind,
   type SpecFieldName,
@@ -138,6 +139,41 @@ function TagsMultiSelect({ form }: { form: CatalogForm }) {
   );
 }
 
+/**
+ * The type picker — registry-constrained, NOT free entry: catalog writes accept only
+ * spec.type values from the document's kind's ADMIN-defined type dictionary
+ * (server-enforced, strict), so the options are that dictionary's values. A stored value
+ * no longer offered is appended so the file keeps rendering — the server's 400 then names
+ * the problem on save. A failed registry load keeps the field rendered (hint only), and a
+ * kind with no dictionary shows its own hint (a required-type kind cannot be saved until
+ * an admin defines the list — the server is the gate).
+ */
+function TypeSelect({ form }: { form: CatalogForm }) {
+  const { t } = useTranslation();
+  const { dictionaries, error } = useEntityTypes();
+  const kind = form.values.kind;
+  const optional = !fieldRequired(kind, "type");
+  const offered = dictionaries.find((dictionary) => dictionary.kind === kind)?.types ?? [];
+  const current = form.values.type.trim();
+  const options = current && !offered.includes(current) ? [...offered, current] : [...offered];
+  let hint: string | undefined;
+  if (error) hint = t("catalog.typeOptionsFailed");
+  else if (offered.length === 0) hint = t("catalog.noTypesForKind", { kind });
+  return (
+    <Select
+      label={t("catalog.field.type")}
+      required={!optional}
+      data={options}
+      searchable
+      clearable={optional}
+      description={hint}
+      value={current || null}
+      onChange={(value) => form.setFieldValue("type", value ?? "")}
+      error={form.getInputProps("type").error}
+    />
+  );
+}
+
 function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }) {
   const { t } = useTranslation();
   const kind = form.values.kind;
@@ -147,16 +183,7 @@ function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }
       <Stack gap="sm">
         {(has("type") || has("lifecycle")) && (
           <Group grow align="flex-start">
-            {has("type") && (
-              <Autocomplete
-                label={t("catalog.field.type")}
-                required={kind !== "System" && kind !== "Domain"}
-                data={[...WELL_KNOWN_TYPES[kind]]}
-                placeholder={WELL_KNOWN_TYPES[kind].slice(0, 3).join(", ")}
-                maxLength={MAX_ENTITY_PART_LENGTH}
-                {...form.getInputProps("type")}
-              />
-            )}
+            {has("type") && <TypeSelect form={form} />}
             {has("lifecycle") && (
               <Autocomplete
                 label={t("catalog.field.lifecycle")}

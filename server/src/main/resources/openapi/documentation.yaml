@@ -31,6 +31,7 @@ tags:
   - name: dictionaries
   - name: labels
   - name: tag-categories
+  - name: entity-types
 
 paths:
   /api/v1/login:
@@ -1027,6 +1028,100 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/entity-types:
+    get:
+      tags: [entity-types]
+      operationId: listEntityTypes
+      summary: List the per-kind type dictionaries
+      description: |
+        Any authenticated user. Returns every active per-kind type dictionary, kind-ordered
+        alphabetically — deliberately unpaged (at most six rows: one per type-bearing kind),
+        NOT a standard list endpoint. The dictionaries are an internal Toadie constraint on
+        the open `spec.type` field (not part of the Backstage schema): each kind's dictionary
+        is the whitelist every catalog-file write's `spec.type` is validated against, and the
+        dictionaries are INDEPENDENT of one another (the same value may be allowed for
+        several kinds).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityTypesList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    post:
+      tags: [entity-types]
+      operationId: createEntityTypes
+      summary: Create a kind's type dictionary
+      description: |
+        ADMIN only. Defines the allowed `spec.type` values for one type-bearing kind
+        (Component, API, System, Domain, Resource, or Group — User's spec has no type).
+        A kind already holding an active dictionary is a `409`; kinds with no dictionary
+        allow NO types (for required-type kinds that blocks saving files of that kind).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityTypesRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema: { type: string }
+              description: URL of the new entity-types resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityTypes'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/entity-types/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      tags: [entity-types]
+      operationId: replaceEntityTypes
+      summary: Replace a kind's type dictionary
+      description: |
+        ADMIN only — whole-dictionary replacement, kind change included (moving the list to
+        a kind that already has an active dictionary is a `409`). Stored files carrying a
+        removed type simply fail the strict check on their next save (no grandfathering).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityTypesRequest'
+      responses:
+        '204': { description: Replaced }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    delete:
+      tags: [entity-types]
+      operationId: deleteEntityTypes
+      summary: Delete a kind's type dictionary
+      description: |
+        ADMIN only — soft delete; the kind becomes definable again by a NEW dictionary.
+        Until then the kind allows NO types, so files of a required-type kind cannot be
+        saved (a deliberate admin choice — the strict no-grandfathering rule).
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1914,6 +2009,60 @@ components:
           description: >-
             At least one of the seven landscape kinds (case-insensitive input; stored in
             canonical casing and order); no duplicates.
+
+    EntityTypes:
+      type: object
+      required: [id, kind, types]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 0
+        kind:
+          type: string
+          maxLength: 63
+          description: >-
+            The type-bearing kind this dictionary constrains (canonical casing). Unique
+            among active dictionaries — one dictionary per kind.
+        types:
+          type: array
+          maxItems: 100
+          items: { type: string, maxLength: 63 }
+          description: >-
+            The kind's allowed `spec.type` values (the spec.type grammar — single word, no
+            whitespace), in the admin's order. Dictionaries are independent: the same value
+            may appear under several kinds.
+
+    EntityTypesList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityTypes'
+          description: Active per-kind dictionaries, kind-ordered alphabetically.
+
+    EntityTypesRequest:
+      type: object
+      required: [kind, types]
+      properties:
+        kind:
+          type: string
+          maxLength: 63
+          description: >-
+            One of the type-bearing kinds — Component, API, System, Domain, Resource, Group
+            (case-insensitive input; stored canonical). User is rejected: its spec has no
+            type field. A kind already holding an active dictionary is a `409`.
+        types:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, maxLength: 63 }
+          description: >-
+            At least one entry; each trimmed and validated with the exact `spec.type` rule
+            (1–63 characters, no whitespace); no case-folded duplicates. Array order becomes
+            the stored order.
 
     ProblemDetail:
       type: object

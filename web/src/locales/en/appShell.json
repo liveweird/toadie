@@ -10,6 +10,7 @@
     "namespaces": "Namespaces",
     "labels": "Labels",
     "tags": "Tags",
+    "types": "Types",
     "users": "Users",
     "changePassword": "Change password",
     "featureFlags": "Feature flags"

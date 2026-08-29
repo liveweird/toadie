@@ -49,7 +49,9 @@ from Lettuce, that any new or edited spec must satisfy:
   `render`, and `round-trip` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user;
   `labels` owns its throwaway label, the one file carrying it, and its user; `tags` owns its
-  throwaway tag category, the one file carrying a tag, and its user; `password-reset` owns
+  throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
+  value it appends to the Domain type dictionary, the one Domain file carrying it, and its
+  user; `password-reset` owns
   its throwaway account (its reset requests use unique per-run emails against the in-memory
   per-email throttle, and both tests together stay under the per-IP 5/min reset bucket);
   `mfa` owns its throwaway accounts and toggles ONLY their MFA flags (the seed admin's MFA
@@ -75,6 +77,12 @@ from Lettuce, that any new or edited spec must satisfy:
   registered categories — **`tags.spec.ts` is that registry's ONLY in-run writer**, creating
   and deleting only its own unique `e2e-tagcat-*` category. No other spec may put tags on
   files without first moving category registration into global-setup.
+- **The type registry follows it doubly.** Catalog writes accept only spec.type values from
+  the file's kind's dictionary, and the dictionaries are per-kind SINGLETONS every spec's
+  forms read (the migration-seeded well-known values back every `pickType` call) —
+  **`types.spec.ts` is the registry's ONLY in-run writer**, and even it only APPENDS its one
+  unique `e2e-type-*` value to the Domain dictionary and removes it again; no spec may
+  delete or replace a seeded dictionary.
 - **The `group:default/platform` owner Group is a persistent test seed.** Catalog writes
   enforce reference RESOLUTION, so the shared `owner: group:default/platform` the specs'
   Component fixtures use must be stored — global-setup seeds it idempotently (201 or 409)
@@ -101,7 +109,7 @@ the same commit** — this list is the coverage map, the scenario file is the de
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
   authenticated pages (`/`, `/catalog-files`, `/catalog-files/new`, `/catalog-files/import`,
-  `/cross-check`, `/render`, `/labels`, `/tags`, `/users`); `color-contrast` consciously waived theme-wide.
+  `/cross-check`, `/render`, `/labels`, `/tags`, `/types`, `/users`); `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
@@ -134,6 +142,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`tags.spec.ts`](scenarios/tags.md) — the tag categories: modal validation → create a
   category (tags + kinds) → edit → the regular user's read-only view → the editor's grouped
   tags picker on a new Component → cleanup; the tag-category registry's only in-run writer.
+- [`types.spec.ts`](scenarios/types.md) — the per-kind type dictionaries: seeded rows → modal
+  validation → append a unique type to the Domain dictionary → the regular user's read-only
+  view → the editor's Type Select on a new Domain file → restore; the type registry's only
+  in-run writer (append-and-remove, the singletons themselves survive).
 - [`url-import.spec.ts`](scenarios/url-import.md) — fetch-from-URL through the real SSRF
   guard: a loopback URL is refused with the uniform public-https error (the happy network
   path deliberately stays server-tested, no external dependency in CI).

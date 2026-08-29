@@ -473,6 +473,57 @@ object TestTagCategories {
     }
 }
 
+/**
+ * Direct access to the SHARED per-kind type dictionaries (V14, seeded by V15) — suite state
+ * every catalog write's spec.type is checked against. Unlike labels/tags, the rows are
+ * per-kind SINGLETONS (at most six, all seeded), so tests cannot mint unique registries:
+ * anything that must change a kind's dictionary goes through [withKindTypes], which
+ * restores the prior state in a finally (the TestNamespaces.withDefaultNamespace idiom).
+ */
+object TestEntityTypes {
+    val service: ch.nokillswit.types.EntityTypesService by lazy {
+        ch.nokillswit.types.EntityTypesService(sharedTestDatabase)
+    }
+
+    data class RawRow(val id: UInt, val kind: String, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.types.EntityTypesService.EntityTypes
+        t.selectAll().map { RawRow(it[t.id].value, it[t.kind], it[t.markedAsDeleted]) }.toList()
+    }
+
+    /** The kind's active dictionary, or null when it has none. */
+    suspend fun current(kind: String): ch.nokillswit.types.EntityTypesResponse? =
+        service.list().singleOrNull { it.kind == kind }
+
+    private suspend fun apply(kind: String, types: List<String>?) {
+        val existing = current(kind)
+        when {
+            existing == null && types != null ->
+                service.create(ch.nokillswit.types.EntityTypesRequest(kind = kind, types = types))
+            existing != null && types == null -> service.delete(existing.id)
+            existing != null && types != null ->
+                service.update(existing.id, ch.nokillswit.types.EntityTypesRequest(kind = kind, types = types))
+            else -> {} // absent stays absent
+        }
+    }
+
+    /**
+     * Runs [block] with [kind]'s dictionary temporarily set to [types] (null = no dictionary
+     * at all), restoring the previous list afterwards — a delete/recreate may mint a new row
+     * id, so tests must not pin the seed ids.
+     */
+    suspend fun withKindTypes(kind: String, types: List<String>?, block: suspend () -> Unit) {
+        val snapshot = current(kind)?.types
+        apply(kind, types)
+        try {
+            block()
+        } finally {
+            apply(kind, snapshot)
+        }
+    }
+}
+
 // Bootstrap tests (and prod-mode boot tests) rotate the seed admin password in the SHARED
 // container. Call this afterwards to put the V3 seed state back so later tests (and re-runs)
 // see the pristine seed.

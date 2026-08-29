@@ -1,0 +1,37 @@
+{
+  "title": "Typy",
+  "intro": "Jedyne wartości spec.type, jakie mogą mieć pliki katalogu — jeden słownik na rodzaj encji, definiowany przez administratorów i administratorki. Słowniki są niezależne: ta sama wartość może być dozwolona dla kilku rodzajów.",
+  "empty": "Nie zdefiniowano jeszcze słowników typów",
+  "loadFailed": "Nie udało się wczytać słowników typów",
+  "newDictionary": "Nowy słownik",
+  "createTitle": "Nowy słownik typów",
+  "editTitle": "Edytuj słownik typów",
+  "column": {
+    "kind": "Rodzaj",
+    "types": "Dozwolone typy"
+  },
+  "field": {
+    "kind": "Rodzaj",
+    "kindHint": "Jeden słownik na rodzaj; User nie ma pola typu",
+    "types": "Dozwolone typy",
+    "typesHint": "Naciśnij Enter, aby dodać każdy typ — jedno słowo, do 63 znaków"
+  },
+  "validation": {
+    "kind": "Wybierz rodzaj z polem typu",
+    "typesRequired": "Dodaj co najmniej jeden typ",
+    "typesCount": "Najwyżej 100 typów",
+    "type": "Typ „{{type}}” musi mieć 1–63 znaki bez białych znaków",
+    "typesDuplicate": "Typy nie mogą się powtarzać"
+  },
+  "saveConflict": "Ten rodzaj ma już słownik typów",
+  "saveInvalid": "Co najmniej jedno pole jest nieprawidłowe",
+  "saveGone": "Ten słownik już nie istnieje — odśwież stronę",
+  "deleteTitle": "Usunąć słownik typów?",
+  "deleteFailed": "Nie udało się usunąć słownika typów",
+  "deleteBody": "Pliki rodzaju {{kind}} nie zapiszą się ze spec.type, dopóki nowy słownik go nie zdefiniuje.",
+  "toast": {
+    "created": "Słownik typów utworzony",
+    "saved": "Słownik typów zapisany",
+    "deleted": "Słownik typów usunięty"
+  }
+}

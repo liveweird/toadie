@@ -97,6 +97,19 @@ export function runNamespace(key: "kinds" | "render" | "roundTrip"): string {
 }
 
 /**
+ * Pick a spec.type in the catalog form's Type Select (free text is not accepted — the
+ * field offers only the kind's admin-defined type dictionary, seeded by V15 with the
+ * well-known Backstage values). Same shape as [pickNamespace].
+ */
+export async function pickType(page: Page, type: string): Promise<void> {
+  const select = page.getByRole("combobox", { name: "Type" });
+  await select.click();
+  await select.fill(type);
+  await page.getByRole("option", { name: type, exact: true }).click();
+  await expect(select).toHaveValue(type);
+}
+
+/**
  * Drive a catalog-files list row's action through its Operations dropdown (the per-row
  * Edit/Download/Delete buttons are bundled under one menu button since the list reshape).
  */

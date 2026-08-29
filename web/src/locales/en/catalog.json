@@ -158,5 +158,7 @@
   "noLabelsForKind": "No labels are defined for kind {{kind}} — administrators register them on the Labels page.",
   "tagOptionsFailed": "Could not load the tag categories. Reload to try again.",
   "noTagsForKind": "No tags are defined for kind {{kind}} — administrators register tag categories on the Tags page.",
+  "typeOptionsFailed": "Could not load the type dictionaries. Reload to try again.",
+  "noTypesForKind": "No types are defined for kind {{kind}} — administrators define them on the Types page.",
   "staleTagsGroup": "Not registered"
 }

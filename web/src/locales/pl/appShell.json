@@ -10,6 +10,7 @@
     "namespaces": "Przestrzenie nazw",
     "labels": "Etykiety",
     "tags": "Tagi",
+    "types": "Typy",
     "users": "Użytkownicy/czki",
     "changePassword": "Zmiana hasła",
     "featureFlags": "Flagi funkcji"

@@ -1,4 +1,4 @@
-import { createUserViaUi, expect, login, logoutButton, openFilters, rowOperation, test, uniqueText } from "./helpers";
+import { createUserViaUi, expect, login, logoutButton, openFilters, pickType, rowOperation, test, uniqueText } from "./helpers";
 
 // The label-registry journey on a throwaway key (unique per attempt, so retries never
 // collide): create → validation → edit → the read-only view → applying the label in the
@@ -69,7 +69,7 @@ test("admin curates the label registry; a regular user reads it; the editor enfo
   const name = uniqueText("e2e-lbl-comp");
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
-  await page.getByRole("combobox", { name: "Type" }).fill("service");
+  await pickType(page, "service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await page.getByRole("button", { name: "Add label" }).click();

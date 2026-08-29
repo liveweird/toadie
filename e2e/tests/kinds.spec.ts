@@ -1,4 +1,4 @@
-import { expect, login, openFilters, pickNamespace, rowOperation, runNamespace, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
 
 async function fillIdentity(page: import("@playwright/test").Page, name: string, ns: string) {
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
@@ -23,7 +23,7 @@ test("a group, an API, and a component owned by the group are created and resolv
   await page.getByRole("combobox", { name: "Kind" }).click();
   await page.getByRole("option", { name: "Group" }).click();
   await fillIdentity(page, team, ns);
-  await page.getByRole("combobox", { name: "Type" }).fill("team");
+  await pickType(page, "team");
   await expect(page.getByLabel("YAML preview")).toContainText("children: []");
   await Promise.all([
     page.waitForResponse(
@@ -37,7 +37,7 @@ test("a group, an API, and a component owned by the group are created and resolv
   await page.getByRole("combobox", { name: "Kind" }).click();
   await page.getByRole("option", { name: "API", exact: true }).click();
   await fillIdentity(page, api, ns);
-  await page.getByRole("combobox", { name: "Type" }).fill("openapi");
+  await pickType(page, "openapi");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
   await page.getByRole("combobox", { name: "Owner" }).fill(team);
   await page.getByRole("textbox", { name: "Definition" }).fill("openapi: 3.0.0");
@@ -52,7 +52,7 @@ test("a group, an API, and a component owned by the group are created and resolv
   // (every reference resolves against the two files just stored).
   await page.goto("/catalog-files/new");
   await fillIdentity(page, comp, ns);
-  await page.getByRole("combobox", { name: "Type" }).fill("service");
+  await pickType(page, "service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
   // The owner PICKER: the just-created group is offered as its full identity and picking
   // it inserts that `group:namespace/name` form.

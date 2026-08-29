@@ -43,7 +43,8 @@ function findSaveCall(mockFetch: FetchMock) {
 
 async function fillMinimalForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
-  await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
+  await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
+  await user.click(await screen.findByRole("option", { name: "service" }));
   await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
   await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "group:default/platform");
 }
@@ -53,7 +54,23 @@ describe("CreateCatalogFile page", () => {
 
   beforeEach(() => {
     mockFetch = vi.fn();
-    vi.stubGlobal("fetch", mockFetch);
+    // The Type Select loads the per-kind dictionaries; serve them ABOVE the per-test mock so
+    // every existing mockImplementation (and findSaveCall over mockFetch.mock.calls) is
+    // untouched by the registry traffic.
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url === "/api/v1/entity-types") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            items: [
+              { id: 1, kind: "Component", types: ["service", "website"] },
+              { id: 2, kind: "API", types: ["openapi"] },
+              { id: 3, kind: "Group", types: ["team"] },
+            ],
+          }),
+        );
+      }
+      return (mockFetch as unknown as (u: string, i?: RequestInit) => Promise<Response>)(url, init);
+    });
     localStorage.setItem(TOKEN_KEY, "fake-token");
   });
 
@@ -153,7 +170,8 @@ describe("CreateCatalogFile page", () => {
     renderCreate();
 
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
-    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
+    await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "service" }));
     await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
     await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "ghost-team");
     // Wait for the pool so the resolution half of validation is armed.
@@ -172,7 +190,8 @@ describe("CreateCatalogFile page", () => {
     renderCreate();
 
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
-    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
+    await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "service" }));
     await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
     await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "group:default/platform");
     // The short form resolves via the default kind (component) to this very document — the
@@ -321,7 +340,8 @@ describe("CreateCatalogFile page", () => {
     expect(screen.getByLabelText("Members", { selector: "input" })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "team-a");
-    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "team");
+    await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "team" }));
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
     await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
@@ -345,7 +365,8 @@ describe("CreateCatalogFile page", () => {
     expect(screen.getByLabelText(/^definition( \*)?$/i)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "billing-api");
-    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "openapi");
+    await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "openapi" }));
     await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
     await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "team-a");
     await user.click(screen.getByRole("button", { name: /^create$/i }));
@@ -396,7 +417,8 @@ describe("CreateCatalogFile page", () => {
     renderCreate();
 
     await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
-    await user.type(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }), "service");
+    await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "service" }));
     await user.type(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }), "production");
 
     // Open the owner picker — the stored group is offered as its full identity;

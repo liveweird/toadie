@@ -1,4 +1,4 @@
-import { expect, login, openFilters, rowOperation, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickType, rowOperation, test, uniqueText } from "./helpers";
 
 // The cross-check journey on two throwaway unique-named files. Saves ENFORCE reference
 // resolution now, so a dangling reference can only be MADE by deleting its target — the
@@ -15,7 +15,7 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
   // The target component first — references must resolve at save time.
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(target);
-  await page.getByRole("combobox", { name: "Type" }).fill("service");
+  await pickType(page, "service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await Promise.all([
@@ -29,7 +29,7 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
   // never reference itself, saved or not).
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(source);
-  await page.getByRole("combobox", { name: "Type" }).fill("service");
+  await pickType(page, "service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await page.getByRole("combobox", { name: "Depends on" }).fill(`component:${source}`);
@@ -84,7 +84,7 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
   // Recreate the target — the finding disappears from a fresh report.
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(target);
-  await page.getByRole("combobox", { name: "Type" }).fill("service");
+  await pickType(page, "service");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   await Promise.all([

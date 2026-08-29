@@ -162,5 +162,7 @@
   "noLabelsForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych etykiet — administratorzy i administratorki rejestrują je na stronie Etykiety.",
   "tagOptionsFailed": "Nie udało się wczytać kategorii tagów. Przeładuj stronę, aby spróbować ponownie.",
   "noTagsForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych tagów — administratorzy i administratorki rejestrują kategorie tagów na stronie Tagi.",
+  "typeOptionsFailed": "Nie udało się wczytać słowników typów. Przeładuj stronę, aby spróbować ponownie.",
+  "noTypesForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych typów — administratorzy i administratorki definiują je na stronie Typy.",
   "staleTagsGroup": "Niezarejestrowane"
 }

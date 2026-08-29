@@ -7,6 +7,7 @@ import ch.nokillswit.infra.db.jsonArrayContains
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.labels.LabelService
 import ch.nokillswit.tags.TagCategoryService
+import ch.nokillswit.types.EntityTypesService
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.plugins.isUniqueViolation
 import ch.nokillswit.users.UserService
@@ -211,6 +212,36 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
     }
 
+    /**
+     * The fifth sanctioned cross-feature table read (see persistence.md): STRICT spec.type
+     * enforcement — every write (create, update, import) with a non-blank type checks it
+     * against the file's kind's ADMIN-curated type dictionary inside the write's own
+     * transaction (matching is byte-exact — the editor only ever writes registered types
+     * verbatim). The dictionaries are per-kind and INDEPENDENT; a kind with no active row
+     * allows NO types (for required-type kinds that means no file can be saved until the
+     * list exists). No grandfathering: a stored file whose type was since removed cannot be
+     * saved until it is fixed. Blank/absent types are the per-kind requiredness tables'
+     * business (validateCatalogFile), not this check's.
+     */
+    private suspend fun requireAllowedType(kind: String, type: String?) {
+        if (type.isNullOrBlank()) return
+        val allowed = EntityTypesService.EntityTypes.selectAll()
+            .where {
+                (EntityTypesService.EntityTypes.kind eq kind) and
+                    (EntityTypesService.EntityTypes.markedAsDeleted eq false)
+            }
+            .map { json.decodeFromString<List<String>>(it[EntityTypesService.EntityTypes.types]) }
+            .singleOrNull()
+            ?: throw BadRequestException(
+                "No types are defined for kind '$kind' — define them on the Types page",
+            )
+        if (type !in allowed) {
+            throw BadRequestException(
+                "spec.type '$type' is not an allowed type for kind '$kind' — define it on the Types page",
+            )
+        }
+    }
+
     private fun CatalogFile.withNamespace(resolved: String): CatalogFile =
         if (metadata.namespace == resolved) this else copy(metadata = metadata.copy(namespace = resolved))
 
@@ -266,6 +297,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         requireAllowedLabels(stored.kind, stored.metadata.labels)
         requireAllowedTags(stored.kind, stored.metadata.tags)
+        requireAllowedType(stored.kind, stored.spec.type)
         requireResolvedReferences(stored, extraIdentities)
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
@@ -292,6 +324,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         requireAllowedLabels(stored.kind, stored.metadata.labels)
         requireAllowedTags(stored.kind, stored.metadata.tags)
+        requireAllowedType(stored.kind, stored.spec.type)
         requireResolvedReferences(stored, emptySet())
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
             it[kind] = stored.kind

@@ -696,6 +696,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/entity-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the per-kind type dictionaries
+         * @description Any authenticated user. Returns every active per-kind type dictionary, kind-ordered
+         *     alphabetically — deliberately unpaged (at most six rows: one per type-bearing kind),
+         *     NOT a standard list endpoint. The dictionaries are an internal Toadie constraint on
+         *     the open `spec.type` field (not part of the Backstage schema): each kind's dictionary
+         *     is the whitelist every catalog-file write's `spec.type` is validated against, and the
+         *     dictionaries are INDEPENDENT of one another (the same value may be allowed for
+         *     several kinds).
+         */
+        get: operations["listEntityTypes"];
+        put?: never;
+        /**
+         * Create a kind's type dictionary
+         * @description ADMIN only. Defines the allowed `spec.type` values for one type-bearing kind
+         *     (Component, API, System, Domain, Resource, or Group — User's spec has no type).
+         *     A kind already holding an active dictionary is a `409`; kinds with no dictionary
+         *     allow NO types (for required-type kinds that blocks saving files of that kind).
+         */
+        post: operations["createEntityTypes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entity-types/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a kind's type dictionary
+         * @description ADMIN only — whole-dictionary replacement, kind change included (moving the list to
+         *     a kind that already has an active dictionary is a `409`). Stored files carrying a
+         *     removed type simply fail the strict check on their next save (no grandfathering).
+         */
+        put: operations["replaceEntityTypes"];
+        post?: never;
+        /**
+         * Delete a kind's type dictionary
+         * @description ADMIN only — soft delete; the kind becomes definable again by a NEW dictionary.
+         *     Until then the kind allows NO types, so files of a required-type kind cannot be
+         *     saved (a deliberate admin choice — the strict no-grandfathering rule).
+         */
+        delete: operations["deleteEntityTypes"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1114,6 +1177,24 @@ export interface components {
             tags: string[];
             /** @description At least one of the seven landscape kinds (case-insensitive input; stored in canonical casing and order); no duplicates. */
             kinds: string[];
+        };
+        EntityTypes: {
+            /** Format: int32 */
+            id: number;
+            /** @description The type-bearing kind this dictionary constrains (canonical casing). Unique among active dictionaries — one dictionary per kind. */
+            kind: string;
+            /** @description The kind's allowed `spec.type` values (the spec.type grammar — single word, no whitespace), in the admin's order. Dictionaries are independent: the same value may appear under several kinds. */
+            types: string[];
+        };
+        EntityTypesList: {
+            /** @description Active per-kind dictionaries, kind-ordered alphabetically. */
+            items: components["schemas"]["EntityTypes"][];
+        };
+        EntityTypesRequest: {
+            /** @description One of the type-bearing kinds — Component, API, System, Domain, Resource, Group (case-insensitive input; stored canonical). User is rejected: its spec has no type field. A kind already holding an active dictionary is a `409`. */
+            kind: string;
+            /** @description At least one entry; each trimmed and validated with the exact `spec.type` rule (1–63 characters, no whitespace); no case-folded duplicates. Array order becomes the stored order. */
+            types: string[];
         };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
@@ -2204,6 +2285,113 @@ export interface operations {
         };
     };
     deleteTagCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listEntityTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityTypesList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createEntityTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityTypesRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new entity-types resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityTypes"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceEntityTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityTypesRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteEntityTypes: {
         parameters: {
             query?: never;
             header?: never;

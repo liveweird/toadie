@@ -102,6 +102,7 @@ private val UNIQUE_CONSTRAINT_DETAILS = mapOf(
     "uq_dictionary_entries_default_active" to "Another entry is already flagged as the default",
     "uq_labels_key_active" to "A label with this key already exists",
     "uq_tag_categories_name_active" to "A tag category with this name already exists",
+    "uq_entity_types_kind_active" to "This kind already has a type dictionary",
 )
 
 private fun Throwable.uniqueViolationDetail(): String {

@@ -847,4 +847,60 @@ class CatalogFileTest {
         assertTrue(page.items.any { it.id == created.id })
         assertNull(page.items.first { it.id == created.id }.title)
     }
+
+    @Test
+    fun `spec type is enforced against the kind's dictionary - strict, on create and update`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("typenf")
+
+        // An unregistered type is a 400 naming the rule (the seeded Component list is the gate).
+        val bad = client.postJson(
+            "/api/v1/catalog-files",
+            componentFile(uniqueEntityName("typenf"), type = "never-registered-xyz"),
+        )
+        assertEquals(HttpStatusCode.BadRequest, bad.status)
+        assertTrue(bad.body<ProblemDetail>().detail!!.contains("not an allowed type"))
+
+        // A type appended to the kind's dictionary becomes saveable; when it is removed again,
+        // the STORED file goes strict-invalid on its next save (no grandfathering).
+        val seededTypes = TestEntityTypes.current("Component")!!.types
+        val extra = uniqueEntityName("typex").lowercase()
+        TestEntityTypes.withKindTypes("Component", seededTypes + extra) {
+            val file = componentFile(uniqueEntityName("typok"), type = extra)
+            val created = client.createCatalogFile(file)
+
+            TestEntityTypes.withKindTypes("Component", seededTypes) {
+                val update = client.putJson("/api/v1/catalog-files/${created.id}", file)
+                assertEquals(HttpStatusCode.BadRequest, update.status)
+                assertTrue(update.body<ProblemDetail>().detail!!.contains("not an allowed type"))
+            }
+        }
+    }
+
+    @Test
+    fun `a kind without a dictionary allows no type at all - but an optional type may stay absent`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("typeless")
+            fun systemFile(name: String, type: String?) = CatalogFile(
+                kind = "System",
+                metadata = CatalogFileMetadata(name = name),
+                spec = EntitySpec(type = type, owner = "group:default/platform"),
+            )
+            TestEntityTypes.withKindTypes("System", null) {
+                val withType = client.postJson(
+                    "/api/v1/catalog-files",
+                    systemFile(uniqueEntityName("typeless"), type = "product"),
+                )
+                assertEquals(HttpStatusCode.BadRequest, withType.status)
+                assertTrue(withType.body<ProblemDetail>().detail!!.contains("No types are defined"))
+
+                // System's type is OPTIONAL — a type-less file saves fine without a dictionary.
+                val without = client.postJson(
+                    "/api/v1/catalog-files",
+                    systemFile(uniqueEntityName("typeless"), type = null),
+                )
+                assertEquals(HttpStatusCode.Created, without.status)
+            }
+        }
 }

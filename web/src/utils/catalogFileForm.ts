@@ -14,16 +14,8 @@ const MAX_PROFILE_EMAIL_LENGTH = 254;
 export const ENTITY_KINDS = ["Component", "API", "System", "Domain", "Resource", "Group", "User"] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
-// The well-known type values per kind (the descriptor reference) — suggestions, not enums.
-export const WELL_KNOWN_TYPES: Record<EntityKind, readonly string[]> = {
-  Component: ["service", "website", "library"],
-  API: ["openapi", "asyncapi", "graphql", "grpc"],
-  System: ["product", "service", "feature-set"],
-  Domain: ["product-area", "product-group", "bundle"],
-  Resource: ["database", "s3-bucket", "kubernetes-cluster"],
-  Group: ["team", "business-unit", "product-area", "root"],
-  User: [],
-};
+// (The per-kind well-known TYPE lists moved server-side: V15 seeds them into the admin-
+// curated type dictionaries, and the editor's Type picker reads those via useEntityTypes.)
 export const WELL_KNOWN_LIFECYCLES = ["experimental", "production", "deprecated"] as const;
 
 // The grammars from .claude/docs/backstage-descriptor-format.md, identical to the server's
@@ -170,7 +162,7 @@ export function fieldApplies(kind: EntityKind, field: SpecFieldName): boolean {
   return KIND_FIELDS[kind].includes(field);
 }
 
-function fieldRequired(kind: EntityKind, field: SpecFieldName): boolean {
+export function fieldRequired(kind: EntityKind, field: SpecFieldName): boolean {
   return KIND_REQUIRED[kind].includes(field);
 }
 

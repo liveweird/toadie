@@ -150,6 +150,13 @@ private val ALLOWED_FIELDS: Map<String, Set<String>> = mapOf(
     "User" to setOf("profile", "memberOf"),
 )
 
+/**
+ * The kinds whose spec carries a `type` field (all but User) — the only kinds the
+ * ADMIN-curated per-kind type dictionaries (`types/`) accept, derived from the field table
+ * so the two can never drift.
+ */
+val TYPE_BEARING_KINDS: List<String> = SUPPORTED_KINDS.filter { "type" in ALLOWED_FIELDS.getValue(it) }
+
 private val REQUIRED_FIELDS: Map<String, Set<String>> = mapOf(
     "Component" to setOf("type", "lifecycle", "owner"),
     "API" to setOf("type", "lifecycle", "owner", "definition"),
@@ -254,7 +261,9 @@ internal fun validateNamePart(value: String, field: String) {
     }
 }
 
-private fun validateSingleWord(value: String, field: String) {
+// Internal: the types registry (types/EntityTypes.kt) validates its values with the exact
+// spec.type rule, so a registered type is always saveable.
+internal fun validateSingleWord(value: String, field: String) {
     if (value.isEmpty() || value.length > MAX_ENTITY_PART_LENGTH || value.any { it.isWhitespace() }) {
         throw BadRequestException("$field must be 1-$MAX_ENTITY_PART_LENGTH characters without whitespace")
     }

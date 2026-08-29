@@ -1,0 +1,37 @@
+{
+  "title": "Types",
+  "intro": "The only spec.type values catalog files may carry — one dictionary per entity kind, defined by administrators. The dictionaries are independent: the same value may be allowed for several kinds.",
+  "empty": "No type dictionaries defined yet",
+  "loadFailed": "Could not load the type dictionaries",
+  "newDictionary": "New dictionary",
+  "createTitle": "New type dictionary",
+  "editTitle": "Edit type dictionary",
+  "column": {
+    "kind": "Kind",
+    "types": "Allowed types"
+  },
+  "field": {
+    "kind": "Kind",
+    "kindHint": "One dictionary per kind; User has no type field",
+    "types": "Allowed types",
+    "typesHint": "Press Enter to add each type — single word, up to 63 characters"
+  },
+  "validation": {
+    "kind": "Pick a type-bearing kind",
+    "typesRequired": "Add at least one type",
+    "typesCount": "At most 100 types",
+    "type": "Type \"{{type}}\" must be 1–63 characters without whitespace",
+    "typesDuplicate": "Types must not repeat"
+  },
+  "saveConflict": "This kind already has a type dictionary",
+  "saveInvalid": "One or more fields are invalid",
+  "saveGone": "This dictionary no longer exists — reload the page",
+  "deleteTitle": "Delete type dictionary?",
+  "deleteFailed": "Could not delete the type dictionary",
+  "deleteBody": "{{kind}} files will not save with a spec.type until a new dictionary defines one.",
+  "toast": {
+    "created": "Type dictionary created",
+    "saved": "Type dictionary saved",
+    "deleted": "Type dictionary deleted"
+  }
+}

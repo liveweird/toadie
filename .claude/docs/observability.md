@@ -17,6 +17,7 @@
 - `dictionary.updated` (byUserId/dictionary/added/renamed/removed — every successful whole-document dictionary replace; a rejected save emits nothing),
 - `label.created` (byUserId/labelId/key/values count/kinds) / `label.updated` (same fields) / `label.deleted` (byUserId/labelId) — every label-registry mutation; a rejected save emits nothing,
 - `tag_category.created` (byUserId/categoryId/name/tags count/kinds) / `tag_category.updated` (same fields) / `tag_category.deleted` (byUserId/categoryId) — every tag-category mutation; a rejected save emits nothing,
+- `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail).
 
 Field-naming convention: the acting caller is `byUserId` everywhere except the auth lifecycle events (`login.*`, `logout`, `refresh.rejected`), where `userId` identifies the account being authenticated.
