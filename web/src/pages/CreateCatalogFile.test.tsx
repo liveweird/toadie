@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import CreateCatalogFile from "./CreateCatalogFile";
@@ -176,29 +176,19 @@ describe("CreateCatalogFile page", () => {
     expect(body.metadata.labels).toEqual({ tier: "backend" });
   });
 
-  test("with the identity pool loaded, an unresolved owner blocks submission inline", async () => {
+  test("a soft-rejected create opens the Save-anyway modal; confirming retries with allowInvalid", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-      if ((init?.method ?? "GET") === "GET" && url.startsWith("/api/v1/catalog-files?")) {
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === "/api/v1/catalog-files") {
+        return Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }));
+      }
+      if (method === "POST" && url === "/api/v1/catalog-files?allowInvalid=true") {
+        return Promise.resolve(jsonResponse(201, { id: 9 }));
+      }
+      if (method === "POST" && url === "/api/v1/catalog-files/check") {
         return Promise.resolve(
           jsonResponse(200, {
-            items: [
-              {
-                id: 1,
-                kind: "Group",
-                name: "team-a",
-                namespace: "default",
-                title: null,
-                type: "team",
-                lifecycle: null,
-                owner: null,
-                creatorName: "A",
-                creatorDeleted: false,
-                updatedAt: 1,
-              },
-            ],
-            page: 1,
-            pageSize: 100,
-            total: 1,
+            findings: [{ field: "spec.owner", reference: "ghost-team", status: "MISSING" }],
           }),
         );
       }
@@ -207,40 +197,45 @@ describe("CreateCatalogFile page", () => {
     const user = userEvent.setup();
     renderCreate();
 
-    await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
-    await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
-    await user.click(await screen.findByRole("option", { name: "service" }));
-    await user.click(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }));
-    await user.click(await screen.findByRole("option", { name: "production" }));
-    await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "ghost-team");
-    // Wait for the pool so the resolution half of validation is armed.
-    await waitFor(() =>
-      expect(mockFetch.mock.calls.some(([u]) => (u as string).startsWith("/api/v1/catalog-files?"))).toBe(true),
-    );
+    await fillMinimalForm(user);
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
-    expect(await screen.findByText(/"ghost-team" does not resolve to a stored entity/)).toBeInTheDocument();
-    expect(findSaveCall(mockFetch)).toBeUndefined();
+    // The strict POST was rejected for soft findings — the modal lists them (scoped: the
+    // live check panel renders the same finding text beside the form).
+    const modal = await screen.findByRole("dialog");
+    expect(within(modal).getByText("Save with findings?")).toBeInTheDocument();
+    expect(within(modal).getByText("ghost-team")).toBeInTheDocument();
+    expect(within(modal).getByText(/No stored entity matches this reference/)).toBeInTheDocument();
+
+    await user.click(within(modal).getByRole("button", { name: /save anyway/i }));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    const waived = mockFetch.mock.calls.find(
+      ([url, init]) =>
+        (init as RequestInit | undefined)?.method === "POST" &&
+        url === "/api/v1/catalog-files?allowInvalid=true",
+    );
+    expect(waived).toBeDefined();
   });
 
-  test("a reference to the entity itself blocks submission inline", async () => {
-    mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(404, {})));
+  test("a 400 the check cannot explain falls back to the validation alert — no modal", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === "/api/v1/catalog-files") {
+        return Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }));
+      }
+      if (method === "POST" && url === "/api/v1/catalog-files/check") {
+        return Promise.resolve(jsonResponse(200, { findings: [] }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
     const user = userEvent.setup();
     renderCreate();
 
-    await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
-    await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
-    await user.click(await screen.findByRole("option", { name: "service" }));
-    await user.click(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }));
-    await user.click(await screen.findByRole("option", { name: "production" }));
-    await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "group:default/platform");
-    // The short form resolves via the default kind (component) to this very document — the
-    // self check needs no identity pool, so it fires even though every fetch 404s here.
-    await user.type(screen.getByLabelText(/subcomponent of/i, { selector: "input" }), "my-svc");
+    await fillMinimalForm(user);
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
-    expect(await screen.findByText(/"my-svc" points at this entity itself/)).toBeInTheDocument();
-    expect(findSaveCall(mockFetch)).toBeUndefined();
+    expect(await screen.findByText(/validation error/i)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   test("tags come from the grouped category picker and land in the payload", async () => {
@@ -491,7 +486,7 @@ describe("CreateCatalogFile page", () => {
     expect(preview).toHaveTextContent("name: preview-svc");
   });
 
-  test("the reference panel lists the blocking findings", async () => {
+  test("the check panel lists the findings", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files/check") {
         return Promise.resolve(
@@ -508,13 +503,13 @@ describe("CreateCatalogFile page", () => {
     });
     renderCreate();
 
-    expect(await screen.findByText("References that will block saving")).toBeInTheDocument();
+    expect(await screen.findByText("Findings — saving will ask for confirmation")).toBeInTheDocument();
     expect(screen.getByText("component:ghost")).toBeInTheDocument();
     expect(screen.getByText("orders-db")).toBeInTheDocument();
     expect(screen.getByText("component:team-x")).toBeInTheDocument();
   });
 
-  test("the reference panel shows the all-clear line when everything resolves", async () => {
+  test("the check panel shows the all-clear line when everything passes", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") === "POST" && url === "/api/v1/catalog-files/check") {
         return Promise.resolve(jsonResponse(200, { findings: [] }));
@@ -523,8 +518,8 @@ describe("CreateCatalogFile page", () => {
     });
     renderCreate();
 
-    expect(await screen.findByText("All references resolve.")).toBeInTheDocument();
-    expect(screen.queryByText("References that will block saving")).not.toBeInTheDocument();
+    expect(await screen.findByText("No findings — the document passes every check.")).toBeInTheDocument();
+    expect(screen.queryByText("Findings — saving will ask for confirmation")).not.toBeInTheDocument();
   });
 
   test.each([

@@ -26,7 +26,14 @@ enum class ImportResultStatus {
     /** Stored; `fileId` points at the new file. */
     CREATED,
 
-    /** Failed the descriptor-format validation; `message` carries the rule. */
+    /**
+     * Stored DESPITE soft findings (unresolved references or registry violations) — import
+     * always waives them so a flawed batch can land and be fixed incrementally. `fileId`
+     * points at the new file; `message` lists the findings; the cross-check report tracks them.
+     */
+    CREATED_WITH_FINDINGS,
+
+    /** Failed the structural descriptor-format validation or namespace resolution; `message` carries the rule. */
     INVALID,
 
     /** An active file already holds this identity — nothing overwritten (report & skip). */

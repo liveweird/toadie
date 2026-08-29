@@ -22,6 +22,7 @@ import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -967,4 +968,100 @@ class CatalogFileTest {
                 assertEquals(HttpStatusCode.Created, without.status)
             }
         }
+
+    @Test
+    fun `allowInvalid waives the soft checks - the strict 400 aggregates them, the waiver stores`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("catalogwaiver")
+        val ghostLabel = uniqueEntityName("waivelbl")
+        val ghostAnnotation = uniqueEntityName("waiveanno")
+        val file = componentFile(
+            uniqueEntityName("waived"),
+            owner = uniqueEntityName("waiveghost"),
+            type = "no-such-type",
+            lifecycle = "no-such-lifecycle",
+        ).let {
+            it.copy(
+                metadata = it.metadata.copy(
+                    labels = mapOf(ghostLabel to "x"),
+                    annotations = mapOf(ghostAnnotation to "v"),
+                    tags = listOf(uniqueTag("waivetag")),
+                ),
+            )
+        }
+
+        // Strict default: ONE aggregated 400 naming every soft finding.
+        val strict = client.postJson("/api/v1/catalog-files", file)
+        assertEquals(HttpStatusCode.BadRequest, strict.status)
+        val detail = strict.body<ProblemDetail>().detail!!
+        assertTrue(detail.contains("does not resolve to a stored entity"))
+        assertTrue(detail.contains("not a defined label"))
+        assertTrue(detail.contains("not a registered annotation key"))
+        assertTrue(detail.contains("is not a defined tag"))
+        assertTrue(detail.contains("is not an allowed type"))
+        assertTrue(detail.contains("is not an allowed lifecycle"))
+
+        // Waived: the identical document stores; strict update still rejects, waived passes.
+        val created = client.postJson("/api/v1/catalog-files?allowInvalid=true", file)
+        assertEquals(HttpStatusCode.Created, created.status)
+        val id = created.body<CatalogFileResponse>().id
+        assertEquals(HttpStatusCode.BadRequest, client.putJson("/api/v1/catalog-files/$id", file).status)
+        assertEquals(
+            HttpStatusCode.NoContent,
+            client.putJson("/api/v1/catalog-files/$id?allowInvalid=true", file).status,
+        )
+        client.delete("/api/v1/catalog-files/$id")
+    }
+
+    @Test
+    fun `allowInvalid never waives the hard checks - structure and namespace resolution`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("cataloghard")
+
+        // Structural: a missing required spec.type is a 400 regardless of the waiver.
+        val structural = componentFile(uniqueEntityName("hardstruct")).let { it.copy(spec = it.spec.copy(type = null)) }
+        val structuralResponse = client.postJson("/api/v1/catalog-files?allowInvalid=true", structural)
+        assertEquals(HttpStatusCode.BadRequest, structuralResponse.status)
+        assertTrue(structuralResponse.body<ProblemDetail>().detail!!.contains("spec.type is required"))
+
+        // Namespace: an undefined namespace is a 400 regardless of the waiver.
+        val undefinedNamespace = componentFile(
+            uniqueEntityName("hardns"),
+            namespace = uniqueEntityName("ghostns").lowercase(),
+        )
+        val namespaceResponse = client.postJson("/api/v1/catalog-files?allowInvalid=true", undefinedNamespace)
+        assertEquals(HttpStatusCode.BadRequest, namespaceResponse.status)
+        assertTrue(namespaceResponse.body<ProblemDetail>().detail!!.contains("not a defined namespace"))
+    }
+
+    @Test
+    fun `a waived save audits the waivedFindings count - a clean save carries no such field`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("catalogwaudit")
+        withAuditCapture { capture ->
+            val waived = client.postJson(
+                "/api/v1/catalog-files?allowInvalid=true",
+                componentFile(uniqueEntityName("wauditsvc"), owner = uniqueEntityName("wauditghost")),
+            )
+            assertEquals(HttpStatusCode.Created, waived.status)
+            val waivedId = waived.body<CatalogFileResponse>().id
+            val waivedEvent = capture.awaitEvent {
+                it.message == "catalog_file.created" && it.hasKeyValue("catalogFileId", waivedId.toLong())
+            }
+            assertNotNull(waivedEvent)
+            assertTrue(waivedEvent.hasKeyValue("waivedFindings", 1))
+
+            val clean = client.postJson("/api/v1/catalog-files", componentFile(uniqueEntityName("wauditclean")))
+            assertEquals(HttpStatusCode.Created, clean.status)
+            val cleanId = clean.body<CatalogFileResponse>().id
+            val cleanEvent = capture.awaitEvent {
+                it.message == "catalog_file.created" && it.hasKeyValue("catalogFileId", cleanId.toLong())
+            }
+            assertNotNull(cleanEvent)
+            assertFalse(cleanEvent.keyValuePairs.orEmpty().any { it.key == "waivedFindings" })
+
+            client.delete("/api/v1/catalog-files/$waivedId")
+            client.delete("/api/v1/catalog-files/$cleanId")
+        }
+    }
 }

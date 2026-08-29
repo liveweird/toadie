@@ -4,6 +4,7 @@ import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.caller
 import ch.nokillswit.infra.db.orVanished
+import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
 import ch.nokillswit.infra.paging.toPage
@@ -57,6 +58,17 @@ class CatalogFiles {
     class Fetch(val parent: CatalogFiles = CatalogFiles())
 }
 
+/**
+ * The created/updated audit fields: `waivedFindings` rides along ONLY when an allowInvalid
+ * save actually waived something — the strict happy path keeps its two-field shape.
+ */
+private fun createdAuditFields(byUserId: UInt, catalogFileId: UInt, waived: Int): Array<Pair<String, Any?>> =
+    buildList<Pair<String, Any?>> {
+        add("byUserId" to byUserId.toLong())
+        add("catalogFileId" to catalogFileId.toLong())
+        if (waived > 0) add("waivedFindings" to waived)
+    }.toTypedArray()
+
 fun Application.configureCatalogFileRoutes() {
     val catalogFileService = attributes[CatalogFileServiceKey]
     // Stateless, no DB — constructed here rather than in the composition root. Lazy so the
@@ -89,11 +101,14 @@ fun Application.configureCatalogFileRoutes() {
                 val caller = call.caller()
                 val file = sanitizedCatalogFile(call.receive())
                 validateCatalogFile(file)
-                val id = catalogFileService.create(file, caller.userId)
-                audit("catalog_file.created", "byUserId" to caller.userId.toLong(), "catalogFileId" to id.toLong())
+                // The explicit soft-check waiver: `?allowInvalid=true` stores despite
+                // unresolved references / registry findings (structural rules stay hard).
+                val allowInvalid = call.request.queryParameters.optionalBoolean("allowInvalid") ?: false
+                val saved = catalogFileService.create(file, caller.userId, allowInvalid = allowInvalid)
+                audit("catalog_file.created", *createdAuditFields(caller.userId, saved.id, saved.waived.size))
                 // Read back for the creator/timestamp envelope — post-commit, so a miss is a 500.
-                val created = catalogFileService.read(id).orVanished("CatalogFile", id)
-                call.response.header(HttpHeaders.Location, call.application.href(CatalogFiles.Id(id = id)))
+                val created = catalogFileService.read(saved.id).orVanished("CatalogFile", saved.id)
+                call.response.header(HttpHeaders.Location, call.application.href(CatalogFiles.Id(id = saved.id)))
                 call.respond(HttpStatusCode.Created, created.toResponse())
             }
             get<CatalogFiles.CrossCheck> {
@@ -125,14 +140,19 @@ fun Application.configureCatalogFileRoutes() {
                     throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
                 }
                 // Report & skip: the per-document orchestration lives in the service; audits
-                // stay route-side (the repo convention) — one created event per stored row.
+                // stay route-side (the repo convention) — one created event per stored row
+                // (waived documents store too, marked withFindings).
+                val storedStatuses = setOf(ImportResultStatus.CREATED, ImportResultStatus.CREATED_WITH_FINDINGS)
                 val results = catalogFileService.import(request.files, caller.userId)
-                for (result in results.filter { it.status == ImportResultStatus.CREATED }) {
+                for (result in results.filter { it.status in storedStatuses }) {
                     audit(
                         "catalog_file.created",
-                        "byUserId" to caller.userId.toLong(),
-                        "catalogFileId" to result.fileId!!.toLong(),
-                        "import" to true,
+                        *buildList<Pair<String, Any?>> {
+                            add("byUserId" to caller.userId.toLong())
+                            add("catalogFileId" to result.fileId!!.toLong())
+                            add("import" to true)
+                            if (result.status == ImportResultStatus.CREATED_WITH_FINDINGS) add("withFindings" to true)
+                        }.toTypedArray(),
                     )
                 }
                 call.respond(HttpStatusCode.OK, ImportResponse(results = results))
@@ -164,12 +184,10 @@ fun Application.configureCatalogFileRoutes() {
                 val caller = call.caller()
                 val file = sanitizedCatalogFile(call.receive())
                 validateCatalogFile(file)
-                catalogFileService.update(route.id, file).orNotFound("Catalog file")
-                audit(
-                    "catalog_file.updated",
-                    "byUserId" to caller.userId.toLong(),
-                    "catalogFileId" to route.id.toLong(),
-                )
+                val allowInvalid = call.request.queryParameters.optionalBoolean("allowInvalid") ?: false
+                val result = catalogFileService.update(route.id, file, allowInvalid = allowInvalid)
+                result.rows.orNotFound("Catalog file")
+                audit("catalog_file.updated", *createdAuditFields(caller.userId, route.id, result.waived.size))
                 call.respond(HttpStatusCode.NoContent)
             }
             delete<CatalogFiles.Id> { route ->

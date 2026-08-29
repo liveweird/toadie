@@ -128,9 +128,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
   Component → cleanup; the registry's only in-run writer.
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list → edit → download `catalog-info.yaml` → delete.
-- [`cross-check.spec.ts`](scenarios/cross-check.md) — an unresolved reference blocks the save
-  (live panel + inline validation); deleting a referenced target creates the Cross-check
-  finding, which recreating the target clears.
+- [`cross-check.spec.ts`](scenarios/cross-check.md) — an unresolved reference opens the
+  Save-anyway modal (cancel and confirm paths); the waived save's finding shows on
+  Cross-check and is repaired in the editor; deleting a referenced target creates a finding,
+  which recreating the target clears.
 - [`kinds.spec.ts`](scenarios/kinds.md) — the multi-kind editor journey: a Group (empty
   children), an API (pasted definition), and a Component whose owner/API references resolve
   live; kind badges on the list.

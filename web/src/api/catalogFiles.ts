@@ -1,7 +1,7 @@
 // Catalog-files API — CRUD + the paginated list. Thin endpoint wrappers: transport
 // (authedFetch/ApiError) in ./http, types from the generated ./schema.
 
-import { buildQuery, jsonRequest, voidRequest } from "./http";
+import { ApiError, buildQuery, jsonRequest, voidRequest } from "./http";
 import type { components, paths } from "./schema";
 
 export type CatalogFilePage =
@@ -50,15 +50,31 @@ export async function getCatalogFile(id: number): Promise<CatalogFileResponse> {
   return jsonRequest<CatalogFileResponse>(`/api/v1/catalog-files/${id}`);
 }
 
-export async function createCatalogFile(req: CatalogFileRequest): Promise<CatalogFileResponse> {
-  return jsonRequest<CatalogFileResponse>("/api/v1/catalog-files", {
+/** The write options: `allowInvalid` waives the soft checks (the editor's Save-anyway flow). */
+export type CatalogSaveOptions = { allowInvalid?: boolean };
+
+// An omit-when-false param (the buildQuery contract): only `true` ever travels.
+const saveQuery = (opts?: CatalogSaveOptions) =>
+  buildQuery({ allowInvalid: opts?.allowInvalid || undefined });
+
+export async function createCatalogFile(
+  req: CatalogFileRequest,
+  opts?: CatalogSaveOptions,
+): Promise<CatalogFileResponse> {
+  const params = saveQuery(opts);
+  return jsonRequest<CatalogFileResponse>(`/api/v1/catalog-files${params ? `?${params}` : ""}`, {
     method: "POST",
     body: JSON.stringify(req),
   });
 }
 
-export async function updateCatalogFile(id: number, req: CatalogFileRequest): Promise<void> {
-  await voidRequest(`/api/v1/catalog-files/${id}`, {
+export async function updateCatalogFile(
+  id: number,
+  req: CatalogFileRequest,
+  opts?: CatalogSaveOptions,
+): Promise<void> {
+  const params = saveQuery(opts);
+  await voidRequest(`/api/v1/catalog-files/${id}${params ? `?${params}` : ""}`, {
     method: "PUT",
     body: JSON.stringify(req),
   });
@@ -72,6 +88,7 @@ export type CrossCheckReport =
   paths["/api/v1/catalog-files/cross-check"]["get"]["responses"]["200"]["content"]["application/json"];
 export type DocumentCheckReport =
   paths["/api/v1/catalog-files/check"]["post"]["responses"]["200"]["content"]["application/json"];
+export type DocumentCheckFinding = components["schemas"]["DocumentCheckFinding"];
 
 /** The workspace report: every stored file's references resolved against the store. */
 export async function getCrossCheckReport(): Promise<CrossCheckReport> {
@@ -94,6 +111,25 @@ export async function checkCatalogFile(req: CatalogFileRequest): Promise<Documen
     method: "POST",
     body: JSON.stringify(req),
   });
+}
+
+/**
+ * Classifies a save rejection for the Save-anyway flow: on a strict-save 400, asks /check
+ * whether the document carries SOFT findings (waivable via `allowInvalid`). Null = not a
+ * soft rejection (a structural 400, another status, or the check itself failed) — map it
+ * through the ordinary error path instead.
+ */
+export async function softRejectionFindings(
+  err: unknown,
+  req: CatalogFileRequest,
+): Promise<DocumentCheckFinding[] | null> {
+  if (!(err instanceof ApiError) || err.status !== 400) return null;
+  try {
+    const report = await checkCatalogFile(req);
+    return report.findings.length > 0 ? report.findings : null;
+  } catch {
+    return null;
+  }
 }
 
 export type CatalogExport =

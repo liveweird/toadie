@@ -4,31 +4,41 @@
   "summary": {
     "files": "Sprawdzone pliki: {{count}}",
     "references": "Sprawdzone odwołania: {{count}}",
-    "errors": "Problemy: {{count}}"
+    "errors": "Zastrzeżenia: {{count}}"
   },
   "field": {
     "file": "Plik",
     "namespace": "Przestrzeń nazw",
     "refField": "Pole",
-    "reference": "Odwołanie",
+    "reference": "Wartość",
     "status": "Status"
   },
   "status": {
     "MISSING": "Nie znaleziono",
     "KIND_REQUIRED": "Wymagany rodzaj",
     "WRONG_KIND": "Zły rodzaj",
-    "SELF_REFERENCE": "Odwołuje się do siebie"
+    "SELF_REFERENCE": "Odwołuje się do siebie",
+    "LABEL_NOT_ALLOWED": "Niedozwolona etykieta",
+    "ANNOTATION_NOT_ALLOWED": "Niedozwolona adnotacja",
+    "TAG_NOT_ALLOWED": "Niedozwolony tag",
+    "TYPE_NOT_ALLOWED": "Niedozwolony typ",
+    "LIFECYCLE_NOT_ALLOWED": "Niedozwolony cykl życia"
   },
   "message": {
-    "MISSING": "Żadna zapisana encja nie odpowiada temu odwołaniu — plik nie zapisze się, dopóki nie zostanie poprawiony.",
+    "MISSING": "Żadna zapisana encja nie odpowiada temu odwołaniu.",
     "KIND_REQUIRED": "Wpisy dependsOn/dependencyOf wymagają jawnego rodzaju, np. component: lub resource:.",
     "WRONG_KIND": "Odwołanie wskazuje rodzaj, na który to pole nie pozwala.",
-    "SELF_REFERENCE": "Odwołanie wskazuje ten sam plik — encja nie może odwoływać się do samej siebie."
+    "SELF_REFERENCE": "Odwołanie wskazuje ten sam plik — encja nie może odwoływać się do samej siebie.",
+    "LABEL_NOT_ALLOWED": "Rejestr etykiet nie dopuszcza tu tej etykiety — dostosuj ją na stronie Etykiety.",
+    "ANNOTATION_NOT_ALLOWED": "Rejestr kluczy adnotacji nie dopuszcza tu tego klucza — dostosuj go na stronie Adnotacje.",
+    "TAG_NOT_ALLOWED": "Kategorie tagów nie dopuszczają tu tego tagu — dostosuj je na stronie Tagi.",
+    "TYPE_NOT_ALLOWED": "Słownik typów tego rodzaju nie dopuszcza tego typu — dostosuj go na stronie Typy.",
+    "LIFECYCLE_NOT_ALLOWED": "Słownik cykli życia nie dopuszcza tej wartości — dostosuj go na stronie Cykle życia."
   },
-  "noFindings": "Nie znaleziono problemów — każde odwołanie się rozwiązuje.",
+  "noFindings": "Brak zastrzeżeń — każdy plik przechodzi kontrole.",
   "panel": {
-    "title": "Odwołania",
-    "errorsTitle": "Odwołania, które zablokują zapis",
-    "allClear": "Wszystkie odwołania się rozwiązują."
+    "title": "Zastrzeżenia",
+    "errorsTitle": "Zastrzeżenia — zapis poprosi o potwierdzenie",
+    "allClear": "Brak zastrzeżeń — dokument przechodzi każdą kontrolę."
   }
 }

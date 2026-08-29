@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import EditCatalogFile from "./EditCatalogFile";
 import { jsonResponse } from "../test/http";
@@ -158,26 +158,58 @@ describe("EditCatalogFile page", () => {
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
   });
 
-  test("pointing a same-kind field at the file's own identity blocks the save inline", async () => {
-    mockGetAndPut(mockFetch);
+  test("a soft-rejected save opens the Save-anyway modal; confirming retries with allowInvalid", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url === "/api/v1/catalog-files/7") {
+        return Promise.resolve(jsonResponse(200, STORED_FILE));
+      }
+      if (method === "PUT" && url === "/api/v1/catalog-files/7") {
+        return Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }));
+      }
+      if (method === "PUT" && url === "/api/v1/catalog-files/7?allowInvalid=true") {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      if (method === "POST" && url === "/api/v1/catalog-files/check") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            findings: [
+              {
+                field: "spec.subcomponentOf",
+                reference: "component:team-a/stored-svc",
+                status: "SELF_REFERENCE",
+              },
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
     const user = userEvent.setup();
     renderEdit();
 
     const nameInput = (await screen.findByLabelText(/^name( \*)?$/i)) as HTMLInputElement;
     await waitFor(() => expect(nameInput.value).toBe("stored-svc"));
-    // The stored file IS its own identity — referencing it (full form) is the self error.
     await user.type(
       screen.getByLabelText(/subcomponent of/i, { selector: "input" }),
       "component:team-a/stored-svc",
     );
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
-    expect(
-      await screen.findByText(/"component:team-a\/stored-svc" points at this entity itself/),
-    ).toBeInTheDocument();
-    expect(
-      mockFetch.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PUT"),
-    ).toBe(false);
+    // The strict PUT was rejected for the self reference — the modal lists it (scoped: the
+    // live check panel renders the same finding text beside the form).
+    const modal = await screen.findByRole("dialog");
+    expect(within(modal).getByText("Save with findings?")).toBeInTheDocument();
+    expect(within(modal).getByText(/an entity cannot reference itself/)).toBeInTheDocument();
+
+    await user.click(within(modal).getByRole("button", { name: /save anyway/i }));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/catalog-files"));
+    const waived = mockFetch.mock.calls.find(
+      ([url, init]) =>
+        (init as RequestInit | undefined)?.method === "PUT" &&
+        url === "/api/v1/catalog-files/7?allowInvalid=true",
+    );
+    expect(waived).toBeDefined();
   });
 
   test("a non-numeric id redirects to the list without fetching the file", () => {

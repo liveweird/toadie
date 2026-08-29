@@ -101,11 +101,7 @@
     "ref": "Musi być referencją encji: [kind:][namespace/]name",
     "refEntry": "\"{{ref}}\" nie jest poprawną referencją encji",
     "definitionLength": "Definicja może mieć najwyżej 100000 znaków",
-    "profileEmailLength": "E-mail może mieć najwyżej 254 znaki",
-    "refUnresolved": "„{{ref}}\" nie wskazuje na zapisaną encję",
-    "refWrongKind": "„{{ref}}\" musi odwoływać się do encji rodzaju {{kinds}}",
-    "refKindRequired": "„{{ref}}\" wymaga jawnego rodzaju, np. component: lub resource:",
-    "refSelf": "„{{ref}}\" wskazuje tę samą encję — encja nie może odwoływać się do samej siebie"
+    "profileEmailLength": "E-mail może mieć najwyżej 254 znaki"
   },
   "validationError": "Błąd walidacji. Sprawdź formularz i spróbuj ponownie.",
   "conflictError": "Aktywny plik o tej przestrzeni nazw i nazwie już istnieje.",
@@ -152,6 +148,7 @@
     "resultSummary": "Zaimportowano {{created}} z {{total}} dokumentów.",
     "status": {
       "CREATED": "Utworzony",
+      "CREATED_WITH_FINDINGS": "Utworzono z zastrzeżeniami",
       "CONFLICT": "Już istnieje",
       "INVALID": "Nieprawidłowy",
       "ERROR": "Niepowodzenie"
@@ -173,5 +170,10 @@
   "noNamespacesDefined": "Nie zdefiniowano żadnych przestrzeni nazw — administratorzy i administratorki definiują je na stronie Przestrzenie nazw.",
   "annotationKeyOptionsFailed": "Nie udało się wczytać kluczy adnotacji. Przeładuj stronę, aby spróbować ponownie.",
   "noAnnotationKeysForKind": "Dla rodzaju {{kind}} nie zdefiniowano żadnych kluczy adnotacji — administratorzy i administratorki rejestrują je na stronie Adnotacje.",
-  "staleTagsGroup": "Niezarejestrowane"
+  "staleTagsGroup": "Niezarejestrowane",
+  "saveAnyway": {
+    "title": "Zapisać mimo zastrzeżeń?",
+    "intro": "Ścisły zapis odrzuca ten dokument z powodu poniższych zastrzeżeń. Możesz mimo to go zapisać i poprawić je później — strona Weryfikacja śledzi każde zastrzeżenie, dopóki go nie rozwiążesz.",
+    "confirm": "Zapisz mimo to"
+  }
 }

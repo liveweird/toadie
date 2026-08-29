@@ -157,20 +157,21 @@ class RoundTripTest {
     }
 
     @Test
-    fun `import reports an unregistered label as INVALID and stores a registered one`() = testApplication {
+    fun `import stores an unregistered label with a findings row - a registered one is clean`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
 
         fun labeled(name: String, labels: Map<String, String>) =
             componentFile(name).let { it.copy(metadata = it.metadata.copy(labels = labels)) }
 
-        // Grammar-valid, never registered in the label registry.
+        // Grammar-valid, never registered in the label registry — import waives the
+        // registry check, so the document STORES and the row carries the finding.
         val ghost = uniqueEntityName("ghostlbl")
-        val rejected = client.import(listOf(labeled(uniqueEntityName("ghostdoc"), mapOf(ghost to "x"))))
+        val waived = client.import(listOf(labeled(uniqueEntityName("ghostdoc"), mapOf(ghost to "x"))))
             .results.single()
-        assertEquals(ImportResultStatus.INVALID, rejected.status)
-        assertNull(rejected.fileId)
-        assertTrue(rejected.message!!.contains("not a defined label"))
+        assertEquals(ImportResultStatus.CREATED_WITH_FINDINGS, waived.status)
+        assertNotNull(waived.fileId)
+        assertTrue(waived.message!!.contains("not a defined label"))
 
         val lbl = uniqueLabel("rtlbl", values = listOf("backend"), kinds = listOf("Component"))
         val stored = client.import(listOf(labeled(uniqueEntityName("rtlbldoc"), mapOf(lbl to "backend"))))
@@ -179,20 +180,21 @@ class RoundTripTest {
     }
 
     @Test
-    fun `import reports an unregistered tag as INVALID and stores a registered one`() = testApplication {
+    fun `import stores an unregistered tag with a findings row - a registered one is clean`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("roundtrip")
 
         fun tagged(name: String, tags: List<String>) =
             componentFile(name).let { it.copy(metadata = it.metadata.copy(tags = tags)) }
 
-        // Grammar-valid, never registered in any tag category.
+        // Grammar-valid, never registered in any tag category — stored anyway, with the
+        // finding reported on the row (import always waives the soft checks).
         val ghost = uniqueTag("ghosttag")
-        val rejected = client.import(listOf(tagged(uniqueEntityName("ghosttagdoc"), listOf(ghost))))
+        val waived = client.import(listOf(tagged(uniqueEntityName("ghosttagdoc"), listOf(ghost))))
             .results.single()
-        assertEquals(ImportResultStatus.INVALID, rejected.status)
-        assertNull(rejected.fileId)
-        assertTrue(rejected.message!!.contains("is not a defined tag"))
+        assertEquals(ImportResultStatus.CREATED_WITH_FINDINGS, waived.status)
+        assertNotNull(waived.fileId)
+        assertTrue(waived.message!!.contains("is not a defined tag"))
 
         val t = uniqueTag("rttag")
         uniqueTagCategory("rttagcat", tags = listOf(t), kinds = listOf("Component"))
@@ -219,25 +221,27 @@ class RoundTripTest {
         ).results
         assertEquals(listOf(ImportResultStatus.CREATED, ImportResultStatus.CREATED), results.map { it.status })
 
-        // A reference to an entity in NEITHER the workspace nor the batch stays INVALID.
-        val rejected = client.import(
+        // A reference to an entity in NEITHER the workspace nor the batch still STORES
+        // (import waives resolution) — the row reports the dangling reference.
+        val waived = client.import(
             listOf(componentFile(uniqueEntityName("sibghost"), namespace = ns, owner = uniqueEntityName("nowhere"))),
         ).results.single()
-        assertEquals(ImportResultStatus.INVALID, rejected.status)
-        assertTrue(rejected.message!!.contains("does not resolve to a stored entity"))
+        assertEquals(ImportResultStatus.CREATED_WITH_FINDINGS, waived.status)
+        assertNotNull(waived.fileId)
+        assertTrue(waived.message!!.contains("does not resolve to a stored entity"))
 
-        // A document referencing ITSELF is INVALID even though its own identity is in the
-        // batch universe — the self-reference rule beats batch resolution.
+        // A document referencing ITSELF stores with a findings row too, even though its own
+        // identity is in the batch universe — the self-reference rule beats batch resolution.
         val selfName = uniqueEntityName("sibself")
-        val selfRejected = client.import(
+        val selfWaived = client.import(
             listOf(
                 componentFile(selfName, namespace = ns).let {
                     it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$selfName"))
                 },
             ),
         ).results.single()
-        assertEquals(ImportResultStatus.INVALID, selfRejected.status)
-        assertTrue(selfRejected.message!!.contains("must not point at the entity itself"))
+        assertEquals(ImportResultStatus.CREATED_WITH_FINDINGS, selfWaived.status)
+        assertTrue(selfWaived.message!!.contains("must not point at the entity itself"))
     }
 
     @Test

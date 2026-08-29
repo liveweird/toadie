@@ -90,8 +90,9 @@ describe("ImportCatalogFiles page", () => {
                 kind: "Group",
                 namespace: "default",
                 name: "team-a",
-                status: "CONFLICT",
-                message: "An active catalog file with this kind, namespace, and name already exists",
+                status: "CREATED_WITH_FINDINGS",
+                fileId: 8,
+                message: "spec.owner reference 'ghost' does not resolve to a stored entity",
               },
             ],
           }),
@@ -106,13 +107,13 @@ describe("ImportCatalogFiles page", () => {
 
     await user.click(screen.getByRole("button", { name: "Import" }));
 
-    expect(await screen.findByText("Imported 1 of 2 documents.")).toBeInTheDocument();
+    // Both stored statuses count as imported; the waived row carries its finding message.
+    expect(await screen.findByText("Imported 2 of 2 documents.")).toBeInTheDocument();
     expect(screen.getByText("Created")).toBeInTheDocument();
-    expect(screen.getByText("Already exists")).toBeInTheDocument();
+    expect(screen.getByText("Created with findings")).toBeInTheDocument();
     expect(
-      screen.getByText("An active catalog file with this kind, namespace, and name already exists"),
+      screen.getByText("spec.owner reference 'ghost' does not resolve to a stored entity"),
     ).toBeInTheDocument();
-
     const [, init] = mockFetch.mock.calls.find(([url]) => url === "/api/v1/catalog-files/import")!;
     const body = JSON.parse((init as RequestInit).body as string) as {
       files: { kind: string; metadata: { name: string } }[];

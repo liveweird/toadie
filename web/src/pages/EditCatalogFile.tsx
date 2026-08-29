@@ -1,20 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { Paper, Stack, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getCatalogFile, updateCatalogFile } from "../api/catalogFiles";
+import {
+  getCatalogFile,
+  softRejectionFindings,
+  updateCatalogFile,
+  type CatalogFileRequest,
+  type DocumentCheckFinding,
+} from "../api/catalogFiles";
 import { ApiError } from "../api/http";
 import CatalogFileEditor from "../components/CatalogFileEditor";
-import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
-import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
+import SaveAnywayModal from "../components/SaveAnywayModal";
 import EditPageLoadState from "../components/EditPageLoadState";
 import {
   catalogFileFormValidation,
   emptyCatalogFileForm,
   fromCatalogFileResponse,
-  type RefResolutionContext,
   toCatalogFileRequest,
   type CatalogFileFormValues,
 } from "../utils/catalogFileForm";
@@ -29,24 +33,17 @@ export default function EditCatalogFile() {
   const id = Number(params.id);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  // The ref rules' resolution context (identity pool + flagged default namespace) — both
-  // load async, so validation reads them through a ref at submit time; while unavailable
-  // the rules degrade to grammar/kind checks and the server stays the gate.
-  const identities = useCatalogIdentities();
-  const { defaultNamespace } = useNamespaceOptions();
-  const resolutionContextRef = useRef<RefResolutionContext | null>(null);
-  useEffect(() => {
-    resolutionContextRef.current = { identities, defaultNamespace };
-  }, [identities, defaultNamespace]);
+  // A strict save rejected for SOFT findings parks the request here; the Save-anyway modal
+  // lists the findings and confirming retries with the allowInvalid waiver.
+  const [waiver, setWaiver] = useState<{
+    request: CatalogFileRequest;
+    findings: DocumentCheckFinding[];
+  } | null>(null);
 
   // The shared form vocabulary (utils/catalogFileForm.ts); the field block owns the sections.
   const form = useForm<CatalogFileFormValues>({
     initialValues: emptyCatalogFileForm(),
-    // The ref is only READ inside the validation rules, which run in the submit
-    // handler — never during render (a react-hooks/refs false positive).
-    // eslint-disable-next-line react-hooks/refs
-    validate: catalogFileFormValidation(t, resolutionContextRef),
+    validate: catalogFileFormValidation(t),
   });
 
   const idIsValid = Number.isFinite(id) && id > 0;
@@ -65,26 +62,47 @@ export default function EditCatalogFile() {
 
   if (!idIsValid) return <Navigate to="/catalog-files" replace />;
 
+  async function save(request: CatalogFileRequest, allowInvalid: boolean) {
+    await updateCatalogFile(id, request, allowInvalid ? { allowInvalid: true } : undefined);
+    await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
+    await queryClient.invalidateQueries({ queryKey: ["catalogFiles", "detail", id] });
+    showSuccessToast(t("catalog.toast.updated"));
+    navigate("/catalog-files", { replace: true });
+  }
+
+  const mapError = (err: unknown) =>
+    saveErrorMessage(err, t, {
+      notFound: "catalog.fileGone",
+      invalid: "catalog.validationError",
+      conflict: "catalog.conflictError",
+      failedStatus: "common.error.saveFailedStatus",
+      failed: "common.error.saveFailedNetwork",
+    });
+
   async function onSubmit(values: CatalogFileFormValues) {
     setError(null);
     setSubmitting(true);
+    const request = toCatalogFileRequest(values);
     try {
-      await updateCatalogFile(id, toCatalogFileRequest(values));
-      await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
-      await queryClient.invalidateQueries({ queryKey: ["catalogFiles", "detail", id] });
-      showSuccessToast(t("catalog.toast.updated"));
-      navigate("/catalog-files", { replace: true });
+      await save(request, false);
     } catch (err) {
-      setError(
-        saveErrorMessage(err, t, {
-          notFound: "catalog.fileGone",
-          invalid: "catalog.validationError",
-          conflict: "catalog.conflictError",
-          failedStatus: "common.error.saveFailedStatus",
-          failed: "common.error.saveFailedNetwork",
-        }),
-      );
+      const findings = await softRejectionFindings(err, request);
+      if (findings) setWaiver({ request, findings });
+      else setError(mapError(err));
     } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function onSaveAnyway() {
+    if (!waiver) return;
+    setSubmitting(true);
+    try {
+      await save(waiver.request, true);
+    } catch (err) {
+      setError(mapError(err));
+    } finally {
+      setWaiver(null);
       setSubmitting(false);
     }
   }
@@ -109,13 +127,21 @@ export default function EditCatalogFile() {
 
   return (
     // Same two-pane document layout as the create page (see web/CLAUDE.md).
-    <CatalogFileEditor
-      title={t("catalog.editFile")}
-      submitLabel={t("common.action.save")}
-      form={form}
-      onSubmit={onSubmit}
-      error={error}
-      submitting={submitting}
-    />
+    <>
+      <CatalogFileEditor
+        title={t("catalog.editFile")}
+        submitLabel={t("common.action.save")}
+        form={form}
+        onSubmit={onSubmit}
+        error={error}
+        submitting={submitting}
+      />
+      <SaveAnywayModal
+        findings={waiver?.findings ?? null}
+        onCancel={() => setWaiver(null)}
+        onConfirm={onSaveAnyway}
+        saving={submitting}
+      />
+    </>
   );
 }

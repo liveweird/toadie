@@ -23,6 +23,8 @@ import { saveErrorMessage } from "../utils/saveError";
 
 const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
   CREATED: "teal",
+  // Stored, but carrying waived findings the cross-check page tracks — a caution, not a failure.
+  CREATED_WITH_FINDINGS: "orange",
   CONFLICT: "yellow",
   INVALID: "red",
   ERROR: "red",
@@ -100,7 +102,9 @@ export default function ImportCatalogFiles() {
     }
   }
 
-  const createdCount = results?.filter((r) => r.status === "CREATED").length ?? 0;
+  // Both stored statuses count as imported — the summary reports what landed.
+  const createdCount =
+    results?.filter((r) => r.status === "CREATED" || r.status === "CREATED_WITH_FINDINGS").length ?? 0;
 
   return (
     <Stack gap="md">

@@ -22,9 +22,9 @@ export type RefField =
   | "domain"
   | "subdomainOf";
 
-// What a field may point at (owner: Backstage allows a group OR a user). Exported for the
-// wrong-kind validation message; mirrors the server's REF_FIELD_ALLOWED_KINDS.
-export const TARGET_KINDS: Record<RefField, readonly string[]> = {
+// What a field may point at (owner: Backstage allows a group OR a user); mirrors the
+// server's REF_FIELD_ALLOWED_KINDS.
+const TARGET_KINDS: Record<RefField, readonly string[]> = {
   owner: ["group", "user"],
   system: ["system"],
   subcomponentOf: ["component"],
@@ -40,24 +40,6 @@ export const TARGET_KINDS: Record<RefField, readonly string[]> = {
   subdomainOf: ["domain"],
 };
 
-// The field's default kind — null for dependsOn/dependencyOf (no default in Backstage).
-// Feeds the resolution check for typed short forms; mirrors the server's REF_FIELD_DEFAULT_KINDS.
-const DEFAULT_KINDS: Record<RefField, string | null> = {
-  owner: "group",
-  system: "system",
-  subcomponentOf: "component",
-  providesApis: "api",
-  consumesApis: "api",
-  dependsOn: null,
-  dependencyOf: null,
-  parent: "group",
-  children: "group",
-  members: "user",
-  memberOf: "group",
-  domain: "domain",
-  subdomainOf: "domain",
-};
-
 // Loose on purpose (any string kind): case-folded here, and the pool rows'
 // generated union type narrows into it.
 type Identity = { kind: string; namespace: string; name: string };
@@ -67,14 +49,10 @@ function fullRef(target: Identity): string {
   return `${target.kind.toLowerCase()}:${target.namespace}/${target.name}`;
 }
 
-/** The single-occurrence split behind the lenient parse (mirror of the server's splitRefOnce). */
-function splitOnce(value: string, sep: string): [string | null, string] | null {
-  const first = value.indexOf(sep);
-  if (first !== value.lastIndexOf(sep)) return null;
-  return first >= 0 ? [value.slice(0, first), value.slice(first + 1)] : [null, value];
-}
-
-export type RefResolutionError = "unresolved" | "wrongKind" | "kindRequired" | "selfReference";
+// (The client-side resolution verdict `refResolutionError` lived here until the
+// save-with-findings model: resolution is soft now — the server's /check reports it, both
+// in the live panel and in the editor's Save-anyway modal — so the client mirror was
+// retired rather than kept in sync.)
 
 function sameIdentity(a: Identity, b: Identity): boolean {
   return (
@@ -82,43 +60,6 @@ function sameIdentity(a: Identity, b: Identity): boolean {
     a.namespace.toLowerCase() === b.namespace.toLowerCase() &&
     a.name.toLowerCase() === b.name.toLowerCase()
   );
-}
-
-/**
- * The write-blocking resolution verdict for one typed reference — the client mirror of the
- * server's rulebook (per-field default kind, allowed target kinds, contextual namespace,
- * case-insensitive, and no reference to [self] — the entity being edited). Null = resolves —
- * or unparsable (the grammar rule owns those), or an unavailable pool for the membership half
- * (loading/failed → grammar-and-kind checks only; the server stays the gate). The self check
- * needs no pool, so it runs regardless; a null [self] (blank name) skips it.
- */
-export function refResolutionError(
-  raw: string,
-  field: RefField,
-  currentNamespace: string,
-  self: Identity | null,
-  identities: readonly Identity[] | undefined,
-): RefResolutionError | null {
-  const kindSplit = splitOnce(raw, ":");
-  if (!kindSplit) return null;
-  const nameSplit = splitOnce(kindSplit[1], "/");
-  if (!nameSplit) return null;
-  const [rawKind, [rawNamespace, rawName]] = [kindSplit[0], nameSplit];
-  if (rawKind === "" || rawNamespace === "" || rawName === "") return null;
-  const kind = rawKind?.toLowerCase() ?? DEFAULT_KINDS[field];
-  if (!kind) return "kindRequired";
-  if (!TARGET_KINDS[field].includes(kind)) return "wrongKind";
-  const namespace = (rawNamespace ?? currentNamespace).toLowerCase();
-  const name = rawName.toLowerCase();
-  if (self && sameIdentity({ kind, namespace, name }, self)) return "selfReference";
-  if (!identities || identities.length === 0) return null;
-  const resolves = identities.some(
-    (identity) =>
-      identity.kind.toLowerCase() === kind &&
-      identity.namespace.toLowerCase() === namespace &&
-      identity.name.toLowerCase() === name,
-  );
-  return resolves ? null : "unresolved";
 }
 
 /** Sorted, deduped full-identity picker options for [field]; [exclude] (the entity being

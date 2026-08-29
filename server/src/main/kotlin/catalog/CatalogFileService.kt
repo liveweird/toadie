@@ -63,6 +63,12 @@ data class CatalogFileDetail(
     )
 }
 
+/** A successful create plus the soft findings the save waived (empty on a strict save). */
+data class CatalogFileSaveResult(val id: UInt, val waived: List<SoftFinding>)
+
+/** A successful update (rows=0 → the route's 404) plus the waived soft findings. */
+data class CatalogFileUpdateResult(val rows: Int, val waived: List<SoftFinding>)
+
 private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "id" to CatalogFileService.CatalogFiles.id,
     "kind" to CatalogFileService.CatalogFiles.kind,
@@ -148,58 +154,37 @@ class CatalogFileService(private val database: R2dbcDatabase) {
     }
 
     /**
-     * The third sanctioned cross-feature table read (see persistence.md): STRICT label
-     * enforcement — every write (create, update, import) checks its labels against the
-     * ADMIN-curated registry inside the write's own transaction. Every key must be an active
-     * registered label, allowed for the file's kind, with the value from the label's closed
-     * list (matching is byte-exact — the editor only ever writes registered keys verbatim).
-     * No grandfathering: a stored file whose label was since removed or narrowed cannot be
-     * saved until it is fixed. An empty registry means no file may carry labels.
+     * The third sanctioned cross-feature table read (see persistence.md) — one snapshot of
+     * the five soft-check registries (labels, tag categories, per-kind type dictionaries,
+     * the LIFECYCLE dictionary, annotation keys), taken inside the calling write/report
+     * transaction. The rules themselves are the pure `registryFindings` in CrossCheck.kt:
+     * every value must be allowed by its ADMIN-curated registry for the file's kind
+     * (byte-exact, no grandfathering; an empty registry allows nothing). A violation is a
+     * SOFT finding — it rejects a strict save but is waivable via `allowInvalid` (see
+     * [softFindings]).
      */
-    private suspend fun requireAllowedLabels(kind: String, labels: Map<String, String>) {
-        if (labels.isEmpty()) return
-        val registry: Map<String, Pair<List<String>, List<String>>> =
-            LabelService.Labels.selectAll()
-                .where { LabelService.Labels.markedAsDeleted eq false }
-                .map {
-                    it[LabelService.Labels.key] to Pair(
-                        json.decodeFromString<List<String>>(it[LabelService.Labels.allowedKinds]),
-                        json.decodeFromString<List<String>>(it[LabelService.Labels.allowedValues]),
-                    )
-                }
-                .toList()
-                .toMap()
-        for ((key, value) in labels) {
-            val (allowedKinds, allowedValues) = registry[key] ?: throw BadRequestException(
-                "metadata.labels key '$key' is not a defined label — define it on the Labels page",
-            )
-            if (kind !in allowedKinds) {
-                throw BadRequestException(
-                    "Label '$key' cannot be applied to kind '$kind' — adjust its kinds on the Labels page",
+    private suspend fun loadRegistrySnapshot(): RegistrySnapshot {
+        val labels = LabelService.Labels.selectAll()
+            .where { LabelService.Labels.markedAsDeleted eq false }
+            .map {
+                it[LabelService.Labels.key] to Pair(
+                    json.decodeFromString<List<String>>(it[LabelService.Labels.allowedKinds]),
+                    json.decodeFromString<List<String>>(it[LabelService.Labels.allowedValues]),
                 )
             }
-            if (value !in allowedValues) {
-                throw BadRequestException(
-                    "Value '$value' is not allowed for label '$key' — adjust its values on the Labels page",
-                )
+            .toList()
+            .toMap()
+        val annotationKeys = AnnotationKeyService.AnnotationKeys.selectAll()
+            .where { AnnotationKeyService.AnnotationKeys.markedAsDeleted eq false }
+            .map {
+                it[AnnotationKeyService.AnnotationKeys.key] to
+                    json.decodeFromString<List<String>>(it[AnnotationKeyService.AnnotationKeys.allowedKinds])
             }
-        }
-    }
-
-    /**
-     * The fourth sanctioned cross-feature table read (see persistence.md): STRICT tag
-     * enforcement — every write (create, update, import) checks its tags against the
-     * ADMIN-curated tag categories inside the write's own transaction. Every tag must belong
-     * to an active category whose kinds include the file's kind (matching is byte-exact —
-     * the editor only ever writes registered tags verbatim). No grandfathering: a stored
-     * file whose tag was since removed cannot be saved until it is fixed. An empty registry
-     * means no file may carry tags.
-     */
-    private suspend fun requireAllowedTags(kind: String, tags: List<String>) {
-        if (tags.isEmpty()) return
+            .toList()
+            .toMap()
         // tag -> (owning category name, its allowed kinds); categories are disjoint by the
         // one-category-per-tag rule, so a plain map suffices.
-        val registry = mutableMapOf<String, Pair<String, List<String>>>()
+        val tags = mutableMapOf<String, Pair<String, List<String>>>()
         TagCategoryService.TagCategories.selectAll()
             .where { TagCategoryService.TagCategories.markedAsDeleted eq false }
             .toList()
@@ -207,146 +192,51 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                 val category = row[TagCategoryService.TagCategories.name]
                 val kinds = json.decodeFromString<List<String>>(row[TagCategoryService.TagCategories.allowedKinds])
                 json.decodeFromString<List<String>>(row[TagCategoryService.TagCategories.tags])
-                    .forEach { registry[it] = category to kinds }
+                    .forEach { tags[it] = category to kinds }
             }
-        for (tag in tags) {
-            val (category, allowedKinds) = registry[tag] ?: throw BadRequestException(
-                "metadata.tags entry '$tag' is not a defined tag — define it on the Tags page",
-            )
-            if (kind !in allowedKinds) {
-                throw BadRequestException(
-                    "Tag '$tag' (category '$category') cannot be applied to kind '$kind'" +
-                        " — adjust the category's kinds on the Tags page",
-                )
+        val types = EntityTypesService.EntityTypes.selectAll()
+            .where { EntityTypesService.EntityTypes.markedAsDeleted eq false }
+            .map {
+                it[EntityTypesService.EntityTypes.kind] to
+                    json.decodeFromString<List<String>>(it[EntityTypesService.EntityTypes.types])
             }
-        }
-    }
-
-    /**
-     * The fifth sanctioned cross-feature table read (see persistence.md): STRICT spec.type
-     * enforcement — every write (create, update, import) with a non-blank type checks it
-     * against the file's kind's ADMIN-curated type dictionary inside the write's own
-     * transaction (matching is byte-exact — the editor only ever writes registered types
-     * verbatim). The dictionaries are per-kind and INDEPENDENT; a kind with no active row
-     * allows NO types (for required-type kinds that means no file can be saved until the
-     * list exists). No grandfathering: a stored file whose type was since removed cannot be
-     * saved until it is fixed. Blank/absent types are the per-kind requiredness tables'
-     * business (validateCatalogFile), not this check's.
-     */
-    private suspend fun requireAllowedType(kind: String, type: String?) {
-        if (type.isNullOrBlank()) return
-        val allowed = EntityTypesService.EntityTypes.selectAll()
-            .where {
-                (EntityTypesService.EntityTypes.kind eq kind) and
-                    (EntityTypesService.EntityTypes.markedAsDeleted eq false)
-            }
-            .map { json.decodeFromString<List<String>>(it[EntityTypesService.EntityTypes.types]) }
-            .singleOrNull()
-            ?: throw BadRequestException(
-                "No types are defined for kind '$kind' — define them on the Types page",
-            )
-        if (type !in allowed) {
-            throw BadRequestException(
-                "spec.type '$type' is not an allowed type for kind '$kind' — define it on the Types page",
-            )
-        }
-    }
-
-    /**
-     * The sixth sanctioned cross-feature table read (see persistence.md): STRICT
-     * spec.lifecycle enforcement — every write (create, update, import) with a non-blank
-     * lifecycle checks it against the GLOBAL `LIFECYCLE` dictionary inside the write's own
-     * transaction (matching is byte-exact — entries are stored lowercase-folded, and the
-     * editor only ever writes stored values). One list for every lifecycle-bearing kind
-     * (the per-kind field tables already forbid the field elsewhere). No grandfathering: a
-     * stored file whose lifecycle was since removed cannot be saved until it is fixed. An
-     * empty dictionary allows none. Blank/absent lifecycles are the per-kind requiredness
-     * tables' business (validateCatalogFile), not this check's.
-     */
-    private suspend fun requireAllowedLifecycle(lifecycle: String?) {
-        if (lifecycle.isNullOrBlank()) return
-        val defined = DictionaryService.Entries.selectAll()
+            .toList()
+            .toMap()
+        val lifecycles = DictionaryService.Entries.selectAll()
             .where {
                 (DictionaryService.Entries.dictionary eq Dictionary.LIFECYCLE.name) and
-                    (DictionaryService.Entries.value eq lifecycle) and
                     (DictionaryService.Entries.markedAsDeleted eq false)
             }
-            .count() > 0
-        if (!defined) {
-            throw BadRequestException(
-                "spec.lifecycle '$lifecycle' is not an allowed lifecycle — define it on the Lifecycles page",
-            )
-        }
-    }
-
-    /**
-     * The seventh sanctioned cross-feature table read (see persistence.md): STRICT
-     * annotation-KEY enforcement — every write (create, update, import) checks its
-     * `metadata.annotations` keys against the ADMIN-curated annotation-key registry inside
-     * the write's own transaction. Every key must be an active registered row whose kinds
-     * include the file's kind (matching is byte-exact — the editor only ever writes
-     * registered keys verbatim); VALUES stay free strings (the descriptor grammar/length
-     * rules only). No grandfathering: a stored file whose key was since removed or narrowed
-     * cannot be saved until it is fixed. An empty registry means no file may carry
-     * annotations. (The server-written keys are rejected earlier, by validateCatalogFile.)
-     */
-    private suspend fun requireAllowedAnnotations(kind: String, annotations: Map<String, String>) {
-        if (annotations.isEmpty()) return
-        val registry: Map<String, List<String>> =
-            AnnotationKeyService.AnnotationKeys.selectAll()
-                .where { AnnotationKeyService.AnnotationKeys.markedAsDeleted eq false }
-                .map {
-                    it[AnnotationKeyService.AnnotationKeys.key] to
-                        json.decodeFromString<List<String>>(it[AnnotationKeyService.AnnotationKeys.allowedKinds])
-                }
-                .toList()
-                .toMap()
-        for (key in annotations.keys) {
-            val allowedKinds = registry[key] ?: throw BadRequestException(
-                "metadata.annotations key '$key' is not a registered annotation key — define it on the Annotations page",
-            )
-            if (kind !in allowedKinds) {
-                throw BadRequestException(
-                    "Annotation '$key' cannot be applied to kind '$kind' — adjust its kinds on the Annotations page",
-                )
-            }
-        }
+            .map { it[DictionaryService.Entries.value] }
+            .toList()
+            .toSet()
+        return RegistrySnapshot(
+            labels = labels,
+            annotationKeys = annotationKeys,
+            tags = tags,
+            types = types,
+            lifecycles = lifecycles,
+        )
     }
 
     private fun CatalogFile.withNamespace(resolved: String): CatalogFile =
         if (metadata.namespace == resolved) this else copy(metadata = metadata.copy(namespace = resolved))
 
     /**
-     * STRICT reference enforcement — every write (create, update, import) resolves every
-     * entity reference against the active workspace inside the write's own transaction,
-     * using the ONE rulebook in CrossCheck.kt (per-field default kinds, allowed target
-     * kinds, contextual namespace). Any finding blocks the save with ONE aggregated 400, so
-     * dangling references can only arise from deletions (allowed by design — the cross-check
-     * report is the net for those) or import batches whose sibling documents failed.
+     * The write path's SOFT checks, as findings: every entity reference resolved against the
+     * active workspace (the ONE rulebook in CrossCheck.kt — per-field default kinds, allowed
+     * target kinds, contextual namespace, never the document ITSELF) plus the registry checks
+     * against [loadRegistrySnapshot]. Runs inside the write's own transaction. A strict save
+     * rejects any finding with ONE aggregated 400; `allowInvalid=true` waives them all and
+     * stores anyway (the cross-check report is the net for what was waived).
      * [extraIdentities] is the import path's batch universe (sibling documents resolve
-     * order-independently). A document may never reference ITSELF (SELF_REFERENCE, checked
-     * against the payload's own identity inside checkDocument) — uniform across create,
-     * update (a rename's "self" is the NEW identity), import, and the ad-hoc check.
+     * order-independently). A rename's "self" is the NEW identity — uniform across create,
+     * update, import, and the ad-hoc check.
      */
-    private suspend fun requireResolvedReferences(stored: CatalogFile, extraIdentities: Set<EntityIdentity>) {
-        val findings = checkDocument(stored, activeIdentities() + extraIdentities).findings
-        if (findings.isEmpty()) return
-        throw BadRequestException(findings.joinToString("; ") { findingMessage(it) })
-    }
-
-    private fun findingMessage(finding: DocumentCheckFinding): String {
-        fun canonical(kind: String) = SUPPORTED_KINDS.first { it.lowercase() == kind }
-        return when (finding.status) {
-            CrossCheckStatus.MISSING ->
-                "${finding.field} reference '${finding.reference}' does not resolve to a stored entity"
-            CrossCheckStatus.WRONG_KIND ->
-                "${finding.field} reference '${finding.reference}' must target " +
-                    REF_FIELD_ALLOWED_KINDS.getValue(finding.field).joinToString(" or ") { canonical(it) }
-            CrossCheckStatus.KIND_REQUIRED ->
-                "${finding.field} reference '${finding.reference}' needs an explicit kind"
-            CrossCheckStatus.SELF_REFERENCE ->
-                "${finding.field} reference '${finding.reference}' must not point at the entity itself"
-        }
+    private suspend fun softFindings(stored: CatalogFile, extraIdentities: Set<EntityIdentity>): List<SoftFinding> {
+        val references = checkDocument(stored, activeIdentities() + extraIdentities).findings
+            .map { SoftFinding(it, referenceFindingMessage(it)) }
+        return references + registryFindings(stored, loadRegistrySnapshot())
     }
 
     /**
@@ -362,16 +252,12 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         file: CatalogFile,
         createdByUserId: UInt,
         extraIdentities: Set<EntityIdentity> = emptySet(),
-    ): UInt = suspendTransaction(database) {
+        allowInvalid: Boolean = false,
+    ): CatalogFileSaveResult = suspendTransaction(database) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         // The stored row AND the content JSON both carry the resolved concrete namespace.
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
-        requireAllowedLabels(stored.kind, stored.metadata.labels)
-        requireAllowedAnnotations(stored.kind, stored.metadata.annotations)
-        requireAllowedTags(stored.kind, stored.metadata.tags)
-        requireAllowedType(stored.kind, stored.spec.type)
-        requireAllowedLifecycle(stored.spec.lifecycle)
-        requireResolvedReferences(stored, extraIdentities)
+        val findings = requireOrWaive(stored, extraIdentities, allowInvalid)
         val now = System.currentTimeMillis()
         val newRecord = CatalogFiles.insert {
             it[kind] = stored.kind
@@ -382,7 +268,20 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             it[createdAt] = now
             it[updatedAt] = now
         }
-        newRecord[CatalogFiles.id].value
+        CatalogFileSaveResult(id = newRecord[CatalogFiles.id].value, waived = findings)
+    }
+
+    /** The strict-or-waive gate shared by create and update: throws unless waived, returns what was. */
+    private suspend fun requireOrWaive(
+        stored: CatalogFile,
+        extraIdentities: Set<EntityIdentity>,
+        allowInvalid: Boolean,
+    ): List<SoftFinding> {
+        val findings = softFindings(stored, extraIdentities)
+        if (findings.isNotEmpty() && !allowInvalid) {
+            throw BadRequestException(findings.joinToString("; ") { it.message })
+        }
+        return findings
     }
 
     suspend fun read(id: UInt): CatalogFileDetail? = suspendTransaction(database) {
@@ -392,23 +291,20 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             .singleOrNull()
     }
 
-    suspend fun update(id: UInt, file: CatalogFile): Int = suspendTransaction(database) {
-        validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
-        val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
-        requireAllowedLabels(stored.kind, stored.metadata.labels)
-        requireAllowedAnnotations(stored.kind, stored.metadata.annotations)
-        requireAllowedTags(stored.kind, stored.metadata.tags)
-        requireAllowedType(stored.kind, stored.spec.type)
-        requireAllowedLifecycle(stored.spec.lifecycle)
-        requireResolvedReferences(stored, emptySet())
-        CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
-            it[kind] = stored.kind
-            it[name] = stored.metadata.name
-            it[namespace] = stored.metadata.namespace
-            it[content] = json.encodeToString(stored)
-            it[updatedAt] = System.currentTimeMillis()
+    suspend fun update(id: UInt, file: CatalogFile, allowInvalid: Boolean = false): CatalogFileUpdateResult =
+        suspendTransaction(database) {
+            validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
+            val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
+            val findings = requireOrWaive(stored, emptySet(), allowInvalid)
+            val rows = CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
+                it[kind] = stored.kind
+                it[name] = stored.metadata.name
+                it[namespace] = stored.metadata.namespace
+                it[content] = json.encodeToString(stored)
+                it[updatedAt] = System.currentTimeMillis()
+            }
+            CatalogFileUpdateResult(rows = rows, waived = findings)
         }
-    }
 
     suspend fun delete(id: UInt): Int = suspendTransaction(database) {
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
@@ -418,20 +314,25 @@ class CatalogFileService(private val database: R2dbcDatabase) {
 
     /** The workspace cross-check report — all active files loaded and resolved in ONE transaction. */
     suspend fun crossCheck(): CrossCheckReport = suspendTransaction(database) {
-        crossCheckAll(activeSources())
+        crossCheckAll(activeSources(), loadRegistrySnapshot())
     }
 
     /**
      * Ad-hoc check of one (possibly unsaved, possibly not-yet-valid) document against the
-     * stored identities. An unsaved doc is deliberately NOT in the identity set, so its
-     * self-references read as missing until first save. This is the editor's per-keystroke
-     * hot path, so it reads only the three denormalized identity columns — never `content`.
+     * stored identities and the registries — the same soft findings a strict save would
+     * reject (the editor's Save-anyway flow consults this after a 400). An unsaved doc is
+     * deliberately NOT in the identity set, so its self-references read as missing until
+     * first save. The editor's per-keystroke hot path: identity columns + the small registry
+     * tables — never `content`.
      */
     suspend fun check(file: CatalogFile): DocumentCheckReport = suspendTransaction(database) {
         // A blank namespace resolves to the flagged default for the live check too; the
         // literal fallback keeps the check non-blocking when nothing is flagged.
         val ns = file.metadata.namespace.ifEmpty { flaggedDefaultNamespace() ?: DEFAULT_NAMESPACE }
-        DocumentCheckReport(findings = checkDocument(file.withNamespace(ns), activeIdentities()).findings)
+        val resolved = file.withNamespace(ns)
+        val references = checkDocument(resolved, activeIdentities()).findings
+        val registry = registryFindings(resolved, loadRegistrySnapshot()).map { it.finding }
+        DocumentCheckReport(findings = references + registry)
     }
 
     /** The identity triple of every active file, from the denormalized columns alone. */
@@ -477,9 +378,14 @@ class CatalogFileService(private val database: R2dbcDatabase) {
     /**
      * Report & skip: each document imports independently — sanitize → validate (a validator
      * 400 becomes INVALID with its message) → create (an identity clash — the partial unique
-     * index's 23505 — becomes CONFLICT; any other storage failure ERROR). Nothing rethrows
-     * except cancellation, so the batch always runs to completion and the result rows ARE the
-     * outcome. The route emits the audit events for the CREATED rows (the repo convention:
+     * index's 23505 — becomes CONFLICT; any other storage failure ERROR). Import ALWAYS
+     * waives the soft checks (`allowInvalid`): a document with unresolved references or
+     * registry findings still stores, reported as CREATED_WITH_FINDINGS with the finding
+     * messages — the point of the round trip is getting the batch IN so errors can be fixed
+     * incrementally (the cross-check report tracks them). Only structural validation and
+     * namespace resolution still skip a document as INVALID. Nothing rethrows except
+     * cancellation, so the batch always runs to completion and the result rows ARE the
+     * outcome. The route emits the audit events for the stored rows (the repo convention:
      * audits live route-side).
      */
     suspend fun import(files: List<CatalogFile>, createdByUserId: UInt): List<ImportFileResult> {
@@ -487,7 +393,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         // (a real export's entities are interdependent — the round trip must survive). Only
         // documents that sanitize, validate, and namespace-resolve contribute an identity.
         // Documented residual: a document referencing a sibling that later fails to STORE
-        // (conflict, registry rule) keeps its dangling reference — the same class as a
+        // (identity conflict) keeps its dangling reference — the same class as a
         // deletion-created dangling ref, and the cross-check report catches it.
         val batchIdentities = files.mapNotNull { raw ->
             val sanitized = sanitizedCatalogFile(raw)
@@ -536,7 +442,16 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
         val base = base(file)
         return try {
-            base.copy(status = ImportResultStatus.CREATED, fileId = create(file, createdByUserId, batchIdentities))
+            val saved = create(file, createdByUserId, batchIdentities, allowInvalid = true)
+            if (saved.waived.isEmpty()) {
+                base.copy(status = ImportResultStatus.CREATED, fileId = saved.id)
+            } else {
+                base.copy(
+                    status = ImportResultStatus.CREATED_WITH_FINDINGS,
+                    fileId = saved.id,
+                    message = saved.waived.joinToString("; ") { it.message },
+                )
+            }
         } catch (e: CancellationException) {
             // Cancellation is not a per-document failure — a gone client must stop the batch.
             throw e

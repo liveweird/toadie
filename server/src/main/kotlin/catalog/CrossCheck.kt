@@ -3,15 +3,16 @@ package ch.nokillswit.catalog
 import kotlinx.serialization.Serializable
 
 /**
- * Cross-checking: resolving the entity references stored files make against the workspace.
- * Pure logic — the service supplies the rows, the routes the transport. Semantics follow
- * `.claude/docs/backstage-descriptor-format.md`: per-field default kinds AND allowed target
- * kinds, an omitted namespace defaults to the REFERENCING file's own namespace, and
- * kind/namespace/name all match case-insensitively. This is ALSO the write-time enforcement
- * rulebook (CatalogFileService.requireResolvedReferences): every save must resolve every
- * reference (and may never reference the document itself), so findings here arise only from
- * deletions (dangling refs), imports whose sibling documents failed, and legacy self-references
- * predating the rule — the cross-check report is the net for those.
+ * Cross-checking: resolving the entity references stored files make against the workspace,
+ * plus the registry checks (labels, annotation keys, tags, type, lifecycle) against a
+ * caller-supplied snapshot. Pure logic — the service supplies the rows and the snapshot, the
+ * routes the transport. Reference semantics follow `.claude/docs/backstage-descriptor-format.md`:
+ * per-field default kinds AND allowed target kinds, an omitted namespace defaults to the
+ * REFERENCING file's own namespace, and kind/namespace/name all match case-insensitively.
+ * This is ALSO the write-time enforcement rulebook (CatalogFileService.softFindings): a save
+ * with any finding is rejected UNLESS the caller waives it with `allowInvalid=true`, so the
+ * cross-check report is the net for waived saves as well as deletions (dangling refs), imports
+ * whose sibling documents failed, and registry rows removed after the fact.
  */
 @Serializable
 enum class CrossCheckStatus {
@@ -29,6 +30,21 @@ enum class CrossCheckStatus {
      * spec.subdomainOf naming that very Domain) — a Toadie rule beyond upstream Backstage.
      */
     SELF_REFERENCE,
+
+    /** A metadata.labels entry the label registry rejects (unknown key, kind, or value). */
+    LABEL_NOT_ALLOWED,
+
+    /** A metadata.annotations key the annotation-key registry rejects (unknown key or kind). */
+    ANNOTATION_NOT_ALLOWED,
+
+    /** A metadata.tags entry the tag categories reject (unknown tag, or its category's kinds). */
+    TAG_NOT_ALLOWED,
+
+    /** A spec.type outside the kind's type dictionary (or the kind has no dictionary at all). */
+    TYPE_NOT_ALLOWED,
+
+    /** A spec.lifecycle outside the global lifecycles dictionary. */
+    LIFECYCLE_NOT_ALLOWED,
 }
 
 /** One problematic reference inside one document (the ad-hoc check's shape). */
@@ -220,14 +236,18 @@ private fun statusOf(
     return if (target in identities) null else CrossCheckStatus.MISSING
 }
 
-/** The workspace report: every active file's references resolved against every active file. */
-fun crossCheckAll(sources: List<CrossCheckSource>): CrossCheckReport {
+/**
+ * The workspace report: every active file's references resolved against every active file,
+ * plus every file's registry findings against [registries].
+ */
+fun crossCheckAll(sources: List<CrossCheckSource>, registries: RegistrySnapshot): CrossCheckReport {
     val identities = sources.map { identityOf(it.file) }.toSet()
     var checkedReferences = 0
     val findings = sources.flatMap { source ->
         val result = checkDocument(source.file, identities)
         checkedReferences += result.referenceCount
-        result.findings.map {
+        val documentFindings = result.findings + registryFindings(source.file, registries).map { it.finding }
+        documentFindings.map {
             CrossCheckFinding(
                 fileId = source.id,
                 fileName = source.file.metadata.name,
@@ -242,5 +262,149 @@ fun crossCheckAll(sources: List<CrossCheckSource>): CrossCheckReport {
         findings = findings,
         checkedFiles = sources.size,
         checkedReferences = checkedReferences,
+    )
+}
+
+/**
+ * A soft (waivable) finding plus its precise strict-mode message — the wire carries the
+ * finding (per-area status), the aggregated 400 and the import result rows carry the message.
+ */
+data class SoftFinding(val finding: DocumentCheckFinding, val message: String)
+
+/** The strict-mode message for a reference finding (registry findings carry their own). */
+fun referenceFindingMessage(finding: DocumentCheckFinding): String {
+    fun canonical(kind: String) = SUPPORTED_KINDS.first { it.lowercase() == kind }
+    return when (finding.status) {
+        CrossCheckStatus.MISSING ->
+            "${finding.field} reference '${finding.reference}' does not resolve to a stored entity"
+        CrossCheckStatus.WRONG_KIND ->
+            "${finding.field} reference '${finding.reference}' must target " +
+                REF_FIELD_ALLOWED_KINDS.getValue(finding.field).joinToString(" or ") { canonical(it) }
+        CrossCheckStatus.KIND_REQUIRED ->
+            "${finding.field} reference '${finding.reference}' needs an explicit kind"
+        CrossCheckStatus.SELF_REFERENCE ->
+            "${finding.field} reference '${finding.reference}' must not point at the entity itself"
+        else -> error("not a reference finding: ${finding.status}")
+    }
+}
+
+/**
+ * The active registry rows the soft checks match against, snapshotted by the caller inside
+ * its own transaction (CatalogFileService.loadRegistrySnapshot) so the pure checks below
+ * stay DB-free and one report reads each registry once.
+ */
+data class RegistrySnapshot(
+    /** label key -> (allowed kinds, allowed values) */
+    val labels: Map<String, Pair<List<String>, List<String>>>,
+    /** annotation key -> allowed kinds */
+    val annotationKeys: Map<String, List<String>>,
+    /** tag -> (owning category name, its allowed kinds) — categories are disjoint by rule */
+    val tags: Map<String, Pair<String, List<String>>>,
+    /** canonical kind -> its active type dictionary (an absent kind allows NO types) */
+    val types: Map<String, List<String>>,
+    /** the active lifecycle values (stored lowercase-folded) */
+    val lifecycles: Set<String>,
+)
+
+/**
+ * One document's registry findings — the same rules the strict save enforces, as findings:
+ * every label/annotation/tag/type/lifecycle value must be allowed by the ADMIN-curated
+ * registries for the file's kind (byte-exact matching, no grandfathering — the editor only
+ * ever writes registered values verbatim, so a finding means the registry changed or the
+ * document arrived via import/waiver). At most one finding per offending entry (the first
+ * failing rule), mirroring the strict messages verbatim.
+ */
+fun registryFindings(file: CatalogFile, registries: RegistrySnapshot): List<SoftFinding> =
+    labelFindings(file, registries) +
+        annotationFindings(file, registries) +
+        tagFindings(file, registries) +
+        typeFindings(file, registries) +
+        lifecycleFindings(file, registries)
+
+private fun soft(field: String, value: String, status: CrossCheckStatus, message: String) =
+    SoftFinding(DocumentCheckFinding(field = field, reference = value, status = status), message)
+
+private fun labelFindings(file: CatalogFile, registries: RegistrySnapshot): List<SoftFinding> =
+    file.metadata.labels.mapNotNull { (key, value) ->
+        val (allowedKinds, allowedValues) = registries.labels[key]
+            ?: return@mapNotNull soft(
+                "metadata.labels", key, CrossCheckStatus.LABEL_NOT_ALLOWED,
+                "metadata.labels key '$key' is not a defined label — define it on the Labels page",
+            )
+        when {
+            file.kind !in allowedKinds -> soft(
+                "metadata.labels", key, CrossCheckStatus.LABEL_NOT_ALLOWED,
+                "Label '$key' cannot be applied to kind '${file.kind}' — adjust its kinds on the Labels page",
+            )
+            value !in allowedValues -> soft(
+                "metadata.labels", "$key=$value", CrossCheckStatus.LABEL_NOT_ALLOWED,
+                "Value '$value' is not allowed for label '$key' — adjust its values on the Labels page",
+            )
+            else -> null
+        }
+    }
+
+private fun annotationFindings(file: CatalogFile, registries: RegistrySnapshot): List<SoftFinding> =
+    file.metadata.annotations.keys.mapNotNull { key ->
+        val allowedKinds = registries.annotationKeys[key]
+            ?: return@mapNotNull soft(
+                "metadata.annotations", key, CrossCheckStatus.ANNOTATION_NOT_ALLOWED,
+                "metadata.annotations key '$key' is not a registered annotation key — define it on the Annotations page",
+            )
+        if (file.kind !in allowedKinds) {
+            soft(
+                "metadata.annotations", key, CrossCheckStatus.ANNOTATION_NOT_ALLOWED,
+                "Annotation '$key' cannot be applied to kind '${file.kind}' — adjust its kinds on the Annotations page",
+            )
+        } else {
+            null
+        }
+    }
+
+private fun tagFindings(file: CatalogFile, registries: RegistrySnapshot): List<SoftFinding> =
+    file.metadata.tags.mapNotNull { tag ->
+        val (category, allowedKinds) = registries.tags[tag]
+            ?: return@mapNotNull soft(
+                "metadata.tags", tag, CrossCheckStatus.TAG_NOT_ALLOWED,
+                "metadata.tags entry '$tag' is not a defined tag — define it on the Tags page",
+            )
+        if (file.kind !in allowedKinds) {
+            soft(
+                "metadata.tags", tag, CrossCheckStatus.TAG_NOT_ALLOWED,
+                "Tag '$tag' (category '$category') cannot be applied to kind '${file.kind}'" +
+                    " — adjust the category's kinds on the Tags page",
+            )
+        } else {
+            null
+        }
+    }
+
+private fun typeFindings(file: CatalogFile, registries: RegistrySnapshot): List<SoftFinding> {
+    val type = file.spec.type
+    if (type.isNullOrBlank()) return emptyList()
+    val allowed = registries.types[file.kind]
+        ?: return listOf(
+            soft(
+                "spec.type", type, CrossCheckStatus.TYPE_NOT_ALLOWED,
+                "No types are defined for kind '${file.kind}' — define them on the Types page",
+            ),
+        )
+    if (type in allowed) return emptyList()
+    return listOf(
+        soft(
+            "spec.type", type, CrossCheckStatus.TYPE_NOT_ALLOWED,
+            "spec.type '$type' is not an allowed type for kind '${file.kind}' — define it on the Types page",
+        ),
+    )
+}
+
+private fun lifecycleFindings(file: CatalogFile, registries: RegistrySnapshot): List<SoftFinding> {
+    val lifecycle = file.spec.lifecycle
+    if (lifecycle.isNullOrBlank() || lifecycle in registries.lifecycles) return emptyList()
+    return listOf(
+        soft(
+            "spec.lifecycle", lifecycle, CrossCheckStatus.LIFECYCLE_NOT_ALLOWED,
+            "spec.lifecycle '$lifecycle' is not an allowed lifecycle — define it on the Lifecycles page",
+        ),
     )
 }

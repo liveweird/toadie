@@ -12,7 +12,7 @@
 - `password.changed` (targetUserId/byUserId/selfChange) / `password.change_denied` (wrong or missing current password),
 - `user.features_changed` (byUserId/targetUserId/featuresFrom/featuresTo — only on an actual change),
 - `user.created` (byUserId/newUserId/email/roles — roles as STORED, i.e. the folded additional-roles set) / `user.updated` (name/email deltas, only when changed) / `user.roles_changed` (rolesFrom/rolesTo, both as stored) / `user.deleted` (byUserId/targetUserId),
-- `catalog_file.created` / `catalog_file.updated` / `catalog_file.deleted` (byUserId/catalogFileId — every catalog-file mutation; a file created through `POST …/import` carries an additional `import: true`),
+- `catalog_file.created` / `catalog_file.updated` / `catalog_file.deleted` (byUserId/catalogFileId — every catalog-file mutation; an `allowInvalid` save that actually waived soft findings adds `waivedFindings` with the count; a file created through `POST …/import` carries an additional `import: true`, plus `withFindings: true` on `CREATED_WITH_FINDINGS` rows),
 - `catalog_file.fetch_blocked` (byUserId/scheme/host — every SSRF-guard rejection on `POST …/fetch`; deliberately NOT the full URL, which may embed query-string tokens),
 - `dictionary.updated` (byUserId/dictionary/added/renamed/removed — every successful whole-document dictionary replace; a rejected save emits nothing),
 - `label.created` (byUserId/labelId/key/values count/kinds) / `label.updated` (same fields) / `label.deleted` (byUserId/labelId) — every label-registry mutation; a rejected save emits nothing,

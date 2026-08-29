@@ -31,9 +31,9 @@ describe("ReferenceCheckPanel", () => {
     mockFetch.mockResolvedValue(jsonResponse(200, { findings: [] }));
     renderWithProviders(<ReferenceCheckPanel document={DOCUMENT} />);
 
-    expect(screen.getByText("References")).toBeInTheDocument();
+    expect(screen.getByText("Findings")).toBeInTheDocument();
 
-    expect(await screen.findByText("All references resolve.", undefined, { timeout: 3000 }))
+    expect(await screen.findByText("No findings — the document passes every check.", undefined, { timeout: 3000 }))
       .toBeInTheDocument();
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/catalog-files/check");
@@ -58,7 +58,7 @@ describe("ReferenceCheckPanel", () => {
     expect(JSON.parse(init.body as string)).toEqual(edited);
   });
 
-  test("renders the blocking findings with their status messages", async () => {
+  test("renders the findings with their status messages", async () => {
     mockFetch.mockResolvedValue(
       jsonResponse(200, {
         findings: [
@@ -70,7 +70,7 @@ describe("ReferenceCheckPanel", () => {
     );
     renderWithProviders(<ReferenceCheckPanel document={DOCUMENT} />);
 
-    expect(await screen.findByText("References that will block saving", undefined, { timeout: 3000 }))
+    expect(await screen.findByText("Findings — saving will ask for confirmation", undefined, { timeout: 3000 }))
       .toBeInTheDocument();
     expect(screen.getByText("group:default/team-a")).toBeInTheDocument();
     expect(
@@ -82,7 +82,7 @@ describe("ReferenceCheckPanel", () => {
     expect(
       screen.getByText(/an entity cannot reference itself/),
     ).toBeInTheDocument();
-    expect(screen.queryByText("All references resolve.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No findings — the document passes every check.")).not.toBeInTheDocument();
   });
 
   test("a failed check stays silent — the panel is advisory", async () => {
@@ -91,8 +91,8 @@ describe("ReferenceCheckPanel", () => {
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalled(), { timeout: 3000 });
 
-    expect(screen.getByText("References")).toBeInTheDocument();
-    expect(screen.queryByText("References that will block saving")).not.toBeInTheDocument();
-    expect(screen.queryByText("All references resolve.")).not.toBeInTheDocument();
+    expect(screen.getByText("Findings")).toBeInTheDocument();
+    expect(screen.queryByText("Findings — saving will ask for confirmation")).not.toBeInTheDocument();
+    expect(screen.queryByText("No findings — the document passes every check.")).not.toBeInTheDocument();
   });
 });

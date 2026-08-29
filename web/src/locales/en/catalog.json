@@ -101,11 +101,7 @@
     "ref": "Must be an entity reference: [kind:][namespace/]name",
     "refEntry": "\"{{ref}}\" is not a valid entity reference",
     "definitionLength": "Definition must be at most 100000 characters",
-    "profileEmailLength": "Email must be at most 254 characters",
-    "refUnresolved": "\"{{ref}}\" does not resolve to a stored entity",
-    "refWrongKind": "\"{{ref}}\" must reference a {{kinds}}",
-    "refKindRequired": "\"{{ref}}\" needs an explicit kind, e.g. component: or resource:",
-    "refSelf": "\"{{ref}}\" points at this entity itself — an entity cannot reference itself"
+    "profileEmailLength": "Email must be at most 254 characters"
   },
   "validationError": "Validation error. Please check the form and try again.",
   "conflictError": "An active file with this namespace and name already exists.",
@@ -148,6 +144,7 @@
     "resultSummary": "Imported {{created}} of {{total}} documents.",
     "status": {
       "CREATED": "Created",
+      "CREATED_WITH_FINDINGS": "Created with findings",
       "CONFLICT": "Already exists",
       "INVALID": "Invalid",
       "ERROR": "Failed"
@@ -169,5 +166,10 @@
   "noNamespacesDefined": "No namespaces are defined — administrators define them on the Namespaces page.",
   "annotationKeyOptionsFailed": "Could not load the annotation keys. Reload to try again.",
   "noAnnotationKeysForKind": "No annotation keys are defined for kind {{kind}} — administrators register them on the Annotations page.",
-  "staleTagsGroup": "Not registered"
+  "staleTagsGroup": "Not registered",
+  "saveAnyway": {
+    "title": "Save with findings?",
+    "intro": "A strict save rejects this document for the findings below. You can save it anyway and fix them later — the Cross-check page tracks every finding until it is resolved.",
+    "confirm": "Save anyway"
+  }
 }

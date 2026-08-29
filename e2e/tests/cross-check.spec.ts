@@ -1,10 +1,12 @@
 import { expect, login, openFilters, pickLifecycle, pickType, rowOperation, test, uniqueText } from "./helpers";
 
-// The cross-check journey on two throwaway unique-named files. Saves ENFORCE reference
-// resolution now, so a dangling reference can only be MADE by deleting its target — the
-// journey covers the editor's inline block, the deletion-created finding, and its repair.
-// Every assert is anchored on the unique names, so other files' findings can never flake it.
-test("an unresolved reference blocks saving; deleting a target creates the finding", async ({
+// The cross-check journey on two throwaway unique-named files. Saves are strict by DEFAULT
+// but waivable: a soft rejection opens the Save-anyway modal, and a waived save lands the
+// finding on the cross-check report. The journey covers the modal's cancel and confirm
+// paths, the report finding a waived save creates, its repair in the editor, and the
+// deletion-created finding. Every assert is anchored on the unique names, so other files'
+// findings can never flake it.
+test("an unresolved reference asks for confirmation; saving anyway lands it on the cross-check report", async ({
   page,
 }) => {
   await login(page);
@@ -12,7 +14,7 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
   const target = uniqueText("e2e-xchk-target");
   const ghost = uniqueText("e2e-xchk-ghost");
 
-  // The target component first — references must resolve at save time.
+  // The target component first — the repaired reference will point at it.
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(target);
   await pickType(page, "service");
@@ -25,8 +27,9 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
     page.getByRole("button", { name: "Create" }).click(),
   ]);
 
-  // The source: first a SELF-reference — flagged live and blocked inline (an entity may
-  // never reference itself, saved or not).
+  // The source: first a SELF-reference — flagged live, and the strict save opens the
+  // Save-anyway modal (an entity may never reference itself, saved or not). Cancel keeps
+  // the document unsaved.
   await page.goto("/catalog-files/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(source);
   await pickType(page, "service");
@@ -35,35 +38,55 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
   await page.getByRole("combobox", { name: "Depends on" }).fill(`component:${source}`);
   await page.keyboard.press("Enter");
   await expect(
-    page.getByLabel("References that will block saving").getByText(`component:${source}`, { exact: true }),
+    page
+      .getByLabel("Findings — saving will ask for confirmation")
+      .getByText(`component:${source}`, { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Create" }).click();
-  await expect(page.getByText(`"component:${source}" points at this entity itself`)).toBeVisible();
+  const modal = page.getByRole("dialog");
+  await expect(modal.getByText("Save with findings?")).toBeVisible();
+  await expect(modal.getByText(`component:${source}`, { exact: true })).toBeVisible();
+  await modal.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
 
-  // Then a dangling dependsOn — flagged live AND blocking the submit client-side too.
+  // Then a dangling dependsOn — this time SAVE ANYWAY: the waived save stores the file.
   await page.getByRole("combobox", { name: "Depends on" }).click();
   await page.keyboard.press("Backspace");
   await page.getByRole("combobox", { name: "Depends on" }).fill(`component:${ghost}`);
   await page.keyboard.press("Enter");
   // Scoped to the alert — the TagsInput pill carries the same text.
   await expect(
-    page.getByLabel("References that will block saving").getByText(`component:${ghost}`, { exact: true }),
+    page
+      .getByLabel("Findings — saving will ask for confirmation")
+      .getByText(`component:${ghost}`, { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Create" }).click();
-  await expect(page.getByText(`"component:${ghost}" does not resolve to a stored entity`)).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(`component:${ghost}`, { exact: true })).toBeVisible();
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes("allowInvalid=true") && r.request().method() === "POST" && r.ok(),
+    ),
+    page.getByRole("dialog").getByRole("button", { name: "Save anyway" }).click(),
+  ]);
+  await expect(page).toHaveURL(/\/catalog-files$/);
 
-  // Point the reference at the real target instead — the panel clears and the save lands.
-  // (Backspace in the empty TagsInput removes the last pill.)
+  // The workspace report shows the waived MISSING finding, linking back to the source file.
+  await page.goto("/cross-check");
+  await expect(page.getByText(`component:${ghost}`, { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: `Edit ${source}` }).first()).toBeVisible();
+
+  // Repair in the editor: point the reference at the real target — the panel clears and
+  // the save goes through strict (no modal).
+  await page.getByRole("link", { name: `Edit ${source}` }).first().click();
+  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(source);
   await page.getByRole("combobox", { name: "Depends on" }).click();
   await page.keyboard.press("Backspace");
   await page.getByRole("combobox", { name: "Depends on" }).fill(`component:${target}`);
   await page.keyboard.press("Enter");
-  await expect(page.getByText("All references resolve.")).toBeVisible();
+  await expect(page.getByText("No findings — the document passes every check.")).toBeVisible();
   await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/catalog-files") && r.request().method() === "POST" && r.ok(),
-    ),
-    page.getByRole("button", { name: "Create" }).click(),
+    page.waitForResponse((r) => r.request().method() === "PUT" && r.ok()),
+    page.getByRole("button", { name: "Save" }).click(),
   ]);
 
   // Deleting the target is allowed — and creates the dangling reference.
@@ -76,10 +99,9 @@ test("an unresolved reference blocks saving; deleting a target creates the findi
     page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
   ]);
 
-  // The workspace report shows the MISSING finding, linking back to the source file.
+  // The workspace report shows the deletion-created MISSING finding.
   await page.goto("/cross-check");
   await expect(page.getByText(`component:${target}`, { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: `Edit ${source}` }).first()).toBeVisible();
 
   // Recreate the target — the finding disappears from a fresh report.
   await page.goto("/catalog-files/new");

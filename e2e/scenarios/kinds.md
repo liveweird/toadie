@@ -22,8 +22,8 @@
 3. They create a **Component** in the same namespace, picking the owner from the reference
    picker — the just-created group is suggested as its full identity and inserts as
    `group:namespace/name` — and providing the API.
-   - *Expected*: the editor's live References panel shows the all-clear — the owner and the
-     provided API both resolve against the files just stored.
+   - *Expected*: the editor's live Findings panel shows the all-clear ("No findings…") —
+     the owner and the provided API both resolve against the files just stored.
 4. On the Files list, filtered by the namespace, all three rows show their kind badges
    (Group, API, Component).
 5. They delete all three files.

@@ -305,4 +305,52 @@ class CrossCheckTest {
         val response = seededClient("crosscheck400").postJson("/api/v1/catalog-files/check", "{ not json")
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
+
+    @Test
+    fun `the check endpoint reports registry findings alongside reference findings`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("checkregistry")
+        val ghostLabel = uniqueEntityName("chklbl")
+        val file = componentFile(uniqueEntityName("chkdoc"), type = "no-such-type")
+            .let { it.copy(metadata = it.metadata.copy(labels = mapOf(ghostLabel to "x"))) }
+
+        val response = client.postJson("/api/v1/catalog-files/check", file)
+        assertEquals(HttpStatusCode.OK, response.status)
+        val findings = response.body<DocumentCheckReport>().findings
+        assertTrue(
+            findings.any {
+                it.status == CrossCheckStatus.LABEL_NOT_ALLOWED &&
+                    it.field == "metadata.labels" && it.reference == ghostLabel
+            },
+        )
+        assertTrue(
+            findings.any {
+                it.status == CrossCheckStatus.TYPE_NOT_ALLOWED &&
+                    it.field == "spec.type" && it.reference == "no-such-type"
+            },
+        )
+    }
+
+    @Test
+    fun `the workspace report lists a waived file's registry findings`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("crosscheckwaived")
+        val ghostTag = uniqueTag("xwtag")
+        val name = uniqueEntityName("xwaived")
+        val file = componentFile(name)
+            .let { it.copy(metadata = it.metadata.copy(tags = listOf(ghostTag))) }
+        val created = client.postJson("/api/v1/catalog-files?allowInvalid=true", file)
+        assertEquals(HttpStatusCode.Created, created.status)
+        val id = created.body<ch.nokillswit.catalog.CatalogFileResponse>().id
+
+        val report = client.report()
+        assertTrue(
+            report.findings.any {
+                it.fileId == id && it.status == CrossCheckStatus.TAG_NOT_ALLOWED &&
+                    it.field == "metadata.tags" && it.reference == ghostTag
+            },
+        )
+
+        client.delete("/api/v1/catalog-files/$id")
+    }
 }

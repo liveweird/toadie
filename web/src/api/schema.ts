@@ -313,8 +313,11 @@ export interface paths {
          *     entity reference must RESOLVE to a stored active entity of a kind the field allows
          *     (e.g. `spec.owner` → Group or User; namespaceless references resolve within the
          *     file's own namespace, matching is case-insensitive) and must NOT reference the
-         *     entity itself — all strict, no grandfathering,
-         *     else `400` (reference violations aggregate into one detail).
+         *     entity itself — all strict by default, no grandfathering,
+         *     else `400` (all soft-check violations aggregate into one detail).
+         *     `allowInvalid=true` WAIVES the soft checks (reference resolution and the five
+         *     registry rules) and stores the document anyway — the cross-check report tracks the
+         *     waived findings; the structural rules and namespace resolution stay hard `400`s.
          *     Entity identity (kind + namespace + name, case-insensitive) must be unique among
          *     active files; a clash is a `409`.
          */
@@ -333,26 +336,31 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Cross-check every stored file's entity references
-         * @description Resolves every entity reference the active files make (`owner`, `system`,
-         *     `subcomponentOf`, `providesApis`, `consumesApis`, `dependsOn`, `dependencyOf`) against
-         *     the workspace and reports four tiers of findings:
+         * Cross-check every stored file against the workspace and the registries
+         * @description The workspace health report. Resolves every entity reference the active files make
+         *     (`owner`, `system`, `subcomponentOf`, `providesApis`, `consumesApis`, `dependsOn`,
+         *     `dependencyOf`) against the workspace:
          *
-         *     - `MISSING` (error) — no active file matches the referenced identity (explicit or via
+         *     - `MISSING` — no active file matches the referenced identity (explicit or via
          *       the field's default kind). Namespaceless references resolve within the REFERENCING
          *       file's own namespace; matching is case-insensitive throughout.
-         *     - `KIND_REQUIRED` (error) — a `dependsOn`/`dependencyOf` entry without a kind; those
+         *     - `KIND_REQUIRED` — a `dependsOn`/`dependencyOf` entry without a kind; those
          *       fields have no default kind, so Backstage itself cannot ingest such a reference.
-         *     - `WRONG_KIND` (error) — the reference names a kind the field does not allow (e.g. a
+         *     - `WRONG_KIND` — the reference names a kind the field does not allow (e.g. a
          *       Component in `spec.owner`, which accepts only Group or User).
-         *     - `SELF_REFERENCE` (error) — the reference resolves to the referencing file itself
+         *     - `SELF_REFERENCE` — the reference resolves to the referencing file itself
          *       (e.g. a Domain's `spec.subdomainOf` naming that very Domain); a Toadie rule beyond
          *       upstream Backstage.
          *
-         *     Saves themselves enforce resolution (an unresolved or self reference is a `400`), so
-         *     findings here arise from DELETIONS (dangling references are allowed to appear that way
-         *     — this report is the net for them), from import batches whose sibling documents
-         *     failed, and from legacy self-references stored before the rule existed.
+         *     …and additionally checks every file's labels, annotation keys, tags, `spec.type`,
+         *     and `spec.lifecycle` against the ADMIN-curated registries (`LABEL_NOT_ALLOWED`,
+         *     `ANNOTATION_NOT_ALLOWED`, `TAG_NOT_ALLOWED`, `TYPE_NOT_ALLOWED`,
+         *     `LIFECYCLE_NOT_ALLOWED`). Saves enforce all of these by default but may waive them
+         *     with `allowInvalid=true` (import always does), so findings here arise from waived
+         *     saves, DELETIONS (dangling references are allowed to appear that way), registry rows
+         *     removed after the fact, import batches whose sibling documents failed, and legacy
+         *     self-references stored before the rule existed. Every finding blocks the file's next
+         *     STRICT save (a waived save still goes through).
          */
         get: operations["crossCheckCatalogFiles"];
         put?: never;
@@ -373,16 +381,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Check one document's references against the stored files
+         * Check one document against the stored files and the registries
          * @description The editor's live companion to the workspace cross-check: takes one (possibly unsaved,
-         *     possibly not-yet-valid) document and returns its reference findings against the stored
-         *     identities — same statuses as the workspace report, and since saves enforce
-         *     resolution, every finding here means the save WILL be rejected. The document is
-         *     sanitized but deliberately NOT validated (in-progress documents are legal here;
-         *     unparsable references are skipped — the form flags them itself). A pure computation:
-         *     nothing is stored; POST only because the document travels in the body. A reference to
-         *     the document's OWN identity is `SELF_REFERENCE` — saved or not, an entity may never
-         *     reference itself.
+         *     possibly not-yet-valid) document and returns its soft findings — reference resolution
+         *     against the stored identities plus the registry checks (labels, annotation keys, tags,
+         *     type, lifecycle) — with the same statuses as the workspace report. Every finding here
+         *     means a STRICT save would be rejected (the editor offers `allowInvalid` as the
+         *     save-anyway waiver). The document is sanitized but deliberately NOT validated
+         *     (in-progress documents are legal here; unparsable references are skipped — the form
+         *     flags them itself). A pure computation: nothing is stored; POST only because the
+         *     document travels in the body. A reference to the document's OWN identity is
+         *     `SELF_REFERENCE` — saved or not, an entity may never reference itself.
          */
         post: operations["checkCatalogFile"];
         delete?: never;
@@ -462,10 +471,12 @@ export interface paths {
          * Import a batch of catalog documents (report & skip)
          * @description Imports up to 200 structured documents (the SPA parses `catalog-info.yaml` client-side
          *     and ships the parsed documents here). Each document imports INDEPENDENTLY and gets its
-         *     own result row: `CREATED` (stored, `fileId` set), `INVALID` (failed the
-         *     descriptor-format validation, a registry rule — defined namespace, registered
-         *     label, registered tag — or reference resolution, `message` names the
-         *     problem; sibling documents in the SAME batch count as resolution targets, order
+         *     own result row: `CREATED` (stored clean, `fileId` set), `CREATED_WITH_FINDINGS`
+         *     (stored DESPITE soft findings — import always waives reference resolution and the
+         *     registry rules so a flawed batch can land and be fixed incrementally; `fileId` set,
+         *     `message` lists the findings, the cross-check report tracks them), `INVALID` (failed
+         *     the structural descriptor-format validation or namespace resolution, `message` names
+         *     the rule; sibling documents in the SAME batch count as resolution targets, order
          *     independent), `CONFLICT` (an active file
          *     already holds the kind+namespace+name identity — nothing is overwritten), or `ERROR`
          *     (an unexpected storage failure). The response is `200` even when every document failed
@@ -523,10 +534,11 @@ export interface paths {
          * Replace a catalog file
          * @description Full replacement; same validation as create (the defined-namespace,
          *     registered-label, registered-annotation-key, registered-tag, registered-type,
-         *     registered-lifecycle, and resolved-reference rules included — strict: a file whose
-         *     namespace, label, annotation key, tag, type, or lifecycle was removed from its
-         *     registry, or whose referenced entity was deleted, cannot be saved until it is
-         *     fixed; a reference to the file's own identity is a `400`). Renaming into an
+         *     registered-lifecycle, and resolved-reference rules included — strict by default: a
+         *     file whose label, annotation key, tag, type, or lifecycle was removed from its
+         *     registry, or whose referenced entity was deleted, cannot be saved until it is fixed;
+         *     a reference to the file's own identity is a `400`). `allowInvalid=true` waives those
+         *     soft checks exactly as on create (the namespace rule stays hard). Renaming into an
          *     identity an active file already holds is a `409`.
          */
         put: operations["replaceCatalogFile"];
@@ -985,16 +997,16 @@ export interface components {
             /** @description The sanitized entity name. */
             name: string;
             /**
-             * @description CREATED — stored (`fileId` set). INVALID — failed the descriptor-format validation (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document.
+             * @description CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite soft findings, which import always waives (`fileId` set, `message` lists the findings; the cross-check report tracks them). INVALID — failed the structural descriptor-format validation or namespace resolution (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document.
              * @enum {string}
              */
-            status: "CREATED" | "INVALID" | "CONFLICT" | "ERROR";
+            status: "CREATED" | "CREATED_WITH_FINDINGS" | "INVALID" | "CONFLICT" | "ERROR";
             /**
              * Format: int32
-             * @description The new file's id, only when status is CREATED.
+             * @description The new file's id, only when the document was stored.
              */
             fileId?: number | null;
-            /** @description The failure detail, absent on CREATED. */
+            /** @description The failure or finding detail, absent on CREATED. */
             message?: string | null;
         };
         CatalogFileMetadata: {
@@ -1110,10 +1122,10 @@ export interface components {
             updatedAt: number;
         };
         /**
-         * @description Every status is an error that BLOCKS the referencing document's next save: MISSING (no stored entity matches), KIND_REQUIRED (a kind-less dependsOn/dependencyOf entry), WRONG_KIND (the reference names a kind the field does not allow), SELF_REFERENCE (the reference resolves to the referencing file itself).
+         * @description Every status blocks the document's next STRICT save (a save may waive them with `allowInvalid=true`). References: MISSING (no stored entity matches), KIND_REQUIRED (a kind-less dependsOn/dependencyOf entry), WRONG_KIND (the reference names a kind the field does not allow), SELF_REFERENCE (the reference resolves to the referencing file itself). Registries: LABEL_NOT_ALLOWED / ANNOTATION_NOT_ALLOWED / TAG_NOT_ALLOWED / TYPE_NOT_ALLOWED / LIFECYCLE_NOT_ALLOWED (the value is not allowed by its ADMIN-curated registry for the file's kind; the finding's `reference` carries the offending value).
          * @enum {string}
          */
-        CrossCheckStatus: "MISSING" | "KIND_REQUIRED" | "WRONG_KIND" | "SELF_REFERENCE";
+        CrossCheckStatus: "MISSING" | "KIND_REQUIRED" | "WRONG_KIND" | "SELF_REFERENCE" | "LABEL_NOT_ALLOWED" | "ANNOTATION_NOT_ALLOWED" | "TAG_NOT_ALLOWED" | "TYPE_NOT_ALLOWED" | "LIFECYCLE_NOT_ALLOWED";
         CrossCheckFinding: {
             /** Format: int32 */
             fileId: number;
@@ -1391,6 +1403,14 @@ export interface components {
         Page: number;
         /** @description Rows per page. Defaults to 20, maximum 100. */
         PageSize: number;
+        /**
+         * @description Waive the SOFT checks (reference resolution and the label / annotation-key / tag /
+         *     type / lifecycle registry rules) and store the document despite their findings —
+         *     the explicit save-anyway opt-in. The structural descriptor-format rules and
+         *     namespace resolution stay hard `400`s regardless. Waived findings surface on the
+         *     workspace cross-check report and block the file's next strict save.
+         */
+        AllowInvalid: boolean;
         /**
          * @description Sort spec. Format: `field` (ascending) or `-field` (descending). Multiple fields are
          *     comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
@@ -1856,7 +1876,16 @@ export interface operations {
     };
     createCatalogFile: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description Waive the SOFT checks (reference resolution and the label / annotation-key / tag /
+                 *     type / lifecycle registry rules) and store the document despite their findings —
+                 *     the explicit save-anyway opt-in. The structural descriptor-format rules and
+                 *     namespace resolution stay hard `400`s regardless. Waived findings surface on the
+                 *     workspace cross-check report and block the file's next strict save.
+                 */
+                allowInvalid?: components["parameters"]["AllowInvalid"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2077,7 +2106,16 @@ export interface operations {
     };
     replaceCatalogFile: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description Waive the SOFT checks (reference resolution and the label / annotation-key / tag /
+                 *     type / lifecycle registry rules) and store the document despite their findings —
+                 *     the explicit save-anyway opt-in. The structural descriptor-format rules and
+                 *     namespace resolution stay hard `400`s regardless. Waived findings surface on the
+                 *     workspace cross-check report and block the file's next strict save.
+                 */
+                allowInvalid?: components["parameters"]["AllowInvalid"];
+            };
             header?: never;
             path: {
                 id: components["parameters"]["ResourceId"];

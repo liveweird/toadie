@@ -71,7 +71,7 @@ describe("CrossCheck page", () => {
 
     expect(await screen.findByText("2 files checked")).toBeInTheDocument();
     expect(screen.getByText("5 references checked")).toBeInTheDocument();
-    expect(screen.getByText("3 problems")).toBeInTheDocument();
+    expect(screen.getByText("3 findings")).toBeInTheDocument();
   });
 
   test("every finding renders as an error row — saves enforce resolution, so all block", async () => {
@@ -99,8 +99,8 @@ describe("CrossCheck page", () => {
     mockReport(mockFetch, { findings: [], checkedFiles: 3, checkedReferences: 7 });
     renderPage();
 
-    const empty = await screen.findByText(/no problems found/i);
-    expect(screen.getByText("0 problems")).toBeInTheDocument();
+    const empty = await screen.findByText(/no findings/i);
+    expect(screen.getByText("0 findings")).toBeInTheDocument();
     // The empty-state cell spans every column — pins the page's columnCount literal.
     expect(empty.closest("td")).toHaveAttribute(
       "colspan",

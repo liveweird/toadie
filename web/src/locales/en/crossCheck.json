@@ -4,31 +4,41 @@
   "summary": {
     "files": "{{count}} files checked",
     "references": "{{count}} references checked",
-    "errors": "{{count}} problems"
+    "errors": "{{count}} findings"
   },
   "field": {
     "file": "File",
     "namespace": "Namespace",
     "refField": "Field",
-    "reference": "Reference",
+    "reference": "Value",
     "status": "Status"
   },
   "status": {
     "MISSING": "Not found",
     "KIND_REQUIRED": "Kind required",
     "WRONG_KIND": "Wrong kind",
-    "SELF_REFERENCE": "References itself"
+    "SELF_REFERENCE": "References itself",
+    "LABEL_NOT_ALLOWED": "Label not allowed",
+    "ANNOTATION_NOT_ALLOWED": "Annotation not allowed",
+    "TAG_NOT_ALLOWED": "Tag not allowed",
+    "TYPE_NOT_ALLOWED": "Type not allowed",
+    "LIFECYCLE_NOT_ALLOWED": "Lifecycle not allowed"
   },
   "message": {
-    "MISSING": "No stored entity matches this reference — the file will not save until it is fixed.",
+    "MISSING": "No stored entity matches this reference.",
     "KIND_REQUIRED": "dependsOn/dependencyOf entries need an explicit kind, e.g. component: or resource:.",
     "WRONG_KIND": "The reference names a kind this field does not allow.",
-    "SELF_REFERENCE": "The reference points at this file itself — an entity cannot reference itself."
+    "SELF_REFERENCE": "The reference points at this file itself — an entity cannot reference itself.",
+    "LABEL_NOT_ALLOWED": "The label registry does not allow this label here — adjust it on the Labels page.",
+    "ANNOTATION_NOT_ALLOWED": "The annotation-key registry does not allow this key here — adjust it on the Annotations page.",
+    "TAG_NOT_ALLOWED": "The tag categories do not allow this tag here — adjust them on the Tags page.",
+    "TYPE_NOT_ALLOWED": "The kind's type dictionary does not allow this type — adjust it on the Types page.",
+    "LIFECYCLE_NOT_ALLOWED": "The lifecycles dictionary does not allow this value — adjust it on the Lifecycles page."
   },
-  "noFindings": "No problems found — every reference resolves.",
+  "noFindings": "No findings — every file passes the checks.",
   "panel": {
-    "title": "References",
-    "errorsTitle": "References that will block saving",
-    "allClear": "All references resolve."
+    "title": "Findings",
+    "errorsTitle": "Findings — saving will ask for confirmation",
+    "allClear": "No findings — the document passes every check."
   }
 }

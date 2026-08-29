@@ -242,41 +242,19 @@ describe("toCatalogFileRequest / fromCatalogFileResponse", () => {
   );
 });
 
-describe("reference resolution validation (the pool-backed half)", () => {
-  const pool = [
-    { kind: "Group", namespace: "default", name: "team-a" },
-    { kind: "Component", namespace: "default", name: "svc-a" },
-    { kind: "API", namespace: "team-x", name: "billing-api" },
-  ];
-  const withPool = catalogFileFormValidation(t, { current: { identities: pool, defaultNamespace: "default" } });
+describe("reference validation is grammar-only (resolution is the server's soft check)", () => {
+  const rules = catalogFileFormValidation(t);
   const component = values({ kind: "Component" });
 
-  test("resolving references pass; unresolved, wrong-kind, and kind-less ones fail", () => {
-    expect(withPool.owner("team-a", component)).toBeNull();
-    expect(withPool.owner("ghost-team", component)).toMatch(/does not resolve/);
-    expect(withPool.owner("component:default/svc-a", component)).toMatch(/must reference a Group \/ User/);
-    expect(withPool.dependsOn(["svc-a"], component)).toMatch(/needs an explicit kind/);
-    expect(withPool.dependsOn(["component:default/svc-a"], component)).toBeNull();
-    // The blank namespace resolves against the flagged default for bare refs.
-    expect(withPool.consumesApis(["team-x/billing-api"], component)).toBeNull();
+  test("well-formed references pass regardless of resolution — the Save-anyway flow owns that", () => {
+    expect(rules.owner("ghost-team", component)).toBeNull();
+    expect(rules.owner("component:default/anything", component)).toBeNull();
+    expect(rules.dependsOn(["svc-a", "component:default/svc-a"], component)).toBeNull();
+    expect(rules.subcomponentOf("component:default/self-name", values({ kind: "Component", name: "self-name" }))).toBeNull();
   });
 
-  test("a reference to the entity itself fails, full and short forms alike", () => {
-    // Editing component "svc-a" (blank namespace → the flagged default): its own identity
-    // is in the pool, but referencing it is the self error — not a pass.
-    const selfish = values({ kind: "Component", name: "svc-a" });
-    expect(withPool.subcomponentOf("component:default/svc-a", selfish)).toMatch(/cannot reference itself/);
-    expect(withPool.subcomponentOf("svc-a", selfish)).toMatch(/cannot reference itself/);
-    expect(withPool.dependsOn(["component:svc-a"], selfish)).toMatch(/cannot reference itself/);
-    // A different name resolves normally against the same pool.
-    expect(withPool.subcomponentOf("component:default/svc-a", values({ kind: "Component", name: "other" }))).toBeNull();
-  });
-
-  test("no context or an empty pool degrades to grammar-and-kind checks only", () => {
-    const noContext = catalogFileFormValidation(t);
-    expect(noContext.owner("ghost-team", component)).toBeNull();
-    const emptyPool = catalogFileFormValidation(t, { current: { identities: [], defaultNamespace: undefined } });
-    expect(emptyPool.owner("ghost-team", component)).toBeNull();
-    expect(emptyPool.owner("component:default/svc-a", component)).toMatch(/must reference a/);
+  test("malformed references still fail on grammar", () => {
+    expect(rules.owner("a:b:c", component)).toMatch(/entity reference/);
+    expect(rules.dependsOn(["bad ref"], component)).toMatch(/"bad ref"/);
   });
 });
