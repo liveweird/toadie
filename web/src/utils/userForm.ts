@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import type { SupportedLanguage } from "../i18n";
 
 // Server limits (users/Validation.kt + auth/Passwords.kt) mirrored client-side.
 export const MAX_USER_NAME_LENGTH = 50;
@@ -16,9 +17,11 @@ export type UserFormValues = {
   name: string;
   email: string;
   admin: boolean;
+  /** The ONE synced per-user language (V18) — its own endpoint on edit, POST field on create. */
+  language: SupportedLanguage;
 };
 
-export const EMPTY_USER_FORM: UserFormValues = { name: "", email: "", admin: false };
+export const EMPTY_USER_FORM: UserFormValues = { name: "", email: "", admin: false, language: "en" };
 
 /** Validation rules shared by the create and edit user pages (mirrors the server's checks). */
 export function userFormValidation(t: TFunction) {

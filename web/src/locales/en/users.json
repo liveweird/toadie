@@ -35,6 +35,7 @@
   "onboardingEmailBody": "Hi {{name}},\n\nyour Toadie account is ready at {{url}}.\n\nSign in with this email address and the password: {{password}}\n\nPlease change the password after your first sign-in (Change password in the sidebar).",
   "adminCheckbox": "Administrator",
   "adminCheckboxHint": "May manage users and reset passwords.",
+  "languageHint": "Applies to the app after their next sign-in and to every email sent to them.",
   "emailAlreadyInUse": "This email is already used by another account.",
   "validation": {
     "nameLength": "Name must be 1–50 characters",

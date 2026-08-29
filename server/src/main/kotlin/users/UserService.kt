@@ -53,6 +53,9 @@ class UserService(private val database: R2dbcDatabase) {
         val role = varchar("role", length = 20).default(UserRole.USER.name)
         val markedAsDeleted = bool("marked_as_deleted").default(false)
         val passwordChangedAt = long("password_changed_at").default(0)
+        // Per-user language (V18): sign-in UI language + the language of every email sent
+        // to the user. No CHECK — SUPPORTED_LANGUAGES is the whitelist.
+        val language = varchar("language", length = 10).default("en")
     }
 
     // Per-user feature flags (V12) — the DISABLED set; no row = enabled.
@@ -68,6 +71,7 @@ class UserService(private val database: R2dbcDatabase) {
             it[email] = user.email
             it[passwordHash] = user.passwordHash
             it[role] = user.role.name
+            it[language] = user.language
         }
         val id = newRecord[Users.id].value
         // MFA is the one inverted-default flag (opt-in): every new user starts with the
@@ -103,6 +107,16 @@ class UserService(private val database: R2dbcDatabase) {
             it[this.passwordHash] = passwordHash
             // Invalidates outstanding refresh tokens: /refresh rejects iat < passwordChangedAt.
             it[passwordChangedAt] = System.currentTimeMillis()
+        }
+    }
+
+    /**
+     * Set the per-user language (V18). Returns 1, or 0 when the id is unknown or
+     * soft-deleted (the route 404s). Idempotent; validated by the route.
+     */
+    suspend fun setLanguage(id: UInt, language: String): Int = suspendTransaction(database) {
+        Users.update({ (Users.id eq id) and active() }) {
+            it[Users.language] = language
         }
     }
 
@@ -262,5 +276,6 @@ class UserService(private val database: R2dbcDatabase) {
         role = UserRole.valueOf(this[Users.role]),
         disabledFeatures = disabledFeatures,
         passwordChangedAt = this[Users.passwordChangedAt],
+        language = this[Users.language],
     )
 }

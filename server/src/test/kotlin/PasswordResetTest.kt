@@ -10,6 +10,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -21,6 +22,38 @@ import kotlin.test.assertTrue
  * events that the worker emits as completion barriers.
  */
 class PasswordResetTest {
+
+    @Test
+    fun `a Polish-language account gets the Polish reset email`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("reset-pl")
+        TestUsers.seed(email = email, password = "old-password-123", name = "Reset Polka", language = "pl")
+        val mail = LogCapture("ch.nokillswit.mail")
+        val auditEvents = LogCapture("ch.nokillswit.audit")
+        try {
+            val response = jsonClient().post("/api/v1/password-reset") {
+                contentType(ContentType.Application.Json)
+                setBody(PasswordResetRequest(email))
+            }
+            assertEquals(HttpStatusCode.Accepted, response.status)
+            assertNotNull(
+                auditEvents.awaitEvent {
+                    it.message == "password_reset.completed" && it.hasKeyValue("email", email)
+                },
+                "the reset should complete",
+            )
+            val message = mail.awaitEvent { "To: $email" in it.formattedMessage }?.formattedMessage
+            assertNotNull(message, "the reset email should have been delivered (log transport)")
+            // The recipient's stored language (V18) drives the whole email.
+            assertTrue("Cześć Reset Polka," in message, "the PL greeting")
+            assertTrue("Nowe hasło" in message, "the PL password label")
+            assertTrue("Twoje nowe hasło Toadie" in message, "the PL subject")
+            assertFalse("New password" in message, "no EN leak into the PL body")
+        } finally {
+            mail.detach()
+            auditEvents.detach()
+        }
+    }
 
     @Test
     fun `existing account gets a working new password by email and the old one stops working`() = testApplication {
@@ -48,7 +81,7 @@ class PasswordResetTest {
             val message = mail.awaitEvent { "To: $email" in it.formattedMessage }?.formattedMessage
             assertNotNull(message, "the reset email should have been delivered (log transport)")
             assertTrue("Hi Reset Tester," in message)
-            assertTrue("New password" in message, "the EN body (recipient language is en until stored per-user)")
+            assertTrue("New password" in message, "the EN body (the account's stored language)")
             assertTrue("Your new Toadie password" in message, "the EN subject")
             val newPassword = Regex("""(?m)^[A-Za-z0-9_-]{16}$""").find(message)?.value
             assertNotNull(newPassword, "email should contain the generated password on its own line")

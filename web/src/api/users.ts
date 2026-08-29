@@ -71,6 +71,14 @@ export async function updateUserFeatures(id: number, disabledFeatures: Feature[]
   return voidRequest(`/api/v1/users/${id}/features`, { method: "PUT", body: JSON.stringify(body) });
 }
 
+/** The ONE synced per-user language — the header switcher's fire-and-forget save. */
+export async function setUserLanguage(id: number, language: string): Promise<void> {
+  await voidRequest(`/api/v1/users/${id}/language`, {
+    method: "PUT",
+    body: JSON.stringify({ language }),
+  });
+}
+
 export async function changeUserPassword(id: number, body: PasswordUpdateBody): Promise<void> {
   await voidRequest(`/api/v1/users/${id}/password`, { method: "PUT", body: JSON.stringify(body) });
 }

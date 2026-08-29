@@ -24,6 +24,7 @@ import {
   setToken,
 } from "./session";
 import { getDisabledFeatures, hasFeature } from "./session";
+import i18n from "../i18n";
 
 const SESSION = {
   token: "access-1",
@@ -33,9 +34,19 @@ const SESSION = {
   userId: 7,
   roles: ["ADMIN" as const],
   disabledFeatures: [],
+  language: "en" as const,
 };
 
 describe("session", () => {
+  test("persistSession applies the stored language to the UI and skips a language-less payload", async () => {
+    persistSession({ ...SESSION, language: "pl" });
+    await vi.waitFor(() => expect(i18n.resolvedLanguage).toBe("pl"));
+    // A mid-deploy older server sends no language — the UI stays untouched.
+    persistSession({ ...SESSION, language: undefined as unknown as "en" });
+    expect(i18n.resolvedLanguage).toBe("pl");
+    await i18n.changeLanguage("en");
+  });
+
   test("persistSession stores the pair, roles, and userId; clearSession removes them", () => {
     persistSession(SESSION);
     expect(getToken()).toBe("access-1");

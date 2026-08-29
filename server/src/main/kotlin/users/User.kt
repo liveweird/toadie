@@ -40,6 +40,10 @@ data class User(
     // Epoch millis of the last password change (0 = never). Server-internal; used to
     // invalidate refresh tokens minted before the change (see /api/v1/refresh).
     val passwordChangedAt: Long = 0,
+    // Per-user language (V18, Lettuce's V61): the UI language at sign-in and the language
+    // of every email sent to the user. Set at create; never client-settable via the
+    // whole-user PUT — changed only by PUT /users/{id}/language (target user or ADMIN).
+    val language: String = "en",
 ) {
     /** The wire/claim shape: additional roles only — empty for a regular user. */
     val additionalRoles: Set<UserRole>
@@ -58,6 +62,8 @@ data class UserCreateRequest(
     // the server stores only the bcrypt hash and never returns plaintext.
     val password: String,
     val roles: List<UserRole>? = null,
+    /** Create-only (the whole-user PUT never touches it); omitted = English. */
+    val language: String? = null,
 )
 
 @Serializable
@@ -76,6 +82,8 @@ data class UserResponse(
     val roles: List<UserRole>,
     /** Per-user feature flags (V12) — the admin-disabled set; empty = full access. */
     val disabledFeatures: List<Feature>,
+    /** The stored per-user language (V18) — the ONE synced language (UI + emails). */
+    val language: String,
 )
 
 fun User.toResponse(id: UInt) = UserResponse(
@@ -84,7 +92,12 @@ fun User.toResponse(id: UInt) = UserResponse(
     email = email,
     roles = additionalRoles.sortedBy { it.name },
     disabledFeatures = disabledFeatures.sortedBy { it.name },
+    language = language,
 )
+
+/** Body of PUT /users/{id}/language (target user or ADMIN — the switcher's save). */
+@Serializable
+data class UserLanguageUpdateRequest(val language: String)
 
 /** Wholesale replacement of a user's disabled-feature set (PUT /users/{id}/features). */
 @Serializable

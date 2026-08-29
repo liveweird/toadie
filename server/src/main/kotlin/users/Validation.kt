@@ -1,5 +1,6 @@
 package ch.nokillswit.users
 
+import ch.nokillswit.dictionaries.SUPPORTED_LANGUAGES
 import io.ktor.server.plugins.BadRequestException
 
 internal const val MAX_NAME_LENGTH = 50
@@ -19,6 +20,13 @@ internal fun validateEmail(email: String) {
     if ('@' !in email) throw BadRequestException("Email must contain '@'")
     if (email.any { it.isISOControl() }) {
         throw BadRequestException("Email must not contain control characters")
+    }
+}
+
+/** The user language (V18) when provided: must be a supported code. Null = default. */
+internal fun validateLanguage(language: String?) {
+    if (language != null && language !in SUPPORTED_LANGUAGES) {
+        throw BadRequestException("Unsupported language (supported: ${SUPPORTED_LANGUAGES.joinToString()})")
     }
 }
 

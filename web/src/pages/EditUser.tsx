@@ -4,9 +4,10 @@ import { Link as RouterLink, Navigate, useNavigate, useParams } from "react-rout
 import { Alert, Button, Container, Group, Paper, Stack, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getUser, updateUser } from "../api/users";
+import { getUser, setUserLanguage, updateUser } from "../api/users";
 import { ApiError } from "../api/http";
-import { isAdmin } from "../api/session";
+import { getUserId, isAdmin } from "../api/session";
+import i18n, { asSupportedLanguage } from "../i18n";
 import EditPageLoadState from "../components/EditPageLoadState";
 import UserFormFields from "../components/UserFormFields";
 import { EMPTY_USER_FORM, rolesOf, userFormValidation, type UserFormValues } from "../utils/userForm";
@@ -38,7 +39,12 @@ export default function EditUser() {
 
   // Derived, not effect-set: initialize applies once (the guarded-initialize idiom).
   if (data && !form.initialized) {
-    form.initialize({ name: data.name, email: data.email, admin: data.roles.includes("ADMIN") });
+    form.initialize({
+      name: data.name,
+      email: data.email,
+      admin: data.roles.includes("ADMIN"),
+      language: asSupportedLanguage(data.language),
+    });
   }
 
   if (!isAdmin()) return <Navigate to="/" replace />;
@@ -53,6 +59,14 @@ export default function EditUser() {
         email: values.email.trim(),
         roles: rolesOf(values),
       });
+      // The language rides its own endpoint (V18) — saved only when actually changed,
+      // AFTER the main update so a failed save never half-applies.
+      if (data && values.language !== asSupportedLanguage(data.language)) {
+        await setUserLanguage(id, values.language);
+        // Editing one's own account applies the language immediately; others pick it up
+        // at their next sign-in or token refresh.
+        if (getUserId() === id) void i18n.changeLanguage(values.language);
+      }
       await queryClient.invalidateQueries({ queryKey: ["users"] });
       await queryClient.invalidateQueries({ queryKey: ["user", id] });
       showSuccessToast(t("users.toast.updated"));

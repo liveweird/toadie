@@ -95,6 +95,7 @@ describe("CreateUser page", () => {
       email: "alice@example.com",
       password: expect.stringMatching(PASSWORD_RE),
       roles: [],
+      language: "en",
     });
     const password = body.password as string;
 

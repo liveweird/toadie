@@ -237,6 +237,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/language": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set a user's language (target user or ADMIN)
+         * @description The ONE synced per-user language: it drives the UI at sign-in (rides `LoginResponse`,
+         *     applied by the SPA on login/MFA/refresh) and the language of every email sent to the
+         *     user (read fresh at send time, so a change takes effect immediately for emails; the
+         *     UI picks it up at the next sign-in or token refresh). **Target user or ADMIN** — the
+         *     header language switcher is the self-service writer (switching while signed in also
+         *     saves here); an admin may fix a mis-set language. Idempotent (a same-value re-PUT is
+         *     `204` again); an unsupported code is `400`. Audited as `user.language_changed` on an
+         *     actual change. Set initially at create (`UserCreateRequest.language`, default `en`);
+         *     the whole-user PUT deliberately never touches it.
+         */
+        put: operations["setUserLanguage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/password": {
         parameters: {
             query?: never;
@@ -873,6 +903,7 @@ export interface components {
             roles: components["schemas"]["UserRole"][];
             /** @description Per-user feature flags — the admin-disabled set; empty = full access. */
             disabledFeatures: components["schemas"]["Feature"][];
+            language: components["schemas"]["Language"];
         };
         /**
          * @description An additional role. Every user is implicitly a regular user; the array only ever carries privileges added on top of that baseline.
@@ -884,6 +915,14 @@ export interface components {
          * @enum {string}
          */
         Feature: "MFA";
+        /**
+         * @description A supported UI/email language. The ONE synced per-user language (V18) — set at create, changed only via PUT /users/{id}/language; drives the SPA at sign-in and every email sent to the user.
+         * @enum {string}
+         */
+        Language: "en" | "pl";
+        UserLanguageUpdateRequest: {
+            language: components["schemas"]["Language"];
+        };
         UserFeaturesUpdateRequest: {
             /** @description The complete new DISABLED set — an empty array enables everything. */
             disabledFeatures: components["schemas"]["Feature"][];
@@ -918,6 +957,8 @@ export interface components {
             password: string;
             /** @description Additional roles; omitted/empty = a regular user. */
             roles?: components["schemas"]["UserRole"][];
+            /** @description Create-only (the whole-user PUT never touches it); omitted = en. */
+            language?: components["schemas"]["Language"] | null;
         };
         UserUpdateRequest: {
             name: string;
@@ -933,6 +974,7 @@ export interface components {
             roles: components["schemas"]["UserRole"][];
             /** @description Per-user feature flags — the admin-disabled set; empty = full access. */
             disabledFeatures: components["schemas"]["Feature"][];
+            language: components["schemas"]["Language"];
         };
         UserPage: {
             items: components["schemas"]["UserResponse"][];
@@ -1790,6 +1832,43 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             /** @description Caller is not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    setUserLanguage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserLanguageUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Language set */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not the target user and not ADMIN */
             403: {
                 headers: {
                     [name: string]: unknown;

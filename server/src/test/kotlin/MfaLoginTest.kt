@@ -41,11 +41,15 @@ class MfaLoginTest {
     private suspend fun HttpClient.verify(challengeId: String, code: String): HttpResponse =
         postJson("/api/v1/login/mfa", MfaVerifyRequest(challengeId, code))
 
-    private suspend fun ApplicationTestBuilder.seedMfaUser(email: String, password: String): UInt {
+    private suspend fun ApplicationTestBuilder.seedMfaUser(
+        email: String,
+        password: String,
+        language: String = "en",
+    ): UInt {
         val adminEmail = uniqueEmail("mfa-admin")
         TestUsers.seed(email = adminEmail, password = "pw-123456789")
         val admin = authedClient(adminEmail, "pw-123456789")
-        val userId = TestUsers.seed(email = email, password = password, role = UserRole.USER)
+        val userId = TestUsers.seed(email = email, password = password, role = UserRole.USER, language = language)
         assertEquals(HttpStatusCode.NoContent, admin.enableMfa(userId).status)
         return userId
     }
@@ -54,10 +58,32 @@ class MfaLoginTest {
     private suspend fun LogCapture.codeFor(email: String): String {
         val message = awaitEvent { "To: $email" in it.formattedMessage }?.formattedMessage
         assertNotNull(message, "the sign-in code email should have been delivered (log transport)")
-        assertTrue("Your sign-in code" in message, "the EN body (recipient language is en)")
+        assertTrue("Your sign-in code" in message, "the EN body (the account's stored language)")
         val code = Regex("""(?m)^\d{6}$""").find(message)?.value
         assertNotNull(code, "email should contain the 6-digit code on its own line")
         return code
+    }
+
+    @Test
+    fun `a Polish-language account gets the Polish sign-in code email`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("mfa-pl")
+        seedMfaUser(email, "pw-123456789", language = "pl")
+        val mail = LogCapture("ch.nokillswit.mail")
+        try {
+            val client = jsonClient()
+            val challenge = client.login(email, "pw-123456789").body<MfaChallengeResponse>()
+            val message = mail.awaitEvent { "To: $email" in it.formattedMessage }?.formattedMessage
+            assertNotNull(message, "the sign-in code email should have been delivered (log transport)")
+            // The recipient's stored language (V18) drives the whole email.
+            assertTrue("Twój kod logowania" in message, "the PL code label")
+            assertTrue("Toadie: twój kod logowania" in message, "the PL subject")
+            val code = Regex("""(?m)^\d{6}$""").find(message)?.value
+            assertNotNull(code, "email should contain the 6-digit code on its own line")
+            assertEquals(HttpStatusCode.OK, client.verify(challenge.challengeId, code).status)
+        } finally {
+            mail.detach()
+        }
     }
 
     @Test

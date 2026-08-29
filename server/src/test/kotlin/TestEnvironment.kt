@@ -197,12 +197,14 @@ object TestUsers {
         password: String,
         name: String = "Test",
         role: UserRole = UserRole.ADMIN,
+        language: String = "en",
     ): UInt = service.create(
         User(
             name = name,
             email = email,
             passwordHash = hashPassword(password, cost = 4),
             role = role,
+            language = language,
         )
     )
 
@@ -609,6 +611,8 @@ object TestSeedState {
                 it[UserService.Users.passwordHash] = SEED_PASSWORD_HASH
                 it[UserService.Users.markedAsDeleted] = false
                 it[UserService.Users.passwordChangedAt] = 0
+                // A test flipping the seed admin's language must not leak into other tests.
+                it[UserService.Users.language] = "en"
             }
         }
     }

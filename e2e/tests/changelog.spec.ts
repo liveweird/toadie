@@ -21,13 +21,10 @@ test("the what's-new dot leads to the changelog and clears once it is read", asy
   await expect(page.getByText(/^v\d+\.\d+\.\d+$/).first()).toBeVisible();
   await expect(page.getByText(/^\d{4}-\d{2}-\d{2}$/).first()).toBeVisible();
 
-  // The bodies follow the UI language: Polish shows the Polish title and bodies.
-  await page.getByRole("button", { name: "Language" }).click();
-  await page.getByRole("menuitem", { name: "Polski" }).click();
-  await expect(page.getByRole("heading", { name: "Historia zmian" })).toBeVisible();
-  await page.getByRole("button", { name: "Język" }).click();
-  await page.getByRole("menuitem", { name: "English" }).click();
-  await expect(page.getByRole("heading", { name: "Changelog" })).toBeVisible();
+  // NO language switching here: this spec runs as the SEED ADMIN, and the switcher writes
+  // the server-side user language (V18) — a mid-run Polish seed admin would flip every
+  // parallel spec's UI. PL bodies are pinned by Changelog.test.tsx; the language journey
+  // lives in i18n.spec.ts on a throwaway user.
 
   // The dot stays cleared on later navigation.
   await page.goto("/");

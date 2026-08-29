@@ -11,6 +11,7 @@
 - `refresh.rejected` (with `reason`: invalid_or_expired/wrong_token_type/revoked/malformed/user_gone/predates_password_change),
 - `password.changed` (targetUserId/byUserId/selfChange) / `password.change_denied` (wrong or missing current password),
 - `user.features_changed` (byUserId/targetUserId/featuresFrom/featuresTo — only on an actual change),
+- `user.language_changed` (the V18 per-user language — byUserId/targetUserId + `from`/`to` codes; emitted only on an actual change; `user.created` additionally carries `language` when non-default),
 - `user.created` (byUserId/newUserId/email/roles — roles as STORED, i.e. the folded additional-roles set) / `user.updated` (name/email deltas, only when changed) / `user.roles_changed` (rolesFrom/rolesTo, both as stored) / `user.deleted` (byUserId/targetUserId),
 - `catalog_file.created` / `catalog_file.updated` / `catalog_file.deleted` (byUserId/catalogFileId — every catalog-file mutation; an `allowInvalid` save that actually waived soft findings adds `waivedFindings` with the count; a file created through `POST …/import` carries an additional `import: true`, plus `withFindings: true` on `CREATED_WITH_FINDINGS` rows),
 - `catalog_file.fetch_blocked` (byUserId/scheme/host — every SSRF-guard rejection on `POST …/fetch`; deliberately NOT the full URL, which may embed query-string tokens),

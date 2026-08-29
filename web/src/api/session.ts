@@ -1,6 +1,7 @@
 // Session state — token/roles storage and the render-time accessors
 // (transport lives in ./http).
 
+import i18n, { asSupportedLanguage } from "../i18n";
 import type { components } from "./schema";
 
 type LoginSuccess = components["schemas"]["LoginResponse"];
@@ -88,4 +89,14 @@ export function persistSession(data: LoginSuccess): void {
   localStorage.setItem(ROLES_KEY, JSON.stringify(data.roles));
   localStorage.setItem(USER_ID_KEY, String(data.userId));
   localStorage.setItem(DISABLED_FEATURES_KEY, JSON.stringify(data.disabledFeatures ?? []));
+  // Apply the user's stored language (V18) — one chokepoint covers login, the MFA step, and
+  // the silent refresh (so an admin change propagates within the refresh window). The
+  // inequality guard avoids re-firing languageChanged app-wide on every refresh; the
+  // data.language truthiness guard keeps a mid-deploy older server harmless (the
+  // disabledFeatures ?? [] precedent). changeLanguage caches to toadie.lang, so the stored
+  // language also becomes the device language.
+  const lang = asSupportedLanguage(data.language);
+  if (data.language && lang !== asSupportedLanguage(i18n.resolvedLanguage)) {
+    void i18n.changeLanguage(lang);
+  }
 }

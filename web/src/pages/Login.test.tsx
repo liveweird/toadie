@@ -85,7 +85,7 @@ describe("Login", () => {
       .mockResolvedValueOnce(
         jsonResponse(200, {
           token: "t", expiresAt: 1, refreshToken: "r", refreshExpiresAt: 2, userId: 7,
-          roles: [], disabledFeatures: [],
+          roles: [], disabledFeatures: [], language: "en",
         }),
       );
     const user = userEvent.setup();

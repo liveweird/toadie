@@ -48,7 +48,10 @@ from Lettuce, that any new or edited spec must satisfy:
   (device-local localStorage only) are read-only;
   `catalog-files` and `cross-check` own throwaway files (unique names in `default`); `kinds`,
   `render`, `round-trip`, and `hierarchy` own throwaway files in this RUN's namespaces (below); `users` owns
-  its throwaway accounts; `namespaces` owns its throwaway dictionary entries and user;
+  its throwaway accounts; `i18n` owns its throwaway user (and ONLY that user's language —
+  **seeded accounts must stay English**: every login applies the stored language to that
+  session's UI, so a Polish seed admin would flip parallel specs mid-run);
+  `namespaces` owns its throwaway dictionary entries and user;
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
@@ -132,12 +135,15 @@ the same commit** — this list is the coverage map, the scenario file is the de
   owner-reference resolution, and the always-visible Kind pills as a visibility switch) →
   edit → download `catalog-info.yaml` → delete.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
-  leads to the changelog via the version stamp, clears once read, and the page follows
-  the UI language.
+  leads to the changelog via the version stamp and clears once read (no language switching
+  — it runs as the seed admin; see `i18n.spec.ts`).
 - [`cross-check.spec.ts`](scenarios/cross-check.md) — an unresolved reference opens the
   Save-anyway modal (cancel and confirm paths); the waived save's finding shows on
   Cross-check and is repaired in the editor; deleting a referenced target creates a finding,
   which recreating the target clears.
+- [`i18n.spec.ts`](scenarios/i18n.md) — the synced per-user language: a throwaway user
+  switches to Polish, the choice survives a reload AND a wiped-device re-login (served from
+  the stored value), and the admin's English flips it back; seeded accounts stay English.
 - [`kinds.spec.ts`](scenarios/kinds.md) — the multi-kind editor journey: a Group (empty
   children), an API (pasted definition), and a Component whose owner/API references resolve
   live; kind badges on the list.

@@ -35,6 +35,7 @@
   "onboardingEmailBody": "Cześć {{name}},\n\nTwoje konto w Toadie jest gotowe pod adresem {{url}}.\n\nZaloguj się tym adresem e-mail i hasłem: {{password}}\n\nZmień hasło po pierwszym logowaniu (Zmiana hasła w menu bocznym).",
   "adminCheckbox": "Administrator/ka",
   "adminCheckboxHint": "Może zarządzać kontami i resetować hasła.",
+  "languageHint": "Obowiązuje w aplikacji po następnym logowaniu i w każdym wysyłanym e-mailu.",
   "emailAlreadyInUse": "Ten e-mail jest już używany przez inne konto.",
   "validation": {
     "nameLength": "Nazwa musi mieć 1–50 znaków",

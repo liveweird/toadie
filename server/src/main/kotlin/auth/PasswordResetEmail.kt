@@ -6,8 +6,7 @@ import ch.nokillswit.infra.mail.passwordEmail
 /**
  * Content of the password-reset email, rendered in the recipient's language. Thin wrapper
  * over the shared scaffold (infra/mail/PasswordEmail.kt) — only the intro copy, the password
- * label, and the subject live here. Toadie stores no per-user language yet, so the route
- * passes "en"; the PL wording ships ready for a future language preference.
+ * label, and the subject live here. The route passes the recipient's stored language (V18).
  */
 internal val PASSWORD_RESET_EMAIL_SUBJECT: LocalizedText = LocalizedText(
     en = "Your new Toadie password",

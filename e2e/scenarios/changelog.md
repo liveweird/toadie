@@ -17,14 +17,15 @@
 3. They look at the newest entry.
    - *Expected*: it shows a version (`vX.Y.Z`) and a release date (`YYYY-MM-DD`) — no exact
      version is asserted, so releases never break this spec.
-4. They switch the UI language to Polish and back to English.
-   - *Expected*: the page title follows ("Historia zmian" / "Changelog") — entry bodies are
-     authored in both languages.
-5. They navigate back to the Hierarchy page.
+4. They navigate back to the Hierarchy page.
    - *Expected*: the dot stays cleared.
 
 ## Not covered here (and why)
 
+- **Language switching** — this spec runs as the SEED ADMIN, and the switcher writes the
+  server-side user language (V18); seeded accounts must stay English. The PL page title and
+  bodies are pinned by `Changelog.test.tsx`, and the language journey lives in
+  [i18n.md](i18n.md) on a throwaway user.
 - **The exact entry list, body markdown rendering, EN/PL body selection, the seen-state
   storage shape, corrupt-state tolerance, the version pin `CHANGELOG[0].version ===
   APP_VERSION`** — pinned by the unit suites (`changelog/entries.test.ts`,

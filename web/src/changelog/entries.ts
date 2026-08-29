@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.5.0",
+    date: "2026-08-30",
+    en: `Toadie speaks your language.
+
+- Your language is now a saved preference: pick it once in the header menu and every device you sign in on comes up in it.
+- Every email Toadie sends — the password reset, the sign-in code — arrives in your language too.
+- Admins can set a language when creating a user and fix it later in the user editor.`,
+    pl: `Toadie mówi w Twoim języku.
+
+- Język jest teraz zapisanym ustawieniem: wybierz go raz w menu nagłówka, a każde urządzenie, na którym się logujesz, uruchomi się w nim.
+- Każdy e-mail od Toadie — reset hasła, kod logowania — również przychodzi w Twoim języku.
+- Administratorzy/ki mogą ustawić język przy zakładaniu konta i poprawić go później w edytorze użytkownika/czki.`,
+  },
+  {
     version: "1.4.0",
     date: "2026-08-29",
     en: `Kind pills, always at hand.

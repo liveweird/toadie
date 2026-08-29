@@ -44,14 +44,14 @@ describe("userFormValidation", () => {
 
 describe("rolesOf", () => {
   test("maps the admin checkbox to the additive roles set", () => {
-    expect(rolesOf({ name: "A", email: "a@b.co", admin: true })).toEqual(["ADMIN"]);
-    expect(rolesOf({ name: "A", email: "a@b.co", admin: false })).toEqual([]);
+    expect(rolesOf({ name: "A", email: "a@b.co", admin: true, language: "en" as const })).toEqual(["ADMIN"]);
+    expect(rolesOf({ name: "A", email: "a@b.co", admin: false, language: "en" as const })).toEqual([]);
   });
 });
 
 describe("shared vocabulary", () => {
   test("EMPTY_USER_FORM is the blank non-admin form", () => {
-    expect(EMPTY_USER_FORM).toEqual({ name: "", email: "", admin: false });
+    expect(EMPTY_USER_FORM).toEqual({ name: "", email: "", admin: false, language: "en" });
   });
 
   test("the limits mirror the server's (users/Validation.kt + auth/Passwords.kt)", () => {

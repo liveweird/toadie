@@ -5,8 +5,7 @@ import ch.nokillswit.infra.mail.LocalizedText
 /**
  * Content of the email-MFA sign-in-code email, rendered in the recipient's language.
  * Hand-rolled rather than reusing passwordEmail because a sign-in code needs no sign-in
- * link — the user is already mid-login. Toadie stores no per-user language yet, so the
- * route passes "en"; the PL wording ships ready for a future language preference.
+ * link — the user is already mid-login. The route passes the recipient's stored language (V18).
  */
 internal val MFA_EMAIL_SUBJECT: LocalizedText = LocalizedText(
     en = "Toadie: your sign-in code",

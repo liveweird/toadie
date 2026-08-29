@@ -35,6 +35,9 @@ function mockGetAndPut(mockFetch: FetchMock, putStatus = 204, putBody: unknown =
     if (method === "GET" && url === "/api/v1/users/7") {
       return Promise.resolve(jsonResponse(200, STORED_USER));
     }
+    if (method === "PUT" && url === "/api/v1/users/7/language") {
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
     if (method === "PUT" && url === "/api/v1/users/7") {
       return Promise.resolve(
         putStatus === 204
@@ -83,6 +86,32 @@ describe("EditUser page", () => {
       email: "bob@example.com",
       roles: ["ADMIN"],
     });
+    // The language was untouched — no language PUT rides along.
+    expect(
+      mockFetch.mock.calls.some(([url]) => url === "/api/v1/users/7/language"),
+    ).toBe(false);
+  });
+
+  test("a changed language is saved via its own endpoint after the main update", async () => {
+    mockGetAndPut(mockFetch);
+    const user = userEvent.setup();
+    renderEdit();
+
+    const nameInput = (await screen.findByLabelText(/^name( \*)?$/i)) as HTMLInputElement;
+    await waitFor(() => expect(nameInput.value).toBe("Bob Basic"));
+
+    await user.click(screen.getByLabelText("Language", { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "Polski" }));
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/users"));
+    const putUrls = mockFetch.mock.calls
+      .filter(([, init]) => (init as RequestInit | undefined)?.method === "PUT")
+      .map(([url]) => url);
+    // Its own endpoint, AFTER the main update (a failed save never half-applies).
+    expect(putUrls).toEqual(["/api/v1/users/7", "/api/v1/users/7/language"]);
+    const langCall = mockFetch.mock.calls.find(([url]) => url === "/api/v1/users/7/language");
+    expect(JSON.parse((langCall![1] as RequestInit).body as string)).toEqual({ language: "pl" });
   });
 
   test("a last-administrator 409 shows its dedicated message", async () => {

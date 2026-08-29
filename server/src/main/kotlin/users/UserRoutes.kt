@@ -12,6 +12,7 @@ import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
 import ch.nokillswit.authz.requireSelfOrAdmin
+import ch.nokillswit.dictionaries.DEFAULT_LANGUAGE
 import ch.nokillswit.infra.db.orVanished
 import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalEnum
@@ -88,6 +89,10 @@ class Users {
         @Serializable
         @Resource("features")
         class Features(val parent: Id)
+
+        @Serializable
+        @Resource("language")
+        class Language(val parent: Id)
     }
 }
 
@@ -128,19 +133,29 @@ fun Application.configureUserRoutes() {
                 val email = canonicalEmail(req.email)
                 validateNameAndEmail(name, email)
                 validatePassword(req.password)
+                validateLanguage(req.language)
                 val role = rolesToStored(req.roles)
                 // The password arrives client-generated and leaves this handler only as a
                 // bcrypt hash — no response ever carries plaintext. A duplicate active email
                 // rides the V1 partial index into the central 23505 → 409.
-                val user = User(name = name, email = email, passwordHash = hashPassword(req.password), role = role)
+                val user = User(
+                    name = name,
+                    email = email,
+                    passwordHash = hashPassword(req.password),
+                    role = role,
+                    language = req.language ?: DEFAULT_LANGUAGE,
+                )
                 val id = userService.create(user)
                 audit(
                     "user.created",
-                    "byUserId" to caller.userId.toLong(),
-                    "newUserId" to id.toLong(),
-                    "email" to email,
-                    // As STORED (the request set folded through rolesToStored), not as requested.
-                    "roles" to role.asAdditionalRoles().joinedNames(),
+                    *buildList<Pair<String, Any?>> {
+                        add("byUserId" to caller.userId.toLong())
+                        add("newUserId" to id.toLong())
+                        add("email" to email)
+                        // As STORED (the request set folded through rolesToStored), not as requested.
+                        add("roles" to role.asAdditionalRoles().joinedNames())
+                        if (user.language != DEFAULT_LANGUAGE) add("language" to user.language)
+                    }.toTypedArray(),
                 )
                 call.response.header(HttpHeaders.Location, call.application.href(Users.Id(id = id)))
                 // Re-read for the response: create() seeds the inverted-default MFA-disabled
@@ -266,6 +281,30 @@ fun Application.configureUserRoutes() {
                         // Named like user.updated's nameFrom/nameTo (the audit convention).
                         "featuresFrom" to existing.disabledFeatures.joinedNames(),
                         "featuresTo" to requested.joinedNames(),
+                    )
+                }
+                call.respond(HttpStatusCode.NoContent)
+            }
+            // Per-user language (V18, Lettuce's model verbatim): self or ADMIN — the header
+            // language switcher is the self-service writer (switching while signed in also
+            // saves here); an admin may fix a mis-set language. Idempotent; guard before
+            // receive/validate so 403 wins over 400.
+            put<Users.Id.Language> { route ->
+                val caller = call.caller()
+                requireSelfOrAdmin(caller, route.parent.id)
+                val req = call.receive<UserLanguageUpdateRequest>()
+                validateLanguage(req.language)
+                val existing = userService.read(route.parent.id).orNotFound("User")
+                if (userService.setLanguage(route.parent.id, req.language) == 0) {
+                    throw NotFoundException("User not found")
+                }
+                if (req.language != existing.language) {
+                    audit(
+                        "user.language_changed",
+                        "byUserId" to caller.userId.toLong(),
+                        "targetUserId" to route.parent.id.toLong(),
+                        "from" to existing.language,
+                        "to" to req.language,
                     )
                 }
                 call.respond(HttpStatusCode.NoContent)

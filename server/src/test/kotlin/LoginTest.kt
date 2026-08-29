@@ -28,6 +28,7 @@ class LoginTest {
         val body = response.body<LoginResponse>()
         assertTrue(body.token.isNotBlank())
         assertTrue(body.expiresAt > before, "expiresAt should be in the future, got ${body.expiresAt}")
+        assertEquals("en", body.language, "the stored language rides the login response (seed default)")
     }
 
     @Test

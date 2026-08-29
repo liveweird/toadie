@@ -88,6 +88,8 @@ data class LoginResponse(
     val roles: List<UserRole>,
     /** Per-user feature flags (V12) — the admin-disabled set; empty = full access. */
     val disabledFeatures: List<Feature>,
+    /** The user's stored language (V18) — the SPA applies it to the UI on login/refresh. */
+    val language: String,
 )
 
 // The refresh rejection detail per audited reason — data beside the handler, not control flow
@@ -102,14 +104,10 @@ private val REFRESH_REJECT_MESSAGES = mapOf(
     "predates_password_change" to "Refresh token predates a password change",
 )
 
-private fun JwtConfig.authResponse(
-    userId: UInt,
-    email: String,
-    roles: Set<UserRole>,
-    disabledFeatures: Set<Feature>,
-): LoginResponse {
-    val access = issueAccessToken(userId, email, roles, disabledFeatures)
-    val refresh = issueRefreshToken(userId, email, roles, disabledFeatures)
+private fun JwtConfig.authResponse(userId: UInt, user: User): LoginResponse {
+    val roles = user.additionalRoles
+    val access = issueAccessToken(userId, user.email, roles, user.disabledFeatures)
+    val refresh = issueRefreshToken(userId, user.email, roles, user.disabledFeatures)
     return LoginResponse(
         token = access.token,
         expiresAt = access.expiresAt,
@@ -117,7 +115,10 @@ private fun JwtConfig.authResponse(
         refreshExpiresAt = refresh.expiresAt,
         userId = userId,
         roles = roles.sortedBy { it.name },
-        disabledFeatures = disabledFeatures.sortedBy { it.name },
+        disabledFeatures = user.disabledFeatures.sortedBy { it.name },
+        // Not a JWT claim: the SPA reads it from this response, and emails read it fresh
+        // at send time — nothing needs it inside the token.
+        language = user.language,
     )
 }
 
@@ -145,8 +146,8 @@ fun Application.configureAuthRoutes() {
     // The password-reset work that runs AFTER the uniform 202 (no timing oracle): lookup,
     // generate, send-before-store, and the completion/failure audits. Launched fire-and-forget
     // by the handler. Soft-deleted accounts are unknown here by construction —
-    // findWithIdByEmail filters active rows. Recipient language is "en" until a per-user
-    // language preference exists (see infra/mail/LocalizedText.kt).
+    // findWithIdByEmail filters active rows. The email renders in the recipient's stored
+    // language (V18; see infra/mail/LocalizedText.kt).
     suspend fun processPasswordReset(app: Application, resetMailer: Mailer, email: String) {
         var delivered = false
         try {
@@ -163,8 +164,8 @@ fun Application.configureAuthRoutes() {
             // recipient now holds an emailed password that does NOT work yet.
             resetMailer.send(
                 to = user.email,
-                subject = PASSWORD_RESET_EMAIL_SUBJECT.of("en"),
-                body = passwordResetEmailBody(user.name, newPassword, mailAppUrl, "en"),
+                subject = PASSWORD_RESET_EMAIL_SUBJECT.of(user.language),
+                body = passwordResetEmailBody(user.name, newPassword, mailAppUrl, user.language),
             )
             delivered = true
             userService.updatePassword(userId, hashPassword(newPassword))
@@ -211,8 +212,8 @@ fun Application.configureAuthRoutes() {
             try {
                 mailer.send(
                     to = user.email,
-                    subject = MFA_EMAIL_SUBJECT.of("en"),
-                    body = mfaEmailBody(user.name, challenge.code, mfaTtlMinutes, "en"),
+                    subject = MFA_EMAIL_SUBJECT.of(user.language),
+                    body = mfaEmailBody(user.name, challenge.code, mfaTtlMinutes, user.language),
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -323,7 +324,7 @@ fun Application.configureAuthRoutes() {
                     return@post
                 }
                 audit("login.success", "email" to user.email, "userId" to userId.toLong())
-                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user.email, user.additionalRoles, user.disabledFeatures))
+                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user))
             }
         }
         rateLimit(RateLimitName(MFA_RATE_LIMIT)) {
@@ -351,7 +352,7 @@ fun Application.configureAuthRoutes() {
                         audit("login.mfa_success", "email" to user.email, "userId" to userId.toLong())
                         call.respond(
                             HttpStatusCode.OK,
-                            jwtConfig.authResponse(userId, user.email, user.additionalRoles, user.disabledFeatures),
+                            jwtConfig.authResponse(userId, user),
                         )
                     }
                 }
@@ -395,7 +396,7 @@ fun Application.configureAuthRoutes() {
                 if (issuedAtSec < user.passwordChangedAt / 1000) {
                     reject("predates_password_change", rawUserId)
                 }
-                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user.email, user.additionalRoles, user.disabledFeatures))
+                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user))
             }
         }
         rateLimit(RateLimitName(PASSWORD_RESET_RATE_LIMIT)) {

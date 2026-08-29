@@ -42,6 +42,7 @@ export default function CreateUser() {
         email: values.email.trim(),
         password,
         roles: rolesOf(values),
+        language: values.language,
       });
       await queryClient.invalidateQueries({ queryKey: ["users"] });
       setCreated({ name: values.name.trim(), email: values.email.trim().toLowerCase(), password });
