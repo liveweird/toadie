@@ -1,4 +1,4 @@
-import { expect, login, openFilters, pickNamespace, runNamespace, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, pickNamespace, rowOperation, runNamespace, test, uniqueText } from "./helpers";
 
 async function fillIdentity(page: import("@playwright/test").Page, name: string, ns: string) {
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
@@ -86,7 +86,7 @@ test("a group, an API, and a component owned by the group are created and resolv
     await page.goto("/catalog-files");
     await openFilters(page);
     await page.getByLabel("Name", { exact: true }).fill(name);
-    await page.getByRole("button", { name: `Delete ${name}` }).click();
+    await rowOperation(page, name, "Delete");
     await Promise.all([
       page.waitForResponse((r) => r.request().method() === "DELETE" && r.ok()),
       page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),

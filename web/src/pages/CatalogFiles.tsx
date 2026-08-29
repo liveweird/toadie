@@ -1,10 +1,11 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Badge, Button, Group, Select, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Button, Group, Menu, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  IconChevronDown,
   IconDownload,
   IconFileDescription,
   IconFileExport,
@@ -182,16 +183,6 @@ export default function CatalogFiles() {
                 onToggle={toggleSort}
               />
             </Table.Th>
-            <Table.Th>{t("catalog.field.title")}</Table.Th>
-            <Table.Th>
-              <SortHeader
-                field="kind"
-                label={t("catalog.field.kind")}
-                activeField={sortField}
-                activeDir={sortDir}
-                onToggle={toggleSort}
-              />
-            </Table.Th>
             <Table.Th>
               <SortHeader
                 field="namespace"
@@ -201,6 +192,16 @@ export default function CatalogFiles() {
                 onToggle={toggleSort}
               />
             </Table.Th>
+            <Table.Th>
+              <SortHeader
+                field="kind"
+                label={t("catalog.field.kind")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+              />
+            </Table.Th>
+            <Table.Th>{t("catalog.field.title")}</Table.Th>
             <Table.Th>{t("catalog.field.tags")}</Table.Th>
             <Table.Th>
               <SortHeader
@@ -211,7 +212,7 @@ export default function CatalogFiles() {
                 onToggle={toggleSort}
               />
             </Table.Th>
-            <Table.Th aria-label={t("common.action.edit")} style={{ width: 1 }} />
+            <Table.Th aria-label={t("catalog.operations")} style={{ width: 1 }} />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -226,7 +227,7 @@ export default function CatalogFiles() {
                   </Text>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">{file.title ?? ""}</Text>
+                  <Text size="sm">{file.namespace}</Text>
                 </Table.Td>
                 <Table.Td>
                   <Badge variant="light" size="sm">
@@ -234,7 +235,7 @@ export default function CatalogFiles() {
                   </Badge>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">{file.namespace}</Text>
+                  <Text size="sm">{file.title ?? ""}</Text>
                 </Table.Td>
                 <Table.Td>
                   <Group gap={4} wrap="wrap">
@@ -249,38 +250,41 @@ export default function CatalogFiles() {
                   <Text size="sm">{new Date(file.updatedAt).toLocaleDateString(i18n.language)}</Text>
                 </Table.Td>
                 <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
-                  <Group gap={4} wrap="nowrap">
-                    <Button
-                      component={RouterLink}
-                      to={`/catalog-files/${file.id}/edit`}
-                      variant="subtle"
-                      size="xs"
-                      leftSection={<IconPencil size={14} />}
-                      aria-label={t("common.action.editAria", { name: file.name })}
-                    >
-                      {t("common.action.edit")}
-                    </Button>
-                    <Button
-                      variant="subtle"
-                      size="xs"
-                      leftSection={<IconDownload size={14} />}
-                      onClick={() => void downloads.handleDownload(file)}
-                      loading={downloads.downloadingId === file.id}
-                      aria-label={t("catalog.downloadAria", { name: file.name })}
-                    >
-                      {t("common.action.download")}
-                    </Button>
-                    <Button
-                      color="red"
-                      variant="subtle"
-                      size="xs"
-                      leftSection={<IconTrash size={14} />}
-                      onClick={() => deleteConfirm.requestDelete(file)}
-                      aria-label={t("common.action.deleteAria", { name: file.name })}
-                    >
-                      {t("common.action.delete")}
-                    </Button>
-                  </Group>
+                  <Menu position="bottom-end">
+                    <Menu.Target>
+                      <Button
+                        variant="subtle"
+                        size="xs"
+                        rightSection={<IconChevronDown size={14} />}
+                        loading={downloads.downloadingId === file.id}
+                        aria-label={t("catalog.operationsAria", { name: file.name })}
+                      >
+                        {t("catalog.operations")}
+                      </Button>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item
+                        component={RouterLink}
+                        to={`/catalog-files/${file.id}/edit`}
+                        leftSection={<IconPencil size={14} />}
+                      >
+                        {t("common.action.edit")}
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={<IconDownload size={14} />}
+                        onClick={() => void downloads.handleDownload(file)}
+                      >
+                        {t("common.action.download")}
+                      </Menu.Item>
+                      <Menu.Item
+                        color="red"
+                        leftSection={<IconTrash size={14} />}
+                        onClick={() => deleteConfirm.requestDelete(file)}
+                      >
+                        {t("common.action.delete")}
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
                 </Table.Td>
               </Table.Tr>
             ))

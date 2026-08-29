@@ -97,6 +97,19 @@ export function runNamespace(key: "kinds" | "render" | "roundTrip"): string {
 }
 
 /**
+ * Drive a catalog-files list row's action through its Operations dropdown (the per-row
+ * Edit/Download/Delete buttons are bundled under one menu button since the list reshape).
+ */
+export async function rowOperation(
+  page: Page,
+  name: string,
+  operation: "Edit" | "Download" | "Delete",
+): Promise<void> {
+  await page.getByRole("button", { name: `Operations for ${name}` }).click();
+  await page.getByRole("menuitem", { name: operation }).click();
+}
+
+/**
  * Pick a namespace in a namespace Select — the catalog form's field AND the list/render
  * pages' filter combo (both offer only the dictionary's entries; free text is not
  * accepted). Mantine Select inputs carry the combobox role; searchable filtering narrows

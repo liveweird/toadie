@@ -44,7 +44,7 @@ Every list page composes the same ported Lettuce blocks — copy `pages/CatalogF
 - **Query**: `useQuery({ queryKey: ["<area>", page, pageSize, sortParam, ...filters], queryFn: list<Area>(...), placeholderData: keepPreviousData })`.
 - **Chrome**: `FilterPanel` (collapsed by default, persisted, active-count badge) + `ClearableTextInput` for freetext filters (debounced) and dictionary-backed Selects for closed value spaces (`NamespaceFilterSelect` over the namespaces dictionary — the list and render pages; the list's grouped tags Select over `useTagCategories` — both undebounced: Select changes are discrete); `SortHeader` in the `Table.Th`s; `TableLoadingRow` (`isLoading && !data`) / rows / `EmptyState` (`!isError`) triage in the tbody; a `color="red" variant="light"` Alert with `loadErrorMessage` ABOVE the table on error; `PaginationBar` below.
 - **Delete**: `useDeleteConfirm` + `ConfirmDeleteModal` — the hook owns modal state and the success toast, the page owns `invalidateQueries`.
-- Row action buttons carry interpolated aria-labels (`<area>.editAria` etc.) — unit tests and e2e locate by them; table tests query cells by **text**, not `cell` role names.
+- Row action buttons carry interpolated aria-labels (`<area>.editAria` etc.) — unit tests and e2e locate by them; table tests query cells by **text**, not `cell` role names. The catalog-files list bundles its row actions under one **Operations** `Menu` instead (trigger aria-label `catalog.operationsAria` with the name interpolated; items are plain `menuitem`s — only one row's menu is open at a time; e2e drives it via the `rowOperation` helper).
 
 ## Forms (the CreateCatalogFile/EditCatalogFile template)
 

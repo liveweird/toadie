@@ -17,13 +17,13 @@
 3. They click **Create**.
    - *Expected*: the file is stored (a successful create round-trip) and the app lands on the
      **Catalog files** list; filtered by the unique name, the row shows the name and title.
-4. They open the row's **Edit** form, change the title and set lifecycle `deprecated`, and
-   click **Save**.
+4. They open the row's **Edit** form through its **Operations** menu, change the title and
+   set lifecycle `deprecated`, and click **Save**.
 5. They reopen the edit form directly.
    - *Expected*: the new title and lifecycle persisted.
-6. Back on the filtered list they click the row's **Download**.
+6. Back on the filtered list they pick **Download** from the row's **Operations** menu.
    - *Expected*: the browser receives a file named `catalog-info.yaml`.
-7. They click the row's **Delete** and confirm in the modal.
+7. They pick **Delete** from the row's **Operations** menu and confirm in the modal.
 8. They load the list fresh and filter by the name again.
    - *Expected*: "No catalog files" — the file is gone.
 

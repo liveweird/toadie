@@ -1,4 +1,4 @@
-import { createUserViaUi, expect, login, logoutButton, openFilters, test, uniqueText } from "./helpers";
+import { createUserViaUi, expect, login, logoutButton, openFilters, rowOperation, test, uniqueText } from "./helpers";
 
 // The tag-category journey on a throwaway category (unique name and tags per attempt, so
 // retries never collide): create → validation → edit → the read-only view → applying a tag
@@ -91,7 +91,7 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   // Cleanup: the file, the category, and the throwaway user.
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(name);
-  await page.getByRole("button", { name: `Delete ${name}` }).click();
+  await rowOperation(page, name, "Delete");
   await Promise.all([
     page.waitForResponse(
       (r) =>

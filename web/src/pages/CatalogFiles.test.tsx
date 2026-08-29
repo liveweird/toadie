@@ -93,6 +93,16 @@ async function pickFilterOption(label: string, option: string) {
   fireEvent.click(await screen.findByRole("option", { name: option }));
 }
 
+// Row actions live in the per-row Operations dropdown — open it, then click the item.
+async function rowOperation(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+  operation: string,
+) {
+  await user.click(await screen.findByRole("button", { name: `Operations for ${name}` }));
+  await user.click(await screen.findByRole("menuitem", { name: operation }));
+}
+
 function renderPage() {
   return renderWithProviders(<CatalogFiles />, { route: "/catalog-files" });
 }
@@ -267,6 +277,7 @@ describe("CatalogFiles page", () => {
 
   test("links to the create and edit pages", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    const user = userEvent.setup();
     renderPage();
 
     await screen.findByText("payments-svc");
@@ -274,10 +285,20 @@ describe("CatalogFiles page", () => {
       "href",
       "/catalog-files/new",
     );
-    expect(screen.getByRole("link", { name: "Edit payments-svc" })).toHaveAttribute(
+    await user.click(screen.getByRole("button", { name: "Operations for payments-svc" }));
+    expect(await screen.findByRole("menuitem", { name: "Edit" })).toHaveAttribute(
       "href",
       "/catalog-files/1/edit",
     );
+  });
+
+  test("columns are ordered Name, Namespace, Kind, Title, Tags, Updated", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    const headers = screen.getAllByRole("columnheader").map((th) => th.textContent);
+    expect(headers.slice(0, 6)).toEqual(["Name", "Namespace", "Kind", "Title", "Tags", "Updated"]);
   });
 
   test("confirming a delete triggers DELETE, refetches, and toasts", async () => {
@@ -297,7 +318,7 @@ describe("CatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Delete web-portal" }));
+    await rowOperation(user, "web-portal", "Delete");
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
 
@@ -319,7 +340,7 @@ describe("CatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Delete web-portal" }));
+    await rowOperation(user, "web-portal", "Delete");
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /cancel/i }));
 
@@ -339,7 +360,7 @@ describe("CatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Download payments-svc" }));
+    await rowOperation(user, "payments-svc", "Download");
     expect(await screen.findByText("Failed to download catalog file")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /close/i }));
@@ -375,7 +396,7 @@ describe("CatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Download payments-svc" }));
+    await rowOperation(user, "payments-svc", "Download");
 
     await waitFor(() => expect(click).toHaveBeenCalledOnce());
     expect(createObjectURL).toHaveBeenCalledOnce();

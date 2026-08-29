@@ -1,4 +1,4 @@
-import { expect, login, openFilters, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, rowOperation, test, uniqueText } from "./helpers";
 
 // Catalog-file CRUD through the real UI, on a throwaway unique-named component so parallel
 // files and re-runs never collide (the list asserts are always name-filter-anchored).
@@ -38,8 +38,8 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await expect(page.getByText(name, { exact: true })).toBeVisible();
   await expect(page.getByText("E2E Component", { exact: true })).toBeVisible();
 
-  // Edit: retitle and deprecate. The filter is debounced; the Edit button auto-waits.
-  await page.getByRole("link", { name: `Edit ${name}` }).click();
+  // Edit: retitle and deprecate — via the row's Operations menu (auto-waiting locators).
+  await rowOperation(page, name, "Edit");
   await expect(page).toHaveURL(new RegExp(`/catalog-files/${fileId}/edit`));
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("E2E Component Renamed");
   await page.getByRole("combobox", { name: "Lifecycle" }).fill("deprecated");
@@ -63,12 +63,12 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await page.getByLabel("Name", { exact: true }).fill(name);
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: `Download ${name}` }).click(),
+    rowOperation(page, name, "Download"),
   ]);
   expect(download.suggestedFilename()).toBe("catalog-info.yaml");
 
   // Delete from the filtered list, confirming in the modal.
-  await page.getByRole("button", { name: `Delete ${name}` }).click();
+  await rowOperation(page, name, "Delete");
   await Promise.all([
     page.waitForResponse(
       (r) =>
