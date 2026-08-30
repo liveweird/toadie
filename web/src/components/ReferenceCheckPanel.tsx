@@ -30,20 +30,20 @@ export default function ReferenceCheckPanel({ document }: { document: CatalogFil
   return (
     <Paper withBorder shadow="sm" p="lg" radius="md">
       <Stack gap="sm">
-        <Title order={3}>{t("crossCheck.panel.title")}</Title>
+        <Title order={3}>{t("errors.panel.title")}</Title>
         {findings.length > 0 ? (
-          <Alert color="red" variant="light" title={t("crossCheck.panel.errorsTitle")}>
+          <Alert color="red" variant="light" title={t("errors.panel.errorsTitle")}>
             <Stack gap={4}>
               {findings.map((f, index) => (
                 <Text size="sm" key={`${f.field}-${f.reference}-${index}`}>
-                  <Code>{f.reference}</Code> ({f.field}) — {t(`crossCheck.message.${f.status}`)}
+                  <Code>{f.reference}</Code> ({f.field}) — {t(`errors.message.${f.status}`)}
                 </Text>
               ))}
             </Stack>
           </Alert>
         ) : data ? (
           <Text size="sm" c="dimmed">
-            {t("crossCheck.panel.allClear")}
+            {t("errors.panel.allClear")}
           </Text>
         ) : null}
       </Stack>

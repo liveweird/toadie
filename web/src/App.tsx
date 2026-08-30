@@ -63,7 +63,7 @@ const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
 const ImportCatalogFiles = lazy(() => import("./pages/ImportCatalogFiles"));
 const EditCatalogFile = lazy(() => import("./pages/EditCatalogFile"));
-const CrossCheck = lazy(() => import("./pages/CrossCheck"));
+const ErrorsPage = lazy(() => import("./pages/Errors"));
 const Namespaces = lazy(() => import("./pages/Namespaces"));
 const Labels = lazy(() => import("./pages/Labels"));
 const Tags = lazy(() => import("./pages/Tags"));
@@ -110,11 +110,11 @@ type NavEntry = NavLeaf | NavGroup;
 const isNavGroup = (entry: NavEntry): entry is NavGroup => "children" in entry;
 
 // `label` holds an i18n key, resolved with t() at render time. Feature entries (catalog
-// files, cross-checks, rendering) append here as they are built.
+// files, the errors report, rendering) append here as they are built.
 const NAV_ITEMS: ReadonlyArray<NavEntry> = [
   { to: "/", label: "appShell.nav.home", icon: IconSitemap },
   { to: catalogFilesPath, label: "appShell.nav.catalogFiles", icon: IconFileDescription },
-  { to: "/cross-check", label: "appShell.nav.crossCheck", icon: IconListCheck },
+  { to: "/errors", label: "appShell.nav.errors", icon: IconListCheck },
   { to: "/graph", label: "appShell.nav.graph", icon: IconTopologyStar3 },
   // Visible to everyone: non-admins get the read-only lists, ADMINs the editors (the pages branch).
   {
@@ -331,7 +331,7 @@ export default function App() {
             <Route path="files/new" element={<CreateCatalogFile />} />
             <Route path="files/import" element={<ImportCatalogFiles />} />
             <Route path="files/:id/edit" element={<EditCatalogFile />} />
-            <Route path="cross-check" element={<CrossCheck />} />
+            <Route path="errors" element={<ErrorsPage />} />
             <Route path="graph" element={<RenderGraph />} />
             <Route path="namespaces" element={<Namespaces />} />
             <Route path="labels" element={<Labels />} />

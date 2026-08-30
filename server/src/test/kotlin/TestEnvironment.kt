@@ -259,7 +259,7 @@ object TestCatalogFiles {
     /**
      * Direct content overwrite bypassing the write path's validation (the TestUsers.softDelete
      * bypass precedent) — for planting legacy rows the API can no longer produce, e.g. a
-     * stored self-reference for the cross-check report tests.
+     * stored self-reference for the Errors report tests.
      */
     suspend fun overwriteContent(id: UInt, file: ch.nokillswit.catalog.CatalogFile) {
         val table = ch.nokillswit.catalog.CatalogFileService.CatalogFiles

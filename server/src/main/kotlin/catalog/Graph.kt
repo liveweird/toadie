@@ -4,8 +4,8 @@ import kotlinx.serialization.Serializable
 
 /**
  * The rendered-together view: the stored entities and the reference edges between them as one
- * graph. Built on CrossCheck.kt's parsing/field machinery so resolution can never disagree
- * with the cross-check (same default kinds, contextual namespace, case-insensitive identity).
+ * graph. Built on Errors.kt's parsing/field machinery so resolution can never disagree
+ * with the Errors report (same default kinds, contextual namespace, case-insensitive identity).
  */
 @Serializable
 enum class GraphNodeStatus {
@@ -48,7 +48,7 @@ data class CatalogGraph(
 
 private fun nodeId(identity: EntityIdentity) = "${identity.kind}:${identity.namespace}/${identity.name}"
 
-private fun storedNode(source: CrossCheckSource): GraphNode {
+private fun storedNode(source: CatalogSource): GraphNode {
     val identity = identityOf(source.file)
     return GraphNode(
         id = nodeId(identity),
@@ -67,9 +67,9 @@ private fun storedNode(source: CrossCheckSource): GraphNode {
  * file outside the rendered set still appears as a STORED node when something points at it —
  * an edge needs both ends. Every parsable, kind-carrying reference becomes an edge to a
  * STORED / MISSING / EXTERNAL node; kind-less dependsOn/dependencyOf entries are skipped
- * (they're cross-check errors, not drawable edges).
+ * (they're report findings, not drawable edges).
  */
-fun buildGraph(sources: List<CrossCheckSource>, allSources: List<CrossCheckSource> = sources): CatalogGraph {
+fun buildGraph(sources: List<CatalogSource>, allSources: List<CatalogSource> = sources): CatalogGraph {
     val storedByIdentity = allSources.associateBy { identityOf(it.file) }
     val nodes = LinkedHashMap<String, GraphNode>()
     val edges = LinkedHashSet<GraphEdge>()
@@ -83,7 +83,7 @@ fun buildGraph(sources: List<CrossCheckSource>, allSources: List<CrossCheckSourc
         for ((field, refs) in source.file.spec.refFields()) {
             val defaultKind = REF_FIELD_DEFAULT_KINDS.getValue(field)
             for (raw in refs.filter { it.isNotBlank() }) {
-                // Kind-less refs resolve to null — cross-check errors, not drawable edges.
+                // Kind-less refs resolve to null — report findings, not drawable edges.
                 val target = resolveTarget(raw, defaultKind, sourceIdentity.namespace) ?: continue
                 val targetId = nodeId(target)
                 nodes.getOrPut(targetId) { virtualOrForeignStoredNode(target, storedByIdentity) }
@@ -99,7 +99,7 @@ fun buildGraph(sources: List<CrossCheckSource>, allSources: List<CrossCheckSourc
 // component, or an external-kind entity.
 private fun virtualOrForeignStoredNode(
     target: EntityIdentity,
-    storedByIdentity: Map<EntityIdentity, CrossCheckSource>,
+    storedByIdentity: Map<EntityIdentity, CatalogSource>,
 ): GraphNode {
     if (target.kind in STORED_KINDS) {
         storedByIdentity[target]?.let { return storedNode(it) }

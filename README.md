@@ -14,10 +14,11 @@ generated-password reveal, self-service password change):
   (Component, API, System, Domain, Resource, Group, User) — validated per kind against the
   Backstage descriptor format, stored server-side with full CRUD and a paginated list, live
   YAML preview, one-click download, and reference pickers suggesting the stored entities,
-- **cross-checking**: a workspace report resolving every entity reference between stored
-  files — owners, systems, APIs, domains, groups and users included (missing targets and
-  kind-less `dependsOn` entries as errors; only Location/Template/custom kinds stay
-  not-checkable) — plus a live reference panel in the editor; findings never block saving,
+- **cross-checking**: the **Errors** report — every error class in the stored files
+  (unresolved/wrong-kind/self references — owners, systems, APIs, domains, groups and users
+  included — registry violations, structurally drifted legacy rows, removed namespaces),
+  filterable like the Files list plus error-type pills — plus a live reference panel in the
+  editor; findings never block saving,
   and
 - **rendering together**: the `/graph` relationship graph — every stored file and the
   reference edges between them (missing and external targets drawn as virtual nodes), with a

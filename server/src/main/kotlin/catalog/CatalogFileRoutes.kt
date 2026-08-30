@@ -35,10 +35,10 @@ class CatalogFiles {
     @Resource("{id}")
     class Id(val parent: CatalogFiles = CatalogFiles(), val id: UInt)
 
-    // Literal segments win over {id} in Ktor's route resolution (pinned by CrossCheckTest).
+    // Literal segments win over {id} in Ktor's route resolution (pinned by ErrorsTest).
     @Serializable
-    @Resource("cross-check")
-    class CrossCheck(val parent: CatalogFiles = CatalogFiles())
+    @Resource("errors")
+    class Errors(val parent: CatalogFiles = CatalogFiles())
 
     @Serializable
     @Resource("check")
@@ -77,9 +77,9 @@ private fun createdAuditFields(byUserId: UInt, catalogFileId: UInt, waived: Int)
     }.toTypedArray()
 
 /**
- * The ONE filter parser shared by the list GET and the graph GET (the two endpoints declare
- * the same filter set): kind canonicalized against the whitelist, owner parsed to the entity
- * identity it targets, labelValue the repeated any-of param that requires label.
+ * The ONE filter parser shared by the list, graph, and errors GETs (the three endpoints
+ * declare the same filter set): kind canonicalized against the whitelist, owner parsed to the
+ * entity identity it targets, labelValue the repeated any-of param that requires label.
  */
 private fun ApplicationCall.catalogFileFilter(): CatalogFileListFilter {
     val params = request.queryParameters
@@ -141,9 +141,11 @@ fun Application.configureCatalogFileRoutes() {
                 call.response.header(HttpHeaders.Location, call.application.href(CatalogFiles.Id(id = saved.id)))
                 call.respond(HttpStatusCode.Created, created.toResponse())
             }
-            get<CatalogFiles.CrossCheck> {
+            get<CatalogFiles.Errors> {
                 call.caller()
-                call.respond(HttpStatusCode.OK, catalogFileService.crossCheck())
+                // The shared filter set narrows which files' errors are reported; references
+                // still resolve against the whole workspace (the graph asymmetry).
+                call.respond(HttpStatusCode.OK, catalogFileService.errors(call.catalogFileFilter()))
             }
             post<CatalogFiles.Check> {
                 call.caller()

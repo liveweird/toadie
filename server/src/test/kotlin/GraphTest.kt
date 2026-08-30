@@ -88,7 +88,7 @@ class GraphTest {
             it.copy(spec = it.spec.copy(dependsOn = listOf("bare-target")))
         }
         val graph = ch.nokillswit.catalog.buildGraph(
-            sources = listOf(ch.nokillswit.catalog.CrossCheckSource(id = 1u, file = file)),
+            sources = listOf(ch.nokillswit.catalog.CatalogSource(id = 1u, file = file)),
         )
         assertTrue(graph.nodes.none { it.name == "bare-target" })
         assertTrue(graph.edges.none { it.field == "spec.dependsOn" })

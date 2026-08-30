@@ -1,12 +1,12 @@
 import { expect, login, openFilters, pickLifecycle, pickType, rowOperation, test, uniqueText } from "./helpers";
 
-// The cross-check journey on two throwaway unique-named files. Saves are strict by DEFAULT
+// The Errors-report journey on two throwaway unique-named files. Saves are strict by DEFAULT
 // but waivable: a soft rejection opens the Save-anyway modal, and a waived save lands the
-// finding on the cross-check report. The journey covers the modal's cancel and confirm
+// finding on the Errors report. The journey covers the modal's cancel and confirm
 // paths, the report finding a waived save creates, its repair in the editor, and the
 // deletion-created finding. Every assert is anchored on the unique names, so other files'
 // findings can never flake it.
-test("an unresolved reference asks for confirmation; saving anyway lands it on the cross-check report", async ({
+test("an unresolved reference asks for confirmation; saving anyway lands it on the Errors report", async ({
   page,
 }) => {
   await login(page);
@@ -71,7 +71,7 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
   await expect(page).toHaveURL(/\/files$/);
 
   // The workspace report shows the waived MISSING finding, linking back to the source file.
-  await page.goto("/cross-check");
+  await page.goto("/errors");
   await expect(page.getByText(`component:${ghost}`, { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: `Edit ${source}` }).first()).toBeVisible();
 
@@ -100,7 +100,14 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
   ]);
 
   // The workspace report shows the deletion-created MISSING finding.
-  await page.goto("/cross-check");
+  await page.goto("/errors");
+  await expect(page.getByText(`component:${target}`, { exact: true })).toBeVisible();
+
+  // The error-type pills filter client-side: References off hides the finding, back on
+  // restores it (the Chip's checkbox input is visually hidden — click its label).
+  await page.getByText("References", { exact: true }).click();
+  await expect(page.getByText(`component:${target}`, { exact: true })).toHaveCount(0);
+  await page.getByText("References", { exact: true }).click();
   await expect(page.getByText(`component:${target}`, { exact: true })).toBeVisible();
 
   // Recreate the target — the finding disappears from a fresh report.
@@ -116,7 +123,7 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
     page.getByRole("button", { name: "Create" }).click(),
   ]);
 
-  await page.goto("/cross-check");
+  await page.goto("/errors");
   // The summary renders once the report has loaded; the unique ref must now be absent.
   await expect(page.getByText(/files checked/)).toBeVisible();
   await expect(page.getByText(`component:${target}`, { exact: true })).toHaveCount(0);

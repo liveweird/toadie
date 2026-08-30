@@ -9,7 +9,7 @@ import io.ktor.client.call.body
 import java.util.UUID
 
 // The shared catalog test fixtures — grammar-valid, collision-free by unique suffix, consumed
-// by every catalog-adjacent suite (files/cross-check/graph/round-trip/audit).
+// by every catalog-adjacent suite (files/errors/graph/round-trip/audit).
 
 /** The catalog-files API base path — every suite builds its URLs from this one constant. */
 const val CATALOG_FILES_PATH = "/api/v1/files"

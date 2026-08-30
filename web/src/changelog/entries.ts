@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.8.0",
+    date: "2026-08-30",
+    en: `The Cross-check page is now **Errors** — and it catches everything.
+
+- The page (now at /errors) reports every error class in your files: unresolved/wrong/self references, registry violations (labels, annotations, tags, types, lifecycles), and two new classes — files whose stored structure no longer passes validation, and files whose namespace was removed from the dictionary.
+- The same filters as the Files and Hierarchy views (name, namespace, kind pills, type, lifecycle, owner, tag, label) narrow the report.
+- New **Error types** pills let you show or hide whole error classes at a glance.`,
+    pl: `Strona Weryfikacji to teraz **Błędy** — i wychwytuje wszystko.
+
+- Strona (teraz pod /errors) raportuje każdą klasę błędów w plikach: nierozwiązane/błędne/własne odwołania, naruszenia rejestrów (etykiety, adnotacje, tagi, typy, cykle życia) oraz dwie nowe klasy — pliki, których zapisana struktura nie przechodzi już walidacji, i pliki, których przestrzeń nazw została usunięta ze słownika.
+- Te same filtry co w widokach Plików i Hierarchii (nazwa, przestrzeń nazw, pigułki rodzajów, typ, cykl życia, właściciel/właścicielka, tag, etykieta) zawężają raport.
+- Nowe pigułki **Rodzaje błędów** pozwalają jednym kliknięciem pokazać lub ukryć całe klasy błędów.`,
+  },
+  {
     version: "1.7.1",
     date: "2026-08-30",
     en: `Manual graph dragging is now fluent.

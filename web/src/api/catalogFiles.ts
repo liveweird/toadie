@@ -12,8 +12,8 @@ export type CatalogFileResponse =
   paths["/api/v1/files/{id}"]["get"]["responses"]["200"]["content"]["application/json"];
 
 /**
- * The shared catalog-file filter set — the list and graph endpoints declare the same
- * whitelisted params (labelValue repeats as the server's documented IN idiom).
+ * The shared catalog-file filter set — the list, graph, and errors endpoints declare the
+ * same whitelisted params (labelValue repeats as the server's documented IN idiom).
  */
 export type CatalogFileFilterValues = {
   name?: string;
@@ -106,15 +106,19 @@ export async function deleteCatalogFile(id: number): Promise<void> {
   await voidRequest(`/api/v1/files/${id}`, { method: "DELETE" });
 }
 
-export type CrossCheckReport =
-  paths["/api/v1/files/cross-check"]["get"]["responses"]["200"]["content"]["application/json"];
+export type ErrorsReport =
+  paths["/api/v1/files/errors"]["get"]["responses"]["200"]["content"]["application/json"];
 export type DocumentCheckReport =
   paths["/api/v1/files/check"]["post"]["responses"]["200"]["content"]["application/json"];
 export type DocumentCheckFinding = components["schemas"]["DocumentCheckFinding"];
 
-/** The workspace report: every stored file's references resolved against the store. */
-export async function getCrossCheckReport(): Promise<CrossCheckReport> {
-  return jsonRequest<CrossCheckReport>("/api/v1/files/cross-check");
+/**
+ * The workspace Errors report; the filters (the list's shared set) narrow which files'
+ * errors are reported — references still resolve against the whole workspace.
+ */
+export async function getCatalogErrors(filters: CatalogFileFilterValues = {}): Promise<ErrorsReport> {
+  const params = buildQuery(filterParams(filters));
+  return jsonRequest<ErrorsReport>(`/api/v1/files/errors${params ? `?${params}` : ""}`);
 }
 
 export type CatalogGraph =

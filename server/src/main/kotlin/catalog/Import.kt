@@ -29,7 +29,7 @@ enum class ImportResultStatus {
     /**
      * Stored DESPITE soft findings (unresolved references or registry violations) — import
      * always waives them so a flawed batch can land and be fixed incrementally. `fileId`
-     * points at the new file; `message` lists the findings; the cross-check report tracks them.
+     * points at the new file; `message` lists the findings; the Errors report tracks them.
      */
     CREATED_WITH_FINDINGS,
 

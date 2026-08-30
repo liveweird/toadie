@@ -40,7 +40,7 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
   `server/src/main/kotlin/`: `auth`, `users`, `catalog`, `dictionaries`, `labels`, and `tags`.
   `catalog` is the feature reference implementation: seven Backstage kinds (Component, API,
   System, Domain, Resource, Group, User), full CRUD + paginated list, strict reference checking,
-  workspace/live cross-checks, graph, import/export, and SSRF-guarded URL fetch. Cross-cutting
+  the workspace Errors report and live check, graph, import/export, and SSRF-guarded URL fetch. Cross-cutting
   wiring and policy live in `plugins/`, `audit/`, and `authz/`; database, mail, paging, and shared
   validation infrastructure live in `infra/`.
 - `server/src/main/resources/application.yaml` declaratively registers application modules.
@@ -118,7 +118,7 @@ Catalog content is a shared authenticated workspace; ADMIN has no extra content 
 Catalog writes are strict: namespaces must exist in the `NAMESPACE` dictionary (blank resolves to
 its flagged default), labels and tags must be allowed for the entity kind by their admin-curated
 registries, and every reference must resolve to an allowed stored kind without targeting the
-entity itself. Cross-check findings normally arise after a referenced entity is deleted and block
+entity itself. Errors-report findings normally arise after a referenced entity is deleted and block
 the referencing file's next save until repaired. Keep the server validators, OpenAPI schemas,
 kind-aware frontend form rules, and YAML parser/generator synchronized.
 

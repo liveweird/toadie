@@ -1,13 +1,25 @@
 {
-  "title": "Weryfikacja odwołań",
-  "loadFailed": "Nie udało się wczytać raportu weryfikacji",
+  "title": "Błędy",
+  "loadFailed": "Nie udało się wczytać raportu błędów",
   "summary": {
     "files": "Sprawdzone pliki: {{count}}",
     "references": "Sprawdzone odwołania: {{count}}",
-    "errors": "Zastrzeżenia: {{count}}"
+    "errors": "Błędy: {{count}}"
+  },
+  "classesLabel": "Rodzaje błędów",
+  "class": {
+    "references": "Odwołania",
+    "structure": "Struktura",
+    "namespace": "Przestrzeń nazw",
+    "labels": "Etykiety",
+    "annotations": "Adnotacje",
+    "tags": "Tagi",
+    "types": "Typy",
+    "lifecycles": "Cykle życia"
   },
   "field": {
     "file": "Plik",
+    "kind": "Rodzaj",
     "namespace": "Przestrzeń nazw",
     "refField": "Pole",
     "reference": "Wartość",
@@ -22,7 +34,9 @@
     "ANNOTATION_NOT_ALLOWED": "Niedozwolona adnotacja",
     "TAG_NOT_ALLOWED": "Niedozwolony tag",
     "TYPE_NOT_ALLOWED": "Niedozwolony typ",
-    "LIFECYCLE_NOT_ALLOWED": "Niedozwolony cykl życia"
+    "LIFECYCLE_NOT_ALLOWED": "Niedozwolony cykl życia",
+    "STRUCTURE_INVALID": "Nieprawidłowa struktura",
+    "NAMESPACE_NOT_ALLOWED": "Niedozwolona przestrzeń nazw"
   },
   "message": {
     "MISSING": "Żadna zapisana encja nie odpowiada temu odwołaniu.",
@@ -33,9 +47,11 @@
     "ANNOTATION_NOT_ALLOWED": "Rejestr kluczy adnotacji nie dopuszcza tu tego klucza — dostosuj go na stronie Adnotacje.",
     "TAG_NOT_ALLOWED": "Kategorie tagów nie dopuszczają tu tego tagu — dostosuj je na stronie Tagi.",
     "TYPE_NOT_ALLOWED": "Słownik typów tego rodzaju nie dopuszcza tego typu — dostosuj go na stronie Typy.",
-    "LIFECYCLE_NOT_ALLOWED": "Słownik cykli życia nie dopuszcza tej wartości — dostosuj go na stronie Cykle życia."
+    "LIFECYCLE_NOT_ALLOWED": "Słownik cykli życia nie dopuszcza tej wartości — dostosuj go na stronie Cykle życia.",
+    "STRUCTURE_INVALID": "Zapisany dokument nie przechodzi już walidacji strukturalnej — otwórz plik i popraw go.",
+    "NAMESPACE_NOT_ALLOWED": "Ta przestrzeń nazw nie jest już zdefiniowana — dodaj ją ponownie na stronie Przestrzenie nazw lub przenieś plik."
   },
-  "noFindings": "Brak zastrzeżeń — każdy plik przechodzi kontrole.",
+  "noFindings": "Brak błędów — każdy plik przechodzi kontrole.",
   "panel": {
     "title": "Zastrzeżenia",
     "errorsTitle": "Zastrzeżenia — zapis poprosi o potwierdzenie",

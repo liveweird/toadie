@@ -180,7 +180,7 @@ export function isValidKey(key: string): boolean {
   return isValidName(name);
 }
 
-/** Format check of `[kind:][namespace/]name` — resolution is the cross-check's job. */
+/** Format check of `[kind:][namespace/]name` — resolution is the Errors report's job. */
 export function isValidEntityRef(ref: string): boolean {
   const colon = ref.indexOf(":");
   if (colon !== ref.lastIndexOf(":")) return false;

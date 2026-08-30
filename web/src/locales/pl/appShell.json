@@ -5,7 +5,7 @@
   "nav": {
     "home": "Hierarchia",
     "catalogFiles": "Pliki",
-    "crossCheck": "Weryfikacja referencji",
+    "errors": "Błędy",
     "graph": "Graf",
     "dictionaries": "Słowniki",
     "namespaces": "Przestrzenie nazw",

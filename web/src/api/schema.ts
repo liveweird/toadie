@@ -379,7 +379,7 @@ export interface paths {
          *     entity itself — all strict by default, no grandfathering,
          *     else `400` (all soft-check violations aggregate into one detail).
          *     `allowInvalid=true` WAIVES the soft checks (reference resolution and the five
-         *     registry rules) and stores the document anyway — the cross-check report tracks the
+         *     registry rules) and stores the document anyway — the Errors report tracks the
          *     waived findings; the structural rules and namespace resolution stay hard `400`s.
          *     Entity identity (kind + namespace + name, case-insensitive) must be unique among
          *     active files; a clash is a `409`.
@@ -391,7 +391,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/files/cross-check": {
+    "/api/v1/files/errors": {
         parameters: {
             query?: never;
             header?: never;
@@ -399,8 +399,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Cross-check every stored file against the workspace and the registries
-         * @description The workspace health report. Resolves every entity reference the active files make
+         * Every error in the stored files — references, registries, structure, namespaces
+         * @description The workspace Errors report. Resolves every entity reference the active files make
          *     (`owner`, `system`, `subcomponentOf`, `providesApis`, `consumesApis`, `dependsOn`,
          *     `dependencyOf`) against the workspace:
          *
@@ -415,7 +415,7 @@ export interface paths {
          *       (e.g. a Domain's `spec.subdomainOf` naming that very Domain); a Toadie rule beyond
          *       upstream Backstage.
          *
-         *     …and additionally checks every file's labels, annotation keys, tags, `spec.type`,
+         *     …checks every file's labels, annotation keys, tags, `spec.type`,
          *     and `spec.lifecycle` against the ADMIN-curated registries (`LABEL_NOT_ALLOWED`,
          *     `ANNOTATION_NOT_ALLOWED`, `TAG_NOT_ALLOWED`, `TYPE_NOT_ALLOWED`,
          *     `LIFECYCLE_NOT_ALLOWED`). Saves enforce all of these by default but may waive them
@@ -424,8 +424,25 @@ export interface paths {
          *     removed after the fact, import batches whose sibling documents failed, and legacy
          *     self-references stored before the rule existed. Every finding blocks the file's next
          *     STRICT save (a waived save still goes through).
+         *
+         *     …and additionally runs the report-only checks over the STORED content — rules that
+         *     are HARD (never waivable) on every write, so a finding can only mean the row
+         *     predates a rule or dictionary change:
+         *
+         *     - `STRUCTURE_INVALID` — the structural descriptor validation no longer accepts the
+         *       stored document (a legacy row); the finding's `message` carries the validator's
+         *       own text. Validation is fail-fast, so a file reports its FIRST structural problem
+         *       only.
+         *     - `NAMESPACE_NOT_ALLOWED` — the stored `metadata.namespace` is no longer an active
+         *       `namespaces` dictionary entry (removed after the save).
+         *
+         *     The optional filters (the SAME whitelisted set as the list and graph endpoints,
+         *     same semantics) narrow which files' errors are REPORTED — `checkedFiles`/
+         *     `checkedReferences` count the reported set; references still resolve against the
+         *     whole workspace, so filtering never manufactures `MISSING` findings. Unpaged by
+         *     design — a report-style computation over the workspace.
          */
-        get: operations["crossCheckCatalogFiles"];
+        get: operations["getCatalogFileErrors"];
         put?: never;
         post?: never;
         delete?: never;
@@ -445,7 +462,7 @@ export interface paths {
         put?: never;
         /**
          * Check one document against the stored files and the registries
-         * @description The editor's live companion to the workspace cross-check: takes one (possibly unsaved,
+         * @description The editor's live companion to the workspace Errors report: takes one (possibly unsaved,
          *     possibly not-yet-valid) document and returns its soft findings — reference resolution
          *     against the stored identities plus the registry checks (labels, annotation keys, tags,
          *     type, lifecycle) — with the same statuses as the workspace report. Every finding here
@@ -472,17 +489,17 @@ export interface paths {
         };
         /**
          * The stored files rendered together as a relationship graph
-         * @description Every active file and the reference edges between them, resolved with the cross-check's
+         * @description Every active file and the reference edges between them, resolved with the Errors report's
          *     semantics (per-field default kinds, namespaceless references resolve in the referencing
          *     file's own namespace, case-insensitive identity). Node statuses:
          *
          *     - `STORED` — an active catalog file (carries `fileId`).
          *     - `MISSING` — a referenced entity of a stored kind that no active file provides (the
-         *       cross-check's MISSING, drawn).
+         *       Errors report's MISSING, drawn).
          *     - `EXTERNAL` — a referenced entity of a kind Toadie doesn't store (Location, Template,
          *       custom kinds).
          *
-         *     Kind-less `dependsOn`/`dependencyOf` entries (cross-check errors) are not drawable and
+         *     Kind-less `dependsOn`/`dependencyOf` entries (report findings) are not drawable and
          *     are omitted. The optional filters (the SAME whitelisted set as the list endpoint, same
          *     semantics) narrow which files' references are EXPANDED; targets still resolve against
          *     the whole workspace, so a stored file outside the filter appears as a STORED node when
@@ -538,7 +555,7 @@ export interface paths {
          *     own result row: `CREATED` (stored clean, `fileId` set), `CREATED_WITH_FINDINGS`
          *     (stored DESPITE soft findings — import always waives reference resolution and the
          *     registry rules so a flawed batch can land and be fixed incrementally; `fileId` set,
-         *     `message` lists the findings, the cross-check report tracks them), `INVALID` (failed
+         *     `message` lists the findings, the Errors report tracks them), `INVALID` (failed
          *     the structural descriptor-format validation or namespace resolution, `message` names
          *     the rule; sibling documents in the SAME batch count as resolution targets, order
          *     independent), `CONFLICT` (an active file
@@ -1126,7 +1143,7 @@ export interface components {
             /** @description The sanitized entity name. */
             name: string;
             /**
-             * @description CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite soft findings, which import always waives (`fileId` set, `message` lists the findings; the cross-check report tracks them). INVALID — failed the structural descriptor-format validation or namespace resolution (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document.
+             * @description CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite soft findings, which import always waives (`fileId` set, `message` lists the findings; the Errors report tracks them). INVALID — failed the structural descriptor-format validation or namespace resolution (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document.
              * @enum {string}
              */
             status: "CREATED" | "CREATED_WITH_FINDINGS" | "INVALID" | "CONFLICT" | "ERROR";
@@ -1171,7 +1188,7 @@ export interface components {
             type?: string | null;
             /** @description Lifecycle state, e.g. `experimental`, `production`, `deprecated`. On every write a non-blank value must be an active entry of the `lifecycles` dictionary (`GET /api/v1/dictionaries/lifecycles`) — unregistered lifecycles are rejected with `400`. */
             lifecycle?: string | null;
-            /** @description Entity reference `[kind:][namespace/]name` of the owning group/user (format-checked here; resolution is the cross-check's job). */
+            /** @description Entity reference `[kind:][namespace/]name` of the owning group/user (format-checked here; resolution is the Errors report's job). */
             owner?: string | null;
             /** @description Entity reference of the parent System. */
             system?: string | null;
@@ -1251,31 +1268,36 @@ export interface components {
             updatedAt: number;
         };
         /**
-         * @description Every status blocks the document's next STRICT save (a save may waive them with `allowInvalid=true`). References: MISSING (no stored entity matches), KIND_REQUIRED (a kind-less dependsOn/dependencyOf entry), WRONG_KIND (the reference names a kind the field does not allow), SELF_REFERENCE (the reference resolves to the referencing file itself). Registries: LABEL_NOT_ALLOWED / ANNOTATION_NOT_ALLOWED / TAG_NOT_ALLOWED / TYPE_NOT_ALLOWED / LIFECYCLE_NOT_ALLOWED (the value is not allowed by its ADMIN-curated registry for the file's kind; the finding's `reference` carries the offending value).
+         * @description References: MISSING (no stored entity matches), KIND_REQUIRED (a kind-less dependsOn/dependencyOf entry), WRONG_KIND (the reference names a kind the field does not allow), SELF_REFERENCE (the reference resolves to the referencing file itself). Registries: LABEL_NOT_ALLOWED / ANNOTATION_NOT_ALLOWED / TAG_NOT_ALLOWED / TYPE_NOT_ALLOWED / LIFECYCLE_NOT_ALLOWED (the value is not allowed by its ADMIN-curated registry for the file's kind; the finding's `reference` carries the offending value). Those nine are SOFT: they block the document's next STRICT save but a save may waive them with `allowInvalid=true`. The last two are report-only verdicts over STORED content whose rules stay HARD on every write: STRUCTURE_INVALID (the descriptor validation no longer accepts the stored document — a legacy row; never emitted by the ad-hoc check) and NAMESPACE_NOT_ALLOWED (the stored namespace was removed from the `namespaces` dictionary after the save).
          * @enum {string}
          */
-        CrossCheckStatus: "MISSING" | "KIND_REQUIRED" | "WRONG_KIND" | "SELF_REFERENCE" | "LABEL_NOT_ALLOWED" | "ANNOTATION_NOT_ALLOWED" | "TAG_NOT_ALLOWED" | "TYPE_NOT_ALLOWED" | "LIFECYCLE_NOT_ALLOWED";
-        CrossCheckFinding: {
+        ErrorStatus: "MISSING" | "KIND_REQUIRED" | "WRONG_KIND" | "SELF_REFERENCE" | "LABEL_NOT_ALLOWED" | "ANNOTATION_NOT_ALLOWED" | "TAG_NOT_ALLOWED" | "TYPE_NOT_ALLOWED" | "LIFECYCLE_NOT_ALLOWED" | "STRUCTURE_INVALID" | "NAMESPACE_NOT_ALLOWED";
+        ErrorFinding: {
             /** Format: int32 */
             fileId: number;
+            fileKind: string;
             fileName: string;
             fileNamespace: string;
-            /** @description The spec field holding the reference, e.g. `spec.dependsOn`. */
+            /** @description The field the error lives in, e.g. `spec.dependsOn` (`document` for STRUCTURE_INVALID findings, which concern the whole document). */
             field: string;
+            /** @description The offending reference or value (empty for STRUCTURE_INVALID findings — the `message` carries the specifics). */
             reference: string;
-            status: components["schemas"]["CrossCheckStatus"];
+            status: components["schemas"]["ErrorStatus"];
+            /** @description The validator's own text — set on STRUCTURE_INVALID findings only; null everywhere else (the status alone identifies the rule). */
+            message?: string | null;
         };
-        CrossCheckReport: {
-            findings: components["schemas"]["CrossCheckFinding"][];
+        ErrorsReport: {
+            findings: components["schemas"]["ErrorFinding"][];
+            /** @description Files in the reported (filter-narrowed) set. */
             checkedFiles: number;
-            /** @description Non-blank references encountered across all checked files. */
+            /** @description Non-blank references encountered across the reported files. */
             checkedReferences: number;
         };
         DocumentCheckFinding: {
             /** @description The spec field holding the reference, e.g. `spec.dependsOn`. */
             field: string;
             reference: string;
-            status: components["schemas"]["CrossCheckStatus"];
+            status: components["schemas"]["ErrorStatus"];
         };
         DocumentCheckReport: {
             findings: components["schemas"]["DocumentCheckFinding"][];
@@ -1537,7 +1559,7 @@ export interface components {
          *     type / lifecycle registry rules) and store the document despite their findings —
          *     the explicit save-anyway opt-in. The structural descriptor-format rules and
          *     namespace resolution stay hard `400`s regardless. Waived findings surface on the
-         *     workspace cross-check report and block the file's next strict save.
+         *     workspace Errors report and block the file's next strict save.
          */
         AllowInvalid: boolean;
         /**
@@ -2148,7 +2170,7 @@ export interface operations {
                  *     type / lifecycle registry rules) and store the document despite their findings —
                  *     the explicit save-anyway opt-in. The structural descriptor-format rules and
                  *     namespace resolution stay hard `400`s regardless. Waived findings surface on the
-                 *     workspace cross-check report and block the file's next strict save.
+                 *     workspace Errors report and block the file's next strict save.
                  */
                 allowInvalid?: components["parameters"]["AllowInvalid"];
             };
@@ -2188,24 +2210,44 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
-    crossCheckCatalogFiles: {
+    getCatalogFileErrors: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Case- and accent-insensitive substring match against the entity name. */
+                name?: components["parameters"]["CatalogNameFilter"];
+                /** @description Exact (case-insensitive) namespace match. */
+                namespace?: components["parameters"]["CatalogNamespaceFilter"];
+                /** @description Any-of (IN) match over the supported kinds (case-insensitive) — repetition is the documented IN idiom on this parameter. An unknown value is a 400. */
+                kind?: components["parameters"]["CatalogKindFilter"];
+                /** @description Exact membership match against the file's metadata.tags entries (case-insensitive; tags are stored lowercase). */
+                tag?: components["parameters"]["CatalogTagFilter"];
+                /** @description Case-insensitive exact match against spec.type. An open match — values are not validated against the type registry (waived/imported files may carry unregistered types), and there is no interplay with the kind filter. */
+                type?: components["parameters"]["CatalogTypeFilter"];
+                /** @description Case-insensitive exact match against spec.lifecycle. An open match — values are not validated against the lifecycles dictionary. */
+                lifecycle?: components["parameters"]["CatalogLifecycleFilter"];
+                /** @description An entity reference (`[kind:][namespace/]name`; defaults kind `group`, namespace `default`) naming the owner to filter by. A file matches when its stored spec.owner — whatever short form it uses — RESOLVES to that entity under the descriptor defaulting rules (default kind group, default namespace = the file's own namespace), case-insensitively. An unparsable reference is a 400. */
+                owner?: components["parameters"]["CatalogOwnerFilter"];
+                /** @description A metadata.labels KEY that must be present on the file. Byte-exact key match (the label registry forbids case-twin keys). Combine with labelValue to also constrain the key's value. */
+                label?: components["parameters"]["CatalogLabelFilter"];
+                /** @description Any-of (IN) match over the selected label's value, case-insensitive — the one parameter where repetition is the documented IN idiom (API-LIST-004). Requires the label parameter (labelValue without label is a 400). */
+                labelValue?: components["parameters"]["CatalogLabelValueFilter"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The workspace report */
+            /** @description The workspace errors report */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CrossCheckReport"];
+                    "application/json": components["schemas"]["ErrorsReport"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalServerError"];
         };
@@ -2421,7 +2463,7 @@ export interface operations {
                  *     type / lifecycle registry rules) and store the document despite their findings —
                  *     the explicit save-anyway opt-in. The structural descriptor-format rules and
                  *     namespace resolution stay hard `400`s regardless. Waived findings surface on the
-                 *     workspace cross-check report and block the file's next strict save.
+                 *     workspace Errors report and block the file's next strict save.
                  */
                 allowInvalid?: components["parameters"]["AllowInvalid"];
             };

@@ -374,7 +374,7 @@ private fun validateRefArray(refs: List<String>, field: String) {
 
 /**
  * Validates the entity-reference grammar `[kind:][namespace/]name` (format only — dangling
- * references are the cross-check feature's concern, not a 400 here). Splits with the same
+ * references are the Errors report's concern, not a 400 here). Splits with the same
  * [splitRefOnce] the lenient `parseRef` uses, so the strict and lenient parses of the grammar
  * can never disagree on structure.
  */

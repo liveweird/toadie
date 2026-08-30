@@ -46,7 +46,7 @@ from Lettuce, that any new or edited spec must satisfy:
 - Each spec's scenario file declares its **Owns** line (exclusive server-side state; "nothing —
   read-only" when applicable). Today: `auth`, `accessibility`, `url-import`, and `changelog`
   (device-local localStorage only) are read-only;
-  `catalog-files` and `cross-check` own throwaway files (unique names in `default`); `kinds`,
+  `catalog-files` and `errors` own throwaway files (unique names in `default`); `kinds`,
   `render`, `round-trip`, and `hierarchy` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `i18n` owns its throwaway user (and ONLY that user's language —
   **seeded accounts must stay English**: every login applies the stored language to that
@@ -126,7 +126,7 @@ the same commit** — this list is the coverage map, the scenario file is the de
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
   authenticated pages (`/`, `/files`, `/files/new`, `/files/import`,
-  `/cross-check`, `/graph`, `/labels`, `/annotations`, `/tags`, `/types`, `/lifecycles`, `/users`); `color-contrast` consciously waived theme-wide.
+  `/errors`, `/graph`, `/labels`, `/annotations`, `/tags`, `/types`, `/lifecycles`, `/users`); `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`annotations.spec.ts`](scenarios/annotations.md) — the annotation-key registry: modal
   validation → register a key (kinds only — values stay free) → edit → the regular user's
@@ -139,10 +139,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).
-- [`cross-check.spec.ts`](scenarios/cross-check.md) — an unresolved reference opens the
-  Save-anyway modal (cancel and confirm paths); the waived save's finding shows on
-  Cross-check and is repaired in the editor; deleting a referenced target creates a finding,
-  which recreating the target clears.
+- [`errors.spec.ts`](scenarios/errors.md) — an unresolved reference opens the
+  Save-anyway modal (cancel and confirm paths); the waived save's finding shows on the
+  Errors page and is repaired in the editor; deleting a referenced target creates a finding
+  (hidden/restored by the References error-type pill), which recreating the target clears.
 - [`i18n.spec.ts`](scenarios/i18n.md) — the synced per-user language: a throwaway user
   switches to Polish, the choice survives a reload AND a wiped-device re-login (served from
   the stored value), and the admin's English flips it back; seeded accounts stay English.

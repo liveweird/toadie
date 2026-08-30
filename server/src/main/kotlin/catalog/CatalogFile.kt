@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
  * (`.claude/docs/backstage-descriptor-format.md`). `spec` is ONE flat superset of every kind's
  * fields (no oneOf/discriminator — hostile to the 3.0 tooling); the per-kind table in
  * CatalogFileValidation.kt enforces required and forbidden fields, so stored documents stay
- * canonical. References are validated by GRAMMAR only — resolving them is the cross-check
+ * canonical. References are validated by GRAMMAR only — resolving them is the Errors report
  * feature's job.
  */
 @Serializable

@@ -7,8 +7,8 @@ import {
   exportCatalogFiles,
   fetchCatalogUrl,
   getCatalogFile,
+  getCatalogErrors,
   getCatalogGraph,
-  getCrossCheckReport,
   importCatalogFiles,
   listAllCatalogFiles,
   listCatalogFiles,
@@ -101,12 +101,14 @@ describe("catalogFiles API wrappers", () => {
     expect(init.method).toBe("DELETE");
   });
 
-  test("getCrossCheckReport GETs the workspace report", async () => {
-    mockFetch.mockResolvedValue(
-      jsonResponse(200, { findings: [], checkedFiles: 0, checkedReferences: 0 }),
+  test("getCatalogErrors appends only the populated filters", async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(jsonResponse(200, { findings: [], checkedFiles: 0, checkedReferences: 0 })),
     );
-    await getCrossCheckReport();
-    expect(lastCall()[0]).toBe("/api/v1/files/cross-check");
+    await getCatalogErrors();
+    expect(lastCall()[0]).toBe("/api/v1/files/errors");
+    await getCatalogErrors({ namespace: "team-a", type: "service" });
+    expect(lastCall()[0]).toBe("/api/v1/files/errors?namespace=team-a&type=service");
   });
 
   test("getCatalogGraph appends only the populated filters", async () => {

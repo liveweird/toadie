@@ -149,12 +149,14 @@ class CatalogFileService(private val database: R2dbcDatabase) {
     /**
      * The third sanctioned cross-feature table read (see persistence.md) — one snapshot of
      * the five soft-check registries (labels, tag categories, per-kind type dictionaries,
-     * the LIFECYCLE dictionary, annotation keys), taken inside the calling write/report
-     * transaction. The rules themselves are the pure `registryFindings` in CrossCheck.kt:
-     * every value must be allowed by its ADMIN-curated registry for the file's kind
-     * (byte-exact, no grandfathering; an empty registry allows nothing). A violation is a
-     * SOFT finding — it rejects a strict save but is waivable via `allowInvalid` (see
-     * [softFindings]).
+     * the LIFECYCLE dictionary, annotation keys) plus the NAMESPACE dictionary values,
+     * taken inside the calling write/report transaction. The soft rules themselves are the
+     * pure `registryFindings` in Errors.kt: every value must be allowed by its ADMIN-curated
+     * registry for the file's kind (byte-exact, no grandfathering; an empty registry allows
+     * nothing). A violation is a SOFT finding — it rejects a strict save but is waivable via
+     * `allowInvalid` (see [softFindings]). The namespaces set is different: it feeds ONLY
+     * the report-only `storedDocumentFindings` (namespace resolution stays a HARD write rule
+     * via [resolvedNamespace]).
      */
     private suspend fun loadRegistrySnapshot(): RegistrySnapshot {
         val labels = LabelService.Labels.selectAll()
@@ -203,12 +205,21 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             .map { it[DictionaryService.Entries.value] }
             .toList()
             .toSet()
+        val namespaces = DictionaryService.Entries.selectAll()
+            .where {
+                (DictionaryService.Entries.dictionary eq Dictionary.NAMESPACE.name) and
+                    (DictionaryService.Entries.markedAsDeleted eq false)
+            }
+            .map { it[DictionaryService.Entries.value] }
+            .toList()
+            .toSet()
         return RegistrySnapshot(
             labels = labels,
             annotationKeys = annotationKeys,
             tags = tags,
             types = types,
             lifecycles = lifecycles,
+            namespaces = namespaces,
         )
     }
 
@@ -217,11 +228,11 @@ class CatalogFileService(private val database: R2dbcDatabase) {
 
     /**
      * The write path's SOFT checks, as findings: every entity reference resolved against the
-     * active workspace (the ONE rulebook in CrossCheck.kt — per-field default kinds, allowed
+     * active workspace (the ONE rulebook in Errors.kt — per-field default kinds, allowed
      * target kinds, contextual namespace, never the document ITSELF) plus the registry checks
      * against [loadRegistrySnapshot]. Runs inside the write's own transaction. A strict save
      * rejects any finding with ONE aggregated 400; `allowInvalid=true` waives them all and
-     * stores anyway (the cross-check report is the net for what was waived).
+     * stores anyway (the Errors report is the net for what was waived).
      * [extraIdentities] is the import path's batch universe (sibling documents resolve
      * order-independently). A rename's "self" is the NEW identity — uniform across create,
      * update, import, and the ad-hoc check.
@@ -305,9 +316,15 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
     }
 
-    /** The workspace cross-check report — all active files loaded and resolved in ONE transaction. */
-    suspend fun crossCheck(): CrossCheckReport = suspendTransaction(database) {
-        crossCheckAll(activeSources(), loadRegistrySnapshot())
+    /**
+     * The workspace Errors report — all active files loaded and resolved in ONE transaction.
+     * The [filter] (the list endpoint's filter set, matched in-memory over the decoded
+     * sources — the graph's shape) narrows which files' errors are REPORTED; references
+     * still resolve against the whole workspace, so filtering never manufactures MISSING.
+     */
+    suspend fun errors(filter: CatalogFileListFilter): ErrorsReport = suspendTransaction(database) {
+        val all = activeSources()
+        errorsReport(reported = all.filter { filter.matches(it.file) }, all = all, registries = loadRegistrySnapshot())
     }
 
     /**
@@ -374,7 +391,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
      * waives the soft checks (`allowInvalid`): a document with unresolved references or
      * registry findings still stores, reported as CREATED_WITH_FINDINGS with the finding
      * messages — the point of the round trip is getting the batch IN so errors can be fixed
-     * incrementally (the cross-check report tracks them). Only structural validation and
+     * incrementally (the Errors report tracks them). Only structural validation and
      * namespace resolution still skip a document as INVALID. Nothing rethrows except
      * cancellation, so the batch always runs to completion and the result rows ARE the
      * outcome. The route emits the audit events for the stored rows (the repo convention:
@@ -386,7 +403,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         // documents that sanitize, validate, and namespace-resolve contribute an identity.
         // Documented residual: a document referencing a sibling that later fails to STORE
         // (identity conflict) keeps its dangling reference — the same class as a
-        // deletion-created dangling ref, and the cross-check report catches it.
+        // deletion-created dangling ref, and the Errors report catches it.
         val batchIdentities = batchIdentities(files)
         return files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId, batchIdentities) }
     }
@@ -410,7 +427,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
      * structural validation, namespace resolution, identity conflicts against the workspace
      * AND within the batch, soft findings — with the insert replaced by prediction. Nothing
      * is stored, nothing is audited; every row's `fileId` stays null and the statuses read
-     * as predictions (CREATED = would be created). One snapshot transaction (the crossCheck
+     * as predictions (CREATED = would be created). One snapshot transaction (the errors-report
      * shape) — cheaper than the real run, semantically equal; the result is a snapshot, so
      * a concurrent write can change the real outcome.
      */
@@ -531,10 +548,10 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
     }
 
-    private suspend fun activeSources(): List<CrossCheckSource> =
+    private suspend fun activeSources(): List<CatalogSource> =
         CatalogFiles.selectAll()
             .where { active() }
-            .map { CrossCheckSource(id = it[CatalogFiles.id].value, file = json.decodeFromString(it[CatalogFiles.content])) }
+            .map { CatalogSource(id = it[CatalogFiles.id].value, file = json.decodeFromString(it[CatalogFiles.content])) }
             .toList()
 
     suspend fun list(filter: CatalogFileListFilter, paging: PageRequest): CatalogFileListResult =

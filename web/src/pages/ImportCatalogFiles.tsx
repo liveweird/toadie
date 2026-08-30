@@ -29,7 +29,7 @@ import { catalogFilesPath } from "../utils/catalogFileLinks";
 
 const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
   CREATED: "teal",
-  // Stored, but carrying waived findings the cross-check page tracks — a caution, not a failure.
+  // Stored, but carrying waived findings the Errors page tracks — a caution, not a failure.
   CREATED_WITH_FINDINGS: "orange",
   CONFLICT: "yellow",
   INVALID: "red",
@@ -100,7 +100,7 @@ export default function ImportCatalogFiles() {
       setResults({ mode, rows: response.results });
       if (mode === "import") {
         // The ["catalogFiles"] prefix covers every catalog-derived query: the list pages,
-        // the reference-picker identities pool, the cross-check report, the graph, and the
+        // the reference-picker identities pool, the Errors report, the graph, and the
         // editor's live check — all refetch after an import. A dry-run changed nothing.
         await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
       }

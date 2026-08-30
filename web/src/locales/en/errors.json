@@ -1,13 +1,25 @@
 {
-  "title": "Cross-check",
-  "loadFailed": "Failed to load the cross-check report",
+  "title": "Errors",
+  "loadFailed": "Failed to load the errors report",
   "summary": {
     "files": "{{count}} files checked",
     "references": "{{count}} references checked",
-    "errors": "{{count}} findings"
+    "errors": "{{count}} errors"
+  },
+  "classesLabel": "Error types",
+  "class": {
+    "references": "References",
+    "structure": "Structure",
+    "namespace": "Namespace",
+    "labels": "Labels",
+    "annotations": "Annotations",
+    "tags": "Tags",
+    "types": "Types",
+    "lifecycles": "Lifecycles"
   },
   "field": {
     "file": "File",
+    "kind": "Kind",
     "namespace": "Namespace",
     "refField": "Field",
     "reference": "Value",
@@ -22,7 +34,9 @@
     "ANNOTATION_NOT_ALLOWED": "Annotation not allowed",
     "TAG_NOT_ALLOWED": "Tag not allowed",
     "TYPE_NOT_ALLOWED": "Type not allowed",
-    "LIFECYCLE_NOT_ALLOWED": "Lifecycle not allowed"
+    "LIFECYCLE_NOT_ALLOWED": "Lifecycle not allowed",
+    "STRUCTURE_INVALID": "Invalid structure",
+    "NAMESPACE_NOT_ALLOWED": "Namespace not allowed"
   },
   "message": {
     "MISSING": "No stored entity matches this reference.",
@@ -33,9 +47,11 @@
     "ANNOTATION_NOT_ALLOWED": "The annotation-key registry does not allow this key here — adjust it on the Annotations page.",
     "TAG_NOT_ALLOWED": "The tag categories do not allow this tag here — adjust them on the Tags page.",
     "TYPE_NOT_ALLOWED": "The kind's type dictionary does not allow this type — adjust it on the Types page.",
-    "LIFECYCLE_NOT_ALLOWED": "The lifecycles dictionary does not allow this value — adjust it on the Lifecycles page."
+    "LIFECYCLE_NOT_ALLOWED": "The lifecycles dictionary does not allow this value — adjust it on the Lifecycles page.",
+    "STRUCTURE_INVALID": "The stored document no longer passes the structural validation — open the file and fix it.",
+    "NAMESPACE_NOT_ALLOWED": "The namespace is no longer defined — re-add it on the Namespaces page or move the file."
   },
-  "noFindings": "No findings — every file passes the checks.",
+  "noFindings": "No errors — every file passes the checks.",
   "panel": {
     "title": "Findings",
     "errorsTitle": "Findings — saving will ask for confirmation",

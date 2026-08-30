@@ -5,7 +5,7 @@ info:
   description: |
     JWT-authenticated REST API for Toadie — a Backstage `catalog-info.yaml` helper.
     Exposes the authentication surface, admin-managed user accounts, and the catalog-file
-    workspace: CRUD across the seven landscape kinds, the cross-check report and live
+    workspace: CRUD across the seven landscape kinds, the Errors report and live
     document check, the relationship graph, the structured export/import round-trip, and
     the SSRF-guarded URL fetch.
 
@@ -583,7 +583,7 @@ paths:
         entity itself — all strict by default, no grandfathering,
         else `400` (all soft-check violations aggregate into one detail).
         `allowInvalid=true` WAIVES the soft checks (reference resolution and the five
-        registry rules) and stores the document anyway — the cross-check report tracks the
+        registry rules) and stores the document anyway — the Errors report tracks the
         waived findings; the structural rules and namespace resolution stay hard `400`s.
         Entity identity (kind + namespace + name, case-insensitive) must be unique among
         active files; a clash is a `409`.
@@ -616,13 +616,13 @@ paths:
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
-  /api/v1/files/cross-check:
+  /api/v1/files/errors:
     get:
       tags: [catalog-files]
-      operationId: crossCheckCatalogFiles
-      summary: Cross-check every stored file against the workspace and the registries
+      operationId: getCatalogFileErrors
+      summary: Every error in the stored files — references, registries, structure, namespaces
       description: |
-        The workspace health report. Resolves every entity reference the active files make
+        The workspace Errors report. Resolves every entity reference the active files make
         (`owner`, `system`, `subcomponentOf`, `providesApis`, `consumesApis`, `dependsOn`,
         `dependencyOf`) against the workspace:
 
@@ -637,7 +637,7 @@ paths:
           (e.g. a Domain's `spec.subdomainOf` naming that very Domain); a Toadie rule beyond
           upstream Backstage.
 
-        …and additionally checks every file's labels, annotation keys, tags, `spec.type`,
+        …checks every file's labels, annotation keys, tags, `spec.type`,
         and `spec.lifecycle` against the ADMIN-curated registries (`LABEL_NOT_ALLOWED`,
         `ANNOTATION_NOT_ALLOWED`, `TAG_NOT_ALLOWED`, `TYPE_NOT_ALLOWED`,
         `LIFECYCLE_NOT_ALLOWED`). Saves enforce all of these by default but may waive them
@@ -646,13 +646,41 @@ paths:
         removed after the fact, import batches whose sibling documents failed, and legacy
         self-references stored before the rule existed. Every finding blocks the file's next
         STRICT save (a waived save still goes through).
+
+        …and additionally runs the report-only checks over the STORED content — rules that
+        are HARD (never waivable) on every write, so a finding can only mean the row
+        predates a rule or dictionary change:
+
+        - `STRUCTURE_INVALID` — the structural descriptor validation no longer accepts the
+          stored document (a legacy row); the finding's `message` carries the validator's
+          own text. Validation is fail-fast, so a file reports its FIRST structural problem
+          only.
+        - `NAMESPACE_NOT_ALLOWED` — the stored `metadata.namespace` is no longer an active
+          `namespaces` dictionary entry (removed after the save).
+
+        The optional filters (the SAME whitelisted set as the list and graph endpoints,
+        same semantics) narrow which files' errors are REPORTED — `checkedFiles`/
+        `checkedReferences` count the reported set; references still resolve against the
+        whole workspace, so filtering never manufactures `MISSING` findings. Unpaged by
+        design — a report-style computation over the workspace.
+      parameters:
+        - $ref: '#/components/parameters/CatalogNameFilter'
+        - $ref: '#/components/parameters/CatalogNamespaceFilter'
+        - $ref: '#/components/parameters/CatalogKindFilter'
+        - $ref: '#/components/parameters/CatalogTagFilter'
+        - $ref: '#/components/parameters/CatalogTypeFilter'
+        - $ref: '#/components/parameters/CatalogLifecycleFilter'
+        - $ref: '#/components/parameters/CatalogOwnerFilter'
+        - $ref: '#/components/parameters/CatalogLabelFilter'
+        - $ref: '#/components/parameters/CatalogLabelValueFilter'
       responses:
         '200':
-          description: The workspace report
+          description: The workspace errors report
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CrossCheckReport'
+                $ref: '#/components/schemas/ErrorsReport'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
@@ -662,7 +690,7 @@ paths:
       operationId: checkCatalogFile
       summary: Check one document against the stored files and the registries
       description: |
-        The editor's live companion to the workspace cross-check: takes one (possibly unsaved,
+        The editor's live companion to the workspace Errors report: takes one (possibly unsaved,
         possibly not-yet-valid) document and returns its soft findings — reference resolution
         against the stored identities plus the registry checks (labels, annotation keys, tags,
         type, lifecycle) — with the same statuses as the workspace report. Every finding here
@@ -695,17 +723,17 @@ paths:
       operationId: getCatalogGraph
       summary: The stored files rendered together as a relationship graph
       description: |
-        Every active file and the reference edges between them, resolved with the cross-check's
+        Every active file and the reference edges between them, resolved with the Errors report's
         semantics (per-field default kinds, namespaceless references resolve in the referencing
         file's own namespace, case-insensitive identity). Node statuses:
 
         - `STORED` — an active catalog file (carries `fileId`).
         - `MISSING` — a referenced entity of a stored kind that no active file provides (the
-          cross-check's MISSING, drawn).
+          Errors report's MISSING, drawn).
         - `EXTERNAL` — a referenced entity of a kind Toadie doesn't store (Location, Template,
           custom kinds).
 
-        Kind-less `dependsOn`/`dependencyOf` entries (cross-check errors) are not drawable and
+        Kind-less `dependsOn`/`dependencyOf` entries (report findings) are not drawable and
         are omitted. The optional filters (the SAME whitelisted set as the list endpoint, same
         semantics) narrow which files' references are EXPANDED; targets still resolve against
         the whole workspace, so a stored file outside the filter appears as a STORED node when
@@ -771,7 +799,7 @@ paths:
         own result row: `CREATED` (stored clean, `fileId` set), `CREATED_WITH_FINDINGS`
         (stored DESPITE soft findings — import always waives reference resolution and the
         registry rules so a flawed batch can land and be fixed incrementally; `fileId` set,
-        `message` lists the findings, the cross-check report tracks them), `INVALID` (failed
+        `message` lists the findings, the Errors report tracks them), `INVALID` (failed
         the structural descriptor-format validation or namespace resolution, `message` names
         the rule; sibling documents in the SAME batch count as resolution targets, order
         independent), `CONFLICT` (an active file
@@ -1395,7 +1423,7 @@ components:
         type / lifecycle registry rules) and store the document despite their findings —
         the explicit save-anyway opt-in. The structural descriptor-format rules and
         namespace resolution stay hard `400`s regardless. Waived findings surface on the
-        workspace cross-check report and block the file's next strict save.
+        workspace Errors report and block the file's next strict save.
     Sort:
       name: sort
       in: query
@@ -1871,7 +1899,7 @@ components:
           description: >-
             CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite
             soft findings, which import always waives (`fileId` set, `message` lists the
-            findings; the cross-check report tracks them). INVALID — failed the structural
+            findings; the Errors report tracks them). INVALID — failed the structural
             descriptor-format validation or namespace resolution (`message` names the rule).
             CONFLICT — an active file already holds this identity; nothing was overwritten.
             ERROR — an unexpected storage failure for this document.
@@ -2005,7 +2033,7 @@ components:
           nullable: true
           description: >-
             Entity reference `[kind:][namespace/]name` of the owning group/user (format-checked
-            here; resolution is the cross-check's job).
+            here; resolution is the Errors report's job).
         system:
           type: string
           nullable: true
@@ -2121,7 +2149,7 @@ components:
           description: True when the creating user has been soft-deleted.
         updatedAt: { type: integer, format: int64, description: Epoch milliseconds. }
 
-    CrossCheckStatus:
+    ErrorStatus:
       type: string
       enum:
         - MISSING
@@ -2133,42 +2161,64 @@ components:
         - TAG_NOT_ALLOWED
         - TYPE_NOT_ALLOWED
         - LIFECYCLE_NOT_ALLOWED
+        - STRUCTURE_INVALID
+        - NAMESPACE_NOT_ALLOWED
       description: >-
-        Every status blocks the document's next STRICT save (a save may waive them with
-        `allowInvalid=true`). References: MISSING (no stored entity matches), KIND_REQUIRED
+        References: MISSING (no stored entity matches), KIND_REQUIRED
         (a kind-less dependsOn/dependencyOf entry), WRONG_KIND (the reference names a kind
         the field does not allow), SELF_REFERENCE (the reference resolves to the referencing
         file itself). Registries: LABEL_NOT_ALLOWED / ANNOTATION_NOT_ALLOWED /
         TAG_NOT_ALLOWED / TYPE_NOT_ALLOWED / LIFECYCLE_NOT_ALLOWED (the value is not
         allowed by its ADMIN-curated registry for the file's kind; the finding's `reference`
-        carries the offending value).
+        carries the offending value). Those nine are SOFT: they block the document's next
+        STRICT save but a save may waive them with `allowInvalid=true`. The last two are
+        report-only verdicts over STORED content whose rules stay HARD on every write:
+        STRUCTURE_INVALID (the descriptor validation no longer accepts the stored document —
+        a legacy row; never emitted by the ad-hoc check) and NAMESPACE_NOT_ALLOWED (the
+        stored namespace was removed from the `namespaces` dictionary after the save).
 
-    CrossCheckFinding:
+    ErrorFinding:
       type: object
-      required: [fileId, fileName, fileNamespace, field, reference, status]
+      required: [fileId, fileKind, fileName, fileNamespace, field, reference, status]
       properties:
         fileId: { type: integer, format: int32, minimum: 0 }
+        fileKind: { type: string }
         fileName: { type: string }
         fileNamespace: { type: string }
         field:
           type: string
-          description: The spec field holding the reference, e.g. `spec.dependsOn`.
-        reference: { type: string }
-        status: { $ref: '#/components/schemas/CrossCheckStatus' }
+          description: >-
+            The field the error lives in, e.g. `spec.dependsOn` (`document` for
+            STRUCTURE_INVALID findings, which concern the whole document).
+        reference:
+          type: string
+          description: >-
+            The offending reference or value (empty for STRUCTURE_INVALID findings —
+            the `message` carries the specifics).
+        status: { $ref: '#/components/schemas/ErrorStatus' }
+        message:
+          type: string
+          nullable: true
+          description: >-
+            The validator's own text — set on STRUCTURE_INVALID findings only; null
+            everywhere else (the status alone identifies the rule).
 
-    CrossCheckReport:
+    ErrorsReport:
       type: object
       required: [findings, checkedFiles, checkedReferences]
       properties:
         findings:
           type: array
           items:
-            $ref: '#/components/schemas/CrossCheckFinding'
-        checkedFiles: { type: integer, minimum: 0 }
+            $ref: '#/components/schemas/ErrorFinding'
+        checkedFiles:
+          type: integer
+          minimum: 0
+          description: Files in the reported (filter-narrowed) set.
         checkedReferences:
           type: integer
           minimum: 0
-          description: Non-blank references encountered across all checked files.
+          description: Non-blank references encountered across the reported files.
 
     DocumentCheckFinding:
       type: object
@@ -2178,7 +2228,7 @@ components:
           type: string
           description: The spec field holding the reference, e.g. `spec.dependsOn`.
         reference: { type: string }
-        status: { $ref: '#/components/schemas/CrossCheckStatus' }
+        status: { $ref: '#/components/schemas/ErrorStatus' }
 
     DocumentCheckReport:
       type: object

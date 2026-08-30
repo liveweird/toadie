@@ -33,7 +33,7 @@ export default function SaveAnywayModal({
         <Stack gap={4}>
           {(findings ?? []).map((f, index) => (
             <Text size="sm" key={`${f.field}-${f.reference}-${index}`}>
-              <Code>{f.reference}</Code> ({f.field}) — {t(`crossCheck.message.${f.status}`)}
+              <Code>{f.reference}</Code> ({f.field}) — {t(`errors.message.${f.status}`)}
             </Text>
           ))}
         </Stack>
