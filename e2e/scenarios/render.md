@@ -25,8 +25,9 @@
    - *Expected*: the orphaned virtual ghost node disappears; the stored nodes (B, the owner
      group) remain — stored nodes are never pruned.
 5. They switch the layout to **Manual** and drag node B across the canvas.
-   - *Expected*: the node moves and stays where dropped (the position save fires); the drag
-     does NOT open B's editor — the page stays on the graph.
+   - *Expected*: the canvas stays painted while dragging (nodes never flicker away
+     mid-gesture); the node moves and stays where dropped (the position save fires); the
+     drag does NOT open B's editor — the page stays on the graph.
 6. They reload the page.
    - *Expected*: the layout is still Manual and B still sits at the dragged position — the
      layout document persisted server-side per user, not in the browser.

@@ -12,56 +12,101 @@ import type { LaidOutNode } from "../utils/graphLayout";
 // ignores props it doesn't render — every prop the page relies on must be surfaced here
 // explicitly (draggability as a data attribute, positions as spans, drags as buttons that
 // replay React Flow's drag event sequence, click-after-drag included).
-vi.mock("@xyflow/react", () => ({
-  ReactFlow: ({
-    nodes,
-    nodesDraggable,
-    onNodesChange,
-    onNodeDragStart,
-    onNodeDragStop,
-    onNodeClick,
-  }: {
-    nodes: LaidOutNode[];
-    nodesDraggable?: boolean;
-    onNodesChange?: (changes: unknown[]) => void;
-    onNodeDragStart?: () => void;
-    onNodeDragStop?: () => void;
-    onNodeClick?: (event: unknown, node: LaidOutNode) => void;
-  }) => (
-    <div data-testid="flow" data-draggable={String(nodesDraggable ?? true)}>
-      {nodes.map((n) => (
-        <div key={n.id}>
-          <button type="button" onClick={(e) => onNodeClick?.(e, n)}>
-            {n.data.apiNode.name} [{n.data.apiNode.status}]
-          </button>
-          <span data-testid={`pos:${n.id}`}>{`${n.position.x},${n.position.y}`}</span>
-          <button
-            type="button"
-            data-testid={`drag:${n.id}`}
-            onClick={(e) => {
-              onNodeDragStart?.();
-              onNodesChange?.([
-                { type: "position", id: n.id, position: { x: 111, y: 222 }, dragging: true },
-              ]);
-              onNodesChange?.([
-                { type: "position", id: n.id, position: { x: 111, y: 222 }, dragging: false },
-              ]);
-              onNodeDragStop?.();
-              // React Flow fires the click after a drag gesture too — the page must swallow it.
-              onNodeClick?.(e, n);
-            }}
-          >
-            drag {n.id}
-          </button>
-        </div>
-      ))}
-    </div>
-  ),
-  Background: () => null,
-  Controls: () => null,
-  Handle: () => null,
-  Position: { Left: "left", Right: "right" },
-}));
+vi.mock("@xyflow/react", async () => {
+  const { useState } = await import("react");
+
+  function useNodesState<T>(initial: T[]) {
+    const [nodes, setNodes] = useState(initial);
+    return [nodes, setNodes, () => {}] as const;
+  }
+
+  function useEdgesState<T>(initial: T[]) {
+    const [edges, setEdges] = useState(initial);
+    return [edges, setEdges, () => {}] as const;
+  }
+
+  function applyNodeChanges<T extends { id: string; position?: { x: number; y: number } }>(
+    changes: { type: string; id?: string; position?: { x: number; y: number } }[],
+    nodes: T[],
+  ): T[] {
+    let next = nodes;
+    for (const change of changes) {
+      if (change.type !== "position" || !change.id || !change.position) continue;
+      next = next.map((n) => (n.id === change.id ? { ...n, position: change.position! } : n));
+    }
+    return next;
+  }
+
+  return {
+    applyNodeChanges,
+    useNodesState,
+    useEdgesState,
+    ReactFlow: ({
+      nodes,
+      nodesDraggable,
+      onNodesChange,
+      onNodeDragStart,
+      onNodeDragStop,
+      onNodeClick,
+    }: {
+      nodes: LaidOutNode[];
+      nodesDraggable?: boolean;
+      onNodesChange?: (changes: unknown[]) => void;
+      onNodeDragStart?: () => void;
+      onNodeDragStop?: () => void;
+      onNodeClick?: (event: unknown, node: LaidOutNode) => void;
+    }) => (
+      <div data-testid="flow" data-draggable={String(nodesDraggable ?? true)}>
+        {nodes.map((n) => (
+          <div key={n.id}>
+            <button type="button" onClick={(e) => onNodeClick?.(e, n)}>
+              {n.data.apiNode.name} [{n.data.apiNode.status}]
+            </button>
+            <span data-testid={`pos:${n.id}`}>{`${n.position.x},${n.position.y}`}</span>
+            <button
+              type="button"
+              data-testid={`drag:${n.id}`}
+              onClick={(e) => {
+                onNodeDragStart?.();
+                onNodesChange?.([
+                  { type: "position", id: n.id, position: { x: 111, y: 222 }, dragging: true },
+                ]);
+                onNodesChange?.([
+                  { type: "position", id: n.id, position: { x: 111, y: 222 }, dragging: false },
+                ]);
+                onNodeDragStop?.();
+                // React Flow fires the click after a drag gesture too — the page must swallow it.
+                onNodeClick?.(e, n);
+              }}
+            >
+              drag {n.id}
+            </button>
+          </div>
+        ))}
+        {/* A multi-select drag ends SEVERAL nodes in ONE changes batch — the page must
+            accumulate them into a single persisted map, not last-write-wins. */}
+        <button
+          type="button"
+          data-testid="drag-multi"
+          onClick={() => {
+            onNodeDragStart?.();
+            onNodesChange?.([
+              { type: "position", id: nodes[0]?.id, position: { x: 11, y: 12 }, dragging: false },
+              { type: "position", id: nodes[1]?.id, position: { x: 21, y: 22 }, dragging: false },
+            ]);
+            onNodeDragStop?.();
+          }}
+        >
+          drag multi
+        </button>
+      </div>
+    ),
+    Background: () => null,
+    Controls: () => null,
+    Handle: () => null,
+    Position: { Left: "left", Right: "right" },
+  };
+});
 
 import RenderGraph from "./RenderGraph";
 
@@ -263,6 +308,31 @@ describe("RenderGraph page", () => {
             "component:default/a": { x: 111, y: 222 },
           },
         }),
+      { timeout: 2000 },
+    );
+  });
+
+  test("a multi-select drag persists BOTH nodes' positions in one save", async () => {
+    mockGraph(mockFetch, GRAPH, 200, { mode: "manual", positions: {} });
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/svc-a/);
+    await user.click(screen.getByTestId("drag-multi"));
+
+    expect(screen.getByTestId("pos:component:default/a").textContent).toBe("11,12");
+    expect(screen.getByTestId("pos:component:default/ghost").textContent).toBe("21,22");
+    await waitFor(
+      () =>
+        expect(layoutPuts(mockFetch)).toEqual([
+          {
+            mode: "manual",
+            positions: {
+              "component:default/a": { x: 11, y: 12 },
+              "component:default/ghost": { x: 21, y: 22 },
+            },
+          },
+        ]),
       { timeout: 2000 },
     );
   });

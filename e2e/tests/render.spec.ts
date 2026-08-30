@@ -93,6 +93,10 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     (async () => {
       await page.mouse.down();
       await page.mouse.move(cx + 140, cy - 60, { steps: 8 });
+      // Mid-gesture the canvas must stay painted (the v1.7.1 flicker fix: nodes vanished
+      // until drag end while the controlled node array was replaced every frame).
+      await expect(nodeB).toBeVisible();
+      await expect(page.getByText(a, { exact: true })).toBeVisible();
       await page.mouse.up();
     })(),
   ]);

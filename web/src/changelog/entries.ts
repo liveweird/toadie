@@ -17,6 +17,16 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.7.1",
+    date: "2026-08-30",
+    en: `Manual graph dragging is now fluent.
+
+- Dragging a node in the Graph page's **Manual** mode no longer makes the canvas flicker or disappear mid-drag — nodes follow the pointer smoothly and stay visible the whole time.`,
+    pl: `Ręczne przeciąganie w grafie jest teraz płynne.
+
+- Przeciąganie węzła w trybie **Ręcznym** strony Grafu nie powoduje już migotania ani znikania obszaru roboczego w trakcie ruchu — węzły płynnie podążają za wskaźnikiem i pozostają cały czas widoczne.`,
+  },
+  {
     version: "1.7.0",
     date: "2026-08-30",
     en: `Arrange the graph your way.

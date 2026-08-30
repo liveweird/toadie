@@ -17,9 +17,12 @@ import {
 } from "@mantine/core";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
+  applyNodeChanges,
   Background,
   Controls,
   ReactFlow,
+  useEdgesState,
+  useNodesState,
   type Edge,
   type NodeChange,
   type ReactFlowInstance,
@@ -58,6 +61,9 @@ const LEGEND: { key: "stored" | "missing" | "external"; style: React.CSSProperti
 type LayoutMode = "auto" | "manual";
 type LayoutState = { mode: LayoutMode; positions: GraphPositions };
 
+/** Stable fallback — a fresh `{}` in deps would retrigger the layout sync effect every render. */
+const EMPTY_POSITIONS: GraphPositions = {};
+
 /** Drag saves are debounced so a repositioning session is one PUT, not one per node. */
 const LAYOUT_SAVE_DEBOUNCE_MS = 600;
 
@@ -91,7 +97,7 @@ export default function RenderGraph() {
   });
   const [local, setLocal] = useState<LayoutState | null>(null);
   const mode: LayoutMode = local?.mode ?? (layoutQuery.data?.mode === "manual" ? "manual" : "auto");
-  const positions: GraphPositions = local?.positions ?? layoutQuery.data?.positions ?? {};
+  const positions: GraphPositions = local?.positions ?? layoutQuery.data?.positions ?? EMPTY_POSITIONS;
 
   const saveTimer = useRef<number | undefined>(undefined);
   function persistLayout(next: LayoutState, debounce: boolean) {
@@ -108,27 +114,41 @@ export default function RenderGraph() {
   }
 
   const noKinds = filters.noKinds;
-  const { nodes, edges } = useMemo(() => {
-    if (!data || noKinds) return { nodes: [], edges: [] };
-    const laid = layoutGraph(filterGraph(data, enabled));
-    if (mode !== "manual") return laid;
-    return { ...laid, nodes: applyManualPositions(laid.nodes, positions) };
-  }, [data, enabled, noKinds, mode, positions]);
+  const baseLayout = useMemo(() => {
+    if (!data || noKinds) return { nodes: [] as LaidOutNode[], edges: [] as Edge[] };
+    return layoutGraph(filterGraph(data, enabled));
+  }, [data, enabled, noKinds]);
+
+  const [nodes, setNodes] = useNodesState<LaidOutNode>([]);
+  const [edges, setEdges] = useEdgesState<Edge>([]);
+
+  // Rebuild the canvas only when the graph structure (baseLayout), the layout mode, or the
+  // SAVED positions change — never on every drag frame (mid-drag movement lives inside
+  // useNodesState via applyNodeChanges; rebuilding here mid-gesture was the flicker).
+  useEffect(() => {
+    setNodes(mode === "manual" ? applyManualPositions(baseLayout.nodes, positions) : baseLayout.nodes);
+    setEdges(baseLayout.edges);
+  }, [mode, baseLayout, positions, setNodes, setEdges]);
 
   // Refit the viewport when the node SET changes (filters, pills, relation chips): the
   // `fitView` prop fires only at init, so a later filter would leave the new layout under
   // the old graph's pan/zoom — nodes off-canvas. Keyed by the sorted ids, NOT positions,
   // so drags, mode switches, and Reset never yank the viewport around.
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance<LaidOutNode, Edge> | null>(null);
-  const fitKey = useMemo(() => nodes.map((n) => n.id).sort((a, b) => a.localeCompare(b)).join("|"), [nodes]);
+  const structureKey = useMemo(
+    () => baseLayout.nodes.map((n) => n.id).sort((a, b) => a.localeCompare(b)).join("|"),
+    [baseLayout.nodes],
+  );
   useEffect(() => {
     void rfInstance?.fitView();
-  }, [rfInstance, fitKey]);
+  }, [rfInstance, structureKey]);
 
-  // Live drag movement: React Flow's controlled-nodes contract — position changes flow
-  // back through here and re-derive the nodes array; the drag-end change (dragging=false)
-  // is what persists.
+  // Live drag: applyNodeChanges keeps the gesture fluent — mid-drag frames never touch
+  // `positions` (writing them re-ran dagre and wholesale-replaced the node array
+  // mid-gesture, blanking the canvas). Only a drag end persists, accumulated across the
+  // whole batch: a multi-select drag ends several nodes in ONE changes array.
   function onNodesChange(changes: NodeChange<LaidOutNode>[]) {
+    setNodes((current) => applyNodeChanges(changes, current));
     if (mode !== "manual") return;
     let next = positions;
     let dragEnded = false;
@@ -138,7 +158,6 @@ export default function RenderGraph() {
       if (change.dragging === false) dragEnded = true;
     }
     if (dragEnded) persistLayout({ mode, positions: next }, true);
-    else if (next !== positions) setLocal({ mode, positions: next });
   }
 
   // A drag on a stored node must never navigate — React Flow can fire onNodeClick after a
