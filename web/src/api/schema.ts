@@ -951,6 +951,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lenses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the lenses visible to the caller
+         * @description Any authenticated user. Returns every active lens the caller may see: their OWN
+         *     lenses (both visibilities) plus everyone's PUBLIC ones — name-ordered
+         *     case-insensitively, deliberately unpaged (a personal-plus-curated scale). A lens is
+         *     a named snapshot of the shared catalog filter set the Hierarchy/Files/Graph/Errors
+         *     views declare; PRIVATE lenses never appear in anyone else's list (admins included —
+         *     ADMIN gets no special content access).
+         */
+        get: operations["listLenses"];
+        put?: never;
+        /**
+         * Save a lens
+         * @description Any authenticated user; the caller becomes the creator. The filter payload is
+         *     validated STRUCTURALLY only (lengths, the kind whitelist, `labelValue` requires
+         *     `label`), never against the registries — a lens holding a since-removed value simply
+         *     matches nothing. A name already held by one of the caller's own active lenses
+         *     (case-insensitively) is a `409`; different users may reuse a name.
+         */
+        post: operations["createLens"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lenses/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a lens
+         * @description Creator only — whole-lens replacement: overwrite (save-again), rename, and the
+         *     visibility flip are all this one operation. A foreign PRIVATE (or unknown) lens id
+         *     is a uniform `404` — a private lens's existence is itself private — while a foreign
+         *     PUBLIC lens (visible in everyone's list anyway) is an honest `403`; admins get the
+         *     same treatment. Same validation and `409` rules as create.
+         */
+        put: operations["replaceLens"];
+        post?: never;
+        /**
+         * Delete a lens
+         * @description Creator only — soft delete; the name becomes reusable by a NEW lens of the same
+         *     owner. The same disclosure split as replace: foreign PRIVATE/unknown → `404`,
+         *     foreign PUBLIC → `403`.
+         */
+        delete: operations["deleteLens"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1389,6 +1454,64 @@ export interface components {
             values: string[];
             /** @description At least one of the seven landscape kinds (case-insensitive input; stored in canonical casing and order); no duplicates. */
             kinds: string[];
+        };
+        /**
+         * @description PRIVATE lenses are visible only to their creator; PUBLIC lenses are visible to every authenticated user. Both stay creator-only mutable.
+         * @enum {string}
+         */
+        LensVisibility: "PRIVATE" | "PUBLIC";
+        /** @description The shared catalog filter set as a saved snapshot — the same nine slots the files/graph/errors GETs accept as query parameters. Every field is optional; absent means "not filtered on". Values are validated structurally only, never against the registries. */
+        LensFilters: {
+            /** @description Case- and accent-insensitive name substring. */
+            name?: string | null;
+            namespace?: string | null;
+            /** @description The visible-kinds set (any-of, canonical casing and order); absent = every kind visible. */
+            kind?: string[] | null;
+            tag?: string | null;
+            type?: string | null;
+            lifecycle?: string | null;
+            /** @description An entity reference, matched by reference resolution. */
+            owner?: string | null;
+            label?: string | null;
+            /** @description Any-of over the selected label's values; requires `label`. */
+            labelValue?: string[] | null;
+        };
+        Lens: {
+            /** Format: int32 */
+            id: number;
+            /** @description Unique case-insensitively among the CREATOR'S active lenses. */
+            name: string;
+            visibility: components["schemas"]["LensVisibility"];
+            filters: components["schemas"]["LensFilters"];
+            /**
+             * Format: int32
+             * @description The creator's user id — the only user who may replace or delete the lens.
+             */
+            createdBy: number;
+            /** @description The creator's display name (from the users table at read time). */
+            creatorName: string;
+            /** @description True when the creator's account has since been soft-deleted. */
+            creatorDeleted: boolean;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            createdAt: number;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            updatedAt: number;
+        };
+        LensList: {
+            /** @description Visible lenses, name-ordered case-insensitively. */
+            items: components["schemas"]["Lens"][];
+        };
+        LensRequest: {
+            /** @description Trimmed; must not be blank. */
+            name: string;
+            visibility: components["schemas"]["LensVisibility"];
+            filters: components["schemas"]["LensFilters"];
         };
         TagCategory: {
             /** Format: int32 */
@@ -2987,6 +3110,112 @@ export interface operations {
         };
     };
     deleteAnnotationKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listLenses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LensList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createLens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LensRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new lens resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lens"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceLens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LensRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteLens: {
         parameters: {
             query?: never;
             header?: never;

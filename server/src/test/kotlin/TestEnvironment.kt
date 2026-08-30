@@ -480,6 +480,20 @@ object TestLabels {
 }
 
 /**
+ * Raw-row access to the lenses table (V20) — soft-delete asserts only; lenses themselves
+ * are created through the routes (every test mints unique names, so no shared-state fixture
+ * is needed).
+ */
+object TestLenses {
+    data class RawRow(val id: UInt, val name: String, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.lenses.LensService.Lenses
+        t.selectAll().map { RawRow(it[t.id].value, it[t.name], it[t.markedAsDeleted]) }.toList()
+    }
+}
+
+/**
  * Direct access to the SHARED annotation-key registry (V17) — the label registry's sibling
  * (keys + kinds, no values), suite state every catalog write's annotation keys are checked
  * against. Tests only ever mint UNIQUE keys (the `uniqueAnnotationKey` fixture) and remove

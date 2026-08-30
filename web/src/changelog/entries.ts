@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.9.0",
+    date: "2026-08-30",
+    en: `**Lenses** — save your filters, name them, share them.
+
+- A lens is a saved snapshot of the filter set (name, namespace, kind pills, type, lifecycle, owner, tag, label) — pick one from the new combo box next to the Filter button on the Hierarchy, Files, Graph, and Errors views, and the filters apply instantly.
+- Lenses are shared between those views: save one on Hierarchy, apply it on Files or Graph.
+- Each lens is **private** (only you see it) or **public** (everyone sees it, grouped and labeled in the picker; only its creator can change it).
+- Overwrite a lens with your current filters, rename it, flip its visibility, or delete it from the actions menu; a "Modified" badge shows when your filters have drifted from the selected lens.`,
+    pl: `**Soczewki** — zapisuj filtry, nazywaj je i udostępniaj.
+
+- Soczewka to zapisany zestaw filtrów (nazwa, przestrzeń nazw, pigułki rodzajów, typ, cykl życia, właściciel/właścicielka, tag, etykieta) — wybierz ją z nowego pola wyboru obok przycisku Filtry w widokach Hierarchii, Plików, Grafu i Błędów, a filtry zastosują się od razu.
+- Soczewki są wspólne dla tych widoków: zapisz na Hierarchii, zastosuj na Plikach lub Grafie.
+- Każda soczewka jest **prywatna** (widzisz ją tylko Ty) lub **publiczna** (widzą ją wszyscy, pogrupowaną i oznaczoną w polu wyboru; zmieniać może ją tylko osoba, która ją utworzyła).
+- Z menu akcji nadpiszesz soczewkę bieżącymi filtrami, zmienisz jej nazwę i widoczność albo ją usuniesz; plakietka „Zmieniona" pokazuje, że filtry odbiegły od wybranej soczewki.`,
+  },
+  {
     version: "1.8.0",
     date: "2026-08-30",
     en: `The Cross-check page is now **Errors** — and it catches everything.

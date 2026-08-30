@@ -9,6 +9,7 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import EmptyState from "../components/EmptyState";
 import ErrorClassPills from "../components/ErrorClassPills";
 import FilterPanel from "../components/FilterPanel";
+import LensPicker from "../components/LensPicker";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { isStringArray, useStoredState } from "../hooks/useStoredState";
@@ -52,7 +53,11 @@ export default function Errors() {
     <Stack gap="md">
       <Title order={2}>{t("errors.title")}</Title>
 
-      <FilterPanel activeFilterCount={filters.activeFilterCount} storageKey="errors">
+      <FilterPanel
+        activeFilterCount={filters.activeFilterCount}
+        storageKey="errors"
+        aside={<LensPicker values={filters.values} controls={filters.controls} />}
+      >
         <CatalogFileFilterControls controls={filters.controls} />
       </FilterPanel>
 

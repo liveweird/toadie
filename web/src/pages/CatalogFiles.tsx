@@ -15,6 +15,7 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
+import LensPicker from "../components/LensPicker";
 import PaginationBar from "../components/PaginationBar";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
@@ -69,7 +70,11 @@ export default function CatalogFiles() {
     <Stack gap="md">
       <Title order={2}>{t("catalog.title")}</Title>
 
-      <FilterPanel activeFilterCount={filters.activeFilterCount} storageKey={SETTINGS_KEY}>
+      <FilterPanel
+        activeFilterCount={filters.activeFilterCount}
+        storageKey={SETTINGS_KEY}
+        aside={<LensPicker values={filters.values} controls={filters.controls} />}
+      >
         <CatalogFileFilterControls controls={filters.controls} />
       </FilterPanel>
 

@@ -1,0 +1,46 @@
+{
+  "picker": {
+    "label": "Lens",
+    "placeholder": "Apply a lens…",
+    "clearAria": "Clear lens"
+  },
+  "group": {
+    "private": "Private",
+    "public": "Public"
+  },
+  "modified": "Modified",
+  "actionsAria": "Lens actions",
+  "action": {
+    "saveAs": "Save as new lens…",
+    "save": "Save changes",
+    "edit": "Rename / visibility…",
+    "delete": "Delete"
+  },
+  "createTitle": "Save lens",
+  "editTitle": "Edit lens",
+  "field": {
+    "name": "Name",
+    "visibility": "Visibility"
+  },
+  "visibility": {
+    "private": "Private",
+    "privateHint": "Only you can see this lens.",
+    "public": "Public",
+    "publicHint": "Everyone can see and apply this lens; only you can change it."
+  },
+  "validation": {
+    "nameRequired": "Name is required",
+    "nameTooLong": "Name must be at most 100 characters"
+  },
+  "saveConflict": "You already have a lens with this name",
+  "saveForbidden": "Only the creator can change a public lens",
+  "saveGone": "This lens no longer exists",
+  "deleteTitle": "Delete lens",
+  "deleteFailed": "Delete failed",
+  "deleteBody": "Delete lens \"{{name}}\"?",
+  "toast": {
+    "created": "Lens saved",
+    "saved": "Lens updated",
+    "deleted": "Lens deleted"
+  }
+}

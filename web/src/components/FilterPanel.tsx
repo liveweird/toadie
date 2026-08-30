@@ -12,10 +12,14 @@ export default function FilterPanel({
   activeFilterCount,
   storageKey,
   children,
+  aside,
 }: {
   activeFilterCount: number;
   storageKey: string;
   children: ReactNode;
+  /** Rendered in the header row beside the toggle — reachable with the panel collapsed
+   *  (the LensPicker's slot). */
+  aside?: ReactNode;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useStoredState(`${storageKey}.filtersOpen`, false, isBoolean);
@@ -44,6 +48,7 @@ export default function FilterPanel({
         >
           {t("common.filter.title")}
         </Button>
+        {aside}
       </Group>
       {open && (
         <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-default-hover)">

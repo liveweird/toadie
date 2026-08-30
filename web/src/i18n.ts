@@ -16,6 +16,7 @@ import enChangelog from "./locales/en/changelog.json";
 import enErrors from "./locales/en/errors.json";
 import enHierarchy from "./locales/en/hierarchy.json";
 import enLabels from "./locales/en/labels.json";
+import enLenses from "./locales/en/lenses.json";
 import enLifecycles from "./locales/en/lifecycles.json";
 import enNamespaces from "./locales/en/namespaces.json";
 import enTags from "./locales/en/tags.json";
@@ -67,6 +68,7 @@ export const en = {
   errors: enErrors,
   hierarchy: enHierarchy,
   labels: enLabels,
+  lenses: enLenses,
   lifecycles: enLifecycles,
   namespaces: enNamespaces,
   tags: enTags,

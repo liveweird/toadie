@@ -19,6 +19,9 @@ generated-password reveal, self-service password change):
   included — registry violations, structurally drifted legacy rows, removed namespaces),
   filterable like the Files list plus error-type pills — plus a live reference panel in the
   editor; findings never block saving,
+- **lenses**: save the current filter set under a name and re-apply it from a combo box on
+  any of the Hierarchy, Files, Graph, and Errors views — each lens private (only you) or
+  public (visible to everyone, changeable only by its creator),
   and
 - **rendering together**: the `/graph` relationship graph — every stored file and the
   reference edges between them (missing and external targets drawn as virtual nodes), with a

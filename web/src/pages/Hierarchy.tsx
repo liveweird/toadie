@@ -23,6 +23,7 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
+import LensPicker from "../components/LensPicker";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
@@ -190,7 +191,11 @@ export default function Hierarchy() {
     <Stack gap="md">
       <Title order={2}>{t("hierarchy.title")}</Title>
 
-      <FilterPanel activeFilterCount={filters.activeFilterCount} storageKey="hierarchy">
+      <FilterPanel
+        activeFilterCount={filters.activeFilterCount}
+        storageKey="hierarchy"
+        aside={<LensPicker values={filters.values} controls={filters.controls} />}
+      >
         <CatalogFileFilterControls controls={filters.controls} />
       </FilterPanel>
 

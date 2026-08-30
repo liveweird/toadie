@@ -1,0 +1,46 @@
+{
+  "picker": {
+    "label": "Soczewka",
+    "placeholder": "Zastosuj soczewkę…",
+    "clearAria": "Wyczyść soczewkę"
+  },
+  "group": {
+    "private": "Prywatne",
+    "public": "Publiczne"
+  },
+  "modified": "Zmieniona",
+  "actionsAria": "Akcje soczewki",
+  "action": {
+    "saveAs": "Zapisz jako nową soczewkę…",
+    "save": "Zapisz zmiany",
+    "edit": "Zmień nazwę / widoczność…",
+    "delete": "Usuń"
+  },
+  "createTitle": "Zapisz soczewkę",
+  "editTitle": "Edytuj soczewkę",
+  "field": {
+    "name": "Nazwa",
+    "visibility": "Widoczność"
+  },
+  "visibility": {
+    "private": "Prywatna",
+    "privateHint": "Tylko Ty widzisz tę soczewkę.",
+    "public": "Publiczna",
+    "publicHint": "Każdy widzi i może zastosować tę soczewkę; tylko Ty możesz ją zmieniać."
+  },
+  "validation": {
+    "nameRequired": "Nazwa jest wymagana",
+    "nameTooLong": "Nazwa może mieć najwyżej 100 znaków"
+  },
+  "saveConflict": "Masz już soczewkę o tej nazwie",
+  "saveForbidden": "Tylko osoba, która utworzyła publiczną soczewkę, może ją zmieniać",
+  "saveGone": "Ta soczewka już nie istnieje",
+  "deleteTitle": "Usuń soczewkę",
+  "deleteFailed": "Usuwanie nie powiodło się",
+  "deleteBody": "Usunąć soczewkę „{{name}}”?",
+  "toast": {
+    "created": "Soczewka zapisana",
+    "saved": "Soczewka zaktualizowana",
+    "deleted": "Soczewka usunięta"
+  }
+}

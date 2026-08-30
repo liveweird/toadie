@@ -84,6 +84,10 @@ from Lettuce, that any new or edited spec must satisfy:
   **`labels.spec.ts` is the registry's ONLY in-run writer**, and it only ever creates and
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
   first moving label registration into global-setup (the run-namespace pattern).
+- **The lens store is per-run unique-name state.** Lenses are per-user content (private by
+  default) and names are only unique per owner, so parallel specs cannot clash as long as
+  every lens a spec saves carries a run-unique `e2e-lens-*` name and is deleted by its own
+  spec — `lenses.spec.ts` follows exactly that and is the store's only writer.
 - **The annotation-key registry follows the same rule.** Catalog writes accept only
   registered annotation keys — **`annotations.spec.ts` is that registry's ONLY in-run
   writer**, creating and deleting only its own unique `e2e-ann-*` key. No other spec may
@@ -158,6 +162,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
   label (values + kinds) → edit → the regular user's read-only view → the editor's
   registry-constrained label pickers on a new Component → the list's label/label-value
   filters (key presence, any-of values) → cleanup; the registry's only in-run writer.
+- [`lenses.spec.ts`](scenarios/lenses.md) — Lenses: filter the Files list, save it as a
+  named private lens, watch the Modified badge on divergence, apply the same lens on
+  Hierarchy, Graph, and Errors, rename it public, delete it; throwaway unique-named files
+  and lenses.
 - [`lifecycles.spec.ts`](scenarios/lifecycles.md) — the lifecycles dictionary: seeded values
   → inline grammar validation → append a unique value → the regular user's read-only view →
   the editor's Lifecycle Select on a new Component → removal; the dictionary's only in-run

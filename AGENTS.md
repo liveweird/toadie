@@ -37,7 +37,7 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
 - `core/` is Kotlin Multiplatform (currently JVM-targeted) and owns the shared OpenTelemetry SDK
   bootstrap.
 - `server/` is the Kotlin/JVM Ktor application. Feature packages live directly under
-  `server/src/main/kotlin/`: `auth`, `users`, `catalog`, `dictionaries`, `labels`, and `tags`.
+  `server/src/main/kotlin/`: `auth`, `users`, `catalog`, `dictionaries`, `labels`, `lenses`, and `tags`.
   `catalog` is the feature reference implementation: seven Backstage kinds (Component, API,
   System, Domain, Resource, Group, User), full CRUD + paginated list, strict reference checking,
   the workspace Errors report and live check, graph, import/export, and SSRF-guarded URL fetch. Cross-cutting

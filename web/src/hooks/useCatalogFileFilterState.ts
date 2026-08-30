@@ -29,6 +29,8 @@ export type CatalogFileFilterControlsState = {
   setLabel: (v: string) => void;
   labelValues: string[];
   setLabelValues: (v: string[]) => void;
+  /** Bulk-set every slot from a values snapshot — the LensPicker's apply entry point. */
+  applyValues: (v: CatalogFileFilterValues) => void;
 };
 
 /**
@@ -83,6 +85,21 @@ export function useCatalogFileFilterState(viewKey: string): {
     if (next !== label) setLabelValues([]);
   }
 
+  // The lens-apply entry point: one snapshot into all nine slots. An absent kind set means
+  // "every kind visible" (all-on sends no param, so the two states are one on the wire), an
+  // absent scalar clears its slot, and labelValue never survives without its label.
+  function applyValues(next: CatalogFileFilterValues) {
+    setName(next.name ?? "");
+    setNamespace(next.namespace ?? "");
+    setKinds(next.kind && next.kind.length > 0 ? [...next.kind] : [...ENTITY_KINDS]);
+    setTag(next.tag ?? "");
+    setType(next.type ?? "");
+    setLifecycle(next.lifecycle ?? "");
+    setOwner(next.owner ?? "");
+    setLabelRaw(next.label ?? "");
+    setLabelValues(next.label && next.labelValue ? [...next.labelValue] : []);
+  }
+
   const values: CatalogFileFilterValues = {
     name: debouncedName || undefined,
     namespace: namespace || undefined,
@@ -133,6 +150,7 @@ export function useCatalogFileFilterState(viewKey: string): {
       setLabel,
       labelValues,
       setLabelValues,
+      applyValues,
     },
   };
 }

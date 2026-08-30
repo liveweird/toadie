@@ -37,6 +37,7 @@ import CatalogGraphNode from "../components/CatalogGraphNode";
 import CatalogKindPills from "../components/CatalogKindPills";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
+import LensPicker from "../components/LensPicker";
 import {
   applyManualPositions,
   filterGraph,
@@ -182,7 +183,11 @@ export default function RenderGraph() {
     <Stack gap="md" h="100%">
       <Title order={2}>{t("render.title")}</Title>
 
-      <FilterPanel activeFilterCount={filters.activeFilterCount} storageKey="renderGraph">
+      <FilterPanel
+        activeFilterCount={filters.activeFilterCount}
+        storageKey="renderGraph"
+        aside={<LensPicker values={filters.values} controls={filters.controls} />}
+      >
         <CatalogFileFilterControls controls={filters.controls} />
       </FilterPanel>
 

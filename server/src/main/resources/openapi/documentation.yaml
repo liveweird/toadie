@@ -33,6 +33,7 @@ tags:
   - name: tag-categories
   - name: entity-types
   - name: annotation-keys
+  - name: lenses
 
 paths:
   /api/v1/login:
@@ -1387,6 +1388,101 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/lenses:
+    get:
+      tags: [lenses]
+      operationId: listLenses
+      summary: List the lenses visible to the caller
+      description: |
+        Any authenticated user. Returns every active lens the caller may see: their OWN
+        lenses (both visibilities) plus everyone's PUBLIC ones — name-ordered
+        case-insensitively, deliberately unpaged (a personal-plus-curated scale). A lens is
+        a named snapshot of the shared catalog filter set the Hierarchy/Files/Graph/Errors
+        views declare; PRIVATE lenses never appear in anyone else's list (admins included —
+        ADMIN gets no special content access).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LensList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    post:
+      tags: [lenses]
+      operationId: createLens
+      summary: Save a lens
+      description: |
+        Any authenticated user; the caller becomes the creator. The filter payload is
+        validated STRUCTURALLY only (lengths, the kind whitelist, `labelValue` requires
+        `label`), never against the registries — a lens holding a since-removed value simply
+        matches nothing. A name already held by one of the caller's own active lenses
+        (case-insensitively) is a `409`; different users may reuse a name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LensRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema: { type: string }
+              description: URL of the new lens resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lens'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/lenses/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      tags: [lenses]
+      operationId: replaceLens
+      summary: Replace a lens
+      description: |
+        Creator only — whole-lens replacement: overwrite (save-again), rename, and the
+        visibility flip are all this one operation. A foreign PRIVATE (or unknown) lens id
+        is a uniform `404` — a private lens's existence is itself private — while a foreign
+        PUBLIC lens (visible in everyone's list anyway) is an honest `403`; admins get the
+        same treatment. Same validation and `409` rules as create.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LensRequest'
+      responses:
+        '204': { description: Replaced }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    delete:
+      tags: [lenses]
+      operationId: deleteLens
+      summary: Delete a lens
+      description: |
+        Creator only — soft delete; the name becomes reusable by a NEW lens of the same
+        owner. The same disclosure split as replace: foreign PRIVATE/unknown → `404`,
+        foreign PUBLIC → `403`.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2420,6 +2516,125 @@ components:
           description: >-
             At least one of the seven landscape kinds (case-insensitive input; stored in
             canonical casing and order); no duplicates.
+
+    LensVisibility:
+      type: string
+      enum: [PRIVATE, PUBLIC]
+      description: >-
+        PRIVATE lenses are visible only to their creator; PUBLIC lenses are visible to every
+        authenticated user. Both stay creator-only mutable.
+
+    LensFilters:
+      type: object
+      description: >-
+        The shared catalog filter set as a saved snapshot — the same nine slots the
+        files/graph/errors GETs accept as query parameters. Every field is optional; absent
+        means "not filtered on". Values are validated structurally only, never against the
+        registries.
+      properties:
+        name:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: Case- and accent-insensitive name substring.
+        namespace:
+          type: string
+          nullable: true
+          maxLength: 255
+        kind:
+          type: array
+          nullable: true
+          maxItems: 7
+          items: { type: string, maxLength: 63 }
+          description: >-
+            The visible-kinds set (any-of, canonical casing and order); absent = every kind
+            visible.
+        tag:
+          type: string
+          nullable: true
+          maxLength: 255
+        type:
+          type: string
+          nullable: true
+          maxLength: 255
+        lifecycle:
+          type: string
+          nullable: true
+          maxLength: 255
+        owner:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: An entity reference, matched by reference resolution.
+        label:
+          type: string
+          nullable: true
+          maxLength: 255
+        labelValue:
+          type: array
+          nullable: true
+          maxItems: 100
+          items: { type: string, maxLength: 255 }
+          description: Any-of over the selected label's values; requires `label`.
+
+    Lens:
+      type: object
+      required: [id, name, visibility, filters, createdBy, creatorName, creatorDeleted, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 0
+        name:
+          type: string
+          maxLength: 100
+          description: Unique case-insensitively among the CREATOR'S active lenses.
+        visibility:
+          $ref: '#/components/schemas/LensVisibility'
+        filters:
+          $ref: '#/components/schemas/LensFilters'
+        createdBy:
+          type: integer
+          format: int32
+          minimum: 0
+          description: The creator's user id — the only user who may replace or delete the lens.
+        creatorName:
+          type: string
+          description: The creator's display name (from the users table at read time).
+        creatorDeleted:
+          type: boolean
+          description: True when the creator's account has since been soft-deleted.
+        createdAt:
+          type: integer
+          format: int64
+          description: Epoch millis.
+        updatedAt:
+          type: integer
+          format: int64
+          description: Epoch millis.
+
+    LensList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lens'
+          description: Visible lenses, name-ordered case-insensitively.
+
+    LensRequest:
+      type: object
+      required: [name, visibility, filters]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          description: Trimmed; must not be blank.
+        visibility:
+          $ref: '#/components/schemas/LensVisibility'
+        filters:
+          $ref: '#/components/schemas/LensFilters'
 
     TagCategory:
       type: object
