@@ -62,6 +62,13 @@ enum class ErrorStatus {
      * removed after the save) — report-only: writes resolve the namespace HARD, unwaivable.
      */
     NAMESPACE_NOT_ALLOWED,
+
+    /**
+     * The file carries no source reference (the https URL of its repo copy) — report-only:
+     * the reference is optional on every write (set it in the editor, or import from a URL),
+     * but a file without one cannot be synced, so the report keeps it visible.
+     */
+    SOURCE_MISSING,
 }
 
 /** One problematic reference inside one document (the ad-hoc check's shape). */
@@ -102,6 +109,8 @@ data class ErrorsReport(
 data class CatalogSource(
     val id: UInt,
     val file: CatalogFile,
+    /** The row's source reference — feeds only the report-only SOURCE_MISSING check. */
+    val sourceUrl: String? = null,
 )
 
 /** The lowercased kinds the editor stores — references to them are RESOLVABLE. */
@@ -274,7 +283,7 @@ fun errorsReport(
         checkedReferences += result.referenceCount
         val documentFindings = result.findings.map { it to null } +
             registryFindings(source.file, registries).map { it.finding to null } +
-            storedDocumentFindings(source.file, registries)
+            storedDocumentFindings(source, registries)
         documentFindings.map { (finding, message) ->
             ErrorFinding(
                 fileId = source.id,
@@ -296,19 +305,22 @@ fun errorsReport(
 }
 
 /**
- * The report-only checks over one STORED document, as (finding, optional message) pairs:
- * structural descriptor validation and namespace-dictionary membership. Both rules are HARD
- * on every write (validateCatalogFile / resolvedNamespace throw 400 before the soft checks
- * run, allowInvalid notwithstanding), so they are deliberately NOT part of
- * [registryFindings]/softFindings — a finding here can only mean the row predates a rule or
- * dictionary change (planted legacy content, a namespace entry removed after the save).
- * validateCatalogFile is fail-fast, so a structurally broken file reports its FIRST problem
- * only (documented in the endpoint description).
+ * The report-only checks over one STORED row, as (finding, optional message) pairs:
+ * structural descriptor validation, namespace-dictionary membership, and the source
+ * reference's presence. The first two rules are HARD on every write (validateCatalogFile /
+ * resolvedNamespace throw 400 before the soft checks run, allowInvalid notwithstanding), so
+ * they are deliberately NOT part of [registryFindings]/softFindings — a finding there can
+ * only mean the row predates a rule or dictionary change (planted legacy content, a
+ * namespace entry removed after the save). The source check is the opposite kind of
+ * report-only: the reference is OPTIONAL on writes, so a missing one is never a save
+ * blocker, just a standing report entry. validateCatalogFile is fail-fast, so a structurally
+ * broken file reports its FIRST problem only (documented in the endpoint description).
  */
 private fun storedDocumentFindings(
-    file: CatalogFile,
+    source: CatalogSource,
     registries: RegistrySnapshot,
 ): List<Pair<DocumentCheckFinding, String?>> {
+    val file = source.file
     val findings = mutableListOf<Pair<DocumentCheckFinding, String?>>()
     try {
         validateCatalogFile(file)
@@ -325,6 +337,13 @@ private fun storedDocumentFindings(
             field = "metadata.namespace",
             reference = namespace,
             status = ErrorStatus.NAMESPACE_NOT_ALLOWED,
+        ) to null
+    }
+    if (source.sourceUrl == null) {
+        findings += DocumentCheckFinding(
+            field = "source",
+            reference = "",
+            status = ErrorStatus.SOURCE_MISSING,
         ) to null
     }
     return findings

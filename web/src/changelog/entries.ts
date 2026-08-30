@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.11.0",
+    date: "2026-08-30",
+    en: `**Source references & repo sync** — tie each file to its copy in a Git repository.
+
+- Every file can carry a **source file URL** (its copy in a GitLab/GitHub repo): set it in the editor's new Source section, or import from a URL — imported files get the reference automatically and start synced.
+- The Files list shows a new **Last sync** column (sortable): no source, never synced, or how long ago — with a "Local changes" marker when the DB copy moved since.
+- **Sync from repo** in the row's Operations menu fetches the repo copy, shows which side changed (repo, DB, or both) and a line-by-line diff, and — after your confirmation — overwrites the DB copy. Syncing the other way (DB → repo) stays in your hands.
+- A file without a source reference shows up on the Errors report as **No source reference** (its own filter pill).`,
+    pl: `**Odnośniki do źródeł i synchronizacja z repozytorium** — powiąż każdy plik z jego kopią w repozytorium Git.
+
+- Każdy plik może mieć **adres URL pliku źródłowego** (jego kopii w repozytorium GitLab/GitHub): ustaw go w nowej sekcji Źródło w edytorze albo zaimportuj plik z adresu URL — zaimportowane pliki dostają odnośnik automatycznie i są od razu zsynchronizowane.
+- Lista Plików ma nową kolumnę **Ostatnia synchronizacja** (z sortowaniem): brak źródła, nigdy nie zsynchronizowano albo jak dawno temu — ze znacznikiem „Zmiany lokalne", gdy kopia w bazie zmieniła się od tego czasu.
+- **Synchronizuj z repozytorium** w menu Operacje wiersza pobiera kopię z repozytorium, pokazuje, po której stronie są zmiany (repozytorium, baza lub obie) oraz różnice linia po linii, a po Twoim potwierdzeniu nadpisuje kopię w bazie. Synchronizację w drugą stronę (baza → repozytorium) wykonujesz samodzielnie.
+- Plik bez odnośnika do źródła pojawia się w raporcie błędów jako **Brak odnośnika do źródła** (z własną pigułką filtra).`,
+  },
+  {
     version: "1.10.0",
     date: "2026-08-30",
     en: `**Kind tiers** — every kind now shows its fill-in priority.

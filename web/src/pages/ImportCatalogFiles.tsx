@@ -43,6 +43,10 @@ export default function ImportCatalogFiles() {
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
   const [fetching, setFetching] = useState(false);
+  // The normalized URL the CURRENT text came from — set on a successful fetch, cleared the
+  // moment the text changes by typing or file pick. Imports pass it as the batch's source
+  // reference (every stored row starts synced); an edited/pasted batch carries none.
+  const [fetchedFrom, setFetchedFrom] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -61,6 +65,7 @@ export default function ImportCatalogFiles() {
   async function handleFile(file: File | null) {
     if (!file) return;
     setText(await file.text());
+    setFetchedFrom(null);
     setResults(null);
   }
 
@@ -70,8 +75,10 @@ export default function ImportCatalogFiles() {
     setFetching(true);
     setFetchError(null);
     try {
-      const fetched = await fetchCatalogUrl(normalizeCatalogUrl(url));
+      const normalized = normalizeCatalogUrl(url);
+      const fetched = await fetchCatalogUrl(normalized);
       setText(fetched.content);
+      setFetchedFrom(normalized);
       setResults(null);
     } catch (err) {
       setFetchError(
@@ -96,7 +103,7 @@ export default function ImportCatalogFiles() {
     try {
       const response =
         mode === "import"
-          ? await importCatalogFiles(current.documents)
+          ? await importCatalogFiles(current.documents, fetchedFrom ?? undefined)
           : await checkImportCatalogFiles(current.documents);
       setResults({ mode, rows: response.results });
       if (mode === "import") {
@@ -154,12 +161,19 @@ export default function ImportCatalogFiles() {
         </Alert>
       )}
 
+      {fetchedFrom != null && (
+        <Text size="sm" c="dimmed">
+          {t("catalog.import.sourceHint", { url: fetchedFrom })}
+        </Text>
+      )}
+
       <Textarea
         label={t("catalog.import.textareaLabel")}
         placeholder={t("catalog.import.placeholder")}
         value={text}
         onChange={(event) => {
           setText(event.currentTarget.value);
+          setFetchedFrom(null);
           setResults(null);
         }}
         autosize

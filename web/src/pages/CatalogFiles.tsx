@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { Alert, Badge, Button, Group, Stack, Table, Text, Title } from "@mantine/core";
@@ -18,6 +19,7 @@ import FilterPanel from "../components/FilterPanel";
 import KindTierDot from "../components/KindTierDot";
 import LensPicker from "../components/LensPicker";
 import PaginationBar from "../components/PaginationBar";
+import SyncCatalogFileModal from "../components/SyncCatalogFileModal";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
@@ -25,12 +27,49 @@ import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { loadErrorMessage } from "../utils/saveError";
+import { relativeTimeAgo } from "../utils/relativeTime";
 import { importCatalogFilesPath, newCatalogFilePath } from "../utils/catalogFileLinks";
 
-const SORT_FIELDS = ["name", "kind", "namespace", "updatedAt"] as const;
+const SORT_FIELDS = ["name", "kind", "namespace", "updatedAt", "lastSyncedAt"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
 
 const SETTINGS_KEY = "catalogFiles";
+
+/**
+ * The Last-sync cell: no reference → dimmed "No source" (also a standing Errors-report
+ * finding), reference but never synced → "Never synced", synced → relative time (absolute
+ * timestamp in the title) plus an orange "local changes" marker when the DB moved since
+ * (`updatedAt > lastSyncedAt` — a sync stamps both equal).
+ */
+function SyncStateCell({ file }: { file: CatalogFileListItem }) {
+  const { t, i18n } = useTranslation();
+  if (file.sourceUrl == null) {
+    return (
+      <Text size="sm" c="dimmed">
+        {t("catalog.sync.noSource")}
+      </Text>
+    );
+  }
+  if (file.lastSyncedAt === 0) {
+    return (
+      <Text size="sm" c="dimmed">
+        {t("catalog.sync.neverSynced")}
+      </Text>
+    );
+  }
+  return (
+    <Group gap={6} wrap="nowrap">
+      <Text size="sm" title={new Date(file.lastSyncedAt).toLocaleString(i18n.language)}>
+        {relativeTimeAgo(file.lastSyncedAt, i18n.language)}
+      </Text>
+      {file.updatedAt > file.lastSyncedAt && (
+        <Badge variant="light" color="orange" size="xs">
+          {t("catalog.sync.localChanges")}
+        </Badge>
+      )}
+    </Group>
+  );
+}
 
 export default function CatalogFiles() {
   const { t, i18n } = useTranslation();
@@ -64,8 +103,12 @@ export default function CatalogFiles() {
     successMessage: t("catalog.toast.deleted"),
   });
 
+  // The Sync-from-repo modal's target row (null = closed); offered only on rows with a
+  // source reference.
+  const [syncTarget, setSyncTarget] = useState<CatalogFileListItem | null>(null);
+
   const total = data?.total ?? 0;
-  const columnCount = 6;
+  const columnCount = 7;
 
   return (
     <Stack gap="md">
@@ -151,6 +194,15 @@ export default function CatalogFiles() {
                 onToggle={toggleSort}
               />
             </Table.Th>
+            <Table.Th>
+              <SortHeader
+                field="lastSyncedAt"
+                label={t("catalog.field.lastSync")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+              />
+            </Table.Th>
             <Table.Th aria-label={t("catalog.operations")} style={{ width: 1 }} />
           </Table.Tr>
         </Table.Thead>
@@ -179,6 +231,9 @@ export default function CatalogFiles() {
                 <Table.Td>
                   <Text size="sm">{new Date(file.updatedAt).toLocaleDateString(i18n.language)}</Text>
                 </Table.Td>
+                <Table.Td>
+                  <SyncStateCell file={file} />
+                </Table.Td>
                 <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
                   <CatalogFileOperations
                     id={file.id}
@@ -186,6 +241,7 @@ export default function CatalogFiles() {
                     downloading={downloads.downloadingId === file.id}
                     onDownload={() => void downloads.handleDownload(file)}
                     onDelete={() => deleteConfirm.requestDelete(file)}
+                    onSync={file.sourceUrl != null ? () => setSyncTarget(file) : undefined}
                   />
                 </Table.Td>
               </Table.Tr>
@@ -233,6 +289,8 @@ export default function CatalogFiles() {
           {t("catalog.createFile")}
         </Button>
       </Group>
+
+      <SyncCatalogFileModal file={syncTarget} onClose={() => setSyncTarget(null)} />
 
       <ConfirmDeleteModal
         confirm={deleteConfirm}

@@ -15,6 +15,7 @@ export const ERROR_CLASSES = [
   "tags",
   "types",
   "lifecycles",
+  "source",
 ] as const;
 
 export type ErrorClass = (typeof ERROR_CLASSES)[number];
@@ -31,6 +32,7 @@ const STATUS_CLASS: Record<ErrorStatus, ErrorClass> = {
   LIFECYCLE_NOT_ALLOWED: "lifecycles",
   STRUCTURE_INVALID: "structure",
   NAMESPACE_NOT_ALLOWED: "namespace",
+  SOURCE_MISSING: "source",
 };
 
 export const classOfStatus = (status: ErrorStatus): ErrorClass => STATUS_CLASS[status];

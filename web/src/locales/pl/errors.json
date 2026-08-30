@@ -15,7 +15,8 @@
     "annotations": "Adnotacje",
     "tags": "Tagi",
     "types": "Typy",
-    "lifecycles": "Cykle życia"
+    "lifecycles": "Cykle życia",
+    "source": "Źródło"
   },
   "field": {
     "file": "Plik",
@@ -36,7 +37,8 @@
     "TYPE_NOT_ALLOWED": "Niedozwolony typ",
     "LIFECYCLE_NOT_ALLOWED": "Niedozwolony cykl życia",
     "STRUCTURE_INVALID": "Nieprawidłowa struktura",
-    "NAMESPACE_NOT_ALLOWED": "Niedozwolona przestrzeń nazw"
+    "NAMESPACE_NOT_ALLOWED": "Niedozwolona przestrzeń nazw",
+    "SOURCE_MISSING": "Brak odnośnika do źródła"
   },
   "message": {
     "MISSING": "Żadna zapisana encja nie odpowiada temu odwołaniu.",
@@ -49,7 +51,8 @@
     "TYPE_NOT_ALLOWED": "Słownik typów tego rodzaju nie dopuszcza tego typu — dostosuj go na stronie Typy.",
     "LIFECYCLE_NOT_ALLOWED": "Słownik cykli życia nie dopuszcza tej wartości — dostosuj go na stronie Cykle życia.",
     "STRUCTURE_INVALID": "Zapisany dokument nie przechodzi już walidacji strukturalnej — otwórz plik i popraw go.",
-    "NAMESPACE_NOT_ALLOWED": "Ta przestrzeń nazw nie jest już zdefiniowana — dodaj ją ponownie na stronie Przestrzenie nazw lub przenieś plik."
+    "NAMESPACE_NOT_ALLOWED": "Ta przestrzeń nazw nie jest już zdefiniowana — dodaj ją ponownie na stronie Przestrzenie nazw lub przenieś plik.",
+    "SOURCE_MISSING": "Plik nie ma odnośnika do źródła — ustaw adres repozytorium w edytorze lub zaimportuj plik z adresu URL."
   },
   "noFindings": "Brak błędów — każdy plik przechodzi kontrole.",
   "panel": {

@@ -8,6 +8,7 @@ export const MAX_DESCRIPTION_LENGTH = 2000;
 const MAX_ANNOTATION_VALUE_LENGTH = 5000;
 export const MAX_LINK_TITLE_LENGTH = 100;
 export const MAX_DEFINITION_LENGTH = 100000;
+export const MAX_SOURCE_URL_LENGTH = 2048;
 const MAX_PROFILE_EMAIL_LENGTH = 254;
 
 export const ENTITY_KINDS = ["Component", "API", "System", "Domain", "Resource", "Group", "User"] as const;
@@ -88,6 +89,8 @@ export type CatalogFileFormValues = {
   memberOf: string[];
   domain: string;
   subdomainOf: string;
+  /** The optional source reference — envelope state beside the document, never in the YAML. */
+  sourceUrl: string;
 };
 
 /** A fresh set of initial form values — a factory so form instances never share array refs. */
@@ -121,6 +124,7 @@ export function emptyCatalogFileForm(): CatalogFileFormValues {
     memberOf: [],
     domain: "",
     subdomainOf: "",
+    sourceUrl: "",
   };
 }
 
@@ -336,6 +340,21 @@ export function catalogFileFormValidation(t: TFunction) {
       const v = value.trim();
       return !v || isAbsoluteUri(v) ? null : t("catalog.validation.url");
     },
+    // The server's static sourceUrl guards (sanitizedSourceUrl): absolute https, no
+    // credentials, sane length — the public-host check stays a fetch-time concern.
+    sourceUrl: (value: string) => {
+      const v = value.trim();
+      if (!v) return null;
+      if (v.length > MAX_SOURCE_URL_LENGTH) return t("catalog.validation.sourceUrl");
+      try {
+        const url = new URL(v);
+        return url.protocol === "https:" && !url.username && !url.password
+          ? null
+          : t("catalog.validation.sourceUrl");
+      } catch {
+        return t("catalog.validation.sourceUrl");
+      }
+    },
     parent: refRule("parent", t),
     children: refArrayRule("children", t),
     members: refArrayRule("members", t),
@@ -464,5 +483,6 @@ export function fromCatalogFileResponse(file: CatalogFileResponse): CatalogFileF
     memberOf: file.spec.memberOf ?? [],
     domain: file.spec.domain ?? "",
     subdomainOf: file.spec.subdomainOf ?? "",
+    sourceUrl: file.sourceUrl ?? "",
   };
 }

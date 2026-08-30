@@ -224,6 +224,8 @@ describe("toCatalogFileRequest / fromCatalogFileResponse", () => {
         creatorDeleted: false,
         createdAt: 1000,
         updatedAt: 2000,
+        sourceUrl: null,
+        lastSyncedAt: 0,
       };
       const req = toCatalogFileRequest(fromCatalogFileResponse(response));
       expect(req.kind).toBe(kind);

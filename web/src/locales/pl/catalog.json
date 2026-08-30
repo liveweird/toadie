@@ -22,7 +22,8 @@
     "links": "Linki",
     "labels": "Etykiety",
     "annotations": "Adnotacje",
-    "profile": "Profil"
+    "profile": "Profil",
+    "source": "Źródło"
   },
   "field": {
     "namespace": "Przestrzeń nazw",
@@ -56,7 +57,9 @@
     "profileEmail": "E-mail",
     "profilePicture": "URL obrazka",
     "label": "Etykieta",
-    "labelValues": "Wartości etykiety"
+    "labelValues": "Wartości etykiety",
+    "lastSync": "Ostatnia synchronizacja",
+    "sourceUrl": "Adres URL pliku źródłowego"
   },
   "hint": {
     "namespace": "Wybierz zdefiniowaną przestrzeń nazw; puste pole oznacza \"{{default}}\"",
@@ -73,7 +76,8 @@
     "members": "Osoby w tej grupie.",
     "memberOf": "Grupy, do których należy ta osoba. Backstage wymaga tej listy — pusta jest w porządku.",
     "domain": "Domena, do której należy ten system.",
-    "subdomainOf": "Domena nadrzędna, dla domen zagnieżdżonych."
+    "subdomainOf": "Domena nadrzędna, dla domen zagnieżdżonych.",
+    "sourceUrl": "Adres https kopii tego pliku w repozytorium GitLab/GitHub — umożliwia synchronizację z repozytorium."
   },
   "addLink": "Dodaj link",
   "addLabel": "Dodaj etykietę",
@@ -103,14 +107,16 @@
     "ref": "Musi być referencją encji: [kind:][namespace/]name",
     "refEntry": "\"{{ref}}\" nie jest poprawną referencją encji",
     "definitionLength": "Definicja może mieć najwyżej 100000 znaków",
-    "profileEmailLength": "E-mail może mieć najwyżej 254 znaki"
+    "profileEmailLength": "E-mail może mieć najwyżej 254 znaki",
+    "sourceUrl": "Musi być bezwzględnym adresem https bez danych logowania"
   },
   "validationError": "Błąd walidacji. Sprawdź formularz i spróbuj ponownie.",
   "conflictError": "Aktywny plik o tej przestrzeni nazw i nazwie już istnieje.",
   "toast": {
     "created": "Utworzono plik katalogu",
     "updated": "Zaktualizowano plik katalogu",
-    "deleted": "Usunięto plik katalogu"
+    "deleted": "Usunięto plik katalogu",
+    "synced": "Plik zsynchronizowany z repozytorium"
   },
   "refHelp": "Każde pole podpowiada zapisane encje, na które może wskazywać — wybór wstawia pełną tożsamość kind:namespace/name. Referencje wpisywane ręcznie też działają (rodzaj i przestrzeń nazw zwykle można pominąć); każda referencja musi wskazywać zapisaną encję.",
   "anyNamespace": "Dowolna przestrzeń nazw",
@@ -170,7 +176,8 @@
     "failedTitle": "Import nie powiódł się",
     "tooMany": "Za dużo dokumentów w jednym imporcie (limit to 200).",
     "failedStatus": "Import nie powiódł się ({{status}})",
-    "failedNetwork": "Import nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
+    "failedNetwork": "Import nie powiódł się. Sprawdź połączenie i spróbuj ponownie.",
+    "sourceHint": "Zaimportowane pliki otrzymają {{url}} jako odnośnik do źródła i będą od razu zsynchronizowane."
   },
   "namespaceOptionsFailed": "Nie udało się wczytać listy przestrzeni nazw. Przeładuj stronę, aby spróbować ponownie.",
   "labelOptionsFailed": "Nie udało się wczytać listy etykiet. Przeładuj stronę, aby spróbować ponownie.",
@@ -192,5 +199,26 @@
   },
   "tier": {
     "tooltip": "Poziom {{tier}} — najpierw uzupełnij niższe poziomy"
+  },
+  "sync": {
+    "action": "Synchronizuj z repozytorium",
+    "title": "Synchronizacja z repozytorium — {{name}}",
+    "sourceLabel": "Źródło:",
+    "lastSynced": "Ostatnio zsynchronizowano {{ago}}",
+    "neverSynced": "Nigdy nie zsynchronizowano",
+    "noSource": "Brak źródła",
+    "localChanges": "Zmiany lokalne",
+    "changedInRepo": "Zmienione w repozytorium",
+    "changedInDb": "Zmienione w bazie",
+    "inSync": "Baza i repozytorium są zgodne",
+    "diffLabel": "Różnice między kopią w bazie a kopią w repozytorium",
+    "loadingAria": "Wczytywanie kopii z repozytorium",
+    "loadFailed": "Nie udało się przygotować porównania",
+    "parseFailed": "Plik w repozytorium nie jest poprawnym catalog-info.yaml.",
+    "noMatch": "Plik w repozytorium nie zawiera już tej encji.",
+    "findingsWarning": "Wersja z repozytorium ma ustalenia ({{count}}) — synchronizacja i tak ją zapisze, a ustalenia pojawią się w raporcie błędów.",
+    "overwriteWarning": "Synchronizacja nadpisze kopię w bazie wersją z repozytorium pokazaną powyżej. Zmiany wprowadzone tylko w bazie zostaną utracone.",
+    "confirm": "Nadpisz kopię w bazie",
+    "failed": "Synchronizacja nie powiodła się"
   }
 }

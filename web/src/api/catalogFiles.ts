@@ -8,6 +8,8 @@ export type CatalogFilePage =
   paths["/api/v1/files"]["get"]["responses"]["200"]["content"]["application/json"];
 export type CatalogFileListItem = components["schemas"]["CatalogFileListItem"];
 export type CatalogFileRequest = components["schemas"]["CatalogFileRequest"];
+/** The create/replace body: the pure document plus the optional source reference. */
+export type CatalogFileWriteRequest = components["schemas"]["CatalogFileWriteRequest"];
 export type CatalogFileResponse =
   paths["/api/v1/files/{id}"]["get"]["responses"]["200"]["content"]["application/json"];
 
@@ -80,7 +82,7 @@ const saveQuery = (opts?: CatalogSaveOptions) =>
   buildQuery({ allowInvalid: opts?.allowInvalid || undefined });
 
 export async function createCatalogFile(
-  req: CatalogFileRequest,
+  req: CatalogFileWriteRequest,
   opts?: CatalogSaveOptions,
 ): Promise<CatalogFileResponse> {
   const params = saveQuery(opts);
@@ -92,7 +94,7 @@ export async function createCatalogFile(
 
 export async function updateCatalogFile(
   id: number,
-  req: CatalogFileRequest,
+  req: CatalogFileWriteRequest,
   opts?: CatalogSaveOptions,
 ): Promise<void> {
   const params = saveQuery(opts);
@@ -173,11 +175,18 @@ export async function exportCatalogFiles(namespace?: string): Promise<CatalogExp
   return jsonRequest<CatalogExport>(`/api/v1/files/export${params ? `?${params}` : ""}`);
 }
 
-/** Report & skip: one result row per document, 200 even when every document failed. */
-export async function importCatalogFiles(files: CatalogFileRequest[]): Promise<ImportResult> {
+/**
+ * Report & skip: one result row per document, 200 even when every document failed.
+ * `sourceUrl` (the fetch-from-URL flow) makes every stored row carry the reference and
+ * start synced — an import from a repo URL IS a sync.
+ */
+export async function importCatalogFiles(
+  files: CatalogFileRequest[],
+  sourceUrl?: string,
+): Promise<ImportResult> {
   return jsonRequest<ImportResult>("/api/v1/files/import", {
     method: "POST",
-    body: JSON.stringify({ files }),
+    body: JSON.stringify({ files, sourceUrl }),
   });
 }
 
@@ -197,5 +206,24 @@ export async function fetchCatalogUrl(url: string): Promise<FetchUrlResult> {
   return jsonRequest<FetchUrlResult>("/api/v1/files/fetch", {
     method: "POST",
     body: JSON.stringify({ url }),
+  });
+}
+
+export type SyncState =
+  paths["/api/v1/files/{id}/sync"]["get"]["responses"]["200"]["content"]["application/json"];
+
+/** The file's sync state: source URL, last-sync stamp, and the baseline document. */
+export async function getSyncState(id: number): Promise<SyncState> {
+  return jsonRequest<SyncState>(`/api/v1/files/${id}/sync`);
+}
+
+/**
+ * The repo→DB sync: overwrites the DB copy with `document` (the parsed repo copy) and
+ * stamps the sync state. Soft findings are always waived server-side (the import posture).
+ */
+export async function syncCatalogFile(id: number, document: CatalogFileRequest): Promise<void> {
+  await voidRequest(`/api/v1/files/${id}/sync`, {
+    method: "POST",
+    body: JSON.stringify({ document }),
   });
 }

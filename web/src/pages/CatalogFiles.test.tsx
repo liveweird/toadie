@@ -23,6 +23,8 @@ type FileRow = {
   creatorName: string;
   creatorDeleted: boolean;
   updatedAt: number;
+  sourceUrl: string | null;
+  lastSyncedAt: number;
 };
 
 const SEED_FILES: FileRow[] = [
@@ -39,6 +41,9 @@ const SEED_FILES: FileRow[] = [
     creatorName: "Alice Creator",
     creatorDeleted: false,
     updatedAt: 1755900000000,
+    // Synced from a repo, then edited locally (updatedAt > lastSyncedAt).
+    sourceUrl: "https://raw.githubusercontent.com/acme/payments/main/catalog-info.yaml",
+    lastSyncedAt: 1755800000000,
   },
   {
     id: 2,
@@ -53,6 +58,8 @@ const SEED_FILES: FileRow[] = [
     creatorName: "Bob Builder",
     creatorDeleted: true,
     updatedAt: 1755900000000,
+    sourceUrl: null,
+    lastSyncedAt: 0,
   },
 ];
 
@@ -302,6 +309,8 @@ describe("CatalogFiles page", () => {
       creatorName: "A",
       creatorDeleted: false,
       updatedAt: 1755900000000,
+      sourceUrl: null,
+      lastSyncedAt: 0,
     };
     setupMocks(mockFetch, (url) =>
       url.includes("pageSize=100") ? filesPage([groupRow]) : filesPage(SEED_FILES),
@@ -593,5 +602,72 @@ describe("CatalogFiles page", () => {
     renderPage();
     await screen.findByText("No catalog files");
     expect(screen.getByRole("button", { name: "Export YAML" })).toBeDisabled();
+  });
+
+  test("the Last sync column shows sync state and offers Sync from repo only on sourced rows", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    // The sourced row: a relative time plus the local-changes marker (updatedAt moved past
+    // the sync stamp); the source-less row reads "No source".
+    expect(screen.getByText("Local changes")).toBeInTheDocument();
+    expect(screen.getByText("No source")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Operations for payments-svc" }));
+    expect(await screen.findByRole("menuitem", { name: "Sync from repo" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: "Operations for web-portal" }));
+    await screen.findByRole("menuitem", { name: "Edit" });
+    expect(screen.queryByRole("menuitem", { name: "Sync from repo" })).not.toBeInTheDocument();
+  });
+
+  test("the Last sync header sorts by lastSyncedAt", async () => {
+    setupMocks(mockFetch, () => filesPage(SEED_FILES));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    await user.click(screen.getByRole("button", { name: /last sync/i }));
+    await calledWith(mockFetch, "sort=lastSyncedAt");
+  });
+
+  test("Sync from repo opens the sync modal for the row", async () => {
+    // The modal's own data flows are covered in SyncCatalogFileModal.test.tsx — here the
+    // sub-requests get just enough shape for the modal to open cleanly.
+    setupMocks(mockFetch, (url) => {
+      if (url === "/api/v1/files/1/sync") {
+        return jsonResponse(200, {
+          sourceUrl: SEED_FILES[0].sourceUrl,
+          lastSyncedAt: 0,
+          syncedDocument: null,
+        });
+      }
+      if (url === "/api/v1/files/1") {
+        return jsonResponse(200, {
+          id: 1,
+          kind: "Component",
+          metadata: { name: "payments-svc", namespace: "default" },
+          spec: {},
+          createdBy: 1,
+          creatorName: "Alice Creator",
+          creatorDeleted: false,
+          createdAt: 1,
+          updatedAt: SEED_FILES[0].updatedAt,
+          sourceUrl: SEED_FILES[0].sourceUrl,
+          lastSyncedAt: 0,
+        });
+      }
+      if (url === "/api/v1/files/fetch") return jsonResponse(502, { status: 502 });
+      return filesPage(SEED_FILES);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("payments-svc");
+    await rowOperation(user, "payments-svc", "Sync from repo");
+    expect(await screen.findByText("Sync from repo — payments-svc")).toBeInTheDocument();
   });
 });

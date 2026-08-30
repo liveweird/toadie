@@ -22,7 +22,8 @@
     "links": "Links",
     "labels": "Labels",
     "annotations": "Annotations",
-    "profile": "Profile"
+    "profile": "Profile",
+    "source": "Source"
   },
   "field": {
     "namespace": "Namespace",
@@ -56,7 +57,9 @@
     "profileEmail": "Email",
     "profilePicture": "Picture URL",
     "label": "Label",
-    "labelValues": "Label values"
+    "labelValues": "Label values",
+    "lastSync": "Last sync",
+    "sourceUrl": "Source file URL"
   },
   "hint": {
     "namespace": "Pick a defined namespace; blank means \"{{default}}\"",
@@ -73,7 +76,8 @@
     "members": "Users in this group.",
     "memberOf": "Groups this user belongs to. Backstage requires this list — empty is fine.",
     "domain": "The domain this system belongs to.",
-    "subdomainOf": "The parent domain, for nested domains."
+    "subdomainOf": "The parent domain, for nested domains.",
+    "sourceUrl": "The https address of this file's copy in a GitLab/GitHub repository — enables Sync from repo."
   },
   "addLink": "Add link",
   "addLabel": "Add label",
@@ -103,14 +107,16 @@
     "ref": "Must be an entity reference: [kind:][namespace/]name",
     "refEntry": "\"{{ref}}\" is not a valid entity reference",
     "definitionLength": "Definition must be at most 100000 characters",
-    "profileEmailLength": "Email must be at most 254 characters"
+    "profileEmailLength": "Email must be at most 254 characters",
+    "sourceUrl": "Must be an absolute https URL without credentials"
   },
   "validationError": "Validation error. Please check the form and try again.",
   "conflictError": "An active file with this namespace and name already exists.",
   "toast": {
     "created": "Catalog file created",
     "updated": "Catalog file updated",
-    "deleted": "Catalog file deleted"
+    "deleted": "Catalog file deleted",
+    "synced": "File synced from repo"
   },
   "refHelp": "Each field suggests the stored entities it may point at — picking one inserts its full kind:namespace/name identity. Typed references work too (kind and namespace may usually be omitted); every reference must resolve to a stored entity.",
   "anyNamespace": "Any namespace",
@@ -166,7 +172,8 @@
     "failedTitle": "Import failed",
     "tooMany": "Too many documents for one import (the limit is 200).",
     "failedStatus": "Import failed ({{status}})",
-    "failedNetwork": "Import failed. Check your connection and try again."
+    "failedNetwork": "Import failed. Check your connection and try again.",
+    "sourceHint": "Imported files will carry {{url}} as their source reference and start synced."
   },
   "namespaceOptionsFailed": "Could not load the namespace list. Reload to try again.",
   "labelOptionsFailed": "Could not load the label list. Reload to try again.",
@@ -188,5 +195,26 @@
   },
   "tier": {
     "tooltip": "Tier {{tier}} — fill lower tiers first"
+  },
+  "sync": {
+    "action": "Sync from repo",
+    "title": "Sync from repo — {{name}}",
+    "sourceLabel": "Source:",
+    "lastSynced": "Last synced {{ago}}",
+    "neverSynced": "Never synced",
+    "noSource": "No source",
+    "localChanges": "Local changes",
+    "changedInRepo": "Changed in repo",
+    "changedInDb": "Changed in DB",
+    "inSync": "DB and repo are in sync",
+    "diffLabel": "Changes between the DB copy and the repo copy",
+    "loadingAria": "Loading the repo copy",
+    "loadFailed": "Could not prepare the comparison",
+    "parseFailed": "The repo file is not a valid catalog-info.yaml.",
+    "noMatch": "The repo file no longer contains this entity.",
+    "findingsWarning": "The repo version carries {{count}} finding(s) — syncing stores it anyway, and they will show on the Errors report.",
+    "overwriteWarning": "Syncing overwrites the DB copy with the repo version shown above. Changes made only in the DB will be lost.",
+    "confirm": "Overwrite DB copy",
+    "failed": "Sync failed"
   }
 }

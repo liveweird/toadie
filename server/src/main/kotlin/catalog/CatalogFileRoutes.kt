@@ -33,7 +33,11 @@ import kotlinx.serialization.Serializable
 class CatalogFiles {
     @Serializable
     @Resource("{id}")
-    class Id(val parent: CatalogFiles = CatalogFiles(), val id: UInt)
+    class Id(val parent: CatalogFiles = CatalogFiles(), val id: UInt) {
+        @Serializable
+        @Resource("sync")
+        class Sync(val parent: Id)
+    }
 
     // Literal segments win over {id} in Ktor's route resolution (pinned by ErrorsTest).
     @Serializable
@@ -129,12 +133,19 @@ fun Application.configureCatalogFileRoutes() {
             }
             post<CatalogFiles> {
                 val caller = call.caller()
-                val file = sanitizedCatalogFile(call.receive())
+                val body = call.receive<CatalogFileWriteRequest>()
+                val file = sanitizedCatalogFile(body.document())
                 validateCatalogFile(file)
+                val sourceUrl = sanitizedSourceUrl(body.sourceUrl)
                 // The explicit soft-check waiver: `?allowInvalid=true` stores despite
                 // unresolved references / registry findings (structural rules stay hard).
                 val allowInvalid = call.request.queryParameters.optionalBoolean("allowInvalid") ?: false
-                val saved = catalogFileService.create(file, caller.userId, allowInvalid = allowInvalid)
+                val saved = catalogFileService.create(
+                    file,
+                    caller.userId,
+                    allowInvalid = allowInvalid,
+                    sourceUrl = sourceUrl,
+                )
                 audit("catalog_file.created", *createdAuditFields(caller.userId, saved.id, saved.waived.size))
                 // Read back for the creator/timestamp envelope — post-commit, so a miss is a 500.
                 val created = catalogFileService.read(saved.id).orVanished("CatalogFile", saved.id)
@@ -185,7 +196,11 @@ fun Application.configureCatalogFileRoutes() {
                 // stay route-side (the repo convention) — one created event per stored row
                 // (waived documents store too, marked withFindings).
                 val storedStatuses = setOf(ImportResultStatus.CREATED, ImportResultStatus.CREATED_WITH_FINDINGS)
-                val results = catalogFileService.import(request.files, caller.userId)
+                val results = catalogFileService.import(
+                    request.files,
+                    caller.userId,
+                    sourceUrl = sanitizedSourceUrl(request.sourceUrl),
+                )
                 for (result in results.filter { it.status in storedStatuses }) {
                     audit(
                         "catalog_file.created",
@@ -224,12 +239,45 @@ fun Application.configureCatalogFileRoutes() {
             }
             put<CatalogFiles.Id> { route ->
                 val caller = call.caller()
-                val file = sanitizedCatalogFile(call.receive())
+                val body = call.receive<CatalogFileWriteRequest>()
+                val file = sanitizedCatalogFile(body.document())
                 validateCatalogFile(file)
+                val sourceUrl = sanitizedSourceUrl(body.sourceUrl)
                 val allowInvalid = call.request.queryParameters.optionalBoolean("allowInvalid") ?: false
-                val result = catalogFileService.update(route.id, file, allowInvalid = allowInvalid)
+                val result = catalogFileService.update(
+                    route.id,
+                    file,
+                    allowInvalid = allowInvalid,
+                    sourceUrl = sourceUrl,
+                )
                 result.rows.orNotFound("Catalog file")
                 audit("catalog_file.updated", *createdAuditFields(caller.userId, route.id, result.waived.size))
+                call.respond(HttpStatusCode.NoContent)
+            }
+            get<CatalogFiles.Id.Sync> { route ->
+                call.caller()
+                val state = catalogFileService.syncState(route.parent.id).orNotFound("Catalog file")
+                call.respond(HttpStatusCode.OK, state.toResponse())
+            }
+            post<CatalogFiles.Id.Sync> { route ->
+                val caller = call.caller()
+                // The repo→DB overwrite: the client fetched the source URL (POST /files/fetch)
+                // and parsed the YAML (a client concern); the service always waives soft
+                // findings (the import posture) and stamps the sync state. Confirmation is a
+                // client concern (the sync modal); rejecting a source-less row is not.
+                val request = call.receive<SyncCatalogFileRequest>()
+                val file = sanitizedCatalogFile(request.document)
+                validateCatalogFile(file)
+                val result = catalogFileService.syncFromRepo(route.parent.id, file)
+                result.rows.orNotFound("Catalog file")
+                audit(
+                    "catalog_file.synced",
+                    *buildList<Pair<String, Any?>> {
+                        add("byUserId" to caller.userId.toLong())
+                        add("catalogFileId" to route.parent.id.toLong())
+                        if (result.waived.isNotEmpty()) add("withFindings" to result.waived.size)
+                    }.toTypedArray(),
+                )
                 call.respond(HttpStatusCode.NoContent)
             }
             delete<CatalogFiles.Id> { route ->

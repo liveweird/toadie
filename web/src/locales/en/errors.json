@@ -15,7 +15,8 @@
     "annotations": "Annotations",
     "tags": "Tags",
     "types": "Types",
-    "lifecycles": "Lifecycles"
+    "lifecycles": "Lifecycles",
+    "source": "Source"
   },
   "field": {
     "file": "File",
@@ -36,7 +37,8 @@
     "TYPE_NOT_ALLOWED": "Type not allowed",
     "LIFECYCLE_NOT_ALLOWED": "Lifecycle not allowed",
     "STRUCTURE_INVALID": "Invalid structure",
-    "NAMESPACE_NOT_ALLOWED": "Namespace not allowed"
+    "NAMESPACE_NOT_ALLOWED": "Namespace not allowed",
+    "SOURCE_MISSING": "No source reference"
   },
   "message": {
     "MISSING": "No stored entity matches this reference.",
@@ -49,7 +51,8 @@
     "TYPE_NOT_ALLOWED": "The kind's type dictionary does not allow this type — adjust it on the Types page.",
     "LIFECYCLE_NOT_ALLOWED": "The lifecycles dictionary does not allow this value — adjust it on the Lifecycles page.",
     "STRUCTURE_INVALID": "The stored document no longer passes the structural validation — open the file and fix it.",
-    "NAMESPACE_NOT_ALLOWED": "The namespace is no longer defined — re-add it on the Namespaces page or move the file."
+    "NAMESPACE_NOT_ALLOWED": "The namespace is no longer defined — re-add it on the Namespaces page or move the file.",
+    "SOURCE_MISSING": "The file has no source reference — set the repo URL in the editor or import it from a URL."
   },
   "noFindings": "No errors — every file passes the checks.",
   "panel": {

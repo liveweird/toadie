@@ -311,4 +311,50 @@ describe("ImportCatalogFiles page", () => {
 
     await waitFor(() => expect(screen.getByText("2 documents ready to import")).toBeInTheDocument());
   });
+
+  test("a fetched batch imports with its source URL; editing the text drops it", async () => {
+    const importBodies: unknown[] = [];
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/v1/files/fetch" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse(200, { content: TWO_DOCS }));
+      }
+      if (url === "/api/v1/files/import" && init?.method === "POST") {
+        importBodies.push(JSON.parse(init.body as string));
+        return Promise.resolve(
+          jsonResponse(200, {
+            results: [
+              { index: 0, kind: "Component", namespace: "default", name: "payments-svc", status: "CREATED", fileId: 7 },
+              { index: 1, kind: "Group", namespace: "default", name: "team-a", status: "CREATED", fileId: 8 },
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    // A GitHub blob link is normalized to its raw form — the hint and the request carry it.
+    fireEvent.change(screen.getByLabelText("Fetch from URL"), {
+      target: { value: "https://github.com/acme/svc/blob/main/catalog-info.yaml" },
+    });
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+    expect(
+      await screen.findByText(/raw\.githubusercontent\.com\/acme\/svc\/main\/catalog-info\.yaml/),
+    ).toBeInTheDocument();
+
+    await screen.findByText("2 documents ready to import");
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() => expect(importBodies).toHaveLength(1));
+    expect(importBodies[0]).toMatchObject({
+      sourceUrl: "https://raw.githubusercontent.com/acme/svc/main/catalog-info.yaml",
+    });
+
+    // Any manual edit means the text is no longer the fetched file — the reference is gone.
+    pasteYaml(TWO_DOCS + "\n");
+    await screen.findByText("2 documents ready to import");
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() => expect(importBodies).toHaveLength(2));
+    expect(importBodies[1] as object).not.toHaveProperty("sourceUrl");
+  });
 });

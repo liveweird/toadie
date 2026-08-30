@@ -81,6 +81,24 @@ const val DEFAULT_NAMESPACE = "default"
 /** The kinds the editor supports, in canonical casing (identity matching stays lowercase). */
 val SUPPORTED_KINDS = listOf("Component", "API", "System", "Domain", "Resource", "Group", "User")
 
+/**
+ * The create/replace request body: the Backstage document plus the OPTIONAL source file
+ * reference (the https URL of the file's canonical copy in a GitLab/GitHub repo). The
+ * document half is stored and exported PURE — the reference is envelope state, which is why
+ * this wrapper exists instead of a field on [CatalogFile]. PUT semantics are full-replace:
+ * an omitted/blank sourceUrl CLEARS the stored reference, and a changed/cleared reference
+ * resets the sync state (last-synced stamp + baseline).
+ */
+@Serializable
+data class CatalogFileWriteRequest(
+    val kind: String = "Component",
+    val metadata: CatalogFileMetadata,
+    val spec: EntitySpec,
+    val sourceUrl: String? = null,
+) {
+    fun document() = CatalogFile(kind = kind, metadata = metadata, spec = spec)
+}
+
 @Serializable
 data class CatalogFileResponse(
     val id: UInt,
@@ -92,6 +110,9 @@ data class CatalogFileResponse(
     val creatorDeleted: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
+    val sourceUrl: String?,
+    /** Epoch millis of the last repo→DB sync; 0 = never. */
+    val lastSyncedAt: Long,
 )
 
 /** The flatter list-row shape: identity + the display fields, creator resolved via join. */
@@ -109,6 +130,24 @@ data class CatalogFileListItem(
     val creatorName: String,
     val creatorDeleted: Boolean,
     val updatedAt: Long,
+    val sourceUrl: String?,
+    /** Epoch millis of the last repo→DB sync; 0 = never — the client derives "modified in
+     *  the DB since the sync" from `updatedAt > lastSyncedAt` (a sync stamps both equal). */
+    val lastSyncedAt: Long,
 )
+
+/** GET /files/{id}/sync — the sync state incl. the baseline document stored at the last sync. */
+@Serializable
+data class SyncStateResponse(
+    val sourceUrl: String?,
+    /** Epoch millis; 0 = never synced. */
+    val lastSyncedAt: Long,
+    /** The document as stored at the last sync — the DB-vs-repo comparison baseline; null = never. */
+    val syncedDocument: CatalogFile?,
+)
+
+/** POST /files/{id}/sync — the repo copy, parsed client-side (YAML stays a client concern). */
+@Serializable
+data class SyncCatalogFileRequest(val document: CatalogFile)
 
 typealias CatalogFilePageResponse = PageResponse<CatalogFileListItem>

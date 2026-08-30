@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.catalog.ErrorFinding
 import ch.nokillswit.catalog.ErrorsReport
 import ch.nokillswit.catalog.ErrorStatus
 import ch.nokillswit.catalog.DocumentCheckReport
@@ -28,6 +29,14 @@ class ErrorsTest {
     private suspend fun HttpClient.report(): ErrorsReport =
         get("$CATALOG_FILES_PATH/errors").body()
 
+    /**
+     * Every fixture file in this suite is deliberately source-less, so each carries a
+     * standing SOURCE_MISSING row — noise for assertions about OTHER findings (the
+     * SOURCE_MISSING behavior itself is pinned in SyncTest).
+     */
+    private fun List<ErrorFinding>.withoutSourceFindings() =
+        filter { it.status != ErrorStatus.SOURCE_MISSING }
+
     @Test
     fun `resolved component references produce no findings, deletion-orphaned ones are MISSING`() = testApplication {
         usePostgresTestcontainer()
@@ -51,7 +60,7 @@ class ErrorsTest {
         val report = client.report()
         assertTrue(report.checkedFiles >= 3)
         assertTrue(report.checkedReferences >= 4, "owner refs count too")
-        val mine = report.findings.filter { it.fileName == source }
+        val mine = report.findings.withoutSourceFindings().filter { it.fileName == source }
         // The stored component AND the stored group both resolve; only the deleted one is MISSING.
         assertEquals(
             listOf("component:$ns/$doomed" to ErrorStatus.MISSING),
@@ -175,7 +184,7 @@ class ErrorsTest {
         )
         client.delete("$CATALOG_FILES_PATH/$parentId")
 
-        val findings = client.report().findings.filter { it.fileNamespace == ns }
+        val findings = client.report().findings.withoutSourceFindings().filter { it.fileNamespace == ns }
         // memberOf → the stored group, members → the stored user: both resolve. The group's
         // parent was deleted → MISSING with the group default kind.
         assertEquals(
@@ -276,7 +285,8 @@ class ErrorsTest {
         }
         TestCatalogFiles.overwriteContent(id, selfRef)
 
-        val findings = client.report().findings.filter { it.fileName == name && it.fileNamespace == ns }
+        val findings = client.report().findings.withoutSourceFindings()
+            .filter { it.fileName == name && it.fileNamespace == ns }
         assertEquals(
             listOf("component:$ns/$name" to ErrorStatus.SELF_REFERENCE),
             findings.map { it.reference to it.status },
@@ -381,15 +391,16 @@ class ErrorsTest {
         // — and the counters count the REPORTED set, not the workspace.
         val filtered = client.get("$CATALOG_FILES_PATH/errors?namespace=$ns").body<ErrorsReport>()
         assertEquals(1, filtered.checkedFiles)
-        assertEquals(listOf(insider), filtered.findings.map { it.fileName })
-        assertEquals("Component", filtered.findings.single().fileKind)
+        val filteredFindings = filtered.findings.withoutSourceFindings()
+        assertEquals(listOf(insider), filteredFindings.map { it.fileName })
+        assertEquals("Component", filteredFindings.single().fileKind)
 
         // The asymmetry: narrowed to the OTHER namespace, the outsider's ref to the (filtered
         // out but stored) insider still resolves — only the genuinely dangling ref is MISSING.
         val outer = client.get("$CATALOG_FILES_PATH/errors?namespace=$other").body<ErrorsReport>()
         assertEquals(
             listOf("component:$ns/$doomed" to ErrorStatus.MISSING),
-            outer.findings.filter { it.fileName == outsider }.map { it.reference to it.status },
+            outer.findings.withoutSourceFindings().filter { it.fileName == outsider }.map { it.reference to it.status },
         )
 
         // The list's parameter validation rides along (the graph precedent): unparsable owner,
@@ -420,7 +431,7 @@ class ErrorsTest {
             TestCatalogFiles.overwriteContent(id, invalid)
 
             val findings = client.get("$CATALOG_FILES_PATH/errors?namespace=$ns").body<ErrorsReport>()
-                .findings.filter { it.fileId == id }
+                .findings.withoutSourceFindings().filter { it.fileId == id }
             assertEquals(listOf(ErrorStatus.STRUCTURE_INVALID), findings.map { it.status })
             val structural = findings.single()
             assertEquals("Component", structural.fileKind)
@@ -463,14 +474,14 @@ class ErrorsTest {
         val findings = client.get("$CATALOG_FILES_PATH/errors?name=$name").body<ErrorsReport>().findings
         assertEquals(
             listOf(Triple("metadata.namespace", ns, ErrorStatus.NAMESPACE_NOT_ALLOWED)),
-            findings.filter { it.fileId == id }.map { Triple(it.field, it.reference, it.status) },
+            findings.withoutSourceFindings().filter { it.fileId == id }.map { Triple(it.field, it.reference, it.status) },
         )
 
         // Re-adding the entry clears the finding — membership is live, in both directions.
         TestNamespaces.ensure(ns)
         assertTrue(
             client.get("$CATALOG_FILES_PATH/errors?name=$name").body<ErrorsReport>()
-                .findings.none { it.fileId == id },
+                .findings.withoutSourceFindings().none { it.fileId == id },
         )
         client.delete("$CATALOG_FILES_PATH/$id")
     }

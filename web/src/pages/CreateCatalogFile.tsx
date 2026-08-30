@@ -31,6 +31,7 @@ export default function CreateCatalogFile() {
   // lists the findings and confirming retries with the allowInvalid waiver.
   const [waiver, setWaiver] = useState<{
     request: CatalogFileRequest;
+    sourceUrl: string | undefined;
     findings: DocumentCheckFinding[];
   } | null>(null);
 
@@ -40,8 +41,8 @@ export default function CreateCatalogFile() {
     validate: catalogFileFormValidation(t),
   });
 
-  async function save(request: CatalogFileRequest, allowInvalid: boolean) {
-    await createCatalogFile(request, allowInvalid ? { allowInvalid: true } : undefined);
+  async function save(request: CatalogFileRequest, sourceUrl: string | undefined, allowInvalid: boolean) {
+    await createCatalogFile({ ...request, sourceUrl }, allowInvalid ? { allowInvalid: true } : undefined);
     await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
     showSuccessToast(t("catalog.toast.created"));
     navigate(catalogFilesPath, { replace: true });
@@ -58,12 +59,14 @@ export default function CreateCatalogFile() {
   async function onSubmit(values: CatalogFileFormValues) {
     setError(null);
     setSubmitting(true);
+    // The document stays pure (the /check body); the source reference rides beside it.
     const request = toCatalogFileRequest(values);
+    const sourceUrl = values.sourceUrl.trim() || undefined;
     try {
-      await save(request, false);
+      await save(request, sourceUrl, false);
     } catch (err) {
       const findings = await softRejectionFindings(err, request);
-      if (findings) setWaiver({ request, findings });
+      if (findings) setWaiver({ request, sourceUrl, findings });
       else setError(mapError(err));
     } finally {
       setSubmitting(false);
@@ -74,7 +77,7 @@ export default function CreateCatalogFile() {
     if (!waiver) return;
     setSubmitting(true);
     try {
-      await save(waiver.request, true);
+      await save(waiver.request, waiver.sourceUrl, true);
     } catch (err) {
       setError(mapError(err));
     } finally {

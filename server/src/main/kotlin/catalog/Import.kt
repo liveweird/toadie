@@ -19,6 +19,13 @@ data class ExportResponse(
 @Serializable
 data class ImportRequest(
     val files: List<CatalogFile>,
+    /**
+     * The URL the batch was fetched from (the import page's fetch-from-URL flow) — every
+     * stored row gets it as its source reference AND starts synced (the content IS the repo
+     * copy at import time). Omitted for pasted/uploaded batches. One URL for the whole
+     * request on purpose: a multi-document catalog-info.yaml is ONE repo file.
+     */
+    val sourceUrl: String? = null,
 )
 
 @Serializable

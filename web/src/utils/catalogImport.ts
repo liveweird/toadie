@@ -195,3 +195,27 @@ export function parseCatalogYaml(text: string): CatalogParseResult {
   }
   return { documents, errors };
 }
+
+/**
+ * Picks one row's own document out of a fetched repo file (the sync modal): a
+ * single-document file is taken as-is (permitting repo-side renames), a multi-document one
+ * must contain the row's identity (a fetch-from-URL import stores every document of one
+ * repo file under the SAME source URL). Case-insensitive; an absent repo namespace counts
+ * as `default` — matching the dominant flagged-default setup, close enough for a
+ * comparison view (the server resolves authoritatively on sync).
+ */
+export function pickRepoDocument(
+  documents: CatalogFileRequest[],
+  file: { kind: string; namespace: string; name: string },
+): CatalogFileRequest | null {
+  if (documents.length === 1) return documents[0];
+  return (
+    documents.find(
+      (doc) =>
+        (doc.kind ?? "Component").toLowerCase() === file.kind.toLowerCase() &&
+        ((doc.metadata.namespace ?? "").toLowerCase() || "default") ===
+          file.namespace.toLowerCase() &&
+        doc.metadata.name.toLowerCase() === file.name.toLowerCase(),
+    ) ?? null
+  );
+}

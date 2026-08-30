@@ -132,7 +132,7 @@ export async function pickLifecycle(page: Page, lifecycle: string): Promise<void
 export async function rowOperation(
   page: Page,
   name: string,
-  operation: "Edit" | "Download" | "Delete",
+  operation: "Edit" | "Download" | "Delete" | "Sync from repo",
 ): Promise<void> {
   const trigger = page.getByRole("button", { name: `Operations for ${name}` });
   // Ensure THIS row's menu actually opened: a previous row's still-fading dropdown treats

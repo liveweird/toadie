@@ -526,8 +526,9 @@ paths:
 
         Supports offset pagination, sorting and filtering.
 
-        - Sortable fields: `id`, `kind`, `name`, `namespace`, `updatedAt`. Default sort is
-          `id` ascending; `id` ascending is always appended as a deterministic tiebreaker.
+        - Sortable fields: `id`, `kind`, `name`, `namespace`, `updatedAt`, `lastSyncedAt`
+          (0 = never synced, so ascending surfaces the most-stale files first). Default sort
+          is `id` ascending; `id` ascending is always appended as a deterministic tiebreaker.
         - Filters (optional, whitelisted; the shared catalog-file filter set — the graph
           endpoint declares the same one): `name`, `namespace`, `kind`, `tag`, `type`,
           `lifecycle`, `owner`, `label` + `labelValue` — see each parameter's description.
@@ -588,6 +589,11 @@ paths:
         waived findings; the structural rules and namespace resolution stay hard `400`s.
         Entity identity (kind + namespace + name, case-insensitive) must be unique among
         active files; a clash is a `409`.
+
+        The optional `sourceUrl` sets the file's source reference (the https URL of its
+        repo copy — static guards only: absolute https, no credentials, at most 2048
+        characters, else `400`). A file created this way is NOT synced yet (`lastSyncedAt`
+        stays 0) — only a sync or a fetch-from-URL import stamps the sync state.
       parameters:
         - $ref: '#/components/parameters/AllowInvalid'
       requestBody:
@@ -595,7 +601,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CatalogFileRequest'
+              $ref: '#/components/schemas/CatalogFileWriteRequest'
       responses:
         '201':
           description: Created
@@ -648,16 +654,18 @@ paths:
         self-references stored before the rule existed. Every finding blocks the file's next
         STRICT save (a waived save still goes through).
 
-        …and additionally runs the report-only checks over the STORED content — rules that
-        are HARD (never waivable) on every write, so a finding can only mean the row
-        predates a rule or dictionary change:
+        …and additionally runs the report-only checks over the STORED rows:
 
         - `STRUCTURE_INVALID` — the structural descriptor validation no longer accepts the
           stored document (a legacy row); the finding's `message` carries the validator's
           own text. Validation is fail-fast, so a file reports its FIRST structural problem
-          only.
+          only. (HARD on every write — a finding means the row predates a rule change.)
         - `NAMESPACE_NOT_ALLOWED` — the stored `metadata.namespace` is no longer an active
-          `namespaces` dictionary entry (removed after the save).
+          `namespaces` dictionary entry (removed after the save; the rule is HARD on writes).
+        - `SOURCE_MISSING` — the file carries no source reference (the URL of its repo
+          copy). The reference is OPTIONAL on every write — set it in the editor or import
+          from a URL — but a file without one cannot be synced, so the report keeps it
+          visible (finding `field` is `source`, `reference` empty).
 
         The optional filters (the SAME whitelisted set as the list and graph endpoints,
         same semantics) narrow which files' errors are REPORTED — `checkedFiles`/
@@ -807,7 +815,10 @@ paths:
         already holds the kind+namespace+name identity — nothing is overwritten), or `ERROR`
         (an unexpected storage failure). The response is `200` even when every document failed
         — the result rows are the outcome; a `400` covers only the batch itself (an
-        undecodable body or more than 200 entries).
+        undecodable body, more than 200 entries, or an invalid `sourceUrl`).
+
+        With `sourceUrl` set (the fetch-from-URL flow), every STORED row gets it as its
+        source reference and starts synced — an import from a repo URL IS a sync.
       requestBody:
         required: true
         content:
@@ -922,6 +933,12 @@ paths:
         a reference to the file's own identity is a `400`). `allowInvalid=true` waives those
         soft checks exactly as on create (the namespace rule stays hard). Renaming into an
         identity an active file already holds is a `409`.
+
+        `sourceUrl` follows full-replace semantics: an omitted/blank value CLEARS the stored
+        source reference, and any change (set, clear, different URL) resets the sync state
+        (`lastSyncedAt` back to 0, the baseline dropped). `updatedAt` bumps only on an
+        actual DOCUMENT change — a reference-only edit never reads as "modified in the DB
+        since the sync".
       parameters:
         - $ref: '#/components/parameters/AllowInvalid'
       requestBody:
@@ -929,7 +946,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CatalogFileRequest'
+              $ref: '#/components/schemas/CatalogFileWriteRequest'
       responses:
         '204': { description: Updated }
         '400':
@@ -951,6 +968,67 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/files/{id}/sync:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [catalog-files]
+      operationId: getCatalogFileSyncState
+      summary: Read a catalog file's sync state
+      description: |
+        The file's source reference, last-sync stamp, and the BASELINE document stored at the
+        last sync — what the sync modal compares the current DB document and the freshly
+        fetched repo copy against to attribute changes to a side. A never-synced file answers
+        `lastSyncedAt: 0` with a null baseline. Any authenticated user (the shared-workspace
+        rule); a pure read, not audited.
+      responses:
+        '200':
+          description: The sync state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStateResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    post:
+      tags: [catalog-files]
+      operationId: syncCatalogFile
+      summary: Overwrite the file with its repo copy (repo→DB sync)
+      description: |
+        The repo→DB sync: overwrites the stored document with the submitted one — the repo
+        copy the client fetched via `POST /files/fetch` and parsed from YAML (YAML stays a
+        client concern) — and stamps the sync state (`lastSyncedAt` = `updatedAt` = now, the
+        submitted document becomes the new baseline).
+
+        Soft findings (reference resolution, the registry rules) are ALWAYS waived — the
+        import posture: the repo is the source of truth and the Errors report is the net.
+        Structural validation and namespace resolution stay HARD (`400`). The file must hold
+        a source reference (`400` otherwise — set one first). A repo-side rename landing on
+        an identity another active file holds is a `409`. Confirmation is a client concern
+        (the sync modal); DB→repo sync deliberately does not exist.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncCatalogFileRequest'
+      responses:
+        '204': { description: Synced — the DB copy now equals the submitted repo copy }
+        '400':
+          description: >-
+            Payload violates the descriptor-format rules, the namespace is not an active
+            dictionary entry, or the file has no source reference.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
   /api/v1/dictionaries/{dictionary}:
@@ -1916,6 +1994,28 @@ components:
         metadata: { $ref: '#/components/schemas/CatalogFileMetadata' }
         spec: { $ref: '#/components/schemas/EntitySpec' }
 
+    CatalogFileWriteRequest:
+      type: object
+      description: >-
+        The create/replace body: the Backstage document plus the OPTIONAL source file
+        reference. The document half is stored and exported PURE — the reference is envelope
+        state (never part of the document or the export/import round trip).
+      required: [metadata, spec]
+      properties:
+        kind: { $ref: '#/components/schemas/EntityKind' }
+        metadata: { $ref: '#/components/schemas/CatalogFileMetadata' }
+        spec: { $ref: '#/components/schemas/EntitySpec' }
+        sourceUrl:
+          type: string
+          maxLength: 2048
+          nullable: true
+          description: >-
+            The https URL of the file's canonical copy in a GitLab/GitHub repo. Static
+            guards only (absolute https, no credentials, at most 2048 characters) — the
+            public-host check runs at fetch time. On PUT, full-replace semantics: omitted or
+            blank CLEARS the stored reference; any change resets the sync state.
+          example: https://github.com/acme/service/blob/main/catalog-info.yaml
+
     EntityKind:
       type: string
       enum: [Component, API, System, Domain, Resource, Group, User]
@@ -1962,6 +2062,17 @@ components:
           maxItems: 200
           description: The documents to import, each handled independently (report & skip).
           items: { $ref: '#/components/schemas/CatalogFileRequest' }
+        sourceUrl:
+          type: string
+          maxLength: 2048
+          nullable: true
+          description: >-
+            The URL the batch was fetched from (the import page's fetch-from-URL flow) —
+            every stored row gets it as its source reference AND starts synced (the content
+            IS the repo copy at import time). Omit for pasted/uploaded batches. One URL for
+            the whole request: a multi-document catalog-info.yaml is ONE repo file. Same
+            static guards as a write's `sourceUrl` (absolute https, no credentials), else
+            the whole batch is a `400`.
 
     ImportResponse:
       type: object
@@ -2210,7 +2321,7 @@ components:
 
     CatalogFileResponse:
       type: object
-      required: [id, kind, metadata, spec, createdBy, creatorName, creatorDeleted, createdAt, updatedAt]
+      required: [id, kind, metadata, spec, createdBy, creatorName, creatorDeleted, createdAt, updatedAt, sourceUrl, lastSyncedAt]
       properties:
         id: { type: integer, format: int32, minimum: 0 }
         kind: { $ref: '#/components/schemas/EntityKind' }
@@ -2223,10 +2334,20 @@ components:
           description: True when the creating user has been soft-deleted.
         createdAt: { type: integer, format: int64, description: Epoch milliseconds. }
         updatedAt: { type: integer, format: int64, description: Epoch milliseconds. }
+        sourceUrl:
+          type: string
+          nullable: true
+          description: The file's source reference (its repo copy's URL); null = none set.
+        lastSyncedAt:
+          type: integer
+          format: int64
+          description: >-
+            Epoch millis of the last repo→DB sync; 0 = never. A sync stamps `updatedAt`
+            equal, so `updatedAt > lastSyncedAt` means "modified in the DB since the sync".
 
     CatalogFileListItem:
       type: object
-      required: [id, kind, name, namespace, title, type, lifecycle, owner, tags, creatorName, creatorDeleted, updatedAt]
+      required: [id, kind, name, namespace, title, type, lifecycle, owner, tags, creatorName, creatorDeleted, updatedAt, sourceUrl, lastSyncedAt]
       properties:
         id: { type: integer, format: int32, minimum: 0 }
         kind: { $ref: '#/components/schemas/EntityKind' }
@@ -2244,6 +2365,43 @@ components:
           type: boolean
           description: True when the creating user has been soft-deleted.
         updatedAt: { type: integer, format: int64, description: Epoch milliseconds. }
+        sourceUrl:
+          type: string
+          nullable: true
+          description: The file's source reference (its repo copy's URL); null = none set.
+        lastSyncedAt:
+          type: integer
+          format: int64
+          description: >-
+            Epoch millis of the last repo→DB sync; 0 = never. A sync stamps `updatedAt`
+            equal, so `updatedAt > lastSyncedAt` means "modified in the DB since the sync".
+
+    SyncStateResponse:
+      type: object
+      required: [sourceUrl, lastSyncedAt, syncedDocument]
+      properties:
+        sourceUrl:
+          type: string
+          nullable: true
+          description: The file's source reference; null = none set (syncing is refused).
+        lastSyncedAt:
+          type: integer
+          format: int64
+          description: Epoch millis of the last repo→DB sync; 0 = never.
+        syncedDocument:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CatalogFileRequest'
+          description: >-
+            The document as stored at the last sync — the baseline the client compares the
+            current DB document and the fetched repo copy against; null = never synced.
+
+    SyncCatalogFileRequest:
+      type: object
+      required: [document]
+      properties:
+        document:
+          $ref: '#/components/schemas/CatalogFileRequest'
 
     ErrorStatus:
       type: string
@@ -2259,6 +2417,7 @@ components:
         - LIFECYCLE_NOT_ALLOWED
         - STRUCTURE_INVALID
         - NAMESPACE_NOT_ALLOWED
+        - SOURCE_MISSING
       description: >-
         References: MISSING (no stored entity matches), KIND_REQUIRED
         (a kind-less dependsOn/dependencyOf entry), WRONG_KIND (the reference names a kind
@@ -2267,11 +2426,13 @@ components:
         TAG_NOT_ALLOWED / TYPE_NOT_ALLOWED / LIFECYCLE_NOT_ALLOWED (the value is not
         allowed by its ADMIN-curated registry for the file's kind; the finding's `reference`
         carries the offending value). Those nine are SOFT: they block the document's next
-        STRICT save but a save may waive them with `allowInvalid=true`. The last two are
-        report-only verdicts over STORED content whose rules stay HARD on every write:
+        STRICT save but a save may waive them with `allowInvalid=true`. The last three are
+        report-only verdicts over STORED rows, never emitted by the ad-hoc check:
         STRUCTURE_INVALID (the descriptor validation no longer accepts the stored document —
-        a legacy row; never emitted by the ad-hoc check) and NAMESPACE_NOT_ALLOWED (the
-        stored namespace was removed from the `namespaces` dictionary after the save).
+        a legacy row; the rule stays HARD on writes), NAMESPACE_NOT_ALLOWED (the stored
+        namespace was removed from the `namespaces` dictionary after the save; HARD on
+        writes too), and SOURCE_MISSING (the file carries no source reference — OPTIONAL on
+        writes, so never a save blocker, just a standing report entry).
 
     ErrorFinding:
       type: object
@@ -2285,12 +2446,13 @@ components:
           type: string
           description: >-
             The field the error lives in, e.g. `spec.dependsOn` (`document` for
-            STRUCTURE_INVALID findings, which concern the whole document).
+            STRUCTURE_INVALID findings, which concern the whole document; `source` for
+            SOURCE_MISSING, which concerns the file's envelope).
         reference:
           type: string
           description: >-
-            The offending reference or value (empty for STRUCTURE_INVALID findings —
-            the `message` carries the specifics).
+            The offending reference or value (empty for STRUCTURE_INVALID — the `message`
+            carries the specifics — and for SOURCE_MISSING, where absence IS the finding).
         status: { $ref: '#/components/schemas/ErrorStatus' }
         message:
           type: string

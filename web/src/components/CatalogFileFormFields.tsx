@@ -33,6 +33,7 @@ import {
   MAX_DESCRIPTION_LENGTH,
   MAX_ENTITY_PART_LENGTH,
   MAX_LINK_TITLE_LENGTH,
+  MAX_SOURCE_URL_LENGTH,
   MAX_TITLE_LENGTH,
   RELATION_FIELDS,
   type CatalogFileFormValues,
@@ -578,6 +579,28 @@ function AnnotationsFieldset({ form }: { form: CatalogForm }) {
  * render — hidden fields keep their values (a kind switch back restores them) and the request
  * mapper strips whatever doesn't belong to the submitted kind.
  */
+/**
+ * The source reference — provenance (the https URL of the file's repo copy), deliberately
+ * its own fieldset rather than Metadata: it is envelope state beside the document, never
+ * part of the Backstage YAML. Backs the Files list's sync column and the Sync-from-repo
+ * operation.
+ */
+function SourceFieldset({ form }: { form: CatalogForm }) {
+  const { t } = useTranslation();
+  return (
+    <Fieldset legend={t("catalog.section.source")}>
+      <TextInput
+        label={t("catalog.field.sourceUrl")}
+        placeholder="https://github.com/acme/service/blob/main/catalog-info.yaml"
+        maxLength={MAX_SOURCE_URL_LENGTH}
+        description={t("catalog.hint.sourceUrl")}
+        inputWrapperOrder={[...BELOW_INPUT]}
+        {...form.getInputProps("sourceUrl")}
+      />
+    </Fieldset>
+  );
+}
+
 export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
   const kind = form.values.kind;
@@ -618,6 +641,7 @@ export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
       <LinksFieldset form={form} />
       <LabelsFieldset form={form} />
       <AnnotationsFieldset form={form} />
+      <SourceFieldset form={form} />
     </Stack>
   );
 }

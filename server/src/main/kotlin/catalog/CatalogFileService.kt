@@ -33,7 +33,7 @@ data class CatalogFileListResult(
     val total: Long,
 )
 
-/** A stored file with its envelope (creator resolved via join, timestamps). */
+/** A stored file with its envelope (creator resolved via join, timestamps, sync state). */
 data class CatalogFileDetail(
     val id: UInt,
     val file: CatalogFile,
@@ -42,6 +42,8 @@ data class CatalogFileDetail(
     val creatorDeleted: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
+    val sourceUrl: String?,
+    val lastSyncedAt: Long,
 ) {
     fun toResponse() = CatalogFileResponse(
         id = id,
@@ -53,6 +55,21 @@ data class CatalogFileDetail(
         creatorDeleted = creatorDeleted,
         createdAt = createdAt,
         updatedAt = updatedAt,
+        sourceUrl = sourceUrl,
+        lastSyncedAt = lastSyncedAt,
+    )
+}
+
+/** GET {id}/sync's read model: the reference + stamp + the baseline stored at the last sync. */
+data class CatalogFileSyncState(
+    val sourceUrl: String?,
+    val lastSyncedAt: Long,
+    val syncedDocument: CatalogFile?,
+) {
+    fun toResponse() = SyncStateResponse(
+        sourceUrl = sourceUrl,
+        lastSyncedAt = lastSyncedAt,
+        syncedDocument = syncedDocument,
     )
 }
 
@@ -68,6 +85,8 @@ private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "name" to CatalogFileService.CatalogFiles.name,
     "namespace" to CatalogFileService.CatalogFiles.namespace,
     "updatedAt" to CatalogFileService.CatalogFiles.updatedAt,
+    // 0 = never synced, so ascending order surfaces the most-stale files first.
+    "lastSyncedAt" to CatalogFileService.CatalogFiles.lastSyncedAt,
 )
 
 /** The ONE sortable whitelist — the route's `parsePaging` argument derives from the column map
@@ -88,6 +107,13 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         val createdBy = reference("created_by", UserService.Users)
         val createdAt = long("created_at")
         val updatedAt = long("updated_at")
+        // The source reference & sync state (V21) — envelope columns, never part of `content`
+        // (the stored document stays a pure Backstage document). 0 = never synced; a sync
+        // stamps updated_at and last_synced_at EQUAL, so updated_at > last_synced_at means
+        // "modified in the DB since the sync"; synced_content is the baseline snapshot.
+        val sourceUrl = varchar("source_url", length = MAX_FETCH_URL_LENGTH).nullable()
+        val lastSyncedAt = long("last_synced_at").default(0)
+        val syncedContent = text("synced_content").nullable()
         val markedAsDeleted = bool("marked_as_deleted").default(false)
     }
 
@@ -257,20 +283,31 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         createdByUserId: UInt,
         extraIdentities: Set<EntityIdentity> = emptySet(),
         allowInvalid: Boolean = false,
+        sourceUrl: String? = null,
+        // Import-from-URL sets this: the content CAME from the repo copy, so the row starts
+        // synced (stamp + baseline). An editor-typed reference does not — content and repo
+        // were never compared, so the row reads "never synced".
+        markSynced: Boolean = false,
     ): CatalogFileSaveResult = suspendTransaction(database) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
+        val source = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
         // The stored row AND the content JSON both carry the resolved concrete namespace.
         val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
         val findings = requireOrWaive(stored, extraIdentities, allowInvalid)
         val now = System.currentTimeMillis()
+        val encoded = json.encodeToString(stored)
+        val synced = markSynced && source != null
         val newRecord = CatalogFiles.insert {
             it[kind] = stored.kind
             it[name] = stored.metadata.name
             it[namespace] = stored.metadata.namespace
-            it[content] = json.encodeToString(stored)
+            it[content] = encoded
             it[createdBy] = createdByUserId
             it[createdAt] = now
             it[updatedAt] = now
+            it[CatalogFiles.sourceUrl] = source
+            it[lastSyncedAt] = if (synced) now else 0
+            it[syncedContent] = if (synced) encoded else null
         }
         CatalogFileSaveResult(id = newRecord[CatalogFiles.id].value, waived = findings)
     }
@@ -295,20 +332,94 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             .singleOrNull()
     }
 
-    suspend fun update(id: UInt, file: CatalogFile, allowInvalid: Boolean = false): CatalogFileUpdateResult =
+    suspend fun update(
+        id: UInt,
+        file: CatalogFile,
+        allowInvalid: Boolean = false,
+        sourceUrl: String? = null,
+    ): CatalogFileUpdateResult =
         suspendTransaction(database) {
             validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
+            val source = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
             val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
             val findings = requireOrWaive(stored, emptySet(), allowInvalid)
+            val encoded = json.encodeToString(stored)
+            // The current row decides the sync-state consequences: a changed/cleared reference
+            // resets the sync state (a different source was never synced from), and updatedAt
+            // bumps ONLY on a content change — a reference-only edit must not read as
+            // "modified in the DB since the sync" (updatedAt > lastSyncedAt is that signal).
+            val current = CatalogFiles.select(CatalogFiles.content, CatalogFiles.sourceUrl)
+                .where { (CatalogFiles.id eq id) and active() }
+                .toList()
+                .singleOrNull()
+                ?: return@suspendTransaction CatalogFileUpdateResult(rows = 0, waived = findings)
+            val contentChanged = current[CatalogFiles.content] != encoded
+            val sourceChanged = current[CatalogFiles.sourceUrl] != source
             val rows = CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
                 it[kind] = stored.kind
                 it[name] = stored.metadata.name
                 it[namespace] = stored.metadata.namespace
-                it[content] = json.encodeToString(stored)
-                it[updatedAt] = System.currentTimeMillis()
+                it[content] = encoded
+                if (contentChanged) it[updatedAt] = System.currentTimeMillis()
+                it[CatalogFiles.sourceUrl] = source
+                if (sourceChanged) {
+                    it[lastSyncedAt] = 0
+                    it[syncedContent] = null
+                }
             }
             CatalogFileUpdateResult(rows = rows, waived = findings)
         }
+
+    /**
+     * The repo→DB sync: overwrites the document with the repo copy (parsed client-side —
+     * YAML stays a client concern) and stamps the sync state. Soft findings are ALWAYS
+     * waived (the import posture — the repo is the source of truth; the Errors report is the
+     * net), structural validation and namespace resolution stay HARD. Requires the row to
+     * hold a source reference (400 otherwise); an identity rename colliding with another
+     * active file surfaces as the ordinary 23505 → 409.
+     */
+    suspend fun syncFromRepo(id: UInt, file: CatalogFile): CatalogFileUpdateResult =
+        suspendTransaction(database) {
+            validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
+            val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
+            val findings = softFindings(stored, emptySet())
+            val current = CatalogFiles.select(CatalogFiles.sourceUrl)
+                .where { (CatalogFiles.id eq id) and active() }
+                .toList()
+                .singleOrNull()
+                ?: return@suspendTransaction CatalogFileUpdateResult(rows = 0, waived = findings)
+            if (current[CatalogFiles.sourceUrl] == null) {
+                throw BadRequestException("This file has no source reference — set one before syncing")
+            }
+            val now = System.currentTimeMillis()
+            val encoded = json.encodeToString(stored)
+            val rows = CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
+                it[kind] = stored.kind
+                it[name] = stored.metadata.name
+                it[namespace] = stored.metadata.namespace
+                it[content] = encoded
+                it[updatedAt] = now
+                it[lastSyncedAt] = now
+                it[syncedContent] = encoded
+            }
+            CatalogFileUpdateResult(rows = rows, waived = findings)
+        }
+
+    /** The sync state of one active file (null = no such file — the route's 404). */
+    suspend fun syncState(id: UInt): CatalogFileSyncState? = suspendTransaction(database) {
+        CatalogFiles.select(CatalogFiles.sourceUrl, CatalogFiles.lastSyncedAt, CatalogFiles.syncedContent)
+            .where { (CatalogFiles.id eq id) and active() }
+            .toList()
+            .singleOrNull()
+            ?.let { row ->
+                CatalogFileSyncState(
+                    sourceUrl = row[CatalogFiles.sourceUrl],
+                    lastSyncedAt = row[CatalogFiles.lastSyncedAt],
+                    syncedDocument = row[CatalogFiles.syncedContent]
+                        ?.let { json.decodeFromString<CatalogFile>(it) },
+                )
+            }
+    }
 
     suspend fun delete(id: UInt): Int = suspendTransaction(database) {
         CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
@@ -397,7 +508,14 @@ class CatalogFileService(private val database: R2dbcDatabase) {
      * outcome. The route emits the audit events for the stored rows (the repo convention:
      * audits live route-side).
      */
-    suspend fun import(files: List<CatalogFile>, createdByUserId: UInt): List<ImportFileResult> {
+    suspend fun import(
+        files: List<CatalogFile>,
+        createdByUserId: UInt,
+        // The fetch-from-URL flow's source: every stored row gets this reference AND starts
+        // synced (the content IS the repo copy at import time — an import from a URL is a
+        // sync). A pasted/uploaded batch passes null and the rows read "no source".
+        sourceUrl: String? = null,
+    ): List<ImportFileResult> {
         // The batch universe: sibling documents resolve against each other ORDER-INDEPENDENTLY
         // (a real export's entities are interdependent — the round trip must survive). Only
         // documents that sanitize, validate, and namespace-resolve contribute an identity.
@@ -405,7 +523,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         // (identity conflict) keeps its dangling reference — the same class as a
         // deletion-created dangling ref, and the Errors report catches it.
         val batchIdentities = batchIdentities(files)
-        return files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId, batchIdentities) }
+        return files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId, batchIdentities, sourceUrl) }
     }
 
     /** The identities every batch document may reference (shared by import and its dry-run). */
@@ -491,6 +609,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         raw: CatalogFile,
         createdByUserId: UInt,
         batchIdentities: Set<EntityIdentity>,
+        sourceUrl: String?,
     ): ImportFileResult {
         val sanitized = sanitizedCatalogFile(raw)
         fun base(f: CatalogFile) = ImportFileResult(
@@ -519,7 +638,14 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         }
         val base = base(file)
         return try {
-            val saved = create(file, createdByUserId, batchIdentities, allowInvalid = true)
+            val saved = create(
+                file,
+                createdByUserId,
+                batchIdentities,
+                allowInvalid = true,
+                sourceUrl = sourceUrl,
+                markSynced = true,
+            )
             if (saved.waived.isEmpty()) {
                 base.copy(status = ImportResultStatus.CREATED, fileId = saved.id)
             } else {
@@ -551,7 +677,13 @@ class CatalogFileService(private val database: R2dbcDatabase) {
     private suspend fun activeSources(): List<CatalogSource> =
         CatalogFiles.selectAll()
             .where { active() }
-            .map { CatalogSource(id = it[CatalogFiles.id].value, file = json.decodeFromString(it[CatalogFiles.content])) }
+            .map {
+                CatalogSource(
+                    id = it[CatalogFiles.id].value,
+                    file = json.decodeFromString(it[CatalogFiles.content]),
+                    sourceUrl = it[CatalogFiles.sourceUrl],
+                )
+            }
             .toList()
 
     suspend fun list(filter: CatalogFileListFilter, paging: PageRequest): CatalogFileListResult =
@@ -575,6 +707,8 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         creatorDeleted = this[UserService.Users.markedAsDeleted],
         createdAt = this[CatalogFiles.createdAt],
         updatedAt = this[CatalogFiles.updatedAt],
+        sourceUrl = this[CatalogFiles.sourceUrl],
+        lastSyncedAt = this[CatalogFiles.lastSyncedAt],
     )
 
     private fun CatalogFileDetail.toListItem() = CatalogFileListItem(
@@ -590,6 +724,8 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         creatorName = creatorName,
         creatorDeleted = creatorDeleted,
         updatedAt = updatedAt,
+        sourceUrl = sourceUrl,
+        lastSyncedAt = lastSyncedAt,
     )
 
 }

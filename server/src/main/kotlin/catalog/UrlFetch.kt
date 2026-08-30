@@ -1,6 +1,7 @@
 package ch.nokillswit.catalog
 
 import ch.nokillswit.authz.BadGatewayException
+import io.ktor.server.plugins.BadRequestException
 import java.io.IOException
 import java.net.InetAddress
 import java.net.URI
@@ -111,6 +112,27 @@ fun validateFetchUrl(raw: String): URI {
     val uri = parseFetchUrl(raw)
     requirePublicHost(uri.host)
     return uri
+}
+
+/** The 400 detail for a rejected source reference on a catalog-file write. */
+const val SOURCE_URL_INVALID_DETAIL =
+    "sourceUrl must be an absolute https URL without credentials (at most $MAX_FETCH_URL_LENGTH characters)"
+
+/**
+ * Sanitizes the optional per-file source reference: trimmed, blank → null, and held to the
+ * STATIC fetch guards only (absolute https, no userinfo, sane length) — the DNS/public-host
+ * check deliberately runs at fetch time, not at write time (a repo may be temporarily
+ * unresolvable without making its files unsaveable). Enforced by route AND service.
+ */
+fun sanitizedSourceUrl(raw: String?): String? {
+    val trimmed = raw?.trim().orEmpty()
+    if (trimmed.isEmpty()) return null
+    try {
+        parseFetchUrl(trimmed)
+    } catch (_: BlockedUrlException) {
+        throw BadRequestException(SOURCE_URL_INVALID_DETAIL)
+    }
+    return trimmed
 }
 
 /**
