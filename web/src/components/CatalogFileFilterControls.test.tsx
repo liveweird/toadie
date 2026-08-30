@@ -127,6 +127,11 @@ describe("CatalogFileFilterControls + useCatalogFileFilterState", () => {
     expect(values().kind).toBeUndefined();
     expect(screen.getByTestId("noKinds")).toHaveTextContent("false");
 
+    // Each pill shows its tier dot, but the dot is aria-hidden: the checkbox accessible
+    // name stays the bare kind (this locator IS the pin — everything below relies on it).
+    const groupPill = screen.getByRole("checkbox", { name: "Group" });
+    expect(groupPill.closest(".mantine-Chip-root")?.querySelector('[data-tier="1"]')).not.toBeNull();
+
     // Toggling one OFF sends the remaining six, in canonical kind order.
     fireEvent.click(screen.getByRole("checkbox", { name: "Group" }));
     await waitFor(() =>

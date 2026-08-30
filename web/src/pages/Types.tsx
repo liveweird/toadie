@@ -29,6 +29,7 @@ import {
 } from "../api/entityTypes";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
+import KindTierDot, { renderKindOption } from "../components/KindTierDot";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useEntityTypes } from "../hooks/useEntityTypes";
 import {
@@ -103,7 +104,7 @@ export default function Types() {
                 {dictionaries.map((dictionary) => (
                   <Table.Tr key={dictionary.id}>
                     <Table.Td>
-                      <Badge color="teal" variant="light" size="sm">
+                      <Badge color="teal" variant="light" size="sm" leftSection={<KindTierDot kind={dictionary.kind} />}>
                         {dictionary.kind}
                       </Badge>
                     </Table.Td>
@@ -220,6 +221,7 @@ function EntityTypesEditorModal({
             label={t("types.field.kind")}
             description={t("types.field.kindHint")}
             data={[...TYPE_BEARING_KINDS]}
+            renderOption={renderKindOption}
             data-autofocus
             {...form.getInputProps("kind")}
             onChange={(v) => form.setFieldValue("kind", v ?? "")}

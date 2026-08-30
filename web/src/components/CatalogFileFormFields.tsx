@@ -15,6 +15,7 @@ import {
 import { type UseFormReturnType } from "@mantine/form";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { renderKindOption } from "./KindTierDot";
 import { useAnnotationKeys } from "../hooks/useAnnotationKeys";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
 import { useEntityTypes } from "../hooks/useEntityTypes";
@@ -601,6 +602,7 @@ export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
         label={t("catalog.field.kind")}
         data={[...ENTITY_KINDS]}
         allowDeselect={false}
+        renderOption={renderKindOption}
         value={kind}
         onChange={(v) => {
           if (v) form.setFieldValue("kind", v as EntityKind);

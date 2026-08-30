@@ -25,6 +25,7 @@ import { isAdmin } from "../api/session";
 import { createLabel, deleteLabel, updateLabel, type Label } from "../api/labels";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
+import KindTierDot, { renderKindOption } from "../components/KindTierDot";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useLabels } from "../hooks/useLabels";
 import { ENTITY_KINDS } from "../utils/catalogFileForm";
@@ -116,7 +117,7 @@ export default function Labels() {
                     <Table.Td>
                       <Group gap={4}>
                         {label.kinds.map((kind) => (
-                          <Badge key={kind} color="teal" variant="light" size="sm">
+                          <Badge key={kind} color="teal" variant="light" size="sm" leftSection={<KindTierDot kind={kind} />}>
                             {kind}
                           </Badge>
                         ))}
@@ -239,6 +240,7 @@ function LabelEditorModal({
             label={t("labels.field.kinds")}
             description={t("labels.field.kindsHint")}
             data={[...ENTITY_KINDS]}
+            renderOption={renderKindOption}
             {...form.getInputProps("kinds")}
           />
           {error && (

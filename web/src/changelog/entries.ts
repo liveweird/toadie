@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.10.0",
+    date: "2026-08-30",
+    en: `**Kind tiers** — every kind now shows its fill-in priority.
+
+- The model is big; you won't fill everything at once. Tiers say where to start: **tier 1** — Domain, System, Group; **tier 2** — Component; **tier 3** — Resource, API; **tier 4** — User.
+- A small numbered dot before every kind name marks its tier — on the kind pills, the Files, Hierarchy, Graph, Errors, and import views, the editor's Kind picker, and the registry pages. Hover it for a reminder.
+- Purely visual: nothing about validation or saving changes — lower tiers first is a recommendation, not a rule.`,
+    pl: `**Poziomy rodzajów** — każdy rodzaj pokazuje teraz swój priorytet uzupełniania.
+
+- Model jest duży; nie uzupełnisz wszystkiego naraz. Poziomy podpowiadają, od czego zacząć: **poziom 1** — Domain, System, Group; **poziom 2** — Component; **poziom 3** — Resource, API; **poziom 4** — User.
+- Mała numerowana kropka przed nazwą rodzaju oznacza jego poziom — na pigułkach rodzajów, w widokach Plików, Hierarchii, Grafu, Błędów i importu, w wyborze rodzaju w edytorze oraz na stronach rejestrów. Najedź na nią, by zobaczyć przypomnienie.
+- Zmiana czysto wizualna: walidacja i zapisywanie działają bez zmian — „najpierw niższe poziomy" to zalecenie, nie reguła.`,
+  },
+  {
     version: "1.9.0",
     date: "2026-08-30",
     en: `**Lenses** — save your filters, name them, share them.

@@ -26,6 +26,10 @@
      the owner and the provided API both resolve against the files just stored.
 4. On the Files list, filtered by the namespace, all three rows show their kind badges
    (Group, API, Component).
+   - *Expected*: each badge carries the kind's **tier dot** — the numbered fill-in-priority
+     marker (Group 1, Component 2, API 3) — and the always-visible Kind pills show a
+     tier-4 dot (User) too. The dots are purely visual (aria-hidden): every bare-kind
+     locator keeps working.
 5. They delete all three files.
 
 ## Not covered here (and why)

@@ -15,6 +15,7 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
+import KindTierDot from "../components/KindTierDot";
 import LensPicker from "../components/LensPicker";
 import PaginationBar from "../components/PaginationBar";
 import SortHeader from "../components/SortHeader";
@@ -168,7 +169,7 @@ export default function CatalogFiles() {
                   <Text size="sm">{file.namespace}</Text>
                 </Table.Td>
                 <Table.Td>
-                  <Badge variant="light" size="sm">
+                  <Badge variant="light" size="sm" leftSection={<KindTierDot kind={file.kind} />}>
                     {file.kind}
                   </Badge>
                 </Table.Td>

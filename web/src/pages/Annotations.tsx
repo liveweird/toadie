@@ -29,6 +29,7 @@ import {
 } from "../api/annotationKeys";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
+import KindTierDot, { renderKindOption } from "../components/KindTierDot";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useAnnotationKeys } from "../hooks/useAnnotationKeys";
 import { ENTITY_KINDS } from "../utils/catalogFileForm";
@@ -111,7 +112,7 @@ export default function Annotations() {
                     <Table.Td>
                       <Group gap={4}>
                         {row.kinds.map((kind) => (
-                          <Badge key={kind} color="teal" variant="light" size="sm">
+                          <Badge key={kind} color="teal" variant="light" size="sm" leftSection={<KindTierDot kind={kind} />}>
                             {kind}
                           </Badge>
                         ))}
@@ -228,6 +229,7 @@ function AnnotationKeyEditorModal({
             label={t("annotations.field.kinds")}
             description={t("annotations.field.kindsHint")}
             data={[...ENTITY_KINDS]}
+            renderOption={renderKindOption}
             {...form.getInputProps("kinds")}
           />
           {error && (

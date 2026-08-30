@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Badge, Text } from "@mantine/core";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
+import KindTierDot from "./KindTierDot";
 import type { LaidOutNode } from "../utils/graphLayout";
 import { GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH } from "../utils/graphLayout";
 
@@ -67,6 +68,7 @@ function CatalogGraphNode({ data }: NodeProps<LaidOutNode>) {
         variant={node.status === "STORED" ? "light" : "outline"}
         color={node.status === "MISSING" ? "red" : node.status === "EXTERNAL" ? "gray" : undefined}
         style={{ position: "absolute", top: 8, right: 8 }}
+        leftSection={<KindTierDot kind={node.kind} />}
       >
         {node.kind}
       </Badge>

@@ -52,7 +52,9 @@ export default function CatalogFileFilterControls({
     // groups appear. Option VALUES are kind-prefixed because the same type may legally be
     // allowed for several kinds ("service" in Component AND System) and Mantine requires
     // unique values across groups — labels stay the bare type, and onChange strips the
-    // prefix back off. The stale item keeps its raw (prefix-less) value.
+    // prefix back off. The stale item keeps its raw (prefix-less) value. The kind GROUP
+    // HEADERS deliberately carry no tier dot (KindTierDot): Mantine Select has no
+    // renderGroupHeader hook.
     const source = (
       controls.kinds.length > 0
         ? dictionaries.filter((d) => controls.kinds.includes(d.kind))

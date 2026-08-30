@@ -23,6 +23,7 @@ import {
   importCatalogFiles,
   type ImportFileResult,
 } from "../api/catalogFiles";
+import KindTierDot from "../components/KindTierDot";
 import { normalizeCatalogUrl, parseCatalogYaml } from "../utils/catalogImport";
 import { saveErrorMessage } from "../utils/saveError";
 import { catalogFilesPath } from "../utils/catalogFileLinks";
@@ -226,7 +227,7 @@ export default function ImportCatalogFiles() {
               {results.rows.map((result) => (
                 <Table.Tr key={result.index}>
                   <Table.Td>
-                    <Badge variant="light" size="sm">
+                    <Badge variant="light" size="sm" leftSection={<KindTierDot kind={result.kind} />}>
                       {result.kind}
                     </Badge>
                   </Table.Td>

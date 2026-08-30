@@ -23,6 +23,7 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
+import KindTierDot from "../components/KindTierDot";
 import LensPicker from "../components/LensPicker";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
@@ -88,7 +89,7 @@ function TreeItem({
         ) : (
           <Box w={22} />
         )}
-        <Badge variant="light" size="sm" color={virtual ? "gray" : undefined}>
+        <Badge variant="light" size="sm" color={virtual ? "gray" : undefined} leftSection={<KindTierDot kind={node.kind} />}>
           {node.kind}
         </Badge>
         <Text size="sm" fw={virtual ? 400 : 500} c={virtual ? "dimmed" : undefined} fs={virtual ? "italic" : undefined}>

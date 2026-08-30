@@ -30,6 +30,7 @@ import {
 } from "../api/tagCategories";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
+import KindTierDot, { renderKindOption } from "../components/KindTierDot";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useTagCategories } from "../hooks/useTagCategories";
 import { ENTITY_KINDS } from "../utils/catalogFileForm";
@@ -122,7 +123,7 @@ export default function Tags() {
                     <Table.Td>
                       <Group gap={4}>
                         {category.kinds.map((kind) => (
-                          <Badge key={kind} color="teal" variant="light" size="sm">
+                          <Badge key={kind} color="teal" variant="light" size="sm" leftSection={<KindTierDot kind={kind} />}>
                             {kind}
                           </Badge>
                         ))}
@@ -245,6 +246,7 @@ function TagCategoryEditorModal({
             label={t("tags.field.kinds")}
             description={t("tags.field.kindsHint")}
             data={[...ENTITY_KINDS]}
+            renderOption={renderKindOption}
             {...form.getInputProps("kinds")}
           />
           {error && (

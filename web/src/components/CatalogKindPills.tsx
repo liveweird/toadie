@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Chip, Group, Stack, Text } from "@mantine/core";
 import { ENTITY_KINDS } from "../utils/catalogFileForm";
+import KindTierDot from "./KindTierDot";
 
 /**
  * The always-visible VISIBLE-kinds pills above the Files list, Hierarchy tree, and Graph
@@ -26,7 +27,10 @@ export default function CatalogKindPills({
         <Group gap="xs" role="group" aria-label={t("catalog.field.kind")}>
           {ENTITY_KINDS.map((kind) => (
             <Chip key={kind} value={kind} size="xs">
-              {kind}
+              <Group gap={4} wrap="nowrap" display="inline-flex" component="span">
+                <KindTierDot kind={kind} />
+                {kind}
+              </Group>
             </Chip>
           ))}
         </Group>

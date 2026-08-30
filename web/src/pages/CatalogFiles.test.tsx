@@ -242,6 +242,11 @@ describe("CatalogFiles page", () => {
     const table = screen.getByRole("table");
     expect(within(table).getByText("Component")).toBeInTheDocument();
     expect(within(table).getByText("API")).toBeInTheDocument();
+    // Each badge carries the kind's tier dot (Component = tier 2, API = tier 3).
+    const badgeDot = (kind: string) =>
+      within(table).getByText(kind).closest(".mantine-Badge-root")?.querySelector("[data-tier]");
+    expect(badgeDot("Component")).toHaveAttribute("data-tier", "2");
+    expect(badgeDot("API")).toHaveAttribute("data-tier", "3");
   });
 
   test("picking a Namespace filter option triggers a refetch with namespace=", async () => {

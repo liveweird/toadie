@@ -189,5 +189,8 @@
     "title": "Zapisać mimo zastrzeżeń?",
     "intro": "Ścisły zapis odrzuca ten dokument z powodu poniższych zastrzeżeń. Możesz mimo to go zapisać i poprawić je później — strona Weryfikacja śledzi każde zastrzeżenie, dopóki go nie rozwiążesz.",
     "confirm": "Zapisz mimo to"
+  },
+  "tier": {
+    "tooltip": "Poziom {{tier}} — najpierw uzupełnij niższe poziomy"
   }
 }

@@ -13,6 +13,28 @@ const MAX_PROFILE_EMAIL_LENGTH = 254;
 export const ENTITY_KINDS = ["Component", "API", "System", "Domain", "Resource", "Group", "User"] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
+// Tier = fill-in priority of a kind (1 first, 4 last) — a purely VISUAL marker (KindTierDot),
+// never enforced anywhere.
+export type KindTier = 1 | 2 | 3 | 4;
+export const KIND_TIERS: Record<EntityKind, KindTier> = {
+  Domain: 1,
+  System: 1,
+  Group: 1,
+  Component: 2,
+  Resource: 3,
+  API: 3,
+  User: 4,
+};
+
+const KIND_TIERS_FOLDED = new Map<string, KindTier>(
+  ENTITY_KINDS.map((kind) => [kind.toLowerCase(), KIND_TIERS[kind]]),
+);
+
+/** Case-insensitive tier lookup — the graph endpoint spells kinds lowercase. */
+export function kindTier(kind: string): KindTier | undefined {
+  return KIND_TIERS_FOLDED.get(kind.toLowerCase());
+}
+
 // (The well-known TYPE and LIFECYCLE value lists moved server-side: V15/V16 seed them into
 // the admin-curated registries, and the editor's pickers read those via useEntityTypes /
 // useLifecycleOptions.)

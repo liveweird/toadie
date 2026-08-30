@@ -9,6 +9,7 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import EmptyState from "../components/EmptyState";
 import ErrorClassPills from "../components/ErrorClassPills";
 import FilterPanel from "../components/FilterPanel";
+import KindTierDot from "../components/KindTierDot";
 import LensPicker from "../components/LensPicker";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
@@ -115,7 +116,10 @@ export default function Errors() {
                   </Anchor>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">{f.fileKind}</Text>
+                  <Group gap={6} wrap="nowrap">
+                    <KindTierDot kind={f.fileKind} />
+                    <Text size="sm">{f.fileKind}</Text>
+                  </Group>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{f.fileNamespace}</Text>

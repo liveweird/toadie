@@ -81,6 +81,14 @@ test("a group, an API, and a component owned by the group are created and resolv
   await expect(compRow.getByText("Component", { exact: true })).toBeVisible();
   await expect(teamRow.getByText("Group", { exact: true })).toBeVisible();
 
+  // Each kind badge carries its TIER dot (fill-in priority — Group 1, Component 2, API 3),
+  // and the pills above spell every tier; the dots are aria-hidden, so the bare-kind
+  // locators above keep working.
+  await expect(teamRow.locator('[data-tier="1"]')).toBeVisible();
+  await expect(compRow.locator('[data-tier="2"]')).toBeVisible();
+  await expect(apiRow.locator('[data-tier="3"]')).toBeVisible();
+  await expect(page.getByRole("group", { name: "Kind" }).locator('[data-tier="4"]')).toBeVisible();
+
   // Cleanup: delete all three throwaway files.
   for (const name of [comp, api, team]) {
     await page.goto("/files");
