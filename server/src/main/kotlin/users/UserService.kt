@@ -66,9 +66,13 @@ class UserService(private val database: R2dbcDatabase) {
     }
 
     suspend fun create(user: User): UInt = suspendTransaction(database) {
+        // Re-checked service-side so direct callers stay guarded (the feature-template rule);
+        // the plaintext-password rules can't apply here — only the bcrypt hash arrives.
+        validateNameAndEmail(user.name, user.email)
+        validateLanguage(user.language)
         val newRecord = Users.insert {
             it[name] = user.name
-            it[email] = user.email
+            it[email] = canonicalEmail(user.email)
             it[passwordHash] = user.passwordHash
             it[role] = user.role.name
             it[language] = user.language
@@ -102,6 +106,8 @@ class UserService(private val database: R2dbcDatabase) {
             ?.let { it[Users.id].value to it.toUser(featuresOf(it[Users.id].value)) }
     }
 
+    // The plaintext rules (min length, bcrypt byte ceiling) are route-side by necessity:
+    // only the bcrypt hash ever reaches the service.
     suspend fun updatePassword(id: UInt, passwordHash: String): Int = suspendTransaction(database) {
         Users.update({ (Users.id eq id) and active() }) {
             it[this.passwordHash] = passwordHash
@@ -112,9 +118,10 @@ class UserService(private val database: R2dbcDatabase) {
 
     /**
      * Set the per-user language (V18). Returns 1, or 0 when the id is unknown or
-     * soft-deleted (the route 404s). Idempotent; validated by the route.
+     * soft-deleted (the route 404s). Idempotent.
      */
     suspend fun setLanguage(id: UInt, language: String): Int = suspendTransaction(database) {
+        validateLanguage(language) // re-checked service-side so direct callers stay guarded
         Users.update({ (Users.id eq id) and active() }) {
             it[Users.language] = language
         }
@@ -170,13 +177,15 @@ class UserService(private val database: R2dbcDatabase) {
      */
     suspend fun updateGuarded(id: UInt, name: String, email: String, role: UserRole): GuardedMutation =
         suspendTransaction(database) {
+            validateNameAndEmail(name, email) // re-checked service-side so direct callers stay guarded
             val existingRole = activeRole(id) ?: return@suspendTransaction GuardedMutation.NOT_FOUND
             if (existingRole == UserRole.ADMIN && role != UserRole.ADMIN && lockedActiveAdminCount() <= 1) {
                 return@suspendTransaction GuardedMutation.LAST_ADMIN
             }
             val rows = Users.update({ (Users.id eq id) and active() }) {
                 it[Users.name] = name
-                it[Users.email] = email
+                // Canonical identity, folded here too (defense-in-depth like findWithIdByEmail).
+                it[Users.email] = canonicalEmail(email)
                 it[Users.role] = role.name
             }
             if (rows == 0) GuardedMutation.NOT_FOUND else GuardedMutation.DONE

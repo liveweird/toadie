@@ -115,8 +115,8 @@ class UrlFetchTest {
     fun `a 200 returns the body text`() = withFixtureServer(
         configure = { it.respond("/ok", 200, "kind: Component\nmetadata:\n  name: fetched\n".toByteArray()) },
     ) { base ->
-        val content = runBlocking { fixtureFetcher().fetch("$base/ok") }
-        assertTrue(content.contains("name: fetched"))
+        val fetched = runBlocking { fixtureFetcher().fetch("$base/ok") }
+        assertTrue(fetched.content.contains("name: fetched"))
     }
 
     @Test
@@ -186,9 +186,16 @@ class UrlFetchTest {
                 startApplication()
                 val client = seededClient("fetchroute")
 
-                val ok = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/ok"))
-                assertEquals(HttpStatusCode.OK, ok.status)
-                assertTrue(ok.body<FetchUrlResponse>().content.contains("name: fetched"))
+                withAuditCapture { capture ->
+                    val ok = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/ok"))
+                    assertEquals(HttpStatusCode.OK, ok.status)
+                    assertTrue(ok.body<FetchUrlResponse>().content.contains("name: fetched"))
+                    // A successful outbound fetch leaves its own trail — scheme/host only,
+                    // never the full URL (it may embed query-string tokens).
+                    val fetched = capture.events.firstOrNull { it.message == "catalog_file.fetched" }
+                    assertNotNull(fetched)
+                    assertTrue(fetched.hasKeyValue("host", "127.0.0.1"))
+                }
 
                 val bad = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/missing"))
                 assertEquals(HttpStatusCode.BadGateway, bad.status)

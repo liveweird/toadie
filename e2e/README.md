@@ -52,6 +52,7 @@ from Lettuce, that any new or edited spec must satisfy:
   **seeded accounts must stay English**: every login applies the stored language to that
   session's UI, so a Polish seed admin would flip parallel specs mid-run);
   `namespaces` owns its throwaway dictionary entries and user;
+  `lenses` owns its throwaway lenses, files, and users (see its own bullet below);
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
@@ -130,7 +131,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
   authenticated pages (`/`, `/files`, `/files/new`, `/files/import`,
-  `/errors`, `/graph`, `/labels`, `/annotations`, `/tags`, `/types`, `/lifecycles`, `/users`); `color-contrast` consciously waived theme-wide.
+  `/errors`, `/graph`, `/labels`, `/annotations`, `/tags`, `/types`, `/lifecycles`,
+  `/namespaces`, `/users`, `/changelog`); `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`annotations.spec.ts`](scenarios/annotations.md) — the annotation-key registry: modal
   validation → register a key (kinds only — values stay free) → edit → the regular user's

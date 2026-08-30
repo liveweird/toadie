@@ -4,7 +4,6 @@ import ch.nokillswit.authz.ConflictException
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.Op
@@ -61,20 +60,6 @@ class TagCategoryService(private val database: R2dbcDatabase) {
                 )
             }
             .toList()
-    }
-
-    suspend fun read(id: UInt): TagCategoryResponse? = suspendTransaction(database) {
-        TagCategories.selectAll()
-            .where { (TagCategories.id eq id) and active() }
-            .map {
-                rowToResponse(
-                    it[TagCategories.id].value,
-                    it[TagCategories.name],
-                    it[TagCategories.allowedKinds],
-                    it[TagCategories.tags],
-                )
-            }
-            .singleOrNull()
     }
 
     /**

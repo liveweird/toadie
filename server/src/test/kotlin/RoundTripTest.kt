@@ -8,6 +8,7 @@ import ch.nokillswit.catalog.ImportRequest
 import ch.nokillswit.catalog.ImportResponse
 import ch.nokillswit.catalog.ImportResultStatus
 import ch.nokillswit.catalog.MAX_IMPORT_FILES
+import ch.nokillswit.catalog.`import`
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete

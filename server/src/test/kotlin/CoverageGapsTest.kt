@@ -31,6 +31,9 @@ class CoverageGapsTest {
         assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH/-1").status)
         assertEquals(HttpStatusCode.BadRequest, client.delete("$CATALOG_FILES_PATH/-1").status)
         assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/users/-5").status)
+        // Nested id-carrying paths ride the same pre-routing intercept.
+        assertEquals(HttpStatusCode.BadRequest, client.get("$CATALOG_FILES_PATH/-1/sync").status)
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/v1/users/-1/graph-layout").status)
     }
 
     @Test

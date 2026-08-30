@@ -39,7 +39,7 @@ export default function CatalogFileOperations({
           loading={downloading}
           aria-label={t("catalog.operationsAria", { name })}
         >
-          {t("catalog.operations")}
+          {t("common.table.operations")}
         </Button>
       </Menu.Target>
       <Menu.Dropdown>

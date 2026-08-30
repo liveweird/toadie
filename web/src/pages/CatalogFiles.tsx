@@ -27,7 +27,8 @@ import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { loadErrorMessage } from "../utils/saveError";
-import { relativeTimeAgo } from "../utils/relativeTime";
+import { formatDate, formatDateTime, relativeTimeAgo } from "../utils/relativeTime";
+import { hasLocalChanges } from "../utils/syncComparison";
 import { importCatalogFilesPath, newCatalogFilePath } from "../utils/catalogFileLinks";
 
 const SORT_FIELDS = ["name", "kind", "namespace", "updatedAt", "lastSyncedAt"] as const;
@@ -59,11 +60,11 @@ function SyncStateCell({ file }: { file: CatalogFileListItem }) {
   }
   return (
     <Group gap={6} wrap="nowrap">
-      <Text size="sm" title={new Date(file.lastSyncedAt).toLocaleString(i18n.language)}>
+      <Text size="sm" title={formatDateTime(file.lastSyncedAt, i18n.language)}>
         {relativeTimeAgo(file.lastSyncedAt, i18n.language)}
       </Text>
-      {file.updatedAt > file.lastSyncedAt && (
-        <Badge variant="light" color="orange" size="xs">
+      {hasLocalChanges(file) && (
+        <Badge variant="light" color="orange" size="sm">
           {t("catalog.sync.localChanges")}
         </Badge>
       )}
@@ -203,7 +204,7 @@ export default function CatalogFiles() {
                 onToggle={toggleSort}
               />
             </Table.Th>
-            <Table.Th aria-label={t("catalog.operations")} style={{ width: 1 }} />
+            <Table.Th aria-label={t("common.table.operations")} style={{ width: 1 }} />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -229,7 +230,10 @@ export default function CatalogFiles() {
                   <Text size="sm">{file.title ?? ""}</Text>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">{new Date(file.updatedAt).toLocaleDateString(i18n.language)}</Text>
+                  {/* Same treatment as the Last-sync cell: compact date, precise tooltip. */}
+                  <Text size="sm" title={formatDateTime(file.updatedAt, i18n.language)}>
+                    {formatDate(file.updatedAt, i18n.language)}
+                  </Text>
                 </Table.Td>
                 <Table.Td>
                   <SyncStateCell file={file} />

@@ -126,6 +126,11 @@ class SyncTest {
         val client = seededClient("syncnosrc")
         val name = uniqueEntityName("nosrc")
         val id = client.createWithSource(withSource(componentFile(name), null)).id
+        // The source-less row still has a readable sync state — the all-default triple.
+        val state = client.get("$CATALOG_FILES_PATH/$id/sync").body<SyncStateResponse>()
+        assertEquals(null, state.sourceUrl)
+        assertEquals(0, state.lastSyncedAt)
+        assertEquals(null, state.syncedDocument)
         val response = client.postJson(
             "$CATALOG_FILES_PATH/$id/sync",
             SyncCatalogFileRequest(document = componentFile(name)),
@@ -168,7 +173,7 @@ class SyncTest {
             val event = capture.events.firstOrNull { it.message == "catalog_file.synced" }
             assertNotNull(event)
             assertTrue(event.hasKeyValue("catalogFileId", id.toLong()))
-            assertTrue(event.hasKeyValue("withFindings", 1))
+            assertTrue(event.hasKeyValue("waivedFindings", 1))
         }
         // The waived finding lands on the Errors report (the import posture).
         val findings = client.get("$CATALOG_FILES_PATH/errors?name=$name").body<ErrorsReport>().findings

@@ -70,14 +70,24 @@ class CatalogFiles {
 }
 
 /**
- * The created/updated audit fields: `waivedFindings` rides along ONLY when an allowInvalid
- * save actually waived something — the strict happy path keeps its two-field shape.
+ * The catalog-file mutation audit fields, shared by created/updated/synced and the import
+ * loop: `waivedFindings` (always the COUNT — one type per field name, SIEM-friendly) rides
+ * along ONLY when the save actually waived something; `import`/`withFindings` are the import
+ * loop's boolean markers. The strict happy path keeps its two-field shape.
  */
-private fun createdAuditFields(byUserId: UInt, catalogFileId: UInt, waived: Int): Array<Pair<String, Any?>> =
+private fun catalogAuditFields(
+    byUserId: UInt,
+    catalogFileId: UInt,
+    waived: Int = 0,
+    import: Boolean = false,
+    withFindings: Boolean = false,
+): Array<Pair<String, Any?>> =
     buildList<Pair<String, Any?>> {
         add("byUserId" to byUserId.toLong())
         add("catalogFileId" to catalogFileId.toLong())
         if (waived > 0) add("waivedFindings" to waived)
+        if (import) add("import" to true)
+        if (withFindings) add("withFindings" to true)
     }.toTypedArray()
 
 /**
@@ -146,7 +156,7 @@ fun Application.configureCatalogFileRoutes() {
                     allowInvalid = allowInvalid,
                     sourceUrl = sourceUrl,
                 )
-                audit("catalog_file.created", *createdAuditFields(caller.userId, saved.id, saved.waived.size))
+                audit("catalog_file.created", *catalogAuditFields(caller.userId, saved.id, waived = saved.waived.size))
                 // Read back for the creator/timestamp envelope — post-commit, so a miss is a 500.
                 val created = catalogFileService.read(saved.id).orVanished("CatalogFile", saved.id)
                 call.response.header(HttpHeaders.Location, call.application.href(CatalogFiles.Id(id = saved.id)))
@@ -204,12 +214,12 @@ fun Application.configureCatalogFileRoutes() {
                 for (result in results.filter { it.status in storedStatuses }) {
                     audit(
                         "catalog_file.created",
-                        *buildList<Pair<String, Any?>> {
-                            add("byUserId" to caller.userId.toLong())
-                            add("catalogFileId" to result.fileId!!.toLong())
-                            add("import" to true)
-                            if (result.status == ImportResultStatus.CREATED_WITH_FINDINGS) add("withFindings" to true)
-                        }.toTypedArray(),
+                        *catalogAuditFields(
+                            caller.userId,
+                            checkNotNull(result.fileId) { "stored import row without a fileId" },
+                            import = true,
+                            withFindings = result.status == ImportResultStatus.CREATED_WITH_FINDINGS,
+                        ),
                     )
                 }
                 call.respond(HttpStatusCode.OK, ImportResponse(results = results))
@@ -217,7 +227,7 @@ fun Application.configureCatalogFileRoutes() {
             post<CatalogFiles.Fetch> {
                 val caller = call.caller()
                 val request = call.receive<FetchUrlRequest>()
-                val content = try {
+                val fetched = try {
                     urlFetcher.fetch(request.url)
                 } catch (blocked: BlockedUrlException) {
                     // A blocked fetch attempt is a probe signal worth keeping; the response
@@ -230,7 +240,15 @@ fun Application.configureCatalogFileRoutes() {
                     )
                     throw BadRequestException(FETCH_URL_INVALID_DETAIL)
                 }
-                call.respond(HttpStatusCode.OK, FetchUrlResponse(content = content))
+                // The success trail: the server pulled a body from a public host on user
+                // command — record who and from where (scheme/host ONLY, never the full URL).
+                audit(
+                    "catalog_file.fetched",
+                    "byUserId" to caller.userId.toLong(),
+                    "scheme" to fetched.uri.scheme,
+                    "host" to fetched.uri.host,
+                )
+                call.respond(HttpStatusCode.OK, FetchUrlResponse(content = fetched.content))
             }
             get<CatalogFiles.Id> { route ->
                 call.caller()
@@ -251,7 +269,7 @@ fun Application.configureCatalogFileRoutes() {
                     sourceUrl = sourceUrl,
                 )
                 result.rows.orNotFound("Catalog file")
-                audit("catalog_file.updated", *createdAuditFields(caller.userId, route.id, result.waived.size))
+                audit("catalog_file.updated", *catalogAuditFields(caller.userId, route.id, waived = result.waived.size))
                 call.respond(HttpStatusCode.NoContent)
             }
             get<CatalogFiles.Id.Sync> { route ->
@@ -272,11 +290,7 @@ fun Application.configureCatalogFileRoutes() {
                 result.rows.orNotFound("Catalog file")
                 audit(
                     "catalog_file.synced",
-                    *buildList<Pair<String, Any?>> {
-                        add("byUserId" to caller.userId.toLong())
-                        add("catalogFileId" to route.parent.id.toLong())
-                        if (result.waived.isNotEmpty()) add("withFindings" to result.waived.size)
-                    }.toTypedArray(),
+                    *catalogAuditFields(caller.userId, route.parent.id, waived = result.waived.size),
                 )
                 call.respond(HttpStatusCode.NoContent)
             }

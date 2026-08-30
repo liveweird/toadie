@@ -23,7 +23,11 @@ data class JwtConfig(
 val JwtConfigKey = AttributeKey<JwtConfig>("JwtConfig")
 
 fun Application.configureSecurity() {
-    if (environment.config.propertyOrNull("security.csrf.enabled")?.getString()?.toBoolean() != false) {
+    // Fail closed like the sibling gates (http.exposeOpenApi, http.behindProxy): a missing or
+    // blank property means the documented default — OFF — never an accidental install.
+    val csrfEnabled = environment.config.propertyOrNull("security.csrf.enabled")?.getString()
+        ?.takeIf { it.isNotBlank() }?.toBoolean() ?: false
+    if (csrfEnabled) {
         install(CSRF) {
             allowOrigin("http://localhost:8081")
             originMatchesHost()

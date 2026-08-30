@@ -119,6 +119,13 @@ class LensTest {
             bob.postJson("/api/v1/lenses", request(name, visibility = LensVisibility.PUBLIC)).status,
         )
 
+        // The PUT side of the same index: RENAMING a lens onto the owner's other active
+        // name is the identical 23505 → 409 (the update runs after the ownership verdict).
+        val sibling = alice.postJson("/api/v1/lenses", request(lensName("lensdup-sib"))).body<LensResponse>()
+        val renameClash = alice.putJson("/api/v1/lenses/${sibling.id}", request(name))
+        assertEquals(HttpStatusCode.Conflict, renameClash.status)
+        assertNotNull(renameClash.body<ProblemDetail>().detail)
+
         assertEquals(HttpStatusCode.NoContent, alice.delete("/api/v1/lenses/${first.id}").status)
         val second = alice.postJson("/api/v1/lenses", request(name))
         assertEquals(HttpStatusCode.Created, second.status)

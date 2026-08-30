@@ -3,7 +3,6 @@ package ch.nokillswit.labels
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.Op
@@ -52,13 +51,6 @@ class LabelService(private val database: R2dbcDatabase) {
             .orderBy(Labels.key.lowerCase() to SortOrder.ASC, Labels.id to SortOrder.ASC)
             .map { rowToResponse(it[Labels.id].value, it[Labels.key], it[Labels.allowedKinds], it[Labels.allowedValues]) }
             .toList()
-    }
-
-    suspend fun read(id: UInt): LabelResponse? = suspendTransaction(database) {
-        Labels.selectAll()
-            .where { (Labels.id eq id) and active() }
-            .map { rowToResponse(it[Labels.id].value, it[Labels.key], it[Labels.allowedKinds], it[Labels.allowedValues]) }
-            .singleOrNull()
     }
 
     suspend fun create(request: LabelRequest): UInt = suspendTransaction(database) {

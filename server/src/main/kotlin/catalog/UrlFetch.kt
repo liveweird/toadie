@@ -47,6 +47,13 @@ data class FetchUrlResponse(val content: String)
  */
 class BlockedUrlException(val scheme: String?, val host: String?) : RuntimeException("Blocked URL")
 
+/**
+ * A successful fetch: the body plus the VALIDATED URI, so the route can audit the
+ * `catalog_file.fetched` scheme/host (the same never-log-the-full-URL discipline as
+ * [BlockedUrlException] — a URL may embed query-string tokens).
+ */
+data class FetchedContent(val uri: URI, val content: String)
+
 /** The static SSRF rules: absolute https, no userinfo, a non-blank host, sane length. */
 fun parseFetchUrl(raw: String): URI {
     val trimmed = raw.trim()
@@ -156,9 +163,9 @@ class CatalogUrlFetcher(private val urlValidator: (String) -> URI = ::validateFe
         .build()
 
     /** Throws [BlockedUrlException] (→ the route's 400) or [BadGatewayException] (→ 502). */
-    suspend fun fetch(rawUrl: String): String {
+    suspend fun fetch(rawUrl: String): FetchedContent {
         val uri = urlValidator(rawUrl)
-        return withContext(Dispatchers.IO) { execute(uri) }
+        return FetchedContent(uri = uri, content = withContext(Dispatchers.IO) { execute(uri) })
     }
 
     private fun execute(uri: URI): String {

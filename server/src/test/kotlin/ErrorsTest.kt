@@ -445,7 +445,7 @@ class ErrorsTest {
         // Stored rows always carry a resolved concrete namespace; the pure function still
         // guards the blank case (the GraphTest pure-call precedent) so it never reports one.
         val file = componentFile("blank-ns", namespace = "")
-        val source = ch.nokillswit.catalog.CatalogSource(id = 1u, file = file)
+        val source = ch.nokillswit.catalog.CatalogSource(id = 1u, file = file, sourceUrl = null)
         val report = ch.nokillswit.catalog.errorsReport(
             reported = listOf(source),
             all = listOf(source),

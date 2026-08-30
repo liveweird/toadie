@@ -3,7 +3,6 @@ package ch.nokillswit.annotations
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.Op
@@ -50,13 +49,6 @@ class AnnotationKeyService(private val database: R2dbcDatabase) {
             .orderBy(AnnotationKeys.key.lowerCase() to SortOrder.ASC, AnnotationKeys.id to SortOrder.ASC)
             .map { rowToResponse(it[AnnotationKeys.id].value, it[AnnotationKeys.key], it[AnnotationKeys.allowedKinds]) }
             .toList()
-    }
-
-    suspend fun read(id: UInt): AnnotationKeyResponse? = suspendTransaction(database) {
-        AnnotationKeys.selectAll()
-            .where { (AnnotationKeys.id eq id) and active() }
-            .map { rowToResponse(it[AnnotationKeys.id].value, it[AnnotationKeys.key], it[AnnotationKeys.allowedKinds]) }
-            .singleOrNull()
     }
 
     suspend fun create(request: AnnotationKeyRequest): UInt = suspendTransaction(database) {

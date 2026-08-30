@@ -59,6 +59,7 @@ ch.nokillswit
 │                       ErrorHandling (RFC 7807), OpenTelemetry, AutoHeadResponse, Resources,
 │                       Routing (SPA catch-all)
 ├── infra/mail/         outbound email (Lettuce's, ported): Mailer/SmtpMailer/LogMailer +
+│                       LocalizedText/PasswordEmail (the recipient-language content layer) +
 │                       configureMail — MAIL_TRANSPORT log/smtp/disabled, the log-transport
 │                       production refusal (fail-closed), null mailer = email features 503.
 │                       Consumers: self-service password reset and email MFA
@@ -70,7 +71,7 @@ ch.nokillswit
 ├── infra/validation/   cross-feature input helpers (sanitizeSingleLine — trim + control-char 400)
 ├── audit/              security audit trail: `audit(event, fields…)` → AUDIT-marked structured logs
 ├── authz/              CallerPrincipal + guards (requireAdmin, requireSelfOrAdmin) + typed
-│                       HTTP exceptions (401/403/404/409/429)
+│                       HTTP exceptions (401/403/404/409/429/502)
 ├── auth/               POST /api/v1/login (+ the email-MFA branch and /login/mfa second
 │                       step — MfaChallenges/MfaEmail), /refresh, /logout + the self-service
 │                       POST /api/v1/password-reset (uniform 202, async send-before-store,
@@ -88,7 +89,8 @@ ch.nokillswit
 │                       deliberately unaudited) + Validation.kt
 ├── dictionaries/       admin-curated ordered value lists (Lettuce's dictionaries, single-
 │                       valued — no translations): Dictionary.kt (the Dictionary enum whitelist
-│                       + DTOs + validateDictionaryUpdate), DictionaryService.kt (whole-document
+│                       + DTOs + validateDictionaryUpdate), Languages.kt (SUPPORTED_LANGUAGES —
+│                       the V18 per-user-language whitelist), DictionaryService.kt (whole-document
 │                       replace: soft-delete-first reconcile, positions rewritten from payload
 │                       order — no reorder endpoint), DictionaryRoutes.kt —
 │                       GET /api/v1/dictionaries/{slug} (any authenticated, unpaged) +
@@ -160,7 +162,11 @@ ch.nokillswit
                         semantics, incl. owner-reference resolution and the labelValue IN
                         param),
                         CatalogFileService.kt, CatalogFileRoutes.kt — /api/v1/files CRUD
-                        + paginated list; shared workspace (no admin gate on content);
+                        + paginated list + the sync pair (GET/POST …/{id}/sync); shared
+                        workspace (no admin gate on content);
+                        CatalogFileImport.kt — the import pipeline (import/importCheck as
+                        service extensions; ONE shared per-document classification, so the
+                        real run and the dry-run cannot drift);
                         Errors.kt — the reference resolver + registry/stored-content checks
                         behind GET …/errors (the filterable workspace Errors report: soft
                         findings + the report-only STRUCTURE_INVALID/NAMESPACE_NOT_ALLOWED)

@@ -1,6 +1,15 @@
 package ch.nokillswit.auth
 
+import ch.nokillswit.audit.audit
 import ch.nokillswit.infra.mail.LocalizedText
+import ch.nokillswit.infra.mail.Mailer
+import ch.nokillswit.infra.mail.respondMailUnavailable
+import ch.nokillswit.users.User
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.log
+import io.ktor.server.response.respond
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /**
  * Content of the email-MFA sign-in-code email, rendered in the recipient's language.
@@ -32,4 +41,54 @@ internal fun mfaEmailBody(name: String, code: String, ttlMinutes: Long, language
     appendLine("${CODE_LABEL.of(language)}:")
     appendLine()
     appendLine(code)
+}
+
+/**
+ * The MFA half of the login handler — the issuance WORKER, extracted from the route
+ * registrar (route files stay declarative; the detekt exemption covers registration, not
+ * workers): correct credentials answered with a challenge instead of tokens. Responds
+ * itself (503 fail-closed on a mail-less deployment, else the challenge); the login
+ * handler returns right after calling it.
+ */
+internal suspend fun issueMfaChallenge(
+    call: ApplicationCall,
+    challenges: MfaChallenges,
+    challengeMailer: Mailer?,
+    codeTtlMinutes: Long,
+    userId: UInt,
+    user: User,
+) {
+    if (challengeMailer == null) {
+        // Fail closed (the password-reset 503 precedent): silently skipping the
+        // second factor would downgrade security on a config change. The
+        // features PUT still works, so an admin can always flip the flag back.
+        audit("login.mfa_unavailable", "email" to user.email, "userId" to userId.toLong())
+        call.respondMailUnavailable("multi-factor login")
+        return
+    }
+    val challenge = challenges.issue(userId)
+    audit("login.mfa_challenge", "email" to user.email, "userId" to userId.toLong())
+    // Challenge stored BEFORE responding (the user submits the code right away);
+    // only the delivery is fire-and-forget, like the password-reset email.
+    val app = call.application
+    app.launch {
+        try {
+            challengeMailer.send(
+                to = user.email,
+                subject = MFA_EMAIL_SUBJECT.of(user.language),
+                body = mfaEmailBody(user.name, challenge.code, codeTtlMinutes, user.language),
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            audit("login.mfa_send_failed", "email" to user.email, "error" to e.message)
+            app.log.error("MFA code email delivery failed for ${user.email}", e)
+        }
+    }
+    call.respond(
+        MfaChallengeResponse(
+            challengeId = challenge.challengeId,
+            expiresAt = challenge.expiresAt,
+        ),
+    )
 }

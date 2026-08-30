@@ -2,7 +2,6 @@ package ch.nokillswit.types
 
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.Op
@@ -49,13 +48,6 @@ class EntityTypesService(private val database: R2dbcDatabase) {
             .orderBy(EntityTypes.kind to SortOrder.ASC, EntityTypes.id to SortOrder.ASC)
             .map { rowToResponse(it[EntityTypes.id].value, it[EntityTypes.kind], it[EntityTypes.types]) }
             .toList()
-    }
-
-    suspend fun read(id: UInt): EntityTypesResponse? = suspendTransaction(database) {
-        EntityTypes.selectAll()
-            .where { (EntityTypes.id eq id) and active() }
-            .map { rowToResponse(it[EntityTypes.id].value, it[EntityTypes.kind], it[EntityTypes.types]) }
-            .singleOrNull()
     }
 
     /**

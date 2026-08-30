@@ -84,7 +84,7 @@ test("a source reference set after creation clears the report flag and enables t
   const modal = page.getByRole("dialog");
   await expect(modal.getByText(`Sync from repo — ${name}`)).toBeVisible();
   await expect(modal.getByText(/The URL must be a public https address/)).toBeVisible();
-  await expect(modal.getByRole("button", { name: "Overwrite DB copy" })).toBeDisabled();
+  await expect(modal.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
   await modal.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
 

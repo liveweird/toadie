@@ -2592,6 +2592,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -2719,6 +2720,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalServerError"];
         };
     };

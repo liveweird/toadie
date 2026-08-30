@@ -109,8 +109,10 @@ data class ErrorsReport(
 data class CatalogSource(
     val id: UInt,
     val file: CatalogFile,
-    /** The row's source reference — feeds only the report-only SOURCE_MISSING check. */
-    val sourceUrl: String? = null,
+    /** The row's source reference — feeds only the report-only SOURCE_MISSING check.
+     *  Deliberately NO default: a caller that forgot the column would silently flag the
+     *  whole workspace as source-less, so the compiler makes every constructor decide. */
+    val sourceUrl: String?,
 )
 
 /** The lowercased kinds the editor stores — references to them are RESOLVABLE. */

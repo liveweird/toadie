@@ -123,13 +123,18 @@ describe("SyncCatalogFileModal", () => {
     // The baseline differs from the repo copy (repo changed) AND updatedAt > lastSyncedAt
     // (DB changed) — both sides light up.
     expect(await screen.findByText("Changed in repo")).toBeInTheDocument();
-    expect(screen.getByText("Changed in DB")).toBeInTheDocument();
+    expect(screen.getByText("Changed in Toadie")).toBeInTheDocument();
     expect(screen.getByText(/Last synced/)).toBeInTheDocument();
     // getByText's default normalizer collapses whitespace — match the collapsed form.
     expect(screen.getByText("- title: Old title")).toBeInTheDocument();
     expect(screen.getByText("+ title: New title")).toBeInTheDocument();
+    // The diff pane is a named, keyboard-scrollable region (see YamlDiffView).
+    const diffRegion = screen.getByRole("group", {
+      name: "Changes between the stored copy and the repo copy",
+    });
+    expect(diffRegion).toHaveAttribute("tabindex", "0");
 
-    const confirm = screen.getByRole("button", { name: "Overwrite DB copy" });
+    const confirm = screen.getByRole("button", { name: "Overwrite stored copy" });
     expect(confirm).toBeEnabled();
     await user.click(confirm);
 
@@ -149,9 +154,9 @@ describe("SyncCatalogFileModal", () => {
     mockRoutes(mockFetch, { fetch: jsonResponse(200, { content: repoYaml("Old title") }) });
     renderModal();
 
-    expect(await screen.findByText("DB and repo are in sync")).toBeInTheDocument();
-    expect(screen.queryByText("Changed in DB")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Overwrite DB copy" })).toBeDisabled();
+    expect(await screen.findByText("Toadie and the repo are in sync")).toBeInTheDocument();
+    expect(screen.queryByText("Changed in Toadie")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
   });
 
   test("repo findings raise the warning but never block the sync", async () => {
@@ -163,7 +168,7 @@ describe("SyncCatalogFileModal", () => {
     renderModal();
 
     expect(await screen.findByText(/carries 1 finding/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Overwrite DB copy" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeEnabled();
   });
 
   test("a refused fetch shows the public-https message and disables the overwrite", async () => {
@@ -175,7 +180,7 @@ describe("SyncCatalogFileModal", () => {
     expect(
       await screen.findByText(/The URL must be a public https address/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Overwrite DB copy" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
   });
 
   test("an unparsable repo file reads as parseFailed", async () => {
@@ -185,7 +190,7 @@ describe("SyncCatalogFileModal", () => {
     expect(
       await screen.findByText("The repo file is not a valid catalog-info.yaml."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Overwrite DB copy" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
   });
 
   test("a failed sync shows the error inline and Cancel closes", async () => {
@@ -195,12 +200,39 @@ describe("SyncCatalogFileModal", () => {
     const user = userEvent.setup();
     renderModal();
 
-    await user.click(await screen.findByRole("button", { name: "Overwrite DB copy" }));
+    await user.click(await screen.findByRole("button", { name: "Overwrite stored copy" }));
     expect(await screen.findByText("Sync failed")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  test("Esc cannot dismiss the modal mid-sync; it closes once the POST settles", async () => {
+    mockRoutes(mockFetch);
+    // Hold the sync POST open so the busy state is observable.
+    let releaseSync: (response: Response) => void = () => {};
+    const base = mockFetch.getMockImplementation() as (
+      url: string,
+      init?: RequestInit,
+    ) => Promise<Response>;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/v1/files/1/sync" && init?.method === "POST") {
+        return new Promise<Response>((resolve) => {
+          releaseSync = resolve;
+        });
+      }
+      return base(url, init);
+    });
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("button", { name: "Overwrite stored copy" }));
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+
+    releaseSync(new Response(null, { status: 204 }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   test("stays closed without a file", () => {

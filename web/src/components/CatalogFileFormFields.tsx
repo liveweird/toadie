@@ -574,12 +574,6 @@ function AnnotationsFieldset({ form }: { form: CatalogForm }) {
 }
 
 /**
- * The field block shared by the create and edit catalog-file pages (which own submit/error
- * handling and the YAML preview). The kind Select drives which per-kind spec/relations fields
- * render — hidden fields keep their values (a kind switch back restores them) and the request
- * mapper strips whatever doesn't belong to the submitted kind.
- */
-/**
  * The source reference — provenance (the https URL of the file's repo copy), deliberately
  * its own fieldset rather than Metadata: it is envelope state beside the document, never
  * part of the Backstage YAML. Backs the Files list's sync column and the Sync-from-repo
@@ -601,6 +595,12 @@ function SourceFieldset({ form }: { form: CatalogForm }) {
   );
 }
 
+/**
+ * The field block shared by the create and edit catalog-file pages (which own submit/error
+ * handling and the YAML preview). The kind Select drives which per-kind spec/relations fields
+ * render — hidden fields keep their values (a kind switch back restores them) and the request
+ * mapper strips whatever doesn't belong to the submitted kind.
+ */
 export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
   const kind = form.values.kind;

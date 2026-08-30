@@ -24,7 +24,7 @@
 5. They pick **Sync from repo** from the row's Operations menu.
    - *Expected*: the sync modal opens, the server-side fetch of the loopback URL is refused
      by the SSRF guard, the modal shows the fixed "must be a public https address" error,
-     and the **Overwrite DB copy** button stays disabled — nothing can be overwritten.
+     and the **Overwrite stored copy** button stays disabled — nothing can be overwritten.
 6. They cancel the modal and delete the file, confirming in the dialog.
    - *Expected*: a fresh filtered load shows "No catalog files".
 

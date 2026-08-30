@@ -3,7 +3,6 @@ package ch.nokillswit.auth
 import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.authz.UnauthorizedException
-import ch.nokillswit.infra.mail.Mailer
 import ch.nokillswit.infra.mail.mailAppUrl
 import ch.nokillswit.infra.mail.mailer
 import ch.nokillswit.infra.mail.respondMailUnavailable
@@ -143,92 +142,15 @@ fun Application.configureAuthRoutes() {
     val mailer = mailer()
     val mailAppUrl = mailAppUrl()
 
-    // The password-reset work that runs AFTER the uniform 202 (no timing oracle): lookup,
-    // generate, send-before-store, and the completion/failure audits. Launched fire-and-forget
-    // by the handler. Soft-deleted accounts are unknown here by construction —
-    // findWithIdByEmail filters active rows. The email renders in the recipient's stored
-    // language (V18; see infra/mail/LocalizedText.kt).
-    suspend fun processPasswordReset(app: Application, resetMailer: Mailer, email: String) {
-        var delivered = false
-        try {
-            val record = userService.findWithIdByEmail(email)
-            if (record == null) {
-                audit("password_reset.unknown_email", "email" to email)
-                return
-            }
-            val (userId, user) = record
-            val newPassword = generatePassword()
-            // Send FIRST, then store: a delivery failure leaves the old password
-            // working; a storage failure after delivery is recoverable by retrying.
-            // The two halves audit under distinct events — a store_failed means the
-            // recipient now holds an emailed password that does NOT work yet.
-            resetMailer.send(
-                to = user.email,
-                subject = PASSWORD_RESET_EMAIL_SUBJECT.of(user.language),
-                body = passwordResetEmailBody(user.name, newPassword, mailAppUrl, user.language),
-            )
-            delivered = true
-            userService.updatePassword(userId, hashPassword(newPassword))
-            audit("password_reset.completed", "email" to user.email, "userId" to userId.toLong())
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            audit(
-                if (delivered) "password_reset.store_failed" else "password_reset.send_failed",
-                "email" to email,
-                "error" to e.message,
-            )
-            app.log.error("Password reset failed for $email (delivered=$delivered)", e)
-        }
-    }
-
     // Email MFA: pending challenges for MFA-enabled accounts mid-login. In-memory,
-    // per-instance, like the throttles above.
+    // per-instance, like the throttles above. The issuance worker itself lives beside the
+    // email content (auth/MfaEmail.kt — route files stay declarative registrars).
     val mfaTtlSeconds = environment.config.property("security.mfa.codeTtlSeconds").getString().toLong()
     val mfaChallenges = MfaChallenges(
         ttlMillis = mfaTtlSeconds * 1000,
         maxAttempts = environment.config.property("security.mfa.maxAttempts").getString().toInt(),
     )
     val mfaTtlMinutes = (mfaTtlSeconds + 59) / 60
-
-    // The MFA half of the login handler: correct credentials answered with a challenge
-    // instead of tokens. Responds itself (503 fail-closed on a mail-less deployment, else
-    // the challenge); the login handler returns right after calling it.
-    suspend fun issueMfaChallenge(call: ApplicationCall, userId: UInt, user: User) {
-        if (mailer == null) {
-            // Fail closed (the password-reset 503 precedent): silently skipping the
-            // second factor would downgrade security on a config change. The
-            // features PUT still works, so an admin can always flip the flag back.
-            audit("login.mfa_unavailable", "email" to user.email, "userId" to userId.toLong())
-            call.respondMailUnavailable("multi-factor login")
-            return
-        }
-        val challenge = mfaChallenges.issue(userId)
-        audit("login.mfa_challenge", "email" to user.email, "userId" to userId.toLong())
-        // Challenge stored BEFORE responding (the user submits the code right away);
-        // only the delivery is fire-and-forget, like the password-reset email.
-        val app = call.application
-        app.launch {
-            try {
-                mailer.send(
-                    to = user.email,
-                    subject = MFA_EMAIL_SUBJECT.of(user.language),
-                    body = mfaEmailBody(user.name, challenge.code, mfaTtlMinutes, user.language),
-                )
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                audit("login.mfa_send_failed", "email" to user.email, "error" to e.message)
-                app.log.error("MFA code email delivery failed for ${user.email}", e)
-            }
-        }
-        call.respond(
-            MfaChallengeResponse(
-                challengeId = challenge.challengeId,
-                expiresAt = challenge.expiresAt,
-            ),
-        )
-    }
 
     // Verifies signature/issuer/audience/expiry of a presented refresh token. Same secret as the
     // access-token verifier in configureSecurity; the `typ` claim is checked separately below.
@@ -320,7 +242,7 @@ fun Application.configureAuthRoutes() {
                 // Email MFA (opt-in via the MFA feature flag, read straight off the DB record —
                 // no JWT exists yet): correct credentials answer with a challenge, not tokens.
                 if (Feature.MFA !in user.disabledFeatures) {
-                    issueMfaChallenge(call, userId, user)
+                    issueMfaChallenge(call, mfaChallenges, mailer, mfaTtlMinutes, userId, user)
                     return@post
                 }
                 audit("login.success", "email" to user.email, "userId" to userId.toLong())
@@ -422,8 +344,9 @@ fun Application.configureAuthRoutes() {
                     )
                 }
                 audit("password_reset.requested", "email" to email)
+                // The worker (auth/PasswordResetEmail.kt) runs after the uniform 202.
                 val app = call.application
-                app.launch { processPasswordReset(app, mailer, email) }
+                app.launch { processPasswordReset(app, userService, mailer, mailAppUrl, email) }
                 call.respond(HttpStatusCode.Accepted)
             }
         }

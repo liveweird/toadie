@@ -25,7 +25,7 @@ import {
 } from "../api/catalogFiles";
 import KindTierDot from "../components/KindTierDot";
 import { normalizeCatalogUrl, parseCatalogYaml } from "../utils/catalogImport";
-import { saveErrorMessage } from "../utils/saveError";
+import { FETCH_URL_ERROR_KEYS, saveErrorMessage } from "../utils/saveError";
 import { catalogFilesPath } from "../utils/catalogFileLinks";
 
 const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
@@ -81,13 +81,7 @@ export default function ImportCatalogFiles() {
       setFetchedFrom(normalized);
       setResults(null);
     } catch (err) {
-      setFetchError(
-        saveErrorMessage(err, t, {
-          invalid: "catalog.import.urlInvalid",
-          failedStatus: "catalog.import.urlFailedStatus",
-          failed: "catalog.import.urlFailedNetwork",
-        }),
-      );
+      setFetchError(saveErrorMessage(err, t, FETCH_URL_ERROR_KEYS));
     } finally {
       setFetching(false);
     }

@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.11.1",
+    date: "2026-08-30",
+    en: `**Quality pass** — a full check-up of the new sync feature and its surroundings.
+
+- The Sync-from-repo dialog can no longer be dismissed mid-sync (Esc or a click outside used to lose the result), confirms faster, and reads better with a keyboard and screen reader (the diff pane is focusable and announced).
+- Clearer wording: the dialog now says "stored copy" and "Toadie" instead of "DB", and finding counts read naturally in both languages.
+- Timestamp columns on the Files list are consistent: both Updated and Last sync show the precise date and time on hover.
+- Behind the scenes: a successful fetch from a repository URL is now audit-logged like a blocked one, and the audit trail uses one consistent field for waived findings.`,
+    pl: `**Przegląd jakości** — pełna kontrola nowej synchronizacji i jej otoczenia.
+
+- Okna Synchronizacji z repozytorium nie da się już zamknąć w trakcie synchronizacji (Esc lub kliknięcie obok potrafiło zgubić wynik), potwierdzenie działa szybciej, a obsługa klawiaturą i czytnikiem ekranu jest lepsza (panel różnic da się sfokusować i jest odczytywany).
+- Czytelniejsze teksty: okno mówi teraz o „zapisanej kopii" i „Toadie" zamiast o „bazie", a liczby ustaleń odmieniają się naturalnie w obu językach.
+- Kolumny z datami na liście Plików są spójne: zarówno Zaktualizowano, jak i Ostatnia synchronizacja pokazują dokładną datę i godzinę po najechaniu.
+- Od zaplecza: udane pobranie z adresu repozytorium trafia teraz do dziennika audytu tak samo jak zablokowane, a dziennik używa jednego spójnego pola dla pominiętych ustaleń.`,
+  },
+  {
     version: "1.11.0",
     date: "2026-08-30",
     en: `**Source references & repo sync** — tie each file to its copy in a Git repository.

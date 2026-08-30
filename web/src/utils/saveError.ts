@@ -38,6 +38,32 @@ export function saveErrorMessage(err: unknown, t: TFunction, keys: SaveErrorKeys
   return t(keys.failed);
 }
 
+/** The catalog-file save vocabulary — shared by the edit page and the sync modal's
+ *  overwrite (one wording for the same failure everywhere). */
+export const CATALOG_SAVE_ERROR_KEYS: SaveErrorKeys = {
+  notFound: "catalog.fileGone",
+  invalid: "catalog.validationError",
+  conflict: "catalog.conflictError",
+  failedStatus: "common.error.saveFailedStatus",
+  failed: "common.error.saveFailedNetwork",
+};
+
+/** The create page's variant: a create has no 404, and fails with the create wording. */
+export const CATALOG_CREATE_ERROR_KEYS: SaveErrorKeys = {
+  invalid: "catalog.validationError",
+  conflict: "catalog.conflictError",
+  failedStatus: "common.error.createFailedStatus",
+  failed: "common.error.createFailedNetwork",
+};
+
+/** The fetch-from-URL vocabulary — shared by the import page and the sync modal's repo
+ *  fetch (the server's SSRF-guarded POST /files/fetch behind both). */
+export const FETCH_URL_ERROR_KEYS: SaveErrorKeys = {
+  invalid: "catalog.import.urlInvalid",
+  failedStatus: "catalog.import.urlFailedStatus",
+  failed: "catalog.import.urlFailedNetwork",
+};
+
 /** The user-save 409 disambiguator: last-admin demotion vs an email already in use. */
 export function isLastAdminConflict(err: unknown): boolean {
   return err instanceof ApiError && err.status === 409 &&

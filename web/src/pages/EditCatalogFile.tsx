@@ -1,51 +1,39 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import { Paper, Stack, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  getCatalogFile,
-  softRejectionFindings,
-  updateCatalogFile,
-  type CatalogFileRequest,
-  type DocumentCheckFinding,
-} from "../api/catalogFiles";
+import { useQuery } from "@tanstack/react-query";
+import { getCatalogFile, updateCatalogFile } from "../api/catalogFiles";
 import { ApiError } from "../api/http";
 import CatalogFileEditor from "../components/CatalogFileEditor";
 import SaveAnywayModal from "../components/SaveAnywayModal";
 import EditPageLoadState from "../components/EditPageLoadState";
+import { useCatalogFileSave } from "../hooks/useCatalogFileSave";
 import {
   catalogFileFormValidation,
   emptyCatalogFileForm,
   fromCatalogFileResponse,
-  toCatalogFileRequest,
   type CatalogFileFormValues,
 } from "../utils/catalogFileForm";
-import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
-import { showSuccessToast } from "../utils/toast";
+import { CATALOG_SAVE_ERROR_KEYS, loadErrorMessage } from "../utils/saveError";
 import { catalogFilesPath } from "../utils/catalogFileLinks";
 
 export default function EditCatalogFile() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  // A strict save rejected for SOFT findings parks the request here; the Save-anyway modal
-  // lists the findings and confirming retries with the allowInvalid waiver.
-  const [waiver, setWaiver] = useState<{
-    request: CatalogFileRequest;
-    sourceUrl: string | undefined;
-    findings: DocumentCheckFinding[];
-  } | null>(null);
 
   // The shared form vocabulary (utils/catalogFileForm.ts); the field block owns the sections.
   const form = useForm<CatalogFileFormValues>({
     initialValues: emptyCatalogFileForm(),
     validate: catalogFileFormValidation(t),
+  });
+
+  // The strict-save → Save-anyway flow shared with the create page.
+  const save = useCatalogFileSave({
+    saveRequest: (body, options) => updateCatalogFile(id, body, options),
+    toastKey: "catalog.toast.updated",
+    errorKeys: CATALOG_SAVE_ERROR_KEYS,
   });
 
   const idIsValid = Number.isFinite(id) && id > 0;
@@ -63,53 +51,6 @@ export default function EditCatalogFile() {
   }
 
   if (!idIsValid) return <Navigate to={catalogFilesPath} replace />;
-
-  async function save(request: CatalogFileRequest, sourceUrl: string | undefined, allowInvalid: boolean) {
-    await updateCatalogFile(id, { ...request, sourceUrl }, allowInvalid ? { allowInvalid: true } : undefined);
-    await queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
-    await queryClient.invalidateQueries({ queryKey: ["catalogFiles", "detail", id] });
-    showSuccessToast(t("catalog.toast.updated"));
-    navigate(catalogFilesPath, { replace: true });
-  }
-
-  const mapError = (err: unknown) =>
-    saveErrorMessage(err, t, {
-      notFound: "catalog.fileGone",
-      invalid: "catalog.validationError",
-      conflict: "catalog.conflictError",
-      failedStatus: "common.error.saveFailedStatus",
-      failed: "common.error.saveFailedNetwork",
-    });
-
-  async function onSubmit(values: CatalogFileFormValues) {
-    setError(null);
-    setSubmitting(true);
-    // The document stays pure (the /check body); the source reference rides beside it.
-    const request = toCatalogFileRequest(values);
-    const sourceUrl = values.sourceUrl.trim() || undefined;
-    try {
-      await save(request, sourceUrl, false);
-    } catch (err) {
-      const findings = await softRejectionFindings(err, request);
-      if (findings) setWaiver({ request, sourceUrl, findings });
-      else setError(mapError(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function onSaveAnyway() {
-    if (!waiver) return;
-    setSubmitting(true);
-    try {
-      await save(waiver.request, waiver.sourceUrl, true);
-    } catch (err) {
-      setError(mapError(err));
-    } finally {
-      setWaiver(null);
-      setSubmitting(false);
-    }
-  }
 
   const notFound = isError && fetchError instanceof ApiError && fetchError.status === 404;
 
@@ -136,15 +77,15 @@ export default function EditCatalogFile() {
         title={t("catalog.editFile")}
         submitLabel={t("common.action.save")}
         form={form}
-        onSubmit={onSubmit}
-        error={error}
-        submitting={submitting}
+        onSubmit={save.onSubmit}
+        error={save.error}
+        submitting={save.submitting}
       />
       <SaveAnywayModal
-        findings={waiver?.findings ?? null}
-        onCancel={() => setWaiver(null)}
-        onConfirm={onSaveAnyway}
-        saving={submitting}
+        findings={save.waiverFindings}
+        onCancel={save.cancelWaiver}
+        onConfirm={save.onSaveAnyway}
+        saving={save.submitting}
       />
     </>
   );
