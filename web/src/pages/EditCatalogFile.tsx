@@ -4,7 +4,7 @@ import { Navigate, useParams } from "react-router-dom";
 import { Alert, Button, Group, Paper, Stack, Title } from "@mantine/core";
 import { IconFileExport, IconRefresh, IconUpload } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCatalogFile, updateCatalogFile } from "../api/catalogFiles";
 import { ApiError } from "../api/http";
 import CatalogFileEditor from "../components/CatalogFileEditor";
@@ -44,9 +44,44 @@ export default function EditCatalogFile() {
 
   // The whole-file operations act on the STORED file, so they live beside the form rather
   // than inside it — none of them goes through the form's submit path.
+  const queryClient = useQueryClient();
   const downloads = useCatalogDownloads();
   const [overwriteOpen, setOverwriteOpen] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
+
+  /**
+   * Re-seed the form after Overwrite or Sync replaced the stored document underneath it.
+   * Mantine's `initialize` is a ONE-SHOT latch, so the guarded call below never fires again:
+   * without this the fields keep the pre-write document AND its dirty baseline, so a later
+   * Save would PUT the old document and silently revert the write.
+   *
+   * Callback-driven on purpose — NOT an effect on `data`. The detail query also refetches in
+   * the background (window focus, sibling invalidations), and re-seeding on any data change
+   * would discard whatever the user is mid-way through typing. Only this user's own completed
+   * write may reset the form. The three calls are the house idiom (see pages/Namespaces.tsx):
+   * new baseline, repaint, clear dirty.
+   */
+  async function reseedFromServer() {
+    // Re-read THROUGH the query rather than beside it: on success the cache and the form move
+    // together, and on failure the error lands in this page's own query state, so the editor
+    // is replaced by its load-error branch — which is what must happen, since a Save over a
+    // form we could not refresh would revert the write that just committed.
+    try {
+      const values = fromCatalogFileResponse(
+        await queryClient.fetchQuery({
+          queryKey: ["catalogFiles", "detail", id],
+          queryFn: () => getCatalogFile(id),
+          retry: false,
+          staleTime: 0,
+        }),
+      );
+      form.setInitialValues(values);
+      form.setValues(values);
+      form.resetDirty();
+    } catch {
+      // Handled by the query's error state above — nothing to add here.
+    }
+  }
 
   const idIsValid = Number.isFinite(id) && id > 0;
 
@@ -141,6 +176,7 @@ export default function EditCatalogFile() {
       <OverwriteWithYamlModal
         file={overwriteOpen ? { id, kind: file.kind, name, namespace } : null}
         onClose={() => setOverwriteOpen(false)}
+        onCompleted={() => void reseedFromServer()}
       />
       <SyncCatalogFileModal
         file={
@@ -157,6 +193,7 @@ export default function EditCatalogFile() {
             : null
         }
         onClose={() => setSyncOpen(false)}
+        onCompleted={() => void reseedFromServer()}
       />
       <SaveAnywayModal
         findings={save.waiverFindings}

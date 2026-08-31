@@ -35,10 +35,17 @@ export type OverwriteTarget = {
 export default function OverwriteWithYamlModal({
   file,
   onClose,
+  onCompleted,
 }: {
   /** The file to overwrite; null keeps the modal closed. */
   file: OverwriteTarget | null;
   onClose: () => void;
+  /**
+   * Fired only after a SUCCESSFUL write — `onClose` alone cannot tell a Cancel from a
+   * completed overwrite. The page owns what happens next (the useDeleteConfirm convention);
+   * the editor re-seeds its form, the list pages need nothing.
+   */
+  onCompleted?: () => void;
 }) {
   const { t } = useTranslation();
   const [saving, setSaving] = useState(false);
@@ -55,7 +62,13 @@ export default function OverwriteWithYamlModal({
       centered
     >
       {file !== null && (
-        <OverwriteModalBody file={file} saving={saving} onSavingChange={setSaving} onClose={onClose} />
+        <OverwriteModalBody
+          file={file}
+          saving={saving}
+          onSavingChange={setSaving}
+          onClose={onClose}
+          onCompleted={onCompleted}
+        />
       )}
     </Modal>
   );
@@ -66,11 +79,13 @@ function OverwriteModalBody({
   saving,
   onSavingChange,
   onClose,
+  onCompleted,
 }: {
   file: OverwriteTarget;
   saving: boolean;
   onSavingChange: (saving: boolean) => void;
   onClose: () => void;
+  onCompleted?: () => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -143,6 +158,7 @@ function OverwriteModalBody({
       onSavingChange(false);
       onClose();
       void queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
+      onCompleted?.();
     } catch (err) {
       onSavingChange(false);
       setSaveError(saveErrorMessage(err, t, CATALOG_SAVE_ERROR_KEYS));

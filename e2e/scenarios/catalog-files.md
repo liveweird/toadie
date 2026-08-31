@@ -30,10 +30,15 @@
    set lifecycle `deprecated`, and click **Save**.
 7. They reopen the edit form directly.
    - *Expected*: the new title and lifecycle persisted.
-8. Back on the filtered list they pick **Export as YAML** from the row's **Operations** menu.
+8. Still in the editor, they pick **Overwrite with YAML**, paste a document that retitles the
+   entity and changes its type, and confirm.
+   - *Expected*: the editor's own fields re-seed to the overwritten values (title and type),
+     and a **Save** afterwards keeps the overwrite instead of writing the pre-overwrite
+     document back — reopening the editor still shows the new title.
+9. Back on the filtered list they pick **Export as YAML** from the row's **Operations** menu.
    - *Expected*: the browser receives a file named `catalog-info.yaml`.
-9. They pick **Delete** from the row's **Operations** menu and confirm in the modal.
-10. They load the list fresh and filter by the name again.
+10. They pick **Delete** from the row's **Operations** menu and confirm in the modal.
+11. They load the list fresh and filter by the name again.
    - *Expected*: "No catalog files" — the file is gone.
 
 ## Not covered here (and why)

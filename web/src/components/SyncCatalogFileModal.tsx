@@ -49,10 +49,13 @@ export type SyncTarget = {
 export default function SyncCatalogFileModal({
   file,
   onClose,
+  onCompleted,
 }: {
   /** The file to sync; null keeps the modal closed. */
   file: SyncTarget | null;
   onClose: () => void;
+  /** Fired only after a SUCCESSFUL sync — see OverwriteWithYamlModal for the rationale. */
+  onCompleted?: () => void;
 }) {
   const { t } = useTranslation();
   const [syncing, setSyncing] = useState(false);
@@ -69,7 +72,13 @@ export default function SyncCatalogFileModal({
       centered
     >
       {file !== null && (
-        <SyncModalBody file={file} syncing={syncing} onSyncingChange={setSyncing} onClose={onClose} />
+        <SyncModalBody
+          file={file}
+          syncing={syncing}
+          onSyncingChange={setSyncing}
+          onClose={onClose}
+          onCompleted={onCompleted}
+        />
       )}
     </Modal>
   );
@@ -80,11 +89,13 @@ function SyncModalBody({
   syncing,
   onSyncingChange,
   onClose,
+  onCompleted,
 }: {
   file: SyncTarget;
   syncing: boolean;
   onSyncingChange: (syncing: boolean) => void;
   onClose: () => void;
+  onCompleted?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
@@ -171,6 +182,7 @@ function SyncModalBody({
       // Refresh the list AFTER closing — nothing blocks the toast, and the modal's own
       // repo queries sit outside this prefix, so no outbound re-fetch fires.
       void queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
+      onCompleted?.();
     } catch (err) {
       onSyncingChange(false);
       setSyncError(saveErrorMessage(err, t, CATALOG_SAVE_ERROR_KEYS));

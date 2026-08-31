@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.13.1",
+    date: "2026-08-31",
+    en: `**Fix: the editor now refreshes after Overwrite or Sync.**
+
+- Overwriting a file with a YAML — or syncing it from its source — while its editor was open left the form showing the OLD content.
+- Worse, and now fixed too: pressing **Save** afterwards wrote that old content back, silently undoing what you had just done.`,
+    pl: `**Poprawka: edytor odświeża się po Nadpisaniu lub Synchronizacji.**
+
+- Nadpisanie pliku YAML-em — albo zsynchronizowanie go ze źródłem — przy otwartym edytorze zostawiało w formularzu STARĄ treść.
+- Gorzej, i to też jest naprawione: naciśnięcie **Zapisz** zapisywało wtedy tę starą treść z powrotem, po cichu cofając to, co przed chwilą zrobiłeś/zrobiłaś.`,
+  },
+  {
     version: "1.13.0",
     date: "2026-08-31",
     en: `**Actions that say what they act on** — and a new way to replace one file.

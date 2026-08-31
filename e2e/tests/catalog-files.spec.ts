@@ -80,6 +80,47 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   );
   await expect(page.getByRole("combobox", { name: "Lifecycle" })).toHaveValue("deprecated");
 
+  // Overwrite with YAML from the editor: the stored document is replaced, and — the v1.13.1
+  // regression — the FORM must re-seed. Before the fix the fields kept the pre-overwrite
+  // document and its dirty baseline, so the Save below silently reverted the overwrite.
+  await page.getByRole("button", { name: "Overwrite with YAML" }).click();
+  const overwrite = page.getByRole("dialog");
+  await overwrite.getByRole("textbox", { name: "YAML content" }).fill(
+    [
+      "apiVersion: backstage.io/v1alpha1",
+      "kind: Component",
+      "metadata:",
+      `  name: ${name}`,
+      "  title: E2E Component Overwritten",
+      "spec:",
+      "  type: library",
+      "  lifecycle: production",
+      "  owner: group:default/platform",
+      "",
+    ].join("\n"),
+  );
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes(`/api/v1/files/${fileId}`) && r.request().method() === "PUT" && r.ok(),
+    ),
+    overwrite.getByRole("button", { name: "Overwrite stored copy" }).click(),
+  ]);
+  await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
+    "E2E Component Overwritten",
+  );
+  await expect(page.getByRole("combobox", { name: "Type" })).toHaveValue("library");
+  // Saving the re-seeded form must keep the overwrite, not write the old document back.
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().endsWith(`/api/v1/files/${fileId}`) && r.request().method() === "PUT" && r.ok(),
+    ),
+    page.getByRole("button", { name: "Save" }).click(),
+  ]);
+  await page.goto(`/files/${fileId}/edit`);
+  await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
+    "E2E Component Overwritten",
+  );
+
   // Download hands over Backstage's canonical filename.
   await page.goto("/files");
   await openFilters(page);

@@ -292,4 +292,112 @@ describe("EditCatalogFile whole-file operations", () => {
     await user.click(screen.getByRole("button", { name: "Overwrite with YAML" }));
     expect(await screen.findByText("Overwrite with YAML — stored-svc")).toBeInTheDocument();
   });
+
+  /**
+   * The v1.13.0 regression: the editor's form is seeded by Mantine's ONE-SHOT `initialize`,
+   * so a whole-file operation that replaces the stored document underneath it left the fields
+   * — and their dirty baseline — showing the old document. The visible symptom was a stale
+   * view; the real damage was the next Save writing the OLD document back over the new one.
+   * Both modals are unit-tested standalone, which is exactly why this slipped through: the
+   * seam that broke only exists with the editor in the tree.
+   */
+  describe("after a whole-file operation replaces the document", () => {
+    const OVERWRITTEN = {
+      ...STORED_FILE,
+      metadata: { ...STORED_FILE.metadata, title: "Overwritten" },
+      updatedAt: 3000,
+    };
+
+    const yamlFor = (title: string) =>
+      [
+        "apiVersion: backstage.io/v1alpha1",
+        "kind: Component",
+        "metadata:",
+        "  name: stored-svc",
+        "  namespace: team-a",
+        `  title: ${title}`,
+        "spec:",
+        "  type: service",
+        "  lifecycle: production",
+        "  owner: group:platform",
+        "",
+      ].join("\n");
+
+    /** GET returns the stored file until the PUT lands, the overwritten one after. */
+    function mockOverwrite(mockFetch: FetchMock, reReadFails = false) {
+      let written = false;
+      mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        if (url === "/api/v1/files/check" && method === "POST") {
+          return Promise.resolve(jsonResponse(200, { findings: [] }));
+        }
+        if (url.startsWith("/api/v1/files/7") && method === "PUT") {
+          written = true;
+          return Promise.resolve(new Response(null, { status: 204 }));
+        }
+        if (url === "/api/v1/files/7" && method === "GET") {
+          if (written && reReadFails) return Promise.resolve(jsonResponse(500, { status: 500 }));
+          return Promise.resolve(jsonResponse(200, written ? OVERWRITTEN : STORED_FILE));
+        }
+        return Promise.resolve(jsonResponse(404, {}));
+      });
+    }
+
+    async function overwrite(user: ReturnType<typeof userEvent.setup>, title: string) {
+      await user.click(screen.getByRole("button", { name: "Overwrite with YAML" }));
+      const area = await screen.findByRole("textbox", { name: "YAML content" });
+      await user.click(area);
+      await user.paste(yamlFor(title));
+      await user.click(await screen.findByRole("button", { name: "Overwrite stored copy" }));
+    }
+
+    test("the form re-seeds, so the fields show the overwritten document", async () => {
+      mockOverwrite(mockFetch);
+      const user = userEvent.setup();
+      renderEdit();
+
+      expect(await screen.findByDisplayValue("Stored")).toBeInTheDocument();
+      await overwrite(user, "Overwritten");
+
+      expect(await screen.findByDisplayValue("Overwritten")).toBeInTheDocument();
+      expect(screen.queryByDisplayValue("Stored")).not.toBeInTheDocument();
+    });
+
+    test("a Save afterwards writes the NEW document, never the pre-overwrite one", async () => {
+      mockOverwrite(mockFetch);
+      const user = userEvent.setup();
+      renderEdit();
+
+      expect(await screen.findByDisplayValue("Stored")).toBeInTheDocument();
+      await overwrite(user, "Overwritten");
+      await screen.findByDisplayValue("Overwritten");
+
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/files"));
+
+      const puts = mockFetch.mock.calls.filter(
+        ([, init]) => (init as RequestInit | undefined)?.method === "PUT",
+      );
+      const saved = JSON.parse((puts.at(-1)![1] as RequestInit).body as string) as {
+        metadata: { title: string };
+      };
+      expect(saved.metadata.title).toBe("Overwritten");
+    });
+
+    test("a failed re-read takes the save away rather than letting it revert the write", async () => {
+      // The re-read goes through the page's own query, so its failure lands in that query's
+      // error state and the editor is replaced by the load-error branch — no Save button, so
+      // the stale form can never be written back over what just committed.
+      mockOverwrite(mockFetch, true);
+      const user = userEvent.setup();
+      renderEdit();
+
+      expect(await screen.findByDisplayValue("Stored")).toBeInTheDocument();
+      await overwrite(user, "Overwritten");
+
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: /^save$/i })).not.toBeInTheDocument(),
+      );
+    });
+  });
 });
