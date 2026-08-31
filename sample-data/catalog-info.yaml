@@ -1,0 +1,773 @@
+# Toadie sample landscape — a small e-commerce/payments software catalog.
+#
+# Every value in this file comes from the ADMIN-curated registries seeded by V22:
+# the two namespaces, the four lifecycles, each kind's type dictionary, the eight
+# label keys with their closed value lists, the four tag categories, and the four
+# annotation keys. So the whole file passes a STRICT save — no waivers needed.
+#
+# Between them the documents use every seeded type value bar one (the Domain type
+# `auxiliary` — there are only four Domains and two of them are genuinely `core-value`),
+# which makes the editor's registry-backed Type/Lifecycle/Label/Tag/Annotation pickers
+# checkable without inventing anything the registries would reject.
+#
+# Mind which registry applies to which kind — it is the thing most easily got wrong:
+#   * tags       → Component and Resource only (Languages/Framework vs Database/Events)
+#   * annotations→ never on Group or User
+#   * lifecycle  → Component and API only
+#   * labels     → per-key: criticality-tier/support-mode are System-only,
+#                  data-classification/gdpr/pci-dss are Resource-only
+#
+# Four references are deliberately broken or unresolvable — see README.md.
+#
+# Load it: paste into the SPA's Import page (/files/import), or POST it through
+# /api/v1/files/import (structured JSON — see README.md).
+
+# ---------------------------------------------------------------------------
+# Groups — spec.type from team/org-unit/org-division. No tags, no annotations.
+# ---------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-tribe
+  namespace: default
+  title: Platform Tribe
+  description: Owns the shared platform; the payments squad reports into it.
+spec:
+  type: org-division
+  profile:
+    displayName: Platform Tribe
+    email: platform-tribe@toadie.local
+  children:
+    - group:default/payments-squad
+  members:
+    - user:default/anna.kowalska
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: retail-tribe
+  namespace: default
+  title: Retail Tribe
+  description: Owns the storefront system end to end.
+spec:
+  type: org-unit
+  profile:
+    displayName: Retail Tribe
+    email: retail-tribe@toadie.local
+  children: []
+  members:
+    - user:default/marek.nowak
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: payments-squad
+  namespace: default
+  title: Payments Squad
+  description: Owns the payments capability. Part of the Platform Tribe.
+spec:
+  type: team
+  profile:
+    displayName: Payments Squad
+    email: payments-squad@toadie.local
+  parent: group:default/platform-tribe
+  children: []
+  members:
+    - user:default/anna.kowalska
+---
+# ---------------------------------------------------------------------------
+# Users — only spec.profile and spec.memberOf exist for this kind.
+# ---------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: anna.kowalska
+  namespace: default
+  title: Anna Kowalska
+  description: Staff engineer, payments.
+spec:
+  profile:
+    displayName: Anna Kowalska
+    email: anna.kowalska@toadie.local
+  memberOf:
+    - group:default/platform-tribe
+    - group:default/payments-squad
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: marek.nowak
+  namespace: default
+  title: Marek Nowak
+  description: Tech lead, storefront.
+spec:
+  profile:
+    displayName: Marek Nowak
+    email: marek.nowak@toadie.local
+  memberOf:
+    - group:default/retail-tribe
+---
+# ---------------------------------------------------------------------------
+# Domains — spec.type from core-value/generic/tech-foundations. No lifecycle.
+# techdocs-ref is the only annotation key registered for this kind.
+# ---------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: commerce
+  namespace: default
+  title: Commerce
+  description: Everything a customer touches on the way to a completed order.
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+spec:
+  type: core-value
+  owner: group:default/retail-tribe
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: payments
+  namespace: default
+  title: Payments
+  description: Money movement, ledgering and settlement. A sub-domain of Commerce.
+spec:
+  type: core-value
+  owner: group:default/payments-squad
+  subdomainOf: domain:default/commerce
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: platform
+  namespace: default
+  title: Platform
+  description: Runtime, delivery and the shared building blocks every product sits on.
+spec:
+  type: tech-foundations
+  owner: group:default/platform-tribe
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: shared-services
+  namespace: default
+  title: Shared Services
+  description: Cross-cutting internal services that belong to no single value stream.
+spec:
+  type: generic
+  owner: group:default/platform-tribe
+---
+# ---------------------------------------------------------------------------
+# Systems — spec.type product/capability. criticality-tier and support-mode are
+# System-only labels; no tags and no lifecycle exist for this kind.
+# ---------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: storefront
+  namespace: default
+  title: Storefront
+  description: The public shop — browsing, cart and checkout.
+  labels:
+    criticality-tier: critical
+    support-mode: 24-7
+    exposure: public
+    hosting-model: public-cloud
+  annotations:
+    backstage.io/kubernetes-id: storefront
+    backstage.io/techdocs-ref: dir:.
+  links:
+    - url: https://shop.example.com
+      title: Production storefront
+      icon: web
+spec:
+  type: product
+  owner: group:default/retail-tribe
+  domain: domain:default/commerce
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: payments
+  namespace: default
+  title: Payments Platform
+  description: Card authorisation, the ledger and settlement reporting.
+  labels:
+    criticality-tier: critical
+    support-mode: 24-7
+    exposure: partner
+    hosting-model: on-premise
+  annotations:
+    backstage.io/kubernetes-id: payments
+spec:
+  type: capability
+  owner: group:default/payments-squad
+  domain: domain:default/payments
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: acquirer
+  namespace: external
+  title: Acquirer (third party)
+  description: >-
+    The card acquirer we authorise against. Lives in the `external` namespace —
+    we model it because we depend on it, but we do not own or run it.
+  labels:
+    criticality-tier: critical
+    support-mode: business-hours
+    exposure: partner
+spec:
+  type: capability
+  owner: group:default/payments-squad
+---
+# ---------------------------------------------------------------------------
+# Components — spec.type service/website/library/job/data-pipeline, lifecycle
+# from the global dictionary. Tags come from Languages + Framework.
+# ---------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: storefront-web
+  namespace: default
+  title: Storefront Web
+  description: >-
+    The customer-facing shop. Server-side rendered product pages, a client-side
+    cart, and the checkout flow.
+  tags:
+    - typescript
+    - react
+  labels:
+    exposure: public
+    hosting-model: public-cloud
+    technology-status: white-list
+  annotations:
+    backstage.io/source-location: url:https://github.com/acme/storefront-web
+    backstage.io/techdocs-ref: dir:.
+    backstage.io/kubernetes-id: storefront-web
+  links:
+    - url: https://grafana.example.com/d/storefront-web
+      title: Grafana dashboard
+      icon: dashboard
+spec:
+  type: website
+  lifecycle: production
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+  consumesApis:
+    - api:default/catalog-graphql
+    - api:default/checkout-rest
+    - api:default/live-cart
+  dependsOn:
+    - resource:default/session-cache
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: catalog-service
+  namespace: default
+  title: Catalog Service
+  description: Product master data, search indexing and availability.
+  tags:
+    - java
+    - spring-boot
+  labels:
+    exposure: internal
+    hosting-model: public-cloud
+    technology-status: white-list
+  annotations:
+    backstage.io/source-location: url:https://github.com/acme/catalog-service
+    backstage.io/kubernetes-label-selector: app=catalog-service
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+  providesApis:
+    - api:default/catalog-graphql
+  dependsOn:
+    - resource:default/catalog-db
+    # UNVERIFIABLE on purpose: Template is outside the seven kinds toadie stores, so
+    # the resolver can only say "cannot be verified" — never "missing".
+    - template:default/nodejs-service-template
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: checkout-service
+  namespace: default
+  title: Checkout Service
+  description: Turns a cart into an order, then asks the payments gateway to collect.
+  tags:
+    - java
+    - quarkus
+  labels:
+    exposure: internal
+    hosting-model: public-cloud
+    technology-status: white-list
+  annotations:
+    backstage.io/source-location: url:https://github.com/acme/checkout-service
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+  providesApis:
+    - api:default/checkout-rest
+    - api:default/order-events
+  consumesApis:
+    - api:default/payments-grpc
+  dependsOn:
+    - resource:default/orders-db
+    - resource:default/order-bus
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: live-cart-gateway
+  namespace: default
+  title: Live Cart Gateway
+  description: Pushes cart and stock changes to open browser sessions.
+  tags:
+    - typescript
+  labels:
+    exposure: public
+    hosting-model: public-cloud
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+  providesApis:
+    - api:default/live-cart
+  dependsOn:
+    - resource:default/session-cache
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: payments-gateway
+  namespace: default
+  title: Payments Gateway
+  description: Card authorisation and capture against the acquirer.
+  tags:
+    - java
+    - spring-boot
+  labels:
+    exposure: partner
+    hosting-model: on-premise
+    technology-status: white-list
+  annotations:
+    backstage.io/kubernetes-id: payments-gateway
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/payments-squad
+  system: system:default/payments
+  providesApis:
+    - api:default/payments-grpc
+  consumesApis:
+    - api:external/acquirer-rest
+  dependsOn:
+    - resource:default/payments-db
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: payments-sdk
+  namespace: default
+  title: Payments SDK
+  description: The client library other teams use to talk to the payments gateway.
+  tags:
+    - java
+  labels:
+    exposure: internal
+    technology-status: white-list
+spec:
+  type: library
+  lifecycle: production
+  owner: group:default/payments-squad
+  system: system:default/payments
+  subcomponentOf: component:default/payments-gateway
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ledger-worker
+  namespace: default
+  title: Ledger Worker
+  description: Double-entry booking of every authorised and captured payment.
+  tags:
+    - java
+    - micronaut
+  labels:
+    exposure: internal
+    hosting-model: on-premise
+spec:
+  type: job
+  lifecycle: production
+  owner: group:default/payments-squad
+  system: system:default/payments
+  dependsOn:
+    - resource:default/payments-db
+    - resource:default/ledger-log
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: settlement-pipeline
+  namespace: default
+  title: Settlement Pipeline
+  description: >-
+    Nightly reconciliation of acquirer settlement files into the reporting
+    warehouse. Being replaced, so it is marked sunsetting rather than deprecated.
+  tags:
+    - python
+  labels:
+    exposure: internal
+    technology-status: grey-zone
+spec:
+  type: data-pipeline
+  lifecycle: sunsetting
+  owner: group:default/payments-squad
+  system: system:default/payments
+  dependsOn:
+    - resource:default/payments-db
+    - resource:default/settlement-warehouse
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: legacy-invoicing
+  namespace: default
+  title: Legacy Invoicing
+  description: >-
+    The pre-2019 invoicing batch job, on its way out. Both its owning group and
+    its archive resource point at entities that do not exist in this workspace —
+    deliberate, so the Errors report has real findings to show.
+  tags:
+    - php
+    - symphony
+  labels:
+    technology-status: black-list
+spec:
+  type: service
+  lifecycle: deprecated
+  # MISSING on purpose: there is no Group `billing-squad` in this workspace.
+  owner: group:default/billing-squad
+  system: system:default/payments
+  dependsOn:
+    # MISSING on purpose: there is no Resource `invoice-archive` either.
+    - resource:default/invoice-archive
+    # KIND_REQUIRED on purpose: a dependsOn entry with no `kind:` prefix. Backstage
+    # cannot ingest those, so the report flags it even though the target DOES exist.
+    - orders-db
+---
+# ---------------------------------------------------------------------------
+# APIs — spec.type openapi/asyncapi/graphql/grpc/web-sockets, lifecycle, and a
+# required spec.definition. No tags exist for this kind.
+# ---------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: catalog-graphql
+  namespace: default
+  title: Catalog GraphQL API
+  description: Product, category and availability queries for the storefront.
+  labels:
+    exposure: internal
+    hosting-model: public-cloud
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+spec:
+  type: graphql
+  lifecycle: production
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+  definition: |
+    type Product {
+      sku: ID!
+      title: String!
+      priceMinor: Int!
+      available: Boolean!
+    }
+
+    type Query {
+      product(sku: ID!): Product
+      products(category: String, first: Int = 20): [Product!]!
+    }
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: checkout-rest
+  namespace: default
+  title: Checkout REST API
+  description: Cart-to-order conversion used by the storefront.
+  labels:
+    exposure: public
+spec:
+  type: openapi
+  lifecycle: production
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: Checkout REST API
+      version: 2.0.0
+    paths:
+      /carts/{cartId}/checkout:
+        post:
+          summary: Convert a cart into an order
+          responses:
+            "201":
+              description: Order created
+            "409":
+              description: Cart already checked out
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: live-cart
+  namespace: default
+  title: Live Cart socket
+  description: Cart and stock updates pushed to an open browser session.
+  labels:
+    exposure: public
+spec:
+  type: web-sockets
+  lifecycle: experimental
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+  definition: |
+    # Frames are newline-delimited JSON, client-initiated subscribe then server push.
+    -> {"op":"subscribe","cartId":"c_123"}
+    <- {"op":"cart.updated","cartId":"c_123","lines":3,"totalMinor":8940}
+    <- {"op":"stock.changed","sku":"SKU-9","available":false}
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: order-events
+  namespace: default
+  title: Order events stream
+  description: >-
+    Order lifecycle events. Published by checkout-service and consumed by nobody
+    in this workspace — deliberate, so the Graph shows a provider with no
+    consumer and the relationship view has a loose end.
+  labels:
+    exposure: internal
+spec:
+  type: asyncapi
+  lifecycle: experimental
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+  definition: |
+    asyncapi: 2.6.0
+    info:
+      title: Order events
+      version: 0.4.0
+    channels:
+      order.placed:
+        subscribe:
+          message:
+            payload:
+              type: object
+              properties:
+                orderId: { type: string }
+                totalMinor: { type: integer }
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: payments-grpc
+  namespace: default
+  title: Payments gRPC API
+  description: Authorise and capture card payments.
+  labels:
+    exposure: partner
+    hosting-model: on-premise
+spec:
+  type: grpc
+  lifecycle: production
+  owner: group:default/payments-squad
+  system: system:default/payments
+  definition: |
+    syntax = "proto3";
+    package acme.payments.v1;
+
+    service Payments {
+      rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse);
+      rpc Capture(CaptureRequest) returns (CaptureResponse);
+    }
+
+    message AuthorizeRequest {
+      string order_id = 1;
+      int64 amount_minor = 2;
+      string currency = 3;
+    }
+    message AuthorizeResponse { string authorization_id = 1; }
+    message CaptureRequest { string authorization_id = 1; }
+    message CaptureResponse { bool captured = 1; }
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: acquirer-rest
+  namespace: external
+  title: Acquirer REST API (third party)
+  description: The acquirer's authorisation endpoint. We consume it; we do not own it.
+  labels:
+    exposure: partner
+spec:
+  type: openapi
+  lifecycle: production
+  owner: group:default/payments-squad
+  system: system:external/acquirer
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: Acquirer Authorisation API
+      version: 1.0.0
+    paths:
+      /authorizations:
+        post:
+          summary: Authorise a card payment
+          responses:
+            "201":
+              description: Authorised
+            "402":
+              description: Declined
+---
+# ---------------------------------------------------------------------------
+# Resources — spec.type database/message-broker/transaction-log/
+# analytical-database/cache. data-classification, gdpr and pci-dss are
+# Resource-only labels; tags come from Database + Events. No lifecycle.
+# ---------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: catalog-db
+  namespace: default
+  title: Catalog database
+  description: PostgreSQL cluster holding product master data.
+  tags:
+    - postgresql
+  labels:
+    data-classification: internal
+    gdpr: "no"
+    pci-dss: "no"
+    hosting-model: public-cloud
+spec:
+  type: database
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: orders-db
+  namespace: default
+  title: Orders database
+  description: PostgreSQL cluster holding orders and their state machine.
+  tags:
+    - postgresql
+  labels:
+    data-classification: confidential
+    gdpr: "yes"
+    pci-dss: "no"
+    hosting-model: public-cloud
+spec:
+  type: database
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: payments-db
+  namespace: default
+  title: Payments database
+  description: PostgreSQL cluster holding authorisations and the ledger.
+  tags:
+    - postgresql
+  labels:
+    data-classification: restricted
+    gdpr: "yes"
+    pci-dss: "yes"
+    hosting-model: on-premise
+    exposure: internal
+spec:
+  type: database
+  owner: group:default/payments-squad
+  system: system:default/payments
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: order-bus
+  namespace: default
+  title: Order event bus
+  description: Kafka cluster carrying the order lifecycle events.
+  tags:
+    - kafka
+  labels:
+    data-classification: internal
+    gdpr: "no"
+spec:
+  type: message-broker
+  owner: group:default/platform-tribe
+  system: system:default/storefront
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: ledger-log
+  namespace: default
+  title: Ledger append-only log
+  description: The immutable booking log behind the ledger worker.
+  labels:
+    data-classification: restricted
+    pci-dss: "yes"
+    hosting-model: on-premise
+spec:
+  type: transaction-log
+  owner: group:default/payments-squad
+  system: system:default/payments
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: settlement-warehouse
+  namespace: default
+  title: Settlement warehouse
+  description: ClickHouse warehouse behind settlement and finance reporting.
+  tags:
+    - clickhouse
+  labels:
+    data-classification: confidential
+    gdpr: "yes"
+spec:
+  type: analytical-database
+  owner: group:default/payments-squad
+  system: system:default/payments
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: session-cache
+  namespace: default
+  title: Session cache
+  description: Redis cluster holding cart and session state.
+  tags:
+    - redis
+  labels:
+    data-classification: internal
+    gdpr: "yes"
+    hosting-model: public-cloud
+spec:
+  type: cache
+  owner: group:default/platform-tribe
+  system: system:default/storefront

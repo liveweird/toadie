@@ -32,6 +32,7 @@ Multi-module Gradle build (Kotlin DSL) defined in `settings.gradle.kts` with two
 - **`server`** — Kotlin/JVM. The Ktor application. Depends on `core`.
 - **`web/`** — Vite + React + TypeScript SPA that consumes the server's HTTP API. Standalone npm workspace; Gradle does not touch it.
 - **`e2e/`** — Playwright blackbox suite against the compose stack. Standalone npm workspace.
+- **`sample-data/`** — a 34-entity multi-document `catalog-info.yaml` (plus its README) speaking the V22-seeded registry vocabulary, loaded BY HAND through the Import page or `POST …/import` to exercise the app. Deliberately NOT seeded: no migration inserts catalog files, so every environment still comes up with an empty workspace.
 
 Group is `ch.nokillswit`, version `1.0.0-SNAPSHOT` (set in root `build.gradle.kts`). Dependency versions are centralized in `gradle/libs.versions.toml`; Ktor itself comes from a separate version catalog (`ktorLibs`) loaded from `io.ktor:ktor-version-catalog` in `settings.gradle.kts`.
 

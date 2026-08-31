@@ -58,6 +58,13 @@ Ports are chosen to coexist with [Lettuce](https://github.com/liveweird/lettuce)
 machine: the app is on **8081**, Postgres is host-mapped to **5433**, and the Vite dev server
 uses **5174**.
 
+The database comes up with the admin-curated registries already filled in — namespaces,
+lifecycles, per-kind types, labels, tag categories and annotation keys — but with an **empty
+catalog**. To get something to look at, load [`sample-data/`](sample-data/README.md): a
+34-entity landscape covering all seven kinds, pasted or picked on the **Import** page. It
+speaks only the seeded vocabulary, and carries four deliberately broken references so the
+Errors report and the Graph have something to show.
+
 ## Running on Kubernetes (local)
 
 With a local cluster that shares the Docker image store (e.g. OrbStack):
