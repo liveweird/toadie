@@ -4,24 +4,9 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
 import KindTierDot from "./KindTierDot";
 import type { LaidOutNode } from "../utils/graphLayout";
-import { GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH } from "../utils/graphLayout";
+import { GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH, STATUS_STYLE } from "../utils/graphLayout";
 import type { GraphNode } from "../api/catalogFiles";
 
-// Status → border/background via Mantine CSS vars only, so light/dark both work untouched.
-const STATUS_STYLE: Record<string, React.CSSProperties> = {
-  STORED: {
-    border: "1.5px solid var(--mantine-color-toadie-7)",
-    background: "var(--mantine-color-body)",
-  },
-  MISSING: {
-    border: "1.5px dashed var(--mantine-color-red-6)",
-    background: "var(--mantine-color-body)",
-  },
-  EXTERNAL: {
-    border: "1.5px dashed var(--mantine-color-gray-5)",
-    background: "var(--mantine-color-default-hover)",
-  },
-};
 
 /**
  * What the fixed-width node cannot show: the namespace it lost to `spec.type`, the title, and

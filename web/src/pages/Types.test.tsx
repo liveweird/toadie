@@ -137,7 +137,27 @@ describe("Types page", () => {
     await user.click(within(modal).getByRole("button", { name: /save/i }));
 
     expect(await screen.findByText(/already has a type dictionary/i)).toBeInTheDocument();
+    // The 409 is about the kind — it marks the FIELD, not the generic alert.
+    expect(within(modal).getByLabelText(/^kind$/i, { selector: "input" })).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  test("a non-conflict failure keeps the generic alert", async () => {
+    serveDictionaries(mockFetch, { "POST /api/v1/entity-types": { status: 500 } });
+    const user = userEvent.setup();
+    renderWithProviders(<Types />);
+
+    await user.click(await screen.findByRole("button", { name: /new dictionary/i }));
+    const modal = screen.getByRole("dialog");
+    await user.click(within(modal).getByLabelText(/^kind$/i, { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "Component" }));
+    await user.type(within(modal).getByRole("combobox", { name: /allowed types/i }), "service{Enter}");
+    await user.click(within(modal).getByRole("button", { name: /save/i }));
+
+    expect(await screen.findByText("Action failed (500)")).toBeInTheDocument();
   });
 
   test("an admin deletes a dictionary after confirming", async () => {

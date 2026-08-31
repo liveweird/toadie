@@ -3,8 +3,7 @@
 -- precedent minus the value dimension: annotation VALUES stay free strings). Catalog-file
 -- writes enforce the registry STRICTLY (unregistered keys are banned everywhere, no
 -- grandfathering) — an EMPTY registry means no file may carry annotations until an admin
--- defines some (deliberate; this migration ships none — the labels posture; V22 later seeds
--- the reference set). Key uniqueness folds
+-- defines some (deliberate; there is no seed — the labels posture). Key uniqueness folds
 -- case over ACTIVE rows only (the uq_labels_key_active pattern), so a soft-deleted key is
 -- reusable.
 CREATE TABLE annotation_keys (

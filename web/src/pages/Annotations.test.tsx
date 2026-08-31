@@ -136,7 +136,27 @@ describe("Annotations page", () => {
     await user.click(within(modal).getByRole("button", { name: /save/i }));
 
     expect(await screen.findByText(/annotation key with this name already exists/i)).toBeInTheDocument();
+    // The 409 is about the key — it marks the FIELD, not the generic alert.
+    expect(within(modal).getByLabelText(/^key$/i, { selector: "input" })).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  test("a non-conflict failure keeps the generic alert", async () => {
+    serveKeys(mockFetch, { "POST /api/v1/annotation-keys": { status: 500 } });
+    const user = userEvent.setup();
+    renderWithProviders(<Annotations />);
+
+    await user.click(await screen.findByRole("button", { name: /new annotation key/i }));
+    const modal = screen.getByRole("dialog");
+    await user.type(within(modal).getByLabelText(/^key$/i, { selector: "input" }), "team");
+    await user.click(within(modal).getByRole("combobox", { name: /applies to kinds/i }));
+    await user.click(await screen.findByRole("option", { name: "Group" }));
+    await user.click(within(modal).getByRole("button", { name: /save/i }));
+
+    expect(await screen.findByText("Action failed (500)")).toBeInTheDocument();
   });
 
   test("an admin deletes a key after confirming", async () => {

@@ -19,7 +19,8 @@ import {
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { IconNote, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconNote, IconPlus } from "@tabler/icons-react";
+import { ApiError } from "../api/http";
 import { isAdmin } from "../api/session";
 import {
   createAnnotationKey,
@@ -30,6 +31,7 @@ import {
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import KindTierDot, { renderKindOption } from "../components/KindTierDot";
+import RowEditDelete from "../components/RowEditDelete";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useAnnotationKeys } from "../hooks/useAnnotationKeys";
 import { ENTITY_KINDS } from "../utils/catalogFileForm";
@@ -120,27 +122,11 @@ export default function Annotations() {
                     </Table.Td>
                     {isAdmin() && (
                       <Table.Td>
-                        <Group gap="xs" justify="flex-end" wrap="nowrap">
-                          <Button
-                            variant="subtle"
-                            size="xs"
-                            leftSection={<IconPencil size={14} />}
-                            aria-label={t("common.action.editAria", { name: row.key })}
-                            onClick={() => setEditorTarget(row)}
-                          >
-                            {t("common.action.edit")}
-                          </Button>
-                          <Button
-                            variant="subtle"
-                            color="red"
-                            size="xs"
-                            leftSection={<IconTrash size={14} />}
-                            aria-label={t("common.action.deleteAria", { name: row.key })}
-                            onClick={() => remove.requestDelete(row)}
-                          >
-                            {t("common.action.delete")}
-                          </Button>
-                        </Group>
+                        <RowEditDelete
+                          name={row.key}
+                          onEdit={() => setEditorTarget(row)}
+                          onDelete={() => remove.requestDelete(row)}
+                        />
                       </Table.Td>
                     )}
                   </Table.Tr>
@@ -204,7 +190,13 @@ function AnnotationKeyEditorModal({
       }
       await onSaved();
     } catch (err) {
-      setError(annotationKeySaveErrorMessage(err, t));
+      // The 409 is about THIS control (the case-insensitive key clash) — mark the field, the
+      // way the catalog editor puts server verdicts on controls; other failures stay the alert.
+      if (err instanceof ApiError && err.status === 409) {
+        form.setFieldError("key", t("annotations.saveConflict"));
+      } else {
+        setError(annotationKeySaveErrorMessage(err, t));
+      }
       setSubmitting(false);
     }
   }

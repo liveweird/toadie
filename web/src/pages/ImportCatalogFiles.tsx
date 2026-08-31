@@ -23,6 +23,7 @@ import {
   importCatalogFiles,
   type ImportFileResult,
 } from "../api/catalogFiles";
+import CatalogFileNameLink from "../components/CatalogFileNameLink";
 import KindTierDot from "../components/KindTierDot";
 import { normalizeCatalogUrl, parseCatalogYaml } from "../utils/catalogImport";
 import { FETCH_URL_ERROR_KEYS, saveErrorMessage } from "../utils/saveError";
@@ -32,7 +33,8 @@ const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
   CREATED: "teal",
   // Stored, but carrying waived findings the Errors page tracks — a caution, not a failure.
   CREATED_WITH_FINDINGS: "orange",
-  CONFLICT: "yellow",
+  // Nothing was stored — as blocking as INVALID, so the same red (not a softer third hue).
+  CONFLICT: "red",
   INVALID: "red",
   ERROR: "red",
 };
@@ -243,9 +245,16 @@ export default function ImportCatalogFiles() {
                     <Text size="sm">{result.namespace}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <Text size="sm" fw={500}>
-                      {result.name}
-                    </Text>
+                    {/* A stored row links straight to its editor — the WITH_FINDINGS ones are
+                        exactly the files the reader goes on to fix. Dry-run rows and skipped
+                        rows have no fileId (nothing was stored). */}
+                    {result.fileId != null ? (
+                      <CatalogFileNameLink id={result.fileId} name={result.name} />
+                    ) : (
+                      <Text size="sm" fw={500}>
+                        {result.name}
+                      </Text>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     <Badge variant="light" size="sm" color={STATUS_COLOR[result.status]}>

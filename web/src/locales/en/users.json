@@ -76,12 +76,15 @@
     "bulkEnable": "Enable for all matching",
     "bulkDisable": "Disable for all matching",
     "bulkTitle": "Apply to every matching user?",
-    "bulkConfirmEnable": "Enable {{feature}} for {{count}} users currently disabled?",
-    "bulkConfirmDisable": "Disable {{feature}} for {{count}} users currently enabled?",
+    "bulkConfirmEnable_one": "Enable {{feature}} for {{count}} user currently disabled?",
+    "bulkConfirmEnable_other": "Enable {{feature}} for {{count}} users currently disabled?",
+    "bulkConfirmDisable_one": "Disable {{feature}} for {{count}} user currently enabled?",
+    "bulkConfirmDisable_other": "Disable {{feature}} for {{count}} users currently enabled?",
     "enableAction": "Enable",
     "disableAction": "Disable",
     "bulkNoChange": "Every matching user is already in that state",
-    "bulkFailed": "The update failed for {{count}} users",
+    "bulkFailed_one": "The update failed for {{count}} user",
+    "bulkFailed_other": "The update failed for {{count}} users",
     "retryFailed": "Retry the failed users"
   }
 }

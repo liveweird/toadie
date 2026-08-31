@@ -1,4 +1,5 @@
 import type { CatalogGraph, GraphNode } from "../api/catalogFiles";
+import type { EntityKind } from "./catalogFileForm";
 
 /**
  * The Hierarchy page's pure shaping: the graph endpoint's nodes/edges become a forest of
@@ -33,11 +34,23 @@ const SINGLE_PARENT_PRIORITY = [
   "spec.parent",
 ] as const;
 
-const KIND_ORDER = ["domain", "system", "component", "api", "resource", "group", "user"];
+// The CONTAINMENT nesting rank (containers before their contents) — deliberately NOT
+// ENTITY_KINDS' display order, and lowercase because the graph endpoint spells kinds so.
+// `satisfies` pins every entry to a real kind; a NEW kind missing from this list is not
+// caught by types and would silently sort last — extend it when the kind set grows.
+const CONTAINMENT_KIND_ORDER = [
+  "domain",
+  "system",
+  "component",
+  "api",
+  "resource",
+  "group",
+  "user",
+] as const satisfies readonly Lowercase<EntityKind>[];
 
 function kindRank(kind: string): number {
-  const rank = KIND_ORDER.indexOf(kind);
-  return rank === -1 ? KIND_ORDER.length : rank;
+  const rank = (CONTAINMENT_KIND_ORDER as readonly string[]).indexOf(kind);
+  return rank === -1 ? CONTAINMENT_KIND_ORDER.length : rank;
 }
 
 function compareNodes(a: GraphNode, b: GraphNode): number {

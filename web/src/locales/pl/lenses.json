@@ -35,9 +35,9 @@
   "saveConflict": "Masz już soczewkę o tej nazwie",
   "saveForbidden": "Tylko osoba, która utworzyła publiczną soczewkę, może ją zmieniać",
   "saveGone": "Ta soczewka już nie istnieje",
-  "deleteTitle": "Usuń soczewkę",
-  "deleteFailed": "Usuwanie nie powiodło się",
-  "deleteBody": "Usunąć soczewkę „{{name}}”?",
+  "deleteTitle": "Usunąć soczewkę?",
+  "deleteFailed": "Nie udało się usunąć soczewki",
+  "deleteBody": "Soczewka „{{name}}” zniknie dla wszystkich osób, które ją widzą.",
   "toast": {
     "created": "Soczewka zapisana",
     "saved": "Soczewka zaktualizowana",

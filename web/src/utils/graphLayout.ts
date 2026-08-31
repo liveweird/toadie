@@ -1,4 +1,5 @@
 import dagre from "@dagrejs/dagre";
+import type { CSSProperties } from "react";
 import type { Edge, Node } from "@xyflow/react";
 import type { CatalogGraph, GraphNode } from "../api/catalogFiles";
 
@@ -56,6 +57,25 @@ export type LaidOutNode = Node<CatalogNodeData>;
 // Fixed footprint for layout; the custom node caps itself to the same box.
 export const GRAPH_NODE_WIDTH = 200;
 export const GRAPH_NODE_HEIGHT = 64;
+
+// Status → border/background via Mantine CSS vars only, so light/dark both work untouched.
+// Lives here (not in CatalogGraphNode) so the Graph page's legend can derive its swatches
+// from the same borders the nodes draw — the legend cannot drift — without the component
+// file exporting a non-component (the react-refresh rule).
+export const STATUS_STYLE: Record<string, CSSProperties> = {
+  STORED: {
+    border: "1.5px solid var(--mantine-color-toadie-7)",
+    background: "var(--mantine-color-body)",
+  },
+  MISSING: {
+    border: "1.5px dashed var(--mantine-color-red-6)",
+    background: "var(--mantine-color-body)",
+  },
+  EXTERNAL: {
+    border: "1.5px dashed var(--mantine-color-gray-5)",
+    background: "var(--mantine-color-default-hover)",
+  },
+};
 
 /** The distinct namespaces a laid-out graph spans — the "should we group at all" input. */
 function namespacesOf(nodes: readonly GraphNode[]): string[] {

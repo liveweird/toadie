@@ -36,3 +36,24 @@ const STATUS_CLASS: Record<ErrorStatus, ErrorClass> = {
 };
 
 export const classOfStatus = (status: ErrorStatus): ErrorClass => STATUS_CLASS[status];
+
+/**
+ * The report's badge colour follows the app-wide vocabulary, not one red for everything:
+ * red = the rule is HARD on writes (structure, namespace — the row would be rejected as-is),
+ * orange = a SOFT finding (saves through Save-anyway, the same orange as everywhere else),
+ * gray = `SOURCE_MISSING`, which is no defect at all — the reference is optional and the
+ * row is only reporting its absence.
+ */
+const CLASS_COLOR: Record<ErrorClass, string> = {
+  structure: "red",
+  namespace: "red",
+  references: "orange",
+  labels: "orange",
+  annotations: "orange",
+  tags: "orange",
+  types: "orange",
+  lifecycles: "orange",
+  source: "gray",
+};
+
+export const colorOfStatus = (status: ErrorStatus): string => CLASS_COLOR[STATUS_CLASS[status]];

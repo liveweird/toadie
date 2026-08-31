@@ -10,10 +10,13 @@ export function shouldShowCharCount(current: number, max: number, mode: CharCoun
   return mode === "always" || current >= max * NEAR_LIMIT_RATIO;
 }
 
+/** The inputWrapperOrder that puts the description (this counter) BELOW the input. */
+export const BELOW_INPUT = ["label", "input", "description", "error"] as const;
+
 /**
  * Description-slot helper for plain TextInputs: the counter node when visible, else undefined
  * (never an empty element — a truthy description renders Mantine's wrapper div even when empty).
- * Pair with inputWrapperOrder={["label", "input", "description", "error"]} to sit below the input.
+ * Pair with inputWrapperOrder={BELOW_INPUT} to sit below the input.
  */
 export function charCountDescription(current: number, max: number, mode: CharCountMode = "nearLimit") {
   return shouldShowCharCount(current, max, mode) ? <CharCount current={current} max={max} /> : undefined;

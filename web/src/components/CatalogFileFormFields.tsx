@@ -25,7 +25,7 @@ import { useLabels } from "../hooks/useLabels";
 import { useLifecycleOptions } from "../hooks/useLifecycleOptions";
 import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
 import { useTagCategories } from "../hooks/useTagCategories";
-import { charCountDescription } from "../utils/charCount";
+import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
 import { NO_FINDINGS, type FieldFindings } from "../utils/fieldFindings";
 import { findingProps } from "../utils/findingProps";
 import { refSuggestions, type RefField } from "../utils/refSuggestions";
@@ -47,7 +47,6 @@ import {
   type SpecFieldName,
 } from "../utils/catalogFileForm";
 
-const BELOW_INPUT = ["label", "input", "description", "error"] as const;
 
 /**
  * The live check's findings, by control. Context rather than a prop through all eleven

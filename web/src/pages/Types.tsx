@@ -19,7 +19,8 @@ import {
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { IconCategory, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconCategory, IconPlus } from "@tabler/icons-react";
+import { ApiError } from "../api/http";
 import { isAdmin } from "../api/session";
 import {
   createEntityTypes,
@@ -30,6 +31,7 @@ import {
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import KindTierDot, { renderKindOption } from "../components/KindTierDot";
+import RowEditDelete from "../components/RowEditDelete";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useEntityTypes } from "../hooks/useEntityTypes";
 import {
@@ -119,27 +121,11 @@ export default function Types() {
                     </Table.Td>
                     {isAdmin() && (
                       <Table.Td>
-                        <Group gap="xs" justify="flex-end" wrap="nowrap">
-                          <Button
-                            variant="subtle"
-                            size="xs"
-                            leftSection={<IconPencil size={14} />}
-                            aria-label={t("common.action.editAria", { name: dictionary.kind })}
-                            onClick={() => setEditorTarget(dictionary)}
-                          >
-                            {t("common.action.edit")}
-                          </Button>
-                          <Button
-                            variant="subtle"
-                            color="red"
-                            size="xs"
-                            leftSection={<IconTrash size={14} />}
-                            aria-label={t("common.action.deleteAria", { name: dictionary.kind })}
-                            onClick={() => remove.requestDelete(dictionary)}
-                          >
-                            {t("common.action.delete")}
-                          </Button>
-                        </Group>
+                        <RowEditDelete
+                          name={dictionary.kind}
+                          onEdit={() => setEditorTarget(dictionary)}
+                          onDelete={() => remove.requestDelete(dictionary)}
+                        />
                       </Table.Td>
                     )}
                   </Table.Tr>
@@ -203,7 +189,13 @@ function EntityTypesEditorModal({
       }
       await onSaved();
     } catch (err) {
-      setError(entityTypesSaveErrorMessage(err, t));
+      // The 409 is about THIS control (the kind already holds a dictionary) — mark the field,
+      // the way the catalog editor puts server verdicts on controls; other failures the alert.
+      if (err instanceof ApiError && err.status === 409) {
+        form.setFieldError("kind", t("types.saveConflict"));
+      } else {
+        setError(entityTypesSaveErrorMessage(err, t));
+      }
       setSubmitting(false);
     }
   }

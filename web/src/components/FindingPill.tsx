@@ -15,7 +15,10 @@ import classes from "../theme.module.css";
  * `renderPill` replaces the default pill wholesale, so this re-renders it faithfully. That is
  * cheap here: neither `MultiSelect` nor `TagsInput` styles its pills (both pass `classes: {}`
  * to `useStyles`), and `Pill` picks up size and variant from the surrounding `PillGroup` /
- * `PillsInput` contexts — an unmarked pill therefore renders exactly as before.
+ * `PillsInput` contexts — an unmarked pill therefore renders exactly as before. One gap the
+ * callback cannot close: Mantine passes neither `readOnly` nor a computed `withRemoveButton`
+ * into `renderPill`, so `!disabled` mirrors the default only for non-readOnly controls —
+ * a future read-only picker rendering finding pills must thread its own flag through here.
  */
 export function renderFindingPill({
   findings,

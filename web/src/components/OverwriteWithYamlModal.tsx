@@ -236,7 +236,7 @@ function OverwriteModalBody({
           {t("common.action.cancel")}
         </Button>
         <Button
-          color="orange"
+          color="red"
           onClick={() => void onConfirm()}
           loading={saving}
           disabled={document == null || identical || !detail.data}

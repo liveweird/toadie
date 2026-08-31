@@ -119,6 +119,18 @@ describe("Errors page", () => {
     expect(links[0]).toHaveAttribute("href", "/files/1/edit");
   });
 
+  test("status badges follow the colour vocabulary: hard classes red, soft classes orange", async () => {
+    mockReport(mockFetch);
+    renderPage();
+
+    // A soft (waivable) reference finding is orange; the report-only verdict on a rule that
+    // is HARD on writes is red — the badge colour rides Mantine's CSS vars on the root.
+    const soft = (await screen.findByText("Not found")).closest("[class*='Badge-root']")!;
+    expect(soft.getAttribute("style")).toContain("orange");
+    const hard = screen.getByText("Invalid structure").closest("[class*='Badge-root']")!;
+    expect(hard.getAttribute("style")).toContain("red");
+  });
+
   test("a STRUCTURE_INVALID row shows the validator's own message and no value", async () => {
     mockReport(mockFetch);
     renderPage();
@@ -139,7 +151,7 @@ describe("Errors page", () => {
     expect(screen.queryByText("component:ghost")).not.toBeInTheDocument();
     expect(screen.queryByText("orders-db")).not.toBeInTheDocument();
     expect(screen.getByText("Invalid structure")).toBeInTheDocument();
-    expect(screen.getByText("1 errors")).toBeInTheDocument();
+    expect(screen.getByText("1 error")).toBeInTheDocument();
 
     // Back on: the rows return (all-on is the default, persisted per view).
     fireEvent.click(screen.getByRole("checkbox", { name: "References" }));

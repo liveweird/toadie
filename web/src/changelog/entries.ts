@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.14.3",
+    date: "2026-09-01",
+    en: `**A consistency pass across the whole app.**
+
+- **Colours now say one thing everywhere**: red means blocked or destructive, orange means "saves after confirming", gray is neutral. The Errors report no longer paints every row red — waivable findings are orange, and a missing source reference (which blocks nothing) is gray. The Sync and Overwrite confirmations turned red: they overwrite the stored copy.
+- **The import report links stored rows** to their editors — the "Created with findings" ones are exactly the files you go on to fix — and on **Feature flags** a user's name opens their features editor.
+- Sortable table headers announce their sort direction to assistive technology, counts read naturally ("1 file checked", not "1 files"), and a duplicate key typed into a registry dialog is now flagged on the field itself.`,
+    pl: `**Przegląd spójności całej aplikacji.**
+
+- **Kolory mówią wszędzie to samo**: czerwony znaczy zablokowane lub nieodwracalne, pomarańczowy — "zapisze się po potwierdzeniu", szary jest neutralny. Raport Błędów nie maluje już każdego wiersza na czerwono — ustalenia do zatwierdzenia są pomarańczowe, a brak odniesienia do źródła (który niczego nie blokuje) jest szary. Potwierdzenia Synchronizacji i Nadpisania zrobiły się czerwone: nadpisują zapisaną kopię.
+- **Raport importu linkuje zapisane wiersze** do ich edytorów — te "Utworzone z ustaleniami" to dokładnie pliki, które zaraz poprawisz — a na **Flagach funkcji** nazwa osoby otwiera jej edytor funkcji.
+- Sortowalne nagłówki tabel ogłaszają kierunek sortowania technologiom asystującym, liczebniki odmieniają się naturalnie, a zduplikowany klucz wpisany w okno rejestru jest teraz oznaczany na samym polu.`,
+  },
+  {
     version: "1.14.2",
     date: "2026-08-31",
     en: `**Click a name to open the file.**

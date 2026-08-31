@@ -87,6 +87,11 @@ describe("FeatureFlags page", () => {
       (screen.getByRole("switch", { name: "Toggle Email MFA for Bob Basic" }) as HTMLInputElement)
         .checked,
     ).toBe(false);
+    // The name is the way into the user's per-user features editor.
+    expect(screen.getByRole("link", { name: "Feature flags for Alice Admin" })).toHaveAttribute(
+      "href",
+      "/users/1/features",
+    );
   });
 
   test("toggling one row PUTs its new wholesale set and toasts", async () => {
@@ -142,7 +147,7 @@ describe("FeatureFlags page", () => {
     await user.click(screen.getByRole("button", { name: "Disable for all matching" }));
     const modal = await screen.findByRole("dialog");
     expect(
-      within(modal).getByText("Disable Email MFA for 1 users currently enabled?"),
+      within(modal).getByText("Disable Email MFA for 1 user currently enabled?"),
     ).toBeInTheDocument();
     await user.click(within(modal).getByRole("button", { name: "Disable" }));
 
@@ -206,7 +211,7 @@ describe("FeatureFlags page", () => {
     const modal = await screen.findByRole("dialog");
     await user.click(within(modal).getByRole("button", { name: "Enable" }));
 
-    const failedAlert = await screen.findByText("The update failed for 1 users");
+    const failedAlert = await screen.findByText("The update failed for 1 user");
     // Bob's name appears both in the table and the failed-rows alert — scope to the alert.
     expect(failedAlert.closest(".mantine-Alert-root")?.textContent).toContain("Bob Basic");
 

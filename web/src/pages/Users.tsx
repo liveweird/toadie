@@ -113,24 +113,20 @@ export default function Users() {
       <Table withTableBorder>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>
-              <SortHeader
-                field="name"
-                label={t("common.field.name")}
-                activeField={sortField}
-                activeDir={sortDir}
-                onToggle={toggleSort}
-              />
-            </Table.Th>
-            <Table.Th>
-              <SortHeader
-                field="email"
-                label={t("common.field.email")}
-                activeField={sortField}
-                activeDir={sortDir}
-                onToggle={toggleSort}
-              />
-            </Table.Th>
+            <SortHeader
+              field="name"
+              label={t("common.field.name")}
+              activeField={sortField}
+              activeDir={sortDir}
+              onToggle={toggleSort}
+            />
+            <SortHeader
+              field="email"
+              label={t("common.field.email")}
+              activeField={sortField}
+              activeDir={sortDir}
+              onToggle={toggleSort}
+            />
             <Table.Th>{t("common.field.role")}</Table.Th>
             <Table.Th aria-label={t("common.table.operations")} style={{ width: 1 }} />
           </Table.Tr>

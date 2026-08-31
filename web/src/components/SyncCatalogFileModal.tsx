@@ -23,16 +23,6 @@ import {
 import { showSuccessToast } from "../utils/toast";
 
 /**
- * The Sync-from-repo modal (the Files list's Operations dropdown): fetches the repo copy
- * through the SSRF-guarded server fetch, shows WHICH side changed since the last sync (the
- * stored baseline attributes it) plus a line diff of the canonical YAML, and overwrites the
- * stored copy on explicit confirmation. DB→repo sync deliberately does not exist.
- *
- * Shell + body split: the body mounts only with a non-null row, so its query functions
- * narrow naturally (no `enabled`-laundering casts), while the shell keeps the one Modal
- * mounted for the open/close transition.
- */
-/**
  * Everything the modal reads about the file — the structural shape, not the list DTO, so the
  * editor can open it with a `CatalogFileResponse` too.
  */
@@ -46,6 +36,16 @@ export type SyncTarget = {
   lastSyncedAt: number;
 };
 
+/**
+ * The Sync-from-repo modal (the Files list's Operations dropdown): fetches the repo copy
+ * through the SSRF-guarded server fetch, shows WHICH side changed since the last sync (the
+ * stored baseline attributes it) plus a line diff of the canonical YAML, and overwrites the
+ * stored copy on explicit confirmation. DB→repo sync deliberately does not exist.
+ *
+ * Shell + body split: the body mounts only with a non-null row, so its query functions
+ * narrow naturally (no `enabled`-laundering casts), while the shell keeps the one Modal
+ * mounted for the open/close transition.
+ */
 export default function SyncCatalogFileModal({
   file,
   onClose,
@@ -263,7 +263,7 @@ function SyncModalBody({
           {t("common.action.cancel")}
         </Button>
         <Button
-          color="orange"
+          color="red"
           onClick={() => void onConfirm()}
           loading={syncing}
           disabled={repoDocument == null || inSync}

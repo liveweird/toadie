@@ -145,7 +145,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`catalog-files.spec.ts`](scenarios/catalog-files.md) — the visual creator's CRUD journey:
   create with live YAML preview → filtered list (name, the type/owner dropdown filters with
   owner-reference resolution, and the always-visible Kind pills as a visibility switch) →
-  edit → download `catalog-info.yaml` → delete.
+  edit → Overwrite with YAML (diff, confirm, and the editor re-seeding so a later Save keeps
+  the overwritten document) → download `catalog-info.yaml` → delete.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).
@@ -187,9 +188,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
   through the compose stack's Mailpit (new password works, old one is dead — skips itself
   without Mailpit).
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
-  (deletion-orphaned) missing nodes for a throwaway namespace; toggling a relation family
-  prunes its virtual nodes; the Manual layout mode drags a node, the position survives a
-  reload (server-side per user), and Reset + Auto restore the pristine layout document.
+  (deletion-orphaned) missing nodes for a throwaway namespace, faced name + type, with the
+  multi-namespace canvas clustered inside labelled namespace frames; toggling a relation
+  family prunes its virtual nodes; the Manual layout mode drags a node, the position survives
+  a reload (server-side per user), and Reset + Auto restore the pristine layout document.
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   dry-run as Would-be-created (the Check button, nothing stored), import as Created, export
   downloads them as one `---`-separated file, and re-importing the export reports every row

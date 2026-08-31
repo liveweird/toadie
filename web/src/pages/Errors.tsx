@@ -15,7 +15,7 @@ import TableLoadingRow from "../components/TableLoadingRow";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { isStringArray, useStoredState } from "../hooks/useStoredState";
 import { loadErrorMessage } from "../utils/saveError";
-import { ERROR_CLASSES, classOfStatus } from "../utils/errorClasses";
+import { ERROR_CLASSES, classOfStatus, colorOfStatus } from "../utils/errorClasses";
 
 /**
  * The Errors page at /errors: every error in the stored files — reference resolution,
@@ -120,7 +120,7 @@ export default function Errors() {
                 </Table.Td>
                 <Table.Td>{f.reference !== "" && <Code>{f.reference}</Code>}</Table.Td>
                 <Table.Td>
-                  <Badge variant="light" color="red">
+                  <Badge variant="light" color={colorOfStatus(f.status)}>
                     {t(`errors.status.${f.status}`)}
                   </Badge>
                   <Text size="xs" c="dimmed" mt={2}>

@@ -172,7 +172,9 @@ describe("LensPicker", () => {
     fireEvent.click(screen.getByRole("option", { name: "My private" }));
     fireEvent.click(screen.getByLabelText("Lens actions"));
     fireEvent.click(await screen.findByText("Delete"));
-    expect(await screen.findByText('Delete lens "My private"?')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Lens "My private" will be gone for everyone who can see it.'),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => {
       const del = mockFetch.mock.calls.find(([, init]) => (init as RequestInit)?.method === "DELETE");

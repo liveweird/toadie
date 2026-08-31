@@ -134,8 +134,9 @@ export default function LensPicker({
           clearable
           clearButtonProps={{ "aria-label": t("lenses.picker.clearAria") }}
         />
+        {/* Neutral gray: "differs from the saved lens" is state, not caution. */}
         {modified && (
-          <Badge size="sm" variant="light" color="yellow">
+          <Badge size="sm" variant="light" color="gray">
             {t("lenses.modified")}
           </Badge>
         )}

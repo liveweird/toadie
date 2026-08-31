@@ -131,7 +131,25 @@ describe("Labels page", () => {
     await user.click(within(modal).getByRole("button", { name: /save/i }));
 
     expect(await screen.findByText(/a label with this key already exists/i)).toBeInTheDocument();
+    // The 409 is about the key — it marks the FIELD, not the generic alert.
+    expect(within(modal).getByLabelText(/^key$/i)).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  test("a non-conflict failure keeps the generic alert", async () => {
+    serveLabels(mockFetch, { "POST /api/v1/labels": { status: 500 } });
+    const user = userEvent.setup();
+    renderWithProviders(<Labels />);
+
+    await user.click(await screen.findByRole("button", { name: /new label/i }));
+    const modal = screen.getByRole("dialog");
+    await user.type(within(modal).getByLabelText(/^key$/i), "team");
+    await user.type(within(modal).getByRole("combobox", { name: /allowed values/i }), "core{Enter}");
+    await user.click(within(modal).getByRole("combobox", { name: /applies to kinds/i }));
+    await user.click(await screen.findByRole("option", { name: "Group" }));
+    await user.click(within(modal).getByRole("button", { name: /save/i }));
+
+    expect(await screen.findByText("Action failed (500)")).toBeInTheDocument();
   });
 
   test("an admin deletes a label after confirming", async () => {

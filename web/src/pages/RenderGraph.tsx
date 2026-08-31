@@ -45,6 +45,7 @@ import {
   layoutGraph,
   namespaceFrames,
   RELATION_FAMILIES,
+  STATUS_STYLE,
   type GraphPositions,
   type LaidOutNode,
   type RelationFamily,
@@ -55,10 +56,11 @@ import { editCatalogFilePath } from "../utils/catalogFileLinks";
 
 const NODE_TYPES = { catalog: CatalogGraphNode };
 
+// Swatches borrow the node's own borders (STATUS_STYLE), so the legend cannot lie.
 const LEGEND: { key: "stored" | "missing" | "external"; style: React.CSSProperties }[] = [
-  { key: "stored", style: { border: "1.5px solid var(--mantine-color-toadie-7)" } },
-  { key: "missing", style: { border: "1.5px dashed var(--mantine-color-red-6)" } },
-  { key: "external", style: { border: "1.5px dashed var(--mantine-color-gray-5)" } },
+  { key: "stored", style: { border: STATUS_STYLE.STORED.border } },
+  { key: "missing", style: { border: STATUS_STYLE.MISSING.border } },
+  { key: "external", style: { border: STATUS_STYLE.EXTERNAL.border } },
 ];
 
 type LayoutMode = "auto" | "manual";

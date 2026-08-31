@@ -35,9 +35,9 @@
   "saveConflict": "You already have a lens with this name",
   "saveForbidden": "Only the creator can change a public lens",
   "saveGone": "This lens no longer exists",
-  "deleteTitle": "Delete lens",
-  "deleteFailed": "Delete failed",
-  "deleteBody": "Delete lens \"{{name}}\"?",
+  "deleteTitle": "Delete lens?",
+  "deleteFailed": "Could not delete the lens",
+  "deleteBody": "Lens \"{{name}}\" will be gone for everyone who can see it.",
   "toast": {
     "created": "Lens saved",
     "saved": "Lens updated",

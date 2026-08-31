@@ -32,7 +32,7 @@ import {
   type LifecycleFormValues,
 } from "../utils/lifecycleForm";
 import { MAX_ENTITY_PART_LENGTH } from "../utils/catalogFileForm";
-import { charCountDescription } from "../utils/charCount";
+import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
 import { loadErrorMessage } from "../utils/saveError";
 
 /**
@@ -179,7 +179,7 @@ function LifecyclesEditor({ initialItems }: { initialItems: DictionaryEntry[] })
                   form.values.entries[index]?.value.length ?? 0,
                   MAX_ENTITY_PART_LENGTH,
                 )}
-                inputWrapperOrder={["label", "input", "description", "error"]}
+                inputWrapperOrder={[...BELOW_INPUT]}
                 {...form.getInputProps(`entries.${index}.value`)}
               />
               <RowControls

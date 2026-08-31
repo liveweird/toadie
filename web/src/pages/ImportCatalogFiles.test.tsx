@@ -114,6 +114,12 @@ describe("ImportCatalogFiles page", () => {
     expect(
       screen.getByText("spec.owner reference 'ghost' does not resolve to a stored entity"),
     ).toBeInTheDocument();
+    // Stored rows link straight to their editors — the WITH_FINDINGS one is what gets fixed next.
+    expect(screen.getByRole("link", { name: "Edit payments-svc" })).toHaveAttribute(
+      "href",
+      "/files/7/edit",
+    );
+    expect(screen.getByRole("link", { name: "Edit team-a" })).toHaveAttribute("href", "/files/8/edit");
     const [, init] = mockFetch.mock.calls.find(([url]) => url === "/api/v1/files/import")!;
     const body = JSON.parse((init as RequestInit).body as string) as {
       files: { kind: string; metadata: { name: string } }[];

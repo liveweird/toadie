@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
-import { Alert, Button, Group, Select, Stack, Switch, Table, Text, Title } from "@mantine/core";
+import { Link as RouterLink, Navigate } from "react-router-dom";
+import { Alert, Anchor, Button, Group, Select, Stack, Switch, Table, Text, Title } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconUsers } from "@tabler/icons-react";
@@ -265,24 +265,20 @@ export default function FeatureFlags() {
       <Table highlightOnHover withTableBorder verticalSpacing="sm">
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>
-              <SortHeader
-                field="name"
-                label={t("common.field.name")}
-                activeField={sortField}
-                activeDir={sortDir}
-                onToggle={toggleSort}
-              />
-            </Table.Th>
-            <Table.Th>
-              <SortHeader
-                field="email"
-                label={t("common.field.email")}
-                activeField={sortField}
-                activeDir={sortDir}
-                onToggle={toggleSort}
-              />
-            </Table.Th>
+            <SortHeader
+              field="name"
+              label={t("common.field.name")}
+              activeField={sortField}
+              activeDir={sortDir}
+              onToggle={toggleSort}
+            />
+            <SortHeader
+              field="email"
+              label={t("common.field.email")}
+              activeField={sortField}
+              activeDir={sortDir}
+              onToggle={toggleSort}
+            />
             <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>
               {t("users.featureFlags.enabledHeader")}
             </Table.Th>
@@ -295,7 +291,18 @@ export default function FeatureFlags() {
             data.items.map((u) => (
               <Table.Tr key={u.id}>
                 <Table.Td>
-                  <Text size="sm">{u.name}</Text>
+                  {/* The name opens the user's per-user features editor — the row names a
+                      user this screen otherwise gives no way into (the Users list links the
+                      same rows). */}
+                  <Anchor
+                    component={RouterLink}
+                    to={`/users/${u.id}/features`}
+                    size="sm"
+                    fw={500}
+                    aria-label={t("users.featuresAria", { name: u.name })}
+                  >
+                    {u.name}
+                  </Anchor>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{u.email}</Text>
