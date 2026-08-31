@@ -55,6 +55,11 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
   await expect(page.getByText(b, { exact: true })).toBeVisible();
   await expect(page.getByText(ghost, { exact: true })).toBeVisible();
   await expect(page.getByText("platform", { exact: true })).toBeVisible();
+  // The node's second line is spec.type, not the namespace: A and B were created as
+  // `service`, and the namespace (this run's `ns`) never appears on a node face.
+  await expect(page.locator(`.react-flow__node[data-id="component:${ns}/${a}"]`)).toContainText("service");
+  // Scoped to the canvas on purpose: the namespace still appears in the filter panel's Select.
+  await expect(page.locator(".react-flow__node").filter({ hasText: ns })).toHaveCount(0);
 
   // Disabling the Depends-on relation prunes the orphaned VIRTUAL ghost node; stored nodes
   // (B, the platform owner) always stay. (The Chip's checkbox input is visually hidden —

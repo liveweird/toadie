@@ -20,7 +20,9 @@
    - *Expected*: deletion is allowed; A's reference to it is now dangling.
 3. They open the **Graph** page and filter by the namespace.
    - *Expected*: nodes for A and B (stored), the ghost (missing), and the stored shared
-     owner group (`platform`) are all drawn on the canvas.
+     owner group (`platform`) are all drawn on the canvas. Each node reads as its name plus
+     its `spec.type` (A and B are `service`) — the namespace is NOT on the node face; it
+     moved into the name's hover tooltip.
 4. They toggle the **Depends on** relation chip off.
    - *Expected*: the orphaned virtual ghost node disappears; the stored nodes (B, the owner
      group) remain — stored nodes are never pruned.

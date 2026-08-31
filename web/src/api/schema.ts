@@ -1474,6 +1474,10 @@ export interface components {
             namespace: string;
             name: string;
             title?: string | null;
+            /** @description The stored document's `spec.type`. Null for a User (its spec has no type), for a type-optional kind left blank, and for every virtual node. */
+            type?: string | null;
+            /** @description The stored document's `metadata.tags`; empty for virtual nodes. */
+            tags?: string[];
             /**
              * Format: int32
              * @description The backing file for STORED nodes; null for virtual nodes.

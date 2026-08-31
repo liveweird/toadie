@@ -27,6 +27,14 @@ data class GraphNode(
     val namespace: String,
     val name: String,
     val title: String? = null,
+    /**
+     * The stored document's `spec.type` — what the graph node's second line shows. Null for a
+     * User (its spec has no type), for a type-optional kind left blank, and for every virtual
+     * node, which has no document at all.
+     */
+    val type: String? = null,
+    /** The stored document's `metadata.tags` — tooltip content; empty for virtual nodes. */
+    val tags: List<String> = emptyList(),
     /** The backing file for STORED nodes; null for virtual (MISSING/EXTERNAL) nodes. */
     val fileId: UInt? = null,
     val status: GraphNodeStatus,
@@ -56,6 +64,8 @@ private fun storedNode(source: CatalogSource): GraphNode {
         namespace = identity.namespace,
         name = source.file.metadata.name,
         title = source.file.metadata.title,
+        type = source.file.spec.type,
+        tags = source.file.metadata.tags,
         fileId = source.id,
         status = GraphNodeStatus.STORED,
     )

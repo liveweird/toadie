@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.11.3",
+    date: "2026-08-31",
+    en: `**Clearer graph nodes** — the boxes on the Graph page say something useful now.
+
+- Each node shows its **type** (service, database, openapi…) where the kind has one, instead of the namespace — which read "default" on almost every file.
+- **Long names no longer disappear under the kind badge.** The name now shortens with an ellipsis and stops where the badge begins.
+- **Hover a node's name** for the full picture: name, namespace, title and tags.`,
+    pl: `**Czytelniejsze węzły grafu** — prostokąty na stronie Graf wreszcie coś mówią.
+
+- Każdy węzeł pokazuje swój **typ** (service, database, openapi…) tam, gdzie dany rodzaj go ma, zamiast przestrzeni nazw — która przy niemal każdym pliku brzmiała „default".
+- **Długie nazwy nie chowają się już pod odznaką rodzaju.** Nazwa skraca się wielokropkiem i kończy tam, gdzie zaczyna się odznaka.
+- **Najedź na nazwę węzła**, żeby zobaczyć całość: nazwę, przestrzeń nazw, tytuł i tagi.`,
+  },
+  {
     version: "1.11.2",
     date: "2026-08-31",
     en: `**A vocabulary out of the box** — new environments no longer start with empty registries.

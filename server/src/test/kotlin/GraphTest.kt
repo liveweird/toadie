@@ -58,6 +58,42 @@ class GraphTest {
     }
 
     @Test
+    fun `a stored node carries the fields its rendering needs - virtual nodes carry none`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("graph")
+        val ns = uniqueNamespace("gns")
+        val tag = uniqueTag("gtag")
+        uniqueTagCategory("gcat", listOf(tag), listOf("Component"))
+        val a = uniqueEntityName("a")
+        val doomed = uniqueEntityName("doomed")
+        // The dangling ref is MADE by deleting its target — saves enforce resolution.
+        val doomedId = client.createCatalogFile(componentFile(doomed, namespace = ns)).id
+        client.createCatalogFile(
+            componentFile(a, namespace = ns, title = "Alpha", type = "library").let {
+                it.copy(
+                    metadata = it.metadata.copy(tags = listOf(tag)),
+                    spec = it.spec.copy(dependsOn = listOf("component:$ns/$doomed")),
+                )
+            },
+        )
+        client.delete("$CATALOG_FILES_PATH/$doomedId")
+
+        val graph = client.graph(namespace = ns)
+        // The graph node's whole display surface: the second line (type) and the tooltip
+        // (title + tags) come off the stored document, not a second request.
+        val nodeA = graph.nodes.single { it.name == a }
+        assertEquals("library", nodeA.type)
+        assertEquals(listOf(tag), nodeA.tags)
+        assertEquals("Alpha", nodeA.title)
+        // A virtual node has no document behind it, so it carries none of the three.
+        val ghost = graph.nodes.single { it.name == doomed }
+        assertEquals(GraphNodeStatus.MISSING, ghost.status)
+        assertNull(ghost.type)
+        assertNull(ghost.title)
+        assertTrue(ghost.tags.isEmpty())
+    }
+
+    @Test
     fun `a deletion-orphaned reference draws a MISSING node`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
