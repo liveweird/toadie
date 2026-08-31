@@ -3,7 +3,8 @@
 -- entity kinds its tags may be applied to (both JSON arrays in TEXT — the labels/V10
 -- precedent). Catalog-file writes enforce the registry STRICTLY (unregistered tags are
 -- banned everywhere, no grandfathering) — an EMPTY registry means no file may carry tags
--- (deliberate; there is no seed). Category names fold case for uniqueness over ACTIVE rows
+-- (deliberate; this migration ships none — V22 later seeds the reference set). Category
+-- names fold case for uniqueness over ACTIVE rows
 -- only (the uq_labels_key_active pattern). Each tag belongs to exactly ONE category —
 -- enforced SERVICE-side in-transaction (tags live inside the JSON array, so no index can
 -- back it; accepted for a single-ADMIN-curated registry).

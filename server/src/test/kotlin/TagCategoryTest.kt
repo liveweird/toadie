@@ -39,6 +39,23 @@ class TagCategoryTest {
     private suspend fun HttpClient.readCategories(): TagCategoryList = get("/api/v1/tag-categories").body()
 
     @Test
+    fun `the V22 seed registers four categories whose tag lists stay disjoint`() = testApplication {
+        usePostgresTestcontainer()
+        val categories = seededClient("tcseed").readCategories().items
+        val byName = categories.associateBy { it.name }
+        assertTrue(
+            listOf("Languages", "Framework", "Database", "Events").all { it in byName },
+            "V22 must seed all four categories: ${byName.keys}",
+        )
+        assertTrue("java" in byName.getValue("Languages").tags)
+        assertEquals(listOf("Resource"), byName.getValue("Events").kinds)
+        // One tag belongs to exactly ONE category — a rule no index backs (the tags live
+        // inside a JSON array), so the seed's own disjointness is worth pinning here.
+        val allTags = categories.flatMap { it.tags }
+        assertEquals(allTags.size, allTags.toSet().size, "a tag may not appear in two categories: $allTags")
+    }
+
+    @Test
     fun `unauthenticated requests are 401`() = testApplication {
         usePostgresTestcontainer()
         val client = jsonClient()

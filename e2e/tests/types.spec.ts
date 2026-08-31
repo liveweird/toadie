@@ -1,7 +1,8 @@
 import { createUserViaUi, expect, login, logoutButton, openFilters, pickType, rowOperation, test, uniqueText } from "./helpers";
 
-// The type-dictionary journey. The dictionaries are per-kind SINGLETONS seeded by V15, so
-// unlike tags there is no throwaway row to create: this spec APPENDS one unique type to the
+// The type-dictionary journey. The dictionaries are per-kind SINGLETONS seeded by V15 and
+// re-curated by V22, so unlike tags there is no throwaway row to create: this spec APPENDS
+// one unique type to the
 // Domain dictionary (the kind no other spec touches) and restores the list at the end. The
 // registry is shared run-state and THIS SPEC IS ITS ONLY IN-RUN WRITER — it never removes
 // values it did not add.
@@ -13,7 +14,7 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   const extraType = uniqueText("e2e-type");
 
   // The nav leaf is visible to everyone; the admin gets the New-dictionary action, and the
-  // V15 seed rows are already listed (Component with its well-known values).
+  // seeded rows are already listed (Component with its curated values).
   await page.getByRole("link", { name: "Types" }).click();
   await expect(page.getByRole("heading", { name: "Types" })).toBeVisible();
   const componentRow = page.getByRole("row").filter({ has: page.getByText("Component", { exact: true }) });

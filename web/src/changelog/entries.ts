@@ -17,6 +17,24 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.11.2",
+    date: "2026-08-31",
+    en: `**A vocabulary out of the box** — new environments no longer start with empty registries.
+
+- **Labels, tags and annotation keys ship filled in.** Until now all three started empty, which meant no file could carry a label, a tag or an annotation until an administrator defined one. There are now eight label keys (exposure, hosting model, data classification, GDPR, PCI DSS, criticality tier, support mode, technology status), four tag categories (Languages, Framework, Database, Events) and four \`backstage.io\` annotation keys.
+- **Types and lifecycles are curated.** Each kind's type list is tuned to a real landscape, and **sunsetting** joins the lifecycles, which now read in order: experimental → production → sunsetting → deprecated.
+- **A second namespace, \`external\`**, for the systems you depend on but do not own. \`default\` stays the default.
+- **A sample landscape to load.** \`sample-data/catalog-info.yaml\` holds 34 entities across all seven kinds, speaking only the seeded vocabulary — import it to see the Files list, Graph, Hierarchy and Errors report with something real in them.
+- Administrators keep full control: every seeded entry is an ordinary row that can be edited, reordered or removed.`,
+    pl: `**Słownictwo od razu po instalacji** — nowe środowiska nie startują już z pustymi rejestrami.
+
+- **Etykiety, tagi i klucze adnotacji są od razu wypełnione.** Dotąd wszystkie trzy startowały puste, więc żaden plik nie mógł nieść etykiety, tagu ani adnotacji, dopóki administrator czegoś nie zdefiniował. Teraz jest osiem kluczy etykiet (ekspozycja, model hostingu, klasyfikacja danych, RODO, PCI DSS, poziom krytyczności, tryb wsparcia, status technologii), cztery kategorie tagów (Languages, Framework, Database, Events) i cztery klucze adnotacji \`backstage.io\`.
+- **Typy i cykle życia są wykuratorowane.** Lista typów każdego rodzaju jest dopasowana do realnego krajobrazu, a do cykli życia dołącza **sunsetting** — kolejność czyta się teraz jako: experimental → production → sunsetting → deprecated.
+- **Druga przestrzeń nazw, \`external\`**, dla systemów, od których zależysz, ale ich nie posiadasz. \`default\` pozostaje domyślna.
+- **Przykładowy krajobraz do wczytania.** \`sample-data/catalog-info.yaml\` zawiera 34 encje wszystkich siedmiu rodzajów, mówiące wyłącznie zasianym słownictwem — zaimportuj go, żeby zobaczyć listę Plików, Graf, Hierarchię i raport Błędów z realną zawartością.
+- Administratorzy zachowują pełną kontrolę: każdy zasiany wpis to zwykły wiersz, który można edytować, przestawić lub usunąć.`,
+  },
+  {
     version: "1.11.1",
     date: "2026-08-30",
     en: `**Quality pass** — a full check-up of the new sync feature and its surroundings.

@@ -5,16 +5,16 @@
   through the UI (email carries the `e2e` marker)
 - **Owns** (exclusive server-side state): the one unique `e2e-type-*` value it APPENDS to the
   **Domain** dictionary (removed again at the end — the dictionaries are per-kind singletons
-  seeded by the migration, so there is no throwaway row to create), the one Domain file
-  carrying that type, and its throwaway user. The type registry is SHARED state and **this
-  spec is its only in-run writer**: it appends and removes only its own value, so the seeded
-  well-known types every other spec's forms rely on survive.
+  seeded by V15 and re-curated by V22, so there is no throwaway row to create), the one
+  Domain file carrying that type, and its throwaway user. The type registry is SHARED state
+  and **this spec is its only in-run writer**: it appends and removes only its own value, so
+  the seeded types every other spec's forms rely on survive.
 
 ## Scenario: admin curates the type dictionaries; a regular user reads them; the editor enforces them
 
 1. The admin signs in and opens **Types** from the nav.
    - *Expected*: the dictionary table renders the seeded per-kind rows (Component listing
-     `service`) with the **New dictionary** action (ADMIN-only).
+     `service`, one of V22's curated values) with the **New dictionary** action (ADMIN-only).
 2. They open the New-dictionary modal and submit it empty.
    - *Expected*: the field errors render inline ("Pick a type-bearing kind", "Add at least
      one type"); no request reaches the server. They cancel out.

@@ -298,8 +298,9 @@ object TestRefTargets {
 /**
  * The namespaces dictionary is SHARED suite state (like the seed admin) — tests append
  * unique throwaway values via [ensure] rather than replacing the whole document, so the
- * V8 `default` seed and other tests' values survive. [rawRows] reads soft-deleted rows
- * too (the API read filters active) to assert flagging over physical removal.
+ * seeded entries (`default` from V8, `external` from V22) and other tests' values survive.
+ * [rawRows] reads soft-deleted rows too (the API read filters active) to assert flagging
+ * over physical removal.
  */
 object TestNamespaces {
     val service: ch.nokillswit.dictionaries.DictionaryService by lazy {
@@ -407,9 +408,10 @@ object TestNamespaces {
 
 /**
  * The lifecycles dictionary is SHARED suite state too (V16 seeds experimental/production/
- * deprecated — every catalog fixture's lifecycle rides those): tests append unique
- * throwaway values via [ensure] and remove only what they added, so the seeds and other
- * tests' values survive. No default-flag plumbing — the LIFECYCLE dictionary has none.
+ * deprecated and V22 adds sunsetting — every catalog fixture's lifecycle rides those):
+ * tests append unique throwaway values via [ensure] and remove only what they added, so the
+ * seeds and other tests' values survive. No default-flag plumbing — the LIFECYCLE
+ * dictionary has none.
  */
 object TestLifecycles {
     val service: ch.nokillswit.dictionaries.DictionaryService by lazy {
@@ -445,9 +447,12 @@ object TestLifecycles {
 }
 
 /**
- * Direct access to the SHARED label registry (V10) — like the namespaces dictionary, suite
- * state every catalog write is checked against. Tests only ever mint UNIQUE keys (the
- * `uniqueLabel` fixture) and remove them when a test's assertions depend on absence.
+ * Direct access to the SHARED label registry (V10, seeded by V22) — like the namespaces
+ * dictionary, suite state every catalog write is checked against. Tests only ever mint
+ * UNIQUE keys (the `uniqueLabel` fixture) and remove them when a test's assertions depend
+ * on absence. That rule is load-bearing: [ensure] matches an existing key case-insensitively
+ * and UPDATES it in place, so a fixed key colliding with one of V22's eight seeded keys
+ * would silently overwrite the seeded row for the whole shared container.
  */
 object TestLabels {
     val service: ch.nokillswit.labels.LabelService by lazy {
@@ -494,10 +499,11 @@ object TestLenses {
 }
 
 /**
- * Direct access to the SHARED annotation-key registry (V17) — the label registry's sibling
- * (keys + kinds, no values), suite state every catalog write's annotation keys are checked
- * against. Tests only ever mint UNIQUE keys (the `uniqueAnnotationKey` fixture) and remove
- * them when a test's assertions depend on absence.
+ * Direct access to the SHARED annotation-key registry (V17, seeded by V22) — the label
+ * registry's sibling (keys + kinds, no values), suite state every catalog write's annotation
+ * keys are checked against. Tests only ever mint UNIQUE keys (the `uniqueAnnotationKey`
+ * fixture) and remove them when a test's assertions depend on absence — [ensure] updates a
+ * same-named row in place, so a fixed key would overwrite one of V22's four seeded ones.
  */
 object TestAnnotationKeys {
     val service: ch.nokillswit.annotations.AnnotationKeyService by lazy {
@@ -530,9 +536,12 @@ object TestAnnotationKeys {
 }
 
 /**
- * Direct access to the SHARED tag-category registry (V11) — like the label registry, suite
- * state every catalog write is checked against. Tests only ever mint UNIQUE names and tags
- * (the `uniqueTagCategory` fixture) and remove them when assertions depend on absence.
+ * Direct access to the SHARED tag-category registry (V11, seeded by V22) — like the label
+ * registry, suite state every catalog write is checked against. Tests only ever mint UNIQUE
+ * names and tags (the `uniqueTagCategory` fixture) and remove them when assertions depend on
+ * absence. Doubly load-bearing here: [ensure] updates a same-named category in place (a
+ * fixed name would overwrite one of V22's four seeded categories), and a fixed TAG already
+ * claimed by another category is a 409 out of the one-category-per-tag rule.
  */
 object TestTagCategories {
     val service: ch.nokillswit.tags.TagCategoryService by lazy {
@@ -565,7 +574,8 @@ object TestTagCategories {
 }
 
 /**
- * Direct access to the SHARED per-kind type dictionaries (V14, seeded by V15) — suite state
+ * Direct access to the SHARED per-kind type dictionaries (V14, seeded by V15, curated by
+ * V22) — suite state
  * every catalog write's spec.type is checked against. Unlike labels/tags, the rows are
  * per-kind SINGLETONS (at most six, all seeded), so tests cannot mint unique registries:
  * anything that must change a kind's dictionary goes through [withKindTypes], which

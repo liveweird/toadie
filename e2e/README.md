@@ -76,7 +76,7 @@ from Lettuce, that any new or edited spec must satisfy:
   spec may flip which entry is flagged (`namespaces.spec` only asserts it; flipping is pinned
   server-/unit-side).
 - **The lifecycles dictionary is single-writer state the same way** (a whole-document PUT):
-  **global-setup does not touch it** — the V16 seed provides the well-known values every
+  **global-setup does not touch it** — the V16/V22 seed provides the four values every
   spec's `pickLifecycle` relies on — and **`lifecycles.spec.ts` is the ONLY in-run writer**,
   appending and removing only its own unique `e2e-lc-*` value; no spec may remove or rename
   a seeded lifecycle.
@@ -84,7 +84,8 @@ from Lettuce, that any new or edited spec must satisfy:
   labels, so a concurrently deleted/edited label breaks parallel specs' saves —
   **`labels.spec.ts` is the registry's ONLY in-run writer**, and it only ever creates and
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
-  first moving label registration into global-setup (the run-namespace pattern).
+  first moving label registration into global-setup (the run-namespace pattern). V22 seeds
+  eight curated keys — no spec may edit or delete those either.
 - **The lens store is per-run unique-name state.** Lenses are per-user content (private by
   default) and names are only unique per owner, so parallel specs cannot clash as long as
   every lens a spec saves carries a run-unique `e2e-lens-*` name and is deleted by its own
@@ -92,14 +93,17 @@ from Lettuce, that any new or edited spec must satisfy:
 - **The annotation-key registry follows the same rule.** Catalog writes accept only
   registered annotation keys — **`annotations.spec.ts` is that registry's ONLY in-run
   writer**, creating and deleting only its own unique `e2e-ann-*` key. No other spec may
-  put annotations on files without first moving key registration into global-setup.
+  put annotations on files without first moving key registration into global-setup. V22
+  seeds four `backstage.io/*` keys — no spec may edit or delete those either.
 - **The tag-category registry follows the same rule.** Catalog writes accept only tags from
   registered categories — **`tags.spec.ts` is that registry's ONLY in-run writer**, creating
   and deleting only its own unique `e2e-tagcat-*` category. No other spec may put tags on
-  files without first moving category registration into global-setup.
+  files without first moving category registration into global-setup. V22 seeds four
+  categories (Languages/Framework/Database/Events) — no spec may edit or delete those, and
+  a new spec's tags must avoid theirs (one tag belongs to exactly one category).
 - **The type registry follows it doubly.** Catalog writes accept only spec.type values from
   the file's kind's dictionary, and the dictionaries are per-kind SINGLETONS every spec's
-  forms read (the migration-seeded well-known values back every `pickType` call) —
+  forms read (the V15/V22-seeded curated lists back every `pickType` call) —
   **`types.spec.ts` is the registry's ONLY in-run writer**, and even it only APPENDS its one
   unique `e2e-type-*` value to the Domain dictionary and removes it again; no spec may
   delete or replace a seeded dictionary.

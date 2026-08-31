@@ -80,6 +80,8 @@ class DictionaryTest {
             items.single { it.isDefault }.value,
             "V9 must flag the seeded default (and at most one entry may carry the flag)",
         )
+        // V22 adds `external` as an ORDINARY entry — the flag must not move to it.
+        assertTrue(items.any { it.value == "external" }, "V22 must seed the external namespace")
     }
 
     @Test
@@ -374,13 +376,22 @@ class DictionaryTest {
         }
     }
     @Test
-    fun `the lifecycles dictionary is seeded with the well-known values and carries no default`() =
+    fun `the lifecycles dictionary is seeded in progression order and carries no default`() =
         testApplication {
             usePostgresTestcontainer()
             val client = seededClient("lcseed")
             val entries = client.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items
             val values = entries.map { it.value }
-            assertTrue(listOf("experimental", "production", "deprecated").all { it in values })
+            assertTrue(
+                listOf("experimental", "production", "sunsetting", "deprecated").all { it in values },
+            )
+            // The list reads as the real progression: V22 rewrote the positions so
+            // `sunsetting` sits between production and deprecated (V16 left the latter at 2).
+            assertTrue(
+                values.indexOf("production") < values.indexOf("sunsetting") &&
+                    values.indexOf("sunsetting") < values.indexOf("deprecated"),
+                "V22 must order the lifecycles experimental -> production -> sunsetting -> deprecated: $values",
+            )
             assertTrue(entries.none { it.isDefault }, "lifecycles have no default entry")
         }
 

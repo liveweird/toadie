@@ -34,6 +34,32 @@ class AnnotationKeyTest {
     private suspend fun HttpClient.readKeys(): AnnotationKeyList = get("/api/v1/annotation-keys").body()
 
     @Test
+    fun `the V22 seed registers the well-known backstage io keys, none of them server-written`() = testApplication {
+        usePostgresTestcontainer()
+        val byKey = seededClient("annseed").readKeys().items.associateBy { it.key }
+        val seeded = listOf(
+            "backstage.io/source-location",
+            "backstage.io/techdocs-ref",
+            "backstage.io/kubernetes-id",
+            "backstage.io/kubernetes-label-selector",
+        )
+        assertTrue(seeded.all { it in byKey }, "V22 must seed all four keys: ${byKey.keys}")
+        assertEquals(
+            listOf("Component", "API", "System", "Domain", "Resource"),
+            byKey.getValue("backstage.io/techdocs-ref").kinds,
+        )
+        // The seed shares backstage.io's prefix with the keys the catalog server writes
+        // itself, which the registry refuses — none of the four may be one of those.
+        for (reserved in listOf(
+            "backstage.io/managed-by-location",
+            "backstage.io/managed-by-origin-location",
+            "backstage.io/orphan",
+        )) {
+            assertTrue(reserved !in byKey, "$reserved is server-written and must never be seeded")
+        }
+    }
+
+    @Test
     fun `unauthenticated requests are 401`() = testApplication {
         usePostgresTestcontainer()
         val client = jsonClient()

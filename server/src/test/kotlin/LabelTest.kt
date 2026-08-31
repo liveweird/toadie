@@ -20,9 +20,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The label-registry surface: CRUD semantics, the payload rules, and the authz split. The
- * registry is SHARED suite state — every test mints UNIQUE keys and removes what its
- * assertions depend on; nothing ever touches another test's labels.
+ * The label-registry surface: the V22 seed, CRUD semantics, the payload rules, and the authz
+ * split. The registry is SHARED suite state — every test mints UNIQUE keys and removes what
+ * its assertions depend on; nothing ever touches another test's labels, and nothing touches
+ * the seeded ones (see [TestLabels]).
  */
 class LabelTest {
 
@@ -35,6 +36,27 @@ class LabelTest {
     ) = LabelRequest(key = key, values = values, kinds = kinds)
 
     private suspend fun HttpClient.readLabels(): LabelList = get("/api/v1/labels").body()
+
+    @Test
+    fun `the V22 seed registers the curated label keys with their closed value lists`() = testApplication {
+        usePostgresTestcontainer()
+        val byKey = seededClient("lblseed").readLabels().items.associateBy { it.key }
+        // The registry shipped EMPTY until V22, so before it no file could carry a label at
+        // all. Spot-check the two shapes that matter: a Resource-only key and a spanning one.
+        assertEquals(listOf("yes", "no"), byKey.getValue("gdpr").values)
+        assertEquals(listOf("Resource"), byKey.getValue("gdpr").kinds)
+        assertEquals(
+            listOf("Component", "API", "System", "Resource"),
+            byKey.getValue("exposure").kinds,
+            "allowed kinds are stored in canonical SUPPORTED_KINDS order",
+        )
+        assertTrue("24-7" in byKey.getValue("support-mode").values)
+        val seeded = listOf(
+            "criticality-tier", "data-classification", "exposure", "gdpr",
+            "hosting-model", "pci-dss", "support-mode", "technology-status",
+        )
+        assertTrue(seeded.all { it in byKey }, "V22 must seed all eight keys: ${byKey.keys}")
+    }
 
     @Test
     fun `unauthenticated requests are 401`() = testApplication {

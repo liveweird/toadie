@@ -98,24 +98,25 @@ export function runNamespace(key: "kinds" | "render" | "roundTrip" | "hierarchy"
 
 /**
  * Pick a spec.type in the catalog form's Type Select (free text is not accepted — the
- * field offers only the kind's admin-defined type dictionary, seeded by V15 with the
- * well-known Backstage values). Same shape as [pickNamespace].
+ * field offers only the kind's admin-defined type dictionary, seeded by V15 and re-curated
+ * by V22). Same shape as [pickNamespace].
  */
 export async function pickType(page: Page, type: string): Promise<void> {
   const select = page.getByRole("combobox", { name: "Type" });
   await select.click();
   await select.fill(type);
-  // The FILTER Type Select groups options by kind and the same type may appear under
-  // several kinds ("service" for Component AND System) — any of them sets the same bare
-  // type, so the first match is always correct (the form's Select has unique options).
+  // The FILTER Type Select groups options by kind, so one type value can appear once per
+  // kind that allows it — the V22 lists happen to be disjoint, but nothing enforces that
+  // (the dictionaries are INDEPENDENT). Every such option sets the same bare type, so the
+  // first match is always correct (the form's own Select has unique options anyway).
   await page.getByRole("option", { name: type, exact: true }).first().click();
   await expect(select).toHaveValue(type);
 }
 
 /**
  * Pick a spec.lifecycle in the catalog form's Lifecycle Select (free text is not accepted —
- * the field offers only the global lifecycles dictionary, seeded by V16 with the well-known
- * values). Same shape as [pickType].
+ * the field offers only the global lifecycles dictionary, seeded by V16 and extended by V22
+ * with `sunsetting`). Same shape as [pickType].
  */
 export async function pickLifecycle(page: Page, lifecycle: string): Promise<void> {
   const select = page.getByRole("combobox", { name: "Lifecycle" });

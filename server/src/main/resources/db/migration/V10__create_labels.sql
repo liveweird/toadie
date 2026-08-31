@@ -3,7 +3,8 @@
 -- the catalog_files.content precedent: whole-label updates replace them atomically, no
 -- child-table reconcile). Catalog-file writes enforce the registry STRICTLY (unregistered
 -- keys are banned everywhere, no grandfathering) — an EMPTY registry means no file may
--- carry labels until an admin defines some (deliberate; there is no seed).
+-- carry labels until an admin defines some (deliberate; this migration ships none — V22
+-- later seeds the reference set).
 -- Key uniqueness folds case (no confusing twins) over ACTIVE rows only (the
 -- uq_users_email_active pattern), so a soft-deleted label frees its key.
 CREATE TABLE labels (

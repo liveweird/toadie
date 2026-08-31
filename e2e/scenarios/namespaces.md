@@ -7,7 +7,7 @@
   unique per run) and its throwaway user — all removed at the end. The namespaces dictionary
   itself is SHARED append-only state: the spec never replaces or reorders entries it did not
   create (its reorder swaps its own two adjacent rows), so the volume's curated list — the
-  seeded `default` included — survives.
+  seeded `default` and `external` included — survives.
 
 ## Scenario: admin curates the ordered namespaces list; a regular user reads it only
 

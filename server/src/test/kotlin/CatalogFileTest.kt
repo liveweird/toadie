@@ -343,7 +343,11 @@ class CatalogFileTest {
         TestNamespaces.ensure("team-a")
         TestLabels.ensure("example.com/tier", listOf("backend"), listOf("Component"))
         TestAnnotationKeys.ensure("github.com/project-slug", listOf("Component"))
-        TestTagCategories.ensure("Languages", listOf("java", "c++"), listOf("Component"))
+        // A MINTED category and tag, never a fixed name: `ensure` updates an existing
+        // same-named category in place, so a fixed name colliding with a V22-seeded one
+        // would silently overwrite the seeded row for the whole shared container.
+        val tag = uniqueTag("fulltag")
+        uniqueTagCategory("fullcat", listOf(tag), listOf("Component"))
         // Every referenced target must be STORED (fixed names in the SHARED team-a/default
         // namespaces — ensured idempotently, a 409 from an earlier run is fine).
         suspend fun ensure(target: CatalogFile) {
@@ -380,7 +384,7 @@ class CatalogFileTest {
                 description = "Everything the format allows.",
                 labels = mapOf("example.com/tier" to "backend"),
                 annotations = mapOf("github.com/project-slug" to "acme/loaded"),
-                tags = listOf("java", "c++"),
+                tags = listOf(tag),
                 links = listOf(CatalogLink(url = "https://example.com/dash", title = "Dashboard", icon = "dashboard")),
             ),
             spec = EntitySpec(

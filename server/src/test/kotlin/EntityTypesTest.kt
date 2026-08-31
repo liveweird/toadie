@@ -21,8 +21,9 @@ import kotlin.test.assertTrue
 /**
  * The per-kind type-dictionary surface: CRUD semantics, the payload rules, per-kind
  * independence, and the authz split. The dictionaries are SHARED suite state and per-kind
- * SINGLETONS (V15 seeds all six type-bearing kinds), so mutating tests scope themselves
- * with [TestEntityTypes.withKindTypes] (restore-in-finally) instead of minting unique rows.
+ * SINGLETONS (V15 seeds all six type-bearing kinds, V22 curates their lists), so mutating
+ * tests scope themselves with [TestEntityTypes.withKindTypes] (restore-in-finally) instead
+ * of minting unique rows.
  */
 class EntityTypesTest {
 
@@ -53,7 +54,7 @@ class EntityTypesTest {
     }
 
     @Test
-    fun `the V15 seed defines the six type-bearing kinds with the well-known values`() = testApplication {
+    fun `the seed defines the six type-bearing kinds with the curated values`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("etseed")
         val byKind = client.readDictionaries().items.associateBy { it.kind }
@@ -62,10 +63,26 @@ class EntityTypesTest {
         assertTrue("team" in byKind.getValue("Group").types)
         assertTrue("database" in byKind.getValue("Resource").types)
         assertTrue("product" in byKind.getValue("System").types)
-        assertTrue("product-area" in byKind.getValue("Domain").types)
-        // Independence by construction: `service` may live under several kinds at once.
-        assertTrue("service" in byKind.getValue("System").types)
+        // V22 replaced V15's well-known Domain values with the curated ones.
+        assertTrue("core-value" in byKind.getValue("Domain").types)
         assertTrue("User" !in byKind, "User has no spec.type — it must never hold a dictionary")
+    }
+
+    @Test
+    fun `the same type value may be allowed under several kinds`() = testApplication {
+        // Per-kind independence: the dictionaries carry no cross-row uniqueness, so one value
+        // may be allowed for several kinds at once. The seeded lists happen to be disjoint
+        // (V22), so the property needs its own rows rather than a seed assertion.
+        usePostgresTestcontainer()
+        val admin = seededClient("etindep", UserRole.ADMIN)
+        val shared = typeValue("etshared")
+        TestEntityTypes.withKindTypes("Domain", listOf(shared)) {
+            TestEntityTypes.withKindTypes("Group", listOf(shared)) {
+                val byKind = admin.readDictionaries().items.associateBy { it.kind }
+                assertTrue(shared in byKind.getValue("Domain").types)
+                assertTrue(shared in byKind.getValue("Group").types)
+            }
+        }
     }
 
     @Test
