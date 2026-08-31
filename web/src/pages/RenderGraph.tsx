@@ -38,10 +38,12 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
 import LensPicker from "../components/LensPicker";
+import NamespaceFrames from "../components/NamespaceFrames";
 import {
   applyManualPositions,
   filterGraph,
   layoutGraph,
+  namespaceFrames,
   RELATION_FAMILIES,
   type GraphPositions,
   type LaidOutNode,
@@ -143,6 +145,11 @@ export default function RenderGraph() {
   useEffect(() => {
     void rfInstance?.fitView();
   }, [rfInstance, structureKey]);
+
+  // Frames come off the LIVE node array, not off baseLayout: mid-drag movement lands in
+  // `nodes` through applyNodeChanges, so a dragged node stretches its namespace's box as it
+  // moves, which is the whole of Manual mode's re-fitting.
+  const frames = useMemo(() => namespaceFrames(nodes), [nodes]);
 
   // Live drag: applyNodeChanges keeps the gesture fluent — mid-drag frames never touch
   // `positions` (writing them re-ran dagre and wholesale-replaced the node array
@@ -280,11 +287,16 @@ export default function RenderGraph() {
             onNodeClick={onNodeClick}
             colorMode={colorScheme}
             fitView
+            // React Flow's default floor is 0.5, which fitView silently clamps to — a large
+            // workspace (or a namespace-clustered one, which dagre lays out taller) then
+            // spills off the canvas with no way to see it whole.
+            minZoom={0.2}
             nodesDraggable={mode === "manual"}
             nodesConnectable={false}
             edgesFocusable={false}
             proOptions={{ hideAttribution: false }}
           >
+            <NamespaceFrames frames={frames} />
             <Background />
             <Controls showInteractive={false} />
           </ReactFlow>

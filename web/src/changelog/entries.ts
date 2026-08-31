@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.12.0",
+    date: "2026-08-31",
+    en: `**Namespaces on the graph** — the Graph page now shows where one namespace ends and the next begins.
+
+- When the graph spans **more than one namespace**, each is drawn inside its own labelled frame.
+- The automatic layout **keeps a namespace's entities together**, so the frames are readable instead of overlapping boxes drawn around scattered nodes.
+- In **Manual** layout, a frame follows what you do: drag an entity anywhere and its namespace's frame stretches to keep containing it. Dragging never changes which namespace something belongs to — that comes from the file itself.
+- A workspace using a single namespace looks exactly as before: one frame around everything would say nothing, so none is drawn.`,
+    pl: `**Przestrzenie nazw na grafie** — strona Graf pokazuje teraz, gdzie kończy się jedna przestrzeń nazw, a zaczyna kolejna.
+
+- Kiedy graf obejmuje **więcej niż jedną przestrzeń nazw**, każda jest rysowana we własnej, opisanej ramce.
+- Automatyczny układ **trzyma encje jednej przestrzeni nazw razem**, dzięki czemu ramki są czytelne, zamiast obejmować rozrzucone węzły.
+- W układzie **Ręcznym** ramka podąża za Tobą: przeciągnij encję gdziekolwiek, a ramka jej przestrzeni nazw rozciągnie się, żeby ją objąć. Przeciąganie nigdy nie zmienia przynależności — ta wynika z samego pliku.
+- Obszar roboczy z jedną przestrzenią nazw wygląda dokładnie jak dotąd: ramka wokół wszystkiego nic by nie mówiła, więc jej nie ma.`,
+  },
+  {
     version: "1.11.3",
     date: "2026-08-31",
     en: `**Clearer graph nodes** — the boxes on the Graph page say something useful now.

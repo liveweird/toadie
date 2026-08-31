@@ -57,12 +57,41 @@ export type LaidOutNode = Node<CatalogNodeData>;
 export const GRAPH_NODE_WIDTH = 200;
 export const GRAPH_NODE_HEIGHT = 64;
 
-/** dagre left-to-right auto-layout → React Flow's nodes/edges. */
+/** The distinct namespaces a laid-out graph spans — the "should we group at all" input. */
+function namespacesOf(nodes: readonly GraphNode[]): string[] {
+  return [...new Set(nodes.map((n) => n.namespace))].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * dagre left-to-right auto-layout → React Flow's nodes/edges.
+ *
+ * With two or more namespaces on the canvas the layout runs as a COMPOUND dagre graph, one
+ * cluster per namespace, so a namespace's entities come out clumped instead of scattered
+ * through the ranks (which is what makes [namespaceFrames] worth drawing at all). A single
+ * namespace groups nothing — clustering costs layout width for no information.
+ *
+ * Two dagre details are load-bearing. The graph must be built `{ compound: true }` (`setParent`
+ * throws otherwise), and each cluster needs an explicit `setNode(id, {})`: `setParent` does
+ * auto-create the node, but with the default `undefined` label, and dagre's `updateInputGraph`
+ * skips label-less nodes. Never set `rankdir` on a cluster — that switches dagre onto its
+ * `recursiveClusterLayout` path, which is a different and far less exercised algorithm.
+ */
 export function layoutGraph(graph: CatalogGraph): { nodes: LaidOutNode[]; edges: Edge[] } {
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "LR", nodesep: 24, ranksep: 90 });
+  const namespaces = namespacesOf(graph.nodes);
+  const grouped = namespaces.length > 1;
+  const g = new dagre.graphlib.Graph({ compound: grouped });
+  // Clustering needs room for the frame chrome between neighbouring namespaces: dagre's
+  // cluster gap comes out at nodesep + 40, and a frame costs FRAME_PADDING below plus
+  // FRAME_PADDING + FRAME_HEADER above, so 36 leaves the boxes visibly apart without
+  // stretching the within-cluster spacing much (24 would leave them touching).
+  g.setGraph({ rankdir: "LR", nodesep: grouped ? 36 : 24, ranksep: 90 });
   g.setDefaultEdgeLabel(() => ({}));
-  for (const n of graph.nodes) g.setNode(n.id, { width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT });
+  // `ns:` cannot collide with a node id, which is always `kind:namespace/name`.
+  if (grouped) for (const ns of namespaces) g.setNode(`ns:${ns}`, {});
+  for (const n of graph.nodes) {
+    g.setNode(n.id, { width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT });
+    if (grouped) g.setParent(n.id, `ns:${n.namespace}`);
+  }
   for (const e of graph.edges) g.setEdge(e.sourceId, e.targetId);
   dagre.layout(g);
 
@@ -97,4 +126,58 @@ export function applyManualPositions(nodes: LaidOutNode[], positions: GraphPosit
     const p = positions[n.id];
     return p ? { ...n, position: { x: p.x, y: p.y } } : n;
   });
+}
+
+/** One namespace's frame: a plain rectangle in canvas coordinates. */
+export interface NamespaceFrame {
+  namespace: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// Frame chrome. Kept tight on purpose: every pixel here has to be paid for by the layout's
+// cluster gap above (see the nodesep note), or neighbouring frames overlap in Auto mode.
+/** Breathing room between a frame's edge and its outermost members. */
+const FRAME_PADDING = 16;
+/** The strip above the members that carries the namespace name. */
+const FRAME_HEADER = 20;
+
+/**
+ * The frames to draw behind [nodes] — one per namespace, sized to the members' CURRENT
+ * positions. Deriving them from live positions rather than from dagre's own cluster bounds is
+ * what makes Manual mode work: drag a node and its frame stretches to keep containing it,
+ * because a node's namespace is DATA and no amount of dragging can change it (so frames may
+ * legitimately end up overlapping).
+ *
+ * Fewer than two namespaces means no frames at all: a lone frame around the whole canvas
+ * states nothing, and most workspaces use `default` and nothing else. Node status is
+ * irrelevant — a MISSING or EXTERNAL node still names a namespace, and belongs in its box.
+ */
+export function namespaceFrames(nodes: readonly LaidOutNode[]): NamespaceFrame[] {
+  const byNamespace = new Map<string, LaidOutNode[]>();
+  for (const n of nodes) {
+    const ns = n.data.apiNode.namespace;
+    const members = byNamespace.get(ns);
+    if (members) members.push(n);
+    else byNamespace.set(ns, [n]);
+  }
+  if (byNamespace.size < 2) return [];
+
+  return [...byNamespace.entries()]
+    .map(([namespace, members]) => {
+      const left = Math.min(...members.map((n) => n.position.x));
+      const top = Math.min(...members.map((n) => n.position.y));
+      const right = Math.max(...members.map((n) => n.position.x)) + GRAPH_NODE_WIDTH;
+      const bottom = Math.max(...members.map((n) => n.position.y)) + GRAPH_NODE_HEIGHT;
+      return {
+        namespace,
+        x: left - FRAME_PADDING,
+        y: top - FRAME_PADDING - FRAME_HEADER,
+        width: right - left + FRAME_PADDING * 2,
+        height: bottom - top + FRAME_PADDING * 2 + FRAME_HEADER,
+      };
+    })
+    .sort((a, b) => a.namespace.localeCompare(b.namespace));
 }

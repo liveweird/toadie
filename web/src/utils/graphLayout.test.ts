@@ -1,6 +1,14 @@
 import { describe, expect, test } from "vitest";
 import type { CatalogGraph } from "../api/catalogFiles";
-import { applyManualPositions, filterGraph, layoutGraph, RELATION_FAMILIES } from "./graphLayout";
+import {
+  applyManualPositions,
+  filterGraph,
+  GRAPH_NODE_HEIGHT,
+  GRAPH_NODE_WIDTH,
+  layoutGraph,
+  namespaceFrames,
+  RELATION_FAMILIES,
+} from "./graphLayout";
 
 const GRAPH: CatalogGraph = {
   nodes: [
@@ -106,5 +114,100 @@ describe("applyManualPositions", () => {
   test("an empty map returns every node at its dagre position", () => {
     const { nodes } = layoutGraph(GRAPH);
     expect(applyManualPositions(nodes, {}).map((n) => n.position)).toEqual(nodes.map((n) => n.position));
+  });
+});
+
+describe("namespaceFrames", () => {
+  const laidOut = (
+    id: string,
+    namespace: string,
+    x: number,
+    y: number,
+    status: "STORED" | "MISSING" | "EXTERNAL" = "STORED",
+  ) => ({
+    id,
+    type: "catalog" as const,
+    position: { x, y },
+    data: {
+      apiNode: {
+        id,
+        kind: "component",
+        namespace,
+        name: id,
+        title: null,
+        fileId: status === "STORED" ? 1 : null,
+        status,
+      },
+    },
+  });
+
+  test("a single namespace gets no frame — a box round everything states nothing", () => {
+    expect(namespaceFrames([laidOut("a", "default", 0, 0), laidOut("b", "default", 300, 0)])).toEqual([]);
+  });
+
+  test("one frame per namespace, each enclosing its members with padding", () => {
+    const frames = namespaceFrames([
+      laidOut("a", "default", 0, 0),
+      laidOut("b", "default", 300, 200),
+      laidOut("x", "external", 900, 0),
+    ]);
+    expect(frames.map((f) => f.namespace)).toEqual(["default", "external"]);
+
+    const [def, ext] = frames;
+    // The box contains both `default` members and neither of them touches its edge.
+    expect(def.x).toBeLessThan(0);
+    expect(def.y).toBeLessThan(0);
+    expect(def.x + def.width).toBeGreaterThan(300 + GRAPH_NODE_WIDTH);
+    expect(def.y + def.height).toBeGreaterThan(200 + GRAPH_NODE_HEIGHT);
+    // A one-member namespace still gets a real box.
+    expect(ext.width).toBeGreaterThan(GRAPH_NODE_WIDTH);
+    expect(ext.height).toBeGreaterThan(GRAPH_NODE_HEIGHT);
+  });
+
+  test("virtual nodes are framed by namespace like any other", () => {
+    const ghost = laidOut("ghost", "external", 900, 0, "MISSING");
+    const frames = namespaceFrames([laidOut("a", "default", 0, 0), ghost]);
+    expect(frames.map((f) => f.namespace)).toEqual(["default", "external"]);
+  });
+
+  test("a member dragged away stretches its frame to keep containing it", () => {
+    const tight = namespaceFrames([laidOut("a", "default", 0, 0), laidOut("x", "external", 900, 0)]);
+    const dragged = namespaceFrames([laidOut("a", "default", 0, 0), laidOut("x", "external", 900, 4000)]);
+    // `external`'s single member moved far down — the box follows it, it does not clip.
+    const before = tight.find((f) => f.namespace === "external")!;
+    const after = dragged.find((f) => f.namespace === "external")!;
+    expect(after.y).toBeGreaterThan(before.y);
+    expect(after.height).toBe(before.height);
+  });
+});
+
+describe("layoutGraph namespace clustering", () => {
+  const twoNamespaces: CatalogGraph = {
+    nodes: [
+      ...GRAPH.nodes,
+      { id: "system:external/acq", kind: "system", namespace: "external", name: "acq", title: null, fileId: 9, status: "STORED" },
+      { id: "api:external/acq-rest", kind: "api", namespace: "external", name: "acq-rest", title: null, fileId: 10, status: "STORED" },
+    ],
+    edges: [
+      ...GRAPH.edges,
+      { sourceId: "api:external/acq-rest", targetId: "system:external/acq", field: "spec.system" },
+      { sourceId: "component:default/a", targetId: "api:external/acq-rest", field: "spec.consumesApis" },
+    ],
+  };
+
+  test("nodes of one namespace are clumped, so the frames do not overlap", () => {
+    const { nodes } = layoutGraph(twoNamespaces);
+    const frames = namespaceFrames(nodes);
+    expect(frames).toHaveLength(2);
+    const [a, b] = frames;
+    // Separated on at least one axis — that is what makes a frame readable.
+    const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+    expect(apart).toBe(true);
+  });
+
+  test("a single-namespace graph is laid out exactly as before — no clustering cost", () => {
+    const { nodes } = layoutGraph(GRAPH);
+    expect(nodes).toHaveLength(4);
+    expect(namespaceFrames(nodes)).toEqual([]);
   });
 });

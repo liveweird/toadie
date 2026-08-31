@@ -48,6 +48,7 @@ vi.mock("@xyflow/react", async () => {
       onNodeDragStart,
       onNodeDragStop,
       onNodeClick,
+      children,
     }: {
       nodes: LaidOutNode[];
       nodesDraggable?: boolean;
@@ -55,8 +56,11 @@ vi.mock("@xyflow/react", async () => {
       onNodeDragStart?: () => void;
       onNodeDragStop?: () => void;
       onNodeClick?: (event: unknown, node: LaidOutNode) => void;
+      children?: React.ReactNode;
     }) => (
       <div data-testid="flow" data-draggable={String(nodesDraggable ?? true)}>
+        {/* The canvas overlays (namespace frames, Background, Controls) are children. */}
+        {children}
         {nodes.map((n) => (
           <div key={n.id}>
             <button type="button" onClick={(e) => onNodeClick?.(e, n)}>
@@ -105,6 +109,9 @@ vi.mock("@xyflow/react", async () => {
     Controls: () => null,
     Handle: () => null,
     Position: { Left: "left", Right: "right" },
+    // The namespace frames render through the viewport portal; here it is just a passthrough
+    // so the frames show up as ordinary DOM and can be asserted on.
+    ViewportPortal: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   };
 });
 
@@ -369,5 +376,30 @@ describe("RenderGraph page", () => {
 
     expect(screen.getByTestId("pos:component:default/a").textContent).not.toBe("5,6");
     await waitFor(() => expect(layoutPuts(mockFetch)).toEqual([{ mode: "manual", positions: {} }]));
+  });
+
+  test("a graph spanning two namespaces draws a frame per namespace", async () => {
+    mockGraph(mockFetch, {
+      nodes: [
+        ...GRAPH.nodes,
+        { id: "system:external/acq", kind: "system", namespace: "external", name: "acq", title: null, fileId: 9, status: "STORED" },
+      ],
+      edges: [...GRAPH.edges, { sourceId: "component:default/a", targetId: "system:external/acq", field: "spec.system" }],
+    });
+    renderPage();
+
+    await screen.findByText(/svc-a/);
+    expect(screen.getByText("default")).toBeInTheDocument();
+    expect(screen.getByText("external")).toBeInTheDocument();
+  });
+
+  test("a single-namespace graph draws no frame at all", async () => {
+    mockGraph(mockFetch, GRAPH);
+    renderPage();
+
+    await screen.findByText(/svc-a/);
+    // A lone box around the whole canvas says nothing, so it is not drawn — and `default`
+    // must therefore appear nowhere on the canvas.
+    expect(screen.queryByText("default")).not.toBeInTheDocument();
   });
 });

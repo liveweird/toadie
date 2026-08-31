@@ -60,6 +60,12 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
   await expect(page.locator(`.react-flow__node[data-id="component:${ns}/${a}"]`)).toContainText("service");
   // Scoped to the canvas on purpose: the namespace still appears in the filter panel's Select.
   await expect(page.locator(".react-flow__node").filter({ hasText: ns })).toHaveCount(0);
+  // Two namespaces are on screen — this run's, and `default` (the shared platform owner) —
+  // so each gets a frame behind its nodes. The frames live in React Flow's viewport portal,
+  // not among the nodes, which is why the assertion above still holds.
+  const frames = page.locator(".react-flow__viewport-portal");
+  await expect(frames.getByText(ns, { exact: true })).toBeVisible();
+  await expect(frames.getByText("default", { exact: true })).toBeVisible();
 
   // Disabling the Depends-on relation prunes the orphaned VIRTUAL ghost node; stored nodes
   // (B, the platform owner) always stay. (The Chip's checkbox input is visually hidden —
