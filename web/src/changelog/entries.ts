@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.14.2",
+    date: "2026-08-31",
+    en: `**Click a name to open the file.**
+
+- On **Files** and **Hierarchy** an entity's name now opens its editor, the way it already did on the Graph and the Errors report. The Operations menu still gets you there too.
+- It is an ordinary link, so it opens in a new tab with cmd/ctrl-click or the middle mouse button, and it is reachable from the keyboard.
+- In the tree, placeholders for entities that are only referenced — never stored — stay plain: there is nothing to open.`,
+    pl: `**Kliknij nazwę, żeby otworzyć plik.**
+
+- Na **Plikach** i w **Hierarchii** nazwa encji otwiera teraz jej edytor — tak jak już działo się to na Grafie i w raporcie Błędów. Menu Operacje nadal też tam prowadzi.
+- To zwykły odnośnik, więc otworzysz go w nowej karcie przez cmd/ctrl-kliknięcie albo środkowy przycisk myszy, i dosięgniesz go z klawiatury.
+- W drzewie zastępniki encji, które są tylko przywoływane — nigdy zapisane — pozostają zwykłym tekstem: nie ma czego otwierać.`,
+  },
+  {
     version: "1.14.1",
     date: "2026-08-31",
     en: `**In fields that hold several values, the bad entry is now marked itself.**

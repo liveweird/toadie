@@ -10,6 +10,7 @@ import {
 } from "@tabler/icons-react";
 import { deleteCatalogFile, listCatalogFiles, type CatalogFileListItem } from "../api/catalogFiles";
 import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
+import CatalogFileNameLink from "../components/CatalogFileNameLink";
 import CatalogFileOperations from "../components/CatalogFileOperations";
 import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
@@ -167,9 +168,7 @@ export default function CatalogFiles() {
             data.items.map((file) => (
               <Table.Tr key={file.id}>
                 <Table.Td>
-                  <Text size="sm" fw={500}>
-                    {file.name}
-                  </Text>
+                  <CatalogFileNameLink id={file.id} name={file.name} />
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{file.namespace}</Text>

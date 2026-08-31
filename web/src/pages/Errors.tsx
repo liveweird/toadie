@@ -1,10 +1,10 @@
 import { useTranslation } from "react-i18next";
-import { Link as RouterLink } from "react-router-dom";
-import { Alert, Anchor, Badge, Code, Group, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Code, Group, Stack, Table, Text, Title } from "@mantine/core";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { IconListCheck } from "@tabler/icons-react";
 import { getCatalogErrors } from "../api/catalogFiles";
 import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
+import CatalogFileNameLink from "../components/CatalogFileNameLink";
 import CatalogKindPills from "../components/CatalogKindPills";
 import EmptyState from "../components/EmptyState";
 import ErrorClassPills from "../components/ErrorClassPills";
@@ -15,7 +15,6 @@ import TableLoadingRow from "../components/TableLoadingRow";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { isStringArray, useStoredState } from "../hooks/useStoredState";
 import { loadErrorMessage } from "../utils/saveError";
-import { editCatalogFilePath } from "../utils/catalogFileLinks";
 import { ERROR_CLASSES, classOfStatus } from "../utils/errorClasses";
 
 /**
@@ -105,15 +104,7 @@ export default function Errors() {
             findings.map((f, index) => (
               <Table.Tr key={`${f.fileId}-${f.field}-${f.reference}-${index}`}>
                 <Table.Td>
-                  <Anchor
-                    component={RouterLink}
-                    to={editCatalogFilePath(f.fileId)}
-                    size="sm"
-                    fw={500}
-                    aria-label={t("common.action.editAria", { name: f.fileName })}
-                  >
-                    {f.fileName}
-                  </Anchor>
+                  <CatalogFileNameLink id={f.fileId} name={f.fileName} />
                 </Table.Td>
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">

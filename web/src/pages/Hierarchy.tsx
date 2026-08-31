@@ -18,6 +18,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { IconChevronDown, IconChevronRight, IconSitemap } from "@tabler/icons-react";
 import { deleteCatalogFile, getCatalogGraph, type GraphNode } from "../api/catalogFiles";
 import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
+import CatalogFileNameLink from "../components/CatalogFileNameLink";
 import CatalogFileOperations from "../components/CatalogFileOperations";
 import OverwriteWithYamlModal, { type OverwriteTarget } from "../components/OverwriteWithYamlModal";
 import CatalogKindPills from "../components/CatalogKindPills";
@@ -93,9 +94,15 @@ function TreeItem({
         <Badge variant="light" size="sm" color={virtual ? "gray" : undefined} leftSection={<KindTierDot kind={node.kind} />}>
           {node.kind}
         </Badge>
-        <Text size="sm" fw={virtual ? 400 : 500} c={virtual ? "dimmed" : undefined} fs={virtual ? "italic" : undefined}>
-          {node.name}
-        </Text>
+        {/* Placeholders have no stored entity to open — the same `fileId == null` test the
+            row's Operations menu applies — so they stay dimmed italic text. */}
+        {node.fileId != null ? (
+          <CatalogFileNameLink id={node.fileId} name={node.name} />
+        ) : (
+          <Text size="sm" fw={400} c="dimmed" fs="italic">
+            {node.name}
+          </Text>
+        )}
         {node.title ? (
           <Text size="sm" c="dimmed" truncate>
             {node.title}

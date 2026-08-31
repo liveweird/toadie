@@ -127,6 +127,21 @@ describe("Hierarchy page", () => {
     });
   });
 
+  test("a stored row's name opens its editor; a placeholder's name is not a link", async () => {
+    mockGraph(mockFetch);
+    renderPage();
+    await screen.findByText("billing");
+
+    expect(screen.getByRole("link", { name: "Edit billing" })).toHaveAttribute(
+      "href",
+      "/files/1/edit",
+    );
+    // The MISSING placeholder has no stored entity to open — same test the Operations menu
+    // applies. Its name still renders, just not as a link.
+    expect(screen.getByText("gone-sys")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Edit gone-sys" })).not.toBeInTheDocument();
+  });
+
   test("the always-visible Kind pills drive the graph query as a visible set", async () => {
     mockGraph(mockFetch);
     renderPage();

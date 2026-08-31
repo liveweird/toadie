@@ -405,6 +405,11 @@ describe("CatalogFiles page", () => {
       "href",
       "/files/new",
     );
+    // The row's NAME is the direct way in — the Operations menu's Edit item is the same route.
+    expect(screen.getByRole("link", { name: "Edit payments-svc" })).toHaveAttribute(
+      "href",
+      "/files/1/edit",
+    );
     await user.click(screen.getByRole("button", { name: "Operations for payments-svc" }));
     expect(await screen.findByRole("menuitem", { name: "Edit" })).toHaveAttribute(
       "href",
