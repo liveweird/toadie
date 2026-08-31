@@ -124,3 +124,20 @@
   text-transform: uppercase;
   color: var(--mantine-color-dimmed);
 }
+
+/* A SOFT finding on a field (the live check's verdict: unresolved reference, value outside a
+   registry). Orange, not red, and deliberately so — a finding does not block the save, it
+   only makes it ask for confirmation, which is the same orange the Save-anyway button and the
+   CREATED_WITH_FINDINGS rows already use. Red stays reserved for "you cannot save this". */
+.findingInput {
+  border-color: light-dark(var(--mantine-color-orange-6), var(--mantine-color-orange-7));
+}
+
+.findingInput:focus,
+.findingInput:focus-within {
+  border-color: light-dark(var(--mantine-color-orange-7), var(--mantine-color-orange-6));
+}
+
+.findingMessage {
+  color: light-dark(var(--mantine-color-orange-8), var(--mantine-color-orange-4));
+}

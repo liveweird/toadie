@@ -18,6 +18,9 @@ export default function CreateCatalogFile() {
   const form = useForm<CatalogFileFormValues>({
     initialValues: emptyCatalogFileForm(),
     validate: catalogFileFormValidation(t),
+    // Feedback when you LEAVE a field, not on every keystroke: a fresh form would otherwise
+    // flash red while you type the first character into each required field.
+    validateInputOnBlur: true,
   });
 
   // The strict-save → Save-anyway flow shared with the edit page.

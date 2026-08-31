@@ -230,5 +230,8 @@
     "warning": "Overwriting replaces the stored copy with the YAML above. The current content is lost.",
     "confirm": "Overwrite stored copy",
     "failed": "Overwrite failed"
+  },
+  "finding": {
+    "entry": "{{reference}}: {{message}}"
   }
 }

@@ -9,6 +9,8 @@ import YamlPreviewCard from "./YamlPreviewCard";
 import { toCatalogFileRequest, type CatalogFileFormValues } from "../utils/catalogFileForm";
 import { catalogInfoYaml } from "../utils/catalogYaml";
 import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
+import { useDocumentCheck } from "../hooks/useDocumentCheck";
+import { indexFindings } from "../utils/fieldFindings";
 import { catalogFilesPath } from "../utils/catalogFileLinks";
 
 /**
@@ -43,6 +45,10 @@ export default function CatalogFileEditor({
   // mapping deliberately keeps it blank — the server resolves authoritatively.
   const { defaultNamespace } = useNamespaceOptions();
   const requestDocument = toCatalogFileRequest(form.values, defaultNamespace);
+  // ONE live check for both consumers: the panel lists the findings, the field block puts
+  // each on the control that produced it.
+  const { findings, checked } = useDocumentCheck(requestDocument);
+  const fieldFindings = indexFindings(findings);
   return (
     <Grid>
       <Grid.Col span={{ base: 12, md: 7 }}>
@@ -51,7 +57,7 @@ export default function CatalogFileEditor({
             <Stack>
               <Title order={2}>{title}</Title>
               {actions}
-              <CatalogFileFormFields form={form} />
+              <CatalogFileFormFields form={form} findings={fieldFindings} />
               {error && (
                 <Alert color="red" variant="light">
                   {error}
@@ -72,7 +78,7 @@ export default function CatalogFileEditor({
       <Grid.Col span={{ base: 12, md: 5 }}>
         <Stack style={{ position: "sticky", top: 72 }}>
           <YamlPreviewCard yaml={catalogInfoYaml(requestDocument)} />
-          <ReferenceCheckPanel document={requestDocument} />
+          <ReferenceCheckPanel findings={findings} checked={checked} />
         </Stack>
       </Grid.Col>
     </Grid>

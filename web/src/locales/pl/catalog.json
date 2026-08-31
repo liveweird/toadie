@@ -238,5 +238,8 @@
     "warning": "Nadpisanie zastąpi zapisaną kopię powyższym YAML-em. Obecna zawartość zostanie utracona.",
     "confirm": "Nadpisz zapisaną kopię",
     "failed": "Nadpisywanie nie powiodło się"
+  },
+  "finding": {
+    "entry": "{{reference}}: {{message}}"
   }
 }

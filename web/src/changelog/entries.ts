@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.14.0",
+    date: "2026-08-31",
+    en: `**Problems now show on the field, not just in the list.**
+
+- Every finding the editor reports — a reference that resolves to nothing, a tag or label the registry doesn't allow, a type outside its dictionary — is marked **on the control that caused it**, while the Findings panel keeps the full list.
+- **Two colours, two meanings.** Red means the save is blocked (a required field left empty, a name that breaks the rules). Orange means the file still saves, after confirming — that is the same orange used elsewhere for "stored, with findings".
+- Required fields are flagged **when you leave them**, instead of staying silent until you press Save.`,
+    pl: `**Problemy widać teraz przy polu, nie tylko na liście.**
+
+- Każde ustalenie zgłaszane przez edytor — odwołanie, które donikąd nie prowadzi, tag lub etykieta niedozwolona przez rejestr, typ spoza słownika — jest oznaczone **przy kontrolce, która je wywołała**, a panel Ustaleń nadal pokazuje pełną listę.
+- **Dwa kolory, dwa znaczenia.** Czerwony oznacza, że zapis jest zablokowany (puste pole wymagane, nazwa łamiąca reguły). Pomarańczowy — że plik i tak się zapisze, po potwierdzeniu; to ten sam pomarańczowy, którego używamy dla „zapisane, z ustaleniami".
+- Pola wymagane są oznaczane **w chwili opuszczenia pola**, zamiast milczeć aż do naciśnięcia Zapisz.`,
+  },
+  {
     version: "1.13.1",
     date: "2026-08-31",
     en: `**Fix: the editor now refreshes after Overwrite or Sync.**

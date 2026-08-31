@@ -1,38 +1,31 @@
 import { Alert, Code, Paper, Stack, Text, Title } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { checkCatalogFile, type CatalogFileRequest } from "../api/catalogFiles";
+import type { DocumentCheckFinding } from "../api/catalogFiles";
 
 /**
- * The editor's live check: the current form document, debounced, against the stored files
- * AND the registries (POST /api/v1/files/check — references plus label/annotation/
- * tag/type/lifecycle findings). Every finding here makes a strict save ask for the
- * Save-anyway confirmation; errors of the check request itself render nothing.
+ * The editor's findings list — the aggregate view beside the form. Each finding also shows on
+ * the control that produced it (see `utils/fieldFindings.ts`); this panel stays because it
+ * catches what the fields cannot: findings whose field is scrolled out of view, and any
+ * `field` the client does not know how to route.
+ *
+ * A dumb renderer: the check itself runs once in the editor shell (`useDocumentCheck`) and is
+ * shared with the field block, so the two never issue separate requests.
  */
-export default function ReferenceCheckPanel({ document }: { document: CatalogFileRequest }) {
+export default function ReferenceCheckPanel({
+  findings,
+  checked,
+}: {
+  findings: DocumentCheckFinding[];
+  /** True once a check has answered — the all-clear line must not flash before the first. */
+  checked: boolean;
+}) {
   const { t } = useTranslation();
-  const json = JSON.stringify(document);
-  const [debounced] = useDebouncedValue(json, 500);
-
-  const { data } = useQuery({
-    // Under the "catalogFiles" prefix so catalog mutations refresh a live check; keyed on
-    // the debounced document with gcTime 0 — superseded documents' entries are dropped as
-    // soon as the key moves on, so typing never accumulates cache entries.
-    queryKey: ["catalogFiles", "check", debounced],
-    queryFn: () => checkCatalogFile(JSON.parse(debounced) as CatalogFileRequest),
-    placeholderData: keepPreviousData,
-    gcTime: 0,
-  });
-
-  const findings = data?.findings ?? [];
-
   return (
     <Paper withBorder shadow="sm" p="lg" radius="md">
       <Stack gap="sm">
         <Title order={3}>{t("errors.panel.title")}</Title>
         {findings.length > 0 ? (
-          <Alert color="red" variant="light" title={t("errors.panel.errorsTitle")}>
+          <Alert color="orange" variant="light" title={t("errors.panel.errorsTitle")}>
             <Stack gap={4}>
               {findings.map((f, index) => (
                 <Text size="sm" key={`${f.field}-${f.reference}-${index}`}>
@@ -41,7 +34,7 @@ export default function ReferenceCheckPanel({ document }: { document: CatalogFil
               ))}
             </Stack>
           </Alert>
-        ) : data ? (
+        ) : checked ? (
           <Text size="sm" c="dimmed">
             {t("errors.panel.allClear")}
           </Text>

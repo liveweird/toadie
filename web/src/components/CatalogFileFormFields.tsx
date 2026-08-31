@@ -12,6 +12,7 @@ import {
   Textarea,
   TextInput,
 } from "@mantine/core";
+import { createContext, useContext } from "react";
 import { type UseFormReturnType } from "@mantine/form";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
@@ -24,6 +25,8 @@ import { useLifecycleOptions } from "../hooks/useLifecycleOptions";
 import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
 import { useTagCategories } from "../hooks/useTagCategories";
 import { charCountDescription } from "../utils/charCount";
+import { NO_FINDINGS, type FieldFindings } from "../utils/fieldFindings";
+import { findingProps } from "../utils/findingProps";
 import { refSuggestions, type RefField } from "../utils/refSuggestions";
 import {
   ENTITY_KINDS,
@@ -42,6 +45,13 @@ import {
 } from "../utils/catalogFileForm";
 
 const BELOW_INPUT = ["label", "input", "description", "error"] as const;
+
+/**
+ * The live check's findings, by control. Context rather than a prop through all eleven
+ * fieldsets: every one of them would otherwise grow a parameter it only forwards.
+ */
+const FindingsContext = createContext<FieldFindings>(NO_FINDINGS);
+const useFindings = () => useContext(FindingsContext);
 
 type CatalogForm = UseFormReturnType<CatalogFileFormValues>;
 type Suggest = (field: RefField) => string[];
@@ -68,9 +78,11 @@ function NamespaceSelect({ form }: { form: CatalogForm }) {
       searchable
       clearable
       description={hint ?? t("catalog.hint.namespace", { default: defaultNamespace ?? "default" })}
+      // Spread first for onFocus/onBlur (the blur is what validates); value/onChange/error
+      // are overridden after, since a Select's value is nullable where the form's is "".
+      {...form.getInputProps("namespace")}
       value={form.values.namespace.trim().toLowerCase() || null}
       onChange={(value) => form.setFieldValue("namespace", value ?? "")}
-      error={form.getInputProps("namespace").error}
     />
   );
 }
@@ -122,6 +134,7 @@ function MetadataFieldset({ form }: { form: CatalogForm }) {
  */
 function TagsMultiSelect({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
+  const findings = useFindings();
   const { categories, loading, error } = useTagCategories();
   const kind = form.values.kind;
   const allowed = categories.filter((category) => category.kinds.includes(kind));
@@ -141,6 +154,10 @@ function TagsMultiSelect({ form }: { form: CatalogForm }) {
       searchable
       description={hint}
       {...form.getInputProps("tags")}
+      {...findingProps(findings.forPath("tags"), t, {
+        hardError: form.getInputProps("tags").error,
+        namedValues: true,
+      })}
     />
   );
 }
@@ -156,6 +173,7 @@ function TagsMultiSelect({ form }: { form: CatalogForm }) {
  */
 function TypeSelect({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
+  const findings = useFindings();
   const { dictionaries, loading, error } = useEntityTypes();
   const kind = form.values.kind;
   const optional = !fieldRequired(kind, "type");
@@ -174,9 +192,12 @@ function TypeSelect({ form }: { form: CatalogForm }) {
       searchable
       clearable={optional}
       description={hint}
+      {...form.getInputProps("type")}
       value={current || null}
       onChange={(value) => form.setFieldValue("type", value ?? "")}
-      error={form.getInputProps("type").error}
+      {...findingProps(findings.forPath("type"), t, {
+        hardError: form.getInputProps("type").error,
+      })}
     />
   );
 }
@@ -190,6 +211,7 @@ function TypeSelect({ form }: { form: CatalogForm }) {
  */
 function LifecycleSelect({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
+  const findings = useFindings();
   const current = form.values.lifecycle.trim();
   const { options, loading, error } = useLifecycleOptions(current);
   let hint: string | undefined;
@@ -203,17 +225,24 @@ function LifecycleSelect({ form }: { form: CatalogForm }) {
       data={options}
       searchable
       description={hint}
+      {...form.getInputProps("lifecycle")}
       value={current || null}
       onChange={(value) => form.setFieldValue("lifecycle", value ?? "")}
-      error={form.getInputProps("lifecycle").error}
+      {...findingProps(findings.forPath("lifecycle"), t, {
+        hardError: form.getInputProps("lifecycle").error,
+      })}
     />
   );
 }
 
 function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }) {
   const { t } = useTranslation();
+  const findings = useFindings();
   const kind = form.values.kind;
   const has = (field: SpecFieldName) => fieldApplies(kind, field);
+  // Single-value refs: the offending value is already in the input, so the message alone.
+  const refFinding = (field: string) =>
+    findingProps(findings.forPath(field), t, { hardError: form.getInputProps(field).error });
   return (
     <Fieldset legend={t("catalog.section.spec")}>
       <Stack gap="sm">
@@ -231,6 +260,7 @@ function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }
             description={t("catalog.hint.owner")}
             data={suggest("owner")}
             {...form.getInputProps("owner")}
+            {...refFinding("owner")}
           />
         )}
         {(has("system") || has("subcomponentOf") || has("domain") || has("subdomainOf") || has("parent")) && (
@@ -241,6 +271,7 @@ function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }
                 description={t("catalog.hint.system")}
                 data={suggest("system")}
                 {...form.getInputProps("system")}
+                {...refFinding("system")}
               />
             )}
             {has("subcomponentOf") && (
@@ -249,6 +280,7 @@ function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }
                 description={t("catalog.hint.subcomponentOf")}
                 data={suggest("subcomponentOf")}
                 {...form.getInputProps("subcomponentOf")}
+                {...refFinding("subcomponentOf")}
               />
             )}
             {has("domain") && (
@@ -257,6 +289,7 @@ function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }
                 description={t("catalog.hint.domain")}
                 data={suggest("domain")}
                 {...form.getInputProps("domain")}
+                {...refFinding("domain")}
               />
             )}
             {has("subdomainOf") && (
@@ -265,6 +298,7 @@ function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }
                 description={t("catalog.hint.subdomainOf")}
                 data={suggest("subdomainOf")}
                 {...form.getInputProps("subdomainOf")}
+                {...refFinding("subdomainOf")}
               />
             )}
             {has("parent") && (
@@ -273,6 +307,7 @@ function SpecFieldset({ form, suggest }: { form: CatalogForm; suggest: Suggest }
                 description={t("catalog.hint.parent")}
                 data={suggest("parent")}
                 {...form.getInputProps("parent")}
+                {...refFinding("parent")}
               />
             )}
           </Group>
@@ -323,6 +358,7 @@ function RelationsFieldset({
   suggest: Suggest;
 }) {
   const { t } = useTranslation();
+  const findings = useFindings();
   return (
     <Fieldset legend={t("catalog.section.relations")}>
       <Stack gap="sm">
@@ -337,6 +373,10 @@ function RelationsFieldset({
             splitChars={[",", " "]}
             data={suggest(field)}
             {...form.getInputProps(field)}
+            {...findingProps(findings.forPath(field), t, {
+              hardError: form.getInputProps(field).error,
+              namedValues: true,
+            })}
           />
         ))}
       </Stack>
@@ -407,6 +447,12 @@ function LinksFieldset({ form }: { form: CatalogForm }) {
  */
 function LabelsFieldset({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
+  const findings = useFindings();
+  // A label finding names the row by key, and carries `key=value` when the VALUE is the
+  // problem — so the two controls get different findings from the same wire field.
+  const keyFinding = (key: string) => (findings.forLabelKey(key) ? [findings.forLabelKey(key)!] : []);
+  const valueFinding = (key: string) =>
+    findings.forLabelValue(key) ? [findings.forLabelValue(key)!] : [];
   const { labels, loading, error } = useLabels();
   const kind = form.values.kind;
   const allowed = labels.filter((label) => label.kinds.includes(kind));
@@ -440,6 +486,9 @@ function LabelsFieldset({ form }: { form: CatalogForm }) {
                   form.setFieldValue(`labels.${index}.value`, "");
                 }}
                 error={form.getInputProps(`labels.${index}.key`).error}
+                {...findingProps(keyFinding(row.key), t, {
+                  hardError: form.getInputProps(`labels.${index}.key`).error,
+                })}
               />
               <Select
                 style={{ flex: 1 }}
@@ -450,6 +499,9 @@ function LabelsFieldset({ form }: { form: CatalogForm }) {
                 value={row.value || null}
                 onChange={(value) => form.setFieldValue(`labels.${index}.value`, value ?? "")}
                 error={form.getInputProps(`labels.${index}.value`).error}
+                {...findingProps(valueFinding(row.key), t, {
+                  hardError: form.getInputProps(`labels.${index}.value`).error,
+                })}
               />
               <ActionIcon
                 variant="subtle"
@@ -501,6 +553,9 @@ function LabelsFieldset({ form }: { form: CatalogForm }) {
  */
 function AnnotationsFieldset({ form }: { form: CatalogForm }) {
   const { t } = useTranslation();
+  const findings = useFindings();
+  const keyFinding = (key: string) =>
+    findings.forAnnotationKey(key) ? [findings.forAnnotationKey(key)!] : [];
   const { annotationKeys, loading, error } = useAnnotationKeys();
   const kind = form.values.kind;
   const allowed = annotationKeys.filter((row) => row.kinds.includes(kind));
@@ -526,6 +581,9 @@ function AnnotationsFieldset({ form }: { form: CatalogForm }) {
               value={row.key || null}
               onChange={(value) => form.setFieldValue(`annotations.${index}.key`, value ?? "")}
               error={form.getInputProps(`annotations.${index}.key`).error}
+              {...findingProps(keyFinding(row.key), t, {
+                hardError: form.getInputProps(`annotations.${index}.key`).error,
+              })}
             />
             <TextInput
               style={{ flex: 1 }}
@@ -601,7 +659,14 @@ function SourceFieldset({ form }: { form: CatalogForm }) {
  * render — hidden fields keep their values (a kind switch back restores them) and the request
  * mapper strips whatever doesn't belong to the submitted kind.
  */
-export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
+export default function CatalogFileFormFields({
+  form,
+  findings = NO_FINDINGS,
+}: {
+  form: CatalogForm;
+  /** Routed to the individual controls; the editor shell runs the one check. */
+  findings?: FieldFindings;
+}) {
   const { t } = useTranslation();
   const kind = form.values.kind;
   const has = (field: SpecFieldName) => fieldApplies(kind, field);
@@ -620,6 +685,7 @@ export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
   const relationFields = RELATION_FIELDS.filter(has);
 
   return (
+    <FindingsContext.Provider value={findings}>
     <Stack gap="md">
       <Select
         label={t("catalog.field.kind")}
@@ -643,5 +709,6 @@ export default function CatalogFileFormFields({ form }: { form: CatalogForm }) {
       <AnnotationsFieldset form={form} />
       <SourceFieldset form={form} />
     </Stack>
+    </FindingsContext.Provider>
   );
 }

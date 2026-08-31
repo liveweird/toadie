@@ -509,6 +509,71 @@ describe("CreateCatalogFile page", () => {
     expect(screen.getByText("component:team-x")).toBeInTheDocument();
   });
 
+  test("each finding also shows on the control that produced it, in the soft-finding tint", async () => {
+    // The panel keeps the aggregate; the fields carry the same verdicts so you see them where
+    // you would fix them. Findings are SOFT — orange, not the red of a blocking error.
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files/check") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            findings: [
+              { field: "spec.owner", reference: "group:default/ghost", status: "MISSING" },
+              { field: "spec.dependsOn", reference: "orders-db", status: "KIND_REQUIRED" },
+              { field: "metadata.tags", reference: "cobol", status: "TAG_NOT_ALLOWED" },
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderCreate();
+
+    // Owner is single-valued, so the message alone — the offending value is in the input.
+    const owner = await screen.findByRole("combobox", { name: /owner/i });
+    await waitFor(() =>
+      expect(owner).toHaveAccessibleDescription(/No stored entity matches this reference/),
+    );
+    // A multi-value field names WHICH entry is at fault, since nothing else identifies it.
+    expect(screen.getByText(/orders-db: .*need an explicit kind/)).toBeInTheDocument();
+    expect(screen.getByText(/cobol: .*do not allow this tag/)).toBeInTheDocument();
+  });
+
+  test("a hard validation error outranks a finding on the same field", async () => {
+    // "You cannot save this" beats "this saves with findings" — red wins over orange.
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files/check") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            findings: [{ field: "spec.owner", reference: "", status: "MISSING" }],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderCreate();
+
+    const owner = await screen.findByRole("combobox", { name: /owner/i });
+    await user.click(owner);
+    await user.tab();
+
+    await waitFor(() => expect(owner).toHaveAccessibleDescription(/Required/));
+    expect(owner).not.toHaveAccessibleDescription(/No stored entity matches/);
+  });
+
+  test("leaving a required field empty flags it before any submit", async () => {
+    mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(404, {})));
+    const user = userEvent.setup();
+    renderCreate();
+
+    const name = await screen.findByLabelText(/^name( \*)?$/i);
+    await user.click(name);
+    await user.tab();
+
+    await waitFor(() => expect(name).toHaveAccessibleDescription(/1–63 alphanumeric/));
+    expect(findSaveCall(mockFetch)).toBeUndefined();
+  });
+
   test("the check panel shows the all-clear line when everything passes", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files/check") {
