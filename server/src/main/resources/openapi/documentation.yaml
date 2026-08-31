@@ -972,6 +972,47 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/files/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [catalog-files]
+      operationId: listCatalogFileEvents
+      summary: List a catalog file's change history
+      description: |
+        The file's immutable audit trail — one entry per creation (the import loop included),
+        edit, repo→DB sync, and deletion — newest first (`timestamp` descending, `id`
+        descending as the same-instant tiebreaker).
+
+        Each entry is STRUCTURAL: an event `type` plus a `params` map, with the acting user
+        resolved to `userName`. No rendered string is stored — clients localize the
+        description. An `UPDATED`/`SYNCED` entry carries the FIELD-LEVEL diff in its params
+        (see the schema). Any authenticated user may read it: whoever may read the file may
+        read its history, and in this shared workspace that is everyone. A missing or deleted
+        file is a `404`.
+
+        Events are server-generated as a side-effect of the mutations; there is no create,
+        update or delete operation. A save that changed nothing records nothing; a sync is
+        recorded even when the repo copy matched.
+
+        Sortable fields: `timestamp`, `id`. Unlike the other lists this one defaults to
+        `-timestamp,-id`.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: The file's events, newest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogFileEventPage'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/files/{id}/sync:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -2570,6 +2611,62 @@ components:
           format: int64
           minimum: 0
           description: Row count after filters, before pagination.
+
+    CatalogFileEventResponse:
+      type: object
+      required: [id, catalogFileId, userId, userName, timestamp, type, params]
+      properties:
+        id: { type: integer, format: int32, minimum: 0 }
+        catalogFileId: { type: integer, format: int32, minimum: 0 }
+        userId: { type: integer, format: int32, minimum: 0 }
+        userName:
+          type: string
+          description: Display name of the user who made the change. Server-resolved, read-only.
+        timestamp:
+          type: integer
+          format: int64
+          description: Epoch milliseconds when the event was recorded. Server-managed.
+        type:
+          type: string
+          enum: [CREATED, UPDATED, SYNCED, DELETED]
+          description: >-
+            Structured event kind; the client renders it in the viewer's language. DELETED
+            entries exist for the record but are unreachable through the API — the file they
+            belong to is gone from every read.
+        params:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            Interpolation params for the localized rendering. `CREATED` carries `kind`, plus
+            `origin: import` when the row came from the import loop. `UPDATED` and `SYNCED`
+            carry the field-level diff: `changed` comma-joins the changed field paths in
+            document order (`metadata.name`, `spec.owner`, `metadata.labels.tier`, … plus the
+            `sourceUrl` pseudo-field for the envelope's source reference), and each path may
+            be followed by `<path>.from`/`<path>.to` (scalars) or `<path>.added`/
+            `<path>.removed` (lists of scalars, comma-joined).
+
+            A path listed in `changed` with NO companion keys is recorded by name only. That
+            happens for the free-text fields (`metadata.description`, `spec.definition` —
+            their content never rides an event), for structured lists (`metadata.links`), and
+            for any value longer than 200 characters, which degrades to name-only rather than
+            being truncated into a misleading diff. `DELETED` carries no params; `SYNCED`
+            carries none when the repo copy matched.
+
+    CatalogFileEventPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogFileEventResponse'
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Event count before pagination.
 
     DictionaryEntry:
       type: object

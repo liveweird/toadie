@@ -154,6 +154,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   Save-anyway modal (cancel and confirm paths); the waived save's finding shows on the
   Errors page and is repaired in the editor; deleting a referenced target creates a finding
   (hidden/restored by the References error-type pill), which recreating the target clears.
+- [`history.spec.ts`](scenarios/history.md) — a file's change history on the editor: the
+  creation entry, then an edit whose sentence names both changed fields while only the
+  scalar gets a before/after line (free text is recorded as the bare fact).
 - [`i18n.spec.ts`](scenarios/i18n.md) — the synced per-user language: a throwaway user
   switches to Polish, the choice survives a reload AND a wiped-device re-login (served from
   the stored value), and the admin's English flips it back; seeded accounts stay English.

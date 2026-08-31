@@ -24,6 +24,8 @@
 - `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail).
 
+**Two trails, on purpose.** The `audit(...)` events above are the SECURITY log: structured, field-poor, shipped to a collector/SIEM, covering denials and every mutation. The catalog file's **change history** (`catalog_file_events`, V23 — see `.claude/docs/persistence.md`) is the PRODUCT feature: user-facing, per document, field-level, read back through `GET /api/v1/files/{id}/events` and rendered in the viewer's language. They are written side by side in the same route handler and neither replaces the other — a catalog mutation extends BOTH, and a new history-bearing feature should say so here.
+
 Field-naming convention: the acting caller is `byUserId` everywhere except the auth lifecycle events (`login.*`, `logout`, `refresh.rejected`), where `userId` identifies the account being authenticated.
 
 Never log secrets (passwords, tokens); emails/ids are fine. When adding a security-relevant mutation or denial path, emit an `audit(...)` event alongside it and extend this list in the same change (the one sanctioned exception: the graph-layout PUT — pure per-user view state written on every drag stop, documented in `.claude/docs/authorization.md`) — in Lettuce this catalog grows to every user/team/content mutation, and the convention transfers wholesale. Tested in `AuditTest` via a Logback `ListAppender` on the audit logger (the shared `LogCapture` helper in `TestEnvironment.kt`).

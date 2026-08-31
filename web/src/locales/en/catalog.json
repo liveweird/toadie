@@ -233,5 +233,28 @@
   },
   "finding": {
     "entry": "{{reference}}: {{message}}"
+  },
+  "history": {
+    "title": "History",
+    "empty": "No history yet.",
+    "loadFailed": "Failed to load the history",
+    "labelField": "Label “{{key}}”",
+    "annotationField": "Annotation “{{key}}”"
+  },
+  "event": {
+    "created": "File created.",
+    "created_import": "File created by import.",
+    "updated": "File updated: {{fields}}.",
+    "synced": "Synced from the repo — no changes.",
+    "synced_changes": "Synced from the repo: {{fields}}.",
+    "deleted": "File deleted."
+  },
+  "change": {
+    "fromTo": "{{label}}: {{from}} → {{to}}",
+    "set": "{{label}}: set to {{to}}",
+    "cleared": "{{label}}: cleared",
+    "added": "{{label}}: +{{added}}",
+    "removed": "{{label}}: −{{removed}}",
+    "addedRemoved": "{{label}}: +{{added}} −{{removed}}"
   }
 }

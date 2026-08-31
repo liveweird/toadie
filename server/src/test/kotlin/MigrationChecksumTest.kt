@@ -42,6 +42,7 @@ class MigrationChecksumTest {
         "V20__create_lenses.sql" to -67040045,
         "V21__catalog_file_source.sql" to -1306038796,
         "V22__seed_registries.sql" to 803114340,
+        "V23__create_catalog_file_events.sql" to -1889608890,
     )
 
     @Test

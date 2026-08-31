@@ -241,5 +241,28 @@
   },
   "finding": {
     "entry": "{{reference}}: {{message}}"
+  },
+  "history": {
+    "title": "Historia",
+    "empty": "Brak historii.",
+    "loadFailed": "Nie udało się wczytać historii",
+    "labelField": "Etykieta „{{key}}”",
+    "annotationField": "Adnotacja „{{key}}”"
+  },
+  "event": {
+    "created": "Utworzono plik.",
+    "created_import": "Utworzono plik przez import.",
+    "updated": "Zaktualizowano plik: {{fields}}.",
+    "synced": "Zsynchronizowano z repozytorium — bez zmian.",
+    "synced_changes": "Zsynchronizowano z repozytorium: {{fields}}.",
+    "deleted": "Usunięto plik."
+  },
+  "change": {
+    "fromTo": "{{label}}: {{from}} → {{to}}",
+    "set": "{{label}}: ustawiono na {{to}}",
+    "cleared": "{{label}}: wyczyszczono",
+    "added": "{{label}}: +{{added}}",
+    "removed": "{{label}}: −{{removed}}",
+    "addedRemoved": "{{label}}: +{{added}} −{{removed}}"
   }
 }

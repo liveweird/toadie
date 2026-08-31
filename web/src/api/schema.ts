@@ -679,6 +679,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/files/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List a catalog file's change history
+         * @description The file's immutable audit trail — one entry per creation (the import loop included),
+         *     edit, repo→DB sync, and deletion — newest first (`timestamp` descending, `id`
+         *     descending as the same-instant tiebreaker).
+         *
+         *     Each entry is STRUCTURAL: an event `type` plus a `params` map, with the acting user
+         *     resolved to `userName`. No rendered string is stored — clients localize the
+         *     description. An `UPDATED`/`SYNCED` entry carries the FIELD-LEVEL diff in its params
+         *     (see the schema). Any authenticated user may read it: whoever may read the file may
+         *     read its history, and in this shared workspace that is everyone. A missing or deleted
+         *     file is a `404`.
+         *
+         *     Events are server-generated as a side-effect of the mutations; there is no create,
+         *     update or delete operation. A save that changed nothing records nothing; a sync is
+         *     recorded even when the repo copy matched.
+         *
+         *     Sortable fields: `timestamp`, `id`. Unlike the other lists this one defaults to
+         *     `-timestamp,-id`.
+         */
+        get: operations["listCatalogFileEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/files/{id}/sync": {
         parameters: {
             query?: never;
@@ -1502,6 +1540,55 @@ export interface components {
             /**
              * Format: int64
              * @description Row count after filters, before pagination.
+             */
+            total: number;
+        };
+        CatalogFileEventResponse: {
+            /** Format: int32 */
+            id: number;
+            /** Format: int32 */
+            catalogFileId: number;
+            /** Format: int32 */
+            userId: number;
+            /** @description Display name of the user who made the change. Server-resolved, read-only. */
+            userName: string;
+            /**
+             * Format: int64
+             * @description Epoch milliseconds when the event was recorded. Server-managed.
+             */
+            timestamp: number;
+            /**
+             * @description Structured event kind; the client renders it in the viewer's language. DELETED entries exist for the record but are unreachable through the API — the file they belong to is gone from every read.
+             * @enum {string}
+             */
+            type: "CREATED" | "UPDATED" | "SYNCED" | "DELETED";
+            /**
+             * @description Interpolation params for the localized rendering. `CREATED` carries `kind`, plus
+             *     `origin: import` when the row came from the import loop. `UPDATED` and `SYNCED`
+             *     carry the field-level diff: `changed` comma-joins the changed field paths in
+             *     document order (`metadata.name`, `spec.owner`, `metadata.labels.tier`, … plus the
+             *     `sourceUrl` pseudo-field for the envelope's source reference), and each path may
+             *     be followed by `<path>.from`/`<path>.to` (scalars) or `<path>.added`/
+             *     `<path>.removed` (lists of scalars, comma-joined).
+             *
+             *     A path listed in `changed` with NO companion keys is recorded by name only. That
+             *     happens for the free-text fields (`metadata.description`, `spec.definition` —
+             *     their content never rides an event), for structured lists (`metadata.links`), and
+             *     for any value longer than 200 characters, which degrades to name-only rather than
+             *     being truncated into a misleading diff. `DELETED` carries no params; `SYNCED`
+             *     carries none when the repo copy matched.
+             */
+            params: {
+                [key: string]: string;
+            };
+        };
+        CatalogFileEventPage: {
+            items: components["schemas"]["CatalogFileEventResponse"][];
+            page: number;
+            pageSize: number;
+            /**
+             * Format: int64
+             * @description Event count before pagination.
              */
             total: number;
         };
@@ -2745,6 +2832,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listCatalogFileEvents: {
+        parameters: {
+            query?: {
+                /** @description 1-based page index. Defaults to 1. */
+                page?: components["parameters"]["Page"];
+                /** @description Rows per page. Defaults to 20, maximum 100. */
+                pageSize?: components["parameters"]["PageSize"];
+                /**
+                 * @description Sort spec. Format: `field` (ascending) or `-field` (descending). Multiple fields are
+                 *     comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
+                 *     sortable-field whitelist; unknown fields are rejected with `400`. `id` ascending is
+                 *     always appended as a deterministic tiebreaker.
+                 */
+                sort?: components["parameters"]["Sort"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file's events, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogFileEventPage"];
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

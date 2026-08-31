@@ -220,3 +220,19 @@ export async function syncCatalogFile(id: number, document: CatalogFileRequest):
     body: JSON.stringify({ document }),
   });
 }
+
+export type CatalogFileEventPage =
+  paths["/api/v1/files/{id}/events"]["get"]["responses"]["200"]["content"]["application/json"];
+export type CatalogFileEvent = CatalogFileEventPage["items"][number];
+
+/**
+ * The file's change history, newest first (server-ordered — never re-sort it client-side).
+ * Structural rows: the SPA renders `type` + `params` in the viewer's language.
+ */
+export async function listCatalogFileEvents(
+  id: number,
+  page: number,
+  pageSize: number,
+): Promise<CatalogFileEventPage> {
+  return jsonRequest<CatalogFileEventPage>(`/api/v1/files/${id}/events?${buildQuery({ page, pageSize })}`);
+}

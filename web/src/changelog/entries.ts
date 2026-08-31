@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.15.0",
+    date: "2026-09-01",
+    en: `**Every catalog file now keeps a history of its own changes.**
+
+- Open a file's editor and you will find a **History** section under the form: who changed what, and when — one entry per creation, edit, repo sync and deletion, newest first.
+- The history is **field by field**. An entry names the fields the save touched, and each one that has values to show gets its own line: an owner reads \`group:default/platform -> group:default/payments\`, tags read \`+billing -legacy\`. Labels and annotations name the exact entry that moved.
+- Long free text — a description or an API definition — is recorded as the bare fact that it changed, never as its content, so the trail stays readable and small.
+- A save that changed nothing records nothing. A sync is recorded even when the repo copy turned out to match, because pulling it is itself an event worth seeing.`,
+    pl: `**Każdy plik katalogu ma teraz własną historię zmian.**
+
+- Po otwarciu edytora pliku pod formularzem znajdziesz sekcję **Historia**: kto co zmienił i kiedy — po jednym wpisie na utworzenie, edycję, synchronizację z repozytorium i usunięcie, od najnowszych.
+- Historia jest **pole po polu**. Wpis wymienia pola, których dotyczył zapis, a każde, które ma co pokazać, dostaje własną linię: właściciel to \`group:default/platform -> group:default/payments\`, tagi to \`+billing -legacy\`. Etykiety i adnotacje wskazują dokładnie ten wpis, który się zmienił.
+- Długi tekst — opis albo definicja API — jest zapisywany wyłącznie jako sam fakt zmiany, nigdy jako treść, więc historia zostaje czytelna i lekka.
+- Zapis, który niczego nie zmienił, nie zostawia wpisu. Synchronizacja zostawia go zawsze, nawet gdy kopia z repozytorium okazała się identyczna — samo jej pobranie warto widzieć.`,
+  },
+  {
     version: "1.14.3",
     date: "2026-09-01",
     en: `**A consistency pass across the whole app.**

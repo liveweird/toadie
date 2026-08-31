@@ -269,6 +269,16 @@ object TestCatalogFiles {
             }
         }
     }
+
+    /**
+     * The stored `params` JSON of one file's history events, read straight from the column —
+     * the params-stay-content-free invariant can only be pinned below the API (which decodes
+     * them into a map).
+     */
+    suspend fun rawEventParams(fileId: UInt): List<String> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.catalog.CatalogFileEventService.CatalogFileEvents
+        t.selectAll().where { t.catalogFileId eq fileId }.map { it[t.params] }.toList()
+    }
 }
 
 /**

@@ -76,8 +76,17 @@ data class CatalogFileSyncState(
 /** A successful create plus the soft findings the save waived (empty on a strict save). */
 data class CatalogFileSaveResult(val id: UInt, val waived: List<SoftFinding>)
 
-/** A successful update (rows=0 → the route's 404) plus the waived soft findings. */
-data class CatalogFileUpdateResult(val rows: Int, val waived: List<SoftFinding>)
+/**
+ * A successful update (rows=0 → the route's 404) plus the waived soft findings and the
+ * field-level [changes] the write made. The diff is computed here because this is the only
+ * place holding both sides in one transaction; the ROUTE turns it into the history event (see
+ * the consistency model in `.claude/docs/persistence.md`).
+ */
+data class CatalogFileUpdateResult(
+    val rows: Int,
+    val waived: List<SoftFinding>,
+    val changes: List<FieldChange> = emptyList(),
+)
 
 private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "id" to CatalogFileService.CatalogFiles.id,
@@ -357,6 +366,14 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                 ?: return@suspendTransaction CatalogFileUpdateResult(rows = 0, waived = findings)
             val contentChanged = current[CatalogFiles.content] != encoded
             val sourceChanged = current[CatalogFiles.sourceUrl] != source
+            // The history's field-level diff — the stored JSON is only decoded when it actually
+            // differs, so an unchanged save pays nothing.
+            val changes = buildList {
+                if (contentChanged) {
+                    addAll(documentChanges(json.decodeFromString(current[CatalogFiles.content]), stored))
+                }
+                sourceUrlChange(current[CatalogFiles.sourceUrl], source)?.let { add(it) }
+            }
             val rows = CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
                 it[kind] = stored.kind
                 it[name] = stored.metadata.name
@@ -369,7 +386,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                     it[syncedContent] = null
                 }
             }
-            CatalogFileUpdateResult(rows = rows, waived = findings)
+            CatalogFileUpdateResult(rows = rows, waived = findings, changes = changes)
         }
 
     /**
@@ -385,7 +402,9 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
             // The cheap row checks come FIRST: a 404/400 must not pay for the workspace +
             // registry snapshot that softFindings loads.
-            val current = CatalogFiles.select(CatalogFiles.sourceUrl)
+            // `content` rides along for the history's field-level diff (the sync overwrites the
+            // document wholesale, so what it CHANGED is the interesting part).
+            val current = CatalogFiles.select(CatalogFiles.sourceUrl, CatalogFiles.content)
                 .where { (CatalogFiles.id eq id) and active() }
                 .toList()
                 .singleOrNull()
@@ -406,7 +425,11 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                 it[lastSyncedAt] = now
                 it[syncedContent] = encoded
             }
-            CatalogFileUpdateResult(rows = rows, waived = findings)
+            CatalogFileUpdateResult(
+                rows = rows,
+                waived = findings,
+                changes = documentChanges(json.decodeFromString(current[CatalogFiles.content]), stored),
+            )
         }
 
     /** The sync state of one active file (null = no such file — the route's 404). */

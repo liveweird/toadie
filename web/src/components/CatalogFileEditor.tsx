@@ -26,6 +26,7 @@ export default function CatalogFileEditor({
   error,
   submitting,
   actions,
+  history,
 }: {
   title: string;
   submitLabel: string;
@@ -38,6 +39,13 @@ export default function CatalogFileEditor({
    * STORED file. Rendered under the title, outside the form's submit path.
    */
   actions?: ReactNode;
+  /**
+   * The file's change history — edit-only like [actions] (a document that isn't stored yet has
+   * none). Full width BELOW the two columns: it is a record of the document above, not a
+   * companion to the form, and the tab strip a two-tab section would need ("Document" +
+   * "History") would only name what is already on screen.
+   */
+  history?: ReactNode;
 }) {
   const { t } = useTranslation();
   // One mapping per render, shared by the preview and the reference panel. Blank namespace
@@ -81,6 +89,16 @@ export default function CatalogFileEditor({
           <ReferenceCheckPanel findings={findings} checked={checked} />
         </Stack>
       </Grid.Col>
+      {history && (
+        <Grid.Col span={12}>
+          <Paper withBorder shadow="sm" p="xl" radius="md">
+            <Stack>
+              <Title order={3}>{t("catalog.history.title")}</Title>
+              {history}
+            </Stack>
+          </Paper>
+        </Grid.Col>
+      )}
     </Grid>
   );
 }

@@ -3,6 +3,8 @@ package ch.nokillswit.catalog
 import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.caller
+import ch.nokillswit.infra.db.EVENT_LOG_DEFAULT_SORT
+import ch.nokillswit.infra.db.EVENT_LOG_SORT_FIELDS
 import ch.nokillswit.infra.db.orVanished
 import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalString
@@ -37,6 +39,10 @@ class CatalogFiles {
         @Serializable
         @Resource("sync")
         class Sync(val parent: Id)
+
+        @Serializable
+        @Resource("events")
+        class Events(val parent: Id)
     }
 
     // Literal segments win over {id} in Ktor's route resolution (pinned by ErrorsTest).
@@ -126,6 +132,7 @@ private fun ApplicationCall.catalogFileFilter(): CatalogFileListFilter {
 
 fun Application.configureCatalogFileRoutes() {
     val catalogFileService = attributes[CatalogFileServiceKey]
+    val eventService = attributes[CatalogFileEventServiceKey]
     // Stateless, no DB — constructed here rather than in the composition root. Lazy so the
     // test seam (CatalogUrlFetcherKey, set after module load) can supply a fixture fetcher.
     val urlFetcher by lazy { attributes.getOrNull(CatalogUrlFetcherKey) ?: CatalogUrlFetcher() }
@@ -157,6 +164,10 @@ fun Application.configureCatalogFileRoutes() {
                     sourceUrl = sourceUrl,
                 )
                 audit("catalog_file.created", *catalogAuditFields(caller.userId, saved.id, waived = saved.waived.size))
+                // The user-facing history, beside the SIEM-facing audit line above (the two
+                // trails are documented in observability.md). Appended AFTER the mutation
+                // commits, in its own transaction — the ported consistency model.
+                eventService.record(saved.id, caller.userId, catalogFileCreationEvent(file.kind))
                 // Read back for the creator/timestamp envelope — post-commit, so a miss is a 500.
                 val created = catalogFileService.read(saved.id).orVanished("CatalogFile", saved.id)
                 call.response.header(HttpHeaders.Location, call.application.href(CatalogFiles.Id(id = saved.id)))
@@ -212,15 +223,17 @@ fun Application.configureCatalogFileRoutes() {
                     sourceUrl = sanitizedSourceUrl(request.sourceUrl),
                 )
                 for (result in results.filter { it.status in storedStatuses }) {
+                    val fileId = checkNotNull(result.fileId) { "stored import row without a fileId" }
                     audit(
                         "catalog_file.created",
                         *catalogAuditFields(
                             caller.userId,
-                            checkNotNull(result.fileId) { "stored import row without a fileId" },
+                            fileId,
                             import = true,
                             withFindings = result.status == ImportResultStatus.CREATED_WITH_FINDINGS,
                         ),
                     )
+                    eventService.record(fileId, caller.userId, catalogFileCreationEvent(result.kind, viaImport = true))
                 }
                 call.respond(HttpStatusCode.OK, ImportResponse(results = results))
             }
@@ -270,6 +283,8 @@ fun Application.configureCatalogFileRoutes() {
                 )
                 result.rows.orNotFound("Catalog file")
                 audit("catalog_file.updated", *catalogAuditFields(caller.userId, route.id, waived = result.waived.size))
+                // A save that changed nothing records nothing (no empty history entries).
+                catalogFileUpdateEvent(result.changes)?.let { eventService.record(route.id, caller.userId, it) }
                 call.respond(HttpStatusCode.NoContent)
             }
             get<CatalogFiles.Id.Sync> { route ->
@@ -292,7 +307,22 @@ fun Application.configureCatalogFileRoutes() {
                     "catalog_file.synced",
                     *catalogAuditFields(caller.userId, route.parent.id, waived = result.waived.size),
                 )
+                // Recorded even when the repo copy matched: pulling it IS the act (it stamps
+                // the sync state), unlike a no-op PUT.
+                eventService.record(route.parent.id, caller.userId, catalogFileSyncEvent(result.changes))
                 call.respond(HttpStatusCode.NoContent)
+            }
+            get<CatalogFiles.Id.Events> { route ->
+                call.caller()
+                // Whoever may read the file may read its history — in this shared workspace,
+                // every authenticated user. A missing or deleted file is the plain 404.
+                catalogFileService.read(route.parent.id).orNotFound("Catalog file")
+                val paging = call.parsePaging(
+                    sortable = EVENT_LOG_SORT_FIELDS,
+                    defaultSort = EVENT_LOG_DEFAULT_SORT,
+                )
+                val result = eventService.listForFile(route.parent.id, paging)
+                call.respond(HttpStatusCode.OK, paging.toPage(result.items, result.total))
             }
             delete<CatalogFiles.Id> { route ->
                 val caller = call.caller()
@@ -302,6 +332,9 @@ fun Application.configureCatalogFileRoutes() {
                     "byUserId" to caller.userId.toLong(),
                     "catalogFileId" to route.id.toLong(),
                 )
+                // The file soft-deletes, so its events outlive it — this one lands in a history
+                // the UI can no longer reach, kept deliberately for the record.
+                eventService.record(route.id, caller.userId, catalogFileDeletionEvent())
                 call.respond(HttpStatusCode.NoContent)
             }
         }

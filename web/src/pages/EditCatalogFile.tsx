@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCatalogFile, updateCatalogFile } from "../api/catalogFiles";
 import { ApiError } from "../api/http";
 import CatalogFileEditor from "../components/CatalogFileEditor";
+import CatalogFileHistory from "../components/CatalogFileHistory";
 import OverwriteWithYamlModal from "../components/OverwriteWithYamlModal";
 import SyncCatalogFileModal from "../components/SyncCatalogFileModal";
 import SyncStateText from "../components/SyncStateText";
@@ -175,6 +176,7 @@ export default function EditCatalogFile() {
         error={save.error}
         submitting={save.submitting}
         actions={actions}
+        history={<CatalogFileHistory fileId={id} />}
       />
       <OverwriteWithYamlModal
         file={overwriteOpen ? { id, kind: file.kind, name, namespace } : null}
