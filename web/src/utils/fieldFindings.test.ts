@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { indexFindings, NO_FINDINGS } from "./fieldFindings";
+import { indexFindings, NO_FINDINGS, pillVerdict } from "./fieldFindings";
 import type { DocumentCheckFinding } from "../api/catalogFiles";
 
 // The real wire triples, taken from a deliberately broken document checked against the
@@ -81,5 +81,54 @@ describe("indexFindings", () => {
     expect(NO_FINDINGS.forLabelKey("tier")).toBeUndefined();
     expect(NO_FINDINGS.forLabelValue("tier")).toBeUndefined();
     expect(NO_FINDINGS.forAnnotationKey("k")).toBeUndefined();
+  });
+});
+
+describe("pillVerdict", () => {
+  // One multi-value field's world: "orders-db" is well-formed but flagged by the live check,
+  // "Bad Ref!" is not a legal reference at all, "component:default/api" is fine.
+  const findings: DocumentCheckFinding[] = [
+    { field: "spec.dependsOn", reference: "orders-db", status: "KIND_REQUIRED" },
+  ];
+  const invalid = (value: string) => (/^[a-z:/-]+$/.test(value) ? null : "Not a valid reference");
+  const statusMessage = (finding: DocumentCheckFinding) => `msg:${finding.status}`;
+  const verdict = (value: string, hardError?: unknown) =>
+    pillVerdict(value, { findings, hardError, invalid, statusMessage });
+
+  test("a clean entry is never marked", () => {
+    expect(verdict("component:default/api")).toBeUndefined();
+    expect(verdict("component:default/api", "Some entry is invalid")).toBeUndefined();
+  });
+
+  test("a flagged entry is marked orange, carrying the status message", () => {
+    expect(verdict("orders-db")).toEqual({ tone: "finding", title: "msg:KIND_REQUIRED" });
+  });
+
+  test("the match is exact — an entry edited since the check answered stops matching", () => {
+    // The check is debounced; between its answer and this render the pill may have changed.
+    expect(verdict("orders-db-2")).toBeUndefined();
+  });
+
+  test("no mark until validation has run — findings aside, red waits for the field's error", () => {
+    // validateInputOnBlur: a half-typed reference must not flash red while you type it.
+    expect(verdict("Bad Ref!")).toBeUndefined();
+  });
+
+  test("once the field carries a hard error, every malformed entry is marked red", () => {
+    // The rule's own message can only name the first offender; the pills name them all.
+    expect(verdict("Bad Ref!", "Entry is invalid")).toEqual({
+      tone: "invalid",
+      title: "Not a valid reference",
+    });
+    expect(verdict("Another Bad!", "Entry is invalid")).toEqual({
+      tone: "invalid",
+      title: "Not a valid reference",
+    });
+  });
+
+  test("red outranks orange on the same field — one class of problem at a time", () => {
+    // A hard error is showing, so the well-formed-but-flagged entry stays unmarked: the field
+    // is currently reporting "you cannot save this", not "this saves with findings".
+    expect(verdict("orders-db", "Entry is invalid")).toBeUndefined();
   });
 });

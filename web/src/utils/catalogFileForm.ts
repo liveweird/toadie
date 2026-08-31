@@ -228,6 +228,15 @@ export function isValidEntityRef(ref: string): boolean {
   return isValidName(name);
 }
 
+/**
+ * Grammar check of one `metadata.tags` entry. Exported because the rule below is not its only
+ * consumer: the pill marker classifies each entry individually (the rule's message can only
+ * ever name the first offender), and both must apply the SAME predicate.
+ */
+export function isValidTag(tag: string): boolean {
+  return tag.length >= 1 && tag.length <= MAX_ENTITY_PART_LENGTH && TAG_RE.test(tag);
+}
+
 function isAbsoluteUri(url: string): boolean {
   try {
     new URL(url);
@@ -286,9 +295,7 @@ export function catalogFileFormValidation(t: TFunction) {
         : t("catalog.validation.namespace");
     },
     tags: (values: string[]) => {
-      const bad = values.find(
-        (tag) => tag.length < 1 || tag.length > MAX_ENTITY_PART_LENGTH || !TAG_RE.test(tag),
-      );
+      const bad = values.find((tag) => !isValidTag(tag));
       return bad === undefined ? null : t("catalog.validation.tag", { tag: bad });
     },
     labels: {

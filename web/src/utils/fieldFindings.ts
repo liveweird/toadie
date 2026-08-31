@@ -77,3 +77,51 @@ export function indexFindings(findings: readonly DocumentCheckFinding[]): FieldF
 
 /** No findings at all — the stable empty lookup, so a findings-free render allocates nothing. */
 export const NO_FINDINGS: FieldFindings = indexFindings([]);
+
+/** How one entry of a multi-value field is marked: the tone to paint it, and why. */
+export interface PillVerdict {
+  /** `invalid` = the grammar rejects it (red, blocks the save); `finding` = soft (orange). */
+  tone: "invalid" | "finding";
+  /** The reason, shown as the pill's hover title. */
+  title: string;
+}
+
+/**
+ * The verdict on ONE entry of a multi-value field (a `TagsInput`/`MultiSelect` pill). The
+ * field-level tint says something is wrong somewhere in the box; this says WHICH entry.
+ *
+ * The precedence rule is deliberately the one `findingProps` applies at field level — a field
+ * shows one class of problem at a time and the pills follow it: while the field carries a hard
+ * error only the entries the grammar rejects are marked (red outranks orange), otherwise the
+ * flagged entries are. Red is gated on the field's `hardError` rather than on the predicate
+ * alone because validation runs on BLUR: a half-typed reference must not flash red as you type
+ * it. Once it has run, though, EVERY offending entry lights up — the rule's own message can
+ * only ever name the first.
+ *
+ * `findings` are matched by exact string: the server echoes the stored value verbatim into
+ * `reference` (`checkDocument`/`tagFindings`), so no normalization is needed. An entry edited
+ * since the debounced check answered simply stops matching until the next one lands.
+ */
+export function pillVerdict(
+  value: string,
+  {
+    findings,
+    hardError,
+    invalid,
+    statusMessage,
+  }: {
+    findings: readonly DocumentCheckFinding[];
+    hardError?: unknown;
+    /** The grammar rule for one entry: the reason it is rejected, or null when it is fine. */
+    invalid: (value: string) => string | null;
+    /** Renders a finding's status as the message the panel and the field already show. */
+    statusMessage: (finding: DocumentCheckFinding) => string;
+  },
+): PillVerdict | undefined {
+  if (hardError) {
+    const reason = invalid(value);
+    return reason === null ? undefined : { tone: "invalid", title: reason };
+  }
+  const finding = findings.find((f) => f.reference === value);
+  return finding === undefined ? undefined : { tone: "finding", title: statusMessage(finding) };
+}

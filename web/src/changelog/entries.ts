@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.14.1",
+    date: "2026-08-31",
+    en: `**In fields that hold several values, the bad entry is now marked itself.**
+
+- **Depends on**, **Provides APIs**, **Tags** and their siblings show each value as a pill. Until now a problem with one of them tinted the whole field, and you had to read the message underneath to work out which pill it meant.
+- The offending pill is now tinted too — **orange** when it is a finding (the file still saves, after confirming), **red** when it breaks the rules and blocks the save. Hover it for the reason.
+- When a field is blocked, **every** malformed entry is marked, not only the first one the message happens to name.`,
+    pl: `**W polach z wieloma wartościami błędny wpis jest teraz oznaczony sam.**
+
+- **Zależy od**, **Udostępnia API**, **Tagi** i pokrewne pokazują każdą wartość jako pigułkę. Do tej pory problem z jedną z nich barwił całe pole i trzeba było czytać komunikat pod spodem, żeby ustalić, o którą pigułkę chodzi.
+- Teraz barwiona jest też sama pigułka — **pomarańczowa**, gdy to ustalenie (plik i tak się zapisze, po potwierdzeniu), **czerwona**, gdy łamie reguły i blokuje zapis. Najedź na nią, żeby poznać powód.
+- Gdy pole jest zablokowane, oznaczone są **wszystkie** błędne wpisy, a nie tylko ten pierwszy, który akurat wymienia komunikat.`,
+  },
+  {
     version: "1.14.0",
     date: "2026-08-31",
     en: `**Problems now show on the field, not just in the list.**

@@ -16,6 +16,7 @@ import { createContext, useContext } from "react";
 import { type UseFormReturnType } from "@mantine/form";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { renderFindingPill } from "./FindingPill";
 import { renderKindOption } from "./KindTierDot";
 import { useAnnotationKeys } from "../hooks/useAnnotationKeys";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
@@ -32,6 +33,8 @@ import {
   ENTITY_KINDS,
   fieldApplies,
   fieldRequired,
+  isValidEntityRef,
+  isValidTag,
   MAX_DEFINITION_LENGTH,
   MAX_DESCRIPTION_LENGTH,
   MAX_ENTITY_PART_LENGTH,
@@ -157,6 +160,12 @@ function TagsMultiSelect({ form }: { form: CatalogForm }) {
       {...findingProps(findings.forPath("tags"), t, {
         hardError: form.getInputProps("tags").error,
         namedValues: true,
+      })}
+      renderPill={renderFindingPill({
+        findings: findings.forPath("tags"),
+        hardError: form.getInputProps("tags").error,
+        invalid: (tag) => (isValidTag(tag) ? null : t("catalog.validation.tag", { tag })),
+        t,
       })}
     />
   );
@@ -376,6 +385,13 @@ function RelationsFieldset({
             {...findingProps(findings.forPath(field), t, {
               hardError: form.getInputProps(field).error,
               namedValues: true,
+            })}
+            renderPill={renderFindingPill({
+              findings: findings.forPath(field),
+              hardError: form.getInputProps(field).error,
+              invalid: (ref) =>
+                isValidEntityRef(ref.trim()) ? null : t("catalog.validation.ref"),
+              t,
             })}
           />
         ))}

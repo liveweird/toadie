@@ -141,3 +141,22 @@
 .findingMessage {
   color: light-dark(var(--mantine-color-orange-8), var(--mantine-color-orange-4));
 }
+
+/* The same two verdicts at ENTRY granularity: one pill of a multi-value field (Depends on,
+   Tags) marked as the offender, since the box tint alone cannot say WHICH of six entries is
+   at fault. Orange = a soft finding (saves through the Save-anyway confirmation), red = the
+   grammar rejects it (blocks the save) — the field-level split, unchanged. Mantine's Pill
+   gives its remove button `color: inherit`, so tinting the text carries the × along.
+   The `-light` tokens rather than this file's usual light-dark() pair: they are already
+   scheme-aware AND they are what `variant="light"` paints, so a marked pill matches the
+   inline Alerts. Hand-picking the dark half got it wrong — a full-strength orange-9 fill on
+   the dark canvas read as a solid block, far heavier than the light scheme's soft tint. */
+.findingPill {
+  background-color: var(--mantine-color-orange-light);
+  color: var(--mantine-color-orange-light-color);
+}
+
+.invalidPill {
+  background-color: var(--mantine-color-red-light);
+  color: var(--mantine-color-red-light-color);
+}

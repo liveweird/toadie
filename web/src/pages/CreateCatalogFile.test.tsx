@@ -6,8 +6,13 @@ import { notifications } from "@mantine/notifications";
 import CreateCatalogFile from "./CreateCatalogFile";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import classes from "../theme.module.css";
 
 const TOKEN_KEY = "toadie.auth.token";
+// The pill marks, by the same class the component applies (vitest runs with css: true, so
+// these are the real hashed names — asserting the rendered colour, not a literal).
+const findingPillClass = classes.findingPill;
+const invalidPillClass = classes.invalidPill;
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
@@ -536,6 +541,43 @@ describe("CreateCatalogFile page", () => {
     // A multi-value field names WHICH entry is at fault, since nothing else identifies it.
     expect(screen.getByText(/orders-db: .*need an explicit kind/)).toBeInTheDocument();
     expect(screen.getByText(/cobol: .*do not allow this tag/)).toBeInTheDocument();
+  });
+
+  test("in a multi-value field the offending PILL is marked, not just the box", async () => {
+    // The box tint cannot say which of several entries is at fault. Orange marks the flagged
+    // one; once validation has run, red marks the malformed one and outranks orange.
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files/check") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            findings: [{ field: "spec.dependsOn", reference: "orders-db", status: "KIND_REQUIRED" }],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderCreate();
+
+    const dependsOn = await screen.findByRole("combobox", { name: /depends on/i });
+    await user.type(dependsOn, "component:default/api{Enter}orders-db{Enter}");
+    // The pill's text sits in Mantine's label span; the mark lands on the pill root above it.
+    const control = dependsOn.closest("[class*='InputWrapper-root']") as HTMLElement;
+    const pill = (text: string) => within(control).getByText(text).parentElement;
+
+    await waitFor(() => expect(pill("orders-db")).toHaveClass(findingPillClass));
+    expect(pill("orders-db")?.getAttribute("title")).toMatch(/need an explicit kind/i);
+    expect(pill("component:default/api")).not.toHaveClass(findingPillClass);
+
+    // A malformed entry (two slashes) — nothing until the field is blurred, then red.
+    await user.type(dependsOn, "a//b{Enter}");
+    expect(pill("a//b")).not.toHaveClass(invalidPillClass);
+    await user.tab();
+
+    await waitFor(() => expect(pill("a//b")).toHaveClass(invalidPillClass));
+    expect(pill("a//b")?.getAttribute("title")).toMatch(/entity reference/i);
+    // Red outranks orange: while the save is blocked, the field reports only the blocker.
+    expect(pill("orders-db")).not.toHaveClass(findingPillClass);
   });
 
   test("a hard validation error outranks a finding on the same field", async () => {
