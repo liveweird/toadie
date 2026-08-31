@@ -39,6 +39,8 @@ const STORED_FILE = {
   creatorDeleted: false,
   createdAt: 1000,
   updatedAt: 2000,
+  sourceUrl: null,
+  lastSyncedAt: 0,
 };
 
 function PathProbe() {
@@ -54,6 +56,16 @@ function renderEdit(route = "/files/7/edit") {
     </Routes>,
     { route },
   );
+}
+
+/** GET-only harness for the whole-file operations (they never submit the form). */
+function mockLoadFile(mockFetch: FetchMock, file: Record<string, unknown>) {
+  mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+    if ((init?.method ?? "GET") === "GET" && url === "/api/v1/files/7") {
+      return Promise.resolve(jsonResponse(200, file));
+    }
+    return Promise.resolve(jsonResponse(404, {}));
+  });
 }
 
 function mockGetAndPut(mockFetch: FetchMock, putStatus = 204) {
@@ -220,5 +232,64 @@ describe("EditCatalogFile page", () => {
     expect(
       mockFetch.mock.calls.some(([url]) => /\/api\/v1\/files\/\w+$/.test(url as string)),
     ).toBe(false);
+  });
+});
+
+describe("EditCatalogFile whole-file operations", () => {
+  let mockFetch: FetchMock;
+
+  beforeEach(() => {
+    mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
+    localStorage.setItem(TOKEN_KEY, "fake-token");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  test("a source-less file greys out Sync from source and reads 'No source'", async () => {
+    mockLoadFile(mockFetch, STORED_FILE);
+    renderEdit();
+
+    await screen.findByDisplayValue("stored-svc");
+    expect(screen.getByRole("button", { name: "Sync from source" })).toBeDisabled();
+    expect(screen.getByText("No source")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export as YAML" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Overwrite with YAML" })).toBeEnabled();
+  });
+
+  test("a sourced-but-unsynced file enables Sync and reads 'Never synced'", async () => {
+    mockLoadFile(mockFetch, { ...STORED_FILE, sourceUrl: "https://example.com/catalog-info.yaml" });
+    renderEdit();
+
+    await screen.findByDisplayValue("stored-svc");
+    expect(screen.getByRole("button", { name: "Sync from source" })).toBeEnabled();
+    expect(screen.getByText("Never synced")).toBeInTheDocument();
+  });
+
+  test("a synced file shows how long ago, and flags a later local edit", async () => {
+    mockLoadFile(mockFetch, {
+      ...STORED_FILE,
+      sourceUrl: "https://example.com/catalog-info.yaml",
+      lastSyncedAt: Date.now() - 3 * 24 * 60 * 60 * 1000,
+      updatedAt: Date.now(),
+    });
+    renderEdit();
+
+    await screen.findByDisplayValue("stored-svc");
+    expect(screen.getByText("3 days ago")).toBeInTheDocument();
+    expect(screen.getByText("Local changes")).toBeInTheDocument();
+  });
+
+  test("Overwrite with YAML opens the modal for this file", async () => {
+    mockLoadFile(mockFetch, STORED_FILE);
+    const user = userEvent.setup();
+    renderEdit();
+
+    await screen.findByDisplayValue("stored-svc");
+    await user.click(screen.getByRole("button", { name: "Overwrite with YAML" }));
+    expect(await screen.findByText("Overwrite with YAML — stored-svc")).toBeInTheDocument();
   });
 });

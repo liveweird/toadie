@@ -76,7 +76,7 @@
     "memberOf": "Groups this user belongs to. Backstage requires this list — empty is fine.",
     "domain": "The domain this system belongs to.",
     "subdomainOf": "The parent domain, for nested domains.",
-    "sourceUrl": "The https address of this file's copy in a GitLab/GitHub repository — enables Sync from repo."
+    "sourceUrl": "The https address of this file's copy in a GitLab/GitHub repository — enables Sync from source."
   },
   "addLink": "Add link",
   "addLabel": "Add label",
@@ -115,7 +115,8 @@
     "created": "Catalog file created",
     "updated": "Catalog file updated",
     "deleted": "Catalog file deleted",
-    "synced": "File synced from repo"
+    "synced": "File synced from repo",
+    "overwritten": "File overwritten"
   },
   "refHelp": "Each field suggests the stored entities it may point at — picking one inserts its full kind:namespace/name identity. Typed references work too (kind and namespace may usually be omitted); every reference must resolve to a stored entity.",
   "anyNamespace": "Any namespace",
@@ -125,12 +126,8 @@
   "anyOwner": "Any owner",
   "anyLabel": "Any label",
   "anyLabelValue": "Any value",
-  "export": {
-    "button": "Export YAML",
-    "failed": "Failed to export catalog files"
-  },
   "import": {
-    "linkLabel": "Import YAML",
+    "linkLabel": "Import new YAML",
     "title": "Import catalog files",
     "intro": "Paste a catalog-info.yaml (multiple documents separated by ---) or pick a file. Each document imports independently — an existing file is never overwritten.",
     "textareaLabel": "YAML content",
@@ -196,8 +193,8 @@
     "tooltip": "Tier {{tier}} — fill lower tiers first"
   },
   "sync": {
-    "action": "Sync from repo",
-    "title": "Sync from repo — {{name}}",
+    "action": "Sync from source",
+    "title": "Sync from source — {{name}}",
     "sourceLabel": "Source:",
     "lastSynced": "Last synced {{ago}}",
     "neverSynced": "Never synced",
@@ -216,5 +213,22 @@
     "overwriteWarning": "Syncing overwrites the stored copy with the repo version shown above. Changes made only in Toadie will be lost.",
     "confirm": "Overwrite stored copy",
     "failed": "Sync failed"
+  },
+  "exportFile": "Export as YAML",
+  "overwrite": {
+    "action": "Overwrite with YAML",
+    "title": "Overwrite with YAML — {{name}}",
+    "intro": "Paste a catalog-info.yaml or pick a file. It replaces this file's stored document — the source reference is kept.",
+    "diffLabel": "Changes between the stored copy and the YAML you supplied",
+    "identical": "The YAML you supplied matches the stored copy — nothing to overwrite.",
+    "parseFailed": "That is not a valid catalog-info.yaml.",
+    "noMatch": "None of the documents is {{name}} — a multi-document file must contain this entity.",
+    "loadingAria": "Loading the stored copy",
+    "loadFailed": "Could not prepare the comparison",
+    "findingsWarning_one": "The YAML carries {{count}} finding — overwriting stores it anyway, and it will show on the Errors report.",
+    "findingsWarning_other": "The YAML carries {{count}} findings — overwriting stores them anyway, and they will show on the Errors report.",
+    "warning": "Overwriting replaces the stored copy with the YAML above. The current content is lost.",
+    "confirm": "Overwrite stored copy",
+    "failed": "Overwrite failed"
   }
 }

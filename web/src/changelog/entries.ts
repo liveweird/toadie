@@ -17,6 +17,26 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.13.0",
+    date: "2026-08-31",
+    en: `**Actions that say what they act on** — and a new way to replace one file.
+
+- **Overwrite with YAML** (new): replace a single file's content by pasting or picking a YAML. You see a line-by-line diff against the stored copy before confirming, and the file's source reference is kept.
+- **Download** is now **Export as YAML**, since that is what it produces.
+- **Import YAML** is now **Import new YAML** — it only ever adds files, and never overwrites an existing one.
+- **Sync from repo** is now **Sync from source**, and it no longer disappears on a file without a source: it is greyed out instead, so you can see the option exists and what it needs.
+- **The editor gained the same three actions**, plus a line telling you when the file was last synced and whether it has changed since.
+- The bottom **Export YAML** button is gone. It exported the whole workspace rather than a file, which the label never said; per-file export now lives in the row's Operations menu.`,
+    pl: `**Akcje, które mówią, na czym działają** — i nowy sposób na podmianę pojedynczego pliku.
+
+- **Nadpisz plikiem YAML** (nowość): zastąp treść jednego pliku, wklejając YAML lub wybierając plik. Przed potwierdzeniem widzisz różnice linia po linii wobec zapisanej kopii, a odwołanie do źródła zostaje zachowane.
+- **Pobierz** to teraz **Eksportuj jako YAML** — bo dokładnie to robi.
+- **Importuj YAML** to teraz **Importuj nowy YAML** — import wyłącznie dodaje pliki i nigdy nie nadpisuje istniejącego.
+- **Synchronizuj z repozytorium** to teraz **Synchronizuj ze źródłem** i nie znika już przy pliku bez źródła: jest wyszarzone, więc widzisz, że opcja istnieje i czego wymaga.
+- **Edytor dostał te same trzy akcje**, a do tego informację, kiedy plik był ostatnio synchronizowany i czy od tego czasu się zmienił.
+- Dolny przycisk **Eksportuj YAML** zniknął. Eksportował cały obszar roboczy, a nie plik — czego etykieta nie mówiła; eksport pojedynczego pliku jest teraz w menu Operacje w wierszu.`,
+  },
+  {
     version: "1.12.0",
     date: "2026-08-31",
     en: `**Namespaces on the graph** — the Graph page now shows where one namespace ends and the next begins.

@@ -67,13 +67,19 @@ test("two pasted documents import, export as one YAML, and re-import as conflict
     page.getByRole("row").filter({ hasText: team }).filter({ hasNotText: comp }),
   ).toBeVisible();
 
-  // Export the filtered namespace and read the downloaded multi-document file.
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    page.getByRole("button", { name: "Export YAML" }).click(),
-  ]);
-  expect(download.suggestedFilename()).toBe("catalog-info.yaml");
-  const exported = readFileSync((await download.path())!, "utf8");
+  // Export each file from its Operations menu, then stitch the two documents back into one
+  // multi-document stream — whole-workspace export is an API-only capability now, so the
+  // round trip is exercised per file (which is what the UI actually offers).
+  const documents: string[] = [];
+  for (const name of [comp, team]) {
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      rowOperation(page, name, "Export as YAML"),
+    ]);
+    expect(download.suggestedFilename()).toBe("catalog-info.yaml");
+    documents.push(readFileSync((await download.path())!, "utf8"));
+  }
+  const exported = documents.join("---\n");
   expect(exported).toContain(`name: ${comp}`);
   expect(exported).toContain(`name: ${team}`);
   expect(exported).toContain("\n---\n");

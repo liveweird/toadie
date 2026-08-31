@@ -128,12 +128,13 @@ export async function pickLifecycle(page: Page, lifecycle: string): Promise<void
 
 /**
  * Drive a catalog-files list row's action through its Operations dropdown (the per-row
- * Edit/Download/Delete buttons are bundled under one menu button since the list reshape).
+ * actions are bundled under one menu button since the list reshape). Sync is always
+ * present but DISABLED on a source-less row, so target it only where a source is set.
  */
 export async function rowOperation(
   page: Page,
   name: string,
-  operation: "Edit" | "Download" | "Delete" | "Sync from repo",
+  operation: "Edit" | "Export as YAML" | "Overwrite with YAML" | "Delete" | "Sync from source",
 ): Promise<void> {
   const trigger = page.getByRole("button", { name: `Operations for ${name}` });
   // Ensure THIS row's menu actually opened: a previous row's still-fading dropdown treats

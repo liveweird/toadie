@@ -15,13 +15,14 @@
      the reference is optional on writes, never a save blocker).
 3. They open the Files list (`/files`) and filter by the name.
    - *Expected*: the **Last sync** column reads **No source**, and the row's Operations
-     menu offers Edit/Download/Delete but no **Sync from repo** yet.
+     menu offers Edit/Export as YAML/Overwrite with YAML/Delete, with **Sync from source**
+     present but greyed out — offered-and-unavailable, never absent.
 4. They open the file in the editor and fill the **Source file URL** in the new Source
    section with `https://127.0.0.1/catalog-info.yaml` (statically valid — absolute https;
    hosts are only probed at fetch time), then save.
    - *Expected*: the save goes through; back on the filtered list the column reads
      **Never synced**, and the Errors report no longer flags the file.
-5. They pick **Sync from repo** from the row's Operations menu.
+5. They pick **Sync from source** from the row's Operations menu.
    - *Expected*: the sync modal opens, the server-side fetch of the loopback URL is refused
      by the SSRF guard, the modal shows the fixed "must be a public https address" error,
      and the **Overwrite stored copy** button stays disabled — nothing can be overwritten.

@@ -4,7 +4,6 @@ import {
   checkCatalogFile,
   createCatalogFile,
   deleteCatalogFile,
-  exportCatalogFiles,
   fetchCatalogUrl,
   getCatalogFile,
   getCatalogErrors,
@@ -144,14 +143,6 @@ describe("catalogFiles API wrappers", () => {
     expect(url).toBe("/api/v1/files/check");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual(REQUEST);
-  });
-
-  test("exportCatalogFiles appends the namespace only when given", async () => {
-    mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(200, { files: [] })));
-    await exportCatalogFiles();
-    expect(lastCall()[0]).toBe("/api/v1/files/export");
-    await exportCatalogFiles("team-a");
-    expect(lastCall()[0]).toBe("/api/v1/files/export?namespace=team-a");
   });
 
   test("importCatalogFiles POSTs the files array wrapped in the request envelope", async () => {

@@ -22,7 +22,8 @@
    - *Expected*: the results table reports both rows **Created** and the summary reads
      "Imported 2 of 2 documents.".
 4. On the Files list, filtered to the namespace, both files appear.
-5. They click **Export YAML** while the namespace filter is active.
+5. They pick **Export as YAML** from each row's **Operations** menu and stitch the two
+   downloads into one `---`-separated stream (whole-workspace export is API-only).
    - *Expected*: the browser downloads `catalog-info.yaml`; the file contains both entity
      names and a `---` document separator.
 6. Back on the import page they paste the exported text verbatim and import again.

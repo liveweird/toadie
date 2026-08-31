@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { CatalogFileRequest } from "../api/catalogFiles";
 import { normalizeCatalogUrl, parseCatalogYaml } from "./catalogImport";
-import { catalogInfoMultiYaml } from "./catalogYaml";
+import { catalogInfoYaml } from "./catalogYaml";
 
 const COMPONENT_YAML = [
   "apiVersion: backstage.io/v1alpha1",
@@ -149,7 +149,7 @@ describe("parseCatalogYaml", () => {
         spec: { profile: { displayName: "J. Doe", email: "jdoe@example.com" }, memberOf: [] },
       },
     ];
-    const { documents, errors } = parseCatalogYaml(catalogInfoMultiYaml(files));
+    const { documents, errors } = parseCatalogYaml(files.map(catalogInfoYaml).join("---\n"));
     expect(errors).toEqual([]);
     const expectedAfterTrip = files.map((f) =>
       f.metadata.namespace === "default"

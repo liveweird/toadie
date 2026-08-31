@@ -76,7 +76,7 @@
     "memberOf": "Grupy, do których należy ta osoba. Backstage wymaga tej listy — pusta jest w porządku.",
     "domain": "Domena, do której należy ten system.",
     "subdomainOf": "Domena nadrzędna, dla domen zagnieżdżonych.",
-    "sourceUrl": "Adres https kopii tego pliku w repozytorium GitLab/GitHub — umożliwia synchronizację z repozytorium."
+    "sourceUrl": "Adres https kopii tego pliku w repozytorium GitLab/GitHub — umożliwia synchronizację ze źródłem."
   },
   "addLink": "Dodaj link",
   "addLabel": "Dodaj etykietę",
@@ -115,7 +115,8 @@
     "created": "Utworzono plik katalogu",
     "updated": "Zaktualizowano plik katalogu",
     "deleted": "Usunięto plik katalogu",
-    "synced": "Plik zsynchronizowany z repozytorium"
+    "synced": "Plik zsynchronizowany z repozytorium",
+    "overwritten": "Plik nadpisany"
   },
   "refHelp": "Każde pole podpowiada zapisane encje, na które może wskazywać — wybór wstawia pełną tożsamość kind:namespace/name. Referencje wpisywane ręcznie też działają (rodzaj i przestrzeń nazw zwykle można pominąć); każda referencja musi wskazywać zapisaną encję.",
   "anyNamespace": "Dowolna przestrzeń nazw",
@@ -125,12 +126,8 @@
   "anyOwner": "Dowolny właściciel",
   "anyLabel": "Dowolna etykieta",
   "anyLabelValue": "Dowolna wartość",
-  "export": {
-    "button": "Eksportuj YAML",
-    "failed": "Nie udało się wyeksportować plików katalogu"
-  },
   "import": {
-    "linkLabel": "Importuj YAML",
+    "linkLabel": "Importuj nowy YAML",
     "title": "Importuj pliki katalogu",
     "intro": "Wklej catalog-info.yaml (wiele dokumentów rozdzielonych ---) albo wybierz plik. Każdy dokument importuje się niezależnie — istniejący plik nigdy nie zostaje nadpisany.",
     "textareaLabel": "Zawartość YAML",
@@ -200,8 +197,8 @@
     "tooltip": "Poziom {{tier}} — najpierw uzupełnij niższe poziomy"
   },
   "sync": {
-    "action": "Synchronizuj z repozytorium",
-    "title": "Synchronizacja z repozytorium — {{name}}",
+    "action": "Synchronizuj ze źródłem",
+    "title": "Synchronizuj ze źródłem — {{name}}",
     "sourceLabel": "Źródło:",
     "lastSynced": "Ostatnio zsynchronizowano {{ago}}",
     "neverSynced": "Nigdy nie zsynchronizowano",
@@ -222,5 +219,24 @@
     "overwriteWarning": "Synchronizacja nadpisze zapisaną kopię wersją z repozytorium pokazaną powyżej. Zmiany wprowadzone tylko w Toadie zostaną utracone.",
     "confirm": "Nadpisz zapisaną kopię",
     "failed": "Synchronizacja nie powiodła się"
+  },
+  "exportFile": "Eksportuj jako YAML",
+  "overwrite": {
+    "action": "Nadpisz plikiem YAML",
+    "title": "Nadpisz plikiem YAML — {{name}}",
+    "intro": "Wklej catalog-info.yaml lub wybierz plik. Zastąpi on zapisany dokument tego pliku — odwołanie do źródła zostaje zachowane.",
+    "diffLabel": "Różnice między zapisaną kopią a podanym przez Ciebie YAML-em",
+    "identical": "Podany YAML jest taki sam jak zapisana kopia — nie ma czego nadpisywać.",
+    "parseFailed": "To nie jest poprawny catalog-info.yaml.",
+    "noMatch": "Żaden z dokumentów to nie {{name}} — plik wielodokumentowy musi zawierać tę encję.",
+    "loadingAria": "Wczytywanie zapisanej kopii",
+    "loadFailed": "Nie udało się przygotować porównania",
+    "findingsWarning_one": "YAML niesie {{count}} ustalenie — nadpisanie zapisze je mimo to i pojawi się w raporcie Błędów.",
+    "findingsWarning_few": "YAML niesie {{count}} ustalenia — nadpisanie zapisze je mimo to i pojawią się w raporcie Błędów.",
+    "findingsWarning_many": "YAML niesie {{count}} ustaleń — nadpisanie zapisze je mimo to i pojawią się w raporcie Błędów.",
+    "findingsWarning_other": "YAML niesie {{count}} ustaleń — nadpisanie zapisze je mimo to i pojawią się w raporcie Błędów.",
+    "warning": "Nadpisanie zastąpi zapisaną kopię powyższym YAML-em. Obecna zawartość zostanie utracona.",
+    "confirm": "Nadpisz zapisaną kopię",
+    "failed": "Nadpisywanie nie powiodło się"
   }
 }

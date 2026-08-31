@@ -1,13 +1,19 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router-dom";
-import { Paper, Stack, Title } from "@mantine/core";
+import { Alert, Button, Group, Paper, Stack, Title } from "@mantine/core";
+import { IconFileExport, IconRefresh, IconUpload } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { useQuery } from "@tanstack/react-query";
 import { getCatalogFile, updateCatalogFile } from "../api/catalogFiles";
 import { ApiError } from "../api/http";
 import CatalogFileEditor from "../components/CatalogFileEditor";
+import OverwriteWithYamlModal from "../components/OverwriteWithYamlModal";
+import SyncCatalogFileModal from "../components/SyncCatalogFileModal";
+import SyncStateText from "../components/SyncStateText";
 import SaveAnywayModal from "../components/SaveAnywayModal";
 import EditPageLoadState from "../components/EditPageLoadState";
+import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
 import { useCatalogFileSave } from "../hooks/useCatalogFileSave";
 import {
   catalogFileFormValidation,
@@ -35,6 +41,12 @@ export default function EditCatalogFile() {
     toastKey: "catalog.toast.updated",
     errorKeys: CATALOG_SAVE_ERROR_KEYS,
   });
+
+  // The whole-file operations act on the STORED file, so they live beside the form rather
+  // than inside it — none of them goes through the form's submit path.
+  const downloads = useCatalogDownloads();
+  const [overwriteOpen, setOverwriteOpen] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
 
   const idIsValid = Number.isFinite(id) && id > 0;
 
@@ -70,6 +82,50 @@ export default function EditCatalogFile() {
     );
   }
 
+  // `data` is present here — the loading/error branches returned above. A stored file always
+  // carries its resolved namespace; the fallback mirrors pickRepoDocument's own.
+  const file = data!;
+  const name = file.metadata.name;
+  const namespace = file.metadata.namespace || "default";
+  const actions = (
+    <Stack gap="xs">
+      <Group gap="sm">
+        <Button
+          variant="default"
+          size="xs"
+          leftSection={<IconFileExport size={14} />}
+          onClick={() => void downloads.handleDownload({ id })}
+          loading={downloads.downloadingId === id}
+        >
+          {t("catalog.exportFile")}
+        </Button>
+        <Button
+          variant="default"
+          size="xs"
+          leftSection={<IconUpload size={14} />}
+          onClick={() => setOverwriteOpen(true)}
+        >
+          {t("catalog.overwrite.action")}
+        </Button>
+        <Button
+          variant="default"
+          size="xs"
+          leftSection={<IconRefresh size={14} />}
+          onClick={() => setSyncOpen(true)}
+          disabled={file.sourceUrl == null}
+        >
+          {t("catalog.sync.action")}
+        </Button>
+        <SyncStateText file={file} />
+      </Group>
+      {downloads.downloadError != null && (
+        <Alert color="red" variant="light" title={t("catalog.downloadFailed")}>
+          {loadErrorMessage(downloads.downloadError, t)}
+        </Alert>
+      )}
+    </Stack>
+  );
+
   return (
     // Same two-pane document layout as the create page (see web/CLAUDE.md).
     <>
@@ -80,6 +136,27 @@ export default function EditCatalogFile() {
         onSubmit={save.onSubmit}
         error={save.error}
         submitting={save.submitting}
+        actions={actions}
+      />
+      <OverwriteWithYamlModal
+        file={overwriteOpen ? { id, kind: file.kind, name, namespace } : null}
+        onClose={() => setOverwriteOpen(false)}
+      />
+      <SyncCatalogFileModal
+        file={
+          syncOpen
+            ? {
+                id,
+                kind: file.kind,
+                name,
+                namespace,
+                sourceUrl: file.sourceUrl,
+                updatedAt: file.updatedAt,
+                lastSyncedAt: file.lastSyncedAt,
+              }
+            : null
+        }
+        onClose={() => setSyncOpen(false)}
       />
       <SaveAnywayModal
         findings={save.waiverFindings}

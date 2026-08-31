@@ -480,7 +480,7 @@ describe("CatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await rowOperation(user, "payments-svc", "Download");
+    await rowOperation(user, "payments-svc", "Export as YAML");
     expect(await screen.findByText("Failed to download catalog file")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /close/i }));
@@ -516,7 +516,7 @@ describe("CatalogFiles page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await rowOperation(user, "payments-svc", "Download");
+    await rowOperation(user, "payments-svc", "Export as YAML");
 
     await waitFor(() => expect(click).toHaveBeenCalledOnce());
     expect(createObjectURL).toHaveBeenCalledOnce();
@@ -526,85 +526,11 @@ describe("CatalogFiles page", () => {
   test("links to the import page", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     renderPage();
-    const link = await screen.findByRole("link", { name: "Import YAML" });
+    const link = await screen.findByRole("link", { name: "Import new YAML" });
     expect(link).toHaveAttribute("href", "/files/import");
   });
 
-  test("export fetches the workspace and downloads one multi-document YAML", async () => {
-    const createObjectURL = vi.fn().mockReturnValue("blob:fake");
-    const revokeObjectURL = vi.fn();
-    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL }));
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    mockFetch.mockImplementation((url: string) => {
-      if (url === "/api/v1/files/export") {
-        return Promise.resolve(
-          jsonResponse(200, {
-            files: [
-              {
-                kind: "Component",
-                metadata: { name: "payments-svc", namespace: "default" },
-                spec: { type: "service", lifecycle: "production", owner: "platform" },
-              },
-              {
-                kind: "Group",
-                metadata: { name: "team-a", namespace: "default" },
-                spec: { type: "team", children: [] },
-              },
-            ],
-          }),
-        );
-      }
-      if (url.startsWith("/api/v1/files?")) return Promise.resolve(filesPage(SEED_FILES));
-      return Promise.resolve(jsonResponse(404, {}));
-    });
-    const user = userEvent.setup();
-    renderPage();
-
-    await user.click(await screen.findByRole("button", { name: "Export YAML" }));
-
-    await waitFor(() => expect(click).toHaveBeenCalledOnce());
-    const blob = createObjectURL.mock.calls[0][0] as Blob;
-    const text = await blob.text();
-    expect(text).toContain("name: payments-svc");
-    expect(text).toContain("\n---\n");
-    expect(text).toContain("name: team-a");
-    click.mockRestore();
-  });
-
-  test("export passes the exact-namespace filter through and errors show the alert", async () => {
-    mockFetch.mockImplementation((url: string) => {
-      const registry = registryResponse(url);
-      if (registry) return Promise.resolve(registry);
-      if (url.startsWith("/api/v1/files/export")) {
-        return Promise.resolve(jsonResponse(500, {}));
-      }
-      if (url.startsWith("/api/v1/files?")) return Promise.resolve(filesPage(SEED_FILES));
-      return Promise.resolve(jsonResponse(404, {}));
-    });
-    const user = userEvent.setup();
-    renderPage();
-
-    await user.click(await screen.findByRole("button", { name: /filters/i }));
-    await pickFilterOption("Namespace", "team-a");
-    await calledWith(mockFetch, "namespace=team-a");
-
-    await user.click(screen.getByRole("button", { name: "Export YAML" }));
-
-    expect(await screen.findByText("Failed to export catalog files")).toBeInTheDocument();
-    const exportCall = mockFetch.mock.calls.find(
-      ([url]) => typeof url === "string" && url.startsWith("/api/v1/files/export"),
-    );
-    expect(exportCall?.[0]).toBe("/api/v1/files/export?namespace=team-a");
-  });
-
-  test("the export button is disabled while the list is empty", async () => {
-    setupMocks(mockFetch, () => filesPage([]));
-    renderPage();
-    await screen.findByText("No catalog files");
-    expect(screen.getByRole("button", { name: "Export YAML" })).toBeDisabled();
-  });
-
-  test("the Last sync column shows sync state and offers Sync from repo only on sourced rows", async () => {
+  test("the Last sync column shows sync state and greys Sync from source out on source-less rows", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     const user = userEvent.setup();
     renderPage();
@@ -615,13 +541,15 @@ describe("CatalogFiles page", () => {
     expect(screen.getByText("Local changes")).toBeInTheDocument();
     expect(screen.getByText("No source")).toBeInTheDocument();
 
+    // The item is always offered — greyed out until the row carries a source, rather than
+    // vanishing, so its absence never reads as "this file cannot be synced at all".
     await user.click(screen.getByRole("button", { name: "Operations for payments-svc" }));
-    expect(await screen.findByRole("menuitem", { name: "Sync from repo" })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: "Sync from source" })).toBeEnabled();
     await user.keyboard("{Escape}");
 
     await user.click(screen.getByRole("button", { name: "Operations for web-portal" }));
     await screen.findByRole("menuitem", { name: "Edit" });
-    expect(screen.queryByRole("menuitem", { name: "Sync from repo" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Sync from source" })).toBeDisabled();
   });
 
   test("the Last sync header sorts by lastSyncedAt", async () => {
@@ -667,7 +595,7 @@ describe("CatalogFiles page", () => {
     renderPage();
 
     await screen.findByText("payments-svc");
-    await rowOperation(user, "payments-svc", "Sync from repo");
-    expect(await screen.findByText("Sync from repo — payments-svc")).toBeInTheDocument();
+    await rowOperation(user, "payments-svc", "Sync from source");
+    expect(await screen.findByText("Sync from source — payments-svc")).toBeInTheDocument();
   });
 });

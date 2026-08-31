@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { parse } from "yaml";
 import type { CatalogFileRequest } from "../api/catalogFiles";
-import { catalogInfoMultiYaml, catalogInfoYaml, downloadYaml } from "./catalogYaml";
+import { catalogInfoYaml, downloadYaml } from "./catalogYaml";
 
 const minimal: CatalogFileRequest = {
   kind: "Component",
@@ -164,31 +164,3 @@ describe("downloadYaml", () => {
   });
 });
 
-describe("catalogInfoMultiYaml", () => {
-  test("joins the documents with --- separator lines into one parseable stream", () => {
-    const minimalComponent: CatalogFileRequest = {
-      kind: "Component",
-      metadata: { name: "a-svc", namespace: "default" },
-      spec: { type: "service", lifecycle: "production", owner: "platform" },
-    };
-    const group: CatalogFileRequest = {
-      kind: "Group",
-      metadata: { name: "team-a", namespace: "default" },
-      spec: { type: "team", children: [] },
-    };
-
-    const text = catalogInfoMultiYaml([minimalComponent, group]);
-    expect(text).toContain("\n---\n");
-    expect(text).toBe(`${catalogInfoYaml(minimalComponent)}---\n${catalogInfoYaml(group)}`);
-  });
-
-  test("a single document has no separator, and no documents means an empty string", () => {
-    const one: CatalogFileRequest = {
-      kind: "Domain",
-      metadata: { name: "payments", namespace: "default" },
-      spec: { owner: "platform" },
-    };
-    expect(catalogInfoMultiYaml([one])).toBe(catalogInfoYaml(one));
-    expect(catalogInfoMultiYaml([])).toBe("");
-  });
-});

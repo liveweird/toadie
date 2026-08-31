@@ -8,7 +8,6 @@ import {
   getCatalogFile,
   getSyncState,
   syncCatalogFile,
-  type CatalogFileListItem,
 } from "../api/catalogFiles";
 import YamlDiffView from "./YamlDiffView";
 import { normalizeCatalogUrl, parseCatalogYaml, pickRepoDocument } from "../utils/catalogImport";
@@ -33,12 +32,26 @@ import { showSuccessToast } from "../utils/toast";
  * narrow naturally (no `enabled`-laundering casts), while the shell keeps the one Modal
  * mounted for the open/close transition.
  */
+/**
+ * Everything the modal reads about the file — the structural shape, not the list DTO, so the
+ * editor can open it with a `CatalogFileResponse` too.
+ */
+export type SyncTarget = {
+  id: number;
+  kind: string;
+  name: string;
+  namespace: string;
+  sourceUrl: string | null;
+  updatedAt: number;
+  lastSyncedAt: number;
+};
+
 export default function SyncCatalogFileModal({
   file,
   onClose,
 }: {
-  /** The row to sync; null keeps the modal closed. */
-  file: CatalogFileListItem | null;
+  /** The file to sync; null keeps the modal closed. */
+  file: SyncTarget | null;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -68,7 +81,7 @@ function SyncModalBody({
   onSyncingChange,
   onClose,
 }: {
-  file: CatalogFileListItem;
+  file: SyncTarget;
   syncing: boolean;
   onSyncingChange: (syncing: boolean) => void;
   onClose: () => void;

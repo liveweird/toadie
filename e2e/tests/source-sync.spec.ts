@@ -35,7 +35,7 @@ test("a source reference set after creation clears the report flag and enables t
     page.getByRole("row").filter({ hasText: name }).getByText("No source reference", { exact: true }),
   ).toBeVisible();
 
-  // The list shows "No source" and the Operations menu holds no Sync item yet.
+  // The list shows "No source" and the Operations menu greys the Sync item out.
   await page.goto("/files");
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(name);
@@ -45,7 +45,9 @@ test("a source reference set after creation clears the report flag and enables t
   const trigger = page.getByRole("button", { name: `Operations for ${name}` });
   await trigger.click();
   await expect(page.getByRole("menuitem", { name: "Edit" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Sync from repo" })).toBeHidden();
+  // Offered but unavailable, not absent — a missing item would read as "this file can never
+  // be synced" rather than "set a source first".
+  await expect(page.getByRole("menuitem", { name: "Sync from source" })).toBeDisabled();
   await page.keyboard.press("Escape");
 
   // Set the reference AFTER creation: the editor's Source section. The URL passes the
@@ -80,9 +82,9 @@ test("a source reference set after creation clears the report flag and enables t
   await page.goto("/files");
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(name);
-  await rowOperation(page, name, "Sync from repo");
+  await rowOperation(page, name, "Sync from source");
   const modal = page.getByRole("dialog");
-  await expect(modal.getByText(`Sync from repo — ${name}`)).toBeVisible();
+  await expect(modal.getByText(`Sync from source — ${name}`)).toBeVisible();
   await expect(modal.getByText(/The URL must be a public https address/)).toBeVisible();
   await expect(modal.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
   await modal.getByRole("button", { name: "Cancel" }).click();

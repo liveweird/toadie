@@ -19,6 +19,7 @@ import { IconChevronDown, IconChevronRight, IconSitemap } from "@tabler/icons-re
 import { deleteCatalogFile, getCatalogGraph, type GraphNode } from "../api/catalogFiles";
 import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogFileOperations from "../components/CatalogFileOperations";
+import OverwriteWithYamlModal, { type OverwriteTarget } from "../components/OverwriteWithYamlModal";
 import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
@@ -144,6 +145,9 @@ export default function Hierarchy() {
   // graph endpoint declares the same params and narrows which files are EXPANDED.
   const filters = useCatalogFileFilterState("hierarchy");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  // The graph payload carries no sourceUrl, so the tree offers overwrite but not sync
+  // (a permanently-greyed Sync item here would assert something we cannot know).
+  const [overwriteTarget, setOverwriteTarget] = useState<OverwriteTarget | null>(null);
   const downloads = useCatalogDownloads();
 
   const { data, isPending, isError, error } = useQuery({
@@ -180,7 +184,15 @@ export default function Hierarchy() {
         id={fileId}
         name={node.name}
         downloading={downloads.downloadingId === fileId}
-        onDownload={() => void downloads.handleDownload({ id: fileId })}
+        onExport={() => void downloads.handleDownload({ id: fileId })}
+        onOverwrite={() =>
+          setOverwriteTarget({
+            id: fileId,
+            kind: node.kind,
+            name: node.name,
+            namespace: node.namespace,
+          })
+        }
         onDelete={() =>
           deleteConfirm.requestDelete({ id: fileId, name: node.name, namespace: node.namespace })
         }
@@ -257,6 +269,8 @@ export default function Hierarchy() {
           />
         ) : null}
       </Paper>
+
+      <OverwriteWithYamlModal file={overwriteTarget} onClose={() => setOverwriteTarget(null)} />
 
       <ConfirmDeleteModal
         confirm={deleteConfirm}

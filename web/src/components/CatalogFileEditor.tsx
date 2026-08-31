@@ -1,3 +1,4 @@
+import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { Alert, Button, Grid, Group, Paper, Stack, Title } from "@mantine/core";
@@ -22,6 +23,7 @@ export default function CatalogFileEditor({
   onSubmit,
   error,
   submitting,
+  actions,
 }: {
   title: string;
   submitLabel: string;
@@ -29,6 +31,11 @@ export default function CatalogFileEditor({
   onSubmit: (values: CatalogFileFormValues) => Promise<void>;
   error: string | null;
   submitting: boolean;
+  /**
+   * Whole-file operations (export/overwrite/sync) — edit-only, since they all act on a
+   * STORED file. Rendered under the title, outside the form's submit path.
+   */
+  actions?: ReactNode;
 }) {
   const { t } = useTranslation();
   // One mapping per render, shared by the preview and the reference panel. Blank namespace
@@ -43,6 +50,7 @@ export default function CatalogFileEditor({
           <form onSubmit={form.onSubmit(onSubmit)} noValidate>
             <Stack>
               <Title order={2}>{title}</Title>
+              {actions}
               <CatalogFileFormFields form={form} />
               {error && (
                 <Alert color="red" variant="light">

@@ -90,7 +90,7 @@ test("the hierarchy nests the containment chain and carries the file operations"
   // Download straight from a tree row's Operations menu.
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    rowOperation(page, worker, "Download"),
+    rowOperation(page, worker, "Export as YAML"),
   ]);
   expect(download.suggestedFilename()).toBe("catalog-info.yaml");
   // Let the download's in-flight state settle (the trigger renders as loading) — the next

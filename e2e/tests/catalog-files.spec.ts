@@ -86,7 +86,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await page.getByLabel("Name", { exact: true }).fill(name);
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    rowOperation(page, name, "Download"),
+    rowOperation(page, name, "Export as YAML"),
   ]);
   expect(download.suggestedFilename()).toBe("catalog-info.yaml");
 
