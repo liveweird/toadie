@@ -164,3 +164,36 @@ export function buildHierarchy(graph: CatalogGraph): HierarchyNode[] {
 
   return roots;
 }
+
+/** A node's position in a built forest: the subtree itself, plus the path it hangs at. */
+export interface HierarchyPlacement {
+  item: HierarchyNode;
+  /**
+   * The path of the subtree's PARENT — what `TreeItem` would have passed down. Rendering a
+   * pinned subtree with this instead of `""` keeps the page's collapse keys (`<path>/<id>`)
+   * identical pinned and unpinned, so pinning never silently unfolds a collapsed branch.
+   */
+  path: string;
+}
+
+/**
+ * Finds where [id] renders in [roots] — the Hierarchy page's pin, which shows one entity and
+ * its descendants and nothing else. Null when the id is not in the forest (the entity left
+ * the filtered set, or was deleted), which is what the page's auto-unpin keys off.
+ *
+ * Group membership places the same node under EVERY containing Group, so an id can have
+ * several placements; the first in document order wins. Both carry the same children, so
+ * which one is picked is invisible — not worth machinery.
+ */
+export function findPlacement(
+  roots: HierarchyNode[],
+  id: string,
+  path = "",
+): HierarchyPlacement | null {
+  for (const item of roots) {
+    if (item.node.id === id) return { item, path };
+    const nested = findPlacement(item.children, id, `${path}/${item.node.id}`);
+    if (nested) return nested;
+  }
+  return null;
+}

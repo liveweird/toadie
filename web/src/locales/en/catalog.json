@@ -256,5 +256,9 @@
     "added": "{{label}}: +{{added}}",
     "removed": "{{label}}: −{{removed}}",
     "addedRemoved": "{{label}}: +{{added}} −{{removed}}"
+  },
+  "pin": {
+    "action": "Pin",
+    "clear": "Unpin"
   }
 }

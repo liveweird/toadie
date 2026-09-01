@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { CatalogGraph, GraphNode } from "../api/catalogFiles";
-import { buildHierarchy, type HierarchyNode } from "./hierarchy";
+import { buildHierarchy, findPlacement, type HierarchyNode } from "./hierarchy";
 
 function node(
   kind: string,
@@ -138,5 +138,45 @@ describe("buildHierarchy", () => {
       "component:b-svc",
       "user:zoe",
     ]);
+  });
+});
+
+describe("findPlacement", () => {
+  const domain = node("domain", "payments");
+  const system = node("system", "billing");
+  const component = node("component", "billing-core");
+  const sub = node("component", "billing-worker");
+  const graph: CatalogGraph = {
+    nodes: [sub, component, system, domain],
+    edges: [
+      edge(system, "spec.domain", domain),
+      edge(component, "spec.system", system),
+      edge(sub, "spec.subcomponentOf", component),
+    ],
+  };
+
+  test("returns the subtree plus the path it hangs at, so collapse keys stay stable", () => {
+    const found = findPlacement(buildHierarchy(graph), component.id);
+    expect(shape([found!.item])).toEqual(["component:billing-core", "component:billing-core > component:billing-worker"]);
+    // The path is the PARENT's — what TreeItem would have passed down at that depth.
+    expect(found!.path).toBe("/domain:default/payments/system:default/billing");
+  });
+
+  test("a root is found at the empty path, and an id that is not in the forest is null", () => {
+    const roots = buildHierarchy(graph);
+    expect(findPlacement(roots, domain.id)?.path).toBe("");
+    expect(findPlacement(roots, "component:default/gone")).toBeNull();
+    expect(findPlacement([], domain.id)).toBeNull();
+  });
+
+  test("a multi-parent user resolves to its first placement — both carry the same children", () => {
+    const a = node("group", "alpha");
+    const b = node("group", "beta");
+    const user = node("user", "jdoe");
+    const roots = buildHierarchy({
+      nodes: [a, b, user],
+      edges: [edge(user, "spec.memberOf", a), edge(user, "spec.memberOf", b)],
+    });
+    expect(findPlacement(roots, user.id)!.path).toBe("/group:default/alpha");
   });
 });

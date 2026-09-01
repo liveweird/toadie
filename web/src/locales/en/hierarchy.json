@@ -7,5 +7,9 @@
   "toggleAria": "Toggle children of {{name}}",
   "badge": {
     "missing": "Missing"
+  },
+  "pinned": {
+    "badge": "Pinned: {{name}}",
+    "clearAria": "Unpin {{name}}"
   }
 }

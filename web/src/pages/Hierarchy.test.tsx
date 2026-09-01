@@ -180,6 +180,65 @@ describe("Hierarchy page", () => {
     expect(screen.queryByRole("button", { name: "Toggle children of orphan" })).not.toBeInTheDocument();
   });
 
+  test("pinning a row narrows the tree to that entity and its descendants", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("core");
+    await user.click(screen.getByRole("button", { name: "Operations for core" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Pin" }));
+
+    // core keeps its own child; its System parent and the unrelated placeholder tree go.
+    expect(screen.getByText("core")).toBeInTheDocument();
+    expect(screen.getByText("worker")).toBeInTheDocument();
+    expect(screen.queryByText("Billing")).not.toBeInTheDocument();
+    expect(screen.queryByText("orphan")).not.toBeInTheDocument();
+    expect(screen.getByText("Pinned: core")).toBeInTheDocument();
+    // Persisted per view, so the trip to a row's editor and back keeps the pin.
+    expect(localStorage.getItem("toadie.viewSettings.hierarchy.pinnedNodeId")).toBe(
+      '"component:default/core"',
+    );
+  });
+
+  test("the pinned row's menu unpins, and the badge's clear button does too", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    localStorage.setItem("toadie.viewSettings.hierarchy.pinnedNodeId", '"component:default/core"');
+    renderPage();
+
+    // A stored pin restores on mount.
+    await screen.findByText("Pinned: core");
+    expect(screen.queryByText("orphan")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Operations for core" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Unpin" }));
+    expect(await screen.findByText("orphan")).toBeInTheDocument();
+    expect(screen.queryByText("Pinned: core")).not.toBeInTheDocument();
+
+    // And again, this time through the badge's own clear button.
+    await user.click(screen.getByRole("button", { name: "Operations for core" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Pin" }));
+    await user.click(await screen.findByRole("button", { name: "Unpin core" }));
+    expect(await screen.findByText("orphan")).toBeInTheDocument();
+  });
+
+  test("a pin whose entity left the filtered payload drops itself", async () => {
+    // The components-only payload no longer contains the pinned System.
+    mockGraph(mockFetch, {
+      nodes: GRAPH.nodes.filter((n) => n.kind === "component"),
+      edges: GRAPH.edges.filter((e) => e.field === "spec.subcomponentOf"),
+    });
+    localStorage.setItem("toadie.viewSettings.hierarchy.pinnedNodeId", '"system:default/billing"');
+    renderPage();
+
+    await screen.findByText("core");
+    expect(screen.queryByText(/^Pinned:/)).not.toBeInTheDocument();
+    expect(localStorage.getItem("toadie.viewSettings.hierarchy.pinnedNodeId")).toBe('""');
+    // Auto-unpinned, so the ordinary filtered tree is back — every component renders.
+    expect(screen.getByText("orphan")).toBeInTheDocument();
+  });
+
   test("a failed graph load shows the error alert", async () => {
     mockGraph(mockFetch, { title: "boom", status: 500 }, 500);
     renderPage();

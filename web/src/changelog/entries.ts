@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.17.0",
+    date: "2026-09-02",
+    en: `**Pin an entity on the Hierarchy to work on just its part of the tree.**
+
+- Every row's **Operations** menu opens with **Pin**. Pinning keeps your filters exactly as they are and additionally narrows the tree to that entity and everything nested under it — pin a System and you see that System and its components, and nothing else.
+- **Unpin** from the same menu, or from the **Pinned** badge that appears above the tree.
+- The pin stays put while you work: open a file's editor from a row, come back, and you are still focused on the same subtree — it survives a reload too.
+- If the pinned entity ever leaves the view — you narrow a filter, switch its kind pill off, or delete it — the pin lets go by itself and the ordinary tree comes back.`,
+    pl: `**Przypnij encję w Hierarchii, żeby pracować tylko na jej fragmencie drzewa.**
+
+- Menu **Operacje** w każdym wierszu zaczyna się teraz od **Przypnij**. Przypięcie zachowuje Twoje filtry bez zmian i dodatkowo zawęża drzewo do tej encji oraz wszystkiego, co jest pod nią zagnieżdżone — przypnij System, a zobaczysz ten System i jego komponenty, i nic więcej.
+- **Odepnij** z tego samego menu albo z plakietki **Przypięte**, która pojawia się nad drzewem.
+- Przypięcie zostaje na czas pracy: otwórz edytor pliku z wiersza, wróć — nadal jesteś skupiony/a na tym samym poddrzewie; przetrwa też przeładowanie strony.
+- Jeśli przypięta encja zniknie z widoku — zawęzisz filtr, wyłączysz pigułkę jej rodzaju albo ją usuniesz — przypięcie zwalnia się samo i wraca zwykłe drzewo.`,
+  },
+  {
     version: "1.16.0",
     date: "2026-09-01",
     en: `**The filters now decide what you see — on Files, Hierarchy and the Graph alike.**

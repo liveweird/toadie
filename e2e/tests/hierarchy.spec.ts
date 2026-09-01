@@ -76,6 +76,18 @@ test("the hierarchy nests the containment chain and carries the file operations"
   await page.getByLabel("Clear type filter").click();
   await expect(page.getByText(worker, { exact: true })).toBeVisible();
 
+  // Pinning the parent COMPONENT keeps the filters and narrows the tree to it and its
+  // descendants: the System above it goes, the subcomponent below stays.
+  await rowOperation(page, core, "Pin");
+  await expect(page.getByText(`Pinned: ${core}`)).toBeVisible();
+  await expect(page.getByText(worker, { exact: true })).toBeVisible();
+  await expect(page.getByText(sys, { exact: true })).toHaveCount(0);
+  // Unpin from the same menu — the pin PERSISTS per view, so leaving it set here would
+  // follow this spec into its collapse and delete steps.
+  await rowOperation(page, core, "Unpin");
+  await expect(page.getByText(sys, { exact: true })).toBeVisible();
+  await expect(page.getByText(`Pinned: ${core}`)).toHaveCount(0);
+
   // Collapsing the parent COMPONENT hides only the subcomponent…
   await page.getByRole("button", { name: `Toggle children of ${core}` }).click();
   await expect(page.getByText(worker, { exact: true })).toHaveCount(0);

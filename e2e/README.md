@@ -166,7 +166,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`hierarchy.spec.ts`](scenarios/hierarchy.md) — the Hierarchy view at `/`: a
   System ⊃ Component ⊃ subcomponent chain nests by most-specific placement, the Files
   filter panel selects what is SHOWN (a filtered-out container stops nesting its children,
-  which fall flat to the root), branches collapse/expand, the tree rows carry the Files Operations menu (download, delete), and a
+  which fall flat to the root), a row's Pin narrows the tree to that entity and its
+  descendants until it is unpinned, branches collapse/expand, the tree rows carry the Files Operations menu (download, delete), and a
   deleted parent becomes a MISSING placeholder; throwaway files in this run's namespace.
 - [`labels.spec.ts`](scenarios/labels.md) — the label registry: modal validation → create a
   label (values + kinds) → edit → the regular user's read-only view → the editor's

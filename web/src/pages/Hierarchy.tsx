@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActionIcon,
@@ -7,6 +7,7 @@ import {
   Box,
   Button,
   Center,
+  CloseButton,
   Group,
   Loader,
   Paper,
@@ -15,7 +16,7 @@ import {
   Title,
 } from "@mantine/core";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconChevronDown, IconChevronRight, IconSitemap } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronRight, IconPin, IconSitemap } from "@tabler/icons-react";
 import { deleteCatalogFile, getCatalogGraph, type GraphNode } from "../api/catalogFiles";
 import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogFileNameLink from "../components/CatalogFileNameLink";
@@ -30,7 +31,8 @@ import LensPicker from "../components/LensPicker";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
-import { buildHierarchy, type HierarchyNode } from "../utils/hierarchy";
+import { useStoredState, isString } from "../hooks/useStoredState";
+import { buildHierarchy, findPlacement, type HierarchyNode } from "../utils/hierarchy";
 import { loadErrorMessage } from "../utils/saveError";
 
 /** The delete confirm's target — the tree row's identity, shaped like a list row. */
@@ -148,6 +150,10 @@ export default function Hierarchy() {
   // nests only what is shown: filtered to one kind, its rows sit flat at the root.
   const filters = useCatalogFileFilterState("hierarchy");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  // The pinned node id ("" = not pinned). Persisted, unlike the collapse state beside it:
+  // every row links into a file's editor, so a pin that died on navigation would have to be
+  // re-set on each trip back — exactly during the focused work pinning is for.
+  const [pinnedId, setPinnedId] = useStoredState("hierarchy.pinnedNodeId", "", isString);
   // The graph payload carries no sourceUrl, so the tree offers overwrite but not sync
   // (a permanently-greyed Sync item here would assert something we cannot know).
   const [overwriteTarget, setOverwriteTarget] = useState<OverwriteTarget | null>(null);
@@ -163,6 +169,22 @@ export default function Hierarchy() {
 
   const noKinds = filters.noKinds;
   const roots = useMemo(() => (data && !noKinds ? buildHierarchy(data) : []), [data, noKinds]);
+  // A pin narrows the tree to one entity and its descendants, ON TOP of the filters. Rendering
+  // the subtree at the path it already hangs at keeps the collapse keys stable across pinning.
+  const placement = useMemo(
+    () => (pinnedId ? findPlacement(roots, pinnedId) : null),
+    [roots, pinnedId],
+  );
+  const visible = placement ? [placement.item] : roots;
+  const basePath = placement?.path ?? "";
+
+  // The pinned entity left the view — a narrowed filter, a kind pill off, the file deleted —
+  // so the pin drops itself. Guarded on DATA (an effect firing mid-load would discard a
+  // restored pin on every reload) and on kinds (all pills off renders nothing by design, with
+  // the query disabled: that is not the entity being gone).
+  useEffect(() => {
+    if (pinnedId && data && !noKinds && !placement) setPinnedId("");
+  }, [pinnedId, data, noKinds, placement, setPinnedId]);
 
   const deleteConfirm = useDeleteConfirm<DeleteTarget>({
     mutationFn: (row) => deleteCatalogFile(row.id),
@@ -199,6 +221,10 @@ export default function Hierarchy() {
         onDelete={() =>
           deleteConfirm.requestDelete({ id: fileId, name: node.name, namespace: node.namespace })
         }
+        pin={{
+          pinned: node.id === pinnedId,
+          onToggle: () => setPinnedId(node.id === pinnedId ? "" : node.id),
+        }}
       />
     );
   };
@@ -224,10 +250,33 @@ export default function Hierarchy() {
         <Button
           variant="default"
           size="xs"
-          onClick={() => setCollapsed(new Set(branchKeys(roots, "", [])))}
+          onClick={() => setCollapsed(new Set(branchKeys(visible, basePath, [])))}
         >
           {t("hierarchy.collapseAll")}
         </Button>
+        {/* Gray: a pin is neutral state, not caution (the LensPicker's Modified badge). It
+            deliberately stays out of the FilterPanel's active-filter count — that badge
+            speaks for what the collapsed panel HIDES, and this says its piece in the open. */}
+        {placement && (
+          <Badge
+            variant="light"
+            color="gray"
+            size="lg"
+            // Badge uppercases by default; an entity name is shown as stored everywhere else.
+            tt="none"
+            leftSection={<IconPin size={12} />}
+            rightSection={
+              <CloseButton
+                size="xs"
+                variant="transparent"
+                aria-label={t("hierarchy.pinned.clearAria", { name: placement.item.node.name })}
+                onClick={() => setPinnedId("")}
+              />
+            }
+          >
+            {t("hierarchy.pinned.badge", { name: placement.item.node.name })}
+          </Badge>
+        )}
       </Group>
 
       {isError && (
@@ -254,12 +303,12 @@ export default function Hierarchy() {
           <Center py="md">
             <Loader size="sm" />
           </Center>
-        ) : roots.length > 0 ? (
-          roots.map((root) => (
+        ) : visible.length > 0 ? (
+          visible.map((root) => (
             <TreeItem
-              key={pathKey("", root.node)}
+              key={pathKey(basePath, root.node)}
               item={root}
-              path=""
+              path={basePath}
               collapsed={collapsed}
               onToggle={toggle}
               operations={operations}

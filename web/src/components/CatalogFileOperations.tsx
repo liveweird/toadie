@@ -5,11 +5,20 @@ import {
   IconChevronDown,
   IconFileExport,
   IconPencil,
+  IconPin,
+  IconPinnedOff,
   IconRefresh,
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
 import { editCatalogFilePath } from "../utils/catalogFileLinks";
+
+/** Pin is offered only by a view that NESTS rows, and so has a subtree to focus. */
+export type PinOperation = {
+  onToggle: () => void;
+  /** True while THIS row is the pinned one — the item then reads Unpin. */
+  pinned: boolean;
+};
 
 /** Sync is offered only where the caller actually knows the file's source state. */
 export type SyncOperation = {
@@ -23,6 +32,11 @@ export type SyncOperation = {
  * navigates to the editor; Export-as-YAML, Overwrite-with-YAML, Sync-from-source, and Delete
  * are handed back to the page, which owns the download hook, the two modals, and the delete
  * confirm.
+ *
+ * `pin` is optional for the same reason as `sync`, from the other side: only the Hierarchy
+ * nests rows, so only it can focus an entity and its descendants — the flat Files list passes
+ * nothing and never shows the item. It sits FIRST, above a divider, because it acts on the
+ * VIEW while everything below it acts on the file.
  *
  * `sync` is optional because a caller either knows the file's source state or it doesn't —
  * the Files list always passes it (with `enabled` off for a source-less row, so the item
@@ -40,6 +54,7 @@ export default function CatalogFileOperations({
   onOverwrite,
   onDelete,
   sync,
+  pin,
 }: {
   id: number;
   name: string;
@@ -48,6 +63,7 @@ export default function CatalogFileOperations({
   onOverwrite: () => void;
   onDelete: () => void;
   sync?: SyncOperation;
+  pin?: PinOperation;
 }) {
   const { t } = useTranslation();
   return (
@@ -64,6 +80,17 @@ export default function CatalogFileOperations({
         </Button>
       </Menu.Target>
       <Menu.Dropdown>
+        {pin && (
+          <>
+            <Menu.Item
+              leftSection={pin.pinned ? <IconPinnedOff size={14} /> : <IconPin size={14} />}
+              onClick={pin.onToggle}
+            >
+              {t(pin.pinned ? "catalog.pin.clear" : "catalog.pin.action")}
+            </Menu.Item>
+            <Menu.Divider />
+          </>
+        )}
         <Menu.Item
           component={RouterLink}
           to={editCatalogFilePath(id)}

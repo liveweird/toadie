@@ -24,17 +24,22 @@
      the filters select which entities are SHOWN, so a hidden parent takes its containment
      edge with it and the components sit flat at the root; with Lifecycle `experimental`
      nothing matches at all and the tree empties; cleared, the chain returns.
-4. They collapse the parent Component's branch, reopen it, then collapse the System's branch.
+4. They **Pin** the parent Component from its row's Operations menu, then **Unpin** it.
+   - *Expected*: pinning keeps the filters and additionally narrows the tree to that
+     Component and its descendants — the subcomponent stays nested under it, the System above
+     it is gone, and a "Pinned: <name>" badge names what is focused; unpinning restores the
+     full chain.
+5. They collapse the parent Component's branch, reopen it, then collapse the System's branch.
    - *Expected*: collapsing the Component hides only the subcomponent; collapsing the System
      hides the whole chain; expanding restores it.
-5. They download the subcomponent's YAML from its row's **Operations** menu.
+6. They download the subcomponent's YAML from its row's **Operations** menu.
    - *Expected*: a `catalog-info.yaml` download starts — the same operation surface as the
      Files list.
-6. They delete the System from its tree row (through the confirm modal).
+7. They delete the System from its tree row (through the confirm modal).
    - *Expected*: the System stays visible as a dimmed MISSING placeholder (no Operations
      menu) with the components still nested under it — deletions create dangling references
      by design, and the tree shows them.
-7. Cleanup: the subcomponent and the component are deleted from their tree rows.
+8. Cleanup: the subcomponent and the component are deleted from their tree rows.
    - *Expected*: with its last children gone, the placeholder disappears too; nothing owned
      by the spec remains.
 
@@ -44,5 +49,8 @@
   dedupe, multi-group Users, cycle promotion, non-containment virtual nodes excluded) —
   pinned by the pure-util unit suite (`utils/hierarchy.test.ts`).
 - **Expand all / Collapse all, error and empty states** — pinned by `Hierarchy.test.tsx`.
+- **The pin's persistence and its auto-unpin** (a stored pin restores on mount; a pinned
+  entity that leaves the filtered payload drops the pin) — pinned by `Hierarchy.test.tsx`,
+  which can stage a payload without it directly.
 - **Edit from a tree row** — the same `RouterLink` as the Files list's menu item, covered by
   the shared `CatalogFileOperations` component through the Files journeys.
