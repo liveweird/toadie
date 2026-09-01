@@ -41,7 +41,9 @@ import LensPicker from "../components/LensPicker";
 import NamespaceFrames from "../components/NamespaceFrames";
 import {
   applyManualPositions,
+  COLLAPSED_FACE_STYLE,
   filterGraph,
+  FOLDED_EDGE_STYLE,
   layoutGraph,
   namespaceFrames,
   RELATION_FAMILIES,
@@ -50,23 +52,29 @@ import {
   type LaidOutNode,
   type RelationFamily,
 } from "../utils/graphLayout";
+import { foldGraph } from "../utils/graphFold";
+import { buildHierarchy } from "../utils/hierarchy";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { loadErrorMessage } from "../utils/saveError";
 import { editCatalogFilePath } from "../utils/catalogFileLinks";
 
 const NODE_TYPES = { catalog: CatalogGraphNode };
 
-// Swatches borrow the node's own borders (STATUS_STYLE), so the legend cannot lie.
-const LEGEND: { key: "stored" | "missing"; style: React.CSSProperties }[] = [
+// Swatches borrow the node's own borders and shadows (STATUS_STYLE, COLLAPSED_FACE_STYLE),
+// so the legend cannot lie.
+const LEGEND: { key: "stored" | "missing" | "collapsed"; style: React.CSSProperties }[] = [
   { key: "stored", style: { border: STATUS_STYLE.STORED.border } },
   { key: "missing", style: { border: STATUS_STYLE.MISSING.border } },
+  { key: "collapsed", style: { border: STATUS_STYLE.STORED.border, ...COLLAPSED_FACE_STYLE.STORED } },
 ];
 
 type LayoutMode = "auto" | "manual";
-type LayoutState = { mode: LayoutMode; positions: GraphPositions };
+/** The per-user layout document as the page holds it — every PUT sends the whole triple. */
+type LayoutState = { mode: LayoutMode; positions: GraphPositions; collapsed: string[] };
 
-/** Stable fallback — a fresh `{}` in deps would retrigger the layout sync effect every render. */
+/** Stable fallbacks — a fresh `{}`/`[]` in deps would retrigger the layout sync effect every render. */
 const EMPTY_POSITIONS: GraphPositions = {};
+const EMPTY_COLLAPSED: string[] = [];
 
 /** Drag saves are debounced so a repositioning session is one PUT, not one per node. */
 const LAYOUT_SAVE_DEBOUNCE_MS = 600;
@@ -89,10 +97,10 @@ export default function RenderGraph() {
     enabled: !filters.noKinds,
   });
 
-  // The per-user layout document (V19): server truth until the first local interaction,
-  // then `local` wins — every mutation writes local state AND fire-and-forget PUTs the
-  // FULL merged document (wholesale replace on the wire, merge in the client — positions
-  // of filtered-out nodes must survive a save).
+  // The per-user layout document (V19 + V24): server truth until the first local
+  // interaction, then `local` wins — every mutation writes local state AND fire-and-forget
+  // PUTs the FULL merged document (wholesale replace on the wire, merge in the client —
+  // positions and collapsed ids of filtered-out nodes must survive a save).
   const userId = getUserId();
   const layoutQuery = useQuery({
     queryKey: ["graphLayout", userId],
@@ -102,6 +110,14 @@ export default function RenderGraph() {
   const [local, setLocal] = useState<LayoutState | null>(null);
   const mode: LayoutMode = local?.mode ?? (layoutQuery.data?.mode === "manual" ? "manual" : "auto");
   const positions: GraphPositions = local?.positions ?? layoutQuery.data?.positions ?? EMPTY_POSITIONS;
+  const collapsed: string[] = local?.collapsed ?? layoutQuery.data?.collapsed ?? EMPTY_COLLAPSED;
+  // The current triple, readable from callbacks baked into node data without making the
+  // dagre memo below depend on positions (which change on every drag stop). Synced in an
+  // effect — never during render — which lands before any click could read it.
+  const layoutRef = useRef<LayoutState>({ mode, positions, collapsed });
+  useEffect(() => {
+    layoutRef.current = { mode, positions, collapsed };
+  }, [mode, positions, collapsed]);
 
   const saveTimer = useRef<number | undefined>(undefined);
   function persistLayout(next: LayoutState, debounce: boolean) {
@@ -117,11 +133,35 @@ export default function RenderGraph() {
     else put();
   }
 
+  // A fold toggle persists at once, like a mode switch — a collapse is a deliberate act, not
+  // a gesture to coalesce. Reached through a ref so the node data's callbacks stay stable.
+  const toggleRef = useRef<(id: string) => void>(() => {});
+  useEffect(() => {
+    toggleRef.current = (id: string) => {
+      const current = layoutRef.current;
+      const next = current.collapsed.includes(id)
+        ? current.collapsed.filter((entry) => entry !== id)
+        : [...current.collapsed, id];
+      persistLayout({ ...current, collapsed: next }, false);
+    };
+  });
+
   const noKinds = filters.noKinds;
+  // Containment for the fold is the Hierarchy's, over the FULL payload — never the
+  // chip-filtered graph, so a System stays collapsible with "Part of system" switched off.
+  const forest = useMemo(() => (data && !noKinds ? buildHierarchy(data) : []), [data, noKinds]);
   const baseLayout = useMemo(() => {
-    if (!data || noKinds) return { nodes: [] as LaidOutNode[], edges: [] as Edge[] };
-    return layoutGraph(filterGraph(data, enabled));
-  }, [data, enabled, noKinds]);
+    if (!data || noKinds) return { nodes: [] as LaidOutNode[], edges: [] as Edge[], anyCollapsed: false };
+    // Chips first, fold second: a MISSING child a chip pruned is neither counted nor hidden.
+    const folded = foldGraph(filterGraph(data, enabled), forest, new Set(collapsed));
+    const laidOut = layoutGraph(folded);
+    const nodes = laidOut.nodes.map((n) => {
+      const info = folded.info.get(n.id);
+      return info ? { ...n, data: { ...n.data, fold: { ...info, onToggle: () => toggleRef.current(n.id) } } } : n;
+    });
+    const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
+    return { nodes, edges: laidOut.edges, anyCollapsed };
+  }, [data, enabled, noKinds, forest, collapsed]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
@@ -166,7 +206,7 @@ export default function RenderGraph() {
       if (change.position) next = { ...next, [change.id]: { x: change.position.x, y: change.position.y } };
       if (change.dragging === false) dragEnded = true;
     }
-    if (dragEnded) persistLayout({ mode, positions: next }, true);
+    if (dragEnded) persistLayout({ mode, positions: next, collapsed }, true);
   }
 
   // A drag on a stored node must never navigate — React Flow can fire onNodeClick after a
@@ -229,20 +269,34 @@ export default function RenderGraph() {
         <SegmentedControl
           size="xs"
           value={mode}
-          onChange={(value) => persistLayout({ mode: value as LayoutMode, positions }, false)}
+          onChange={(value) => persistLayout({ mode: value as LayoutMode, positions, collapsed }, false)}
           data={[
             { value: "auto", label: t("render.layoutMode.auto") },
             { value: "manual", label: t("render.layoutMode.manual") },
           ]}
           aria-label={t("render.layoutMode.label")}
         />
+        {/* Reset layout clears POSITIONS only — the fold is its own dimension with its own
+            reset below, so straightening a dragged canvas never unfolds it. */}
         {mode === "manual" && (
           <Button
             variant="default"
             size="xs"
-            onClick={() => persistLayout({ mode: "manual", positions: {} }, false)}
+            onClick={() => persistLayout({ mode: "manual", positions: {}, collapsed }, false)}
           >
             {t("render.resetLayout")}
+          </Button>
+        )}
+        {/* Expand all clears the WHOLE list, stale ids of filtered-out nodes included, so
+            nothing resurfaces collapsed later. Shown only while a drawn node is collapsed —
+            a list holding nothing but stale ids has no visible state to reset. */}
+        {baseLayout.anyCollapsed && (
+          <Button
+            variant="default"
+            size="xs"
+            onClick={() => persistLayout({ mode, positions, collapsed: [] }, false)}
+          >
+            {t("render.expandAll")}
           </Button>
         )}
       </Group>
@@ -258,6 +312,15 @@ export default function RenderGraph() {
             </Text>
           </Group>
         ))}
+        <Group gap={6}>
+          {/* The folded-edge swatch draws with the edge's own dash pattern. */}
+          <svg width={28} height={8} aria-hidden="true" style={{ display: "inline-block" }}>
+            <line x1={0} y1={4} x2={28} y2={4} stroke="currentColor" strokeWidth={1.5} style={FOLDED_EDGE_STYLE} />
+          </svg>
+          <Text size="xs" c="dimmed">
+            {t("render.legend.folded")}
+          </Text>
+        </Group>
       </Group>
 
       {isError && (

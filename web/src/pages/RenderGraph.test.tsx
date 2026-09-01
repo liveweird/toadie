@@ -43,6 +43,7 @@ vi.mock("@xyflow/react", async () => {
     useEdgesState,
     ReactFlow: ({
       nodes,
+      edges,
       nodesDraggable,
       onNodesChange,
       onNodeDragStart,
@@ -51,6 +52,7 @@ vi.mock("@xyflow/react", async () => {
       children,
     }: {
       nodes: LaidOutNode[];
+      edges: { id: string; label?: unknown }[];
       nodesDraggable?: boolean;
       onNodesChange?: (changes: unknown[]) => void;
       onNodeDragStart?: () => void;
@@ -61,11 +63,31 @@ vi.mock("@xyflow/react", async () => {
       <div data-testid="flow" data-draggable={String(nodesDraggable ?? true)}>
         {/* The canvas overlays (namespace frames, Background, Controls) are children. */}
         {children}
+        {/* Edges by id with their label — the fold's re-attribution is asserted on these. */}
+        {edges.map((e) => (
+          <span key={e.id} data-testid={`edge:${e.id}`}>
+            {String(e.label ?? "")}
+          </span>
+        ))}
         {nodes.map((n) => (
           <div key={n.id}>
             <button type="button" onClick={(e) => onNodeClick?.(e, n)}>
               {n.data.apiNode.name} [{n.data.apiNode.status}]
             </button>
+            {/* The custom node's fold toggle, as the page hands it over in node data. */}
+            {n.data.fold && (
+              <button
+                type="button"
+                aria-label={
+                  n.data.fold.collapsed
+                    ? `Expand ${n.data.apiNode.name} (${n.data.fold.descendants} hidden)`
+                    : `Collapse ${n.data.apiNode.name}`
+                }
+                onClick={n.data.fold.onToggle}
+              >
+                fold
+              </button>
+            )}
             <span data-testid={`pos:${n.id}`}>{`${n.position.x},${n.position.y}`}</span>
             <button
               type="button"
@@ -138,6 +160,24 @@ const NAMESPACE_ENTRIES = {
   items: [
     { id: 1, value: "default", isDefault: true },
     { id: 2, value: "team-a", isDefault: false },
+  ],
+};
+
+// A System with two components that both depend on one Resource — the fold fixture.
+const SHOP = "system:default/shop";
+const DB = "resource:default/db";
+const FOLD_GRAPH = {
+  nodes: [
+    { id: SHOP, kind: "system", namespace: "default", name: "shop", title: null, fileId: 20, status: "STORED" },
+    { id: "component:default/a", kind: "component", namespace: "default", name: "svc-a", title: null, fileId: 7, status: "STORED" },
+    { id: "component:default/b", kind: "component", namespace: "default", name: "svc-b", title: null, fileId: 8, status: "STORED" },
+    { id: DB, kind: "resource", namespace: "default", name: "db", title: null, fileId: 30, status: "STORED" },
+  ],
+  edges: [
+    { sourceId: "component:default/a", targetId: SHOP, field: "spec.system" },
+    { sourceId: "component:default/b", targetId: SHOP, field: "spec.system" },
+    { sourceId: "component:default/a", targetId: DB, field: "spec.dependsOn" },
+    { sourceId: "component:default/b", targetId: DB, field: "spec.dependsOn" },
   ],
 };
 
@@ -285,7 +325,9 @@ describe("RenderGraph page", () => {
 
     expect(screen.getByTestId("flow")).toHaveAttribute("data-draggable", "true");
     expect(screen.getByRole("button", { name: "Reset layout" })).toBeInTheDocument();
-    await waitFor(() => expect(layoutPuts(mockFetch)).toEqual([{ mode: "manual", positions: {} }]));
+    await waitFor(() =>
+      expect(layoutPuts(mockFetch)).toEqual([{ mode: "manual", positions: {}, collapsed: [] }]),
+    );
   });
 
   test("a drag moves the node, persists the FULL merged map, and never navigates", async () => {
@@ -314,6 +356,7 @@ describe("RenderGraph page", () => {
             "component:default/zzz": { x: 1, y: 2 },
             "component:default/a": { x: 111, y: 222 },
           },
+          collapsed: [],
         }),
       { timeout: 2000 },
     );
@@ -338,6 +381,7 @@ describe("RenderGraph page", () => {
               "component:default/a": { x: 11, y: 12 },
               "component:default/ghost": { x: 21, y: 22 },
             },
+            collapsed: [],
           },
         ]),
       { timeout: 2000 },
@@ -375,7 +419,88 @@ describe("RenderGraph page", () => {
     await user.click(screen.getByRole("button", { name: "Reset layout" }));
 
     expect(screen.getByTestId("pos:component:default/a").textContent).not.toBe("5,6");
-    await waitFor(() => expect(layoutPuts(mockFetch)).toEqual([{ mode: "manual", positions: {} }]));
+    await waitFor(() =>
+      expect(layoutPuts(mockFetch)).toEqual([{ mode: "manual", positions: {}, collapsed: [] }]),
+    );
+  });
+
+  test("collapsing a System hides its components, folds their relations onto it, and saves at once", async () => {
+    mockGraph(mockFetch, FOLD_GRAPH);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/svc-a \[STORED\]/);
+    // Leaves have nothing to fold; the System and nothing else offers a toggle.
+    expect(screen.queryByRole("button", { name: /Collapse svc-a/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Expand all" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Collapse shop" }));
+
+    expect(screen.queryByText(/svc-a/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/svc-b/)).not.toBeInTheDocument();
+    expect(screen.getByText(/shop \[STORED\]/)).toBeInTheDocument();
+    // Both hidden components' dependsOn edges now leave the System as ONE counted edge, and
+    // the containment edges are gone with their sources.
+    expect(screen.getByTestId(`edge:${SHOP}->${DB}:spec.dependsOn`)).toHaveTextContent("dependsOn ×2");
+    expect(screen.queryByTestId("edge:component:default/a->resource:default/db:spec.dependsOn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`edge:component:default/a->${SHOP}:spec.system`)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand shop (2 hidden)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand all" })).toBeInTheDocument();
+    // Persisted immediately (not debounced like a drag), as the whole document.
+    await waitFor(() =>
+      expect(layoutPuts(mockFetch)).toEqual([{ mode: "auto", positions: {}, collapsed: [SHOP] }]),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Expand shop (2 hidden)" }));
+    expect(screen.getByText(/svc-a \[STORED\]/)).toBeInTheDocument();
+    expect(screen.getByTestId("edge:component:default/a->resource:default/db:spec.dependsOn")).toHaveTextContent("dependsOn");
+    await waitFor(() =>
+      expect(layoutPuts(mockFetch).at(-1)).toEqual({ mode: "auto", positions: {}, collapsed: [] }),
+    );
+  });
+
+  test("a stored collapsed list applies on mount, and Expand all clears the whole list", async () => {
+    // The stored list also carries an id NOT in this graph — Expand all must drop it too
+    // (the reset for this dimension), while a mere toggle would have kept it.
+    mockGraph(mockFetch, FOLD_GRAPH, 200, {
+      mode: "auto",
+      positions: {},
+      collapsed: [SHOP, "system:default/elsewhere"],
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/shop \[STORED\]/);
+    expect(screen.queryByText(/svc-a/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+
+    expect(screen.getByText(/svc-a \[STORED\]/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Expand all" })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(layoutPuts(mockFetch)).toEqual([{ mode: "auto", positions: {}, collapsed: [] }]),
+    );
+  });
+
+  test("Reset layout and a drag save both carry the collapsed list through", async () => {
+    mockGraph(mockFetch, FOLD_GRAPH, 200, { mode: "manual", positions: {}, collapsed: [SHOP] });
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/shop \[STORED\]/);
+    await user.click(screen.getByRole("button", { name: "Reset layout" }));
+    await waitFor(() =>
+      expect(layoutPuts(mockFetch)).toEqual([{ mode: "manual", positions: {}, collapsed: [SHOP] }]),
+    );
+
+    await user.click(screen.getByTestId(`drag:${SHOP}`));
+    await waitFor(
+      () =>
+        expect(layoutPuts(mockFetch).at(-1)).toEqual({
+          mode: "manual",
+          positions: { [SHOP]: { x: 111, y: 222 } },
+          collapsed: [SHOP],
+        }),
+      { timeout: 2000 },
+    );
   });
 
   test("a graph spanning two namespaces draws a frame per namespace", async () => {

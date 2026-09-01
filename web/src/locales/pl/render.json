@@ -13,7 +13,9 @@
   },
   "legend": {
     "stored": "Zapisany plik",
-    "missing": "Brakująca encja"
+    "missing": "Brakująca encja",
+    "collapsed": "Zwinięty — jego zawartość jest ukryta w środku",
+    "folded": "Relacja ukrytej encji"
   },
   "layoutMode": {
     "label": "Układ",
@@ -22,5 +24,10 @@
   },
   "resetLayout": "Resetuj układ",
   "empty": "Nie ma czego renderować — żaden zapisany plik nie pasuje.",
-  "nodeAria": "Otwórz {{name}}"
+  "nodeAria": "Otwórz {{name}}",
+  "fold": {
+    "collapseAria": "Zwiń {{name}}",
+    "expandAria": "Rozwiń {{name}} (ukrytych: {{count}})"
+  },
+  "expandAll": "Rozwiń wszystko"
 }

@@ -52,8 +52,16 @@ export function filterGraph(graph: CatalogGraph, enabled: readonly RelationFamil
   return { nodes, edges };
 }
 
+/** The fold affordance a node with drawn descendants carries (see utils/graphFold.ts). */
+export interface NodeFold {
+  collapsed: boolean;
+  /** Its drawn containment descendants — the hidden count the collapsed pill shows. */
+  descendants: number;
+  onToggle: () => void;
+}
+
 /** The node data carried into React Flow (and the custom node component). */
-type CatalogNodeData = { apiNode: GraphNode } & Record<string, unknown>;
+type CatalogNodeData = { apiNode: GraphNode; fold?: NodeFold } & Record<string, unknown>;
 export type LaidOutNode = Node<CatalogNodeData>;
 
 // Fixed footprint for layout; the custom node caps itself to the same box.
@@ -75,6 +83,33 @@ export const STATUS_STYLE: Record<string, CSSProperties> = {
   },
 };
 
+/**
+ * The stacked-cards look of a COLLAPSED face: a second card peeking out behind the node, in
+ * the status's own border colour, so "several things" reads at any zoom before the count
+ * pill is legible. Keyed by status like [STATUS_STYLE] and consumed by the legend too.
+ */
+export const COLLAPSED_FACE_STYLE: Record<string, CSSProperties> = {
+  STORED: {
+    boxShadow: "4px 4px 0 -1.5px var(--mantine-color-body), 4px 4px 0 0 var(--mantine-color-toadie-7)",
+  },
+  MISSING: {
+    boxShadow: "4px 4px 0 -1.5px var(--mantine-color-body), 4px 4px 0 0 var(--mantine-color-red-6)",
+  },
+};
+
+/** A FOLDED edge — one standing in for a hidden node's relation — draws dashed. */
+export const FOLDED_EDGE_STYLE: CSSProperties = { strokeDasharray: "6 4" };
+
+/** What `layoutGraph` needs of an edge: the API shape, plus the fold counters when folded. */
+type LayoutEdge = CatalogGraph["edges"][number] & { relations?: number; folded?: number };
+type LayoutInput = { nodes: GraphNode[]; edges: LayoutEdge[] };
+
+/** An edge's label: the field without `spec.`, and `×n` when it merges several relations. */
+export function edgeLabel(edge: LayoutEdge): string {
+  const base = edge.field.replace("spec.", "");
+  return (edge.relations ?? 1) > 1 ? `${base} ×${edge.relations}` : base;
+}
+
 /** The distinct namespaces a laid-out graph spans — the "should we group at all" input. */
 function namespacesOf(nodes: readonly GraphNode[]): string[] {
   return [...new Set(nodes.map((n) => n.namespace))].sort((a, b) => a.localeCompare(b));
@@ -94,7 +129,7 @@ function namespacesOf(nodes: readonly GraphNode[]): string[] {
  * skips label-less nodes. Never set `rankdir` on a cluster — that switches dagre onto its
  * `recursiveClusterLayout` path, which is a different and far less exercised algorithm.
  */
-export function layoutGraph(graph: CatalogGraph): { nodes: LaidOutNode[]; edges: Edge[] } {
+export function layoutGraph(graph: LayoutInput): { nodes: LaidOutNode[]; edges: Edge[] } {
   const namespaces = namespacesOf(graph.nodes);
   const grouped = namespaces.length > 1;
   const g = new dagre.graphlib.Graph({ compound: grouped });
@@ -122,11 +157,13 @@ export function layoutGraph(graph: CatalogGraph): { nodes: LaidOutNode[]; edges:
       data: { apiNode: n },
     };
   });
+  // Ids stay `source->target:field` — unique, since the fold merges on exactly that key.
   const edges: Edge[] = graph.edges.map((e) => ({
     id: `${e.sourceId}->${e.targetId}:${e.field}`,
     source: e.sourceId,
     target: e.targetId,
-    label: e.field.replace("spec.", ""),
+    label: edgeLabel(e),
+    ...((e.folded ?? 0) > 0 ? { style: FOLDED_EDGE_STYLE } : {}),
   }));
   return { nodes, edges };
 }

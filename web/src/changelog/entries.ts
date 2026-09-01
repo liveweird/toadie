@@ -17,6 +17,24 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.18.0",
+    date: "2026-09-02",
+    en: `**Collapse a node on the Graph — its contents fold into it, and their relations stay visible.**
+
+- Every node with something beneath it — the same containment the Hierarchy shows: a Domain over its Systems, a System over its components, a Group over its members — now carries a small chevron. Click it to **collapse** the node: everything inside disappears from the canvas until you expand it again.
+- A collapsed node is unmistakable: it reads as a stack of cards and wears a filled pill with the number of entities hidden inside.
+- Nothing the hidden entities said is lost. A relation between a hidden entity and the rest of the world is drawn as a relation of the collapsed node instead — **dashed**, so you can tell it stands in for something folded away — and several such relations of one kind merge into one edge with a count, like \`dependsOn ×3\`.
+- Which relations are drawn is still the chips' business; collapsing works on what belongs to what, so a System folds even with **Part of system** switched off.
+- What you collapsed is saved with your layout, per user: it follows you across reloads and devices, and **Expand all** puts everything back at once. Reset layout straightens positions only and leaves your folds alone.`,
+    pl: `**Zwiń węzeł na Grafie — jego zawartość chowa się do środka, a jej relacje pozostają widoczne.**
+
+- Każdy węzeł, pod którym coś jest — dokładnie to zawieranie, które pokazuje Hierarchia: Domena nad swoimi Systemami, System nad komponentami, Grupa nad członkami — ma teraz mały szewron. Kliknij go, żeby **zwinąć** węzeł: wszystko w środku znika z płótna, dopóki go znów nie rozwiniesz.
+- Zwinięty węzeł jest nie do pomylenia: wygląda jak stos kart i nosi wypełnioną plakietkę z liczbą ukrytych w nim encji.
+- Nic, co mówiły ukryte encje, nie ginie. Relacja między ukrytą encją a resztą świata jest rysowana jako relacja zwiniętego węzła — **przerywana**, żeby było widać, że zastępuje coś zwiniętego — a kilka takich relacji jednego rodzaju łączy się w jedną krawędź z licznikiem, np. \`dependsOn ×3\`.
+- Które relacje są rysowane, nadal decydują pigułki; zwijanie działa na tym, co do czego należy, więc System zwija się nawet przy wyłączonej pigułce **Należy do systemu**.
+- To, co zwiniesz, zapisuje się razem z Twoim układem, per użytkownik/użytkowniczka: wraca po przeładowaniu i na innym urządzeniu, a **Rozwiń wszystko** przywraca wszystko naraz. Resetuj układ prostuje tylko pozycje i nie rusza Twoich zwinięć.`,
+  },
+  {
     version: "1.17.0",
     date: "2026-09-02",
     en: `**Pin an entity on the Hierarchy to work on just its part of the tree.**

@@ -22,8 +22,11 @@ class GraphLayoutTest {
 
     private fun layoutPath(id: UInt) = "/api/v1/users/$id/graph-layout"
 
-    private fun doc(mode: String, vararg positions: Pair<String, GraphPosition>) =
-        GraphLayoutDocument(mode = mode, positions = positions.toMap())
+    private fun doc(
+        mode: String,
+        vararg positions: Pair<String, GraphPosition>,
+        collapsed: List<String> = emptyList(),
+    ) = GraphLayoutDocument(mode = mode, positions = positions.toMap(), collapsed = collapsed)
 
     @Test
     fun `a user round-trips their own layout - default doc first, wholesale replace, audit-silent`() = testApplication {
@@ -36,18 +39,23 @@ class GraphLayoutTest {
         assertEquals(GraphLayoutDocument(), client.get(layoutPath(id)).body<GraphLayoutDocument>())
 
         withAuditCapture { capture ->
+            // The collapsed list rides the same document (V24) — order preserved, ids of nodes
+            // the server never heard of kept verbatim (never pruned, the positions posture).
             val first = doc(
                 "manual",
                 "component:default/a" to GraphPosition(12.5, -3.0),
                 "group:default/team" to GraphPosition(0.0, 640.0),
+                collapsed = listOf("system:default/shop", "domain:default/commerce"),
             )
             assertEquals(HttpStatusCode.NoContent, client.putJson(layoutPath(id), first).status)
             assertEquals(first, client.get(layoutPath(id)).body<GraphLayoutDocument>())
 
-            // Wholesale replace: the re-PUT's map wins outright — the dropped key is gone.
+            // Wholesale replace: the re-PUT's map wins outright — the dropped key is gone, and
+            // a document that omits `collapsed` reads back as nothing collapsed.
             val second = doc("manual", "component:default/a" to GraphPosition(1.0, 2.0))
             assertEquals(HttpStatusCode.NoContent, client.putJson(layoutPath(id), second).status)
             assertEquals(second, client.get(layoutPath(id)).body<GraphLayoutDocument>())
+            assertTrue(client.get(layoutPath(id)).body<GraphLayoutDocument>().collapsed.isEmpty())
 
             // Deliberately unaudited: high-frequency pure view state.
             assertTrue(
@@ -105,6 +113,17 @@ class GraphLayoutTest {
             HttpStatusCode.BadRequest,
             admin.putJson(layoutPath(id), doc("manual", "bad\u0007key" to GraphPosition(0.0, 0.0))).status,
         )
+
+        // The collapsed list (V24) is held to the same ceiling and the same id grammar.
+        val tooManyCollapsed = doc("auto", collapsed = (0..MAX_GRAPH_POSITIONS).map { "component:default/n$it" })
+        val overCap = admin.putJson(layoutPath(id), tooManyCollapsed)
+        assertEquals(HttpStatusCode.BadRequest, overCap.status)
+        assertTrue(overCap.body<ProblemDetail>().detail!!.contains("collapsed"))
+        for (bad in listOf("  ", "a".repeat(401), "bad\u0007key")) {
+            val response = admin.putJson(layoutPath(id), doc("auto", collapsed = listOf("system:default/ok", bad)))
+            assertEquals(HttpStatusCode.BadRequest, response.status, "collapsed id ${bad.take(12)} must be refused")
+            assertTrue(response.body<ProblemDetail>().detail!!.startsWith("Collapsed node ids"))
+        }
     }
 
     @Test
@@ -127,6 +146,8 @@ class GraphLayoutTest {
         val decoded = kotlinx.serialization.json.Json.decodeFromString<GraphLayoutDocument>("""{}""")
         assertEquals("auto", decoded.mode)
         assertTrue(decoded.positions.isEmpty())
+        // Pre-V24 clients send no `collapsed` at all — that must read as nothing collapsed.
+        assertTrue(decoded.collapsed.isEmpty())
     }
 
     @Test

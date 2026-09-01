@@ -118,4 +118,60 @@ describe("CatalogGraphNode", () => {
     renderWithProviders(<CatalogGraphNode {...nodeProps({ status: "MISSING", fileId: null })} />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
+
+  describe("the fold toggle", () => {
+    function withFold(fold: { collapsed: boolean; descendants: number; onToggle: () => void }) {
+      const props = nodeProps();
+      return { ...props, data: { ...props.data, fold } } as NodeProps<LaidOutNode>;
+    }
+
+    test("a node with nothing beneath it has no toggle at all", () => {
+      renderWithProviders(<CatalogGraphNode {...nodeProps()} />);
+      expect(screen.queryByRole("button", { name: /Collapse|Expand/ })).not.toBeInTheDocument();
+    });
+
+    test("expanded: a Collapse control whose click toggles and never reaches the node wrapper", async () => {
+      const user = userEvent.setup();
+      const onToggle = vi.fn();
+      const wrapperClick = vi.fn();
+      // The wrapper stands in for React Flow's node element, whose click the page turns into
+      // navigation — a fold must never ride that path.
+      renderWithProviders(
+        <div onClick={wrapperClick}>
+          <CatalogGraphNode {...withFold({ collapsed: false, descendants: 4, onToggle })} />
+        </div>,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Collapse svc-x" });
+      expect(toggle).toHaveClass("nodrag", "nopan");
+      await user.click(toggle);
+      expect(onToggle).toHaveBeenCalledTimes(1);
+      expect(wrapperClick).not.toHaveBeenCalled();
+      // The face is still its own, separate, control — the two are siblings, not nested.
+      expect(screen.getByLabelText("Open svc-x")).not.toContainElement(toggle);
+    });
+
+    test("collapsed: an Expand pill carrying the hidden count, and the keyboard path stays sealed too", async () => {
+      const user = userEvent.setup();
+      const onToggle = vi.fn();
+      const wrapperClick = vi.fn();
+      renderWithProviders(
+        <div onClick={wrapperClick}>
+          <CatalogGraphNode {...withFold({ collapsed: true, descendants: 12, onToggle })} />
+        </div>,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Expand svc-x (12 hidden)" });
+      expect(toggle).toHaveTextContent("12");
+      toggle.focus();
+      await user.keyboard("{Enter}");
+      expect(onToggle).toHaveBeenCalledTimes(1);
+      expect(wrapperClick).not.toHaveBeenCalled();
+      // Enter on the FACE still opens the file — the fold sits beside it, not inside it.
+      screen.getByLabelText("Open svc-x").focus();
+      await user.keyboard("{Enter}");
+      expect(wrapperClick).toHaveBeenCalledTimes(1);
+      expect(onToggle).toHaveBeenCalledTimes(1);
+    });
+  });
 });

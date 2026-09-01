@@ -194,8 +194,11 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
   (deletion-orphaned) missing nodes for one per-attempt name stem, faced name + type, with the
   two-namespace canvas clustered inside labelled namespace frames and the unmatched shared
-  owner group left out; toggling a relation family prunes the missing nodes it strands; the Manual layout mode drags a node, the position survives
-  a reload (server-side per user), and Reset + Auto restore the pristine layout document.
+  owner group left out; toggling a relation family prunes the missing nodes it strands;
+  collapsing the System hides its component and re-attributes the component's relations to
+  the System as dashed edges, survives a reload (server-side per user), and Expand all undoes
+  it; the Manual layout mode drags a node, the position survives a reload, and Reset + Auto
+  restore the pristine layout document.
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   dry-run as Would-be-created (the Check button, nothing stored), import as Created, export
   downloads them as one `---`-separated file, and re-importing the export reports every row

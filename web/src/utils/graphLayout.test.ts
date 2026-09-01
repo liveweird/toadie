@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import type { CatalogGraph } from "../api/catalogFiles";
 import {
   applyManualPositions,
+  edgeLabel,
   filterGraph,
+  FOLDED_EDGE_STYLE,
   GRAPH_NODE_HEIGHT,
   GRAPH_NODE_WIDTH,
   layoutGraph,
@@ -211,5 +213,33 @@ describe("layoutGraph namespace clustering", () => {
     const { nodes } = layoutGraph(GRAPH);
     expect(nodes).toHaveLength(4);
     expect(namespaceFrames(nodes)).toEqual([]);
+  });
+});
+
+describe("layoutGraph folded edges", () => {
+  const folded = {
+    nodes: GRAPH.nodes.slice(0, 2),
+    edges: [
+      { sourceId: "component:default/a", targetId: "component:default/b", field: "spec.dependsOn", relations: 3, folded: 3 },
+      { sourceId: "component:default/b", targetId: "component:default/a", field: "spec.owner", relations: 2, folded: 1 },
+      { sourceId: "component:default/a", targetId: "component:default/b", field: "spec.system", relations: 1, folded: 0 },
+    ],
+  };
+
+  test("a plain edge keeps its field label; a merged one counts its relations", () => {
+    expect(edgeLabel({ sourceId: "x", targetId: "y", field: "spec.dependsOn" })).toBe("dependsOn");
+    expect(edgeLabel(folded.edges[0])).toBe("dependsOn ×3");
+    expect(edgeLabel(folded.edges[2])).toBe("system");
+  });
+
+  test("an edge standing in for ANY hidden relation draws dashed; a direct one does not", () => {
+    const { edges } = layoutGraph(folded);
+    expect(edges.map((e) => e.label)).toEqual(["dependsOn ×3", "owner ×2", "system"]);
+    expect(edges[0].style).toEqual(FOLDED_EDGE_STYLE);
+    // Two relations, one of them folded: the edge is partly a stand-in, so it reads dashed.
+    expect(edges[1].style).toEqual(FOLDED_EDGE_STYLE);
+    expect(edges[2].style).toBeUndefined();
+    // Ids stay the fold's own merge key, so React Flow sees one edge per merged pair+field.
+    expect(edges[0].id).toBe("component:default/a->component:default/b:spec.dependsOn");
   });
 });

@@ -4,7 +4,9 @@ import type { EntityKind } from "./catalogFileForm";
 /**
  * The Hierarchy page's pure shaping: the graph endpoint's nodes/edges become a forest of
  * containment trees. Containment relations only — ownership, dependencies, and API
- * provide/consume edges never nest anything here (the Graph page draws those).
+ * provide/consume edges never nest anything here (the Graph page draws those). The Graph
+ * page's FOLD (`utils/graphFold.ts`) reuses `buildHierarchy` as its definition of what a
+ * collapsed node hides, so the two views can never disagree about what belongs to what.
  *
  * Placement rules (user-chosen):
  * - MOST SPECIFIC single parent: an entity nests in ONE place, picked by field priority

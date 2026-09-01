@@ -14,15 +14,17 @@ val GraphLayoutServiceKey = AttributeKey<GraphLayoutService>("GraphLayoutService
 
 /**
  * The per-user Graph-page layout store (V19): one row per user holding the whole
- * [GraphLayoutDocument] — mode as a plain column, positions as a JSON object in TEXT (the
- * labels/tags precedent). Hard-delete by design (the user_disabled_features exception):
- * pure view state replaced wholesale on every save, no history worth keeping.
+ * [GraphLayoutDocument] — mode as a plain column, positions as a JSON object and (V24) the
+ * collapsed ids as a JSON array, both in TEXT (the labels/tags precedent). Hard-delete by
+ * design (the user_disabled_features exception): pure view state replaced wholesale on every
+ * save, no history worth keeping.
  */
 class GraphLayoutService(private val database: R2dbcDatabase) {
     object GraphLayouts : Table("graph_layouts") {
         val userId = reference("user_id", UserService.Users)
         val mode = varchar("mode", length = 10).default("auto")
         val positions = text("positions").default("{}")
+        val collapsed = text("collapsed").default("[]")
         val updatedAt = long("updated_at")
         override val primaryKey = PrimaryKey(userId)
     }
@@ -38,6 +40,7 @@ class GraphLayoutService(private val database: R2dbcDatabase) {
                 GraphLayoutDocument(
                     mode = it[GraphLayouts.mode],
                     positions = json.decodeFromString(it[GraphLayouts.positions]),
+                    collapsed = json.decodeFromString(it[GraphLayouts.collapsed]),
                 )
             }
             ?: GraphLayoutDocument()
@@ -54,6 +57,7 @@ class GraphLayoutService(private val database: R2dbcDatabase) {
             it[GraphLayouts.userId] = userId
             it[mode] = doc.mode
             it[positions] = json.encodeToString(doc.positions)
+            it[collapsed] = json.encodeToString(doc.collapsed)
             it[updatedAt] = System.currentTimeMillis()
         }
     }

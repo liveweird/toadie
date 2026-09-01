@@ -15,30 +15,42 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
   const a = `${stem}-a`;
   const b = `${stem}-b`;
   const ghost = `${stem}-ghost`;
+  const sys = `${stem}-sys`;
+  const created = () =>
+    page.waitForResponse(
+      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
+    );
 
-  // The targets first (B in the OTHER namespace, the doomed ghost here), then A depending
-  // on both — a cross-namespace edge is what makes the canvas span two frames.
-  for (const [name, namespace, dependsOn] of [
-    [b, nsAlt, []],
-    [ghost, ns, []],
-    [a, ns, [`component:${nsAlt}/${b}`, `component:${ns}/${ghost}`]],
-  ] as [string, string, string[]][]) {
+  // The System first (type is optional for Systems — left blank): A will belong to it, which
+  // is what makes it collapsible on the canvas.
+  await page.goto("/files/new");
+  await page.getByRole("combobox", { name: "Kind" }).click();
+  await page.getByRole("option", { name: "System", exact: true }).click();
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill(sys);
+  await pickNamespace(page, ns);
+  await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
+  await Promise.all([created(), page.getByRole("button", { name: "Create" }).click()]);
+
+  // Then the targets (B in the OTHER namespace, the doomed ghost here), then A — in the
+  // System, depending on both — a cross-namespace edge is what makes the canvas span two
+  // frames.
+  for (const [name, namespace, dependsOn, system] of [
+    [b, nsAlt, [], null],
+    [ghost, ns, [], null],
+    [a, ns, [`component:${nsAlt}/${b}`, `component:${ns}/${ghost}`], `system:${ns}/${sys}`],
+  ] as [string, string, string[], string | null][]) {
     await page.goto("/files/new");
     await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
     await pickNamespace(page, namespace);
     await pickType(page, "service");
     await pickLifecycle(page, "production");
     await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
+    if (system) await page.getByRole("combobox", { name: "System" }).fill(system);
     for (const ref of dependsOn) {
       await page.getByRole("combobox", { name: "Depends on" }).fill(ref);
       await page.keyboard.press("Enter");
     }
-    await Promise.all([
-      page.waitForResponse(
-        (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-      ),
-      page.getByRole("button", { name: "Create" }).click(),
-    ]);
+    await Promise.all([created(), page.getByRole("button", { name: "Create" }).click()]);
   }
 
   // Deleting the ghost leaves A's reference dangling — the graph's MISSING node.
@@ -61,6 +73,7 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
   await expect(page.getByText(a, { exact: true })).toBeVisible();
   await expect(page.getByText(b, { exact: true })).toBeVisible();
   await expect(page.getByText(ghost, { exact: true })).toBeVisible();
+  await expect(page.getByText(sys, { exact: true })).toBeVisible();
   await expect(page.getByText("platform", { exact: true })).toHaveCount(0);
   // The node's second line is spec.type, not the namespace: A and B were created as
   // `service`, and the namespace never appears on a node face.
@@ -91,6 +104,33 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     page.waitForResponse(
       (r) => r.url().includes("/graph-layout") && r.request().method() === "PUT" && r.ok(),
     );
+
+  // Folding. Depends-on goes back on first — the folded edges are what this step watches.
+  // Only the System has something beneath it (A), so it alone offers a fold toggle; the
+  // leaves do not. Collapsing hides A and re-attributes A's two dependsOn relations to the
+  // System: two DASHED edges leave it, one to B and one to the ghost.
+  await page.getByText("Depends on", { exact: true }).click();
+  await expect(page.getByText(ghost, { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: `Collapse ${a}` })).toHaveCount(0);
+  await expect(page.locator(".react-flow__node")).toHaveCount(4);
+  await expect(page.locator(".react-flow__edge-path[style*='stroke-dasharray']")).toHaveCount(0);
+  await Promise.all([layoutPut(), page.getByRole("button", { name: `Collapse ${sys}` }).click()]);
+  await expect(page.getByText(a, { exact: true })).toHaveCount(0);
+  await expect(page.locator(".react-flow__node")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: `Expand ${sys} (1 hidden)` })).toBeVisible();
+  await expect(page.locator(".react-flow__edge").filter({ hasText: "dependsOn" })).toHaveCount(2);
+  await expect(page.locator(".react-flow__edge-path[style*='stroke-dasharray']")).toHaveCount(2);
+
+  // Reload: the collapsed set lives in the per-user layout document, server-side.
+  await page.reload();
+  await expect(page.getByRole("button", { name: `Expand ${sys} (1 hidden)` })).toBeVisible();
+  await expect(page.getByText(a, { exact: true })).toHaveCount(0);
+
+  // Expand all brings A back with its own solid edges, and clears the stored list.
+  await Promise.all([layoutPut(), page.getByRole("button", { name: "Expand all" }).click()]);
+  await expect(page.getByText(a, { exact: true })).toBeVisible();
+  await expect(page.locator(".react-flow__edge-path[style*='stroke-dasharray']")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Expand all" })).toHaveCount(0);
 
   // Switch to Manual (the SegmentedControl input is visually hidden — click its label).
   // Assert the radio state rather than awaiting the mode PUT: a retry inheriting a
@@ -133,12 +173,13 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
   await expect.poll(transformOfB).not.toBe(draggedTransform);
 
   // Back to Auto — the seed admin's layout document ends the run pristine (auto, no
-  // positions), so parallel/later runs start from the default.
+  // positions, nothing collapsed — Expand all above), so parallel/later runs start from the
+  // default.
   await Promise.all([layoutPut(), page.getByText("Auto", { exact: true }).click()]);
   await expect(page.getByRole("button", { name: "Reset layout" })).toHaveCount(0);
 
-  // Cleanup: delete both throwaway files.
-  for (const name of [a, b]) {
+  // Cleanup: delete the three remaining throwaway files.
+  for (const name of [a, b, sys]) {
     await page.goto("/files");
     await openFilters(page);
     await page.getByLabel("Name", { exact: true }).fill(name);

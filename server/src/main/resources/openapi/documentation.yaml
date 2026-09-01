@@ -1890,9 +1890,10 @@ components:
     GraphLayoutDocument:
       type: object
       description: >-
-        The per-user Graph-page layout (V19): the mode plus every manually dragged node's
-        position, keyed by node id (kind:namespace/name). The PUT replaces it wholesale;
-        both fields default (auto / empty) when omitted.
+        The per-user Graph-page layout (V19): the mode, every manually dragged node's
+        position keyed by node id (kind:namespace/name), and the ids of the nodes the user
+        collapsed (V24). The PUT replaces it wholesale; every field defaults (auto / empty)
+        when omitted.
       properties:
         mode:
           type: string
@@ -1908,6 +1909,15 @@ components:
           description: >-
             Dragged node positions by node id — at most 1000 entries, keys non-blank and
             at most 400 characters.
+        collapsed:
+          type: array
+          items: { type: string }
+          description: >-
+            Node ids the user collapsed on the Graph (their containment descendants are
+            hidden and the collapsed node stands in for their relations) — at most 1000
+            entries under the position-key rules. Never pruned server-side: like positions,
+            an id of a node outside the client's current filter is kept, so the client sends
+            the full list back on every save.
 
     UserFeaturesUpdateRequest:
       type: object

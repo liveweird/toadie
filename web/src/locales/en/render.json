@@ -13,7 +13,9 @@
   },
   "legend": {
     "stored": "Stored file",
-    "missing": "Missing entity"
+    "missing": "Missing entity",
+    "collapsed": "Collapsed — its contents are hidden inside",
+    "folded": "Relation of a hidden entity"
   },
   "layoutMode": {
     "label": "Layout",
@@ -22,5 +24,10 @@
   },
   "resetLayout": "Reset layout",
   "empty": "Nothing to render — no stored files match.",
-  "nodeAria": "Open {{name}}"
+  "nodeAria": "Open {{name}}",
+  "fold": {
+    "collapseAria": "Collapse {{name}}",
+    "expandAria": "Expand {{name}} ({{count}} hidden)"
+  },
+  "expandAll": "Expand all"
 }

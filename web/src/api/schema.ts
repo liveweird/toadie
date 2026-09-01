@@ -515,9 +515,10 @@ export interface paths {
          *     `GET /api/v1/files` returns for the same query, and an edge is drawn only when BOTH of
          *     its ends are shown — so a reference to a stored file the filter excluded contributes
          *     neither a node nor an edge, and is never reported as `MISSING` (hidden is not absent).
-         *     A `MISSING` entity has no document, so only the two slots its reference identity carries
-         *     are judged against the filter — `kind` and `namespace`; the content filters (tag, type,
-         *     lifecycle, owner, label) never hide it. A referenced kind Toadie does not store
+         *     A `MISSING` entity is judged on every slot its reference identity carries — `kind`,
+         *     `namespace` and `name` — so those filters mean the same thing for it as for a stored
+         *     file; the CONTENT filters (tag, type, lifecycle, owner, label) have no document to read
+         *     and never hide it. A referenced kind Toadie does not store
          *     (Location, Template, custom) can be selected by no `kind` value and is never drawn.
          *
          *     Unpaged by design — a report-style computation over the workspace.
@@ -1184,7 +1185,7 @@ export interface components {
              */
             y: number;
         };
-        /** @description The per-user Graph-page layout (V19): the mode plus every manually dragged node's position, keyed by node id (kind:namespace/name). The PUT replaces it wholesale; both fields default (auto / empty) when omitted. */
+        /** @description The per-user Graph-page layout (V19): the mode, every manually dragged node's position keyed by node id (kind:namespace/name), and the ids of the nodes the user collapsed (V24). The PUT replaces it wholesale; every field defaults (auto / empty) when omitted. */
         GraphLayoutDocument: {
             /**
              * @description auto = the dagre layout computed on every render; manual = the stored dragged positions apply (nodes without a stored position keep their dagre spot).
@@ -1196,6 +1197,8 @@ export interface components {
             positions?: {
                 [key: string]: components["schemas"]["GraphPosition"];
             };
+            /** @description Node ids the user collapsed on the Graph (their containment descendants are hidden and the collapsed node stands in for their relations) — at most 1000 entries under the position-key rules. Never pruned server-side: like positions, an id of a node outside the client's current filter is kept, so the client sends the full list back on every save. */
+            collapsed?: string[];
         };
         UserFeaturesUpdateRequest: {
             /** @description The complete new DISABLED set — an empty array enables everything. */
