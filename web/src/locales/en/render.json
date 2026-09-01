@@ -13,8 +13,7 @@
   },
   "legend": {
     "stored": "Stored file",
-    "missing": "Missing entity",
-    "external": "Not stored in Toadie"
+    "missing": "Missing entity"
   },
   "layoutMode": {
     "label": "Layout",

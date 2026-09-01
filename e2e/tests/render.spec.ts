@@ -1,26 +1,31 @@
 import { expect, login, openFilters, pickLifecycle, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
 
-// The render-graph journey in this run's throwaway NAMESPACE (registered by global-setup —
-// the form accepts only defined namespaces): the namespace filter isolates this spec's nodes
-// from other files in the shared database, and per-attempt-unique node names keep retries
-// honest against their own residue. Saves enforce reference resolution, so the MISSING node
-// is MADE by deleting a stored target after its referrer saved.
+// The render-graph journey across this run's two throwaway NAMESPACES (registered by
+// global-setup — the form accepts only defined namespaces). Isolation runs off a per-attempt
+// unique NAME stem shared by all three nodes, so the graph's name filter selects exactly this
+// attempt's entities and retries never inherit their own residue; the second namespace is what
+// puts two namespace frames on one canvas, now that a neighbour outside the filter is no longer
+// drawn. Saves enforce reference resolution, so the MISSING node is MADE by deleting a stored
+// target after its referrer saved.
 test("the graph renders stored and missing nodes for a namespace", async ({ page }) => {
   await login(page);
   const ns = runNamespace("render");
-  const a = uniqueText("e2e-rnode-a");
-  const b = uniqueText("e2e-rnode-b");
-  const ghost = uniqueText("e2e-rnode-ghost");
+  const nsAlt = runNamespace("renderAlt");
+  const stem = uniqueText("e2e-rnode");
+  const a = `${stem}-a`;
+  const b = `${stem}-b`;
+  const ghost = `${stem}-ghost`;
 
-  // The targets first (B and the doomed ghost), then A depending on both.
-  for (const [name, dependsOn] of [
-    [b, []],
-    [ghost, []],
-    [a, [`component:${ns}/${b}`, `component:${ns}/${ghost}`]],
-  ] as [string, string[]][]) {
+  // The targets first (B in the OTHER namespace, the doomed ghost here), then A depending
+  // on both — a cross-namespace edge is what makes the canvas span two frames.
+  for (const [name, namespace, dependsOn] of [
+    [b, nsAlt, []],
+    [ghost, ns, []],
+    [a, ns, [`component:${nsAlt}/${b}`, `component:${ns}/${ghost}`]],
+  ] as [string, string, string[]][]) {
     await page.goto("/files/new");
     await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
-    await pickNamespace(page, ns);
+    await pickNamespace(page, namespace);
     await pickType(page, "service");
     await pickLifecycle(page, "production");
     await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
@@ -46,38 +51,41 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
   ]);
 
-  // Render the namespace: A and B stored, the ghost missing, the (stored) owner group too.
+  // Render this attempt's entities by NAME: A and B stored, the ghost missing. The shared
+  // owner group is NOT drawn — it does not match the filter, and the filters now select what
+  // is shown; a MISSING node is judged on the same identity, so the ghost's name lets it in.
   await page.goto("/graph");
   // The graph shares the Files list's filter panel now (collapsed by default).
   await openFilters(page);
-  await pickNamespace(page, ns);
+  await page.getByLabel("Name", { exact: true }).fill(stem);
   await expect(page.getByText(a, { exact: true })).toBeVisible();
   await expect(page.getByText(b, { exact: true })).toBeVisible();
   await expect(page.getByText(ghost, { exact: true })).toBeVisible();
-  await expect(page.getByText("platform", { exact: true })).toBeVisible();
+  await expect(page.getByText("platform", { exact: true })).toHaveCount(0);
   // The node's second line is spec.type, not the namespace: A and B were created as
-  // `service`, and the namespace (this run's `ns`) never appears on a node face.
+  // `service`, and the namespace never appears on a node face.
   await expect(page.locator(`.react-flow__node[data-id="component:${ns}/${a}"]`)).toContainText("service");
   // Scoped to the canvas on purpose: the namespace still appears in the filter panel's Select.
   await expect(page.locator(".react-flow__node").filter({ hasText: ns })).toHaveCount(0);
-  // Two namespaces are on screen — this run's, and `default` (the shared platform owner) —
-  // so each gets a frame behind its nodes. The frames live in React Flow's viewport portal,
-  // not among the nodes, which is why the assertion above still holds.
+  // Two namespaces are on screen — A and the ghost here, B next door — so each gets a frame
+  // behind its nodes. The frames live in React Flow's viewport portal, not among the nodes,
+  // which is why the assertion above still holds.
   const frames = page.locator(".react-flow__viewport-portal");
   await expect(frames.getByText(ns, { exact: true })).toBeVisible();
-  await expect(frames.getByText("default", { exact: true })).toBeVisible();
+  await expect(frames.getByText(nsAlt, { exact: true })).toBeVisible();
 
-  // Disabling the Depends-on relation prunes the orphaned VIRTUAL ghost node; stored nodes
-  // (B, the platform owner) always stay. (The Chip's checkbox input is visually hidden —
-  // click its label.)
+  // Disabling the Depends-on relation prunes the orphaned MISSING ghost — its only edge was
+  // what made it knowable — while the stored nodes stay: a relation chip governs relations,
+  // not which entities are shown. (The Chip's checkbox input is visually hidden — click its
+  // label.)
   await page.getByText("Depends on", { exact: true }).click();
   await expect(page.getByText(ghost, { exact: true })).toHaveCount(0);
   await expect(page.getByText(b, { exact: true })).toBeVisible();
-  await expect(page.getByText("platform", { exact: true })).toBeVisible();
+  await expect(page.getByText(a, { exact: true })).toBeVisible();
 
   // Manual layout: node canvas positions read via the React Flow wrapper's translate()
   // transform — viewport-independent, unlike boundingBox (fitView rescales after reload).
-  const nodeB = page.locator(`.react-flow__node[data-id="component:${ns}/${b}"]`);
+  const nodeB = page.locator(`.react-flow__node[data-id="component:${nsAlt}/${b}"]`);
   const transformOfB = () => nodeB.evaluate((el) => (el as HTMLElement).style.transform);
   const layoutPut = () =>
     page.waitForResponse(

@@ -444,11 +444,13 @@ export interface paths {
          *       from a URL — but a file without one cannot be synced, so the report keeps it
          *       visible (finding `field` is `source`, `reference` empty).
          *
-         *     The optional filters (the SAME whitelisted set as the list and graph endpoints,
-         *     same semantics) narrow which files' errors are REPORTED — `checkedFiles`/
-         *     `checkedReferences` count the reported set; references still resolve against the
-         *     whole workspace, so filtering never manufactures `MISSING` findings. Unpaged by
-         *     design — a report-style computation over the workspace.
+         *     The optional filters (the SAME whitelisted set as the list endpoint) narrow which
+         *     files' errors are REPORTED — `checkedFiles`/`checkedReferences` count the reported
+         *     set; references still resolve against the whole workspace, so filtering never
+         *     manufactures `MISSING` findings. This is deliberately UNLIKE the graph endpoint,
+         *     which reads the same params as "what is shown": a file's verdict must not depend on
+         *     what else is on screen. Unpaged by design — a report-style computation over the
+         *     workspace.
          */
         get: operations["getCatalogFileErrors"];
         put?: never;
@@ -497,22 +499,28 @@ export interface paths {
         };
         /**
          * The stored files rendered together as a relationship graph
-         * @description Every active file and the reference edges between them, resolved with the Errors report's
+         * @description The shown entities and the reference edges between them, resolved with the Errors report's
          *     semantics (per-field default kinds, namespaceless references resolve in the referencing
          *     file's own namespace, case-insensitive identity). Node statuses:
          *
          *     - `STORED` — an active catalog file (carries `fileId`).
          *     - `MISSING` — a referenced entity of a stored kind that no active file provides (the
          *       Errors report's MISSING, drawn).
-         *     - `EXTERNAL` — a referenced entity of a kind Toadie doesn't store (Location, Template,
-         *       custom kinds).
          *
          *     Kind-less `dependsOn`/`dependencyOf` entries (report findings) are not drawable and
-         *     are omitted. The optional filters (the SAME whitelisted set as the list endpoint, same
-         *     semantics) narrow which files' references are EXPANDED; targets still resolve against
-         *     the whole workspace, so a stored file outside the filter appears as a STORED node when
-         *     something points at it. Unpaged by design — a report-style computation over the
-         *     workspace.
+         *     are omitted.
+         *
+         *     The optional filters (the SAME whitelisted set as the list endpoint, same semantics)
+         *     select which entities are SHOWN: the `STORED` nodes are exactly the rows
+         *     `GET /api/v1/files` returns for the same query, and an edge is drawn only when BOTH of
+         *     its ends are shown — so a reference to a stored file the filter excluded contributes
+         *     neither a node nor an edge, and is never reported as `MISSING` (hidden is not absent).
+         *     A `MISSING` entity has no document, so only the two slots its reference identity carries
+         *     are judged against the filter — `kind` and `namespace`; the content filters (tag, type,
+         *     lifecycle, owner, label) never hide it. A referenced kind Toadie does not store
+         *     (Location, Template, custom) can be selected by no `kind` value and is never drawn.
+         *
+         *     Unpaged by design — a report-style computation over the workspace.
          */
         get: operations["getCatalogGraph"];
         put?: never;
@@ -1504,7 +1512,7 @@ export interface components {
             findings: components["schemas"]["DocumentCheckFinding"][];
         };
         /** @enum {string} */
-        GraphNodeStatus: "STORED" | "MISSING" | "EXTERNAL";
+        GraphNodeStatus: "STORED" | "MISSING";
         GraphNode: {
             /** @description Canonical lowercased identity `kind:namespace/name` (the dedupe key). */
             id: string;
@@ -1512,13 +1520,13 @@ export interface components {
             namespace: string;
             name: string;
             title?: string | null;
-            /** @description The stored document's `spec.type`. Null for a User (its spec has no type), for a type-optional kind left blank, and for every virtual node. */
+            /** @description The stored document's `spec.type`. Null for a User (its spec has no type), for a type-optional kind left blank, and for a MISSING node. */
             type?: string | null;
-            /** @description The stored document's `metadata.tags`; empty for virtual nodes. */
+            /** @description The stored document's `metadata.tags`; empty for a MISSING node. */
             tags?: string[];
             /**
              * Format: int32
-             * @description The backing file for STORED nodes; null for virtual nodes.
+             * @description The backing file for STORED nodes; null for a MISSING node.
              */
             fileId?: number | null;
             status: components["schemas"]["GraphNodeStatus"];

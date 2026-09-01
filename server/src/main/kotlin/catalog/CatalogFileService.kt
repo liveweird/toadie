@@ -456,9 +456,11 @@ class CatalogFileService(private val database: R2dbcDatabase) {
 
     /**
      * The workspace Errors report — all active files loaded and resolved in ONE transaction.
-     * The [filter] (the list endpoint's filter set, matched in-memory over the decoded
-     * sources — the graph's shape) narrows which files' errors are REPORTED; references
-     * still resolve against the whole workspace, so filtering never manufactures MISSING.
+     * The [filter] (the list endpoint's filter set, matched in-memory over the decoded sources)
+     * narrows which files' errors are REPORTED; references still resolve against the whole
+     * workspace, so filtering never manufactures MISSING. Deliberately UNLIKE the graph, where
+     * the same filter decides what is SHOWN and a hidden target takes its edge with it: a
+     * report about a file must not change its verdict because of what else is on screen.
      */
     suspend fun errors(filter: CatalogFileListFilter): ErrorsReport = suspendTransaction(database) {
         val all = activeSources()
@@ -498,14 +500,19 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             .toSet()
 
     /**
-     * The rendered-together graph — all active files in one transaction. The [filter] (the
-     * list endpoint's filter set, matched in-memory over the decoded sources) narrows which
-     * files' references are EXPANDED; targets still resolve against the whole workspace
-     * (a stored file filtered out elsewhere appears as a STORED node when pointed at).
+     * The rendered-together graph — all active files in one transaction. The [filter] (the list
+     * endpoint's filter set, matched in-memory over the decoded sources) selects which entities
+     * are SHOWN: the graph's STORED nodes are exactly the list endpoint's rows for the same
+     * query, and an edge is drawn only when both of its ends are shown. The unfiltered `all` is
+     * still passed so a hidden stored target can be told apart from an absent one.
      */
     suspend fun graph(filter: CatalogFileListFilter): CatalogGraph = suspendTransaction(database) {
         val all = activeSources()
-        buildGraph(sources = all.filter { filter.matches(it.file) }, allSources = all)
+        buildGraph(
+            sources = all.filter { filter.matches(it.file) },
+            allSources = all,
+            showsVirtual = filter::allowsVirtualTarget,
+        )
     }
 
     /** The export payload: active documents, (namespace, name)-ordered, optionally one namespace. */

@@ -36,8 +36,10 @@ const FIELD_FAMILY: Record<string, RelationFamily> = {
 };
 
 /**
- * Drops edges of disabled relation families, then prunes virtual (MISSING/EXTERNAL) nodes no
- * remaining edge touches. Stored nodes always stay — the workspace itself is the render.
+ * Drops edges of disabled relation families, then prunes MISSING nodes no remaining edge
+ * touches — a missing entity is known ONLY through a reference, so with that reference hidden
+ * there is nothing left to draw. Stored nodes always stay: the server already sent exactly the
+ * entities the filters select, and a relation chip governs relations, not which entities exist.
  */
 export function filterGraph(graph: CatalogGraph, enabled: readonly RelationFamily[]): CatalogGraph {
   const enabledSet = new Set(enabled);
@@ -70,10 +72,6 @@ export const STATUS_STYLE: Record<string, CSSProperties> = {
   MISSING: {
     border: "1.5px dashed var(--mantine-color-red-6)",
     background: "var(--mantine-color-body)",
-  },
-  EXTERNAL: {
-    border: "1.5px dashed var(--mantine-color-gray-5)",
-    background: "var(--mantine-color-default-hover)",
   },
 };
 
@@ -173,7 +171,7 @@ const FRAME_HEADER = 20;
  *
  * Fewer than two namespaces means no frames at all: a lone frame around the whole canvas
  * states nothing, and most workspaces use `default` and nothing else. Node status is
- * irrelevant — a MISSING or EXTERNAL node still names a namespace, and belongs in its box.
+ * irrelevant — a MISSING node still names a namespace, and belongs in its box.
  */
 export function namespaceFrames(nodes: readonly LaidOutNode[]): NamespaceFrame[] {
   const byNamespace = new Map<string, LaidOutNode[]>();

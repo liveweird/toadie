@@ -157,14 +157,14 @@ class GraphTest {
     }
 
     @Test
-    fun `the namespace filter keeps a stored target from another namespace as STORED`() = testApplication {
+    fun `a stored target the filter hides leaves the graph, and never reads as MISSING`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("graph")
         val nsA = uniqueNamespace("gns")
         val nsB = uniqueNamespace("gns")
         val a = uniqueEntityName("a")
         val b = uniqueEntityName("b")
-        val bId = client.createCatalogFile(componentFile(b, namespace = nsB)).id
+        client.createCatalogFile(componentFile(b, namespace = nsB))
         client.createCatalogFile(
             componentFile(a, namespace = nsA).let {
                 it.copy(spec = it.spec.copy(dependsOn = listOf("component:$nsB/$b")))
@@ -172,12 +172,12 @@ class GraphTest {
         )
 
         val graph = client.graph(namespace = nsA)
-        // b's own references are NOT expanded (it is outside the filter), but the node is
-        // there — STORED, with its real fileId, never MISSING.
-        val nodeB = graph.nodes.single { it.name == b }
-        assertEquals(GraphNodeStatus.STORED, nodeB.status)
-        assertEquals(bId, nodeB.fileId)
-        assertTrue(graph.edges.none { it.sourceId == nodeB.id })
+        // b is stored, but the namespace filter does not show it: no node, and therefore no
+        // edge either (both ends must be shown). Hidden is not absent — it must NOT go MISSING,
+        // which is why the builder still resolves against the unfiltered workspace.
+        assertTrue(graph.nodes.none { it.name == b })
+        assertTrue(graph.edges.isEmpty())
+        assertEquals(listOf(a), graph.nodes.map { it.name })
     }
 
     @Test
@@ -239,6 +239,77 @@ class GraphTest {
     }
 
     @Test
+    fun `the kind filter selects what is shown - a hidden owner takes its edge with it`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("graphkind")
+        val ns = uniqueNamespace("gkns")
+        val team = uniqueEntityName("gkteam")
+        val svc = uniqueEntityName("gksvc")
+        client.createCatalogFile(groupFile(team, namespace = ns))
+        client.createCatalogFile(componentFile(svc, namespace = ns, owner = team))
+
+        // The reported bug: filtering to one kind used to draw the referenced Group too.
+        val components: CatalogGraph = client.get("$CATALOG_FILES_PATH/graph?namespace=$ns&kind=Component").body()
+        assertEquals(listOf(svc), components.nodes.map { it.name })
+        assertTrue(components.edges.isEmpty(), "the owner edge needs both ends shown")
+
+        // Enabling both pills brings the Group — and with it the owner edge — back.
+        val both: CatalogGraph =
+            client.get("$CATALOG_FILES_PATH/graph?namespace=$ns&kind=Component&kind=Group").body()
+        assertEquals(setOf(svc, team), both.nodes.map { it.name }.toSet())
+        assertEquals(listOf("spec.owner"), both.edges.map { it.field })
+    }
+
+    @Test
+    fun `a MISSING entity is governed by its own kind pill, not the referrer's`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("graphmiss")
+        val ns = uniqueNamespace("gmns")
+        val svc = uniqueEntityName("gmsvc")
+        val ghost = uniqueEntityName("gmghost")
+        // Waived: the reference is deliberately unresolvable.
+        client.postJson(
+            "$CATALOG_FILES_PATH?allowInvalid=true",
+            componentFile(svc, namespace = ns).let {
+                it.copy(spec = it.spec.copy(dependsOn = listOf("api:$ns/$ghost")))
+            },
+        )
+
+        // The ghost is an API: the Component pill alone does not show it, so its edge goes too.
+        val componentsOnly: CatalogGraph =
+            client.get("$CATALOG_FILES_PATH/graph?namespace=$ns&kind=Component").body()
+        assertEquals(listOf(svc), componentsOnly.nodes.map { it.name })
+        assertTrue(componentsOnly.edges.isEmpty())
+
+        // With the API pill on it is drawn — a missing API is still an API.
+        val withApis: CatalogGraph =
+            client.get("$CATALOG_FILES_PATH/graph?namespace=$ns&kind=Component&kind=API").body()
+        val ghostNode = withApis.nodes.single { it.name == ghost }
+        assertEquals(GraphNodeStatus.MISSING, ghostNode.status)
+        assertEquals(1, withApis.edges.size)
+    }
+
+    @Test
+    fun `a reference to a kind Toadie doesn't store draws nothing`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("graphext")
+        val ns = uniqueNamespace("gxns")
+        val svc = uniqueEntityName("gxsvc")
+        client.postJson(
+            "$CATALOG_FILES_PATH?allowInvalid=true",
+            componentFile(svc, namespace = ns).let {
+                it.copy(spec = it.spec.copy(dependsOn = listOf("template:$ns/scaffold")))
+            },
+        )
+
+        // No kind pill exists for Template, so nothing could ever select it — and every pill
+        // being on (no kind param at all) is not a way in either.
+        val graph = client.graph(namespace = ns)
+        assertEquals(listOf(svc), graph.nodes.map { it.name })
+        assertTrue(graph.edges.isEmpty())
+    }
+
+    @Test
     fun `the graph endpoint requires authentication and dodges the id route`() = testApplication {
         usePostgresTestcontainer()
         assertEquals(HttpStatusCode.Unauthorized, jsonClient().get("$CATALOG_FILES_PATH/graph").status)
@@ -283,26 +354,24 @@ class GraphTest {
 
         suspend fun graphFor(query: String): CatalogGraph =
             client.get("$CATALOG_FILES_PATH/graph?namespace=$ns&$query").body()
-        // Every source here carries at least an owner edge, so the edge sourceIds ARE the
-        // files the filter EXPANDED — the graph half of the list-vs-graph parity assert.
-        suspend fun expandedNames(query: String): Set<String> =
-            graphFor(query).edges.map { it.sourceId.substringAfterLast('/') }.toSet()
+        // None of these queries can strand a MISSING target, so the graph's whole node set is
+        // its STORED one — the strongest form of the parity: same query, same entities.
+        suspend fun shownNames(query: String): Set<String> =
+            graphFor(query).nodes.map { it.name }.toSet()
         suspend fun listedNames(query: String): Set<String> =
             client.get("$CATALOG_FILES_PATH?namespace=$ns&kind=Component&$query")
                 .body<CatalogFilePageResponse>().items.map { it.name }.toSet()
 
-        // Parity: the graph expands exactly the files the list returns, filter by filter.
+        // Parity: the graph SHOWS exactly the files the list returns, filter by filter.
         for (query in listOf("type=library", "owner=group:$ns/team-y", "label=$key&labelValue=v1", "name=$a")) {
-            assertEquals(listedNames(query), expandedNames(query), "list/graph parity for $query")
+            assertEquals(listedNames(query), shownNames(query), "list/graph parity for $query")
         }
 
-        // Narrowing to B still keeps its STORED targets: A stays a STORED node with a fileId
-        // even though the filter excluded it from expansion (the allSources contract).
+        // Narrowing to B drops A entirely — and B's dependsOn edge with it, since an edge
+        // needs both ends shown. A is stored, so it must not turn up as MISSING either.
         val narrowed = graphFor("type=library")
-        val nodeA = narrowed.nodes.single { it.name == a }
-        assertEquals(GraphNodeStatus.STORED, nodeA.status)
-        assertNotNull(nodeA.fileId)
-        assertTrue(narrowed.edges.none { it.sourceId == nodeA.id })
+        assertEquals(listOf(b), narrowed.nodes.map { it.name })
+        assertTrue(narrowed.edges.isEmpty())
 
         // The graph shares the list's parameter validation: unparsable owner and orphaned
         // labelValue are 400s here too.

@@ -14,9 +14,6 @@ enum class GraphNodeStatus {
 
     /** A referenced entity of a stored kind that no active file provides — MISSING, drawn. */
     MISSING,
-
-    /** A referenced entity of a kind Toadie doesn't store (Location, Template, custom). */
-    EXTERNAL,
 }
 
 @Serializable
@@ -29,13 +26,13 @@ data class GraphNode(
     val title: String? = null,
     /**
      * The stored document's `spec.type` — what the graph node's second line shows. Null for a
-     * User (its spec has no type), for a type-optional kind left blank, and for every virtual
+     * User (its spec has no type), for a type-optional kind left blank, and for a MISSING
      * node, which has no document at all.
      */
     val type: String? = null,
-    /** The stored document's `metadata.tags` — tooltip content; empty for virtual nodes. */
+    /** The stored document's `metadata.tags` — tooltip content; empty for a MISSING node. */
     val tags: List<String> = emptyList(),
-    /** The backing file for STORED nodes; null for virtual (MISSING/EXTERNAL) nodes. */
+    /** The backing file for STORED nodes; null for a MISSING one. */
     val fileId: UInt? = null,
     val status: GraphNodeStatus,
 )
@@ -72,15 +69,26 @@ private fun storedNode(source: CatalogSource): GraphNode {
 }
 
 /**
- * Builds the graph for [sources] (the files whose references are expanded — e.g. one
- * namespace). Targets resolve against [allSources] (the whole active workspace), so a stored
- * file outside the rendered set still appears as a STORED node when something points at it —
- * an edge needs both ends. Every parsable, kind-carrying reference becomes an edge to a
- * STORED / MISSING / EXTERNAL node; kind-less dependsOn/dependencyOf entries are skipped
- * (they're report findings, not drawable edges).
+ * Builds the graph over [sources] — the SHOWN entities, i.e. exactly the files the caller's
+ * filter selected (the same set the Files list returns). A reference becomes an edge only when
+ * its target is shown as well: **an edge needs both of its ends on screen**. A target that is
+ * a stored file the filter excluded therefore draws nothing at all — which is precisely why
+ * [allSources] (the whole active workspace) is still needed: without it, a hidden stored file
+ * would be mislabelled MISSING.
+ *
+ * A target no active file provides is a MISSING entity. It carries no document, so only the
+ * identity-borne slots can be judged — [showsVirtual] decides (the kind pill and the namespace
+ * filter). A referenced kind Toadie doesn't store (Location, Template, custom) has no kind pill
+ * that could ever select it, so it is never shown.
+ *
+ * Kind-less dependsOn/dependencyOf entries are skipped (report findings, not drawable edges).
  */
-fun buildGraph(sources: List<CatalogSource>, allSources: List<CatalogSource> = sources): CatalogGraph {
-    val storedByIdentity = allSources.associateBy { identityOf(it.file) }
+fun buildGraph(
+    sources: List<CatalogSource>,
+    allSources: List<CatalogSource> = sources,
+    showsVirtual: (EntityIdentity) -> Boolean = { true },
+): CatalogGraph {
+    val storedIdentities = allSources.mapTo(HashSet()) { identityOf(it.file) }
     val nodes = LinkedHashMap<String, GraphNode>()
     val edges = LinkedHashSet<GraphEdge>()
 
@@ -96,7 +104,11 @@ fun buildGraph(sources: List<CatalogSource>, allSources: List<CatalogSource> = s
                 // Kind-less refs resolve to null — report findings, not drawable edges.
                 val target = resolveTarget(raw, defaultKind, sourceIdentity.namespace) ?: continue
                 val targetId = nodeId(target)
-                nodes.getOrPut(targetId) { virtualOrForeignStoredNode(target, storedByIdentity) }
+                // Already shown, or drawable as a MISSING entity the filter admits — otherwise
+                // skip the reference entirely: no node means no edge. (Re-putting an existing
+                // key leaves its insertion order alone.)
+                val node = nodes[targetId] ?: shownMissingNode(target, storedIdentities, showsVirtual) ?: continue
+                nodes[targetId] = node
                 edges += GraphEdge(sourceId = nodeId(sourceIdentity), targetId = targetId, field = field)
             }
         }
@@ -105,20 +117,24 @@ fun buildGraph(sources: List<CatalogSource>, allSources: List<CatalogSource> = s
     return CatalogGraph(nodes = nodes.values.toList(), edges = edges.toList())
 }
 
-// A referenced node that is not in the rendered set: a stored file outside it, a missing
-// component, or an external-kind entity.
-private fun virtualOrForeignStoredNode(
+// The node for a referenced target that is not itself shown — null (no node, hence no edge)
+// unless it is a MISSING entity the filter admits.
+private fun shownMissingNode(
     target: EntityIdentity,
-    storedByIdentity: Map<EntityIdentity, CatalogSource>,
-): GraphNode {
-    if (target.kind in STORED_KINDS) {
-        storedByIdentity[target]?.let { return storedNode(it) }
-    }
+    storedIdentities: Set<EntityIdentity>,
+    showsVirtual: (EntityIdentity) -> Boolean,
+): GraphNode? {
+    // Stored, but the filter hid it: hidden is not the same as absent, so it must NOT read as
+    // MISSING — it simply leaves the canvas.
+    if (target in storedIdentities) return null
+    // A kind Toadie doesn't store has no kind pill, so nothing could ever select it.
+    if (target.kind !in STORED_KINDS) return null
+    if (!showsVirtual(target)) return null
     return GraphNode(
         id = nodeId(target),
         kind = target.kind,
         namespace = target.namespace,
         name = target.name,
-        status = if (target.kind in STORED_KINDS) GraphNodeStatus.MISSING else GraphNodeStatus.EXTERNAL,
+        status = GraphNodeStatus.MISSING,
     )
 }

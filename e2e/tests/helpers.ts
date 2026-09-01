@@ -90,7 +90,7 @@ export async function openFilters(page: Page): Promise<void> {
  * concurrently, so the setup process is the one writer and specs just read these values
  * (namespaces.spec.ts, the sole in-run writer, appends/removes only its own entries).
  */
-export function runNamespace(key: "kinds" | "render" | "roundTrip" | "hierarchy"): string {
+export function runNamespace(key: "kinds" | "render" | "renderAlt" | "roundTrip" | "hierarchy"): string {
   const value = process.env[`E2E_NS_${key.toUpperCase()}`];
   if (!value) throw new Error(`global-setup did not register the "${key}" run namespace`);
   return value;

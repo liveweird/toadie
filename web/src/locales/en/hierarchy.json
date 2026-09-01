@@ -6,7 +6,6 @@
   "collapseAll": "Collapse all",
   "toggleAria": "Toggle children of {{name}}",
   "badge": {
-    "missing": "Missing",
-    "external": "External"
+    "missing": "Missing"
   }
 }

@@ -91,7 +91,7 @@ function CatalogGraphNode({ data }: NodeProps<LaidOutNode>) {
         <Badge
           size="xs"
           variant={node.status === "STORED" ? "light" : "outline"}
-          color={node.status === "MISSING" ? "red" : node.status === "EXTERNAL" ? "gray" : undefined}
+          color={node.status === "MISSING" ? "red" : undefined}
           style={{ flex: "0 0 auto" }}
           leftSection={<KindTierDot kind={node.kind} />}
         >

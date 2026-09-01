@@ -11,7 +11,7 @@ import type { EntityKind } from "./catalogFileForm";
  *   (subcomponentOf beats system — a subcomponent renders under its parent component,
  *   not beside it under the system). The exception is group membership: memberOf/members
  *   are multi-valued, so a User (or a missing member) appears under EVERY containing Group.
- * - Virtual (MISSING/EXTERNAL) nodes render as placeholders ONLY when they participate in
+ * - MISSING nodes render as placeholders ONLY when they participate in
  *   a containment relation — a deleted System keeps its ex-children nested under a dashed
  *   placeholder, while a virtual node reachable only through owner/dependsOn edges stays
  *   out of the tree entirely.

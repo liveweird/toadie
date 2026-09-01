@@ -17,6 +17,24 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.16.0",
+    date: "2026-09-01",
+    en: `**The filters now decide what you see — on Files, Hierarchy and the Graph alike.**
+
+- Filtering the Graph or the Hierarchy to one kind used to draw the neighbours those entities pointed at as well: pick **Domain** and the owning Groups came along. Now the pills and filters select **which entities are shown**, and the Graph shows exactly the entities the Files list would return for the same query.
+- A relation is drawn only when **both of its ends are shown**, so hiding a kind takes its edges with it. The relation chips still govern relations only — switching one off never removes an entity.
+- The Hierarchy follows the same rule: with a container's kind filtered out, its children sit flat at the root rather than nesting under something you asked not to see.
+- A referenced entity that does not exist (a **missing** node) is judged the same way — by kind, namespace and name — so it appears when you are looking at its kind, and stays out when you are not.
+- One thing is no longer drawn at all: references to kinds Toadie does not store, such as a Backstage Template. No kind pill can select them, so they cannot honestly be shown as part of a filtered view.`,
+    pl: `**To filtry decydują teraz o tym, co widzisz — tak samo na Plikach, Hierarchii i Grafie.**
+
+- Zawężenie Grafu albo Hierarchii do jednego rodzaju rysowało dotąd również sąsiadów, na które te encje wskazywały: po wybraniu **Domeny** dołączały do niej Grupy będące właścicielami. Teraz pigułki i filtry wybierają, **które encje są pokazywane**, a Graf pokazuje dokładnie te encje, które lista Plików zwróciłaby dla tego samego zapytania.
+- Relacja jest rysowana tylko wtedy, gdy **oba jej końce są pokazywane**, więc ukrycie rodzaju zabiera ze sobą jego krawędzie. Pigułki relacji nadal rządzą wyłącznie relacjami — wyłączenie którejś nigdy nie usuwa encji.
+- Hierarchia działa tak samo: gdy rodzaj kontenera jest odfiltrowany, jego dzieci stoją płasko w korzeniu, zamiast zagnieżdżać się pod czymś, czego nie chcesz widzieć.
+- Encja, do której istnieje odwołanie, ale która nie istnieje (węzeł **brakujący**), jest oceniana tak samo — po rodzaju, przestrzeni nazw i nazwie — więc pojawia się, gdy patrzysz na jej rodzaj, i nie pojawia się, gdy nie patrzysz.
+- Jedno przestało być rysowane zupełnie: odwołania do rodzajów, których Toadie nie przechowuje, na przykład do szablonu Backstage. Żadna pigułka rodzaju ich nie obejmuje, więc nie da się ich uczciwie pokazać jako części odfiltrowanego widoku.`,
+  },
+  {
     version: "1.15.0",
     date: "2026-09-01",
     en: `**Every catalog file now keeps a history of its own changes.**

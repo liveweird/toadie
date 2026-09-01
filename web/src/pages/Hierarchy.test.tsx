@@ -162,6 +162,24 @@ describe("Hierarchy page", () => {
     });
   });
 
+  test("filtered to one kind, the rows sit flat — nesting needs the parent shown too", async () => {
+    // What the server answers for kind=Component: the components, and no System to nest
+    // under, so their spec.system edges have no second end and never arrive.
+    mockGraph(mockFetch, {
+      nodes: GRAPH.nodes.filter((n) => n.kind === "component"),
+      edges: GRAPH.edges.filter((e) => e.field === "spec.subcomponentOf"),
+    });
+    renderPage();
+
+    await screen.findByText("core");
+    expect(screen.queryByText("Billing")).not.toBeInTheDocument();
+    // core keeps its own child (both ends shown) and so is still a collapsible branch, while
+    // orphan — whose only parent was the hidden System — is a plain root row.
+    expect(screen.getByRole("button", { name: "Toggle children of core" })).toBeInTheDocument();
+    expect(screen.getByText("orphan")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Toggle children of orphan" })).not.toBeInTheDocument();
+  });
+
   test("a failed graph load shows the error alert", async () => {
     mockGraph(mockFetch, { title: "boom", status: 500 }, 500);
     renderPage();

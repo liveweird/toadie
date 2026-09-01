@@ -165,8 +165,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
   live; kind badges on the list.
 - [`hierarchy.spec.ts`](scenarios/hierarchy.md) — the Hierarchy view at `/`: a
   System ⊃ Component ⊃ subcomponent chain nests by most-specific placement, the Files
-  filter panel narrows what is expanded (referenced containers stay), branches
-  collapse/expand, the tree rows carry the Files Operations menu (download, delete), and a
+  filter panel selects what is SHOWN (a filtered-out container stops nesting its children,
+  which fall flat to the root), branches collapse/expand, the tree rows carry the Files Operations menu (download, delete), and a
   deleted parent becomes a MISSING placeholder; throwaway files in this run's namespace.
 - [`labels.spec.ts`](scenarios/labels.md) — the label registry: modal validation → create a
   label (values + kinds) → edit → the regular user's read-only view → the editor's
@@ -191,9 +191,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   through the compose stack's Mailpit (new password works, old one is dead — skips itself
   without Mailpit).
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
-  (deletion-orphaned) missing nodes for a throwaway namespace, faced name + type, with the
-  multi-namespace canvas clustered inside labelled namespace frames; toggling a relation
-  family prunes its virtual nodes; the Manual layout mode drags a node, the position survives
+  (deletion-orphaned) missing nodes for one per-attempt name stem, faced name + type, with the
+  two-namespace canvas clustered inside labelled namespace frames and the unmatched shared
+  owner group left out; toggling a relation family prunes the missing nodes it strands; the Manual layout mode drags a node, the position survives
   a reload (server-side per user), and Reset + Auto restore the pristine layout document.
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   dry-run as Would-be-created (the Check button, nothing stored), import as Created, export

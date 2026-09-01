@@ -176,7 +176,9 @@ fun Application.configureCatalogFileRoutes() {
             get<CatalogFiles.Errors> {
                 call.caller()
                 // The shared filter set narrows which files' errors are reported; references
-                // still resolve against the whole workspace (the graph asymmetry).
+                // still resolve against the whole workspace, so narrowing the report never
+                // manufactures a MISSING finding (the graph, where the filter decides what is
+                // SHOWN, deliberately reads the same params differently).
                 call.respond(HttpStatusCode.OK, catalogFileService.errors(call.catalogFileFilter()))
             }
             post<CatalogFiles.Check> {

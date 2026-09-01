@@ -116,7 +116,9 @@ export type DocumentCheckFinding = components["schemas"]["DocumentCheckFinding"]
 
 /**
  * The workspace Errors report; the filters (the list's shared set) narrow which files'
- * errors are reported — references still resolve against the whole workspace.
+ * errors are reported — references still resolve against the whole workspace, so narrowing
+ * the report never manufactures a MISSING finding (unlike the graph, where the same params
+ * decide what is shown).
  */
 export async function getCatalogErrors(filters: CatalogFileFilterValues = {}): Promise<ErrorsReport> {
   const params = buildQuery(filterParams(filters));
@@ -128,8 +130,9 @@ export type CatalogGraph =
 export type GraphNode = components["schemas"]["GraphNode"];
 
 /**
- * The rendered-together graph; the filters (the list's shared set) narrow which files'
- * references are expanded — targets still resolve against the whole workspace.
+ * The rendered-together graph; the filters (the list's shared set) select which entities are
+ * SHOWN — the STORED nodes are exactly the rows `listCatalogFiles` returns for the same query,
+ * and an edge comes back only when both of its ends are shown.
  */
 export async function getCatalogGraph(filters: CatalogFileFilterValues = {}): Promise<CatalogGraph> {
   const params = buildQuery(filterParams(filters));

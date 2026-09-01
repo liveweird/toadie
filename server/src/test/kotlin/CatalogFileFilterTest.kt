@@ -5,6 +5,7 @@ import ch.nokillswit.catalog.CatalogFileListFilter
 import ch.nokillswit.catalog.CatalogFileMetadata
 import ch.nokillswit.catalog.EntityIdentity
 import ch.nokillswit.catalog.EntitySpec
+import ch.nokillswit.catalog.allowsVirtualTarget
 import ch.nokillswit.catalog.foldForMatch
 import ch.nokillswit.catalog.matches
 import ch.nokillswit.catalog.ownerFilterTarget
@@ -102,5 +103,26 @@ class CatalogFileFilterTest {
         assertTrue(CatalogFileListFilter(label = "example.com/tier", labelValues = listOf("BACKEND")).matches(f))
         assertTrue(CatalogFileListFilter(label = "example.com/tier", labelValues = listOf("edge", "backend")).matches(f))
         assertFalse(CatalogFileListFilter(label = "example.com/tier", labelValues = listOf("edge")).matches(f))
+    }
+
+    @Test
+    fun `a MISSING target is judged on its identity only - content filters never hide it`() {
+        val ghost = EntityIdentity("api", "team-ns", "billing")
+        // No filter at all shows it; so does a kind list containing its (canonical-cased) kind.
+        assertTrue(CatalogFileListFilter().allowsVirtualTarget(ghost))
+        assertTrue(CatalogFileListFilter(kinds = listOf("API", "Component")).allowsVirtualTarget(ghost))
+        assertFalse(CatalogFileListFilter(kinds = listOf("Component")).allowsVirtualTarget(ghost))
+        // Namespace and name are the other two slots a reference identity carries — the name
+        // box narrows a MISSING node with the list's own folded-substring rule.
+        assertTrue(CatalogFileListFilter(namespace = "Team-NS").allowsVirtualTarget(ghost))
+        assertFalse(CatalogFileListFilter(namespace = "other").allowsVirtualTarget(ghost))
+        assertTrue(CatalogFileListFilter(name = "BILL").allowsVirtualTarget(ghost))
+        assertFalse(CatalogFileListFilter(name = "ledger").allowsVirtualTarget(ghost))
+        // It has no document, so the content filters have nothing to match — hiding a dangling
+        // reference behind a tag filter would hide exactly the problem worth seeing.
+        assertTrue(
+            CatalogFileListFilter(tag = "billing", type = "service", lifecycle = "production", label = "tier")
+                .allowsVirtualTarget(ghost),
+        )
     }
 }

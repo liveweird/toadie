@@ -13,8 +13,7 @@
   },
   "legend": {
     "stored": "Zapisany plik",
-    "missing": "Brakująca encja",
-    "external": "Nieprzechowywane w Toadie"
+    "missing": "Brakująca encja"
   },
   "layoutMode": {
     "label": "Układ",

@@ -121,6 +121,20 @@ internal fun CatalogFileListFilter.matches(file: CatalogFile): Boolean =
         (label?.let { it in file.metadata.labels } ?: true) &&
         matchesLabelValues(file)
 
+/**
+ * Whether the graph may draw a referenced entity that no stored file provides (a MISSING node).
+ * Every slot a reference IDENTITY carries is judged — kind, namespace and name — so the pills
+ * and the name box mean the same thing here as everywhere else. The CONTENT filters (tag, type,
+ * lifecycle, owner, label) have no document to read and never hide it: dropping a dangling
+ * reference because a tag filter is on would hide exactly what is worth seeing.
+ */
+internal fun CatalogFileListFilter.allowsVirtualTarget(identity: EntityIdentity): Boolean =
+    // `kinds` holds canonical casing (`API`), an identity is lowercase throughout.
+    (kinds.isEmpty() || kinds.any { it.equals(identity.kind, ignoreCase = true) }) &&
+        (namespace?.takeIf { it.isNotBlank() }?.let { identity.namespace == it.lowercase() } ?: true) &&
+        // The list's own substring rule, so the name box narrows both alike.
+        (name?.takeIf { it.isNotBlank() }?.let { foldForMatch(identity.name).contains(foldForMatch(it)) } ?: true)
+
 private fun CatalogFileListFilter.matchesName(file: CatalogFile): Boolean =
     name?.takeIf { it.isNotBlank() }?.let { foldForMatch(file.metadata.name).contains(foldForMatch(it)) } ?: true
 

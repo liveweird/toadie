@@ -113,11 +113,6 @@ function TreeItem({
             {t("hierarchy.badge.missing")}
           </Badge>
         )}
-        {node.status === "EXTERNAL" && (
-          <Badge variant="outline" size="sm" color="gray">
-            {t("hierarchy.badge.external")}
-          </Badge>
-        )}
         {operations(node)}
       </Group>
       {children.length > 0 && !isCollapsed && (
@@ -143,13 +138,14 @@ function TreeItem({
  * (Domain ⊃ Systems ⊃ Components/APIs/Resources, subcomponents nested, Groups with their
  * member Users). Data is the Graph page's endpoint — same query key, same cache, refreshed
  * by every catalog mutation; the shaping lives in utils/hierarchy.ts. STORED rows carry the
- * Files list's Operations menu; MISSING/EXTERNAL placeholders render dimmed without one.
+ * Files list's Operations menu; MISSING placeholders render dimmed without one.
  */
 export default function Hierarchy() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   // The Files list's full filter set (per-view persisted under hierarchy.filter.*) — the
-  // graph endpoint declares the same params and narrows which files are EXPANDED.
+  // graph endpoint declares the same params and answers the entities they SELECT, so the tree
+  // nests only what is shown: filtered to one kind, its rows sit flat at the root.
   const filters = useCatalogFileFilterState("hierarchy");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   // The graph payload carries no sourceUrl, so the tree offers overwrite but not sync

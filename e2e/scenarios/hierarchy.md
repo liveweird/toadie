@@ -20,10 +20,10 @@
      under its parent component, NOT directly under the System.
 3. They add the **Type** filter `service`, then swap it for **Lifecycle** `experimental`,
    then clear both.
-   - *Expected*: with Type `service` the components stay AND the type-less System stays too
-     (it is their referenced container — filters narrow what is EXPANDED, referenced targets
-     keep rendering); with Lifecycle `experimental` nothing expands and the tree empties;
-     cleared, the chain returns.
+   - *Expected*: with Type `service` the components stay but the type-less System does NOT —
+     the filters select which entities are SHOWN, so a hidden parent takes its containment
+     edge with it and the components sit flat at the root; with Lifecycle `experimental`
+     nothing matches at all and the tree empties; cleared, the chain returns.
 4. They collapse the parent Component's branch, reopen it, then collapse the System's branch.
    - *Expected*: collapsing the Component hides only the subcomponent; collapsing the System
      hides the whole chain; expanding restores it.

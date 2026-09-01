@@ -3,30 +3,35 @@
 - **Spec**: [tests/render.spec.ts](../tests/render.spec.ts)
 - **Actors**: the seed administrator (`admin@toadie.local`) — an ordinary user here (shared
   workspace)
-- **Owns** (exclusive server-side state): three throwaway files in a throwaway unique
-  NAMESPACE (`e2e-rns-…`, this run's namespace, registered in the namespaces dictionary by
-  global-setup) — one deleted mid-journey to create the missing node, the other two deleted
-  at the end; the graph's namespace filter isolates the assertions from every other file in
-  the shared database. Also **the seed admin's graph layout document** (the per-user V19
-  row behind the Auto/Manual modes) — only this spec touches it, and the journey ends by
-  restoring it to the pristine default (Reset + Auto)
+- **Owns** (exclusive server-side state): three throwaway files sharing one per-attempt
+  unique NAME stem, spread over this run's two throwaway NAMESPACES (`e2e-rns-…` and
+  `e2e-rns2-…`, registered in the namespaces dictionary by global-setup) — one deleted
+  mid-journey to create the missing node, the other two deleted at the end; the graph's NAME
+  filter isolates the assertions from every other file in the shared database, and the second
+  namespace is what puts two namespace frames on one canvas. Also **the seed admin's graph
+  layout document** (the per-user V19 row behind the Auto/Manual modes) — only this spec
+  touches it, and the journey ends by restoring it to the pristine default (Reset + Auto)
 
 ## Scenario: the graph renders stored and missing nodes for a namespace
 
-1. The admin signs in and creates three components in the run namespace (picked from the
-   Namespace select): B, the doomed ghost, then A with **Depends on** entries for both —
-   saves enforce reference resolution, so targets exist first.
+1. The admin signs in and creates three components sharing one name stem (namespaces picked
+   from the Namespace select): B in the second run namespace, the doomed ghost in the first,
+   then A — also in the first — with **Depends on** entries for both; saves enforce reference
+   resolution, so targets exist first.
 2. They delete the ghost from the filtered Files list.
    - *Expected*: deletion is allowed; A's reference to it is now dangling.
-3. They open the **Graph** page and filter by the namespace.
-   - *Expected*: nodes for A and B (stored), the ghost (missing), and the stored shared
-     owner group (`platform`) are all drawn on the canvas. Each node reads as its name plus
-     its `spec.type` (A and B are `service`) — the namespace is NOT on the node face; it
-     moved into the name's hover tooltip. Because two namespaces are on screen (this run's,
-     and `default` for the shared owner group), each is drawn inside its own labelled frame.
+3. They open the **Graph** page and filter by the shared name stem.
+   - *Expected*: nodes for A and B (stored) and the ghost (missing) are drawn. The shared
+     owner group (`platform`) is NOT — the filters select which entities are shown, and it is
+     not one of them; the ghost is judged on the same identity, so its matching name lets it
+     in. Each node reads as its name plus its `spec.type` (A and B are `service`) — the
+     namespace is NOT on the node face; it moved into the name's hover tooltip. Because two
+     namespaces are on screen (A and the ghost in one, B in the other), each is drawn inside
+     its own labelled frame.
 4. They toggle the **Depends on** relation chip off.
-   - *Expected*: the orphaned virtual ghost node disappears; the stored nodes (B, the owner
-     group) remain — stored nodes are never pruned.
+   - *Expected*: the orphaned missing ghost node disappears — its only edge was what made it
+     knowable — while the stored nodes A and B remain: a relation chip governs which relations
+     are drawn, never which entities are shown.
 5. They switch the layout to **Manual** and drag node B across the canvas.
    - *Expected*: the canvas stays painted while dragging (nodes never flicker away
      mid-gesture); the node moves and stays where dropped (the position save fires); the

@@ -15,7 +15,7 @@ const GRAPH: CatalogGraph = {
     { id: "component:default/a", kind: "component", namespace: "default", name: "a", title: null, fileId: 1, status: "STORED" },
     { id: "component:default/b", kind: "component", namespace: "default", name: "b", title: "B", fileId: 2, status: "STORED" },
     { id: "component:default/ghost", kind: "component", namespace: "default", name: "ghost", title: null, fileId: null, status: "MISSING" },
-    { id: "group:default/team-x", kind: "group", namespace: "default", name: "team-x", title: null, fileId: null, status: "EXTERNAL" },
+    { id: "group:default/team-x", kind: "group", namespace: "default", name: "team-x", title: null, fileId: null, status: "MISSING" },
   ],
   edges: [
     { sourceId: "component:default/a", targetId: "component:default/b", field: "spec.dependsOn" },
@@ -34,7 +34,7 @@ describe("filterGraph", () => {
   test("drops disabled families' edges and prunes orphaned virtual nodes", () => {
     const filtered = filterGraph(GRAPH, ["dependsOn"]);
     expect(filtered.edges).toEqual([GRAPH.edges[0]]);
-    // ghost (MISSING) and team-x (EXTERNAL) lost their only edge → pruned; stored nodes stay.
+    // ghost and team-x (both MISSING) lost their only edge → pruned; stored nodes stay.
     expect(filtered.nodes.map((n) => n.name)).toEqual(["a", "b"]);
   });
 
@@ -60,6 +60,8 @@ describe("filterGraph", () => {
   });
 
   test("stored nodes survive even with every family disabled", () => {
+    // The server already sent exactly the entities the filters select, so a relation chip
+    // must never remove one — it governs relations, not which entities are shown.
     const filtered = filterGraph(GRAPH, []);
     expect(filtered.edges).toHaveLength(0);
     expect(filtered.nodes.map((n) => n.status)).toEqual(["STORED", "STORED"]);
@@ -123,7 +125,7 @@ describe("namespaceFrames", () => {
     namespace: string,
     x: number,
     y: number,
-    status: "STORED" | "MISSING" | "EXTERNAL" = "STORED",
+    status: "STORED" | "MISSING" = "STORED",
   ) => ({
     id,
     type: "catalog" as const,

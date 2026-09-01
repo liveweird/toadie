@@ -62,13 +62,13 @@ test("the hierarchy nests the containment chain and carries the file operations"
   await expect(page.getByText(core, { exact: true })).toBeVisible();
   await expect(page.getByText(worker, { exact: true })).toBeVisible();
 
-  // The Files list's filters narrow which files are EXPANDED: with Type "service" the
-  // components stay AND the type-less System stays too — it is their referenced container.
+  // The filters select what is SHOWN: with Type "service" the components stay, but the
+  // type-less System does NOT — so the components lose their container and sit flat.
   await pickType(page, "service");
   await expect(page.getByText(worker, { exact: true })).toBeVisible();
-  await expect(page.getByText(sys, { exact: true })).toBeVisible();
-  // No service-typed file is experimental, so the tree empties — the System goes with its
-  // referrers; clearing the filters restores the chain.
+  await expect(page.getByText(sys, { exact: true })).toHaveCount(0);
+  // No service-typed file is experimental either, so the tree empties entirely;
+  // clearing the filters restores the chain.
   await pickLifecycle(page, "experimental");
   await expect(page.getByText(core, { exact: true })).toHaveCount(0);
   await expect(page.getByText(sys, { exact: true })).toHaveCount(0);

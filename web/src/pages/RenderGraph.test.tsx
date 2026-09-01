@@ -125,7 +125,7 @@ const GRAPH = {
   nodes: [
     { id: "component:default/a", kind: "component", namespace: "default", name: "svc-a", title: null, fileId: 7, status: "STORED" },
     { id: "component:default/ghost", kind: "component", namespace: "default", name: "ghost", title: null, fileId: null, status: "MISSING" },
-    { id: "group:default/team-x", kind: "group", namespace: "default", name: "team-x", title: null, fileId: null, status: "EXTERNAL" },
+    { id: "group:default/team-x", kind: "group", namespace: "default", name: "team-x", title: null, fileId: null, status: "MISSING" },
   ],
   edges: [
     { sourceId: "component:default/a", targetId: "component:default/ghost", field: "spec.dependsOn" },
@@ -208,7 +208,7 @@ describe("RenderGraph page", () => {
 
     expect(await screen.findByText(/svc-a \[STORED\]/)).toBeInTheDocument();
     expect(screen.getByText(/ghost \[MISSING\]/)).toBeInTheDocument();
-    expect(screen.getByText(/team-x \[EXTERNAL\]/)).toBeInTheDocument();
+    expect(screen.getByText(/team-x \[MISSING\]/)).toBeInTheDocument();
   });
 
   test("the namespace filter refetches with namespace=", async () => {
@@ -234,7 +234,7 @@ describe("RenderGraph page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await screen.findByText(/team-x \[EXTERNAL\]/);
+    await screen.findByText(/team-x \[MISSING\]/);
     await user.click(screen.getByRole("checkbox", { name: "Owned by" }));
 
     expect(screen.queryByText(/team-x/)).not.toBeInTheDocument();

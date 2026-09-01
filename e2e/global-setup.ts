@@ -77,6 +77,10 @@ async function registerRunNamespaces(): Promise<void> {
   const minted: Record<string, string> = {
     KINDS: `e2e-kns-${uniq}`,
     RENDER: `e2e-rns-${uniq}`,
+    // render.spec needs a SECOND namespace on one canvas: namespace frames only appear when
+    // the shown graph spans two, and since the filters now decide what is shown, a neighbour
+    // from another namespace can no longer wander in.
+    RENDERALT: `e2e-rns2-${uniq}`,
     ROUNDTRIP: `e2e-rtns-${uniq}`,
     HIERARCHY: `e2e-hns-${uniq}`,
   };

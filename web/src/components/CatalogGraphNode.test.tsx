@@ -36,7 +36,7 @@ describe("CatalogGraphNode", () => {
   test.each([
     ["STORED", 7, "component"],
     ["MISSING", null, "component"],
-    ["EXTERNAL", null, "group"],
+    ["MISSING", null, "group"],
   ] as const)("renders a %s node with its kind badge", (status, fileId, kind) => {
     renderWithProviders(<CatalogGraphNode {...nodeProps({ status, fileId, kind })} />);
     expect(screen.getByText("svc-x")).toBeInTheDocument();
@@ -51,8 +51,8 @@ describe("CatalogGraphNode", () => {
     expect(screen.queryByText("default")).not.toBeInTheDocument();
   });
 
-  test("a node without a type (a User, or any virtual node) shows no second line", () => {
-    // `type` absent is the User case and every MISSING/EXTERNAL node; the box keeps its
+  test("a node without a type (a User, or a MISSING node) shows no second line", () => {
+    // `type` absent is the User case and every MISSING node; the box keeps its
     // height, so dagre never sees the difference.
     renderWithProviders(<CatalogGraphNode {...nodeProps({ type: null, kind: "user" })} />);
     expect(screen.getByText("svc-x")).toBeInTheDocument();

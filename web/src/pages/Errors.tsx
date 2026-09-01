@@ -21,7 +21,8 @@ import { ERROR_CLASSES, classOfStatus, colorOfStatus } from "../utils/errorClass
  * The Errors page at /errors: every error in the stored files — reference resolution,
  * registry findings, structural drift, removed namespaces. The shared filter set narrows
  * which files are REPORTED server-side (references still resolve against the whole
- * workspace — the graph semantics); the error-class pills filter the fetched findings
+ * workspace, so narrowing never manufactures a MISSING finding — deliberately unlike the
+ * Graph, where the same filters decide what is SHOWN); the error-class pills filter the fetched findings
  * client-side. STRUCTURE_INVALID rows carry the validator's own message; every other
  * status renders its static explanation.
  */
