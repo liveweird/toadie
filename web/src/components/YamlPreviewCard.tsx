@@ -11,7 +11,9 @@ export default function YamlPreviewCard({ yaml, embedded }: { yaml: string; embe
   const body = (
     <Stack gap="sm">
       <Title order={3}>{t("catalog.preview")}</Title>
-      <ScrollArea.Autosize mah="70vh">
+      {/* A keyboard-focusable scroll region (the YamlDiffView rule): long YAML overflows the
+          drawer's width, and a scrollable region must be reachable by keyboard. */}
+      <ScrollArea.Autosize mah="70vh" viewportProps={{ tabIndex: 0 }}>
         <Code block aria-label={t("catalog.preview")}>
           {yaml}
         </Code>

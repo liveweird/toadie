@@ -9,6 +9,7 @@ import {
   IconPlus,
 } from "@tabler/icons-react";
 import { deleteCatalogFile, listCatalogFiles, type CatalogFileListItem } from "../api/catalogFiles";
+import CatalogFileDrawer from "../components/CatalogFileDrawer";
 import CatalogFileNameLink from "../components/CatalogFileNameLink";
 import CatalogToolbar from "../components/CatalogToolbar";
 import CatalogFileOperations from "../components/CatalogFileOperations";
@@ -21,6 +22,7 @@ import SyncCatalogFileModal from "../components/SyncCatalogFileModal";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
+import { useQuickViewParam } from "../hooks/useQuickViewParam";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
@@ -71,6 +73,7 @@ export default function CatalogFiles() {
   // source reference.
   const [syncTarget, setSyncTarget] = useState<CatalogFileListItem | null>(null);
   const [overwriteTarget, setOverwriteTarget] = useState<CatalogFileListItem | null>(null);
+  const quickView = useQuickViewParam();
 
   const total = data?.total ?? 0;
   const columnCount = 6;
@@ -202,6 +205,7 @@ export default function CatalogFiles() {
                     onDelete={() => deleteConfirm.requestDelete(file)}
                     // Always offered, greyed out until the row carries a source reference.
                     sync={{ onSync: () => setSyncTarget(file), enabled: file.sourceUrl != null }}
+                    onQuickView={() => quickView.open(file.id)}
                   />
                 </Table.Td>
               </Table.Tr>
@@ -227,6 +231,8 @@ export default function CatalogFiles() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
+
+      <CatalogFileDrawer />
 
       <SyncCatalogFileModal file={syncTarget} onClose={() => setSyncTarget(null)} />
 

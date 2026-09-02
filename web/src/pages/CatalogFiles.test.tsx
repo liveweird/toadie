@@ -609,4 +609,16 @@ describe("CatalogFiles page", () => {
     await rowOperation(user, "payments-svc", "Sync from source");
     expect(await screen.findByText("Sync from source — payments-svc")).toBeInTheDocument();
   });
+
+  test("Quick view from the Operations menu opens the drawer and addresses it with ?file=", async () => {
+    setupMocks(mockFetch, (url) =>
+      url === "/api/v1/files/1" ? jsonResponse(200, { ...SEED_FILES[0], createdBy: 1, creatorName: "A", creatorDeleted: false, metadata: { name: SEED_FILES[0].name, namespace: "default" }, spec: {} }) : filesPage(SEED_FILES),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await rowOperation(user, "payments-svc", "Quick view");
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("payments-svc")).toBeInTheDocument();
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledWith("/api/v1/files/1", expect.anything()));
+  });
 });

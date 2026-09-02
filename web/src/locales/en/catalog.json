@@ -57,7 +57,10 @@
     "label": "Label",
     "labelValues": "Label values",
     "lastSync": "Last sync",
-    "sourceUrl": "Source file URL"
+    "sourceUrl": "Source file URL",
+    "created": "Created",
+    "createdBy": "Created by",
+    "source": "Source"
   },
   "hint": {
     "namespace": "Pick a defined namespace; blank means \"{{default}}\"",
@@ -259,5 +262,10 @@
   "pin": {
     "action": "Pin",
     "clear": "Unpin"
+  },
+  "quickView": "Quick view",
+  "drawer": {
+    "summary": "Summary",
+    "noDescription": "No description"
   }
 }

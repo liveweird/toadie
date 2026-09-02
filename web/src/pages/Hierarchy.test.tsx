@@ -250,4 +250,13 @@ describe("Hierarchy page", () => {
     renderPage();
     expect(await screen.findByText(/nothing to show/i)).toBeInTheDocument();
   });
+
+  test("Quick view from a stored row's menu opens the drawer", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Operations for billing" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Quick view" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
 });

@@ -15,6 +15,7 @@ import {
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconChevronDown, IconChevronRight, IconChevronsDown, IconChevronsUp, IconPin, IconSitemap } from "@tabler/icons-react";
 import { deleteCatalogFile, getCatalogGraph, type GraphNode } from "../api/catalogFiles";
+import CatalogFileDrawer from "../components/CatalogFileDrawer";
 import CatalogFileNameLink from "../components/CatalogFileNameLink";
 import CatalogToolbar from "../components/CatalogToolbar";
 import CatalogFileOperations from "../components/CatalogFileOperations";
@@ -22,6 +23,7 @@ import OverwriteWithYamlModal, { type OverwriteTarget } from "../components/Over
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
+import { useQuickViewParam } from "../hooks/useQuickViewParam";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useStoredState, isString } from "../hooks/useStoredState";
@@ -195,6 +197,7 @@ export default function Hierarchy() {
     });
   }
 
+  const quickView = useQuickViewParam();
   const operations = (node: GraphNode) => {
     const fileId = node.fileId;
     if (fileId == null) return null;
@@ -212,6 +215,7 @@ export default function Hierarchy() {
             namespace: node.namespace,
           })
         }
+        onQuickView={() => quickView.open(fileId)}
         onDelete={() =>
           deleteConfirm.requestDelete({ id: fileId, name: node.name, namespace: node.namespace })
         }
@@ -316,6 +320,8 @@ export default function Hierarchy() {
           />
         ) : null}
       </Paper>
+
+      <CatalogFileDrawer />
 
       <OverwriteWithYamlModal file={overwriteTarget} onClose={() => setOverwriteTarget(null)} />
 

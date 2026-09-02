@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { Menu } from "@mantine/core";
 import {
+  IconEye,
   IconFileExport,
   IconPencil,
   IconPin,
@@ -55,6 +56,7 @@ export default function CatalogFileOperations({
   onDelete,
   sync,
   pin,
+  onQuickView,
 }: {
   id: number;
   name: string;
@@ -64,6 +66,8 @@ export default function CatalogFileOperations({
   onDelete: () => void;
   sync?: SyncOperation;
   pin?: PinOperation;
+  /** Opens the quick-view drawer (v1.21.0) — offered where a page mounts `CatalogFileDrawer`. */
+  onQuickView?: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -78,6 +82,11 @@ export default function CatalogFileOperations({
           </Menu.Item>
           <Menu.Divider />
         </>
+      )}
+      {onQuickView && (
+        <Menu.Item leftSection={<IconEye size={14} />} onClick={onQuickView}>
+          {t("catalog.quickView")}
+        </Menu.Item>
       )}
       <Menu.Item
         component={RouterLink}

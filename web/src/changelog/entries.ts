@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.21.0",
+    date: "2026-09-03",
+    en: `**Quick view: read a file without leaving the list.**
+
+- Every row's menu on the Files list and the Hierarchy now offers **Quick view**: a drawer slides in from the right with the file's summary — namespace, title, description, owner, type, lifecycle, tags, labels, source and sync state, who created it and when — its live **Findings**, and its **YAML**.
+- From the drawer you can **Export**, **Overwrite with YAML**, **Sync from source** (when the file has one), or jump to **Edit**. Deleting stays in the row menu, next to its confirmation.
+- The drawer is part of the address (\`?file=…\`): reload and it is still open, share the link and it opens for whoever follows it, press Back after editing and you are looking at it again.`,
+    pl: `**Szybki podgląd: przeczytaj plik bez opuszczania listy.**
+
+- Menu każdego wiersza na liście Plików i w Hierarchii oferuje teraz **Szybki podgląd**: z prawej wsuwa się szuflada z podsumowaniem pliku — przestrzeń nazw, tytuł, opis, właściciel, typ, cykl życia, tagi, etykiety, źródło i stan synchronizacji, kto i kiedy go utworzył/a — jego bieżącymi **Ustaleniami** i jego **YAML-em**.
+- Z szuflady możesz **Eksportować**, **Nadpisać YAML-em**, **Zsynchronizować ze źródłem** (gdy plik je ma) albo przejść do **Edycji**. Usuwanie zostaje w menu wiersza, obok swojego potwierdzenia.
+- Szuflada jest częścią adresu (\`?file=…\`): odśwież stronę, a nadal jest otwarta; udostępnij link, a otworzy się każdemu, kto go kliknie; naciśnij Wstecz po edycji, a znów na nią patrzysz.`,
+  },
+  {
     version: "1.20.0",
     date: "2026-09-03",
     en: `**Every page uses its space better: one toolbar row, denser lists, a grouped Errors report, and an editor whose Save never scrolls away.**

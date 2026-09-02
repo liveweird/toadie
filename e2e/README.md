@@ -150,6 +150,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`command-palette.spec.ts`](scenarios/command-palette.md) — Ctrl K opens the palette:
   a page name jumps there, a file name searches the catalog and opens the editor (owns one
   throwaway System in the `render` run namespace).
+- [`quick-view.spec.ts`](scenarios/quick-view.md) — the quick-view drawer opens from a
+  row menu, is addressed by `?file=`, survives a reload, scans clean, and hands over to the
+  editor (owns one throwaway System in the `render` run namespace).
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).

@@ -57,7 +57,10 @@
     "label": "Etykieta",
     "labelValues": "Wartości etykiety",
     "lastSync": "Ostatnia synchronizacja",
-    "sourceUrl": "Adres URL pliku źródłowego"
+    "sourceUrl": "Adres URL pliku źródłowego",
+    "created": "Utworzono",
+    "createdBy": "Utworzył/a",
+    "source": "Źródło"
   },
   "hint": {
     "namespace": "Wybierz zdefiniowaną przestrzeń nazw; puste pole oznacza \"{{default}}\"",
@@ -267,5 +270,10 @@
   "pin": {
     "action": "Przypnij",
     "clear": "Odepnij"
+  },
+  "quickView": "Szybki podgląd",
+  "drawer": {
+    "summary": "Podsumowanie",
+    "noDescription": "Brak opisu"
   }
 }
