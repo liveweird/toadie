@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createUserViaUi, expect, login, logoutButton, openFilters, test, uniqueText } from "./helpers";
+import { createUserViaUi, deleteUserRow, expect, login, signOut, test, uniqueText } from "./helpers";
 
 /**
  * Every namespace input on the editor, in visible (= stored) order. `.all()` never waits,
@@ -89,7 +89,7 @@ test("admin curates the ordered namespaces list; a regular user reads it only", 
   await expect(page.getByText("Default", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Add namespace" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
-  await logoutButton(page).click();
+  await signOut(page);
 
   // Cleanup as the admin: both throwaway entries removed (one save), then the throwaway user.
   await login(page);
@@ -99,17 +99,5 @@ test("admin curates the ordered namespaces list; a regular user reads it only", 
   await saveNamespaces(page);
   expect(await namespaceValues(page)).not.toContain(nsA);
 
-  await page.goto("/users");
-  await openFilters(page);
-  await page.getByLabel("Name", { exact: true }).fill(throwaway.name);
-  await page.getByRole("button", { name: `Delete ${throwaway.name}` }).click();
-  await Promise.all([
-    page.waitForResponse(
-      (r) =>
-        r.url().endsWith(`/api/v1/users/${throwaway.id}`) &&
-        r.request().method() === "DELETE" &&
-        r.ok(),
-    ),
-    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
-  ]);
+  await deleteUserRow(page, throwaway.name);
 });

@@ -1,6 +1,5 @@
 {
   "action": {
-    "logout": "Wyloguj",
     "create": "Utwórz",
     "save": "Zapisz",
     "cancel": "Anuluj",
@@ -40,7 +39,8 @@
     "previousPage": "Poprzednia strona",
     "nextPage": "Następna strona",
     "lastPage": "Ostatnia strona",
-    "operations": "Operacje"
+    "operations": "Operacje",
+    "operationsAria": "Operacje dla {{name}}"
   },
   "error": {
     "timeout": "Przekroczono limit czasu żądania. Spróbuj ponownie.",
@@ -76,5 +76,6 @@
   },
   "featureHint": {
     "MFA": "6-cyfrowy kod wysyłany e-mailem przy każdym logowaniu (drugi składnik)."
-  }
+  },
+  "loading": "Ładowanie…"
 }

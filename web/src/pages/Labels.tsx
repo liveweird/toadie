@@ -2,20 +2,16 @@ import { useState } from "react";
 import {
   Alert,
   Badge,
+  Box,
   Button,
-  Center,
-  Container,
   Group,
-  Loader,
   Modal,
   MultiSelect,
-  Paper,
   Stack,
   Table,
   TagsInput,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,7 +22,7 @@ import { isAdmin } from "../api/session";
 import { createLabel, deleteLabel, updateLabel, type Label } from "../api/labels";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
-import KindTierDot, { renderKindOption } from "../components/KindTierDot";
+import { renderKindOption } from "../components/KindTierDot";
 import RowEditDelete from "../components/RowEditDelete";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useLabels } from "../hooks/useLabels";
@@ -42,6 +38,10 @@ import {
 } from "../utils/labelForm";
 import { loadErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
+import LoadingBlock from "../components/LoadingBlock";
+import KindBadge from "../components/KindBadge";
+import PageHeader from "../components/PageHeader";
+import { CONTENT_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The label registry (`/labels`): everyone gets the read-only list; an ADMIN additionally
@@ -62,31 +62,29 @@ export default function Labels() {
   });
 
   return (
-    <Container size="md" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader
+        title={t("labels.title")}
+        description={t("labels.intro")}
+        actions={
+          isAdmin() && (
+            <Button leftSection={<IconPlus size={16} />} onClick={() => setEditorTarget("new")}>
+              {t("labels.newLabel")}
+            </Button>
+          )
+        }
+      />
+      <Box maw={CONTENT_MAX_WIDTH}>
         <Stack>
-          <Group justify="space-between" align="flex-start">
-            <Title order={2}>{t("labels.title")}</Title>
-            {isAdmin() && (
-              <Button leftSection={<IconPlus size={16} />} onClick={() => setEditorTarget("new")}>
-                {t("labels.newLabel")}
-              </Button>
-            )}
-          </Group>
-          <Text size="sm" c="dimmed">
-            {t("labels.intro")}
-          </Text>
           {error ? (
             <Alert color="red" variant="light" title={t("labels.loadFailed")}>
               {loadErrorMessage(loadError, t)}
             </Alert>
           ) : loading ? (
-            <Center py="xl">
-              <Loader />
-            </Center>
+            <LoadingBlock />
           ) : labels.length === 0 ? (
             <EmptyState
-              icon={<IconTag size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+              icon={IconTag}
               label={t("labels.empty")}
             />
           ) : (
@@ -119,9 +117,7 @@ export default function Labels() {
                     <Table.Td>
                       <Group gap={4}>
                         {label.kinds.map((kind) => (
-                          <Badge key={kind} color="teal" variant="light" size="sm" leftSection={<KindTierDot kind={kind} />}>
-                            {kind}
-                          </Badge>
+                          <KindBadge key={kind} kind={kind} />
                         ))}
                       </Group>
                     </Table.Td>
@@ -140,7 +136,7 @@ export default function Labels() {
             </Table>
           )}
         </Stack>
-      </Paper>
+      </Box>
 
       {editorTarget !== null && (
         <LabelEditorModal
@@ -159,7 +155,7 @@ export default function Labels() {
         errorTitle={t("labels.deleteFailed")}
         body={(label) => t("labels.deleteBody", { key: label.key })}
       />
-    </Container>
+    </Stack>
   );
 }
 

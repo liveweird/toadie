@@ -25,12 +25,34 @@ export async function login(page: Page, email = ADMIN, password = PASSWORD): Pro
   await page.getByRole("textbox", { name: "Email" }).fill(email);
   await page.getByRole("textbox", { name: "Password" }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(logoutButton(page)).toBeVisible({ timeout: 15_000 });
+  await expect(accountMenu(page)).toBeVisible({ timeout: 15_000 });
 }
 
-/** The header logout affordance — visible only inside the authenticated shell. */
-export function logoutButton(page: Page) {
-  return page.getByRole("button", { name: "Logout" });
+/** The header account-menu trigger — visible only inside the authenticated shell (v1.19.0). */
+export function accountMenu(page: Page) {
+  return page.getByRole("button", { name: "Account menu" });
+}
+
+/** Sign out through the account menu (the former header Logout button). */
+export async function signOut(page: Page): Promise<void> {
+  await accountMenu(page).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+}
+
+/**
+ * Delete a user from the Users list through its row menu (v1.19.0: the row actions sit under
+ * an "Operations for <name>" kebab) — the cleanup step every throwaway-user spec ends with.
+ * Filters the list to the name first, then waits for the DELETE to land.
+ */
+export async function deleteUserRow(page: Page, name: string): Promise<void> {
+  await page.goto("/users");
+  await openFilters(page);
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await rowOperation(page, name, `Delete ${name}`);
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "DELETE" && r.ok()),
+    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
+  ]);
 }
 
 /**
@@ -127,14 +149,23 @@ export async function pickLifecycle(page: Page, lifecycle: string): Promise<void
 }
 
 /**
- * Drive a catalog-files list row's action through its Operations dropdown (the per-row
- * actions are bundled under one menu button since the list reshape). Sync is always
- * present but DISABLED on a source-less row, so target it only where a source is set.
+ * Drive a list row's action through its "Operations for <name>" kebab menu (the catalog
+ * Files/Hierarchy rows and, since v1.19.0, the Users rows — whose items carry interpolated
+ * names, hence the open `string` union member). Sync is always present but DISABLED on a
+ * source-less row, so target it only where a source is set.
  */
 export async function rowOperation(
   page: Page,
   name: string,
-  operation: "Edit" | "Export as YAML" | "Overwrite with YAML" | "Delete" | "Sync from source" | "Pin" | "Unpin",
+  operation:
+    | "Edit"
+    | "Export as YAML"
+    | "Overwrite with YAML"
+    | "Delete"
+    | "Sync from source"
+    | "Pin"
+    | "Unpin"
+    | (string & {}),
 ): Promise<void> {
   const trigger = page.getByRole("button", { name: `Operations for ${name}` });
   // Ensure THIS row's menu actually opened: a previous row's still-fading dropdown treats

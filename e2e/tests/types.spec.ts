@@ -1,4 +1,15 @@
-import { createUserViaUi, expect, login, logoutButton, openFilters, pickType, rowOperation, test, uniqueText } from "./helpers";
+import {
+  createUserViaUi,
+  deleteUserRow,
+  expect,
+  login,
+  openFilters,
+  pickType,
+  rowOperation,
+  signOut,
+  test,
+  uniqueText,
+} from "./helpers";
 
 // The type-dictionary journey. The dictionaries are per-kind SINGLETONS seeded by V15 and
 // re-curated by V22, so unlike tags there is no throwaway row to create: this spec APPENDS
@@ -49,7 +60,7 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   await expect(page.getByText(extraType)).toBeVisible();
   await expect(page.getByRole("button", { name: "New dictionary" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Edit Domain" })).toHaveCount(0);
-  await logoutButton(page).click();
+  await signOut(page);
 
   // Back as the admin: the editor's Type field is the registry Select — the appended value
   // is offered for a Domain document and the save passes the strict server check.
@@ -95,15 +106,5 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   ]);
   await expect(domainRow.getByText(extraType, { exact: true })).toHaveCount(0);
 
-  await page.goto("/users");
-  await openFilters(page);
-  await page.getByLabel("Name", { exact: true }).fill(throwaway.name);
-  await page.getByRole("button", { name: `Delete ${throwaway.name}` }).click();
-  await Promise.all([
-    page.waitForResponse(
-      (r) =>
-        r.url().endsWith(`/api/v1/users/${throwaway.id}`) && r.request().method() === "DELETE" && r.ok(),
-    ),
-    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
-  ]);
+  await deleteUserRow(page, throwaway.name);
 });

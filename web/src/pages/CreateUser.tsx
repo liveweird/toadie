@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
-import { Alert, Button, Container, Group, Paper, Stack, Title } from "@mantine/core";
+import { Alert, Button, Group, Paper, Stack } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { IconMail } from "@tabler/icons-react";
@@ -12,6 +12,8 @@ import UserFormFields from "../components/UserFormFields";
 import { generatePassword } from "../utils/password";
 import { EMPTY_USER_FORM, rolesOf, userFormValidation, type UserFormValues } from "../utils/userForm";
 import { saveErrorMessage } from "../utils/saveError";
+import PageHeader from "../components/PageHeader";
+import { FORM_MAX_WIDTH } from "../utils/layout";
 
 export default function CreateUser() {
   const { t } = useTranslation();
@@ -79,11 +81,11 @@ export default function CreateUser() {
     : undefined;
 
   return (
-    <Container size="sm" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader title={t("users.createUser")} backTo={{ to: "/users", label: t("users.title") }} />
+      <Paper withBorder p="xl" maw={FORM_MAX_WIDTH}>
         <form onSubmit={form.onSubmit(onSubmit)} noValidate>
           <Stack>
-            <Title order={2}>{t("users.createUser")}</Title>
             {/* No password field: it is generated on submit and revealed exactly once. */}
             <UserFormFields form={form} />
             {error && (
@@ -113,6 +115,6 @@ export default function CreateUser() {
           </Button>
         }
       />
-    </Container>
+    </Stack>
   );
 }

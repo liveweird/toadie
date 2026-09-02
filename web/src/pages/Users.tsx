@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, Navigate } from "react-router-dom";
-import { Alert, Badge, Button, Group, Modal, Select, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Button, Group, Menu, Modal, Select, Stack, Table, Text } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconKey, IconPencil, IconPlus, IconToggleLeft, IconTrash, IconUsers } from "@tabler/icons-react";
@@ -12,6 +12,7 @@ import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
 import OneTimePasswordModal from "../components/OneTimePasswordModal";
 import PaginationBar from "../components/PaginationBar";
+import RowActionsMenu from "../components/RowActionsMenu";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
@@ -19,6 +20,7 @@ import { usePagedSort } from "../hooks/usePagedSort";
 import { useResetPassword } from "../hooks/useResetPassword";
 import { isString, useStoredState } from "../hooks/useStoredState";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
+import PageHeader from "../components/PageHeader";
 
 const SORT_FIELDS = ["name", "email"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
@@ -75,7 +77,16 @@ export default function Users() {
 
   return (
     <Stack gap="md">
-      <Title order={2}>{t("users.title")}</Title>
+      <PageHeader
+        title={t("users.title")}
+        actions={
+          <>
+            <Button component={RouterLink} to="/users/new" leftSection={<IconPlus size={16} />}>
+              {t("users.createUser")}
+            </Button>
+          </>
+        }
+      />
 
       <FilterPanel activeFilterCount={activeFilterCount} storageKey={SETTINGS_KEY}>
         <ClearableTextInput
@@ -110,7 +121,7 @@ export default function Users() {
         </Alert>
       )}
 
-      <Table withTableBorder>
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <SortHeader
@@ -156,7 +167,7 @@ export default function Users() {
                   </Table.Td>
                   <Table.Td>
                     {user.roles.includes("ADMIN") ? (
-                      <Badge variant="filled" color="grape" size="sm">
+                      <Badge variant="outline" color="gray" size="sm">
                         {t("common.role.ADMIN")}
                       </Badge>
                     ) : (
@@ -165,54 +176,47 @@ export default function Users() {
                       </Text>
                     )}
                   </Table.Td>
-                  <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
-                    <Group gap={4} wrap="nowrap">
-                      <Button
+                  <Table.Td style={{ width: 1 }} ta="right">
+                    <RowActionsMenu label={t("common.table.operationsAria", { name: user.name })}>
+                      <Menu.Item
                         component={RouterLink}
                         to={`/users/${user.id}/edit`}
-                        variant="subtle"
-                        size="xs"
                         leftSection={<IconPencil size={14} />}
                         aria-label={t("common.action.editAria", { name: user.name })}
                       >
                         {t("common.action.edit")}
-                      </Button>
-                      <Button
+                      </Menu.Item>
+                      <Menu.Item
                         component={RouterLink}
                         to={`/users/${user.id}/features`}
-                        variant="subtle"
-                        size="xs"
                         leftSection={<IconToggleLeft size={14} />}
                         aria-label={t("users.featuresAria", { name: user.name })}
                       >
                         {t("users.featuresAction")}
-                      </Button>
+                      </Menu.Item>
                       {/* Own row: no reset (self-change needs the current password — the
                           Change password page) and no delete (the server 403s it anyway). */}
                       {!self && (
                         <>
-                          <Button
-                            variant="subtle"
-                            size="xs"
+                          <Menu.Divider />
+                          <Menu.Item
                             leftSection={<IconKey size={14} />}
                             onClick={() => reset.request(user)}
                             aria-label={t("users.resetPasswordAria", { name: user.name })}
                           >
                             {t("users.resetPassword")}
-                          </Button>
-                          <Button
+                          </Menu.Item>
+                          <Menu.Item
                             color="red"
-                            variant="subtle"
-                            size="xs"
                             leftSection={<IconTrash size={14} />}
                             onClick={() => deleteConfirm.requestDelete(user)}
                             aria-label={t("common.action.deleteAria", { name: user.name })}
                           >
                             {t("common.action.delete")}
-                          </Button>
+                          </Menu.Item>
                         </>
                       )}
-                    </Group>
+                    </RowActionsMenu>
                   </Table.Td>
                 </Table.Tr>
               );
@@ -221,7 +225,7 @@ export default function Users() {
             <Table.Tr>
               <Table.Td colSpan={columnCount}>
                 <EmptyState
-                  icon={<IconUsers size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+                  icon={IconUsers}
                   label={t("users.noUsers")}
                 />
               </Table.Td>
@@ -237,12 +241,6 @@ export default function Users() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
-
-      <Group justify="flex-end">
-        <Button component={RouterLink} to="/users/new" leftSection={<IconPlus size={16} />}>
-          {t("users.createUser")}
-        </Button>
-      </Group>
 
       <ConfirmDeleteModal
         confirm={deleteConfirm}

@@ -3,7 +3,6 @@
   "createFile": "New catalog file",
   "editFile": "Edit catalog file",
   "noFiles": "No catalog files",
-  "operationsAria": "Operations for {{name}}",
   "deleteModalTitle": "Delete catalog file?",
   "deleteTitle": "Delete catalog file \"{{name}}\" (namespace {{namespace}})?",
   "deleteUndone": "This cannot be undone.",

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link as RouterLink, Navigate } from "react-router-dom";
-import { Alert, Anchor, Button, Group, Select, Stack, Switch, Table, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Button, Group, Select, Stack, Switch, Table, Text } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconUsers } from "@tabler/icons-react";
@@ -19,6 +19,7 @@ import { FEATURES, isAdmin, type Feature } from "../api/session";
 import { listUsers, updateUserFeatures, type UserPage } from "../api/users";
 import { showSuccessToast } from "../utils/toast";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
+import PageHeader from "../components/PageHeader";
 
 const SORT_FIELDS = ["id", "name", "email"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
@@ -164,7 +165,38 @@ export default function FeatureFlags() {
 
   return (
     <Stack gap="md">
-      <Title order={2}>{t("users.featureFlags.title")}</Title>
+      <PageHeader
+        title={t("users.featureFlags.title")}
+        actions={
+          <>
+            <Button
+              variant="light"
+              loading={bulk.preparing === true}
+              disabled={bulk.preparing !== null || total === 0}
+              onClick={() => {
+                // Clear the page-level error at the interaction, not inside fetchAll — the
+                // hook's data-fetch callback is not a place for view-state writes.
+                setError(null);
+                void bulk.prepare(true);
+              }}
+            >
+              {t("users.featureFlags.bulkEnable")}
+            </Button>
+            <Button
+              variant="light"
+              color="red"
+              loading={bulk.preparing === false}
+              disabled={bulk.preparing !== null || total === 0}
+              onClick={() => {
+                setError(null);
+                void bulk.prepare(false);
+              }}
+            >
+              {t("users.featureFlags.bulkDisable")}
+            </Button>
+          </>
+        }
+      />
 
       <FilterPanel activeFilterCount={activeFilterCount} storageKey={SETTINGS_KEY}>
         <Select
@@ -234,35 +266,7 @@ export default function FeatureFlags() {
         </Alert>
       )}
 
-      <Group justify="flex-end" gap="sm">
-        <Button
-          variant="light"
-          loading={bulk.preparing === true}
-          disabled={bulk.preparing !== null || total === 0}
-          onClick={() => {
-            // Clear the page-level error at the interaction, not inside fetchAll — the
-            // hook's data-fetch callback is not a place for view-state writes.
-            setError(null);
-            void bulk.prepare(true);
-          }}
-        >
-          {t("users.featureFlags.bulkEnable")}
-        </Button>
-        <Button
-          variant="light"
-          color="red"
-          loading={bulk.preparing === false}
-          disabled={bulk.preparing !== null || total === 0}
-          onClick={() => {
-            setError(null);
-            void bulk.prepare(false);
-          }}
-        >
-          {t("users.featureFlags.bulkDisable")}
-        </Button>
-      </Group>
-
-      <Table highlightOnHover withTableBorder verticalSpacing="sm">
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <SortHeader
@@ -326,7 +330,7 @@ export default function FeatureFlags() {
             <Table.Tr>
               <Table.Td colSpan={columnCount}>
                 <EmptyState
-                  icon={<IconUsers size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+                  icon={IconUsers}
                   label={t("users.noUsers")}
                 />
               </Table.Td>

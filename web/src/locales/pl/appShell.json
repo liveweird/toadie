@@ -1,15 +1,12 @@
 {
   "brand": "Toadie",
-  "toggleColorScheme": "Przełącz motyw kolorystyczny",
   "skipToContent": "Przejdź do treści",
   "nav": {
     "home": "Hierarchia",
     "catalogFiles": "Pliki",
     "errors": "Błędy",
     "graph": "Graf",
-    "dictionaries": "Słowniki",
     "namespaces": "Przestrzenie nazw",
-    "metadata": "Metadane",
     "labels": "Etykiety",
     "tags": "Tagi",
     "types": "Typy",
@@ -19,5 +16,27 @@
     "changePassword": "Zmiana hasła",
     "featureFlags": "Flagi funkcji",
     "changelog": "Historia zmian"
+  },
+  "section": {
+    "catalog": "Katalog",
+    "registries": "Rejestry",
+    "administration": "Administracja"
+  },
+  "userMenu": {
+    "open": "Menu konta",
+    "language": "Język",
+    "theme": "Motyw",
+    "themeLight": "Jasny",
+    "themeDark": "Ciemny",
+    "themeAuto": "Systemowy",
+    "signOut": "Wyloguj"
+  },
+  "palette": {
+    "open": "Szukaj i przejdź do…",
+    "placeholder": "Szukaj plików lub przejdź do strony…",
+    "groupPages": "Strony",
+    "groupActions": "Akcje",
+    "groupFiles": "Pliki",
+    "nothingFound": "Nic nie znaleziono"
   }
 }

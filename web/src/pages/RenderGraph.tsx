@@ -4,15 +4,12 @@ import { useNavigate } from "react-router-dom";
 import {
   Alert,
   Button,
-  Center,
   Chip,
   Group,
-  Loader,
   Paper,
   SegmentedControl,
   Stack,
   Text,
-  Title,
   useComputedColorScheme,
 } from "@mantine/core";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -57,6 +54,8 @@ import { buildHierarchy } from "../utils/hierarchy";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { loadErrorMessage } from "../utils/saveError";
 import { editCatalogFilePath } from "../utils/catalogFileLinks";
+import LoadingBlock from "../components/LoadingBlock";
+import PageHeader from "../components/PageHeader";
 
 const NODE_TYPES = { catalog: CatalogGraphNode };
 
@@ -229,7 +228,7 @@ export default function RenderGraph() {
 
   return (
     <Stack gap="md" h="100%">
-      <Title order={2}>{t("render.title")}</Title>
+      <PageHeader title={t("render.title")} />
 
       <FilterPanel
         activeFilterCount={filters.activeFilterCount}
@@ -330,12 +329,10 @@ export default function RenderGraph() {
       )}
 
       {isLoading && !data ? (
-        <Center py="xl">
-          <Loader size="sm" />
-        </Center>
+        <LoadingBlock />
       ) : !isLoading && !isError && nodes.length === 0 ? (
         <EmptyState
-          icon={<IconTopologyStar3 size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+          icon={IconTopologyStar3}
           label={t("render.empty")}
         />
       ) : (

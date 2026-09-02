@@ -6,14 +6,11 @@ import {
   Badge,
   Box,
   Button,
-  Center,
   CloseButton,
   Group,
-  Loader,
   Paper,
   Stack,
   Text,
-  Title,
 } from "@mantine/core";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconChevronDown, IconChevronRight, IconPin, IconSitemap } from "@tabler/icons-react";
@@ -26,7 +23,6 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
-import KindTierDot from "../components/KindTierDot";
 import LensPicker from "../components/LensPicker";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
@@ -34,6 +30,9 @@ import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useStoredState, isString } from "../hooks/useStoredState";
 import { buildHierarchy, findPlacement, type HierarchyNode } from "../utils/hierarchy";
 import { loadErrorMessage } from "../utils/saveError";
+import LoadingBlock from "../components/LoadingBlock";
+import KindBadge from "../components/KindBadge";
+import PageHeader from "../components/PageHeader";
 
 /** The delete confirm's target — the tree row's identity, shaped like a list row. */
 interface DeleteTarget {
@@ -75,7 +74,6 @@ function TreeItem({
   const { node, children } = item;
   const key = pathKey(path, node);
   const isCollapsed = collapsed.has(key);
-  const virtual = node.status !== "STORED";
   return (
     <Box>
       <Group gap="xs" wrap="nowrap" py={4}>
@@ -93,9 +91,7 @@ function TreeItem({
         ) : (
           <Box w={22} />
         )}
-        <Badge variant="light" size="sm" color={virtual ? "gray" : undefined} leftSection={<KindTierDot kind={node.kind} />}>
-          {node.kind}
-        </Badge>
+        <KindBadge kind={node.kind} status={node.status} />
         {/* Placeholders have no stored entity to open — the same `fileId == null` test the
             row's Operations menu applies — so they stay dimmed italic text. */}
         {node.fileId != null ? (
@@ -231,7 +227,7 @@ export default function Hierarchy() {
 
   return (
     <Stack gap="md">
-      <Title order={2}>{t("hierarchy.title")}</Title>
+      <PageHeader title={t("hierarchy.title")} />
 
       <FilterPanel
         activeFilterCount={filters.activeFilterCount}
@@ -300,9 +296,7 @@ export default function Hierarchy() {
       <Paper withBorder p="md">
         {/* A disabled (noKinds) query stays pending forever — fall through to the empty state. */}
         {isPending && !data && !noKinds ? (
-          <Center py="md">
-            <Loader size="sm" />
-          </Center>
+          <LoadingBlock py="md" />
         ) : visible.length > 0 ? (
           visible.map((root) => (
             <TreeItem
@@ -316,7 +310,7 @@ export default function Hierarchy() {
           ))
         ) : !isError ? (
           <EmptyState
-            icon={<IconSitemap size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+            icon={IconSitemap}
             label={t("hierarchy.empty")}
           />
         ) : null}

@@ -17,6 +17,26 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.19.0",
+    date: "2026-09-03",
+    en: `**A refreshed workspace: a calmer look, denser tables, an account menu, and a command palette.**
+
+- The brand amber now marks only what you can act on — primary buttons, the current page, focus. Links are plain text that underline on hover, filter chips are light toggles instead of solid buttons, and every kind badge wears the same quiet tint with its tier dot.
+- The sidebar is three labelled sections — **Catalog**, **Registries**, and (for administrators) **Administration** — with every page one click away; nothing folds any more.
+- Your account has a home: the avatar at the top right opens a menu with your name, email and role, the **language**, the **theme** (light, dark or system), **Change password**, the **Changelog** (with the what's-new marker), and **Sign out**.
+- Every page starts with its title and its primary action on the same row — **New catalog file**, **Import**, **New user**, **New label** and friends no longer hide at the bottom of a table.
+- Tables are denser (about 40 px a row) and every row's actions sit under one **⋮** menu named after the row, on the Files list, the Hierarchy and the Users list alike.
+- Press **⌘K** (Ctrl K) — or click the search box in the header — to jump to any page or open a catalog file by typing part of its name.`,
+    pl: `**Odświeżone środowisko pracy: spokojniejszy wygląd, gęstsze tabele, menu konta i paleta poleceń.**
+
+- Bursztynowy kolor marki oznacza teraz tylko to, na czym możesz działać — główne przyciski, bieżącą stronę, fokus. Linki są zwykłym tekstem podkreślanym po najechaniu, żetony filtrów to lekkie przełączniki zamiast pełnych przycisków, a każda odznaka rodzaju nosi tę samą stonowaną barwę ze swoją kropką poziomu.
+- Pasek boczny to trzy podpisane sekcje — **Katalog**, **Rejestry** i (dla administratorów/administratorek) **Administracja** — z każdą stroną na jedno kliknięcie; nic się już nie zwija.
+- Twoje konto ma swoje miejsce: awatar w prawym górnym rogu otwiera menu z Twoim imieniem, adresem e-mail i rolą, **językiem**, **motywem** (jasny, ciemny lub systemowy), **Zmianą hasła**, **Dziennikiem zmian** (ze znacznikiem nowości) i **Wylogowaniem**.
+- Każda strona zaczyna się od tytułu i głównej akcji w tym samym wierszu — **Nowy plik katalogu**, **Import**, **Nowy użytkownik**, **Nowa etykieta** i podobne nie chowają się już pod tabelą.
+- Tabele są gęstsze (około 40 px na wiersz), a akcje każdego wiersza kryją się pod jednym menu **⋮** nazwanym od wiersza — na liście Plików, w Hierarchii i na liście Użytkowników tak samo.
+- Naciśnij **⌘K** (Ctrl K) — lub kliknij pole wyszukiwania w nagłówku — aby przejść do dowolnej strony albo otworzyć plik katalogu, wpisując fragment jego nazwy.`,
+  },
+  {
     version: "1.18.0",
     date: "2026-09-02",
     en: `**Collapse a node on the Graph — its contents fold into it, and their relations stay visible.**

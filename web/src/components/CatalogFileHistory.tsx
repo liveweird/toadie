@@ -1,6 +1,7 @@
 import { useState } from "react";
+import LoadingBlock from "./LoadingBlock";
 import { useTranslation } from "react-i18next";
-import { Alert, Group, Loader, Pagination, Stack, Text, Timeline } from "@mantine/core";
+import { Alert, Group, Pagination, Stack, Text, Timeline } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import type { ParseKeys, TFunction } from "i18next";
 import { listCatalogFileEvents, type CatalogFileEvent } from "../api/catalogFiles";
@@ -121,7 +122,7 @@ export default function CatalogFileHistory({ fileId }: { fileId: number }) {
     queryFn: () => listCatalogFileEvents(fileId, page, PAGE_SIZE),
   });
 
-  if (isLoading) return <Loader size="sm" />;
+  if (isLoading) return <LoadingBlock py="sm" />;
   if (isError) {
     return (
       <Alert color="red" variant="light">

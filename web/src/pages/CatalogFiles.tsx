@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Badge, Button, Group, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Button, Stack, Table, Text } from "@mantine/core";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconFileDescription,
@@ -16,7 +16,6 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
-import KindTierDot from "../components/KindTierDot";
 import LensPicker from "../components/LensPicker";
 import PaginationBar from "../components/PaginationBar";
 import OverwriteWithYamlModal from "../components/OverwriteWithYamlModal";
@@ -31,6 +30,8 @@ import { usePagedSort } from "../hooks/usePagedSort";
 import { loadErrorMessage } from "../utils/saveError";
 import { formatDate, formatDateTime } from "../utils/relativeTime";
 import { importCatalogFilesPath, newCatalogFilePath } from "../utils/catalogFileLinks";
+import KindBadge from "../components/KindBadge";
+import PageHeader from "../components/PageHeader";
 
 const SORT_FIELDS = ["name", "kind", "namespace", "updatedAt", "lastSyncedAt"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
@@ -79,7 +80,24 @@ export default function CatalogFiles() {
 
   return (
     <Stack gap="md">
-      <Title order={2}>{t("catalog.title")}</Title>
+      <PageHeader
+        title={t("catalog.title")}
+        actions={
+          <>
+            <Button
+              component={RouterLink}
+              to={importCatalogFilesPath}
+              variant="default"
+              leftSection={<IconFileImport size={16} />}
+            >
+              {t("catalog.import.linkLabel")}
+            </Button>
+            <Button component={RouterLink} to={newCatalogFilePath} leftSection={<IconPlus size={16} />}>
+              {t("catalog.createFile")}
+            </Button>
+          </>
+        }
+      />
 
       <FilterPanel
         activeFilterCount={filters.activeFilterCount}
@@ -109,7 +127,7 @@ export default function CatalogFiles() {
         </Alert>
       )}
 
-      <Table withTableBorder>
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <SortHeader
@@ -164,9 +182,7 @@ export default function CatalogFiles() {
                   <Text size="sm">{file.namespace}</Text>
                 </Table.Td>
                 <Table.Td>
-                  <Badge variant="light" size="sm" leftSection={<KindTierDot kind={file.kind} />}>
-                    {file.kind}
-                  </Badge>
+                  <KindBadge kind={file.kind} />
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{file.title ?? ""}</Text>
@@ -198,7 +214,7 @@ export default function CatalogFiles() {
             <Table.Tr>
               <Table.Td colSpan={columnCount}>
                 <EmptyState
-                  icon={<IconFileDescription size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+                  icon={IconFileDescription}
                   label={t("catalog.noFiles")}
                 />
               </Table.Td>
@@ -214,20 +230,6 @@ export default function CatalogFiles() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
-
-      <Group justify="flex-end">
-        <Button
-          component={RouterLink}
-          to={importCatalogFilesPath}
-          variant="default"
-          leftSection={<IconFileImport size={16} />}
-        >
-          {t("catalog.import.linkLabel")}
-        </Button>
-        <Button component={RouterLink} to={newCatalogFilePath} leftSection={<IconPlus size={16} />}>
-          {t("catalog.createFile")}
-        </Button>
-      </Group>
 
       <SyncCatalogFileModal file={syncTarget} onClose={() => setSyncTarget(null)} />
 

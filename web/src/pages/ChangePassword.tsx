@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Button, Container, Group, Paper, PasswordInput, Stack, Title } from "@mantine/core";
+import { Alert, Button, Group, Paper, PasswordInput, Stack } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { changeUserPassword } from "../api/users";
 import { getUserId } from "../api/session";
@@ -8,6 +8,8 @@ import { utf8ByteLength } from "../utils/password";
 import { saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
 import { MAX_PASSWORD_BYTES, MIN_PASSWORD_LENGTH } from "../utils/userForm";
+import PageHeader from "../components/PageHeader";
+import { FORM_MAX_WIDTH } from "../utils/layout";
 
 type Values = { currentPassword: string; password: string; confirm: string };
 
@@ -57,11 +59,11 @@ export default function ChangePassword() {
   }
 
   return (
-    <Container size="sm" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader title={t("users.changePasswordTitle")} />
+      <Paper withBorder p="xl" maw={FORM_MAX_WIDTH}>
         <form onSubmit={form.onSubmit(onSubmit)} noValidate>
           <Stack>
-            <Title order={2}>{t("users.changePasswordTitle")}</Title>
             <PasswordInput
               label={t("users.currentPassword")}
               autoComplete="current-password"
@@ -93,6 +95,6 @@ export default function ChangePassword() {
           </Stack>
         </form>
       </Paper>
-    </Container>
+    </Stack>
   );
 }

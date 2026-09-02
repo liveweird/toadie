@@ -1,13 +1,14 @@
 import type { Page } from "@playwright/test";
 import {
   createUserViaUi,
+  deleteUserRow,
   expect,
   login,
-  logoutButton,
   openFilters,
   pickLifecycle,
   pickType,
   rowOperation,
+  signOut,
   test,
   uniqueText,
 } from "./helpers";
@@ -83,7 +84,7 @@ test("admin curates the global lifecycles list; a regular user reads it; the edi
   await expect(page.getByText(extra)).toBeVisible();
   await expect(page.getByRole("button", { name: "Add lifecycle" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
-  await logoutButton(page).click();
+  await signOut(page);
 
   // Back as the admin: the editor's Lifecycle field is the registry Select — the appended
   // value is offered for a new Component and the save passes the strict server check.
@@ -119,15 +120,5 @@ test("admin curates the global lifecycles list; a regular user reads it; the edi
   await saveLifecycles(page);
   expect(await lifecycleValues(page)).not.toContain(extra);
 
-  await page.goto("/users");
-  await openFilters(page);
-  await page.getByLabel("Name", { exact: true }).fill(throwaway.name);
-  await page.getByRole("button", { name: `Delete ${throwaway.name}` }).click();
-  await Promise.all([
-    page.waitForResponse(
-      (r) =>
-        r.url().endsWith(`/api/v1/users/${throwaway.id}`) && r.request().method() === "DELETE" && r.ok(),
-    ),
-    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
-  ]);
+  await deleteUserRow(page, throwaway.name);
 });

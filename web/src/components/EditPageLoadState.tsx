@@ -1,5 +1,6 @@
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Button, Center, Group, Loader } from "@mantine/core";
+import { Alert, Button, Group } from "@mantine/core";
+import LoadingBlock from "./LoadingBlock";
 
 /**
  * The edit pages' shared load triage: a centered loader while fetching, else the load-failure
@@ -18,9 +19,7 @@ export default function EditPageLoadState({
   backLabel: string;
 }) {
   return isLoading ? (
-    <Center py="xl">
-      <Loader />
-    </Center>
+    <LoadingBlock />
   ) : (
     <>
       <Alert color="red" variant="light">

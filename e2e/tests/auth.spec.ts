@@ -1,10 +1,10 @@
-import { ADMIN, expect, login, logoutButton, test } from "./helpers";
+import { accountMenu, ADMIN, expect, login, signOut, test } from "./helpers";
 
 test("admin can log in and log out", async ({ page }) => {
   await login(page);
   await expect(page.getByRole("heading", { name: "Hierarchy" })).toBeVisible();
 
-  await logoutButton(page).click();
+  await signOut(page);
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   await expect(page.getByText("You've been signed out.")).toBeVisible();
 });
@@ -28,5 +28,5 @@ test("a deep link is guarded and lands back after signing in", async ({ page }) 
 
   // Back at the requested path — inside the shell it renders the not-found page (no blank).
   await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
-  await expect(logoutButton(page)).toBeVisible();
+  await expect(accountMenu(page)).toBeVisible();
 });

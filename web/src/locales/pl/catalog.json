@@ -3,7 +3,6 @@
   "createFile": "Nowy plik katalogu",
   "editFile": "Edytuj plik katalogu",
   "noFiles": "Brak plików katalogu",
-  "operationsAria": "Operacje dla {{name}}",
   "deleteModalTitle": "Usunąć plik katalogu?",
   "deleteTitle": "Usunąć plik katalogu \"{{name}}\" (przestrzeń nazw {{namespace}})?",
   "deleteUndone": "Tej operacji nie można cofnąć.",

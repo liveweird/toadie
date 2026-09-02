@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Alert, Button, Container, Group, Paper, Stack, Title } from "@mantine/core";
+import { Alert, Button, Group, Paper, Stack } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getUser, setUserLanguage, updateUser } from "../api/users";
@@ -13,6 +13,8 @@ import UserFormFields from "../components/UserFormFields";
 import { EMPTY_USER_FORM, rolesOf, userFormValidation, type UserFormValues } from "../utils/userForm";
 import { isLastAdminConflict, loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
+import PageHeader from "../components/PageHeader";
+import { FORM_MAX_WIDTH } from "../utils/layout";
 
 export default function EditUser() {
   const { t } = useTranslation();
@@ -90,10 +92,10 @@ export default function EditUser() {
   const notFound = isError && fetchError instanceof ApiError && fetchError.status === 404;
 
   return (
-    <Container size="sm" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader title={t("users.editUser")} backTo={{ to: "/users", label: t("users.title") }} />
+      <Paper withBorder p="xl" maw={FORM_MAX_WIDTH}>
         <Stack>
-          <Title order={2}>{t("users.editUser")}</Title>
           {isLoading || isError ? (
             <EditPageLoadState
               isLoading={isLoading}
@@ -123,6 +125,6 @@ export default function EditUser() {
           )}
         </Stack>
       </Paper>
-    </Container>
+    </Stack>
   );
 }

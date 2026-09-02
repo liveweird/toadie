@@ -1,6 +1,5 @@
 {
   "action": {
-    "logout": "Logout",
     "create": "Create",
     "save": "Save",
     "cancel": "Cancel",
@@ -40,7 +39,8 @@
     "previousPage": "Previous page",
     "nextPage": "Next page",
     "lastPage": "Last page",
-    "operations": "Operations"
+    "operations": "Operations",
+    "operationsAria": "Operations for {{name}}"
   },
   "error": {
     "timeout": "The request timed out. Try again.",
@@ -76,5 +76,6 @@
   },
   "featureHint": {
     "MFA": "A 6-digit code emailed at every sign-in (second factor)."
-  }
+  },
+  "loading": "Loading…"
 }

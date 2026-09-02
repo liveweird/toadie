@@ -8,9 +8,9 @@
 ## Scenario: admin can log in and log out
 
 1. The admin signs in through the real login form — email, password, "Sign in".
-   - *Expected*: the app shell is up — the **Hierarchy** heading and the header Logout button are
+   - *Expected*: the app shell is up — the **Hierarchy** heading and the header account-menu button are
      visible.
-2. The admin clicks **Logout** in the header.
+2. The admin opens the header account menu and clicks **Sign out**.
    - *Expected*: they are back on the login screen — the **Sign in** button and the
      "You've been signed out." banner are visible.
 
@@ -25,7 +25,7 @@
    - *Expected*: they are bounced to the sign-in form.
 2. They sign in with the admin's credentials.
    - *Expected*: the app returns to the requested path inside the shell — for an unknown path
-     that is the **Page not found** page, with the header Logout button visible (never a blank
+     that is the **Page not found** page, with the header account-menu button visible (never a blank
      document).
 
 ## Not covered here (and why)

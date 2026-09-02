@@ -9,7 +9,7 @@
 ## Scenario: the what's-new dot leads to the changelog and clears once it is read
 
 1. The admin signs in on a fresh browser context.
-   - *Expected*: the navbar version stamp carries the red what's-new dot (this device has
+   - *Expected*: the header account-menu button carries the red what's-new dot (this device has
      never seen the current version).
 2. They click the version stamp.
    - *Expected*: the **Changelog** page opens; reading it marks the version seen, so the

@@ -1,17 +1,5 @@
 import { useState } from "react";
-import {
-  Alert,
-  Button,
-  Center,
-  Container,
-  Group,
-  Loader,
-  Paper,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Alert, Box, Button, Group, Paper, Stack, Text, TextInput } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,6 +22,9 @@ import {
 import { MAX_ENTITY_PART_LENGTH } from "../utils/catalogFileForm";
 import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
 import { loadErrorMessage } from "../utils/saveError";
+import LoadingBlock from "../components/LoadingBlock";
+import PageHeader from "../components/PageHeader";
+import { FORM_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The lifecycles dictionary (`/lifecycles`) — the Namespaces page's sibling, minus the
@@ -52,29 +43,24 @@ export default function Lifecycles() {
   });
 
   return (
-    <Container size="sm" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader title={t("lifecycles.title")} description={t("lifecycles.intro")} />
+      <Box maw={FORM_MAX_WIDTH}>
         <Stack>
-          <Title order={2}>{t("lifecycles.title")}</Title>
-          <Text size="sm" c="dimmed">
-            {t("lifecycles.intro")}
-          </Text>
           {isError ? (
             <Alert color="red" variant="light" title={t("lifecycles.loadFailed")}>
               {loadErrorMessage(error, t)}
             </Alert>
           ) : isLoading || !data ? (
-            <Center py="xl">
-              <Loader />
-            </Center>
+            <LoadingBlock />
           ) : isAdmin() ? (
             <LifecyclesEditor initialItems={data} />
           ) : (
             <ReadOnlyEntries items={data} />
           )}
         </Stack>
-      </Paper>
-    </Container>
+      </Box>
+    </Stack>
   );
 }
 
@@ -84,7 +70,7 @@ function ReadOnlyEntries({ items }: { items: DictionaryEntry[] }) {
   if (items.length === 0) {
     return (
       <EmptyState
-        icon={<IconRecycle size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+        icon={IconRecycle}
         label={t("lifecycles.empty")}
       />
     );

@@ -1,21 +1,5 @@
 import { useState } from "react";
-import {
-  Alert,
-  Badge,
-  Button,
-  Center,
-  Container,
-  Group,
-  Loader,
-  Modal,
-  MultiSelect,
-  Paper,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Alert, Box, Button, Group, Modal, MultiSelect, Stack, Table, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -30,7 +14,7 @@ import {
 } from "../api/annotationKeys";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
-import KindTierDot, { renderKindOption } from "../components/KindTierDot";
+import { renderKindOption } from "../components/KindTierDot";
 import RowEditDelete from "../components/RowEditDelete";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useAnnotationKeys } from "../hooks/useAnnotationKeys";
@@ -46,6 +30,10 @@ import {
 } from "../utils/annotationKeyForm";
 import { loadErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
+import LoadingBlock from "../components/LoadingBlock";
+import KindBadge from "../components/KindBadge";
+import PageHeader from "../components/PageHeader";
+import { CONTENT_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The annotation-key registry (`/annotations`) — the Labels page's sibling with the value
@@ -67,31 +55,29 @@ export default function Annotations() {
   });
 
   return (
-    <Container size="md" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader
+        title={t("annotations.title")}
+        description={t("annotations.intro")}
+        actions={
+          isAdmin() && (
+            <Button leftSection={<IconPlus size={16} />} onClick={() => setEditorTarget("new")}>
+              {t("annotations.newKey")}
+            </Button>
+          )
+        }
+      />
+      <Box maw={CONTENT_MAX_WIDTH}>
         <Stack>
-          <Group justify="space-between" align="flex-start">
-            <Title order={2}>{t("annotations.title")}</Title>
-            {isAdmin() && (
-              <Button leftSection={<IconPlus size={16} />} onClick={() => setEditorTarget("new")}>
-                {t("annotations.newKey")}
-              </Button>
-            )}
-          </Group>
-          <Text size="sm" c="dimmed">
-            {t("annotations.intro")}
-          </Text>
           {error ? (
             <Alert color="red" variant="light" title={t("annotations.loadFailed")}>
               {loadErrorMessage(loadError, t)}
             </Alert>
           ) : loading ? (
-            <Center py="xl">
-              <Loader />
-            </Center>
+            <LoadingBlock />
           ) : annotationKeys.length === 0 ? (
             <EmptyState
-              icon={<IconNote size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+              icon={IconNote}
               label={t("annotations.empty")}
             />
           ) : (
@@ -114,9 +100,7 @@ export default function Annotations() {
                     <Table.Td>
                       <Group gap={4}>
                         {row.kinds.map((kind) => (
-                          <Badge key={kind} color="teal" variant="light" size="sm" leftSection={<KindTierDot kind={kind} />}>
-                            {kind}
-                          </Badge>
+                          <KindBadge key={kind} kind={kind} />
                         ))}
                       </Group>
                     </Table.Td>
@@ -135,7 +119,7 @@ export default function Annotations() {
             </Table>
           )}
         </Stack>
-      </Paper>
+      </Box>
 
       {editorTarget !== null && (
         <AnnotationKeyEditorModal
@@ -154,7 +138,7 @@ export default function Annotations() {
         errorTitle={t("annotations.deleteFailed")}
         body={(row) => t("annotations.deleteBody", { key: row.key })}
       />
-    </Container>
+    </Stack>
   );
 }
 

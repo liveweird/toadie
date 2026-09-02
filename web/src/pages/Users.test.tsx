@@ -90,19 +90,27 @@ describe("Users page", () => {
     expect(screen.getByText("You")).toBeInTheDocument();
   });
 
-  test("the own row offers Edit but neither Delete nor Reset password", async () => {
+  test("the own row's menu offers Edit but neither Delete nor Reset password", async () => {
     setupMocks(mockFetch, () => usersPage(SEED_USERS));
+    const user = userEvent.setup();
     renderPage();
 
     await screen.findByText("Alice Admin");
-    expect(screen.getByRole("link", { name: "Edit Alice Admin" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete Alice Admin" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Operations for Alice Admin" }));
+    expect(await screen.findByRole("menuitem", { name: "Edit Alice Admin" })).toHaveAttribute(
+      "href",
+      "/users/1/edit",
+    );
+    expect(screen.getByRole("menuitem", { name: "Feature flags for Alice Admin" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Delete Alice Admin" })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Reset password for Alice Admin" }),
+      screen.queryByRole("menuitem", { name: "Reset password for Alice Admin" }),
     ).not.toBeInTheDocument();
-    // The other row has all three.
-    expect(screen.getByRole("button", { name: "Delete Bob Basic" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reset password for Bob Basic" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    // The other row has all four.
+    await user.click(screen.getByRole("button", { name: "Operations for Bob Basic" }));
+    expect(await screen.findByRole("menuitem", { name: "Delete Bob Basic" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Reset password for Bob Basic" })).toBeInTheDocument();
   });
 
   test("the role filter refetches with role=", async () => {
@@ -140,7 +148,8 @@ describe("Users page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Delete Bob Basic" }));
+    await user.click(await screen.findByRole("button", { name: "Operations for Bob Basic" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete Bob Basic" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
 
@@ -163,7 +172,8 @@ describe("Users page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Delete Bob Basic" }));
+    await user.click(await screen.findByRole("button", { name: "Operations for Bob Basic" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete Bob Basic" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
 
@@ -181,7 +191,8 @@ describe("Users page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Reset password for Bob Basic" }));
+    await user.click(await screen.findByRole("button", { name: "Operations for Bob Basic" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Reset password for Bob Basic" }));
     let dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /^reset$/i }));
 

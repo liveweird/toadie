@@ -1,4 +1,16 @@
-import { createUserViaUi, expect, login, logoutButton, openFilters, pickLifecycle, pickType, rowOperation, test, uniqueText } from "./helpers";
+import {
+  createUserViaUi,
+  deleteUserRow,
+  expect,
+  login,
+  openFilters,
+  pickLifecycle,
+  pickType,
+  rowOperation,
+  signOut,
+  test,
+  uniqueText,
+} from "./helpers";
 
 // The annotation-key-registry journey on a throwaway key (unique per attempt, so retries
 // never collide): create → validation → edit → the read-only view → applying the annotation
@@ -60,7 +72,7 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
   await expect(page.getByText(key)).toBeVisible();
   await expect(page.getByRole("button", { name: "New annotation key" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: `Edit ${key}` })).toHaveCount(0);
-  await logoutButton(page).click();
+  await signOut(page);
 
   // Back as the admin: the editor's annotation KEY is the registry Select (only registered
   // keys for the kind are offered) while the VALUE stays free text.
@@ -108,15 +120,5 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
   ]);
   await expect(page.getByText(key)).toHaveCount(0);
 
-  await page.goto("/users");
-  await openFilters(page);
-  await page.getByLabel("Name", { exact: true }).fill(throwaway.name);
-  await page.getByRole("button", { name: `Delete ${throwaway.name}` }).click();
-  await Promise.all([
-    page.waitForResponse(
-      (r) =>
-        r.url().endsWith(`/api/v1/users/${throwaway.id}`) && r.request().method() === "DELETE" && r.ok(),
-    ),
-    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
-  ]);
+  await deleteUserRow(page, throwaway.name);
 });

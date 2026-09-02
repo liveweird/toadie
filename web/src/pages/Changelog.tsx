@@ -1,9 +1,11 @@
 import { useEffect } from "react";
-import { Container, Paper, Stack, Text, Timeline, Title } from "@mantine/core";
+import { Box, Stack, Text, Timeline } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 import { CHANGELOG } from "../changelog/entries";
 import { markChangelogSeen } from "../hooks/useChangelogSeen";
 import MarkdownView from "../components/MarkdownView";
+import PageHeader from "../components/PageHeader";
+import { CONTENT_MAX_WIDTH } from "../utils/layout";
 
 // Changelog bodies are authored release CONTENT, deliberately not tied to the UI language
 // set: entries carry hand-written EN + PL only, and any other shipped UI language reads the
@@ -19,10 +21,10 @@ export default function Changelog() {
   }, []);
 
   return (
-    <Container size="md" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader title={t("changelog.title")} />
+      <Box maw={CONTENT_MAX_WIDTH}>
         <Stack>
-          <Title order={2}>{t("changelog.title")}</Title>
           <Timeline bulletSize={12} lineWidth={2}>
             {CHANGELOG.map((entry) => (
               <Timeline.Item key={entry.version} title={`v${entry.version}`}>
@@ -34,7 +36,7 @@ export default function Changelog() {
             ))}
           </Timeline>
         </Stack>
-      </Paper>
-    </Container>
+      </Box>
+    </Stack>
   );
 }

@@ -2,20 +2,16 @@ import { useState } from "react";
 import {
   Alert,
   Badge,
+  Box,
   Button,
-  Center,
-  Container,
   Group,
-  Loader,
   Modal,
   MultiSelect,
-  Paper,
   Stack,
   Table,
   TagsInput,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,7 +26,7 @@ import {
 } from "../api/tagCategories";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
-import KindTierDot, { renderKindOption } from "../components/KindTierDot";
+import { renderKindOption } from "../components/KindTierDot";
 import RowEditDelete from "../components/RowEditDelete";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useTagCategories } from "../hooks/useTagCategories";
@@ -46,6 +42,10 @@ import {
 } from "../utils/tagCategoryForm";
 import { loadErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
+import LoadingBlock from "../components/LoadingBlock";
+import KindBadge from "../components/KindBadge";
+import PageHeader from "../components/PageHeader";
+import { CONTENT_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The tag categories (`/tags`) — an internal Toadie concept, not part of the Backstage
@@ -67,31 +67,29 @@ export default function Tags() {
   });
 
   return (
-    <Container size="md" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader
+        title={t("tags.title")}
+        description={t("tags.intro")}
+        actions={
+          isAdmin() && (
+            <Button leftSection={<IconPlus size={16} />} onClick={() => setEditorTarget("new")}>
+              {t("tags.newCategory")}
+            </Button>
+          )
+        }
+      />
+      <Box maw={CONTENT_MAX_WIDTH}>
         <Stack>
-          <Group justify="space-between" align="flex-start">
-            <Title order={2}>{t("tags.title")}</Title>
-            {isAdmin() && (
-              <Button leftSection={<IconPlus size={16} />} onClick={() => setEditorTarget("new")}>
-                {t("tags.newCategory")}
-              </Button>
-            )}
-          </Group>
-          <Text size="sm" c="dimmed">
-            {t("tags.intro")}
-          </Text>
           {error ? (
             <Alert color="red" variant="light" title={t("tags.loadFailed")}>
               {loadErrorMessage(loadError, t)}
             </Alert>
           ) : loading ? (
-            <Center py="xl">
-              <Loader />
-            </Center>
+            <LoadingBlock />
           ) : categories.length === 0 ? (
             <EmptyState
-              icon={<IconHash size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+              icon={IconHash}
               label={t("tags.empty")}
             />
           ) : (
@@ -124,9 +122,7 @@ export default function Tags() {
                     <Table.Td>
                       <Group gap={4}>
                         {category.kinds.map((kind) => (
-                          <Badge key={kind} color="teal" variant="light" size="sm" leftSection={<KindTierDot kind={kind} />}>
-                            {kind}
-                          </Badge>
+                          <KindBadge key={kind} kind={kind} />
                         ))}
                       </Group>
                     </Table.Td>
@@ -145,7 +141,7 @@ export default function Tags() {
             </Table>
           )}
         </Stack>
-      </Paper>
+      </Box>
 
       {editorTarget !== null && (
         <TagCategoryEditorModal
@@ -164,7 +160,7 @@ export default function Tags() {
         errorTitle={t("tags.deleteFailed")}
         body={(category) => t("tags.deleteBody", { name: category.name })}
       />
-    </Container>
+    </Stack>
   );
 }
 

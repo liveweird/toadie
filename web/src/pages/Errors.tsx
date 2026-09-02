@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Alert, Badge, Code, Group, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Code, Group, Stack, Table, Text } from "@mantine/core";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { IconListCheck } from "@tabler/icons-react";
 import { getCatalogErrors } from "../api/catalogFiles";
@@ -9,13 +9,14 @@ import CatalogKindPills from "../components/CatalogKindPills";
 import EmptyState from "../components/EmptyState";
 import ErrorClassPills from "../components/ErrorClassPills";
 import FilterPanel from "../components/FilterPanel";
-import KindTierDot from "../components/KindTierDot";
 import LensPicker from "../components/LensPicker";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { isStringArray, useStoredState } from "../hooks/useStoredState";
 import { loadErrorMessage } from "../utils/saveError";
 import { ERROR_CLASSES, classOfStatus, colorOfStatus } from "../utils/errorClasses";
+import KindBadge from "../components/KindBadge";
+import PageHeader from "../components/PageHeader";
 
 /**
  * The Errors page at /errors: every error in the stored files — reference resolution,
@@ -52,7 +53,7 @@ export default function Errors() {
 
   return (
     <Stack gap="md">
-      <Title order={2}>{t("errors.title")}</Title>
+      <PageHeader title={t("errors.title")} />
 
       <FilterPanel
         activeFilterCount={filters.activeFilterCount}
@@ -86,7 +87,7 @@ export default function Errors() {
         </Alert>
       )}
 
-      <Table withTableBorder>
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>{t("errors.field.file")}</Table.Th>
@@ -108,10 +109,7 @@ export default function Errors() {
                   <CatalogFileNameLink id={f.fileId} name={f.fileName} />
                 </Table.Td>
                 <Table.Td>
-                  <Group gap={6} wrap="nowrap">
-                    <KindTierDot kind={f.fileKind} />
-                    <Text size="sm">{f.fileKind}</Text>
-                  </Group>
+                  <KindBadge kind={f.fileKind} />
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{f.fileNamespace}</Text>
@@ -134,7 +132,7 @@ export default function Errors() {
             <Table.Tr>
               <Table.Td colSpan={columnCount}>
                 <EmptyState
-                  icon={<IconListCheck size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+                  icon={IconListCheck}
                   label={t("errors.noFindings")}
                 />
               </Table.Td>

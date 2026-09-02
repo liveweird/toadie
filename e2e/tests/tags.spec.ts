@@ -1,4 +1,16 @@
-import { createUserViaUi, expect, login, logoutButton, openFilters, pickLifecycle, pickType, rowOperation, test, uniqueText } from "./helpers";
+import {
+  createUserViaUi,
+  deleteUserRow,
+  expect,
+  login,
+  openFilters,
+  pickLifecycle,
+  pickType,
+  rowOperation,
+  signOut,
+  test,
+  uniqueText,
+} from "./helpers";
 
 // The tag-category journey on a throwaway category (unique name and tags per attempt, so
 // retries never collide): create → validation → edit → the read-only view → applying a tag
@@ -64,7 +76,7 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   await expect(page.getByText(category)).toBeVisible();
   await expect(page.getByRole("button", { name: "New category" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: `Edit ${category}` })).toHaveCount(0);
-  await logoutButton(page).click();
+  await signOut(page);
 
   // Back as the admin: the editor's tags field is the grouped registry picker — the
   // category's tags offered under its name for a Component document.
@@ -110,15 +122,5 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   ]);
   await expect(page.getByText(category)).toHaveCount(0);
 
-  await page.goto("/users");
-  await openFilters(page);
-  await page.getByLabel("Name", { exact: true }).fill(throwaway.name);
-  await page.getByRole("button", { name: `Delete ${throwaway.name}` }).click();
-  await Promise.all([
-    page.waitForResponse(
-      (r) =>
-        r.url().endsWith(`/api/v1/users/${throwaway.id}`) && r.request().method() === "DELETE" && r.ok(),
-    ),
-    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
-  ]);
+  await deleteUserRow(page, throwaway.name);
 });

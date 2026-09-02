@@ -1,4 +1,13 @@
-import { createUserViaUi, expect, login, logoutButton, openFilters, test, uniqueText } from "./helpers";
+import {
+  accountMenu,
+  createUserViaUi,
+  deleteUserRow,
+  expect,
+  login,
+  openFilters,
+  signOut,
+  test,
+} from "./helpers";
 
 // Email MFA (opt-in via the per-user MFA feature flag) + the feature-flags admin surfaces.
 // The full sign-in roundtrip needs the compose stack's Mailpit catcher (http://localhost:8026);
@@ -6,17 +15,6 @@ import { createUserViaUi, expect, login, logoutButton, openFilters, test, unique
 // enabling it would make every other spec's login demand a code.
 
 const MAILPIT = "http://localhost:8026";
-
-async function deleteUserViaUi(page: import("@playwright/test").Page, name: string) {
-  await page.goto("/users");
-  await openFilters(page);
-  await page.getByLabel("Name", { exact: true }).fill(name);
-  await page.getByRole("button", { name: `Delete ${name}` }).click();
-  await Promise.all([
-    page.waitForResponse((r) => r.request().method() === "DELETE" && r.ok()),
-    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
-  ]);
-}
 
 test("admin toggles a user's MFA on the feature-flags screen and the per-user editor", async ({
   page,
@@ -48,7 +46,7 @@ test("admin toggles a user's MFA on the feature-flags screen and the per-user ed
   ]);
   await expect(page).toHaveURL(/\/users$/);
 
-  await deleteUserViaUi(page, user.name);
+  await deleteUserRow(page, user.name);
 });
 
 test("an MFA-enabled account signs in with the emailed code", async ({ page }) => {
@@ -68,7 +66,7 @@ test("an MFA-enabled account signs in with the emailed code", async ({ page }) =
     page.waitForResponse((r) => r.url().endsWith(`/api/v1/users/${user.id}/features`) && r.ok()),
     page.getByRole("button", { name: "Save" }).click(),
   ]);
-  await logoutButton(page).click();
+  await signOut(page);
 
   // Correct credentials answer with the code step, not a session.
   await page.goto("/login");
@@ -102,10 +100,10 @@ test("an MFA-enabled account signs in with the emailed code", async ({ page }) =
   await page.getByRole("textbox").first().click();
   await page.keyboard.type(code!);
   await page.getByRole("button", { name: "Verify code" }).click();
-  await expect(logoutButton(page)).toBeVisible({ timeout: 15_000 });
-  await logoutButton(page).click();
+  await expect(accountMenu(page)).toBeVisible({ timeout: 15_000 });
+  await signOut(page);
 
   // Cleanup as the admin: the spec owns its throwaway account.
   await login(page);
-  await deleteUserViaUi(page, user.name);
+  await deleteUserRow(page, user.name);
 });

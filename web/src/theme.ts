@@ -1,7 +1,11 @@
 import {
+  ActionIcon,
+  Anchor,
   AppShell,
   Autocomplete,
   Badge,
+  Chip,
+  Menu,
   Modal,
   MultiSelect,
   NavLink,
@@ -34,10 +38,13 @@ const toadie: MantineColorsTuple = [
 const sans =
   "'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-// Design language (the Lettuce "clean enterprise SaaS" posture): the brand amber is the
-// interactive accent (buttons, links, active nav) at a deep, serious shade; the canvas is a
-// quiet near-white (dark: dark-8) that lets white surfaces lift on a soft, diffuse shadow
-// scale. Don't reintroduce stock-blue actions or stock-green success states.
+// Design language (the Lettuce "clean enterprise SaaS" posture, restrained in v1.19.0): the
+// brand amber is the interactive accent — primary CTAs, the active nav item, focus — and
+// NOTHING else: links are dark text with a hover underline, chips and badges are light
+// tints, icon controls are neutral gray. One colour at one intensity for one job, so the
+// few amber elements on a screen are the ones that matter. The canvas is a quiet near-white
+// (dark: dark-8) that lets white surfaces lift on a soft, diffuse shadow scale. Don't
+// reintroduce stock-blue actions or stock-green success states.
 export const theme = createTheme({
   primaryColor: "toadie",
   // Shade 7 in light mode — deeper, calmer CTAs than the mid-amber 6.
@@ -70,8 +77,10 @@ export const theme = createTheme({
   components: {
     // Every data table in the app: a card-like frame on the quiet canvas, hoverable rows,
     // and a neutral, compact header row (see theme.module.css). New tables inherit all of it.
+    // verticalSpacing xs (10px) + 14px/1.55 text = ~40px rows: the density of a data grid,
+    // not a marketing table. Pages never pass a spacing of their own.
     Table: Table.extend({
-      defaultProps: { highlightOnHover: true, verticalSpacing: "sm" },
+      defaultProps: { highlightOnHover: true, verticalSpacing: "xs", horizontalSpacing: "md", fz: "sm" },
       classNames: { table: classes.table, thead: classes.tableHead },
     }),
     // The shell surfaces: white header/navbar over a tinted main canvas, crisp separators.
@@ -82,7 +91,16 @@ export const theme = createTheme({
         navbar: classes.appNavbar,
       },
     }),
-    NavLink: NavLink.extend({ classNames: { root: classes.navLink } }),
+    NavLink: NavLink.extend({ classNames: { root: classes.navLink, section: classes.navLinkSection } }),
+    // Links are text-coloured and underline on hover — the accent is reserved for actions.
+    Anchor: Anchor.extend({ defaultProps: { underline: "hover" }, classNames: { root: classes.anchor } }),
+    // Filter chips (kinds, relations, error classes) are toggles, not calls to action: a
+    // light tint when checked, never the filled brand colour.
+    Chip: Chip.extend({ defaultProps: { variant: "light" } }),
+    // Icon-only controls (row kebabs, edit/delete, tree toggles) are neutral by default;
+    // a destructive one passes color="red" explicitly.
+    ActionIcon: ActionIcon.extend({ defaultProps: { variant: "subtle", color: "gray" } }),
+    Menu: Menu.extend({ defaultProps: { position: "bottom-end", withinPortal: true, shadow: "md" } }),
     // Every searchable Select/MultiSelect/TagsInput matches accent-insensitively ("zolw" finds
     // "Żółw"), mirroring the server-side unaccent list filters. A per-site `filter` prop still
     // wins — don't pass one unless it preserves the diacritics folding (see utils/text.ts).
@@ -90,7 +108,7 @@ export const theme = createTheme({
     Autocomplete: Autocomplete.extend({ defaultProps: { filter: foldedOptionsFilter } }),
     MultiSelect: MultiSelect.extend({ defaultProps: { filter: foldedOptionsFilter } }),
     TagsInput: TagsInput.extend({ defaultProps: { filter: foldedOptionsFilter } }),
-    Badge: Badge.extend({ defaultProps: { radius: "sm" } }),
+    Badge: Badge.extend({ defaultProps: { radius: "sm", variant: "light" } }),
     Tooltip: Tooltip.extend({ defaultProps: { radius: "md" } }),
     Modal: Modal.extend({ defaultProps: { radius: "md" } }),
   },

@@ -1,4 +1,4 @@
-import { createUserViaUi, expect, login, logoutButton, openFilters, test, uniqueText } from "./helpers";
+import { createUserViaUi, deleteUserRow, expect, login, signOut, test, uniqueText } from "./helpers";
 
 // Self-service password reset: the "Forgot password?" flow on the login screen.
 // The full email roundtrip needs the compose stack's Mailpit catcher (http://localhost:8026 —
@@ -46,7 +46,7 @@ test("a reset email delivers a working new password and kills the old one", asyn
 
   await login(page);
   const user = await createUserViaUi(page, "E2E-Reset");
-  await logoutButton(page).click();
+  await signOut(page);
 
   await page.goto("/reset-password");
   await page.getByRole("textbox", { name: "Email" }).fill(user.email);
@@ -74,7 +74,7 @@ test("a reset email delivers a working new password and kills the old one", asyn
     .toBeTruthy();
 
   await login(page, user.email, newPassword!);
-  await logoutButton(page).click();
+  await signOut(page);
 
   // The old (revealed-at-creation) password no longer works. Development stacks lift the
   // per-IP login bucket, so the rejection message is deterministic here.
@@ -86,12 +86,5 @@ test("a reset email delivers a working new password and kills the old one", asyn
 
   // Cleanup: the spec owns its throwaway account.
   await login(page);
-  await page.goto("/users");
-  await openFilters(page);
-  await page.getByLabel("Name", { exact: true }).fill(user.name);
-  await page.getByRole("button", { name: `Delete ${user.name}` }).click();
-  await Promise.all([
-    page.waitForResponse((r) => r.request().method() === "DELETE" && r.ok()),
-    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
-  ]);
+  await deleteUserRow(page, user.name);
 });

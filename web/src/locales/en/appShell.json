@@ -1,15 +1,12 @@
 {
   "brand": "Toadie",
-  "toggleColorScheme": "Toggle color scheme",
   "skipToContent": "Skip to main content",
   "nav": {
     "home": "Hierarchy",
     "catalogFiles": "Files",
     "errors": "Errors",
     "graph": "Graph",
-    "dictionaries": "Dictionaries",
     "namespaces": "Namespaces",
-    "metadata": "Metadata",
     "labels": "Labels",
     "tags": "Tags",
     "types": "Types",
@@ -19,5 +16,27 @@
     "changePassword": "Change password",
     "featureFlags": "Feature flags",
     "changelog": "Changelog"
+  },
+  "section": {
+    "catalog": "Catalog",
+    "registries": "Registries",
+    "administration": "Administration"
+  },
+  "userMenu": {
+    "open": "Account menu",
+    "language": "Language",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeAuto": "System",
+    "signOut": "Sign out"
+  },
+  "palette": {
+    "open": "Search and jump to…",
+    "placeholder": "Search files or jump to a page…",
+    "groupPages": "Pages",
+    "groupActions": "Actions",
+    "groupFiles": "Files",
+    "nothingFound": "Nothing found"
   }
 }

@@ -1,19 +1,5 @@
 import { useState } from "react";
-import {
-  Alert,
-  Badge,
-  Button,
-  Center,
-  Container,
-  Group,
-  Loader,
-  Paper,
-  Radio,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Alert, Badge, Box, Button, Group, Paper, Radio, Stack, Text, TextInput } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -37,6 +23,9 @@ import {
 import { MAX_ENTITY_PART_LENGTH } from "../utils/catalogFileForm";
 import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
 import { loadErrorMessage } from "../utils/saveError";
+import LoadingBlock from "../components/LoadingBlock";
+import PageHeader from "../components/PageHeader";
+import { FORM_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The namespaces dictionary (`/namespaces`): everyone gets the ordered read-only list; an
@@ -53,29 +42,24 @@ export default function Namespaces() {
   });
 
   return (
-    <Container size="sm" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader title={t("namespaces.title")} description={t("namespaces.intro")} />
+      <Box maw={FORM_MAX_WIDTH}>
         <Stack>
-          <Title order={2}>{t("namespaces.title")}</Title>
-          <Text size="sm" c="dimmed">
-            {t("namespaces.intro")}
-          </Text>
           {isError ? (
             <Alert color="red" variant="light" title={t("namespaces.loadFailed")}>
               {loadErrorMessage(error, t)}
             </Alert>
           ) : isLoading || !data ? (
-            <Center py="xl">
-              <Loader />
-            </Center>
+            <LoadingBlock />
           ) : isAdmin() ? (
             <NamespacesEditor initialItems={data} />
           ) : (
             <ReadOnlyEntries items={data} />
           )}
         </Stack>
-      </Paper>
-    </Container>
+      </Box>
+    </Stack>
   );
 }
 
@@ -85,7 +69,7 @@ function ReadOnlyEntries({ items }: { items: DictionaryEntry[] }) {
   if (items.length === 0) {
     return (
       <EmptyState
-        icon={<IconFolders size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+        icon={IconFolders}
         label={t("namespaces.empty")}
       />
     );
@@ -101,7 +85,7 @@ function ReadOnlyEntries({ items }: { items: DictionaryEntry[] }) {
             <Group gap="xs" wrap="nowrap" align="baseline" justify="space-between" style={{ flex: 1 }}>
               <Text size="sm">{entry.value}</Text>
               {entry.isDefault && (
-                <Badge color="teal" variant="light" size="sm" style={{ flexShrink: 0 }}>
+                <Badge color="gray" variant="light" size="sm" style={{ flexShrink: 0 }}>
                   {t("namespaces.defaultBadge")}
                 </Badge>
               )}

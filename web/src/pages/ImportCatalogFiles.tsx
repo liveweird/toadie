@@ -13,7 +13,6 @@ import {
   Text,
   TextInput,
   Textarea,
-  Title,
 } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { IconArrowLeft, IconDownload, IconFileImport, IconListCheck, IconUpload } from "@tabler/icons-react";
@@ -24,10 +23,11 @@ import {
   type ImportFileResult,
 } from "../api/catalogFiles";
 import CatalogFileNameLink from "../components/CatalogFileNameLink";
-import KindTierDot from "../components/KindTierDot";
 import { normalizeCatalogUrl, parseCatalogYaml } from "../utils/catalogImport";
 import { FETCH_URL_ERROR_KEYS, saveErrorMessage } from "../utils/saveError";
 import { catalogFilesPath } from "../utils/catalogFileLinks";
+import KindBadge from "../components/KindBadge";
+import PageHeader from "../components/PageHeader";
 
 const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
   CREATED: "teal",
@@ -127,10 +127,11 @@ export default function ImportCatalogFiles() {
 
   return (
     <Stack gap="md">
-      <Title order={2}>{t("catalog.import.title")}</Title>
-      <Text size="sm" c="dimmed">
-        {t("catalog.import.intro")}
-      </Text>
+      <PageHeader
+        title={t("catalog.import.title")}
+        description={t("catalog.import.intro")}
+        backTo={{ to: catalogFilesPath, label: t("catalog.backToList") }}
+      />
 
       <Group align="flex-end" gap="xs">
         <TextInput
@@ -223,7 +224,7 @@ export default function ImportCatalogFiles() {
               { created: createdCount, total: results.rows.length },
             )}
           </Text>
-          <Table withTableBorder>
+          <Table>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>{t("catalog.field.kind")}</Table.Th>
@@ -237,9 +238,7 @@ export default function ImportCatalogFiles() {
               {results.rows.map((result) => (
                 <Table.Tr key={result.index}>
                   <Table.Td>
-                    <Badge variant="light" size="sm" leftSection={<KindTierDot kind={result.kind} />}>
-                      {result.kind}
-                    </Badge>
+                    <KindBadge kind={result.kind} />
                   </Table.Td>
                   <Table.Td>
                     <Text size="sm">{result.namespace}</Text>

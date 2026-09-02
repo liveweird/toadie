@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router-dom";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { APP_VERSION } from "./changelog/version";
@@ -31,6 +31,7 @@ describe("App shell", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    localStorage.clear();
   });
 
   describe("when authenticated", () => {
@@ -49,12 +50,10 @@ describe("App shell", () => {
       expect(await screen.findByText(new RegExp(`v${APP_VERSION.replace(/\./g, "\\.")}`))).toBeInTheDocument();
     });
 
-    test("the nav groups render open with their child links addressable", async () => {
+    test("the sidebar renders its sections with every leaf link addressable", async () => {
       renderApp("/");
-      // Group parents are toggle buttons, not links…
-      expect(await screen.findByRole("button", { name: "Dictionaries" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Metadata" })).toBeInTheDocument();
-      // …and start OPEN, so every child link is in the DOM immediately.
+      // Sections are labelled groups, never toggles — every leaf is in the DOM immediately.
+      const registries = await screen.findByRole("group", { name: "Registries" });
       for (const [name, href] of [
         ["Namespaces", "/namespaces"],
         ["Types", "/types"],
@@ -63,26 +62,39 @@ describe("App shell", () => {
         ["Tags", "/tags"],
         ["Annotations", "/annotations"],
       ] as const) {
-        expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
+        expect(within(registries).getByRole("link", { name })).toHaveAttribute("href", href);
       }
-      // The Graph leaf follows the renamed route.
+      expect(screen.queryByRole("button", { name: "Dictionaries" })).not.toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Graph" })).toHaveAttribute("href", "/graph");
+      // Account items live in the header menu, not the sidebar.
+      expect(screen.queryByRole("link", { name: "Change password" })).not.toBeInTheDocument();
+      // A non-admin session sees no Administration section at all.
+      expect(screen.queryByRole("group", { name: "Administration" })).not.toBeInTheDocument();
     });
 
-    test("shows a Changelog nav link and a linked version stamp with the what's-new dot", async () => {
+    test("an admin session sees the Administration section", async () => {
+      localStorage.setItem("toadie.auth.roles", JSON.stringify(["ADMIN"]));
       renderApp("/");
-      expect(await screen.findByRole("link", { name: "Changelog" })).toHaveAttribute(
-        "href",
-        "/changelog",
-      );
-      expect(screen.getByTitle("Build version")).toHaveAttribute("href", "/changelog");
+      const admin = await screen.findByRole("group", { name: "Administration" });
+      expect(within(admin).getByRole("link", { name: "Users" })).toHaveAttribute("href", "/users");
+      expect(within(admin).getByRole("link", { name: "Feature flags" })).toHaveAttribute("href", "/feature-flags");
+    });
+
+    test("the account menu holds the Changelog link; the stamp links there and the trigger carries the dot", async () => {
+      const user = userEvent.setup();
+      renderApp("/");
+      expect(await screen.findByTitle("Build version")).toHaveAttribute("href", "/changelog");
+      // The what's-new dot rides the account-menu trigger while the version is unseen.
       expect(screen.getByTitle("What's new")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Account menu" }));
+      expect(await screen.findByRole("menuitem", { name: /Changelog/ })).toHaveAttribute("href", "/changelog");
     });
 
     test("opening the changelog clears the what's-new dot immediately", async () => {
       const user = userEvent.setup();
       renderApp("/");
-      await user.click(await screen.findByRole("link", { name: "Changelog" }));
+      await user.click(await screen.findByRole("button", { name: "Account menu" }));
+      await user.click(await screen.findByRole("menuitem", { name: /Changelog/ }));
       // Explicit timeout — the Changelog chunk is lazy.
       expect(
         await screen.findByRole("heading", { level: 2, name: "Changelog" }, { timeout: 5000 }),
@@ -116,7 +128,8 @@ describe("App shell", () => {
       );
       const user = userEvent.setup();
       renderApp("/");
-      await user.click(await screen.findByRole("button", { name: "Logout" }));
+      await user.click(await screen.findByRole("button", { name: "Account menu" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
       await waitFor(() => expect(localStorage.getItem(TOKEN_KEY)).toBeNull());
       expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
       // The signed-out banner rides the flagSignedOut() handoff.

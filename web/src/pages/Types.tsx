@@ -1,21 +1,5 @@
 import { useState } from "react";
-import {
-  Alert,
-  Badge,
-  Button,
-  Center,
-  Container,
-  Group,
-  Loader,
-  Modal,
-  Paper,
-  Select,
-  Stack,
-  Table,
-  TagsInput,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Alert, Badge, Box, Button, Group, Modal, Select, Stack, Table, TagsInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -30,7 +14,7 @@ import {
 } from "../api/entityTypes";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
-import KindTierDot, { renderKindOption } from "../components/KindTierDot";
+import { renderKindOption } from "../components/KindTierDot";
 import RowEditDelete from "../components/RowEditDelete";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useEntityTypes } from "../hooks/useEntityTypes";
@@ -45,6 +29,10 @@ import {
 } from "../utils/entityTypeForm";
 import { loadErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
+import LoadingBlock from "../components/LoadingBlock";
+import KindBadge from "../components/KindBadge";
+import PageHeader from "../components/PageHeader";
+import { CONTENT_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The per-kind type dictionaries (`/types`) — an internal Toadie constraint on the open
@@ -66,31 +54,29 @@ export default function Types() {
   });
 
   return (
-    <Container size="md" px={0}>
-      <Paper withBorder shadow="sm" p="xl" radius="md">
+    <Stack gap="md">
+      <PageHeader
+        title={t("types.title")}
+        description={t("types.intro")}
+        actions={
+          isAdmin() && (
+            <Button leftSection={<IconPlus size={16} />} onClick={() => setEditorTarget("new")}>
+              {t("types.newDictionary")}
+            </Button>
+          )
+        }
+      />
+      <Box maw={CONTENT_MAX_WIDTH}>
         <Stack>
-          <Group justify="space-between" align="flex-start">
-            <Title order={2}>{t("types.title")}</Title>
-            {isAdmin() && (
-              <Button leftSection={<IconPlus size={16} />} onClick={() => setEditorTarget("new")}>
-                {t("types.newDictionary")}
-              </Button>
-            )}
-          </Group>
-          <Text size="sm" c="dimmed">
-            {t("types.intro")}
-          </Text>
           {error ? (
             <Alert color="red" variant="light" title={t("types.loadFailed")}>
               {loadErrorMessage(loadError, t)}
             </Alert>
           ) : loading ? (
-            <Center py="xl">
-              <Loader />
-            </Center>
+            <LoadingBlock />
           ) : dictionaries.length === 0 ? (
             <EmptyState
-              icon={<IconCategory size={32} stroke={1.2} color="var(--mantine-color-dimmed)" />}
+              icon={IconCategory}
               label={t("types.empty")}
             />
           ) : (
@@ -106,9 +92,7 @@ export default function Types() {
                 {dictionaries.map((dictionary) => (
                   <Table.Tr key={dictionary.id}>
                     <Table.Td>
-                      <Badge color="teal" variant="light" size="sm" leftSection={<KindTierDot kind={dictionary.kind} />}>
-                        {dictionary.kind}
-                      </Badge>
+                      <KindBadge kind={dictionary.kind} />
                     </Table.Td>
                     <Table.Td>
                       <Group gap={4}>
@@ -134,7 +118,7 @@ export default function Types() {
             </Table>
           )}
         </Stack>
-      </Paper>
+      </Box>
 
       {editorTarget !== null && (
         <EntityTypesEditorModal
@@ -153,7 +137,7 @@ export default function Types() {
         errorTitle={t("types.deleteFailed")}
         body={(dictionary) => t("types.deleteBody", { kind: dictionary.kind })}
       />
-    </Container>
+    </Stack>
   );
 }
 

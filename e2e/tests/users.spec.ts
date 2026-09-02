@@ -1,4 +1,4 @@
-import { createUserViaUi, expect, login, logoutButton, openFilters, test, uniqueText } from "./helpers";
+import { createUserViaUi, deleteUserRow, expect, login, openFilters, signOut, test, uniqueText } from "./helpers";
 
 // The whole account lifecycle on a throwaway user (its email carries the e2e marker):
 // create via the one-time reveal → the new user's limited view → self password change →
@@ -15,9 +15,15 @@ test("admin creates a user who signs in, changes their password, and is finally 
   // Row-scoped asserts (the filter is debounced, and residue rows may share the page).
   const adminRow = page.getByRole("row").filter({ hasText: "admin@toadie.local" });
   await expect(adminRow.getByText("You")).toBeVisible();
-  await expect(adminRow.getByRole("link", { name: /^Edit / })).toBeVisible();
-  await expect(adminRow.getByRole("button", { name: /^Delete / })).toHaveCount(0);
-  await expect(adminRow.getByRole("button", { name: /^Reset password/ })).toHaveCount(0);
+  // The row actions sit under the kebab (v1.19.0): open it and read the menu.
+  const adminMenu = adminRow.getByRole("button", { name: /^Operations for / });
+  await adminMenu.click();
+  const adminMenuId = await adminMenu.getAttribute("aria-controls");
+  const adminItems = page.locator(`[id="${adminMenuId}"]`);
+  await expect(adminItems.getByRole("menuitem", { name: /^Edit / })).toBeVisible();
+  await expect(adminItems.getByRole("menuitem", { name: /^Delete / })).toHaveCount(0);
+  await expect(adminItems.getByRole("menuitem", { name: /^Reset password/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
   const throwaway = await createUserViaUi(page, "E2E Person");
   expect(throwaway.password).toMatch(/^[A-Za-z0-9_-]{16}$/);
@@ -36,7 +42,7 @@ test("admin creates a user who signs in, changes their password, and is finally 
     page.waitForResponse((r) => r.url().includes("/password") && r.request().method() === "PUT" && r.ok()),
     page.getByRole("button", { name: "Save" }).click(),
   ]);
-  await logoutButton(page).click();
+  await signOut(page);
 
   // Back as admin: promote, then delete; both against the name-filtered list.
   await login(page);
@@ -55,13 +61,7 @@ test("admin creates a user who signs in, changes their password, and is finally 
     page.getByRole("row").filter({ hasText: throwaway.name }).getByText("Admin", { exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: `Delete ${throwaway.name}` }).click();
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith(`/api/v1/users/${throwaway.id}`) && r.request().method() === "DELETE" && r.ok(),
-    ),
-    page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
-  ]);
+  await deleteUserRow(page, throwaway.name);
   // Verify against a fresh load — the in-place list can lose a refetch race.
   await page.goto("/users");
   await openFilters(page);
@@ -69,7 +69,7 @@ test("admin creates a user who signs in, changes their password, and is finally 
   await expect(page.getByText("No users")).toBeVisible();
 
   // The deleted account can no longer sign in (their CHANGED password included).
-  await logoutButton(page).click();
+  await signOut(page);
   // Fresh load: the logout notification can remount the login form and drop typed values.
   await page.goto("/login");
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();

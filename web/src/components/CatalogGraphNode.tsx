@@ -3,10 +3,10 @@ import { ActionIcon, Badge, Button, Group, Stack, Text, Tooltip } from "@mantine
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import KindTierDot from "./KindTierDot";
 import type { LaidOutNode, NodeFold } from "../utils/graphLayout";
 import { COLLAPSED_FACE_STYLE, GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH, STATUS_STYLE } from "../utils/graphLayout";
 import type { GraphNode } from "../api/catalogFiles";
+import KindBadge from "./KindBadge";
 
 /**
  * What the fixed-width node cannot show: the namespace it lost to `spec.type`, the title, and
@@ -135,15 +135,7 @@ function CatalogGraphNode({ data }: NodeProps<LaidOutNode>) {
             difference. `minWidth: 0` is load-bearing on the type: without it a flex item refuses
             to shrink below its content width and `truncate` silently no-ops. */}
         <Group gap={6} wrap="nowrap" align="center" mt={2}>
-          <Badge
-            size="xs"
-            variant={node.status === "STORED" ? "light" : "outline"}
-            color={node.status === "MISSING" ? "red" : undefined}
-            style={{ flex: "0 0 auto" }}
-            leftSection={<KindTierDot kind={node.kind} />}
-          >
-            {node.kind}
-          </Badge>
+          <KindBadge kind={node.kind} status={node.status} size="xs" style={{ flex: "0 0 auto" }} />
           <Text size="xs" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }}>
             {node.type}
           </Text>
