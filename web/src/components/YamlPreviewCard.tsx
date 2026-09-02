@@ -6,18 +6,22 @@ import { useTranslation } from "react-i18next";
  * ReferenceCheckPanel) in a sticky Stack so the whole column stays in view while the (long)
  * form scrolls.
  */
-export default function YamlPreviewCard({ yaml }: { yaml: string }) {
+export default function YamlPreviewCard({ yaml, embedded }: { yaml: string; embedded?: boolean }) {
   const { t } = useTranslation();
-  return (
-    <Paper withBorder shadow="sm" p="lg" radius="md">
-      <Stack gap="sm">
-        <Title order={3}>{t("catalog.preview")}</Title>
-        <ScrollArea.Autosize mah="70vh">
-          <Code block aria-label={t("catalog.preview")}>
-            {yaml}
-          </Code>
-        </ScrollArea.Autosize>
-      </Stack>
+  const body = (
+    <Stack gap="sm">
+      <Title order={3}>{t("catalog.preview")}</Title>
+      <ScrollArea.Autosize mah="70vh">
+        <Code block aria-label={t("catalog.preview")}>
+          {yaml}
+        </Code>
+      </ScrollArea.Autosize>
+    </Stack>
+  );
+  // `embedded` = no card of its own — a host (the quick-view drawer) supplies the surface.
+  return embedded ? body : (
+    <Paper withBorder p="md" radius="md">
+      {body}
     </Paper>
   );
 }

@@ -417,13 +417,19 @@ describe("CatalogFiles page", () => {
     );
   });
 
-  test("columns are ordered Name, Namespace, Kind, Title, Updated", async () => {
+  test("columns are ordered Name, Kind, Namespace, Updated, Last sync — the title rides the Name cell", async () => {
     setupMocks(mockFetch, () => filesPage(SEED_FILES));
     renderPage();
 
-    await screen.findByText("payments-svc");
+    const name = await screen.findByText("payments-svc");
     const headers = screen.getAllByRole("columnheader").map((th) => th.textContent);
-    expect(headers.slice(0, 5)).toEqual(["Name", "Namespace", "Kind", "Title", "Updated"]);
+    expect(headers.slice(0, 5)).toEqual(["Name", "Kind", "Namespace", "Updated", "Last sync"]);
+    // Updated is relative text (Intl "yesterday"/"3 days ago"/…) carrying the precise
+    // timestamp as its hover text.
+    const cells = within(name.closest("tr")!).getAllByRole("cell");
+    const updated = cells[3].querySelector("[title]")!;
+    expect(updated.textContent).not.toBe("");
+    expect(updated.getAttribute("title")).toMatch(/\d/);
   });
 
   test("confirming a delete triggers DELETE, refetches, and toasts", async () => {

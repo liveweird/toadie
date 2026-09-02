@@ -1,21 +1,21 @@
 import { useMemo, useState } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
-import { Link as RouterLink } from "react-router-dom";
 import {
   Alert,
   Badge,
   Button,
   FileButton,
   Group,
+  Paper,
   Stack,
   Table,
   Text,
-  TextInput,
   Textarea,
+  TextInput,
 } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { IconArrowLeft, IconDownload, IconFileImport, IconListCheck, IconUpload } from "@tabler/icons-react";
+import { IconDownload, IconFileImport, IconListCheck, IconUpload } from "@tabler/icons-react";
 import {
   checkImportCatalogFiles,
   fetchCatalogUrl,
@@ -133,6 +133,8 @@ export default function ImportCatalogFiles() {
         backTo={{ to: catalogFilesPath, label: t("catalog.backToList") }}
       />
 
+      <Paper withBorder p="lg" radius="md">
+      <Stack gap="md">
       <Group align="flex-end" gap="xs">
         <TextInput
           label={t("catalog.import.urlLabel")}
@@ -195,6 +197,8 @@ export default function ImportCatalogFiles() {
           </Text>
         )}
       </Group>
+      </Stack>
+      </Paper>
 
       {parsed.errors.length > 0 && (
         <Alert color="red" variant="light" title={t("catalog.import.parseErrorsTitle")}>
@@ -276,15 +280,7 @@ export default function ImportCatalogFiles() {
         </Stack>
       )}
 
-      <Group justify="space-between">
-        <Button
-          component={RouterLink}
-          to={catalogFilesPath}
-          variant="default"
-          leftSection={<IconArrowLeft size={16} />}
-        >
-          {t("catalog.backToList")}
-        </Button>
+      <Group justify="flex-end">
         <Group gap="xs">
           <Button
             variant="default"

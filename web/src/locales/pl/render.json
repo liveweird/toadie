@@ -15,7 +15,8 @@
     "stored": "Zapisany plik",
     "missing": "Brakująca encja",
     "collapsed": "Zwinięty — jego zawartość jest ukryta w środku",
-    "folded": "Relacja ukrytej encji"
+    "folded": "Relacja ukrytej encji",
+    "title": "Legenda"
   },
   "layoutMode": {
     "label": "Układ",

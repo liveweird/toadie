@@ -14,17 +14,20 @@ export default function SortHeader<F extends string>({
   activeField,
   activeDir,
   onToggle,
+  width,
 }: {
   field: F;
   label: string;
   activeField: F;
   activeDir: SortDir;
   onToggle: (field: F) => void;
+  /** A fixed column width (px) for `layout="fixed"` tables — omit on the one wide column. */
+  width?: number;
 }) {
   const isActive = activeField === field;
   const Icon = !isActive ? IconArrowsSort : activeDir === "asc" ? IconArrowUp : IconArrowDown;
   return (
-    <Table.Th aria-sort={!isActive ? "none" : activeDir === "asc" ? "ascending" : "descending"}>
+    <Table.Th aria-sort={!isActive ? "none" : activeDir === "asc" ? "ascending" : "descending"} w={width}>
       <UnstyledButton
         onClick={() => onToggle(field)}
         style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 600 }}

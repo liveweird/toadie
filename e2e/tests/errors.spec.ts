@@ -125,7 +125,7 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
 
   await page.goto("/errors");
   // The summary renders once the report has loaded; the unique ref must now be absent.
-  await expect(page.getByText(/files checked/)).toBeVisible();
+  await expect(page.getByText(/files checked/i)).toBeVisible();
   await expect(page.getByText(`component:${target}`, { exact: true })).toHaveCount(0);
 
   // Cleanup: the source first (the target is still referenced — deletable anyway, but

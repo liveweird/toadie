@@ -14,32 +14,38 @@ import type { DocumentCheckFinding } from "../api/catalogFiles";
 export default function ReferenceCheckPanel({
   findings,
   checked,
+  embedded,
 }: {
   findings: DocumentCheckFinding[];
   /** True once a check has answered — the all-clear line must not flash before the first. */
   checked: boolean;
+  /** No card of its own — a host (the quick-view drawer) supplies the surface. */
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
-  return (
-    <Paper withBorder shadow="sm" p="lg" radius="md">
-      <Stack gap="sm">
-        <Title order={3}>{t("errors.panel.title")}</Title>
-        {findings.length > 0 ? (
-          <Alert color="orange" variant="light" title={t("errors.panel.errorsTitle")}>
-            <Stack gap={4}>
-              {findings.map((f, index) => (
-                <Text size="sm" key={`${f.field}-${f.reference}-${index}`}>
-                  <Code>{f.reference}</Code> ({f.field}) — {t(`errors.message.${f.status}`)}
-                </Text>
-              ))}
-            </Stack>
-          </Alert>
-        ) : checked ? (
-          <Text size="sm" c="dimmed">
-            {t("errors.panel.allClear")}
-          </Text>
-        ) : null}
-      </Stack>
+  const body = (
+    <Stack gap="sm">
+      <Title order={3}>{t("errors.panel.title")}</Title>
+      {findings.length > 0 ? (
+        <Alert color="orange" variant="light" title={t("errors.panel.errorsTitle")}>
+          <Stack gap={4}>
+            {findings.map((f, index) => (
+              <Text size="sm" key={`${f.field}-${f.reference}-${index}`}>
+                <Code>{f.reference}</Code> ({f.field}) — {t(`errors.message.${f.status}`)}
+              </Text>
+            ))}
+          </Stack>
+        </Alert>
+      ) : checked ? (
+        <Text size="sm" c="dimmed">
+          {t("errors.panel.allClear")}
+        </Text>
+      ) : null}
+    </Stack>
+  );
+  return embedded ? body : (
+    <Paper withBorder p="md" radius="md">
+      {body}
     </Paper>
   );
 }

@@ -527,4 +527,12 @@ describe("RenderGraph page", () => {
     // must therefore appear nowhere on the canvas.
     expect(screen.queryByText("default")).not.toBeInTheDocument();
   });
+  test("the legend opens from the toolbar button", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Legend" }));
+    expect(await screen.findByText("Stored file")).toBeInTheDocument();
+    expect(screen.getByText("Relation of a hidden entity")).toBeInTheDocument();
+  });
 });

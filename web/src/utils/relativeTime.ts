@@ -1,4 +1,5 @@
-// Relative/absolute time rendering for the Files list's timestamp columns via the built-in
+// Relative/absolute time rendering for the Files list's timestamp columns (relative text with the
+// precise timestamp as hover text) via the built-in
 // Intl formatters — no date library on purpose (the repo has none). Formatters are cached
 // per locale: the list renders one per row per render, and construction is the costly part.
 
@@ -12,7 +13,6 @@ const UNITS: { unit: Intl.RelativeTimeFormatUnit; ms: number }[] = [
 
 const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>();
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
-const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 
 function cached<T>(cache: Map<string, T>, locale: string, build: (locale: string) => T): T {
   let formatter = cache.get(locale);
@@ -46,12 +46,5 @@ export function formatDateTime(epochMillis: number, locale: string): string {
   return cached(dateTimeFormatters, locale, (l) => new Intl.DateTimeFormat(l, {
     dateStyle: "medium",
     timeStyle: "short",
-  })).format(epochMillis);
-}
-
-/** The locale's date only — the compact cell text beside the tooltip above. */
-export function formatDate(epochMillis: number, locale: string): string {
-  return cached(dateFormatters, locale, (l) => new Intl.DateTimeFormat(l, {
-    dateStyle: "medium",
   })).format(epochMillis);
 }

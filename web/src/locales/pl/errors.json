@@ -2,9 +2,9 @@
   "title": "Błędy",
   "loadFailed": "Nie udało się wczytać raportu błędów",
   "summary": {
-    "files": "Sprawdzone pliki: {{count}}",
-    "references": "Sprawdzone odwołania: {{count}}",
-    "errors": "Błędy: {{count}}"
+    "filesLabel": "Sprawdzone pliki",
+    "referencesLabel": "Sprawdzone odwołania",
+    "errorsLabel": "Błędy"
   },
   "classesLabel": "Rodzaje błędów",
   "class": {
@@ -22,9 +22,7 @@
     "file": "Plik",
     "kind": "Rodzaj",
     "namespace": "Przestrzeń nazw",
-    "refField": "Pole",
-    "reference": "Wartość",
-    "status": "Status"
+    "findings": "Ustalenia"
   },
   "status": {
     "MISSING": "Nie znaleziono",

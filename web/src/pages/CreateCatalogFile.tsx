@@ -10,6 +10,7 @@ import {
   type CatalogFileFormValues,
 } from "../utils/catalogFileForm";
 import { CATALOG_CREATE_ERROR_KEYS } from "../utils/saveError";
+import { catalogFilesPath } from "../utils/catalogFileLinks";
 
 export default function CreateCatalogFile() {
   const { t } = useTranslation();
@@ -37,6 +38,7 @@ export default function CreateCatalogFile() {
         submitLabel={t("common.action.create")}
         form={form}
         onSubmit={save.onSubmit}
+        back={{ to: catalogFilesPath, label: t("catalog.backToList") }}
         error={save.error}
         submitting={save.submitting}
       />

@@ -5,25 +5,22 @@ import {
   Alert,
   Badge,
   Box,
-  Button,
   CloseButton,
   Group,
   Paper,
   Stack,
   Text,
+  Tooltip,
 } from "@mantine/core";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconChevronDown, IconChevronRight, IconPin, IconSitemap } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronRight, IconChevronsDown, IconChevronsUp, IconPin, IconSitemap } from "@tabler/icons-react";
 import { deleteCatalogFile, getCatalogGraph, type GraphNode } from "../api/catalogFiles";
-import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogFileNameLink from "../components/CatalogFileNameLink";
+import CatalogToolbar from "../components/CatalogToolbar";
 import CatalogFileOperations from "../components/CatalogFileOperations";
 import OverwriteWithYamlModal, { type OverwriteTarget } from "../components/OverwriteWithYamlModal";
-import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
-import FilterPanel from "../components/FilterPanel";
-import LensPicker from "../components/LensPicker";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
@@ -33,6 +30,7 @@ import { loadErrorMessage } from "../utils/saveError";
 import LoadingBlock from "../components/LoadingBlock";
 import KindBadge from "../components/KindBadge";
 import PageHeader from "../components/PageHeader";
+import classes from "../theme.module.css";
 
 /** The delete confirm's target — the tree row's identity, shaped like a list row. */
 interface DeleteTarget {
@@ -76,22 +74,20 @@ function TreeItem({
   const isCollapsed = collapsed.has(key);
   return (
     <Box>
-      <Group gap="xs" wrap="nowrap" py={4}>
+      <Group gap="xs" wrap="nowrap" py={2} px={4} className={classes.treeRow}>
         {children.length > 0 ? (
           <ActionIcon
-            variant="subtle"
-            color="gray"
-            size="sm"
+            size="xs"
             aria-label={t("hierarchy.toggleAria", { name: node.name })}
             aria-expanded={!isCollapsed}
             onClick={() => onToggle(key)}
           >
-            {isCollapsed ? <IconChevronRight size={16} /> : <IconChevronDown size={16} />}
+            {isCollapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
           </ActionIcon>
         ) : (
-          <Box w={22} />
+          <Box w={18} style={{ flexShrink: 0 }} />
         )}
-        <KindBadge kind={node.kind} status={node.status} />
+        <KindBadge kind={node.kind} status={node.status} size="xs" />
         {/* Placeholders have no stored entity to open — the same `fileId == null` test the
             row's Operations menu applies — so they stay dimmed italic text. */}
         {node.fileId != null ? (
@@ -102,19 +98,21 @@ function TreeItem({
           </Text>
         )}
         {node.title ? (
-          <Text size="sm" c="dimmed" truncate>
+          <Text size="xs" c="dimmed" truncate>
             {node.title}
           </Text>
         ) : null}
         {node.status === "MISSING" && (
-          <Badge variant="outline" size="sm" color="red">
+          <Badge variant="outline" size="xs" color="red">
             {t("hierarchy.badge.missing")}
           </Badge>
         )}
-        {operations(node)}
+        <Box ml="auto" style={{ flexShrink: 0 }}>
+          {operations(node)}
+        </Box>
       </Group>
       {children.length > 0 && !isCollapsed && (
-        <Box pl={26} style={{ borderLeft: "1px solid var(--mantine-color-default-border)" }} ml={10}>
+        <Box pl={22} ml={13} className={classes.treeBranch}>
           {children.map((child) => (
             <TreeItem
               key={pathKey(key, child.node)}
@@ -227,29 +225,30 @@ export default function Hierarchy() {
 
   return (
     <Stack gap="md">
-      <PageHeader title={t("hierarchy.title")} />
-
-      <FilterPanel
-        activeFilterCount={filters.activeFilterCount}
-        storageKey="hierarchy"
-        aside={<LensPicker values={filters.values} controls={filters.controls} />}
-      >
-        <CatalogFileFilterControls controls={filters.controls} />
-      </FilterPanel>
-
-      <CatalogKindPills kinds={filters.controls.kinds} setKinds={filters.controls.setKinds} />
-
-      <Group gap="lg">
-        <Button variant="default" size="xs" onClick={() => setCollapsed(new Set())}>
-          {t("hierarchy.expandAll")}
-        </Button>
-        <Button
-          variant="default"
-          size="xs"
-          onClick={() => setCollapsed(new Set(branchKeys(visible, basePath, [])))}
-        >
-          {t("hierarchy.collapseAll")}
-        </Button>
+      <PageHeader
+        title={t("hierarchy.title")}
+        toolbar={
+      <CatalogToolbar viewKey="hierarchy" filters={filters}>
+        <Tooltip label={t("hierarchy.expandAll")}>
+          <ActionIcon
+            variant="default"
+            size="md"
+            aria-label={t("hierarchy.expandAll")}
+            onClick={() => setCollapsed(new Set())}
+          >
+            <IconChevronsDown size={16} />
+          </ActionIcon>
+        </Tooltip>
+        <Tooltip label={t("hierarchy.collapseAll")}>
+          <ActionIcon
+            variant="default"
+            size="md"
+            aria-label={t("hierarchy.collapseAll")}
+            onClick={() => setCollapsed(new Set(branchKeys(visible, basePath, [])))}
+          >
+            <IconChevronsUp size={16} />
+          </ActionIcon>
+        </Tooltip>
         {/* Gray: a pin is neutral state, not caution (the LensPicker's Modified badge). It
             deliberately stays out of the FilterPanel's active-filter count — that badge
             speaks for what the collapsed panel HIDES, and this says its piece in the open. */}
@@ -273,7 +272,9 @@ export default function Hierarchy() {
             {t("hierarchy.pinned.badge", { name: placement.item.node.name })}
           </Badge>
         )}
-      </Group>
+      </CatalogToolbar>
+        }
+      />
 
       {isError && (
         <Alert color="red" variant="light" title={t("hierarchy.loadFailed")}>

@@ -4,6 +4,7 @@ import { Link as RouterLink } from "react-router-dom";
 import { Alert, Button, Grid, Group, Paper, Stack, Title } from "@mantine/core";
 import { type UseFormReturnType } from "@mantine/form";
 import CatalogFileFormFields from "./CatalogFileFormFields";
+import PageHeader from "./PageHeader";
 import ReferenceCheckPanel from "./ReferenceCheckPanel";
 import YamlPreviewCard from "./YamlPreviewCard";
 import { toCatalogFileRequest, type CatalogFileFormValues } from "../utils/catalogFileForm";
@@ -12,11 +13,17 @@ import { useNamespaceOptions } from "../hooks/useNamespaceOptions";
 import { useDocumentCheck } from "../hooks/useDocumentCheck";
 import { indexFindings } from "../utils/fieldFindings";
 import { catalogFilesPath } from "../utils/catalogFileLinks";
+import classes from "../theme.module.css";
 
 /**
  * The editor shell shared by the create and edit catalog-file pages: the app's document
- * screen — form beside a sticky live YAML preview + reference panel, wider than the
- * Container-sm simple-field forms (see web/CLAUDE.md). The pages own submit/error state.
+ * screen — a PageHeader (title, back link, the whole-file operations as its actions), then
+ * the form beside a sticky live YAML preview + findings panel, wider than the simple-field
+ * forms (see web/CLAUDE.md). The form's Cancel/Save bar is STICKY at the bottom of the
+ * viewport (v1.20.0), so a long document never hides its Save; the sections are flat
+ * fieldsets under small legends rather than boxes. No tabs: the field-level finding marks
+ * must stay on screen and a blocked submit must never sit on a hidden tab. The pages own
+ * submit/error state.
  */
 export default function CatalogFileEditor({
   title,
@@ -25,7 +32,9 @@ export default function CatalogFileEditor({
   onSubmit,
   error,
   submitting,
+  back,
   actions,
+  banner,
   history,
 }: {
   title: string;
@@ -34,11 +43,15 @@ export default function CatalogFileEditor({
   onSubmit: (values: CatalogFileFormValues) => Promise<void>;
   error: string | null;
   submitting: boolean;
+  /** The header's back link (to the Files list). */
+  back?: { to: string; label: string };
   /**
    * Whole-file operations (export/overwrite/sync) — edit-only, since they all act on a
-   * STORED file. Rendered under the title, outside the form's submit path.
+   * STORED file. Rendered as the PageHeader's actions, outside the form's submit path.
    */
   actions?: ReactNode;
+  /** A page-level notice under the header (the edit page's download-error alert). */
+  banner?: ReactNode;
   /**
    * The file's change history — edit-only like [actions] (a document that isn't stored yet has
    * none). Full width BELOW the two columns: it is a record of the document above, not a
@@ -58,47 +71,49 @@ export default function CatalogFileEditor({
   const { findings, checked } = useDocumentCheck(requestDocument);
   const fieldFindings = indexFindings(findings);
   return (
-    <Grid>
-      <Grid.Col span={{ base: 12, md: 7 }}>
-        <Paper withBorder shadow="sm" p="xl" radius="md">
-          <form onSubmit={form.onSubmit(onSubmit)} noValidate>
-            <Stack>
-              <Title order={2}>{title}</Title>
-              {actions}
-              <CatalogFileFormFields form={form} findings={fieldFindings} />
-              {error && (
-                <Alert color="red" variant="light">
-                  {error}
-                </Alert>
-              )}
-              <Group justify="flex-end" gap="sm">
-                <Button component={RouterLink} to={catalogFilesPath} variant="default">
-                  {t("common.action.cancel")}
-                </Button>
-                <Button type="submit" loading={submitting}>
-                  {submitLabel}
-                </Button>
-              </Group>
-            </Stack>
-          </form>
-        </Paper>
-      </Grid.Col>
-      <Grid.Col span={{ base: 12, md: 5 }}>
-        <Stack style={{ position: "sticky", top: 72 }}>
-          <YamlPreviewCard yaml={catalogInfoYaml(requestDocument)} />
-          <ReferenceCheckPanel findings={findings} checked={checked} />
-        </Stack>
-      </Grid.Col>
-      {history && (
-        <Grid.Col span={12}>
-          <Paper withBorder shadow="sm" p="xl" radius="md">
-            <Stack>
-              <Title order={3}>{t("catalog.history.title")}</Title>
-              {history}
-            </Stack>
+    <Stack gap="md">
+      <PageHeader title={title} backTo={back} actions={actions} />
+      {banner}
+      <Grid>
+        <Grid.Col span={{ base: 12, md: 7 }}>
+          <Paper withBorder p="lg" radius="md">
+            <form onSubmit={form.onSubmit(onSubmit)} noValidate>
+              <Stack>
+                <CatalogFileFormFields form={form} findings={fieldFindings} />
+                {error && (
+                  <Alert color="red" variant="light">
+                    {error}
+                  </Alert>
+                )}
+                <Group justify="flex-end" gap="sm" className={classes.stickyActions}>
+                  <Button component={RouterLink} to={catalogFilesPath} variant="default">
+                    {t("common.action.cancel")}
+                  </Button>
+                  <Button type="submit" loading={submitting}>
+                    {submitLabel}
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
           </Paper>
         </Grid.Col>
-      )}
-    </Grid>
+        <Grid.Col span={{ base: 12, md: 5 }}>
+          <Stack className={classes.stickyAside}>
+            <YamlPreviewCard yaml={catalogInfoYaml(requestDocument)} />
+            <ReferenceCheckPanel findings={findings} checked={checked} />
+          </Stack>
+        </Grid.Col>
+        {history && (
+          <Grid.Col span={12}>
+            <Paper withBorder p="lg" radius="md">
+              <Stack>
+                <Title order={3}>{t("catalog.history.title")}</Title>
+                {history}
+              </Stack>
+            </Paper>
+          </Grid.Col>
+        )}
+      </Grid>
+    </Stack>
   );
 }

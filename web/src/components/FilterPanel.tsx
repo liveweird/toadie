@@ -13,6 +13,7 @@ export default function FilterPanel({
   storageKey,
   children,
   aside,
+  trailing,
 }: {
   activeFilterCount: number;
   storageKey: string;
@@ -20,12 +21,14 @@ export default function FilterPanel({
   /** Rendered in the header row beside the toggle — reachable with the panel collapsed
    *  (the LensPicker's slot). */
   aside?: ReactNode;
+  /** Rendered at the END of the header row, pushed right (the Kind pills' slot, v1.20.0). */
+  trailing?: ReactNode;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useStoredState(`${storageKey}.filtersOpen`, false, isBoolean);
   return (
     <div>
-      <Group gap="xs" mb={open ? "sm" : 0}>
+      <Group gap="xs" mb={open ? "sm" : 0} wrap="wrap">
         <Button
           variant="default"
           size="xs"
@@ -49,6 +52,7 @@ export default function FilterPanel({
           {t("common.filter.title")}
         </Button>
         {aside}
+        {trailing && <Group ml="auto">{trailing}</Group>}
       </Group>
       {open && (
         <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-default-hover)">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router-dom";
-import { Alert, Button, Group, Paper, Stack, Title } from "@mantine/core";
+import { Alert, Button, Paper, Stack } from "@mantine/core";
 import { IconFileExport, IconRefresh, IconUpload } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +14,8 @@ import SyncCatalogFileModal from "../components/SyncCatalogFileModal";
 import SyncStateText from "../components/SyncStateText";
 import SaveAnywayModal from "../components/SaveAnywayModal";
 import EditPageLoadState from "../components/EditPageLoadState";
+import PageHeader from "../components/PageHeader";
+import { FORM_MAX_WIDTH } from "../utils/layout";
 import { useCatalogDownloads } from "../hooks/useCatalogDownloads";
 import { useCatalogFileSave } from "../hooks/useCatalogFileSave";
 import {
@@ -107,17 +109,20 @@ export default function EditCatalogFile() {
 
   if (isLoading || isError) {
     return (
-      <Paper withBorder shadow="sm" p="xl" radius="md" maw={560}>
-        <Stack>
-          <Title order={2}>{t("catalog.editFile")}</Title>
+      <Stack gap="md">
+        <PageHeader
+          title={t("catalog.editFile")}
+          backTo={{ to: catalogFilesPath, label: t("catalog.backToList") }}
+        />
+        <Paper withBorder p="xl" maw={FORM_MAX_WIDTH}>
           <EditPageLoadState
             isLoading={isLoading}
             message={notFound ? t("catalog.fileNotFound") : loadErrorMessage(fetchError, t)}
             backTo={catalogFilesPath}
             backLabel={t("catalog.backToList")}
           />
-        </Stack>
-      </Paper>
+        </Paper>
+      </Stack>
     );
   }
 
@@ -126,44 +131,45 @@ export default function EditCatalogFile() {
   const file = data!;
   const name = file.metadata.name;
   const namespace = file.metadata.namespace || "default";
+  // The whole-file operations ride the page header (v1.20.0); the download-error alert is
+  // the header's banner rather than a sibling of the buttons.
   const actions = (
-    <Stack gap="xs">
-      <Group gap="sm">
-        <Button
-          variant="default"
-          size="xs"
-          leftSection={<IconFileExport size={14} />}
-          onClick={() => void downloads.handleDownload({ id })}
-          loading={downloads.downloadingId === id}
-        >
-          {t("catalog.exportFile")}
-        </Button>
-        <Button
-          variant="default"
-          size="xs"
-          leftSection={<IconUpload size={14} />}
-          onClick={() => setOverwriteOpen(true)}
-        >
-          {t("catalog.overwrite.action")}
-        </Button>
-        <Button
-          variant="default"
-          size="xs"
-          leftSection={<IconRefresh size={14} />}
-          onClick={() => setSyncOpen(true)}
-          disabled={file.sourceUrl == null}
-        >
-          {t("catalog.sync.action")}
-        </Button>
-        <SyncStateText file={file} />
-      </Group>
-      {downloads.downloadError != null && (
-        <Alert color="red" variant="light" title={t("catalog.downloadFailed")}>
-          {loadErrorMessage(downloads.downloadError, t)}
-        </Alert>
-      )}
-    </Stack>
+    <>
+      <SyncStateText file={file} />
+      <Button
+        variant="default"
+        size="sm"
+        leftSection={<IconFileExport size={14} />}
+        onClick={() => void downloads.handleDownload({ id })}
+        loading={downloads.downloadingId === id}
+      >
+        {t("catalog.exportFile")}
+      </Button>
+      <Button
+        variant="default"
+        size="sm"
+        leftSection={<IconUpload size={14} />}
+        onClick={() => setOverwriteOpen(true)}
+      >
+        {t("catalog.overwrite.action")}
+      </Button>
+      <Button
+        variant="default"
+        size="sm"
+        leftSection={<IconRefresh size={14} />}
+        onClick={() => setSyncOpen(true)}
+        disabled={file.sourceUrl == null}
+      >
+        {t("catalog.sync.action")}
+      </Button>
+    </>
   );
+  const banner =
+    downloads.downloadError != null ? (
+      <Alert color="red" variant="light" title={t("catalog.downloadFailed")}>
+        {loadErrorMessage(downloads.downloadError, t)}
+      </Alert>
+    ) : null;
 
   return (
     // Same two-pane document layout as the create page (see web/CLAUDE.md).
@@ -173,6 +179,8 @@ export default function EditCatalogFile() {
         submitLabel={t("common.action.save")}
         form={form}
         onSubmit={save.onSubmit}
+        back={{ to: catalogFilesPath, label: t("catalog.backToList") }}
+        banner={banner}
         error={save.error}
         submitting={save.submitting}
         actions={actions}

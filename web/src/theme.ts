@@ -5,6 +5,7 @@ import {
   Autocomplete,
   Badge,
   Chip,
+  Fieldset,
   Menu,
   Modal,
   MultiSelect,
@@ -109,6 +110,12 @@ export const theme = createTheme({
     MultiSelect: MultiSelect.extend({ defaultProps: { filter: foldedOptionsFilter } }),
     TagsInput: TagsInput.extend({ defaultProps: { filter: foldedOptionsFilter } }),
     Badge: Badge.extend({ defaultProps: { radius: "sm", variant: "light" } }),
+    // Form sections (the catalog editor's eight fieldsets): flat, headed by a small caps
+    // legend over a hairline — the fieldset/legend semantics stay, the boxes go.
+    Fieldset: Fieldset.extend({
+      defaultProps: { variant: "unstyled" },
+      classNames: { root: classes.formSection, legend: classes.formSectionLegend },
+    }),
     Tooltip: Tooltip.extend({ defaultProps: { radius: "md" } }),
     Modal: Modal.extend({ defaultProps: { radius: "md" } }),
   },

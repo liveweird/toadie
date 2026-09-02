@@ -9,14 +9,11 @@ import {
   IconPlus,
 } from "@tabler/icons-react";
 import { deleteCatalogFile, listCatalogFiles, type CatalogFileListItem } from "../api/catalogFiles";
-import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogFileNameLink from "../components/CatalogFileNameLink";
+import CatalogToolbar from "../components/CatalogToolbar";
 import CatalogFileOperations from "../components/CatalogFileOperations";
-import CatalogKindPills from "../components/CatalogKindPills";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
-import FilterPanel from "../components/FilterPanel";
-import LensPicker from "../components/LensPicker";
 import PaginationBar from "../components/PaginationBar";
 import OverwriteWithYamlModal from "../components/OverwriteWithYamlModal";
 import SyncStateText from "../components/SyncStateText";
@@ -28,7 +25,7 @@ import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { loadErrorMessage } from "../utils/saveError";
-import { formatDate, formatDateTime } from "../utils/relativeTime";
+import { formatDateTime, relativeTimeAgo } from "../utils/relativeTime";
 import { importCatalogFilesPath, newCatalogFilePath } from "../utils/catalogFileLinks";
 import KindBadge from "../components/KindBadge";
 import PageHeader from "../components/PageHeader";
@@ -76,7 +73,7 @@ export default function CatalogFiles() {
   const [overwriteTarget, setOverwriteTarget] = useState<CatalogFileListItem | null>(null);
 
   const total = data?.total ?? 0;
-  const columnCount = 7;
+  const columnCount = 6;
 
   return (
     <Stack gap="md">
@@ -97,17 +94,8 @@ export default function CatalogFiles() {
             </Button>
           </>
         }
+        toolbar={<CatalogToolbar viewKey={SETTINGS_KEY} filters={filters} />}
       />
-
-      <FilterPanel
-        activeFilterCount={filters.activeFilterCount}
-        storageKey={SETTINGS_KEY}
-        aside={<LensPicker values={filters.values} controls={filters.controls} />}
-      >
-        <CatalogFileFilterControls controls={filters.controls} />
-      </FilterPanel>
-
-      <CatalogKindPills kinds={filters.controls.kinds} setKinds={filters.controls.setKinds} />
 
       {isError && (
         <Alert color="red" variant="light" title={t("catalog.loadFailed")}>
@@ -127,7 +115,8 @@ export default function CatalogFiles() {
         </Alert>
       )}
 
-      <Table>
+      <Table.ScrollContainer minWidth={760}>
+      <Table layout="fixed">
         <Table.Thead>
           <Table.Tr>
             <SortHeader
@@ -138,26 +127,28 @@ export default function CatalogFiles() {
               onToggle={toggleSort}
             />
             <SortHeader
-              field="namespace"
-              label={t("catalog.field.namespace")}
-              activeField={sortField}
-              activeDir={sortDir}
-              onToggle={toggleSort}
-            />
-            <SortHeader
               field="kind"
               label={t("catalog.field.kind")}
               activeField={sortField}
               activeDir={sortDir}
               onToggle={toggleSort}
+              width={130}
             />
-            <Table.Th>{t("catalog.field.title")}</Table.Th>
+            <SortHeader
+              field="namespace"
+              label={t("catalog.field.namespace")}
+              activeField={sortField}
+              activeDir={sortDir}
+              onToggle={toggleSort}
+              width={160}
+            />
             <SortHeader
               field="updatedAt"
               label={t("catalog.field.updated")}
               activeField={sortField}
               activeDir={sortDir}
               onToggle={toggleSort}
+              width={150}
             />
             <SortHeader
               field="lastSyncedAt"
@@ -165,8 +156,9 @@ export default function CatalogFiles() {
               activeField={sortField}
               activeDir={sortDir}
               onToggle={toggleSort}
+              width={200}
             />
-            <Table.Th aria-label={t("common.table.operations")} style={{ width: 1 }} />
+            <Table.Th aria-label={t("common.table.operations")} w={48} />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -176,27 +168,31 @@ export default function CatalogFiles() {
             data.items.map((file) => (
               <Table.Tr key={file.id}>
                 <Table.Td>
+                  {/* Name over title: the title was never sortable, and one cell keeps the
+                      Name column the only wide one at 1920. */}
                   <CatalogFileNameLink id={file.id} name={file.name} />
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm">{file.namespace}</Text>
+                  {file.title && (
+                    <Text size="xs" c="dimmed" truncate>
+                      {file.title}
+                    </Text>
+                  )}
                 </Table.Td>
                 <Table.Td>
                   <KindBadge kind={file.kind} />
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">{file.title ?? ""}</Text>
+                  <Text size="sm">{file.namespace}</Text>
                 </Table.Td>
                 <Table.Td>
-                  {/* Same treatment as the Last-sync cell: compact date, precise tooltip. */}
+                  {/* Relative, with the precise timestamp as the hover text (the SyncStateText idiom). */}
                   <Text size="sm" title={formatDateTime(file.updatedAt, i18n.language)}>
-                    {formatDate(file.updatedAt, i18n.language)}
+                    {relativeTimeAgo(file.updatedAt, i18n.language)}
                   </Text>
                 </Table.Td>
                 <Table.Td>
                   <SyncStateText file={file} />
                 </Table.Td>
-                <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
+                <Table.Td ta="right">
                   <CatalogFileOperations
                     id={file.id}
                     name={file.name}
@@ -222,6 +218,7 @@ export default function CatalogFiles() {
           ) : null}
         </Table.Tbody>
       </Table>
+      </Table.ScrollContainer>
 
       <PaginationBar
         total={total}

@@ -7,6 +7,7 @@ import {
   Chip,
   Group,
   Paper,
+  Popover,
   SegmentedControl,
   Stack,
   Text,
@@ -25,16 +26,13 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { IconTopologyStar3 } from "@tabler/icons-react";
+import { IconInfoCircle, IconTopologyStar3 } from "@tabler/icons-react";
 import { getCatalogGraph } from "../api/catalogFiles";
 import { getUserId } from "../api/session";
 import { getGraphLayout, setGraphLayout } from "../api/users";
-import CatalogFileFilterControls from "../components/CatalogFileFilterControls";
 import CatalogGraphNode from "../components/CatalogGraphNode";
-import CatalogKindPills from "../components/CatalogKindPills";
+import CatalogToolbar from "../components/CatalogToolbar";
 import EmptyState from "../components/EmptyState";
-import FilterPanel from "../components/FilterPanel";
-import LensPicker from "../components/LensPicker";
 import NamespaceFrames from "../components/NamespaceFrames";
 import {
   applyManualPositions,
@@ -56,6 +54,7 @@ import { loadErrorMessage } from "../utils/saveError";
 import { editCatalogFilePath } from "../utils/catalogFileLinks";
 import LoadingBlock from "../components/LoadingBlock";
 import PageHeader from "../components/PageHeader";
+import classes from "../theme.module.css";
 
 const NODE_TYPES = { catalog: CatalogGraphNode };
 
@@ -227,100 +226,91 @@ export default function RenderGraph() {
   }
 
   return (
-    <Stack gap="md" h="100%">
-      <PageHeader title={t("render.title")} />
-
-      <FilterPanel
-        activeFilterCount={filters.activeFilterCount}
-        storageKey="renderGraph"
-        aside={<LensPicker values={filters.values} controls={filters.controls} />}
-      >
-        <CatalogFileFilterControls controls={filters.controls} />
-      </FilterPanel>
-
-      <CatalogKindPills kinds={filters.controls.kinds} setKinds={filters.controls.setKinds} />
-
-      {/* Which RELATIONSHIP families draw edges — captioned so the pills never read as
-          entity kinds (the Kind filter pills live in the panel above). */}
-      <Stack gap={4}>
-        <Text size="sm" fw={500} component="label">
-          {t("render.relationsLabel")}
-        </Text>
-        <Chip.Group
-          multiple
-          value={enabled}
-          onChange={(values) => setEnabled(values as RelationFamily[])}
-        >
-          <Group gap="xs" role="group" aria-label={t("render.relationsLabel")}>
-            {RELATION_FAMILIES.map((family) => (
-              <Chip key={family} value={family} size="xs">
-                {t(`render.relation.${family}`)}
-              </Chip>
-            ))}
-          </Group>
-        </Chip.Group>
-      </Stack>
-
-      <Group gap="sm">
-        <Text size="sm" fw={500} component="label">
-          {t("render.layoutMode.label")}
-        </Text>
-        <SegmentedControl
-          size="xs"
-          value={mode}
-          onChange={(value) => persistLayout({ mode: value as LayoutMode, positions, collapsed }, false)}
-          data={[
-            { value: "auto", label: t("render.layoutMode.auto") },
-            { value: "manual", label: t("render.layoutMode.manual") },
-          ]}
-          aria-label={t("render.layoutMode.label")}
-        />
-        {/* Reset layout clears POSITIONS only — the fold is its own dimension with its own
-            reset below, so straightening a dragged canvas never unfolds it. */}
-        {mode === "manual" && (
-          <Button
-            variant="default"
-            size="xs"
-            onClick={() => persistLayout({ mode: "manual", positions: {}, collapsed }, false)}
-          >
-            {t("render.resetLayout")}
-          </Button>
-        )}
-        {/* Expand all clears the WHOLE list, stale ids of filtered-out nodes included, so
-            nothing resurfaces collapsed later. Shown only while a drawn node is collapsed —
-            a list holding nothing but stale ids has no visible state to reset. */}
-        {baseLayout.anyCollapsed && (
-          <Button
-            variant="default"
-            size="xs"
-            onClick={() => persistLayout({ mode, positions, collapsed: [] }, false)}
-          >
-            {t("render.expandAll")}
-          </Button>
-        )}
-      </Group>
-
-      <Group gap="lg">
-        {LEGEND.map(({ key, style }) => (
-          <Group key={key} gap={6}>
-            <span
-              style={{ width: 14, height: 14, borderRadius: 4, display: "inline-block", ...style }}
-            />
-            <Text size="xs" c="dimmed">
-              {t(`render.legend.${key}`)}
-            </Text>
-          </Group>
-        ))}
-        <Group gap={6}>
-          {/* The folded-edge swatch draws with the edge's own dash pattern. */}
-          <svg width={28} height={8} aria-hidden="true" style={{ display: "inline-block" }}>
-            <line x1={0} y1={4} x2={28} y2={4} stroke="currentColor" strokeWidth={1.5} style={FOLDED_EDGE_STYLE} />
-          </svg>
-          <Text size="xs" c="dimmed">
-            {t("render.legend.folded")}
-          </Text>
-        </Group>
-      </Group>
+    <Stack gap="md" className={classes.fillPage}>
+      <PageHeader
+        title={t("render.title")}
+        toolbar={
+          <CatalogToolbar viewKey="renderGraph" filters={filters}>
+            {/* Which RELATIONSHIP families draw edges — the group's aria-label names it. */}
+            <Chip.Group
+              multiple
+              value={enabled}
+              onChange={(values) => setEnabled(values as RelationFamily[])}
+            >
+              <Group gap={6} role="group" aria-label={t("render.relationsLabel")}>
+                {RELATION_FAMILIES.map((family) => (
+                  <Chip key={family} value={family} size="xs">
+                    {t(`render.relation.${family}`)}
+                  </Chip>
+                ))}
+              </Group>
+            </Chip.Group>
+            <Group gap="xs" ml="auto" wrap="wrap">
+              <SegmentedControl
+                size="xs"
+                value={mode}
+                onChange={(value) =>
+                  persistLayout({ mode: value as LayoutMode, positions, collapsed }, false)
+                }
+                data={[
+                  { value: "auto", label: t("render.layoutMode.auto") },
+                  { value: "manual", label: t("render.layoutMode.manual") },
+                ]}
+                aria-label={t("render.layoutMode.label")}
+              />
+              {/* Reset layout clears POSITIONS only — the fold is its own dimension with its
+                  own reset, so straightening a dragged canvas never unfolds it. */}
+              {mode === "manual" && (
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={() => persistLayout({ mode: "manual", positions: {}, collapsed }, false)}
+                >
+                  {t("render.resetLayout")}
+                </Button>
+              )}
+              {/* Expand all clears the WHOLE list, stale ids of filtered-out nodes included,
+                  so nothing resurfaces collapsed later. Shown only while a drawn node is
+                  collapsed — a list holding nothing but stale ids has no visible state. */}
+              {baseLayout.anyCollapsed && (
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={() => persistLayout({ mode, positions, collapsed: [] }, false)}
+                >
+                  {t("render.expandAll")}
+                </Button>
+              )}
+              <Popover position="bottom-end" shadow="md" withArrow>
+                <Popover.Target>
+                  <Button variant="subtle" size="xs" color="gray" leftSection={<IconInfoCircle size={14} />}>
+                    {t("render.legend.title")}
+                  </Button>
+                </Popover.Target>
+                <Popover.Dropdown>
+                  <Stack gap="xs">
+                    {LEGEND.map(({ key, style }) => (
+                      <Group key={key} gap={8} wrap="nowrap">
+                        <span
+                          style={{ width: 14, height: 14, borderRadius: 4, display: "inline-block", flexShrink: 0, ...style }}
+                        />
+                        <Text size="xs">{t(`render.legend.${key}`)}</Text>
+                      </Group>
+                    ))}
+                    <Group gap={8} wrap="nowrap">
+                      {/* The folded-edge swatch draws with the edge's own dash pattern. */}
+                      <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
+                        <line x1={0} y1={4} x2={14} y2={4} stroke="currentColor" strokeWidth={1.5} style={FOLDED_EDGE_STYLE} />
+                      </svg>
+                      <Text size="xs">{t("render.legend.folded")}</Text>
+                    </Group>
+                  </Stack>
+                </Popover.Dropdown>
+              </Popover>
+            </Group>
+          </CatalogToolbar>
+        }
+      />
 
       {isError && (
         <Alert color="red" variant="light" title={t("render.loadFailed")}>
@@ -336,7 +326,7 @@ export default function RenderGraph() {
           label={t("render.empty")}
         />
       ) : (
-        <Paper withBorder radius="md" style={{ height: "calc(100vh - 320px)", minHeight: 360 }}>
+        <Paper withBorder radius="md" className={classes.fillPageCanvas}>
           <ReactFlow
             nodes={nodes}
             edges={edges}

@@ -17,6 +17,26 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.20.0",
+    date: "2026-09-03",
+    en: `**Every page uses its space better: one toolbar row, denser lists, a grouped Errors report, and an editor whose Save never scrolls away.**
+
+- The Files, Hierarchy, Graph and Errors views share one toolbar row — filters, lens and the kind pills side by side — so the content starts a hundred pixels higher; on the Graph the relations, layout and a **Legend** button share a second row and the canvas fills the rest of the window.
+- The Files list stacks each file's title under its name, shows **Updated** as "3 days ago" (hover for the exact time), and keeps its columns at a sensible width on wide screens.
+- The Hierarchy's rows are tighter, with a hover highlight and quieter guide lines; Expand all / Collapse all are two icon buttons in the toolbar.
+- The Errors report opens with three counters — files checked, references checked, errors — and the error-class chips now carry counts. Findings are grouped **per file**: one row per file, one compact line per finding, with the explanation on hover instead of repeated in every row.
+- The catalog editor's title and whole-file operations moved into the page header, the sections are flat headings instead of boxes, and **Cancel / Save** stay pinned to the bottom of the window while you scroll. The Import page groups its inputs in one card.
+- The namespaces and lifecycles editors are one bordered list with a pinned Save bar; the feature-flags bulk actions sit in the page header.`,
+    pl: `**Każda strona lepiej wykorzystuje miejsce: jeden wiersz narzędzi, gęstsze listy, pogrupowany raport Błędów i edytor, którego Zapisz nigdy nie ucieka z ekranu.**
+
+- Widoki Pliki, Hierarchia, Graf i Błędy dzielą jeden wiersz narzędzi — filtry, soczewka i żetony rodzajów obok siebie — więc treść zaczyna się sto pikseli wyżej; na Grafie relacje, układ i przycisk **Legenda** dzielą drugi wiersz, a płótno wypełnia resztę okna.
+- Lista Plików pokazuje tytuł pliku pod jego nazwą, kolumnę **Zaktualizowano** jako „3 dni temu" (dokładny czas po najechaniu) i utrzymuje rozsądną szerokość kolumn na szerokich ekranach.
+- Wiersze Hierarchii są ciaśniejsze, z podświetleniem po najechaniu i spokojniejszymi liniami prowadzącymi; Rozwiń wszystko / Zwiń wszystko to dwa przyciski-ikony w pasku narzędzi.
+- Raport Błędów otwierają trzy liczniki — sprawdzone pliki, sprawdzone odwołania, błędy — a żetony klas błędów pokazują liczby. Ustalenia są pogrupowane **per plik**: jeden wiersz na plik, jedna zwięzła linia na ustalenie, z wyjaśnieniem po najechaniu zamiast powtarzania go w każdym wierszu.
+- Tytuł edytora katalogu i operacje na całym pliku przeniosły się do nagłówka strony, sekcje to płaskie nagłówki zamiast ramek, a **Anuluj / Zapisz** pozostają przypięte do dołu okna podczas przewijania. Strona Importu grupuje swoje pola w jednej karcie.
+- Edytory przestrzeni nazw i cykli życia to jedna obramowana lista z przypiętym paskiem Zapisz; akcje zbiorcze flag funkcji siedzą w nagłówku strony.`,
+  },
+  {
     version: "1.19.0",
     date: "2026-09-03",
     en: `**A refreshed workspace: a calmer look, denser tables, an account menu, and a command palette.**

@@ -15,7 +15,8 @@
     "stored": "Stored file",
     "missing": "Missing entity",
     "collapsed": "Collapsed — its contents are hidden inside",
-    "folded": "Relation of a hidden entity"
+    "folded": "Relation of a hidden entity",
+    "title": "Legend"
   },
   "layoutMode": {
     "label": "Layout",

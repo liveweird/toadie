@@ -65,7 +65,7 @@ test("a saved lens applies the same filters on Hierarchy, Files, Graph, and Erro
   await page.goto("/errors");
   await page.getByRole("combobox", { name: "Lens", exact: true }).click();
   await page.getByRole("option", { name: lensName }).click();
-  await expect(page.getByText(/files checked/)).toBeVisible();
+  await expect(page.getByText(/files checked/i)).toBeVisible();
   await openFilters(page);
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue(fileA);
 

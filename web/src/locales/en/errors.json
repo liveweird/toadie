@@ -2,12 +2,9 @@
   "title": "Errors",
   "loadFailed": "Failed to load the errors report",
   "summary": {
-    "files_one": "{{count}} file checked",
-    "files_other": "{{count}} files checked",
-    "references_one": "{{count}} reference checked",
-    "references_other": "{{count}} references checked",
-    "errors_one": "{{count}} error",
-    "errors_other": "{{count}} errors"
+    "filesLabel": "Files checked",
+    "referencesLabel": "References checked",
+    "errorsLabel": "Errors"
   },
   "classesLabel": "Error types",
   "class": {
@@ -25,9 +22,7 @@
     "file": "File",
     "kind": "Kind",
     "namespace": "Namespace",
-    "refField": "Field",
-    "reference": "Value",
-    "status": "Status"
+    "findings": "Findings"
   },
   "status": {
     "MISSING": "Not found",

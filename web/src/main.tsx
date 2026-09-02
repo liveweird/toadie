@@ -5,9 +5,13 @@ import { MantineProvider, ColorSchemeScript } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@fontsource-variable/inter/index.css";
-import "@mantine/core/styles.css";
-import "@mantine/notifications/styles.css";
-import "@mantine/spotlight/styles.css";
+// The LAYERED Mantine stylesheets (`@layer mantine`): every unlayered rule of ours —
+// theme.module.css above all — then wins regardless of stylesheet order. Load-bearing: Vite
+// splits theme.module.css into a shared CSS chunk once lazy pages import it, and index.html
+// links that chunk BEFORE Mantine's own styles, where plain source order would lose.
+import "@mantine/core/styles.layer.css";
+import "@mantine/notifications/styles.layer.css";
+import "@mantine/spotlight/styles.layer.css";
 import "./index.css";
 import "./i18n";
 import App from "./App.tsx";

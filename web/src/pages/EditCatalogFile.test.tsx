@@ -146,10 +146,10 @@ describe("EditCatalogFile page", () => {
     renderEdit();
 
     expect(await screen.findByText("Catalog file not found.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /back to catalog files/i })).toHaveAttribute(
-      "href",
-      "/files",
-    );
+    // The header's back link and the load-state's back button both lead to the list.
+    for (const link of screen.getAllByRole("link", { name: /back to catalog files/i })) {
+      expect(link).toHaveAttribute("href", "/files");
+    }
     expect(screen.queryByRole("button", { name: /^save$/i })).not.toBeInTheDocument();
   });
 

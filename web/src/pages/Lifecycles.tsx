@@ -24,6 +24,7 @@ import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
 import { loadErrorMessage } from "../utils/saveError";
 import LoadingBlock from "../components/LoadingBlock";
 import PageHeader from "../components/PageHeader";
+import classes from "../theme.module.css";
 import { FORM_MAX_WIDTH } from "../utils/layout";
 
 /**
@@ -45,7 +46,7 @@ export default function Lifecycles() {
   return (
     <Stack gap="md">
       <PageHeader title={t("lifecycles.title")} description={t("lifecycles.intro")} />
-      <Box maw={FORM_MAX_WIDTH}>
+      <Paper withBorder p="lg" radius="md" maw={FORM_MAX_WIDTH}>
         <Stack>
           {isError ? (
             <Alert color="red" variant="light" title={t("lifecycles.loadFailed")}>
@@ -59,7 +60,7 @@ export default function Lifecycles() {
             <ReadOnlyEntries items={data} />
           )}
         </Stack>
-      </Box>
+      </Paper>
     </Stack>
   );
 }
@@ -76,18 +77,18 @@ function ReadOnlyEntries({ items }: { items: DictionaryEntry[] }) {
     );
   }
   return (
-    <Stack gap="xs">
+    <Box className={classes.listRows}>
       {items.map((entry, index) => (
-        <Paper key={entry.id} withBorder p="sm" radius="md">
+        <Box key={entry.id} className={classes.listRow}>
           <Group gap="xs" wrap="nowrap" align="baseline">
             <Text size="sm" c="dimmed" w={24} ta="right" style={{ flexShrink: 0 }}>
               {index + 1}.
             </Text>
             <Text size="sm">{entry.value}</Text>
           </Group>
-        </Paper>
+        </Box>
       ))}
-    </Stack>
+    </Box>
   );
 }
 
@@ -151,8 +152,9 @@ function LifecyclesEditor({ initialItems }: { initialItems: DictionaryEntry[] })
             {t("lifecycles.empty")}
           </Text>
         )}
+        <Box className={classes.listRows}>
         {rows.map((row, index) => (
-          <Paper key={row.key} withBorder p="sm" radius="md">
+          <Box key={row.key} className={classes.listRow}>
             <Group align="flex-start" gap="xs" wrap="nowrap">
               <Text size="sm" c="dimmed" w={24} ta="right" pt={8} style={{ flexShrink: 0 }}>
                 {index + 1}.
@@ -179,8 +181,9 @@ function LifecyclesEditor({ initialItems }: { initialItems: DictionaryEntry[] })
                 removeLabel={t("lifecycles.removeEntry", { position: index + 1 })}
               />
             </Group>
-          </Paper>
+          </Box>
         ))}
+        </Box>
         <Group>
           <Button
             variant="light"
@@ -208,7 +211,7 @@ function LifecyclesEditor({ initialItems }: { initialItems: DictionaryEntry[] })
           </Alert>
         )}
 
-        <Group justify="flex-end" gap="sm">
+        <Group justify="flex-end" gap="sm" className={classes.stickyActions}>
           <Button
             type="button"
             variant="default"
