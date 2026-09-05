@@ -1,2 +1,4 @@
 [tools]
 java = "temurin-21.0.11+10.0.LTS"
+# Matches the Dockerfile's node:24-alpine and the e2e workflow's setup-node.
+node = "24"

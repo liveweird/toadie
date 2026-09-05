@@ -12,6 +12,7 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 - Run server tests only: `./gradlew :server:test` (needs a Docker daemon — Testcontainers)
 - Run a single test: `./gradlew :server:test --tests "ch.nokillswit.ServerTest.security headers are set on responses"`
 - Static analysis (detekt, both Kotlin modules): `./gradlew detekt` — rides `check`/`build`, zero-findings gate (no baseline file). Rule tuning lives in `config/detekt/detekt.yml` ONLY, one commented override per deliberate repo idiom; never add an uncommented `@Suppress`.
+- Dependency locking is ON (root `build.gradle.kts`): after ANY dependency change run `./gradlew build --write-locks` and commit the updated lockfiles (`core/gradle.lockfile`, `server/gradle.lockfile`, the root `settings-gradle.lockfile` + `buildscript-gradle.lockfile`); a "lock state" resolution error means the lock is stale — regenerate it, never delete the file.
 - Package the server for deployment: `./gradlew :server:installDist`. **Never use `:server:buildFatJar`** — the fat JAR breaks Flyway's `ServiceLoader` discovery and NPEs at startup.
 - JVM memory flags are pre-tuned in `server/build.gradle.kts` (`applicationDefaultJvmArgs`) — the rationale is commented in place.
 - **Run the whole stack with one command: `docker compose up --build`** (only Docker required). See "Running the full stack" below.
@@ -20,7 +21,7 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Running the full stack
 
-`docker compose up --build` serves everything at `http://localhost:8081` (sign in as `admin@toadie.local` / `changeme`); local dev is `docker compose up postgres` (host port **5433**) + `./gradlew :server:run` + `cd web && npm run dev` (Vite on **5174**, proxying `/api` to :8081). The compose stack bundles **Mailpit** (`http://localhost:8026`) and wires the app's password-reset and MFA email to it (`MAIL_TRANSPORT=smtp`). Ports deliberately avoid Lettuce's 8080/5432/5173/8025 so both stacks can run side by side. Kubernetes (OrbStack) deployment targets the dedicated `toadie` namespace — see `k8s/secret.yaml`'s header for the secret-creation command.
+`docker compose up --build` serves everything at `http://localhost:8081` (sign in as `admin@toadie.local` / `changeme`); local dev is `docker compose up postgres` (host port **5433**) + `./gradlew :server:run` + `cd web && npm run dev` (Vite on **5174**, proxying `/api` to :8081). The compose stack bundles **Mailpit** (`http://localhost:8026`) and wires the app's password-reset and MFA email to it (`MAIL_TRANSPORT=smtp`). Ports deliberately avoid Lettuce's 8080/5432/5173/8025 so both stacks can run side by side. Kubernetes (OrbStack) deployment targets the dedicated `toadie` namespace — see `k8s/templates/secret.yaml`'s header for the secret-creation command.
 
 ## Architecture
 
@@ -58,7 +59,8 @@ ch.nokillswit
 ├── plugins/            cross-cutting Ktor wiring (configureXxx that only `install` plugins):
 │                       Http, SecurityHeaders, Monitoring, Serialization, Security (JWT),
 │                       ErrorHandling (RFC 7807), OpenTelemetry, AutoHeadResponse, Resources,
-│                       Routing (SPA catch-all)
+│                       Routing (SPA catch-all), Health (/healthz liveness + /readyz readiness —
+│                       the k8s probes; unauthenticated, outside /api/, registered after the infra group)
 ├── infra/mail/         outbound email (Lettuce's, ported): Mailer/SmtpMailer/LogMailer +
 │                       LocalizedText/PasswordEmail (the recipient-language content layer) +
 │                       configureMail — MAIL_TRANSPORT log/smtp/disabled, the log-transport

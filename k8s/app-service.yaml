@@ -6,9 +6,12 @@ metadata:
   name: app
   namespace: toadie
 spec:
-  # OrbStack provisions local LoadBalancers; `kubectl -n toadie port-forward svc/app` is
-  # the fallback. Port 8081 (not 8080) so Toadie's LB can coexist with Lettuce's.
-  type: LoadBalancer
+  # ClusterIP: the Ingress (k8s/templates/app-ingress.yaml) fronts the app; for pod-direct
+  # debugging use `kubectl -n toadie port-forward svc/app 8081:8081` (production mode then
+  # answers a 301 unless you send `X-Forwarded-Proto: https`). Switching a live LoadBalancer
+  # Service to ClusterIP can be rejected (allocated nodePort) — `kubectl -n toadie delete svc app`
+  # first, then apply. Port 8081 (not 8080) so Toadie coexists with Lettuce on one cluster.
+  type: ClusterIP
   ports:
     - name: "8081"
       port: 8081
