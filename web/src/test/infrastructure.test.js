@@ -9,8 +9,18 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const composeSource = readFileSync(resolve(repoRoot, "docker-compose.yaml"), "utf8");
 const ciSource = readFileSync(resolve(repoRoot, ".github/workflows/ci.yml"), "utf8");
 const e2eSource = readFileSync(resolve(repoRoot, ".github/workflows/e2e.yml"), "utf8");
+const toolchainSource = readFileSync(resolve(repoRoot, "mise.toml"), "utf8");
 
 describe("deployment and verification safety defaults", () => {
+  it("uses the full Temurin version from the local toolchain in CI", () => {
+    const ci = parse(ciSource);
+    const javaSetup = ci.jobs.backend.steps.find((step) => step.uses?.startsWith("actions/setup-java@"));
+    const localVersion = toolchainSource.match(/^java = "temurin-([^"]+)"$/m)?.[1];
+    expect(localVersion).toBeTruthy();
+    expect(javaSetup.with.distribution).toBe("temurin");
+    expect(javaSetup.with["java-version"]).toBe(localVersion);
+  });
+
   it("publishes every demo service on loopback, never on the LAN", () => {
     const compose = parse(composeSource);
     const ports = Object.values(compose.services).flatMap((service) => service.ports ?? []);

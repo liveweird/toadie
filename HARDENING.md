@@ -20,6 +20,10 @@ the new bindings at the next intentional recreation, preserving their database v
 
 ### Local verification of Stage 1 (2026-09-05)
 
+The first hosted run exposed a setup-only failure: Temurin's exact version needs the full
+`21.0.11+10.0.LTS` suffix, not `21.0.11+10`. The CI selector is corrected and a regression
+test compares it with `mise.toml`. A successful hosted run remains pending.
+
 - `./gradlew build :server:koverXmlReport --no-daemon`: passed, including detekt and
   coverage gates; 371 tests, no failures or skips. Testcontainers used OrbStack through a
   per-invocation `DOCKER_HOST`, not a repository-specific socket setting.
