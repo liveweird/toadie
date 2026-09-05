@@ -11,6 +11,17 @@ Mutation tests must wait for completed success UI (for example, the editor/confi
 dialog closing), not just a fetch spy recording a request: the response callback may still
 be updating modal state when the test otherwise tears down its DOM.
 
+**Dialog entrance readiness.** A post-merge Lenses trace showed a click at y≈397 while the
+confirm button slid toward y≈427; no second file DELETE was sent, and ~37 seconds remained.
+`readyDialog(page, title)` in the E2E helpers waits for computed opacity one before callers
+interact. Playwright visibility ignores opacity, and two stable frames can precede the deferred
+entrance animation, so visibility/stability alone was insufficient. Never fix this with sleeps,
+larger timeouts, repeated destructive clicks, or blanket animation suppression. The read-only
+`dialog-readiness` journey holds a real unsaved lens editor transparent, verifies the helper
+does not resolve, releases the hold in `finally`, then cancels. The Lenses journey additionally
+matches exact resource URLs/methods, asserts status outside the response predicate (a failed
+HTTP response must fail directly, not be ignored until timeout), and awaits completed UI.
+
 **Session lifecycle regressions (V25).** `AuthSessionServiceTest` injects a clock and tests
 expiry, cross-instance revocation, stale-epoch issuance, competing credential writes, and
 logout/renewal races. `SessionRevocationTest` checks current and superseded pairs, independent

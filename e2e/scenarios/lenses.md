@@ -31,8 +31,13 @@
    - *Expected*: the picker shows the new name, and the reopened dropdown lists it under
      the **Public** group.
 8. They **Delete** the lens through the confirm modal.
-   - *Expected*: the picker clears.
+   - *Expected*: the fully entered modal names the intended lens; its exact DELETE returns
+     204, the modal disappears, and the picker clears.
 9. They delete both throwaway files from the filtered Files list.
+   - *Expected*: each confirmation has finished entering and names its intended file before
+     a single click. Each exact file DELETE returns 204; its modal and row disappear before
+     moving on to the next file. An HTTP failure fails directly instead of being filtered out
+     by an `ok()`-only response waiter. Creation and rename likewise await their completed UI.
 
 ## Not covered here (and why)
 

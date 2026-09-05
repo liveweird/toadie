@@ -2,6 +2,17 @@ import { expect, test, type Page } from "@playwright/test";
 
 export { expect, test };
 
+/**
+ * Visibility alone does not mean a Mantine dialog finished entering: opacity zero still
+ * counts as visible to Playwright, and a deferred slide can start AFTER its stability check.
+ * Wait for the computed endpoint before interacting; never sleep or retry a destructive click.
+ */
+export async function readyDialog(page: Page, title: string) {
+  const dialog = page.getByRole("dialog", { name: title, exact: true });
+  await expect(dialog).toHaveCSS("opacity", "1");
+  return dialog;
+}
+
 /** The seeded bootstrap admin (V3) — the compose demo leaves its password unrotated. */
 export const ADMIN = "admin@toadie.local";
 export const PASSWORD = "changeme";

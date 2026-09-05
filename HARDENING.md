@@ -137,6 +137,30 @@ for the success UI to close the dialog, not merely for the request spy to be cal
   be regenerated). The regular stack remains healthy on V25 with 155 users and 400 catalog files.
   These results were recorded before committing or deploying to the regular stack.
 
+### Post-merge CI follow-up: Lenses dialog entrance (2026-09-06)
+
+The [master run after PR #3](https://github.com/liveweird/toadie/actions/runs/33994155779)
+failed the no-flaky gate: Lenses passed on retry after its second file-cleanup click missed
+an entering confirmation button. The trace records a click at y≈397, the final button at
+y≈427, no corresponding DELETE request, and ~37 seconds still available; it was not a slow
+server DELETE or an exhausted journey budget. Backend, frontend, and reset-link journeys passed.
+
+The focused follow-up adds `readyDialog` (computed opacity one), an entrance-hold regression,
+exact resource/status response checks, and modal/row completion waits. App behavior, animations,
+timeouts, retries, and coverage gates are unchanged. This does not mark the historical hosted
+failure green or start the outbound-fetch work.
+
+Verification against a disposable Compose stack using the unchanged merged app image:
+
+- Ten repetitions each of Lenses and the entrance regression: **20 passed**, retries disabled.
+- Full browser suite with four workers: **46 passed**, retries disabled.
+- Negative control with a visibility-only helper: the regression failed on its readiness
+  assertion as expected; the repository helper was not modified for this experiment.
+- E2E type-check and scenario parity: passed (**26** spec/scenario pairs).
+- Removed only the disposable verification containers/network/volume; its generated test data
+  can be recreated. The regular app remained healthy with **155 users / 400 catalog files**.
+  These are local pre-commit results; hosted CI has not yet run with this follow-up.
+
 ## Stage 3 — failure handling and concurrency
 
 - [ ] Bound the entire outbound fetch, including DNS/body reads; stalled-body/cancellation tests.
