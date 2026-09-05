@@ -6,6 +6,8 @@ import ch.nokillswit.auth.TokenBlocklistService
 import ch.nokillswit.auth.TokenBlocklistServiceKey
 import ch.nokillswit.auth.AuthSessionService
 import ch.nokillswit.auth.AuthSessionServiceKey
+import ch.nokillswit.auth.PasswordResetService
+import ch.nokillswit.auth.PasswordResetServiceKey
 import ch.nokillswit.catalog.CatalogFileEventService
 import ch.nokillswit.catalog.CatalogFileEventServiceKey
 import ch.nokillswit.catalog.CatalogFileService
@@ -50,4 +52,9 @@ suspend fun Application.configureDatabase() {
     attributes.put(AnnotationKeyServiceKey, AnnotationKeyService(database))
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
     attributes.put(AuthSessionServiceKey, AuthSessionService(database))
+    attributes.put(PasswordResetServiceKey, PasswordResetService(
+        database,
+        ttlMillis = environment.config.property("security.passwordReset.tokenTtlSeconds").getString().toLong()
+            .also { require(it in 1..3600) { "Password reset TTL must be between 1 and 3600 seconds" } } * 1000,
+    ))
 }

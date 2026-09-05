@@ -48,6 +48,11 @@ With `CI` set, `failOnFlakyTests` means a passing retry still fails the gate. Mi
 fails reset/MFA journeys rather than skipping them; local log-only development may still skip
 those two mail-dependent journeys.
 
+For a separate local verification stack, set both `E2E_BASE_URL` (the SPA/API origin) and
+`E2E_MAILPIT_URL` (the matching catcher, default `http://localhost:8026`). Its `MAIL_APP_URL`
+must match `E2E_BASE_URL` so the email journey stays on that isolated stack. Use a distinct
+Compose project, container names, ports, and database volume; never reuse the user's volume.
+
 ## Parallel execution
 
 The suite runs on **4 workers by default** (`E2E_WORKERS` overrides; `E2E_WORKERS=1` restores
@@ -73,7 +78,7 @@ from Lettuce, that any new or edited spec must satisfy:
   user; `lifecycles` owns the one value it appends to the lifecycles dictionary, the one
   Component file carrying it, and its user; `password-reset` owns
   its throwaway account (its reset requests use unique per-run emails against the in-memory
-  per-email throttle, and both tests together stay under the per-IP 5/min reset bucket);
+  per-email throttle; development uses the 100/min request bucket, confirmation stays 10/min);
   `mfa` owns its throwaway accounts and toggles ONLY their MFA flags (the seed admin's MFA
   flag is never touched — enabling it would make every spec's login demand a code) — all
   deleted by their own spec.
@@ -150,7 +155,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
   authenticated pages (`/`, `/files`, `/files/new`, `/files/import`,
   `/errors`, `/graph`, `/labels`, `/annotations`, `/tags`, `/types`, `/lifecycles`,
   `/namespaces`, `/users`, `/changelog`), plus an explicitly held Errors loading state and
-  its completed report; `color-contrast` consciously waived theme-wide.
+  its completed report, plus reset confirmation/missing-link recovery; `color-contrast`
+  consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`annotations.spec.ts`](scenarios/annotations.md) — the annotation-key registry: modal
   validation → register a key (kinds only — values stay free) → edit → the regular user's
@@ -210,7 +216,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
   append-only against the shared document.
 - [`password-reset.spec.ts`](scenarios/password-reset.md) — the forgot-password flow:
   neutral confirmation + per-email throttle for unknown addresses; the full email roundtrip
-  through the compose stack's Mailpit (new password works, old one is dead — local-only skip
+  through Mailpit (old credentials survive request/GET; confirmation revokes sessions, enables
+  the chosen password, and rejects replay — local-only skip
   without Mailpit; missing Mailpit fails CI).
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
   (deletion-orphaned) missing nodes for one per-attempt name stem, faced name + type, with the

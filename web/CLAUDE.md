@@ -40,8 +40,19 @@ of the current login. Old pre-V25 tokens require sign-in again. The self ChangeP
 clears tokens and the query cache on its successful 204, shows the localized sign-in-again
 toast, navigates to `/login`, and notifies the auth boundary. Failed changes retain the session.
 Other revocations use the existing single-flight refresh/definitive-401 handling; do not add
-a parallel transport implementation. MFA remains login-scoped. Reset-link confirmation is
-not implemented yet; `/reset-password` still has the old behavior tracked in `HARDENING.md`.
+a parallel transport implementation. MFA remains login-scoped.
+
+**Reset links (V26):** `/reset-password` requests a link without changing credentials;
+`/reset-password/confirm#token=…` lets the recipient choose/confirm a new password. Both routes
+are public even when already signed in. `ConfirmPasswordReset` removes the fragment/query from
+history immediately and retains the grant only in component memory (never browser storage).
+Reloading the stripped URL requires reopening the email link. No API call happens on GET.
+The public `confirmPasswordReset` transport never sends a JWT or attempts session refresh.
+Only successful confirmation clears the local session/query cache; it shows a sign-in-again
+confirmation, not an authenticated session. Invalid/expired/used links offer another request;
+429/network failures allow retry. Shared `passwordFieldsValidation` keeps this and ChangePassword
+aligned (10 characters minimum, 71 UTF-8 bytes maximum, matching confirmation). Existing AuthCard,
+amber actions, teal confirmations, red inline errors, and EN/PL translations remain authoritative.
 
 - **ErrorBoundary** (`components/ErrorBoundary.tsx`): a page render crash must never white-screen the app. `RouteErrorBoundary` wraps the `<Outlet />` inside `AppShell.Main` (header/nav survive; keyed by `location.pathname`, so navigating anywhere recovers), and a plain `ErrorBoundary` in `main.tsx` is the last resort for shell crashes. Don't add per-page boundaries — the two mounts are the model.
 - **Catch-all 404**: `pages/NotFound.tsx` is the LAST `path="*"` child of the Shell route. New routes go above it.

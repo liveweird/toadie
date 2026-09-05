@@ -55,11 +55,23 @@ type PasswordResetBody =
 
 /**
  * Self-service password reset. Always 202 for a well-formed request (no account enumeration);
- * throws ApiError on 429 (one request per minute per address) or 503 (deployment without email).
+ * throws ApiError on 429 (one request per minute per address) or 503 (email/reset origin unavailable).
  */
 export async function requestPasswordReset(email: string): Promise<void> {
   const body: PasswordResetBody = { email };
   const res = await fetch(`${API_BASE}/api/v1/password-reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: timeoutSignal(),
+  });
+  if (!res.ok) throw new ApiError(res.status, await safeJson(res));
+}
+
+/** Public single-purpose credential exchange; never refresh/retry it through authedFetch. */
+export async function confirmPasswordReset(token: string, password: string): Promise<void> {
+  const body: components["schemas"]["PasswordResetConfirmRequest"] = { token, password };
+  const res = await fetch(`${API_BASE}/api/v1/password-reset/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

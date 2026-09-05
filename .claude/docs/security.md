@@ -7,7 +7,7 @@
 - **JWT secret** (`plugins/Security.kt`): blank, the placeholder `"secret"`, the repo-committed compose demo key (`dev-only-00366d…`), or the `k8s/templates/secret.yaml` template placeholder (`CHANGE-ME-openssl-rand-hex-32`) → warn in development, **refuse to start** in production. Set a strong private `JWT_SECRET`.
 - **Seed passwords** (`infra/db/Bootstrap.kt`, module `configureBootstrap`, runs after `configureDatabase`): in production mode, if any active account still carries the well-known `changeme` bcrypt hash the app **refuses to start**. Setting `ADMIN_INITIAL_PASSWORD` (config `bootstrap.adminInitialPassword`) rotates the V3 seed admin's password at startup — idempotent: only applied while the admin still has the seed hash, so an admin-chosen password is never overwritten. Covered by `BootstrapTest`; seed-mutating tests restore state via `TestSeedState.restoreSeedAccounts()` (`TestEnvironment.kt`).
 
-- **Mail transport** (`infra/mail/Mail.kt`): `mail.transport=log` writes outbound email (including generated passwords) into the application log — permitted with a warning in development, **refuse to start** in production; `smtp` with a blank host refuses to start in **any** mode. See "Outbound email" below.
+- **Mail transport** (`infra/mail/Mail.kt`): `mail.transport=log` writes outbound email (including reset links and MFA codes) into the application log — permitted with a warning in development, **refuse to start** in production; `smtp` with a blank host refuses to start in **any** mode. See "Outbound email" below.
 
 (Lettuce has one more fail-closed check — the data-encryption key; it arrives with field encryption at rest, see "Not yet ported" below.)
 
@@ -19,7 +19,48 @@
 
 **Per-account login lockout** (`auth/LoginThrottle.kt`, wired in `configureAuthRoutes`): after `security.lockout.threshold` (default 5, `$LOGIN_LOCKOUT_THRESHOLD`) consecutive failures for one submitted email, `/login` answers `429` for `security.lockout.durationSeconds` (default 900, `$LOGIN_LOCKOUT_DURATION_SECONDS`) — even with the correct password, and regardless of whether the account exists (no enumeration signal). A success resets the counter. In-memory and per-instance by design (single-replica deployment; a restart only resets the throttle). Complements the per-IP `RateLimit` bucket, which rotating hosts sidestep. The lockout 429 is **thrown** (`TooManyRequestsException`), never `respondProblem`ed directly — StatusPages' generic 429 status handler rewrites any non-StatusPages 429, so only the exception path keeps the specific detail. Tests: `LoginThrottleTest` (unit, injected clock) + `LoginLockoutTest` (route). The SPA maps the 429 to `auth.accountLocked`.
 
-**Self-service password reset** (`POST /api/v1/password-reset`, in `auth/AuthRoutes.kt`; SPA: "Forgot password?" on `/login` → `/reset-password`): body `{email}`; always `202` for a well-formed request — account existence is unobservable (the lookup/generate/send/store work runs **asynchronously** after the response, so latency is uniform too). If the account exists, a new 16-char password is generated server-side (`generatePassword` in `auth/Passwords.kt`, 96 bits), the email is sent **first** and only then the bcrypt hash stored via `UserService.updatePassword` (a delivery failure leaves the old password working); the credential-version increment invalidates outstanding access and refresh tokens. **Known remaining weakness:** this flow still replaces the password before mailbox confirmation; single-use reset links are the next Stage 2 change in `HARDENING.md`. Throttled per submitted email — one request per `security.passwordReset.minIntervalSeconds` (default 60, `$PASSWORD_RESET_MIN_INTERVAL_SECONDS`) — uniformly for existing and unknown addresses (`auth/PasswordResetThrottle.kt`, in-memory/per-instance like the lockout), plus a per-IP `RateLimit` bucket (`security.rateLimit.passwordResetPerMinute`, `$PASSWORD_RESET_RATE_LIMIT_PER_MINUTE` — blank follows the mode: 5/min production, 100/min development, the loginPerMinute rationale; back-to-back e2e runs from one host would otherwise trip it). `503` when the deployment has no outbound email (`MAIL_TRANSPORT=disabled`). A soft-deleted account is unknown here by construction (`findWithIdByEmail` filters active rows). The email renders through the `LocalizedText` catalog (`infra/mail/PasswordEmail.kt` + `auth/PasswordResetEmail.kt`) in the RECIPIENT'S stored language (V18 `users.language`, EN fallback), includes a sign-in link only when `mail.appUrl` is set, and warns the recipient that their previous password no longer works. Tests: `PasswordResetThrottleTest` + `LocalizedEmailTest` (unit) + `PasswordResetTest` (route, incl. the full email→login roundtrip via a `ListAppender` on the `ch.nokillswit.mail` logger and the send-before-store delivery-failure case).
+**Self-service password reset** (`auth/PasswordResetRoutes.kt`, V26): public
+`POST /api/v1/password-reset` accepts `{email}` and returns uniform `202`; active-account lookup,
+token issuance, and email delivery happen asynchronously, with no password/session mutation.
+Unknown and deleted accounts send nothing. Each link has a cryptographically random 256-bit,
+43-character base64url token; only its SHA-256 digest, user id, captured credential epoch, and
+expiry are persisted. TTL is `PASSWORD_RESET_TOKEN_TTL_SECONDS` (default 900, range 1–3600).
+Multiple requested links may coexist; requesting another must not revoke a usable link.
+Failed delivery revokes the new grant only. Email uses the recipient's stored EN/PL language.
+
+The link is `MAIL_APP_URL/reset-password/confirm#token=…`. Only configured origins are accepted:
+HTTPS in production, HTTP also allowed in development, no path prefix/userinfo/query/fragment.
+Missing/invalid origin or disabled mail yields `503`. Never trust the request Host header.
+The fragment never reaches HTTP access logs; the SPA removes it from history and holds the grant
+only in component memory. Loading/opening the page does not validate or consume a grant.
+
+Public `POST /api/v1/password-reset/confirm` takes `{token,password}`, checks the grant before
+password validation/bcrypt, then locks the active user and rechecks expiry/epoch in PostgreSQL.
+Grant consumption, password/hash/epoch update, and sibling-grant deletion are ONE transaction
+(`PasswordResetService.complete` + `users.updatePasswordInTransaction`). Competing confirmations
+have one winner across instances. Password/email/role changes and deletion invalidate stale grants.
+Malformed/unknown/expired/used/epoch-stale grants all return `401`; invalid passwords return
+`400` without consumption (minimum 10 characters, maximum 71 UTF-8 bytes). Success is `204`
+with no auto-login: all existing sessions and pending MFA challenges become invalid, while MFA
+remains enabled for normal sign-in. A best-effort localized notification contains no password
+or reset token; delivery failure cannot undo success. If the response is lost, try signing in
+with the chosen password or request another link, never treat retry's `401` as proof of failure.
+
+Request throttling remains per email (default 60 seconds, `PASSWORD_RESET_MIN_INTERVAL_SECONDS`)
+plus per IP (5/min production, 100/min development, `PASSWORD_RESET_RATE_LIMIT_PER_MINUTE`);
+confirmation has a separate 10/min per-IP bucket in every mode. Throttles/MFA are still
+instance-local: do not scale replicas on the strength of persisted reset grants alone.
+The feature's Setup interceptor sets `Cache-Control: no-store`, including pre-handler 429s. Audit events record requests, link delivery/failure,
+confirmation/rejection, and notification failure; never raw tokens/passwords or mail-provider
+exception messages (which can contain message bodies). Development log mail deliberately reveals
+link credentials and MUST remain inaccessible outside the local demo.
+
+Tests: `PasswordResetServiceTest` (injected-clock expiry, digest storage, concurrency, epoch/CAS),
+`PasswordResetTest`/`PasswordResetConfirmationTest` (routes, delivery/notification failure,
+revocation, MFA, throttles), `LocalizedEmailTest`, frontend confirmation tests, and the Mailpit
+browser journey. The design follows the [OWASP reset guidance](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).
+Lettuce was inspected but still has the replaced emailed-password design; retain the existing
+mail/localization/throttle primitives, not that weakness.
 
 **Per-IP login bucket** (`security.rateLimit.loginPerMinute`, `$LOGIN_RATE_LIMIT_PER_MINUTE`, registered in `configureAuthRoutes`): blank **follows the mode** — 10/min in production, 1000/min in development — and an explicit number pins it in either mode (the `http.exposeOpenApi` idiom). Development is lifted because the e2e suite drives its logins from one host and would otherwise sleep out the bucket; **the per-account lockout above is the actual brute-force defence and is identical in both modes**. The sibling `refresh` bucket defaults to 30/min in both modes and is pinnable via `security.rateLimit.refreshPerMinute` (`$REFRESH_RATE_LIMIT_PER_MINUTE`). `RateLimitResponseTest` and `LoginTest` pin the value to `10` explicitly, since tests run in development mode.
 
@@ -43,7 +84,7 @@ CSRF install is gated behind `security.csrf.enabled` (default **`false`** in `ap
 
 **Default admin.** Migration `V3__seed_admin.sql` inserts a single bootstrap administrator on first boot: `admin@toadie.local` / `changeme` (role `ADMIN`), idempotent via `ON CONFLICT DO NOTHING`. The migration is kept **unchanged** (dev + e2e depend on it; checksums must not change) — production neutralizes it at startup via the bootstrap above. There are no demo seed users (Lettuce's V9 demo org was not ported). **Kubernetes secrets** live in the `toadie-secrets` Secret in the `toadie` namespace (`k8s/templates/secret.yaml` is a placeholder template kept OUT of the applied directory — create the real one out-of-band with the `kubectl create secret generic` command in its header; the app deployment consumes it via `secretKeyRef`).
 
-**Outbound email** (`infra/mail/`, ported from Lettuce): `configureMail` (registered at the top of the infrastructure group, before Flyway) publishes `MailerKey` holding a `Mailer` or null. `mail.transport` (`$MAIL_TRANSPORT`) selects `log` (dev default — the full message, **including generated passwords**, goes to the `ch.nokillswit.mail` logger; **production mode refuses to start on it**), `smtp` (Jakarta/Angus Mail over `mail.smtp.*` / `$SMTP_HOST` etc.; a blank host refuses startup in any mode), or `disabled` (the Docker image default via `ENV MAIL_TRANSPORT=disabled` — email features answer 503 through `respondMailUnavailable`). The compose demo wires `smtp` → the bundled Mailpit (`http://localhost:8026` — 8025 is Lettuce's); k8s ships `disabled` with `SMTP_USER`/`SMTP_PASSWORD` read (optional) from `toadie-secrets`. Consumers: self-service password reset and email MFA. The recipient-language content layer (`LocalizedText`/`passwordEmail`) lives beside the transports. Tests: `MailTransportTest` (the transport matrix + both refusals + LogMailer delivery via the `ch.nokillswit.mail` LogCapture); production-mode boot tests must override `mail.transport` with `"disabled"`, since the dev-default `log` transport is refused in production.
+**Outbound email** (`infra/mail/`, ported from Lettuce): `configureMail` (registered at the top of the infrastructure group, before Flyway) publishes `MailerKey` holding a `Mailer` or null. `mail.transport` (`$MAIL_TRANSPORT`) selects `log` (dev default — the full message, **including reset links and MFA codes**, goes to the `ch.nokillswit.mail` logger; **production mode refuses to start on it**), `smtp` (Jakarta/Angus Mail over `mail.smtp.*` / `$SMTP_HOST` etc.; a blank host refuses startup in any mode), or `disabled` (the Docker image default via `ENV MAIL_TRANSPORT=disabled` — email features answer 503 through `respondMailUnavailable`). The compose demo wires `smtp` → the bundled Mailpit (`http://localhost:8026` — 8025 is Lettuce's); k8s ships `disabled` with `SMTP_USER`/`SMTP_PASSWORD` read (optional) from `toadie-secrets`. Consumers: self-service password reset and email MFA. `LocalizedText` lives beside the transports; feature-owned `PasswordResetEmail` and `MfaEmail` compose recipient-language content. Tests: `MailTransportTest` (the transport matrix + both refusals + LogMailer delivery via the `ch.nokillswit.mail` LogCapture); production-mode boot tests must override `mail.transport` with `"disabled"`, since the dev-default `log` transport is refused in production.
 
 ### Not yet ported from Lettuce
 

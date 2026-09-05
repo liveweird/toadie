@@ -31,6 +31,17 @@ test("login screen has no WCAG A/AA violations", async ({ page }) => {
   await scan(page);
 });
 
+test("reset confirmation and missing-link states have no WCAG A/AA violations", async ({ page }) => {
+  // A syntactically valid but unissued token only renders the form; GET must not consume it.
+  await page.goto(`/reset-password/confirm#token=${"a".repeat(43)}`);
+  await expect(page.getByRole("button", { name: "Set new password" })).toBeVisible();
+  await expect(page).toHaveURL(/\/reset-password\/confirm$/);
+  await scan(page);
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Request another reset link" })).toBeVisible();
+  await scan(page);
+});
+
 test("the Errors loading state has no WCAG A/AA violations", async ({ page }) => {
   await login(page);
   // Hold the real report request so the scan always sees loading, even on a fast DB.

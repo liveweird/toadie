@@ -7,10 +7,9 @@ import { useForm } from "@mantine/form";
 import { changeUserPassword } from "../api/users";
 import { clearSession, getUserId } from "../api/session";
 import { notifyAuthChange } from "../auth";
-import { utf8ByteLength } from "../utils/password";
 import { saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
-import { MAX_PASSWORD_BYTES, MIN_PASSWORD_LENGTH } from "../utils/userForm";
+import { passwordFieldsValidation } from "../utils/userForm";
 import PageHeader from "../components/PageHeader";
 import { FORM_MAX_WIDTH } from "../utils/layout";
 
@@ -28,13 +27,7 @@ export default function ChangePassword() {
     initialValues: { currentPassword: "", password: "", confirm: "" },
     validate: {
       currentPassword: (v) => (v ? null : t("users.validation.currentPasswordRequired")),
-      password: (v) => {
-        if (v.length < MIN_PASSWORD_LENGTH) return t("users.validation.passwordLength");
-        // The bcrypt ceiling counts BYTES, not characters (multibyte input bites earlier).
-        if (utf8ByteLength(v) > MAX_PASSWORD_BYTES) return t("users.validation.passwordTooLong");
-        return null;
-      },
-      confirm: (v, values) => (v === values.password ? null : t("users.validation.passwordsMismatch")),
+      ...passwordFieldsValidation(t),
     },
   });
 

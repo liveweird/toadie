@@ -5,6 +5,7 @@ export { expect, test };
 /** The seeded bootstrap admin (V3) — the compose demo leaves its password unrotated. */
 export const ADMIN = "admin@toadie.local";
 export const PASSWORD = "changeme";
+export const MAILPIT = process.env.E2E_MAILPIT_URL ?? "http://localhost:8026";
 
 /**
  * Navigate to a usable sign-in form. Any leftover session has to go first: while one exists

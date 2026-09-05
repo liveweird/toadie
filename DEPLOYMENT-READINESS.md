@@ -93,13 +93,15 @@ Recommendations:
 ### Make the public application URL configurable
 
 The SPA uses relative API URLs by default, which worked with the tested hostnames and IPs.
-However, Compose hard-codes `MAIL_APP_URL=http://localhost:8081`. Emails sent to remote
-users would point them at their own machine.
+The current Compose file parameterizes `MAIL_APP_URL`, defaulting to `http://localhost:8081`.
+That default is only appropriate for local users; remote recipients need the actual external
+origin. V26 reset requests fail closed with 503 when the URL is missing/invalid (HTTPS in
+production; no subpath, userinfo, query, or fragment) or outbound mail is disabled.
 
 Recommendations:
 
-- Parameterize `MAIL_APP_URL`, retaining localhost as a demo default and setting the actual
-  public HTTPS URL for a normal deployment.
+- Set `MAIL_APP_URL` to the actual public HTTPS origin for a normal deployment; the Compose
+  parameterization is implemented, but it does not choose the correct deployment value for you.
 - Keep SPA and API on the same origin where possible. A split-origin deployment also needs
   review of the build-time API base, CORS, and the `connect-src 'self'` content-security policy.
 - Configure real SMTP for password reset and email MFA. Kubernetes currently ships with

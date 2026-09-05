@@ -90,6 +90,14 @@ sed "s#toadie.example.com#$HOST#g" k8s/templates/app-ingress.yaml | kubectl appl
 The app runs in production mode behind the TLS-terminating Ingress; its probes hit the dedicated
 `/healthz` (liveness) and `/readyz` (readiness) endpoints.
 
+Self-service password reset requires outbound SMTP and `MAIL_APP_URL` set to the external
+origin (HTTPS in production; HTTP also allowed in development; no subpath/query/fragment).
+Without either, requests return 503; Kubernetes defaults to disabled mail. Reset emails carry
+single-use links, valid for 15 minutes by default (`PASSWORD_RESET_TOKEN_TTL_SECONDS`, 1–3600).
+Requesting/opening a link does not change credentials. Only confirmation sets the chosen
+password and signs out existing sessions; MFA stays enabled. Deploy the matching server and
+SPA together. V26 adds the reset-grant table without otherwise signing users out.
+
 ## Local development
 
 Three processes:

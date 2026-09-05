@@ -19,6 +19,15 @@ generated from a list, so a single scenario section stands in for all of them.
 1. The admin signs in, opens `<path>`, and waits for its heading.
    - *Expected*: an axe scan (same tags and waiver) reports zero violations.
 
+## Scenario: reset confirmation and missing-link states have no WCAG A/AA violations
+
+1. An anonymous visitor opens the confirmation page with a syntactically valid, unissued token.
+   - *Expected*: the choose-password form renders and the URL fragment disappears; axe reports
+     zero violations (the same theme-wide contrast waiver applies).
+2. They reload the stripped URL.
+   - *Expected*: the missing-link recovery state offers another reset request and passes axe.
+     No token is issued or consumed, and no server records are created.
+
 ## Not covered here (and why)
 
 - **Interactive journeys** (modals mid-flight, drag interactions) — apart from the explicit

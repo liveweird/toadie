@@ -110,15 +110,7 @@ class UserService(private val database: R2dbcDatabase) {
     // The plaintext rules (min length, bcrypt byte ceiling) are route-side by necessity:
     // only the bcrypt hash ever reaches the service.
     suspend fun updatePassword(id: UInt, passwordHash: String, expectedAuthVersion: Long? = null): Int = suspendTransaction(database) {
-        Users.update({
-            (Users.id eq id) and active() and
-                (expectedAuthVersion?.let { Users.authVersion eq it } ?: Op.TRUE)
-        }) {
-            it[this.passwordHash] = passwordHash
-            // A monotonic epoch also invalidates tokens minted in the same millisecond.
-            it[passwordChangedAt] = System.currentTimeMillis()
-            it[authVersion] = authVersion + 1
-        }
+        updatePasswordInTransaction(id, passwordHash, expectedAuthVersion)
     }
 
     /**
@@ -300,4 +292,21 @@ class UserService(private val database: R2dbcDatabase) {
         language = this[Users.language],
         authVersion = this[Users.authVersion],
     )
+}
+
+/** Caller owns the transaction: reset-token consumption and credentials must commit together. */
+internal suspend fun updatePasswordInTransaction(
+    id: UInt,
+    passwordHash: String,
+    expectedAuthVersion: Long?,
+    changedAt: Long = System.currentTimeMillis(),
+): Int = with(UserService.Users) {
+    update({
+        (UserService.Users.id eq id) and (markedAsDeleted eq false) and
+            (expectedAuthVersion?.let { authVersion eq it } ?: Op.TRUE)
+    }) {
+        it[UserService.Users.passwordHash] = passwordHash
+        it[passwordChangedAt] = changedAt
+        it[authVersion] = authVersion + 1
+    }
 }

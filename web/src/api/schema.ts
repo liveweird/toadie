@@ -125,15 +125,53 @@ export interface paths {
          * Request a self-service password reset
          * @description Always answers `202` for a well-formed request, whether or not an account with that
          *     email exists (no account enumeration; the actual work happens asynchronously). If the
-         *     account exists, a new password is generated, its hash replaces the old one (which stops
-         *     working, and all outstanding refresh tokens are invalidated), and the password is sent
-         *     to the account's email address. Throttled per submitted email — one request per interval
+         *     account exists, a single-use reset link is emailed to its stored address. Requesting
+         *     or opening a link never changes the password or sessions. Links expire after 15 minutes
+         *     by default (`PASSWORD_RESET_TOKEN_TTL_SECONDS`, positive and at most 3600 seconds).
+         *     Only a SHA-256 digest of the 256-bit random token is persisted. The browser receives
+         *     the token in a URL fragment, never a server-visible path or query string.
+         *     Throttled per submitted email — one request per interval
          *     (default 60 s, `PASSWORD_RESET_MIN_INTERVAL_SECONDS`) — uniformly for existing and
          *     unknown addresses, and rate-limited per client IP. A soft-deleted account is unknown
-         *     here (no password is minted, no email sent; the `202` stays uniform). Answers `503` on
-         *     deployments without outbound email (`MAIL_TRANSPORT=disabled`).
+         *     here (no link is minted, no email sent; the `202` stays uniform). Answers `503` on
+         *     deployments without outbound email or a valid `MAIL_APP_URL` (HTTPS in production;
+         *     HTTP is allowed in development; no subpath, userinfo, query, or fragment). The URL
+         *     is configured, never derived from Host headers. Responses are no-store.
+         *     Multiple requested links may coexist; completing one invalidates all of them.
          */
         post: operations["requestPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Choose a new password using a single-use reset link
+         * @description Public credential exchange: the reset token authorizes only this operation, never
+         *     bearer-authenticated API calls. Send it in the JSON body, not the URL. A valid token
+         *     is checked before password validation. Expired, used, malformed, and unknown tokens,
+         *     deleted accounts, or tokens predating a password/email/role change return uniform 401.
+         *     Consumption, password replacement, and credential-epoch advancement commit atomically;
+         *     concurrent confirmations cannot both succeed, including with different links for one
+         *     account. Password validation failures do not consume the token. Success invalidates
+         *     all access/refresh sessions and pending MFA challenges. No automatic login: sign in
+         *     normally, including MFA if enabled. A best-effort confirmation email contains no password
+         *     or token; delivery failure does not undo the reset. Rate-limited to 10 requests/minute per client IP.
+         *     Responses are no-store. A lost success response can make a retry return 401; try signing
+         *     in with the chosen password or request another link. Existing valid links can still be
+         *     confirmed when outbound mail is subsequently disabled.
+         */
+        post: operations["confirmPasswordReset"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1135,6 +1173,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PasswordResetConfirmRequest: {
+            /** @description Single-use 256-bit reset credential from the email; never logged or returned. */
+            token: string;
+            /**
+             * Format: password
+             * @description New password; at most 71 UTF-8 bytes (bcrypt ceiling).
+             */
+            password: string;
+        };
         PasswordResetRequest: {
             /** Format: email */
             email: string;
@@ -2068,7 +2115,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
-            /** @description This deployment cannot send email (password reset unavailable) */
+            /** @description Outbound email or the reset-link URL is not configured */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2077,6 +2124,32 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
+        };
+    };
+    confirmPasswordReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Password replaced and existing sessions revoked; sign in again */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     listUsers: {

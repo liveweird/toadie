@@ -7,7 +7,7 @@ import io.ktor.util.AttributeKey
 
 /**
  * The configured [Mailer], or null when `mail.transport` is `disabled` — consumers (the
- * password-reset endpoint and email MFA, when they are ported from Lettuce) treat null as
+ * password-reset endpoint and email MFA) treat null as
  * "email features unavailable" and answer 503.
  */
 val MailerKey = AttributeKey<MailerHolder>("Mailer")
@@ -36,7 +36,7 @@ suspend fun ApplicationCall.respondMailUnavailable(feature: String) =
  *
  * Transports:
  *  - `log` (dev default) — messages go to the `ch.nokillswit.mail` logger instead of being sent.
- *    Message bodies can contain freshly generated passwords, so production mode REFUSES this
+ *    Message bodies can contain freshly reset links and MFA codes, so production mode REFUSES this
  *    transport at startup (same fail-closed family as the JWT-secret and seed-password checks).
  *  - `smtp` — real delivery via `mail.smtp.*`; a blank host refuses startup in ANY mode (it
  *    cannot possibly work, and failing late would drop transactional emails silently).
@@ -48,7 +48,7 @@ fun Application.configureMail() {
         "disabled" -> null
         "log" -> {
             val message =
-                "mail.transport=log writes outbound email (including generated passwords) to the " +
+            "mail.transport=log writes outbound email (including reset links and MFA codes) to the " +
                     "application log. Set MAIL_TRANSPORT=smtp with real SMTP settings, or disabled."
             if (developmentMode) log.warn("$message (permitted in development only)")
             else error(message)
