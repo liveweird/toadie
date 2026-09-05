@@ -36,6 +36,7 @@ ktor:
       - ch.nokillswit.annotations.AnnotationKeyRoutesKt.configureAnnotationKeyRoutes
       - ch.nokillswit.lenses.LensRoutesKt.configureLensRoutes
       - ch.nokillswit.auth.AuthRoutesKt.configureAuthRoutes
+      - ch.nokillswit.auth.PasswordResetRoutesKt.configurePasswordResetRoutes
       # — catch-all router
       - ch.nokillswit.plugins.RoutingKt.configureRouting
 
@@ -63,6 +64,8 @@ security:
   # uniformly whether or not the account exists. In-memory, per-instance, like the lockout.
   passwordReset:
     minIntervalSeconds: "$PASSWORD_RESET_MIN_INTERVAL_SECONDS:60"
+    # Persisted, single-use reset links; at most one hour. Requests never change passwords.
+    tokenTtlSeconds: "$PASSWORD_RESET_TOKEN_TTL_SECONDS:900"
   # Email MFA (opt-in per user via the MFA feature flag): a login with correct credentials
   # mints a challenge and emails a 6-digit code; the code must come back to
   # POST /api/v1/login/mfa within the TTL and attempt cap. Challenges are in-memory,

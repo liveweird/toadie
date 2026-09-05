@@ -46,12 +46,12 @@ test compares it with `mise.toml`. The subsequent master run linked above passed
 
 ## Stage 2 — authentication lifecycle
 
-- [ ] Single-use expiring reset links; do not change the password before mailbox confirmation.
+- [x] Single-use expiring reset links; do not change the password before mailbox confirmation.
 - [x] Prompt session invalidation on account deletion, password change, and privilege removal.
 - [x] Session-family logout so superseded refresh tokens cannot outlive a logged-out session.
 - [x] Reject MFA challenges issued before a credential/identity change; compare-and-set self
   password writes so overlapping requests cannot overwrite newer credentials.
-- [ ] Regression coverage for revocation, reset-token replay/expiry, overlapping operations,
+- [x] Regression coverage for revocation, reset-token replay/expiry, overlapping operations,
   and challenges issued before a credential change; update API, migrations, UI, EN/PL, and E2E.
 
 These are intentional behavior changes, not merely refactors. Keep them in a separately
@@ -63,8 +63,19 @@ the server, contract/generated types, self-password-change UI, EN/PL messages, r
 browser scenario, and Claude docs. Password, email, and role changes invalidate that
 user's sessions; name-only/no-op profile edits preserve them. Applying V25 requires everyone to sign
 in again; pre-migration tokens have no session family. Already-authorized requests may finish.
-**Reset confirmation links are still pending**; the current emailed-password flow remains an
-identified weakness, now with exact access/refresh revocation when the password is replaced.
+The second Stage 2 changeset replaces emailed passwords with single-use confirmation links
+(V26). The request preserves credentials and sessions; only atomic confirmation consumes the
+grant and increments the credential epoch. Mail origin is configured, not derived from Host;
+reset tokens are never stored raw in PostgreSQL or browser storage. The existing Lettuce mail,
+localization, and throttle primitives are reused; its current emailed-password design was
+inspected and intentionally not copied. V26 is additive schema and does not itself force logout.
+
+**Compatibility decision (API-VER-001/002):** the request's JSON/status contract remains unchanged,
+but the email workflow deliberately changes within `/api/v1` as a security remediation. This
+is a behavior-breaking exception to the additive-only guideline, not a claim of full compatibility.
+Deploy server and SPA together, set `MAIL_APP_URL` to the external origin (HTTPS in production),
+and tell users that new emails contain links, not passwords. Old generated passwords remain
+ordinary credentials until changed; no insecure legacy reset endpoint is retained.
 
 ### Local verification of the session changeset (2026-09-05)
 
@@ -102,6 +113,29 @@ coverage floors, test timeouts, axe waivers, and fail-on-flaky policy are unchan
 hosted verification of the follow-up is the merge criterion for PR #2, not local passes alone.
 The slower Linux check also exposed a Labels modal teardown race; its mutation tests now wait
 for the success UI to close the dialog, not merely for the request spy to be called.
+
+### Local verification of the reset-link changeset
+
+- Full Gradle build, detekt, and unchanged coverage gates passed: **387 tests**, no failures
+  or skips; **97.82% lines, 76.91% branches**. Expiry uses an injected clock; race tests use
+  separate services against the same PostgreSQL database.
+- Frontend build, lint, knip, contract drift/lint, and unchanged coverage gates passed:
+  **680 tests / 88 suites**; 97.63% lines, 95.36% statements, 92.62% functions, 91.68% branches.
+- Full browser suite: **45 passed**, no retries/skips, against a separate Compose image,
+  port 8091, Mailpit 8036, and the disposable `toadie-reset-verify_postgres-data` volume.
+  The reset journey checks preserved credentials on request/GET, signed-in confirmation,
+  session revocation, chosen-password login, original-password rejection, and replay recovery.
+  Desktop/mobile screenshots and axe covered the confirmation and missing-link states;
+  the existing theme-wide contrast waiver is unchanged.
+- API review: [two-pass reset review](api-guidelines/reviews/password-reset.md), including
+  the explicit workflow-versioning and header-only-credential-wording deviations. Spectral:
+  0 errors, 2 registered-gap warnings, 71 registered-gap hints. Runtime conformance covers
+  53/53 operations and 222/279 operation/status pairs; no fuzzing run is claimed.
+- V26 was applied only to Testcontainers/disposable verification databases. The regular
+  port-8081 app, its volume, and Kubernetes resources were not changed by this batch.
+  The disposable containers/network/volume were removed after verification (test data can
+  be regenerated). The regular stack remains healthy on V25 with 155 users and 400 catalog files.
+  These results were recorded before committing or deploying to the regular stack.
 
 ## Stage 3 — failure handling and concurrency
 

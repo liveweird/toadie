@@ -5,7 +5,6 @@ import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.authz.UnauthorizedException
 import ch.nokillswit.infra.mail.mailAppUrl
 import ch.nokillswit.infra.mail.mailer
-import ch.nokillswit.infra.mail.respondMailUnavailable
 import ch.nokillswit.plugins.JwtConfig
 import ch.nokillswit.plugins.JwtConfigKey
 import ch.nokillswit.users.Feature
@@ -13,7 +12,6 @@ import ch.nokillswit.users.User
 import ch.nokillswit.users.UserRole
 import ch.nokillswit.users.UserServiceKey
 import ch.nokillswit.users.canonicalEmail
-import ch.nokillswit.users.validateEmail
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.auth0.jwt.exceptions.JWTVerificationException
@@ -34,22 +32,17 @@ import io.ktor.server.request.receiveNullable
 import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
-import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.seconds
 
 private const val LOGIN_RATE_LIMIT = "login"
 private const val REFRESH_RATE_LIMIT = "refresh"
-private const val PASSWORD_RESET_RATE_LIMIT = "password-reset"
 private const val MFA_RATE_LIMIT = "mfa"
 
 private const val DEFAULT_REFRESH_LIMIT_PER_MINUTE = 30
 
 @Serializable
 data class LoginRequest(val email: String, val password: String)
-
-@Serializable
-data class PasswordResetRequest(val email: String)
 
 /**
  * The MFA branch of POST /api/v1/login: credentials verified, second factor pending — no
@@ -150,12 +143,6 @@ fun Application.configureAuthRoutes() {
         lockoutMillis = environment.config.property("security.lockout.durationSeconds").getString().toLong() * 1000,
     )
 
-    // Self-service password reset: one request per submitted email per interval, uniformly
-    // whether or not the account exists (the 429 carries no enumeration signal).
-    val resetThrottle = PasswordResetThrottle(
-        minIntervalMillis = environment.config
-            .property("security.passwordReset.minIntervalSeconds").getString().toLong() * 1000,
-    )
     val mailer = mailer()
     val mailAppUrl = mailAppUrl()
 
@@ -191,7 +178,7 @@ fun Application.configureAuthRoutes() {
 
     // The password-reset bucket follows the mode like the login bucket (5/min production,
     // lifted in development — the e2e suite fires several resets from one host in quick
-    // succession); the per-EMAIL throttle above is the actual abuse defence in both modes.
+    // succession); PasswordResetRoutes' per-email throttle remains identical in both modes.
     val passwordResetLimit = environment.config.propertyOrNull("security.rateLimit.passwordResetPerMinute")
         ?.getString()?.takeIf { it.isNotBlank() }?.toInt()
         ?: if (developmentMode) 100 else 5
@@ -212,6 +199,10 @@ fun Application.configureAuthRoutes() {
             requestKey { call -> call.request.origin.remoteHost }
         }
         register(RateLimitName(MFA_RATE_LIMIT)) {
+            rateLimiter(limit = 10, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
+        register(RateLimitName(PASSWORD_RESET_CONFIRM_RATE_LIMIT)) {
             rateLimiter(limit = 10, refillPeriod = 60.seconds)
             requestKey { call -> call.request.origin.remoteHost }
         }
@@ -330,35 +321,6 @@ fun Application.configureAuthRoutes() {
                 // Renewal atomically checks the current account epoch and existing family.
                 // Unlike second-precision iat, this also rejects same-instant credential changes.
                 call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user, sessions, sessionId))
-            }
-        }
-        rateLimit(RateLimitName(PASSWORD_RESET_RATE_LIMIT)) {
-            // Self-service reset: generate a new password and email it. Always 202 for a
-            // well-formed request — existence of the account must not be observable, so the
-            // actual work happens asynchronously after the response (uniform latency, no
-            // timing oracle: the lookup, bcrypt hash, and SMTP round-trip all take place
-            // off the request).
-            post("/api/v1/password-reset") {
-                // Canonical identity: fold like login, so a case-variant reset request
-                // reaches its account (and keeps its one throttle bucket).
-                val email = canonicalEmail(call.receive<PasswordResetRequest>().email)
-                validateEmail(email)
-                if (mailer == null) {
-                    // mail.transport=disabled — the deployment cannot send email at all.
-                    call.respondMailUnavailable("password reset")
-                    return@post
-                }
-                if (!resetThrottle.tryAcquire(email)) {
-                    audit("password_reset.throttled", "email" to email)
-                    throw TooManyRequestsException(
-                        "Only one password reset per minute per address — try again shortly",
-                    )
-                }
-                audit("password_reset.requested", "email" to email)
-                // The worker (auth/PasswordResetEmail.kt) runs after the uniform 202.
-                val app = call.application
-                app.launch { processPasswordReset(app, userService, mailer, mailAppUrl, email) }
-                call.respond(HttpStatusCode.Accepted)
             }
         }
         authenticate {

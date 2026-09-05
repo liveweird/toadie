@@ -4,6 +4,7 @@ import {
   deleteUserRow,
   expect,
   login,
+  MAILPIT,
   openFilters,
   signOut,
   test,
@@ -14,7 +15,6 @@ import {
 // that test skips itself when Mailpit is unreachable. NEVER touch the seed admin's MFA flag —
 // enabling it would make every other spec's login demand a code.
 
-const MAILPIT = "http://localhost:8026";
 
 test("admin toggles a user's MFA on the feature-flags screen and the per-user editor", async ({
   page,

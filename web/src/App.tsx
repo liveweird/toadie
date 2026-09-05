@@ -16,6 +16,7 @@ import classes from "./theme.module.css";
 
 const Login = lazy(() => import("./pages/Login"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const ConfirmPasswordReset = lazy(() => import("./pages/ConfirmPasswordReset"));
 const Hierarchy = lazy(() => import("./pages/Hierarchy"));
 const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
@@ -145,14 +146,8 @@ export default function App() {
             </RedirectIfAuthed>
           }
         />
-        <Route
-          path="/reset-password"
-          element={
-            <RedirectIfAuthed>
-              <ResetPassword />
-            </RedirectIfAuthed>
-          }
-        />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/reset-password/confirm" element={<ConfirmPasswordReset />} />
         <Route element={<RequireAuth />}>
           <Route element={<Shell />}>
             <Route index element={<Hierarchy />} />

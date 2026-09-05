@@ -56,3 +56,17 @@ Backend tests live flat in `server/src/test/kotlin/` (kotlin.test + `io.ktor.ser
 **Schemathesis (optional manual fuzz pass, not in CI).** Property-based fuzzing of the running stack from the spec: `docker compose up --build` (compose ships dev mode, so `/openapi` is exposed), grab a token — `TOKEN=$(curl -s -X POST localhost:8081/api/v1/login -H 'Content-Type: application/json' -d '{"email":"admin@toadie.local","password":"changeme"}' | jq -r .token)` — then `uvx schemathesis run -c all -H "Authorization: Bearer $TOKEN" --exclude-path /api/v1/logout http://localhost:8081/openapi/documentation.yaml --url http://localhost:8081`. The `/logout` exclusion is load-bearing: fuzzing it **revokes the bearer token** (everything after 401s). Login fuzzing also trips the per-account lockout for `admin@toadie.local` (the spec's example email) — in-memory, so `docker compose restart app` clears it. Expect residual noise from stateful invariants the spec cannot express (rate-limit 429s, TRACE probes); a **`Server error` count above zero is the real signal**. It complements, not replaces, the suite-piggybacked conformance layer above; fuzz junk lives only in the compose volume (`docker compose down -v` resets). Needs `uv` (or `pipx`); no Python dependency lives in the repo.
 
 **E2E scenarios (design artifacts).** The Playwright suite in `e2e/` is governed by `e2e/README.md` (run recipes, the parallel state-ownership rulebook, the coverage map). Every spec has a **natural-language scenario file** in `e2e/scenarios/` — versioned, deliberately non-executable design artifacts (actors, owned state, numbered user-level steps, expected outcomes; `## Scenario:` headings equal the `test()` titles verbatim). `e2e/scenarios/README.md` holds the format and the **compiler contract** — the house rules any human/agent/tool must satisfy when turning a scenario into spec code. Same-commit rule: a new or behaviorally changed test lands with its scenario file and its one-line entry in the e2e README's coverage map; `cd e2e && npm run check:scenarios` enforces the parity mechanically (both directions, orphan files included; `accessibility.spec.ts` is the one registered template-title skip), and `npm run typecheck` covers what Playwright's transpile-only TS handling never checks.
+
+### Reset-link regressions (V26)
+
+`PasswordResetServiceTest` uses an injected clock (no expiry sleeps) and separate service
+instances over the same Testcontainers database to exercise digest-only storage, expiration,
+same/sibling-token races, credential/identity changes, deletion, and self-password CAS races.
+`PasswordResetTest` and `PasswordResetConfirmationTest` use conformant HTTP clients and await
+recipient-scoped delivery/audit events to test no mutation before confirmation, replay,
+session/MFA revocation, password policy, throttles, missing configuration, and mail failures.
+Frontend tests assert fragment removal, no GET-side API call, no JWT/refresh on confirmation,
+no token persistence, inline validation/errors, and success-only local session cleanup.
+The Mailpit journey uses a throwaway account with cleanup in `finally`; isolated stacks can
+set `E2E_MAILPIT_URL` alongside `E2E_BASE_URL`. Never apply V26 to a user's running database
+merely to verify a changeset: use Testcontainers and a disposable Compose project/volume.

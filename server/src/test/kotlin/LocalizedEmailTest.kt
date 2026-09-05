@@ -2,53 +2,41 @@ package ch.nokillswit
 
 import ch.nokillswit.auth.PASSWORD_RESET_EMAIL_SUBJECT
 import ch.nokillswit.auth.passwordResetEmailBody
+import ch.nokillswit.auth.resetAppUrl
 import ch.nokillswit.infra.mail.LocalizedText
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.*
 
-/**
- * Direct tests of the per-language email builders (thin wrappers over
- * infra/mail/PasswordEmail.kt, exercised through their real content). Toadie wires only "en"
- * today (no per-user language preference), but the machinery and PL wordings are pinned so a
- * future language column is a one-line change.
- */
 class LocalizedEmailTest {
-
     @Test
-    fun `LocalizedText resolves both languages and falls back to English`() {
+    fun `localized reset links preserve the account until confirmation`() {
         val text = LocalizedText(en = "EN", pl = "PL")
         assertEquals("EN", text.of("en"))
         assertEquals("PL", text.of("pl"))
-        assertEquals("EN", text.of("xx"), "an unknown code falls back to English")
-    }
-
-    @Test
-    fun `password-reset body renders one language with the password and the dead-password warning`() {
-        val en = passwordResetEmailBody("Alice", "s3cret-P4ss_word", appUrl = null, language = "en")
+        assertEquals("EN", text.of("xx"))
+        val token = "a".repeat(43)
+        val en = passwordResetEmailBody("Alice", token, "https://toadie.example", 900, "en")
         assertTrue("Hi Alice," in en)
-        assertFalse("Cześć" in en, "the EN body must not carry Polish")
-        assertTrue("New password:" in en)
-        assertTrue("s3cret-P4ss_word" in en)
-        assertTrue("no longer works" in en)
-
-        val pl = passwordResetEmailBody("Alice", "s3cret-P4ss_word", appUrl = null, language = "pl")
+        assertTrue("Your password is unchanged" in en)
+        assertTrue("minutes): 15" in en)
+        assertTrue("https://toadie.example/reset-password/confirm#token=$token" in en)
+        val pl = passwordResetEmailBody("Alice", token, "https://toadie.example", 901, "pl")
         assertTrue("Cześć Alice," in pl)
-        assertFalse("Hi Alice," in pl, "the PL body must not carry English")
-        assertTrue("Nowe hasło:" in pl)
-        assertTrue("już nie działa" in pl)
-
-        assertEquals("Your new Toadie password", PASSWORD_RESET_EMAIL_SUBJECT.of("en"))
-        assertEquals("Twoje nowe hasło Toadie", PASSWORD_RESET_EMAIL_SUBJECT.of("pl"))
+        assertTrue("pozostaje bez zmian" in pl)
+        assertTrue("minuty): 16" in pl)
+        assertFalse("Hi Alice" in pl)
+        assertEquals("Reset your Toadie password", PASSWORD_RESET_EMAIL_SUBJECT.of("en"))
+        assertEquals("Zresetuj hasło Toadie", PASSWORD_RESET_EMAIL_SUBJECT.of("pl"))
     }
 
     @Test
-    fun `the sign-in link renders only when the deployment URL is configured`() {
-        val withUrl = passwordResetEmailBody("Ann", "pw", appUrl = "https://toadie.example", language = "en")
-        assertTrue("Sign in: https://toadie.example" in withUrl)
-        // The intro copy also says "Sign in with the new password" — assert on the LINK line.
-        val withoutUrl = passwordResetEmailBody("Ann", "pw", appUrl = null, language = "en")
-        assertFalse("Sign in:" in withoutUrl)
+    fun `reset origins are configured and HTTPS outside development`() {
+        for (value in listOf(null, "", " ", "https://x/".repeat(300), "not a url", "//x", "file:///tmp/x",
+            "https://user:pass@x", "https://x/?redirect=bad", "https://x/#bad", "https://x:65536", "https:///path",
+            "https://x/subpath")) {
+            assertNull(resetAppUrl(value, true), value)
+        }
+        assertNull(resetAppUrl("http://localhost:8081", false))
+        assertEquals("http://localhost:8081", resetAppUrl("http://localhost:8081/", true))
+        assertEquals("https://toadie.example", resetAppUrl("https://toadie.example/", false))
     }
 }

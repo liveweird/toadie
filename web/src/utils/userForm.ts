@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 import type { SupportedLanguage } from "../i18n";
+import { utf8ByteLength } from "./password";
 
 // Server limits (users/Validation.kt + auth/Passwords.kt) mirrored client-side.
 export const MAX_USER_NAME_LENGTH = 50;
@@ -7,6 +8,19 @@ export const MAX_EMAIL_LENGTH = 254;
 export const MIN_PASSWORD_LENGTH = 10;
 /** The bcrypt ceiling — counts BYTES, not characters (multibyte input bites earlier). */
 export const MAX_PASSWORD_BYTES = 71;
+
+/** The same new-password policy for authenticated changes and email-link confirmation. */
+export function passwordFieldsValidation(t: TFunction) {
+  return {
+    password: (value: string) => {
+      if (value.length < MIN_PASSWORD_LENGTH) return t("users.validation.passwordLength");
+      if (utf8ByteLength(value) > MAX_PASSWORD_BYTES) return t("users.validation.passwordTooLong");
+      return null;
+    },
+    confirm: (value: string, values: { password: string }) =>
+      value === values.password ? null : t("users.validation.passwordsMismatch"),
+  };
+}
 
 // Linear-time shape check (no catastrophic backtracking); the server's rule is looser
 // (just '@' + no control chars) — this is UX-level guidance, not the gate.

@@ -186,9 +186,10 @@ Do not let a drag navigate, do not refit the viewport on drags/mode/reset, and k
 outside the node's interactive face.
 
 Pages are lazy and use shared `PageHeader` chrome; navigation is defined once in
-`utils/navigation.ts` for the sidebar, user menu, and command palette. User creation/reset
-passwords are generated client-side and revealed exactly once; the server never returns plaintext
-passwords. The selected UI language is also stored on the user and drives server-composed email.
+`utils/navigation.ts` for the sidebar, user menu, and command palette. Administrator-created/reset
+passwords are generated client-side and revealed exactly once; self-service reset links let the
+recipient choose a password. The server never returns plaintext passwords. The selected UI
+language is also stored on the user and drives server-composed email.
 
 `web/src/changelog/version.ts` (`APP_VERSION`) is the sole source of the displayed app version;
 the Gradle snapshot version is unrelated. A release adds the newest bilingual markdown entry to
@@ -202,7 +203,13 @@ cache a successful account/session verdict. Password, email, and role changes
 invalidate existing sessions, deletion blocks them, and logout revokes every token generation
 from that login. Renewal must not recreate a revoked family. MFA challenges capture the epoch
 verified with the password; self password changes compare-and-set it and require re-login.
-Deploying V25 requires everyone to sign in again. Single-use reset links remain the next change.
+Deploying V25 requires everyone to sign in again. V26 adds expiring reset grants stored only as
+SHA-256 digests. Reset requests preserve credentials; only POST `/api/v1/password-reset/confirm`
+consumes the grant and changes the password/epoch atomically, invalidating sibling links,
+sessions, and pending MFA challenges without disabling MFA. Never consume a grant on GET,
+email passwords, log raw reset tokens, or persist them in browser storage. The confirmation
+page reads a URL fragment and removes it from history. Reset requests need configured outbound
+mail and a valid `MAIL_APP_URL` origin (HTTPS in production); otherwise they return 503.
 
 Pushes, PRs, and merge groups run `.github/workflows/ci.yml`. Require its **Quality gate**
 status in the repository ruleset after pushing: backend, frontend/contract, and reusable E2E

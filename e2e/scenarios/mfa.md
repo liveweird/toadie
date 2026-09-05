@@ -23,7 +23,7 @@
 
 ## Scenario: an MFA-enabled account signs in with the emailed code
 
-*Skips itself when Mailpit (`http://localhost:8026`) is unreachable locally.
+*Skips itself when Mailpit (`E2E_MAILPIT_URL`, default `http://localhost:8026`) is unreachable locally.
 In CI it fails instead of skipping; the disposable stack must provide Mailpit.*
 
 1. The admin creates a throwaway user, enables their MFA in the per-user editor, and signs

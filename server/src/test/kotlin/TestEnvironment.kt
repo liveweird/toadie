@@ -52,6 +52,7 @@ fun ApplicationTestBuilder.configureApp(vararg overrides: Pair<String, String>) 
                 "postgres.user" to PostgresTestSupport.user,
                 "postgres.password" to PostgresTestSupport.password,
                 "security.csrf.enabled" to "false",
+                "mail.appUrl" to "http://localhost:8081",
                 *overrides,
             )
         )
@@ -183,6 +184,15 @@ internal fun newTokenBlocklistService(clock: () -> Long): ch.nokillswit.auth.Tok
 
 internal fun newAuthSessionService(clock: () -> Long): ch.nokillswit.auth.AuthSessionService =
     ch.nokillswit.auth.AuthSessionService(sharedTestDatabase, clock)
+
+internal fun newPasswordResetService(ttlMillis: Long = 900_000, clock: () -> Long = System::currentTimeMillis) =
+    ch.nokillswit.auth.PasswordResetService(sharedTestDatabase, ttlMillis, clock)
+
+internal suspend fun resetTokenHashes(userId: UInt): List<String> = suspendTransaction(sharedTestDatabase) {
+    with(ch.nokillswit.auth.PasswordResetService.Tokens) {
+        selectAll().where { this@with.userId eq userId }.toList().map { it[tokenHash] }
+    }
+}
 
 private val sharedTestDatabase: R2dbcDatabase by lazy {
     R2dbcDatabase.connect(

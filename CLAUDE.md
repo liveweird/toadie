@@ -75,7 +75,7 @@ ch.nokillswit
 │                       Routing (SPA catch-all), Health (/healthz liveness + /readyz readiness —
 │                       the k8s probes; unauthenticated, outside /api/, registered after the infra group)
 ├── infra/mail/         outbound email (Lettuce's, ported): Mailer/SmtpMailer/LogMailer +
-│                       LocalizedText/PasswordEmail (the recipient-language content layer) +
+│                       LocalizedText (the recipient-language content layer) +
 │                       configureMail — MAIL_TRANSPORT log/smtp/disabled, the log-transport
 │                       production refusal (fail-closed), null mailer = email features 503.
 │                       Consumers: self-service password reset and email MFA
@@ -92,8 +92,9 @@ ch.nokillswit
 │                       HTTP exceptions (401/403/404/409/429/502)
 ├── auth/               POST /api/v1/login (+ the email-MFA branch and /login/mfa second
 │                       step — MfaChallenges/MfaEmail), /refresh, /logout + the self-service
-│                       POST /api/v1/password-reset (uniform 202, async send-before-store,
-│                       PasswordResetThrottle) + token minting + password hashing/generation
+│                       POST /api/v1/password-reset (uniform 202, async single-use link delivery)
+│                       + /password-reset/confirm (atomic password/grant consumption, V26)
+│                       + PasswordResetThrottle + token minting + password hashing
 │                       + LoginThrottle + the revoked-token blocklist
 ├── users/              the user domain: ADMIN-only management CRUD (/api/v1/users list/create
 │                       + {id} get/put/delete with the self-delete 403 and last-admin 409
@@ -221,8 +222,23 @@ and the SPA clears tokens/query cache and returns to login. Existing in-flight r
 
 Deploying V25 invalidates pre-migration tokens: everyone must sign in again. `password_changed_at`
 remains an audit timestamp, not the revocation boundary. MFA/throttle state remains instance-local,
-so this is not permission to add replicas. The emailed-password reset design is **still pending**
-replacement with single-use confirmation links; see `HARDENING.md` and the cross-cutting auth docs.
+so this is not permission to add replicas.
+
+### Single-use password reset (V26)
+
+`auth/PasswordResetRoutes.kt` owns the public request and confirmation endpoints; the latter
+uses `PasswordResetService` to consume a SHA-256-digested, 256-bit random grant and update the
+password/credential epoch in one user-row-locked transaction. The request never changes a
+password or invalidates a session. Links expire after 15 minutes (configurable 1–3600 seconds),
+are tied to the active user's captured epoch, and only one outstanding link can complete.
+The public SPA `/reset-password/confirm` reads `#token=…`, removes the fragment from history,
+and retains it only in memory. GET does not consume anything. Success requires normal sign-in,
+keeps MFA enabled, revokes old sessions/challenges, and sends a best-effort notification without
+secrets. Requesting requires mail and a valid `MAIL_APP_URL` origin (HTTPS in production, HTTP
+allowed in development; no path prefix, userinfo, query, or fragment); otherwise 503. V26 itself
+does not sign users out. See the security/persistence docs and `HARDENING.md` for deployment
+and compatibility notes. Lettuce was inspected: its reset still emails a generated password,
+so the existing mail/throttle infrastructure was retained but that weakness was not copied.
 
 ### The OpenAPI contract
 
