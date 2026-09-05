@@ -21,6 +21,13 @@ generated from a list, so a single scenario section stands in for all of them.
 
 ## Not covered here (and why)
 
-- **Interactive journeys** (modals mid-flight, drag interactions) — the smoke scans settled
-  pages; deeper audits are a deliberate, separate pass.
+- **Interactive journeys** (modals mid-flight, drag interactions) — apart from the explicit
+  report-loading regression below, deeper audits are a deliberate, separate pass.
 - **color-contrast** — a conscious theme-wide waiver (dimmed text by design), not a backlog.
+
+## Scenario: the Errors loading state has no WCAG A/AA violations
+
+1. The admin opens Errors while its real report request is held by the browser test.
+   - *Expected*: the named loading indicator is visible and an axe scan reports zero violations.
+2. The request is released and the real report finishes loading.
+   - *Expected*: the loading indicator disappears and a second axe scan reports zero violations.

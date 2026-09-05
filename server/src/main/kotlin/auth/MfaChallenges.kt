@@ -25,7 +25,7 @@ class MfaChallenges(
     data class IssuedChallenge(val challengeId: String, val code: String, val expiresAt: Long)
 
     sealed interface Outcome {
-        data class Success(val userId: UInt) : Outcome
+        data class Success(val userId: UInt, val authVersion: Long = 0) : Outcome
 
         /** [reason] feeds the audit trail only — the HTTP answer stays a uniform 401. */
         data class Failure(val reason: String) : Outcome
@@ -33,6 +33,7 @@ class MfaChallenges(
 
     private data class Challenge(
         val userId: UInt,
+        val authVersion: Long,
         val code: String,
         val expiresAt: Long,
         val attempts: Int,
@@ -40,12 +41,12 @@ class MfaChallenges(
 
     private val challenges = ConcurrentHashMap<String, Challenge>()
 
-    fun issue(userId: UInt): IssuedChallenge {
+    fun issue(userId: UInt, authVersion: Long = 0): IssuedChallenge {
         pruneIfOversized()
         val id = generateChallengeId()
         val code = generateMfaCode()
         val expiresAt = clock() + ttlMillis
-        challenges[id] = Challenge(userId, code, expiresAt, attempts = 0)
+        challenges[id] = Challenge(userId, authVersion, code, expiresAt, attempts = 0)
         return IssuedChallenge(id, code, expiresAt)
     }
 
@@ -60,7 +61,7 @@ class MfaChallenges(
             // Single-use is a CAS, not a courtesy: only the submission that actually removes
             // the entry wins — a concurrent duplicate with the same correct code loses.
             return if (challenges.remove(challengeId, challenge)) {
-                Outcome.Success(challenge.userId)
+                Outcome.Success(challenge.userId, challenge.authVersion)
             } else {
                 Outcome.Failure("unknown_challenge")
             }

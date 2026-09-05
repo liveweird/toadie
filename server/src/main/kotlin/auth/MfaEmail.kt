@@ -66,7 +66,7 @@ internal suspend fun issueMfaChallenge(
         call.respondMailUnavailable("multi-factor login")
         return
     }
-    val challenge = challenges.issue(userId)
+    val challenge = challenges.issue(userId, user.authVersion)
     audit("login.mfa_challenge", "email" to user.email, "userId" to userId.toLong())
     // Challenge stored BEFORE responding (the user submits the code right away);
     // only the delivery is fire-and-forget, like the password-reset email.

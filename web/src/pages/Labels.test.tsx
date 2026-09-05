@@ -115,6 +115,7 @@ describe("Labels page", () => {
     await waitFor(() => expect(findCall(mockFetch, "PUT", "/api/v1/labels/2")).toBeDefined());
     const body = JSON.parse((findCall(mockFetch, "PUT", "/api/v1/labels/2")![1] as RequestInit).body as string);
     expect(body).toEqual({ key: "team", values: ["core", "platform"], kinds: ["Group", "User"] });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   test("a 409 on save renders the conflict message inline", async () => {
@@ -162,5 +163,8 @@ describe("Labels page", () => {
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
 
     await waitFor(() => expect(findCall(mockFetch, "DELETE", "/api/v1/labels/1")).toBeDefined());
+    // The request being sent is not the operation finishing. Wait for the success UI
+    // before teardown instead of leaving the success callback to close the modal later.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 });

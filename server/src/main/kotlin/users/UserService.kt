@@ -53,6 +53,7 @@ class UserService(private val database: R2dbcDatabase) {
         val role = varchar("role", length = 20).default(UserRole.USER.name)
         val markedAsDeleted = bool("marked_as_deleted").default(false)
         val passwordChangedAt = long("password_changed_at").default(0)
+        val authVersion = long("auth_version").default(0)
         // Per-user language (V18): sign-in UI language + the language of every email sent
         // to the user. No CHECK — SUPPORTED_LANGUAGES is the whitelist.
         val language = varchar("language", length = 10).default("en")
@@ -108,11 +109,15 @@ class UserService(private val database: R2dbcDatabase) {
 
     // The plaintext rules (min length, bcrypt byte ceiling) are route-side by necessity:
     // only the bcrypt hash ever reaches the service.
-    suspend fun updatePassword(id: UInt, passwordHash: String): Int = suspendTransaction(database) {
-        Users.update({ (Users.id eq id) and active() }) {
+    suspend fun updatePassword(id: UInt, passwordHash: String, expectedAuthVersion: Long? = null): Int = suspendTransaction(database) {
+        Users.update({
+            (Users.id eq id) and active() and
+                (expectedAuthVersion?.let { Users.authVersion eq it } ?: Op.TRUE)
+        }) {
             it[this.passwordHash] = passwordHash
-            // Invalidates outstanding refresh tokens: /refresh rejects iat < passwordChangedAt.
+            // A monotonic epoch also invalidates tokens minted in the same millisecond.
             it[passwordChangedAt] = System.currentTimeMillis()
+            it[authVersion] = authVersion + 1
         }
     }
 
@@ -187,6 +192,12 @@ class UserService(private val database: R2dbcDatabase) {
                 // Canonical identity, folded here too (defense-in-depth like findWithIdByEmail).
                 it[Users.email] = canonicalEmail(email)
                 it[Users.role] = role.name
+                // Evaluate against the locked UPDATE row, not the earlier validation snapshot.
+                // Cosmetic/no-op writes stay idempotent; restoring a role cannot revive old tokens.
+                it[Users.authVersion] = Case().When(
+                    (Users.email neq canonicalEmail(email)) or (Users.role neq role.name),
+                    Users.authVersion + 1,
+                ).Else(Users.authVersion)
             }
             if (rows == 0) GuardedMutation.NOT_FOUND else GuardedMutation.DONE
         }
@@ -254,6 +265,7 @@ class UserService(private val database: R2dbcDatabase) {
             Users.update({ (Users.email eq email) and (Users.passwordHash eq expectedHash) and active() }) {
                 it[passwordHash] = newHash
                 it[passwordChangedAt] = System.currentTimeMillis()
+                it[authVersion] = authVersion + 1
             }
         }
 
@@ -286,5 +298,6 @@ class UserService(private val database: R2dbcDatabase) {
         disabledFeatures = disabledFeatures,
         passwordChangedAt = this[Users.passwordChangedAt],
         language = this[Users.language],
+        authVersion = this[Users.authVersion],
     )
 }

@@ -38,12 +38,14 @@ data class User(
     // client-settable via PUT — replaced only by PUT /users/{id}/features (ADMIN).
     val disabledFeatures: Set<Feature> = emptySet(),
     // Epoch millis of the last password change (0 = never). Server-internal; used to
-    // invalidate refresh tokens minted before the change (see /api/v1/refresh).
+    // audit password changes; authVersion is the exact session-revocation boundary.
     val passwordChangedAt: Long = 0,
     // Per-user language (V18, Lettuce's V61): the UI language at sign-in and the language
     // of every email sent to the user. Set at create; never client-settable via the
     // whole-user PUT — changed only by PUT /users/{id}/language (target user or ADMIN).
     val language: String = "en",
+    /** Monotonic credential/identity epoch; internal only, never part of UserResponse. */
+    val authVersion: Long = 0,
 ) {
     /** The wire/claim shape: additional roles only — empty for a regular user. */
     val additionalRoles: Set<UserRole>

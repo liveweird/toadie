@@ -19,7 +19,7 @@ export default function LoadingBlock({
   const { t } = useTranslation();
   return (
     <Center py={py} mih={mih}>
-      <Loader size={size} aria-label={t("common.loading")} />
+      <Loader size={size} role="status" aria-label={t("common.loading")} />
     </Center>
   );
 }

@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Group, Paper, PasswordInput, Stack } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { changeUserPassword } from "../api/users";
-import { getUserId } from "../api/session";
+import { clearSession, getUserId } from "../api/session";
+import { notifyAuthChange } from "../auth";
 import { utf8ByteLength } from "../utils/password";
 import { saveErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
@@ -16,6 +19,8 @@ type Values = { currentPassword: string; password: string; confirm: string };
 /** Every user's self-service password change (the current password is always required). */
 export default function ChangePassword() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -43,8 +48,12 @@ export default function ChangePassword() {
         password: values.password,
         currentPassword: values.currentPassword,
       });
-      showSuccessToast(t("users.toast.passwordChanged"));
       form.reset();
+      clearSession();
+      queryClient.clear();
+      showSuccessToast(t("users.toast.passwordChangedSignIn"));
+      navigate("/login", { replace: true });
+      notifyAuthChange();
     } catch (err) {
       setError(
         saveErrorMessage(err, t, {

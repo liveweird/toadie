@@ -196,6 +196,14 @@ the Gradle snapshot version is unrelated. A release adds the newest bilingual ma
 
 ## Testing and Verification
 
+Authentication uses database-backed session families (`auth/AuthSessionService.kt`, V25).
+Every bearer must match a live family and the active user's monotonic credential epoch; never
+cache a successful account/session verdict. Password, email, and role changes
+invalidate existing sessions, deletion blocks them, and logout revokes every token generation
+from that login. Renewal must not recreate a revoked family. MFA challenges capture the epoch
+verified with the password; self password changes compare-and-set it and require re-login.
+Deploying V25 requires everyone to sign in again. Single-use reset links remain the next change.
+
 Pushes, PRs, and merge groups run `.github/workflows/ci.yml`. Require its **Quality gate**
 status in the repository ruleset after pushing: backend, frontend/contract, and reusable E2E
 jobs must all succeed. E2E owns a disposable `toadie-ci` project on a fresh hosted runner;

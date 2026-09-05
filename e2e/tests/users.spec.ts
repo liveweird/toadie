@@ -42,6 +42,9 @@ test("admin creates a user who signs in, changes their password, and is finally 
     page.waitForResponse((r) => r.url().includes("/password") && r.request().method() === "PUT" && r.ok()),
     page.getByRole("button", { name: "Save" }).click(),
   ]);
+  await expect(page).toHaveURL(/\/login$/);
+  // The successful self-change invalidates this session; explicitly sign in with the new password.
+  await login(page, throwaway.email, newPassword);
   await signOut(page);
 
   // Back as admin: promote, then delete; both against the name-filtered list.

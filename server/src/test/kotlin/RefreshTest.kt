@@ -89,9 +89,7 @@ class RefreshTest {
         val client = jsonClient()
         val session = client.login(email, "pw")
 
-        // JWT iat has second precision and the comparison truncates both sides, so a change in
-        // the same wall-clock second as the mint would NOT invalidate — wait out the boundary.
-        Thread.sleep(1100)
+        // No sleep: the credential epoch is exact even inside a single clock tick.
         TestUsers.service.updatePassword(userId, hashPassword("new-password!", cost = 4))
 
         val response = client.postJson("/api/v1/refresh", RefreshRequest(session.refreshToken))

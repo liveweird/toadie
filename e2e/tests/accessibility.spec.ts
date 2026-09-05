@@ -31,6 +31,28 @@ test("login screen has no WCAG A/AA violations", async ({ page }) => {
   await scan(page);
 });
 
+test("the Errors loading state has no WCAG A/AA violations", async ({ page }) => {
+  await login(page);
+  // Hold the real report request so the scan always sees loading, even on a fast DB.
+  // Release it in finally; no sleeps, fabricated response, or server-side mutation.
+  let release!: () => void;
+  const reportGate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(/\/api\/v1\/files\/errors(?:\?|$)/, async (route) => {
+    await reportGate;
+    await route.continue();
+  });
+  try {
+    await page.goto("/errors");
+    await expect(page.getByRole("heading", { name: "Errors", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Loading…", { exact: true })).toBeVisible();
+    await scan(page);
+  } finally {
+    release();
+  }
+  await expect(page.getByLabel("Loading…", { exact: true })).toHaveCount(0);
+  await scan(page);
+});
+
 // One test per page keeps the report line-per-page.
 const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/", heading: "Hierarchy" },

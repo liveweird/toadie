@@ -17,6 +17,7 @@ import ch.nokillswit.users.validateEmail
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.auth0.jwt.exceptions.JWTVerificationException
+import java.util.UUID
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.*
 import io.ktor.server.auth.authenticate
@@ -100,13 +101,28 @@ private val REFRESH_REJECT_MESSAGES = mapOf(
     "revoked" to "Refresh token revoked",
     "malformed" to "Malformed refresh token",
     "user_gone" to "User no longer exists",
-    "predates_password_change" to "Refresh token predates a password change",
 )
 
-private fun JwtConfig.authResponse(userId: UInt, user: User): LoginResponse {
+private suspend fun JwtConfig.authResponse(
+    userId: UInt,
+    user: User,
+    sessions: AuthSessionService,
+    existingSessionId: String? = null,
+): LoginResponse {
     val roles = user.additionalRoles
-    val access = issueAccessToken(userId, user.email, roles, user.disabledFeatures)
-    val refresh = issueRefreshToken(userId, user.email, roles, user.disabledFeatures)
+    val sessionId = existingSessionId ?: UUID.randomUUID().toString()
+    val access = issueAccessToken(userId, user.email, roles, user.disabledFeatures, sessionId)
+    val refresh = issueRefreshToken(userId, user.email, roles, user.disabledFeatures, sessionId)
+    val expiresAt = maxOf(access.expiresAt, refresh.expiresAt)
+    val active = if (existingSessionId == null) {
+        sessions.create(sessionId, userId, user.authVersion, expiresAt)
+    } else {
+        sessions.renew(sessionId, userId, user.authVersion, expiresAt)
+    }
+    if (!active) {
+        audit("session.rejected", "userId" to userId.toLong())
+        throw UnauthorizedException("Session expired or revoked — sign in again")
+    }
     return LoginResponse(
         token = access.token,
         expiresAt = access.expiresAt,
@@ -125,6 +141,7 @@ fun Application.configureAuthRoutes() {
     val jwtConfig = attributes[JwtConfigKey]
     val userService = attributes[UserServiceKey]
     val blocklist = attributes[TokenBlocklistServiceKey]
+    val sessions = attributes[AuthSessionServiceKey]
 
     // Per-account lockout, complementing the per-IP RateLimit below (which rotating hosts
     // sidestep): N consecutive failures for one email → locked for the configured window.
@@ -245,8 +262,9 @@ fun Application.configureAuthRoutes() {
                     issueMfaChallenge(call, mfaChallenges, mailer, mfaTtlMinutes, userId, user)
                     return@post
                 }
+                val response = jwtConfig.authResponse(userId, user, sessions)
                 audit("login.success", "email" to user.email, "userId" to userId.toLong())
-                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user))
+                call.respond(HttpStatusCode.OK, response)
             }
         }
         rateLimit(RateLimitName(MFA_RATE_LIMIT)) {
@@ -267,22 +285,20 @@ fun Application.configureAuthRoutes() {
                         // One read (the /refresh precedent): the user must still exist and be
                         // active, and the pair is minted from their current roles/flags.
                         val user = userService.read(userId)
-                        if (user == null) {
-                            audit("login.mfa_failure", "reason" to "user_gone", "userId" to userId.toLong())
+                        if (user == null || user.authVersion != outcome.authVersion) {
+                            audit("login.mfa_failure", "reason" to "credentials_changed_or_user_gone", "userId" to userId.toLong())
                             throw UnauthorizedException("Invalid or expired sign-in code")
                         }
+                        val response = jwtConfig.authResponse(userId, user, sessions)
                         audit("login.mfa_success", "email" to user.email, "userId" to userId.toLong())
-                        call.respond(
-                            HttpStatusCode.OK,
-                            jwtConfig.authResponse(userId, user),
-                        )
+                        call.respond(HttpStatusCode.OK, response)
                     }
                 }
             }
         }
         rateLimit(RateLimitName(REFRESH_RATE_LIMIT)) {
             // Not behind `authenticate`: the access token may already be expired here. Pure-sliding —
-            // a fresh pair is minted and the old tokens are left to expire on their own (not revoked).
+            // a fresh pair stays in the same server-side family; logout revokes ALL its pairs.
             post("/api/v1/refresh") {
                 val req = call.receive<RefreshRequest>()
                 fun reject(reason: String, userId: Long? = null): Nothing {
@@ -305,20 +321,15 @@ fun Application.configureAuthRoutes() {
                 if (blocklist.isRevoked(jti)) {
                     reject("revoked", rawUserId)
                 }
-                val userId = rawUserId?.toUInt() ?: reject("malformed")
+                val userId = decoded.sessionUserId() ?: reject("malformed")
+                val sessionId = decoded.getClaim("sid").asString() ?: reject("malformed", rawUserId)
                 // One read: confirm the user still exists and isn't soft-deleted, and pick up their
                 // current role/email so changes take effect on the next refresh.
                 val user = userService.read(userId)
                     ?: reject("user_gone", rawUserId)
-                // A password change invalidates all refresh tokens minted before it (tokens
-                // without an iat claim predate this scheme and count as minted at epoch 0).
-                // JWT iat has SECOND precision, so compare both sides truncated to seconds —
-                // otherwise a token minted in the same second as the change is falsely rejected.
-                val issuedAtSec = (decoded.issuedAt?.time ?: 0) / 1000
-                if (issuedAtSec < user.passwordChangedAt / 1000) {
-                    reject("predates_password_change", rawUserId)
-                }
-                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user))
+                // Renewal atomically checks the current account epoch and existing family.
+                // Unlike second-precision iat, this also rejects same-instant credential changes.
+                call.respond(HttpStatusCode.OK, jwtConfig.authResponse(userId, user, sessions, sessionId))
             }
         }
         rateLimit(RateLimitName(PASSWORD_RESET_RATE_LIMIT)) {
@@ -353,13 +364,16 @@ fun Application.configureAuthRoutes() {
         authenticate {
             post("/api/v1/logout") {
                 val principal = call.principal<JWTPrincipal>()!!
+                val userId = principal.payload.sessionUserId()!!
+                val sessionId = principal.payload.getClaim("sid").asString()!!
+                sessions.revoke(sessionId, userId)
                 val jti = principal.payload.id
                 val exp = principal.payload.expiresAt?.time ?: System.currentTimeMillis()
                 if (jti != null) {
                     blocklist.revoke(jti, exp)
                 }
-                // Also revoke the refresh token, if the client sent it, so an explicit logout kills it
-                // too (rotation leaves superseded tokens alive, but logout is a deliberate revoke).
+                // The whole family is already revoked, including superseded refresh tokens.
+                // Keep optional per-token blocklisting for compatibility and defense in depth.
                 // Best-effort by design (logout always answers 204), but the failures are NARROW
                 // and logged — a blanket catch would silently skip revocation on unrelated errors
                 // and swallow coroutine cancellation.
@@ -381,7 +395,10 @@ fun Application.configureAuthRoutes() {
                         call.application.log.debug("Logout refresh token invalid — nothing to revoke", cause)
                         null
                     }
-                    decoded?.id?.let { rjti ->
+                    // An optional body must never revoke a different login/device/user.
+                    decoded?.takeIf {
+                        it.sessionUserId() == userId && it.getClaim("sid").asString() == sessionId
+                    }?.id?.let { rjti ->
                         blocklist.revoke(rjti, decoded.expiresAt?.time ?: System.currentTimeMillis())
                     }
                 }

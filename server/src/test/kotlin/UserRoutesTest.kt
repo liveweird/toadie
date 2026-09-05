@@ -219,28 +219,36 @@ class UserRoutesTest {
                 UserUpdateRequest(name = "Acting Admin", email = uniqueEmail("acting"), roles = emptyList()),
             )
             assertEquals(HttpStatusCode.NoContent, demoteActor.status)
+            assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/users").status)
+            val soloClient = authedClient(soloEmail, "initial-pass-123")
 
-            // solo is now the final active admin: demotion and deletion are both 409 …
-            val demote = client.putJson(
+            // The old actor is no longer authorized. The sole admin cannot demote themself;
+            // self-delete is 403 at the HTTP boundary, with the service's last-admin backstop.
+            val demote = soloClient.putJson(
                 "/api/v1/users/${solo.id}",
                 UserUpdateRequest(name = solo.name, email = soloEmail, roles = emptyList()),
             )
             assertEquals(HttpStatusCode.Conflict, demote.status)
-            val delete = client.delete("/api/v1/users/${solo.id}")
-            assertEquals(HttpStatusCode.Conflict, delete.status)
+            assertEquals(HttpStatusCode.Forbidden, soloClient.delete("/api/v1/users/${solo.id}").status)
+            assertEquals(
+                ch.nokillswit.users.UserService.GuardedMutation.LAST_ADMIN,
+                TestUsers.service.deleteGuarded(solo.id),
+            )
 
             // … until the actor is re-promoted, after which both succeed.
-            val promoteActor = client.putJson(
+            val restoredEmail = uniqueEmail("acting2")
+            val promoteActor = soloClient.putJson(
                 "/api/v1/users/$actingAdminId",
-                UserUpdateRequest(name = "Acting Admin", email = uniqueEmail("acting2"), roles = listOf(UserRole.ADMIN)),
+                UserUpdateRequest(name = "Acting Admin", email = restoredEmail, roles = listOf(UserRole.ADMIN)),
             )
             assertEquals(HttpStatusCode.NoContent, promoteActor.status)
-            val demoteNow = client.putJson(
+            val restoredClient = authedClient(restoredEmail, "pw-123456789")
+            val demoteNow = restoredClient.putJson(
                 "/api/v1/users/${solo.id}",
                 UserUpdateRequest(name = solo.name, email = soloEmail, roles = emptyList()),
             )
             assertEquals(HttpStatusCode.NoContent, demoteNow.status)
-            assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/users/${solo.id}").status)
+            assertEquals(HttpStatusCode.NoContent, restoredClient.delete("/api/v1/users/${solo.id}").status)
         }
     }
 

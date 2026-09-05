@@ -2,6 +2,8 @@ package ch.nokillswit.plugins
 
 import ch.nokillswit.auth.TOKEN_TYPE_ACCESS
 import ch.nokillswit.auth.TokenBlocklistServiceKey
+import ch.nokillswit.auth.AuthSessionServiceKey
+import ch.nokillswit.auth.sessionUserId
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.http.HttpStatusCode
@@ -80,7 +82,11 @@ fun Application.configureSecurity() {
                 // blocklisted, so it is rejected outright rather than skipping the check.
                 val jti = credential.payload.id
                 val revocable = jti != null && !application.attributes[TokenBlocklistServiceKey].isRevoked(jti)
-                if (audOk && typOk && revocable) JWTPrincipal(credential.payload) else null
+                val userId = credential.payload.sessionUserId()
+                val sessionId = credential.payload.getClaim("sid").asString()
+                val active = audOk && typOk && revocable && userId != null && sessionId != null &&
+                    application.attributes[AuthSessionServiceKey].isActive(sessionId, userId)
+                if (active) JWTPrincipal(credential.payload) else null
             }
             // The challenge runs outside StatusPages, so emit the RFC 7807 body here too.
             challenge { _, _ ->

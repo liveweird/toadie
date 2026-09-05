@@ -47,12 +47,16 @@ function findSaveCall(mockFetch: FetchMock) {
 }
 
 async function fillMinimalForm(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText(/^name( \*)?$/i), "my-svc");
+  // Fixture text is pasted as one input event: these tests exercise saving/pickers, not
+  // per-keystroke rendering of the whole editor and its live YAML/check preview.
+  await user.click(screen.getByLabelText(/^name( \*)?$/i));
+  await user.paste("my-svc");
   await user.click(screen.getByLabelText(/^type( \*)?$/i, { selector: "input" }));
   await user.click(await screen.findByRole("option", { name: "service" }));
   await user.click(screen.getByLabelText(/^lifecycle( \*)?$/i, { selector: "input" }));
   await user.click(await screen.findByRole("option", { name: "production" }));
-  await user.type(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }), "group:default/platform");
+  await user.click(screen.getByLabelText(/^owner( \*)?$/i, { selector: "input" }));
+  await user.paste("group:default/platform");
 }
 
 describe("CreateCatalogFile page", () => {
@@ -426,12 +430,14 @@ describe("CreateCatalogFile page", () => {
     await user.click(screen.getByRole("button", { name: /add annotation/i }));
     await user.click(screen.getByRole("combobox", { name: "Annotations Key 1" }));
     await user.click(await screen.findByRole("option", { name: "github.com/project-slug" }));
-    await user.type(screen.getByLabelText("Annotations Value 1"), "acme/repo — any text");
+    await user.click(screen.getByLabelText("Annotations Value 1"));
+    await user.paste("acme/repo — any text");
     await user.click(screen.getByRole("button", { name: "Remove annotation 1" }));
     expect(screen.queryByRole("combobox", { name: "Annotations Key 1" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /add link/i }));
-    await user.type(screen.getByLabelText("URL 1"), "https://example.com");
+    await user.click(screen.getByLabelText("URL 1"));
+    await user.paste("https://example.com");
     await user.click(screen.getByRole("button", { name: "Remove link 1" }));
     expect(screen.queryByLabelText("URL 1")).not.toBeInTheDocument();
   });

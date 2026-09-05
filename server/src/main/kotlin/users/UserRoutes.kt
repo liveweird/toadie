@@ -239,12 +239,14 @@ fun Application.configureUserRoutes() {
                 val caller = call.caller()
                 requireSelfOrAdmin(caller, route.parent.id)
                 val req = call.receive<PasswordUpdateRequest>()
+                var expectedAuthVersion: Long? = null
                 // Changing one's OWN password always requires the current one (even for an admin);
                 // an admin resetting somebody else's does not. Read before update so a wrong
                 // current password never mutates anything. Checked BEFORE the length validation
                 // so 403 wins over 400 (the convention everywhere else).
                 if (caller.userId == route.parent.id) {
                     val existing = userService.read(route.parent.id).orNotFound("User")
+                    expectedAuthVersion = existing.authVersion
                     if (req.currentPassword == null || !verifyPassword(req.currentPassword, existing.passwordHash)) {
                         audit(
                             "password.change_denied",
@@ -256,7 +258,11 @@ fun Application.configureUserRoutes() {
                     }
                 }
                 validatePassword(req.password)
-                userService.updatePassword(route.parent.id, hashPassword(req.password)).orNotFound("User")
+                val updated = userService.updatePassword(route.parent.id, hashPassword(req.password), expectedAuthVersion)
+                if (updated == 0 && expectedAuthVersion != null) {
+                    throw ForbiddenException("Credentials changed concurrently — sign in again")
+                }
+                updated.orNotFound("User")
                 audit(
                     "password.changed",
                     "targetUserId" to route.parent.id.toLong(),

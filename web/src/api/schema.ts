@@ -76,7 +76,10 @@ export interface paths {
          *     refresh token is left valid until its own expiry — it is not rotated out. Requires no
          *     `Authorization` header (the access token may already be expired). Returns `401` for a
          *     missing/invalid/expired/revoked refresh token, if the user no longer exists, or if the
-         *     token was minted before the user's most recent password change.
+         *     family has expired or been logged out, or the user's credential/identity version changed.
+         *     All pairs share a server-side session family: logout kills every generation, including
+         *     superseded refresh tokens. Password, email, and role changes invalidate all
+         *     of that user's families immediately. Pre-session-migration tokens require a new login.
          */
         post: operations["refresh"];
         delete?: never;
@@ -95,9 +98,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Revoke the bearer token (server-side denylist)
-         * @description Revokes the access token carried in the `Authorization` header. If a `refreshToken` is
-         *     supplied in the body, it is revoked too. The body is optional.
+         * End the current login session on the server
+         * @description Ends the session family of the access token carried in the `Authorization` header.
+         *     Every access and refresh token issued for that login stops working, including older
+         *     pairs superseded by refresh. Other logins/devices remain active. The optional
+         *     `refreshToken` body is accepted for compatibility but is not required for full revocation;
+         *     a token belonging to another family or user cannot revoke that unrelated session.
          */
         post: operations["logout"];
         delete?: never;
@@ -192,13 +198,16 @@ export interface paths {
          * @description ADMIN only. The password is deliberately not writable here (it has its own endpoint).
          *     Demoting the LAST active administrator is a `409` — the management surface must stay
          *     reachable. An email already used by another active account is also a `409`.
+         *     An email or role change invalidates all of the target user's existing sessions,
+         *     including access tokens, so removed privileges cannot survive until token expiry.
+         *     Name-only edits and unchanged replacements preserve sessions.
          */
         put: operations["updateUser"];
         post?: never;
         /**
          * Delete a user
-         * @description ADMIN only, soft delete: the account can no longer sign in, outstanding refresh
-         *     tokens die (`user_gone`), the email is freed for reuse, and the user's catalog files
+         * @description ADMIN only, soft delete: the account can no longer sign in, outstanding access and
+         *     refresh tokens are rejected, the email is freed for reuse, and the user's catalog files
          *     stay with a deleted-creator marker. Deleting YOURSELF is a `403`; deleting the LAST
          *     active administrator is a `409`.
          */
@@ -315,12 +324,14 @@ export interface paths {
         get?: never;
         /**
          * Change a user's password
-         * @description Sets a new password for the user (minimum 10 characters). Only the password is
-         *     changed; no other fields are touched. Requires the caller to be the target user,
+         * @description Sets a new password for the user (minimum 10 characters), advances the credential
+         *     version, and updates the password-change timestamp. Requires the caller to be the target user,
          *     or to be ADMIN. When the caller changes their OWN password (even an admin),
          *     `currentPassword` is required and must match; an admin resetting another user's
-         *     password omits it. A successful change invalidates all outstanding refresh tokens
-         *     (already-issued access tokens expire naturally within their TTL).
+         *     password omits it. A successful change invalidates all outstanding access and refresh
+         *     tokens on every device, even if minted in the same clock tick. The SPA clears its local
+         *     session and returns to login. A self-change checked against credentials concurrently
+         *     replaced by another request returns `403` without overwriting that newer password.
          */
         put: operations["changeUserPassword"];
         post?: never;
@@ -1224,7 +1235,7 @@ export interface components {
             refreshToken: string;
         };
         LogoutRequest: {
-            /** @description Optional refresh token to revoke together with the access token. */
+            /** @description Optional same-session refresh token; logout revokes the entire family even without it. */
             refreshToken?: string;
         };
         UserCreateRequest: {
@@ -2023,7 +2034,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Token revoked */
+            /** @description Session revoked */
             204: {
                 headers: {
                     [name: string]: unknown;

@@ -21,6 +21,11 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Automated verification
 
+CI regressions include the Errors page with its real report request held pending: loading
+spinners must expose a named `status`, not an `aria-label` on a generic span. Heavy catalog
+save-flow test fixtures use paste events; keyboard behavior keeps real typing. Preserve the
+existing timeouts, coverage floors, and fail-on-flaky policy (see `.claude/docs/testing.md`).
+
 CI uses the complete Temurin version from `mise.toml` (`21.0.11+10.0.LTS`); keep the build/LTS suffix. `setup-java` cannot resolve the truncated `21.0.11+10` selector. The infrastructure regression suite pins CI/local version parity.
 
 `.github/workflows/ci.yml` runs on pushes, PRs, merge queues, and manual dispatch. Its **Quality gate** requires backend build/coverage, frontend build/lint/knip/coverage + Spectral/schema-drift checks, and the reusable E2E workflow to succeed. After pushing, configure **Quality gate** as a required status in the GitHub repository ruleset; YAML alone cannot enforce merges. E2E owns a disposable `toadie-ci` Compose project on a fresh hosted runner, collects diagnostics, and removes only that project's volume even after setup failures. Local `npm test` preserves the development database. CI fails flaky browser tests and missing Mailpit. See `.claude/docs/testing.md`, `e2e/README.md`, and `HARDENING.md` for the staged follow-up work.
@@ -201,6 +206,23 @@ ch.nokillswit
 ```
 
 **Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse`) with the `validateX` free function enforced by route AND service (in the DTO file, or a sibling `<Entity>Validation.kt` once the rules outgrow it — the catalog split), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_SECTIONS` entries (`web/src/utils/navigation.ts`), and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`.
+
+### Authentication session lifecycle (V25)
+
+`auth/AuthSessionService.kt` owns persisted login families (`auth_sessions`); every JWT carries
+their shared `sid`. The bearer verifier checks an active family and the user's current
+`auth_version` in PostgreSQL on every request, without caching acceptance. Password changes,
+bootstrap rotation, and email/role changes advance that version in the
+mutation transaction. Deletion rejects the active-user check. Logout deletes the whole family,
+including superseded refresh tokens; another login/device is unaffected. Renewal is never an
+upsert and cannot resurrect logout. Pending MFA challenges retain the epoch verified with the
+password, and issuance rechecks it under a user-row lock. Self password changes use compare-and-set
+and the SPA clears tokens/query cache and returns to login. Existing in-flight requests may finish.
+
+Deploying V25 invalidates pre-migration tokens: everyone must sign in again. `password_changed_at`
+remains an audit timestamp, not the revocation boundary. MFA/throttle state remains instance-local,
+so this is not permission to add replicas. The emailed-password reset design is **still pending**
+replacement with single-use confirmation links; see `HARDENING.md` and the cross-cutting auth docs.
 
 ### The OpenAPI contract
 

@@ -19,6 +19,8 @@
    - *Expected*: no **Users** item in the nav, and `/users` bounces to the Hierarchy page — the management
      surface is ADMIN-only.
 4. They change their own password on the **Change password** page (current + new + confirm).
+   - *Expected*: the old session is cleared and the browser returns to **Sign in**. Signing
+     in with the new password works; the user signs out before the admin resumes.
 5. Back as the admin: the throwaway user is promoted to **Administrator** via the edit form
    (the name-filtered list then shows the Admin badge), and afterwards deleted via the row's
    confirm modal.
