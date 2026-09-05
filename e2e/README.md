@@ -35,6 +35,19 @@ npm run check:scenarios       # spec ↔ scenario parity: files exist, test() ti
 files included); `accessibility.spec.ts` is its one registered skip — the parameterized-title
 carve-out in [`scenarios/README.md`](scenarios/README.md).
 
+## Automatic CI
+
+The reusable `.github/workflows/e2e.yml` runs from the push/PR/merge-queue
+quality workflow and can still be dispatched manually. It owns the explicit `toadie-ci`
+Compose project on a fresh hosted runner, waits for API readiness and Mailpit, runs static
+checks and journeys, retains diagnostics, and always removes only that disposable project's
+containers/network/volume. Never move it to a shared self-hosted Docker daemon. Local
+setup/teardown behavior above is unchanged.
+
+With `CI` set, `failOnFlakyTests` means a passing retry still fails the gate. Missing Mailpit
+fails reset/MFA journeys rather than skipping them; local log-only development may still skip
+those two mail-dependent journeys.
+
 ## Parallel execution
 
 The suite runs on **4 workers by default** (`E2E_WORKERS` overrides; `E2E_WORKERS=1` restores
@@ -189,14 +202,15 @@ the same commit** — this list is the coverage map, the scenario file is the de
   writer (append-and-remove, the seeds survive).
 - [`mfa.spec.ts`](scenarios/mfa.md) — email MFA + the flags surfaces: the /feature-flags
   row switch and per-user editor round-trip a throwaway user's MFA flag; an MFA-enabled
-  account signs in through the emailed 6-digit code via Mailpit (skips itself without it).
+  account signs in through the emailed 6-digit code via Mailpit (local-only skip without it;
+  missing Mailpit fails CI).
 - [`namespaces.spec.ts`](scenarios/namespaces.md) — the namespaces dictionary: inline grammar
   validation → append two entries → reorder → the regular user's read-only view → removal;
   append-only against the shared document.
 - [`password-reset.spec.ts`](scenarios/password-reset.md) — the forgot-password flow:
   neutral confirmation + per-email throttle for unknown addresses; the full email roundtrip
-  through the compose stack's Mailpit (new password works, old one is dead — skips itself
-  without Mailpit).
+  through the compose stack's Mailpit (new password works, old one is dead — local-only skip
+  without Mailpit; missing Mailpit fails CI).
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
   (deletion-orphaned) missing nodes for one per-attempt name stem, faced name + type, with the
   two-namespace canvas clustered inside labelled namespace frames and the unmatched shared

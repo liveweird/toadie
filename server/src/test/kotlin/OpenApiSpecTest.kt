@@ -1,10 +1,14 @@
 package ch.nokillswit
 
+import com.atlassian.oai.validator.model.SimpleRequest
+import com.atlassian.oai.validator.model.SimpleResponse
 import io.swagger.v3.parser.OpenAPIV3Parser
 import io.swagger.v3.parser.core.models.ParseOptions
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Static sanity checks on the OpenAPI spec itself — no server or database boot. The runtime
@@ -15,17 +19,29 @@ class OpenApiSpecTest {
 
     @Test
     fun `spec parses with no parser messages`() {
-        val result = OpenAPIV3Parser().readContents(OpenApiSpec.validatorYaml, null, ParseOptions().apply { isResolve = true })
+        val result = OpenAPIV3Parser().readContents(OpenApiSpec.rawYaml, null, ParseOptions().apply { isResolve = true })
         assertNotNull(result.openAPI, "spec failed to parse")
         assertEquals(emptyList(), result.messages ?: emptyList(), "spec should parse without warnings/errors")
     }
 
-    /**
-     * The spec declares `openapi: 3.1.0` but is validated at test time as 3.0.3 (in-memory relabel
-     * in [OpenApiSpec] — swagger-request-validator's 3.1 support is unreliable). That relabel is
-     * only sound while the document uses no 3.1-only constructs; this guard pins it. If it fails:
-     * remove the 3.1-only construct, or rework the relabel in OpenApiConformance.kt.
-     */
+    @Test
+    fun `the published spec honestly declares the dialect validated by our tools`() {
+        assertEquals("openapi: 3.0.3", OpenApiSpec.rawYaml.lineSequence().first())
+        assertEquals("3.0.3", OpenApiSpec.parsed.openapi)
+    }
+
+    @Test
+    fun `published nullability accepts an unsynced file and rejects a wrong timestamp type`() {
+        val request = SimpleRequest.Builder.get("/api/v1/files/1/sync").build()
+        fun response(timestamp: String) = SimpleResponse.Builder.status(200)
+            .withHeader("Content-Type", "application/json")
+            .withBody("""{"sourceUrl":null,"lastSyncedAt":$timestamp,"syncedDocument":null}""")
+            .build()
+        assertFalse(OpenApiSpec.validator.validate(request, response("0")).hasErrors())
+        assertTrue(OpenApiSpec.validator.validate(request, response("\"invalid\"")).hasErrors())
+    }
+
+    /** A 3.1 upgrade must migrate the schemas and both consumers together, never just the label. */
     @Test
     fun `spec uses only 3_0-compatible constructs`() {
         val offenders = listOf(
@@ -40,8 +56,7 @@ class OpenApiSpecTest {
         ).mapNotNull { regex -> regex.find(OpenApiSpec.rawYaml)?.value }
         assertEquals(
             emptyList(), offenders,
-            "documentation.yaml contains OpenAPI 3.1-only constructs, but conformance validation " +
-                "relabels it to 3.0.3 (see OpenApiConformance.kt) — use the 3.0 idiom (e.g. nullable:) instead",
+            "documentation.yaml declares OpenAPI 3.0.3 — use the 3.0 idiom (e.g. nullable:) instead",
         )
     }
 

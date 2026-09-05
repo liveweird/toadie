@@ -54,6 +54,7 @@ test("an MFA-enabled account signs in with the emailed code", async ({ page }) =
     (r) => r.ok,
     () => false,
   );
+  if (process.env.CI) expect(mailpitUp, "CI must exercise the MFA email roundtrip").toBeTruthy();
   test.skip(!mailpitUp, "Mailpit (compose stack) is not reachable — the code email is unobservable");
 
   await login(page);

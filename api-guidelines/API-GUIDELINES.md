@@ -547,13 +547,14 @@ commit them. No endpoint/param/status may exist in code but not the spec, or vic
 (API-CONF-001 enforces this at test time).
 **Check:** spec diff accompanies every route diff; generated types are in sync.
 
-### API-DOC-002 — Keep it 3.0-compatible `[spectral]`
-**MUST** stay OpenAPI 3.0-compatible while the toolchain requires it (`nullable: true`,
-never `type: [..., "null"]`). Note the deliberate split: the committed document is
-LABELED `openapi: 3.1.0` (openapi-typescript wants it) while its BODY stays 3.0-shaped —
-the conformance harness relabels it 3.0.3 in memory for swagger-request-validator
-(`OpenApiConformance.kt`) and `OpenApiSpecTest` pins that no 3.1-only construct creeps in.
-**Check:** no schema uses a `type` array containing `"null"`.
+### API-DOC-002 — Publish the dialect the tools actually validate `[spectral]`
+**MUST** publish OpenAPI **3.0.3** while using 3.0 schemas (`nullable: true`, never
+`type: [..., "null"]`). Both swagger-request-validator and openapi-typescript consume
+the SAME document verbatim — no test-only version relabeling. The frontend generator
+supports 3.0.3; labeling 3.0 nullability as 3.1 misleads external JSON Schema consumers.
+A future 3.1 migration must update the schemas and both consumers together.
+**Check:** the published version is 3.0.3, the document passes `oas3-schema`, and no
+schema uses a `type` array containing `"null"` (`OpenApiSpecTest` also pins the dialect).
 
 ### API-DOC-003 — Unique operationIds `[spectral]`
 **MUST** give every operation a unique `operationId`.

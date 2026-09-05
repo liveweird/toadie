@@ -42,6 +42,7 @@ test("a reset email delivers a working new password and kills the old one", asyn
     (r) => r.ok,
     () => false,
   );
+  if (process.env.CI) expect(mailpitUp, "CI must exercise the password-reset email roundtrip").toBeTruthy();
   test.skip(!mailpitUp, "Mailpit (compose stack) is not reachable — email roundtrip untestable");
 
   await login(page);

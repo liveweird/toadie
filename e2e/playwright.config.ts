@@ -21,6 +21,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: Number(process.env.E2E_WORKERS ?? 4),
   forbidOnly: !!process.env.CI,
+  // Retrying captures diagnostic evidence, but a flaky journey is still a failed CI gate.
+  failOnFlakyTests: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   timeout: 60_000,

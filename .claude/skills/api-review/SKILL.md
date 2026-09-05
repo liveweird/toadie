@@ -12,9 +12,14 @@ given; otherwise `server/src/main/resources/openapi/documentation.yaml`.
 ## Pass 1 — mechanical (Spectral)
 
 ```sh
-npx --yes @stoplight/spectral-cli lint <target-spec> \
+web/node_modules/.bin/spectral lint <target-spec> \
   --ruleset api-guidelines/api-guidelines.spectral.yaml
 ```
+
+Install the pinned CLI with `cd web && npm ci --legacy-peer-deps` first. For the project
+contract plus the conformant fixture, `cd web && npm run lint:api` runs both. Also run
+`npm run check:api` for a read-only generated-type drift check. Both are automatic CI gates.
+The published contract is OpenAPI 3.0.3 and must be validated verbatim, never relabeled.
 
 Interpret by severity (the model is documented in `api-guidelines/README.md`):
 

@@ -54,6 +54,11 @@ docker compose up --build
 Then open <http://localhost:8081> and sign in as `admin@toadie.local` / `changeme`.
 Swagger UI: <http://localhost:8081/openapi>.
 
+Compose binds the app, PostgreSQL, and Mailpit ports to **127.0.0.1 only**. This is a local
+HTTP demo with known credentials, not a LAN/public deployment. `MAIL_APP_URL` changes email
+links, not network exposure or security. Recreate existing containers to apply changed port
+bindings, keeping the database volume.
+
 Ports are chosen to coexist with [Lettuce](https://github.com/liveweird/lettuce) on the same
 machine: the app is on **8081**, Postgres is host-mapped to **5433**, and the Vite dev server
 uses **5174**.
@@ -96,6 +101,24 @@ cd web && npm install --legacy-peer-deps && npm run dev   # SPA on localhost:517
 ```
 
 The local JDK is managed by [mise](https://mise.jdx.dev) (`mise.toml`, Temurin 21).
+
+## Automated quality gates
+
+Pushes, PRs, and merge queues run `.github/workflows/ci.yml`: backend build/tests/coverage,
+frontend build/lint/dead-code/coverage, OpenAPI lint and generated-type drift, and browser
+journeys against a fresh disposable Compose stack. CI fails flaky journeys and requires the
+Mailpit email tests. Reports are retained for seven days.
+
+After pushing the workflow, configure **Quality gate** as a required repository status check.
+Committed workflow YAML alone does not prevent unchecked merges.
+
+Local equivalents: `./gradlew build :server:koverXmlReport`; in `web/`, `npm ci --legacy-peer-deps`
+followed by `npm run check:api`, `npm run lint:api`, `npm run build`, `npm run lint`,
+`npm run knip`, and `npm run test:coverage`; in `e2e/`, `npm ci`, `npm run typecheck`,
+`npm run check:scenarios`, and `npm test` (the local suite still preserves the dev database).
+
+The published API contract is **OpenAPI 3.0.3**, validated without rewriting its version.
+See [HARDENING.md](HARDENING.md) for the remaining staged work.
 
 ## Useful Gradle tasks
 

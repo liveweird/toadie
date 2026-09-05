@@ -73,7 +73,8 @@ registered in `application.yaml`. `plugins/Routing.kt` is only the final SPA/sta
 
 - `docker compose up --build`: build and run PostgreSQL, the API, and the SPA at
   `http://localhost:8081` (sign in as `admin@toadie.local` / `changeme`); Mailpit captures reset
-  and MFA email at `http://localhost:8026`.
+  and MFA email at `http://localhost:8026`. All three published ports are loopback-only;
+  do not expose this development-mode configuration on a LAN or public interface.
 - `docker compose up postgres`: start only the development database (host port **5433**, not
   5432 — Lettuce may occupy 5432 on the same machine).
 - `./gradlew build`: compile and verify the Gradle modules with the JDK 21 toolchain (the local
@@ -87,6 +88,8 @@ registered in `application.yaml`. `plugins/Routing.kt` is only the final SPA/sta
 - `cd web && npm run build && npm run lint && npm test`: type-check, bundle, lint, and run Vitest.
 - `cd web && npm run test:coverage`: run frontend coverage gates. `npm run knip`: dead-code gate.
 - `cd web && npm run gen:api`: regenerate `web/src/api/schema.ts` from the OpenAPI contract.
+- `cd web && npm run check:api && npm run lint:api`: read-only generated-type drift check and
+  lockfile-pinned Spectral lint of the published contract and reference fixture.
 - `cd e2e && npm test`: run Playwright against the full stack on port 8081;
   `npm run typecheck` and `npm run check:scenarios` are the Docker-free static gates.
 
@@ -192,6 +195,15 @@ the Gradle snapshot version is unrelated. A release adds the newest bilingual ma
 `web/src/changelog/entries.ts` and bumps `APP_VERSION` in the same change; tests pin their parity.
 
 ## Testing and Verification
+
+Pushes, PRs, and merge groups run `.github/workflows/ci.yml`. Require its **Quality gate**
+status in the repository ruleset after pushing: backend, frontend/contract, and reusable E2E
+jobs must all succeed. E2E owns a disposable `toadie-ci` project on a fresh hosted runner;
+cleanup removes only its data. Local E2E preserves the dev volume. CI fails flaky browser
+tests and missing Mailpit rather than silently reducing coverage.
+
+The published contract is OpenAPI **3.0.3**. Both the conformance validator and frontend generator
+consume the same bytes; never relabel the version in tests to accommodate a tool.
 
 Use Kotlin Test/Ktor Test Host, Vitest with Testing Library, and Playwright for cross-stack
 journeys. Add focused regression coverage for behavioral changes. Backend tests boot PostgreSQL

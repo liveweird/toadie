@@ -15,6 +15,10 @@ JVM footprint tuning is baked into the `application {}` block in `server/build.g
 
 ## Running the full stack
 
+The demo publishes the app, PostgreSQL, and Mailpit on **127.0.0.1 only**. This is a security boundary: development credentials and captured reset/MFA emails must not be exposed on a LAN. Production addressing belongs in a separately secured deployment. Recreate existing containers to apply changed bindings, keeping their database volume.
+
+CI is separate: `.github/workflows/e2e.yml` owns a disposable `toadie-ci` project on a fresh hosted runner, waits for readiness, runs browser journeys, collects diagnostics, and removes only that project's volume even after setup failures. Never move it to a shared self-hosted daemon. Ordinary local E2E commands retain their preserve-data behavior.
+
 Two ways to run, sharing the same `docker-compose.yaml`. All ports deliberately avoid Lettuce's (8080/5432/5173), so both stacks can run side by side on one machine:
 
 - **One command (clone & run / demo):** `docker compose up --build` builds the SPA, builds the server, starts PostgreSQL, runs Flyway on boot, and serves everything at `http://localhost:8081` (Swagger at `/openapi`; sign in as `admin@toadie.local` / `changeme`). Tear down with `docker compose down` (add `-v` to drop the DB volume).

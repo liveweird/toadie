@@ -1,0 +1,90 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21.0.11+10'
+          cache: gradle
+      - name: Build, test, static analysis, and coverage
+        run: ./gradlew build :server:koverXmlReport --no-daemon
+      - name: Upload backend reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-reports
+          path: |
+            server/build/reports/
+            server/build/test-results/
+            core/build/reports/
+          retention-days: 7
+
+  frontend:
+    name: Frontend and contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --legacy-peer-deps
+        working-directory: web
+      - name: Check API contract and generated types
+        working-directory: web
+        run: npm run lint:api && npm run check:api
+      - name: Build, lint, dead code, and coverage
+        working-directory: web
+        run: npm run build && npm run lint && npm run knip && npm run test:coverage
+      - name: Upload frontend coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-coverage
+          path: web/coverage/
+          retention-days: 7
+
+  e2e:
+    name: Browser journeys
+    uses: ./.github/workflows/e2e.yml
+
+  quality-gate:
+    # Require this ONE stable status in the repository ruleset. No path filters: a skipped
+    # dependency must never turn a required check green or leave a documentation PR pending.
+    name: Quality gate
+    if: ${{ always() }}
+    needs: [backend, frontend, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every verification job to succeed
+        env:
+          BACKEND: ${{ needs.backend.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$E2E" = success

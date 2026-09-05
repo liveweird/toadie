@@ -1,5 +1,7 @@
 ### Security posture: development vs production mode
 
+**Local-demo network boundary.** Compose publishes the app (:8081), PostgreSQL (:5433), and Mailpit (:8026) on `127.0.0.1` only. Do not widen those bindings casually: the demo has burned credentials, HTTP, and an unauthenticated mailbox containing reset/MFA emails. Remote deployment needs a separate production configuration with private secrets, TLS, and private database/mail services. Existing containers retain old bindings until recreated; editing YAML does not secure a running container retroactively.
+
 `ktor.development` is env-overridable (`$KTOR_DEVELOPMENT:true`): local `:server:run`/tests default to development mode; **the Docker image ships `KTOR_DEVELOPMENT=false`** (production mode), and `docker-compose.yaml` explicitly sets it back to `true` because it is the local plain-HTTP demo. Production mode activates HSTS + HTTPS redirect and three **fail-closed startup checks**:
 
 - **JWT secret** (`plugins/Security.kt`): blank, the placeholder `"secret"`, the repo-committed compose demo key (`dev-only-00366d…`), or the `k8s/templates/secret.yaml` template placeholder (`CHANGE-ME-openssl-rand-hex-32`) → warn in development, **refuse to start** in production. Set a strong private `JWT_SECRET`.

@@ -19,7 +19,13 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 - Frontend: `cd web && npm install --legacy-peer-deps`, then `npm run dev|build|lint|test|test:coverage|knip|gen:api` (details in `web/CLAUDE.md`).
 - E2E: `cd e2e && npm ci && npx playwright install chromium && npm test` (plus `npm run typecheck` and `npm run check:scenarios`).
 
+## Automated verification
+
+`.github/workflows/ci.yml` runs on pushes, PRs, merge queues, and manual dispatch. Its **Quality gate** requires backend build/coverage, frontend build/lint/knip/coverage + Spectral/schema-drift checks, and the reusable E2E workflow to succeed. After pushing, configure **Quality gate** as a required status in the GitHub repository ruleset; YAML alone cannot enforce merges. E2E owns a disposable `toadie-ci` Compose project on a fresh hosted runner, collects diagnostics, and removes only that project's volume even after setup failures. Local `npm test` preserves the development database. CI fails flaky browser tests and missing Mailpit. See `.claude/docs/testing.md`, `e2e/README.md`, and `HARDENING.md` for the staged follow-up work.
+
 ## Running the full stack
+
+Compose publishes the app, PostgreSQL, and Mailpit on **127.0.0.1 only**. The demo JWT key, database password, and captured reset/MFA mail must not be exposed on a LAN. Changing `MAIL_APP_URL` changes links, not bindings or production security. Existing containers retain old bindings until recreated; keep their database volume.
 
 `docker compose up --build` serves everything at `http://localhost:8081` (sign in as `admin@toadie.local` / `changeme`); local dev is `docker compose up postgres` (host port **5433**) + `./gradlew :server:run` + `cd web && npm run dev` (Vite on **5174**, proxying `/api` to :8081). The compose stack bundles **Mailpit** (`http://localhost:8026`) and wires the app's password-reset and MFA email to it (`MAIL_TRANSPORT=smtp`). Ports deliberately avoid Lettuce's 8080/5432/5173/8025 so both stacks can run side by side. Kubernetes (OrbStack) deployment targets the dedicated `toadie` namespace — see `k8s/templates/secret.yaml`'s header for the secret-creation command.
 
@@ -196,7 +202,7 @@ ch.nokillswit
 
 ### The OpenAPI contract
 
-`server/src/main/resources/openapi/documentation.yaml` is hand-maintained and authoritative: every endpoint change edits it in the same commit. The server test suite validates every test-client `/api/` interaction against it (`OpenApiConformance.kt`, default `-Dopenapi.conformance=fail`); the frontend derives its request/response types from it (`npm run gen:api` → committed `web/src/api/schema.ts` — regenerate in the same commit as a spec change). The file says `openapi: 3.1.0` but must use only 3.0-compatible constructs (the conformance harness relabels it in memory; `OpenApiSpecTest` guards this).
+`server/src/main/resources/openapi/documentation.yaml` is hand-maintained and authoritative: every endpoint change edits it in the same commit. The server test suite validates every test-client `/api/` interaction against it (`OpenApiConformance.kt`, default `-Dopenapi.conformance=fail`); the frontend derives its request/response types from it (`npm run gen:api` → committed `web/src/api/schema.ts` — regenerate in the same commit as a spec change). The file declares **OpenAPI 3.0.3**, matching its `nullable:` semantics. Both tools consume it verbatim — never relabel it in tests. `OpenApiSpecTest` pins the dialect and nullability; `cd web && npm run check:api` detects generated-type drift without changing files, and `npm run lint:api` runs the pinned Spectral CLI against the contract and reference fixture.
 
 ### Cross-cutting conventions
 

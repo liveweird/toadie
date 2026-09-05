@@ -24,7 +24,8 @@
 ## Scenario: a reset email delivers a working new password and kills the old one
 
 *Skips itself when Mailpit (`http://localhost:8026`, the compose stack's catcher) is
-unreachable — the email roundtrip cannot be observed on a log-transport dev stack.*
+unreachable locally — the email roundtrip cannot be observed on a log-transport dev stack.
+In CI it fails instead of skipping; the disposable stack must provide Mailpit.*
 
 1. The admin creates a throwaway user through the real UI (capturing the one-time revealed
    password) and signs out.

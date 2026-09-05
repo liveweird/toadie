@@ -28,11 +28,14 @@ runs both.
 Checks the structural rules tagged `[spectral]` / `[both]`:
 
 ```sh
-npx @stoplight/spectral-cli lint server/src/main/resources/openapi/documentation.yaml \
-  --ruleset api-guidelines/api-guidelines.spectral.yaml
+cd web
+npm ci --legacy-peer-deps
+npm run lint:api             # contract AND conformant fixture; lockfile-pinned CLI
+npm run check:api            # generated-type drift; never overwrites schema.ts
+cd ..
 
 # Sanity-check the ruleset itself against the conformant fixture (fully clean, incl. hints):
-npx @stoplight/spectral-cli lint api-guidelines/examples/conformant.yaml \
+web/node_modules/.bin/spectral lint api-guidelines/examples/conformant.yaml \
   --ruleset api-guidelines/api-guidelines.spectral.yaml
 ```
 

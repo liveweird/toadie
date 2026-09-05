@@ -10,7 +10,7 @@ services:
     ports:
       # Host port 5433 (not 5432) so Toadie can run beside Lettuce on the same machine;
       # in-network consumers still use postgres:5432.
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       # postgres 18+ images keep data in a versioned subdir of /var/lib/postgresql;
       # mounting the pre-18 /var/lib/postgresql/data path makes the container unhealthy.
@@ -28,7 +28,7 @@ services:
     container_name: toadie-mailpit
     restart: unless-stopped
     ports:
-      - "8026:8025"
+      - "127.0.0.1:8026:8025"
 
   app:
     build:
@@ -63,7 +63,7 @@ services:
       # demo only — set MAIL_APP_URL to the address other people reach the stack at.
       MAIL_APP_URL: "${MAIL_APP_URL:-http://localhost:8081}"
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     # Ceiling for the tuned JVM (SerialGC + -Xmx256m + C1, baked into bin/server): ~270 MiB RSS
     # under light load, so 512 MiB leaves comfortable headroom and bounds the container.
     mem_limit: 512m

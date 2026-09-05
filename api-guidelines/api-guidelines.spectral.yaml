@@ -347,6 +347,8 @@ rules:
 
   # --- API-DOC ---------------------------------------------------------------
 
+  oas3-schema: true # Validate the published dialect, not merely the house-style subset.
+
   operation-operationId-unique: true # API-DOC-003 (built-in from spectral:oas)
 
   no-openapi-31-null-type-arrays:
