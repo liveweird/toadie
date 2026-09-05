@@ -26,6 +26,12 @@ spinners must expose a named `status`, not an `aria-label` on a generic span. He
 save-flow test fixtures use paste events; keyboard behavior keeps real typing. Preserve the
 existing timeouts, coverage floors, and fail-on-flaky policy (see `.claude/docs/testing.md`).
 
+For entering Mantine dialogs, e2e uses `readyDialog(page, title)` to wait for computed opacity
+one before interacting: DOM visibility alone can pass before a deferred slide starts. The
+Lenses cleanup regression matches mutations to exact resource IDs, asserts their status, and
+waits for modal/row disappearance before continuing. `dialog-readiness.spec.ts` holds a real
+editor's entrance to pin that distinction without sleeps, click retries, or disabling animations.
+
 CI uses the complete Temurin version from `mise.toml` (`21.0.11+10.0.LTS`); keep the build/LTS suffix. `setup-java` cannot resolve the truncated `21.0.11+10` selector. The infrastructure regression suite pins CI/local version parity.
 
 `.github/workflows/ci.yml` runs on pushes, PRs, merge queues, and manual dispatch. Its **Quality gate** requires backend build/coverage, frontend build/lint/knip/coverage + Spectral/schema-drift checks, and the reusable E2E workflow to succeed. After pushing, configure **Quality gate** as a required status in the GitHub repository ruleset; YAML alone cannot enforce merges. E2E owns a disposable `toadie-ci` Compose project on a fresh hosted runner, collects diagnostics, and removes only that project's volume even after setup failures. Local `npm test` preserves the development database. CI fails flaky browser tests and missing Mailpit. See `.claude/docs/testing.md`, `e2e/README.md`, and `HARDENING.md` for the staged follow-up work.

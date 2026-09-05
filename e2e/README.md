@@ -64,6 +64,7 @@ from Lettuce, that any new or edited spec must satisfy:
 - Each spec's scenario file declares its **Owns** line (exclusive server-side state; "nothing —
   read-only" when applicable). Today: `auth`, `accessibility`, `url-import`, and `changelog`
   (device-local localStorage only) are read-only;
+  `dialog-readiness` opens and cancels an unsaved editor (browser-only entrance hold, no stored state);
   `catalog-files`, `errors`, and `source-sync` own throwaway files (unique names in `default`); `kinds`,
   `render`, `round-trip`, and `hierarchy` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `i18n` owns its throwaway user (and ONLY that user's language —
@@ -158,6 +159,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
   its completed report, plus reset confirmation/missing-link recovery; `color-contrast`
   consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
+- [`dialog-readiness.spec.ts`](scenarios/dialog-readiness.md) — hold a real modal entering,
+  prove the shared readiness helper waits despite DOM visibility, release it, and cancel.
 - [`annotations.spec.ts`](scenarios/annotations.md) — the annotation-key registry: modal
   validation → register a key (kinds only — values stay free) → edit → the regular user's
   read-only view → the editor's registry key Select with a free-text value on a new
@@ -202,7 +205,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`lenses.spec.ts`](scenarios/lenses.md) — Lenses: filter the Files list, save it as a
   named private lens, watch the Modified badge on divergence, apply the same lens on
   Hierarchy, Graph, and Errors, rename it public, delete it; throwaway unique-named files
-  and lenses.
+  and lenses. Dialog actions await entrance completion; mutations match the exact resource
+  and status, then wait for the completed UI before continuing or cleaning the next file.
 - [`lifecycles.spec.ts`](scenarios/lifecycles.md) — the lifecycles dictionary: seeded values
   → inline grammar validation → append a unique value → the regular user's read-only view →
   the editor's Lifecycle Select on a new Component → removal; the dictionary's only in-run

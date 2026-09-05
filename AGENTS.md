@@ -217,6 +217,10 @@ jobs must all succeed. E2E owns a disposable `toadie-ci` project on a fresh host
 cleanup removes only its data. Local E2E preserves the dev volume. CI fails flaky browser
 tests and missing Mailpit rather than silently reducing coverage.
 
+For animated modal actions, use the E2E `readyDialog(page, title)` helper: visible does not
+mean the entrance transition has finished. Match mutation responses to their exact resource,
+assert the returned status, then wait for completed UI before navigating or cleaning another row.
+
 The published contract is OpenAPI **3.0.3**. Both the conformance validator and frontend generator
 consume the same bytes; never relabel the version in tests to accommodate a tool.
 
