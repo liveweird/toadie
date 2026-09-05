@@ -1,5 +1,14 @@
 ### Testing
 
+**Session lifecycle regressions (V25).** `AuthSessionServiceTest` injects a clock and tests
+expiry, cross-instance revocation, stale-epoch issuance, competing credential writes, and
+logout/renewal races. `SessionRevocationTest` checks current and superseded pairs, independent
+logins, foreign-token logout bodies, account changes/deletion, and malformed family/identity
+claims. MFA tests reject challenges predating a password change. No sleep is needed to cross
+a JWT timestamp boundary: the account epoch is exact. Tests must never rely on a demoted
+administrator's stale token to perform protected operations. The users browser journey checks
+the required re-login after self password change, with its scenario/coverage-map entry updated.
+
 **Automatic CI.** `.github/workflows/ci.yml` runs every push/PR, merge group, and manual dispatch without path filters. Backend: `./gradlew build :server:koverXmlReport`; frontend: locked `npm ci --legacy-peer-deps`, `lint:api`, `check:api`, build, lint, knip, and coverage. The reusable E2E workflow runs TypeScript/scenario parity and browser journeys. The aggregate **Quality gate** fails if any dependency fails, is cancelled, or is skipped; make it a required repository status after pushing (repository settings, not something YAML activates). E2E owns a disposable `toadie-ci` project on a fresh GitHub-hosted runner, waits for `/readyz` and Mailpit, collects diagnostics, and always removes only that project's volume. Never move it to a shared self-hosted Docker daemon. Retries collect evidence but `failOnFlakyTests` keeps flaky tests red; missing Mailpit fails CI instead of skipping MFA/reset coverage. `web/src/test/infrastructure.test.js` guards demo bindings and CI wiring; this Node filesystem test stays JavaScript so it needs no Node globals in the SPA's TypeScript configuration.
 
 **OrbStack discovery.** If Docker CLI works but Testcontainers cannot find a daemon, set `DOCKER_HOST` to the endpoint printed by `docker context inspect --format '{{.Endpoints.docker.Host}}'` for that invocation. The CLI's selected context is not automatically inherited by Testcontainers. Never bake a developer's socket path into repository configuration.

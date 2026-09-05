@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { screen, waitFor } from "@testing-library/react";
 import { notifications } from "@mantine/notifications";
+import { useLocation } from "react-router-dom";
 import ChangePassword from "./ChangePassword";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
@@ -10,6 +11,10 @@ const TOKEN_KEY = "toadie.auth.token";
 const USER_ID_KEY = "toadie.auth.userId";
 
 type FetchMock = ReturnType<typeof vi.fn>;
+
+function LocationProbe() {
+  return <output>{useLocation().pathname}</output>;
+}
 
 async function fill(user: ReturnType<typeof userEvent.setup>, current: string, next: string, confirm = next) {
   await user.type(screen.getByLabelText(/^current password( \*)?$/i), current);
@@ -33,7 +38,7 @@ describe("ChangePassword page", () => {
     localStorage.clear();
   });
 
-  test("PUTs to the caller's own password endpoint and toasts", async () => {
+  test("changes the password, clears the session, and returns to sign-in", async () => {
     const toast = vi.spyOn(notifications, "show").mockReturnValue("id");
     mockFetch.mockImplementation((url: string, init?: RequestInit) =>
       Promise.resolve(
@@ -43,11 +48,12 @@ describe("ChangePassword page", () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ChangePassword />);
+    localStorage.setItem("toadie.auth.refreshToken", "old-refresh");
+    renderWithProviders(<><ChangePassword /><LocationProbe /></>, { route: "/change-password" });
 
     await fill(user, "old-password-1", "new-password-42");
     await waitFor(() => expect(toast).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "Password changed", color: "teal" }),
+      expect.objectContaining({ message: "Password changed. Sign in again on each device.", color: "teal" }),
     ));
     const putCall = mockFetch.mock.calls.find(
       ([url, init]) =>
@@ -59,6 +65,10 @@ describe("ChangePassword page", () => {
     });
     // The form resets after success.
     expect((screen.getByLabelText(/^current password( \*)?$/i) as HTMLInputElement).value).toBe("");
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem(USER_ID_KEY)).toBeNull();
+    expect(localStorage.getItem("toadie.auth.refreshToken")).toBeNull();
+    expect(await screen.findByText("/login")).toBeInTheDocument();
     toast.mockRestore();
   });
 
@@ -96,5 +106,6 @@ describe("ChangePassword page", () => {
 
     await fill(user, "wrong-old-1", "new-password-42");
     expect(await screen.findByText(/current password is incorrect/i)).toBeInTheDocument();
+    expect(localStorage.getItem(TOKEN_KEY)).toBe("fake-token");
   });
 });

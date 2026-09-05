@@ -12,8 +12,10 @@ regression tests synchronized with each stage; do not lower coverage thresholds.
 - [x] Loopback-only Compose demo ports, guarded by a regression test.
 - [x] Honest OpenAPI 3.0.3; no validator-only relabeling; nullability regression test.
 - [x] Pinned Spectral CLI, schema validation, and read-only generated-type drift check.
-- [ ] Push the workflow and require **Quality gate** in GitHub repository settings.
-- [ ] Observe a successful hosted CI run (local equivalents are not a hosted-run result).
+- [x] Push the workflow to master.
+- [ ] Require **Quality gate** in GitHub repository settings (not changed by this implementation).
+- [x] Observe a successful hosted CI run: [master at 6e0962b](https://github.com/liveweird/toadie/actions/runs/33988678078),
+  backend, frontend/contracts, browser journeys, and aggregate gate all passed.
 
 Existing running demo containers are not automatically rebound by editing Compose. Apply
 the new bindings at the next intentional recreation, preserving their database volume.
@@ -22,7 +24,7 @@ the new bindings at the next intentional recreation, preserving their database v
 
 The first hosted run exposed a setup-only failure: Temurin's exact version needs the full
 `21.0.11+10.0.LTS` suffix, not `21.0.11+10`. The CI selector is corrected and a regression
-test compares it with `mise.toml`. A successful hosted run remains pending.
+test compares it with `mise.toml`. The subsequent master run linked above passed.
 
 - `./gradlew build :server:koverXmlReport --no-daemon`: passed, including detekt and
   coverage gates; 371 tests, no failures or skips. Testcontainers used OrbStack through a
@@ -45,14 +47,46 @@ test compares it with `mise.toml`. A successful hosted run remains pending.
 ## Stage 2 — authentication lifecycle
 
 - [ ] Single-use expiring reset links; do not change the password before mailbox confirmation.
-- [ ] Prompt session invalidation on account deletion, password change, and privilege removal.
-- [ ] Session-family logout so superseded refresh tokens cannot outlive a logged-out session.
+- [x] Prompt session invalidation on account deletion, password change, and privilege removal.
+- [x] Session-family logout so superseded refresh tokens cannot outlive a logged-out session.
+- [x] Reject MFA challenges issued before a credential/identity change; compare-and-set self
+  password writes so overlapping requests cannot overwrite newer credentials.
 - [ ] Regression coverage for revocation, reset-token replay/expiry, overlapping operations,
   and challenges issued before a credential change; update API, migrations, UI, EN/PL, and E2E.
 
 These are intentional behavior changes, not merely refactors. Keep them in a separately
 reviewable changeset. Inspect Lettuce before introducing shared capabilities, but do not
 copy the reviewed weaknesses back into the implementation.
+
+The first Stage 2 changeset adds V25 (`auth_sessions` + `users.auth_version`) and updates
+the server, contract/generated types, self-password-change UI, EN/PL messages, regressions,
+browser scenario, and Claude docs. Password, email, and role changes invalidate that
+user's sessions; name-only/no-op profile edits preserve them. Applying V25 requires everyone to sign
+in again; pre-migration tokens have no session family. Already-authorized requests may finish.
+**Reset confirmation links are still pending**; the current emailed-password flow remains an
+identified weakness, now with exact access/refresh revocation when the password is replaced.
+
+### Local verification of the session changeset (2026-09-05)
+
+- Full Gradle build, detekt, and coverage gates passed: 379 backend tests, no failures or
+  skips; 97.75% line and 76.57% branch coverage. Coverage thresholds are unchanged.
+- Frontend build, lint, knip, API drift/lint, and coverage gates passed: 668 tests across
+  87 suites; 97.60% lines, 95.34% statements, 92.67% functions, 91.61% branches.
+- Runtime OpenAPI conformance covers all 52 operations and 218 of 274 declared
+  operation/status pairs. The last-admin regression now rejects the demoted actor's stale
+  token instead of using it to reach a 409; the service's last-admin backstop remains tested.
+  Spectral reports 0 errors, 2 registered-gap warnings, and 70 registered-gap hints.
+- E2E type checking and all 25 spec/scenario pairs passed. The four focused auth/user
+  journeys passed against the final rebuilt image without retries; an earlier build also
+  passed those journeys twice (8 runs). The full 43-journey hosted result above is for
+  committed Stage 1, not this session changeset.
+- Verification used a separate Compose project, ports, and database volume. Its three
+  containers, network, and disposable test-data volume were removed afterward; the existing
+  development stack and database were preserved. At this verification checkpoint the changeset
+  was not yet committed or deployed to that stack. V25 was verified on fresh test databases,
+  not the development database.
+- Read-only inspection of the active master rules found no required **Quality gate** status
+  check. Repository settings were not changed; that Stage 1 task remains open.
 
 ## Stage 3 — failure handling and concurrency
 

@@ -21,8 +21,9 @@ fun JwtConfig.issueAccessToken(
     email: String,
     roles: Set<UserRole>,
     disabledFeatures: Set<Feature>,
+    sessionId: String,
 ): IssuedToken =
-    issueToken(userId, email, roles, disabledFeatures, TOKEN_TYPE_ACCESS, accessExpiresInSeconds)
+    issueToken(userId, email, roles, disabledFeatures, sessionId, TOKEN_TYPE_ACCESS, accessExpiresInSeconds)
 
 /** Longer-lived token exchanged at POST /api/v1/refresh for a fresh pair. */
 fun JwtConfig.issueRefreshToken(
@@ -30,14 +31,16 @@ fun JwtConfig.issueRefreshToken(
     email: String,
     roles: Set<UserRole>,
     disabledFeatures: Set<Feature>,
+    sessionId: String,
 ): IssuedToken =
-    issueToken(userId, email, roles, disabledFeatures, TOKEN_TYPE_REFRESH, refreshExpiresInSeconds)
+    issueToken(userId, email, roles, disabledFeatures, sessionId, TOKEN_TYPE_REFRESH, refreshExpiresInSeconds)
 
 private fun JwtConfig.issueToken(
     userId: UInt,
     email: String,
     roles: Set<UserRole>,
     disabledFeatures: Set<Feature>,
+    sessionId: String,
     typ: String,
     ttlSeconds: Long,
 ): IssuedToken {
@@ -46,8 +49,9 @@ private fun JwtConfig.issueToken(
     val token = JWT.create()
         .withAudience(audience)
         .withIssuer(issuer)
-        .withIssuedAt(Date(now)) // compared against users.password_changed_at on /refresh
+        .withIssuedAt(Date(now)) // informational; session revocation uses the exact account epoch
         .withJWTId(UUID.randomUUID().toString())
+        .withClaim("sid", sessionId)
         .withClaim("email", email)
         .withClaim("userId", userId.toLong())
         .withArrayClaim("roles", roles.map { it.name }.sorted().toTypedArray())

@@ -4,6 +4,8 @@ import ch.nokillswit.annotations.AnnotationKeyService
 import ch.nokillswit.annotations.AnnotationKeyServiceKey
 import ch.nokillswit.auth.TokenBlocklistService
 import ch.nokillswit.auth.TokenBlocklistServiceKey
+import ch.nokillswit.auth.AuthSessionService
+import ch.nokillswit.auth.AuthSessionServiceKey
 import ch.nokillswit.catalog.CatalogFileEventService
 import ch.nokillswit.catalog.CatalogFileEventServiceKey
 import ch.nokillswit.catalog.CatalogFileService
@@ -47,4 +49,5 @@ suspend fun Application.configureDatabase() {
     attributes.put(EntityTypesServiceKey, EntityTypesService(database))
     attributes.put(AnnotationKeyServiceKey, AnnotationKeyService(database))
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
+    attributes.put(AuthSessionServiceKey, AuthSessionService(database))
 }

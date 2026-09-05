@@ -33,6 +33,15 @@ The pinned `ajv` 8 development dependency supplies Spectral's runtime peers (`aj
 
 ## Error handling
 
+**Session revocation (V25):** password, email, and role changes invalidate
+all existing sessions of the affected account; logout invalidates every refresh generation
+of the current login. Old pre-V25 tokens require sign-in again. The self ChangePassword page
+clears tokens and the query cache on its successful 204, shows the localized sign-in-again
+toast, navigates to `/login`, and notifies the auth boundary. Failed changes retain the session.
+Other revocations use the existing single-flight refresh/definitive-401 handling; do not add
+a parallel transport implementation. MFA remains login-scoped. Reset-link confirmation is
+not implemented yet; `/reset-password` still has the old behavior tracked in `HARDENING.md`.
+
 - **ErrorBoundary** (`components/ErrorBoundary.tsx`): a page render crash must never white-screen the app. `RouteErrorBoundary` wraps the `<Outlet />` inside `AppShell.Main` (header/nav survive; keyed by `location.pathname`, so navigating anywhere recovers), and a plain `ErrorBoundary` in `main.tsx` is the last resort for shell crashes. Don't add per-page boundaries — the two mounts are the model.
 - **Catch-all 404**: `pages/NotFound.tsx` is the LAST `path="*"` child of the Shell route. New routes go above it.
 - **Chunk-load recovery**: `main.tsx` listens for `vite:preloadError` (a redeploy 404s the old hashed chunks) and reloads once, rate-limited via sessionStorage (`toadie.chunkReloadedAt`, max one reload/minute) so a genuinely missing chunk falls through to the ErrorBoundary instead of looping.

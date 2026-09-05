@@ -4,6 +4,7 @@ import ch.nokillswit.auth.LoginRequest
 import ch.nokillswit.auth.LoginResponse
 import ch.nokillswit.auth.MfaChallengeResponse
 import ch.nokillswit.auth.MfaVerifyRequest
+import ch.nokillswit.auth.hashPassword
 import ch.nokillswit.users.Feature
 import ch.nokillswit.users.UserFeaturesUpdateRequest
 import ch.nokillswit.users.UserRole
@@ -30,6 +31,31 @@ import kotlin.test.assertTrue
  * FeatureFlagsTest/AuditTest.
  */
 class MfaLoginTest {
+
+    @Test
+    fun `a password change invalidates a pending MFA challenge and a new challenge still works`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("mfa-credential-epoch")
+        val userId = seedMfaUser(email, "old-password")
+        val mail = LogCapture("ch.nokillswit.mail")
+        try {
+            val client = jsonClient()
+            val pending = client.login(email, "old-password").body<MfaChallengeResponse>()
+            val oldCode = mail.codeFor(email)
+            TestUsers.service.updatePassword(userId, hashPassword("new-password", cost = 4))
+            assertEquals(HttpStatusCode.Unauthorized, client.verify(pending.challengeId, oldCode).status)
+        } finally {
+            mail.detach()
+        }
+        val freshMail = LogCapture("ch.nokillswit.mail")
+        try {
+            val client = jsonClient()
+            val fresh = client.login(email, "new-password").body<MfaChallengeResponse>()
+            assertEquals(HttpStatusCode.OK, client.verify(fresh.challengeId, freshMail.codeFor(email)).status)
+        } finally {
+            freshMail.detach()
+        }
+    }
 
     /** Enable MFA for [userId] — an empty disabled set removes the default MFA row. */
     private suspend fun HttpClient.enableMfa(userId: UInt) =

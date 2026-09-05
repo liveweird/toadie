@@ -240,7 +240,7 @@ the same commit** — this list is the coverage map, the scenario file is the de
   guard: a loopback URL is refused with the uniform public-https error (the happy network
   path deliberately stays server-tested, no external dependency in CI).
 - [`users.spec.ts`](scenarios/users.md) — the account lifecycle: create via the one-time
-  password reveal → the new user's limited view + self password change → promotion →
+  password reveal → the new user's limited view + self password change → required re-login → promotion →
   deletion → the dead login; own-row protections on the admin's row.
 
 Specs log in with the seeded admin (`admin@toadie.local`, password `changeme`), and use unique

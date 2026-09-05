@@ -202,6 +202,23 @@ ch.nokillswit
 
 **Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse`) with the `validateX` free function enforced by route AND service (in the DTO file, or a sibling `<Entity>Validation.kt` once the rules outgrow it — the catalog split), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_SECTIONS` entries (`web/src/utils/navigation.ts`), and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`.
 
+### Authentication session lifecycle (V25)
+
+`auth/AuthSessionService.kt` owns persisted login families (`auth_sessions`); every JWT carries
+their shared `sid`. The bearer verifier checks an active family and the user's current
+`auth_version` in PostgreSQL on every request, without caching acceptance. Password changes,
+bootstrap rotation, and email/role changes advance that version in the
+mutation transaction. Deletion rejects the active-user check. Logout deletes the whole family,
+including superseded refresh tokens; another login/device is unaffected. Renewal is never an
+upsert and cannot resurrect logout. Pending MFA challenges retain the epoch verified with the
+password, and issuance rechecks it under a user-row lock. Self password changes use compare-and-set
+and the SPA clears tokens/query cache and returns to login. Existing in-flight requests may finish.
+
+Deploying V25 invalidates pre-migration tokens: everyone must sign in again. `password_changed_at`
+remains an audit timestamp, not the revocation boundary. MFA/throttle state remains instance-local,
+so this is not permission to add replicas. The emailed-password reset design is **still pending**
+replacement with single-use confirmation links; see `HARDENING.md` and the cross-cutting auth docs.
+
 ### The OpenAPI contract
 
 `server/src/main/resources/openapi/documentation.yaml` is hand-maintained and authoritative: every endpoint change edits it in the same commit. The server test suite validates every test-client `/api/` interaction against it (`OpenApiConformance.kt`, default `-Dopenapi.conformance=fail`); the frontend derives its request/response types from it (`npm run gen:api` → committed `web/src/api/schema.ts` — regenerate in the same commit as a spec change). The file declares **OpenAPI 3.0.3**, matching its `nullable:` semantics. Both tools consume it verbatim — never relabel it in tests. `OpenApiSpecTest` pins the dialect and nullability; `cd web && npm run check:api` detects generated-type drift without changing files, and `npm run lint:api` runs the pinned Spectral CLI against the contract and reference fixture.

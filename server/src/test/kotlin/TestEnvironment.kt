@@ -181,6 +181,9 @@ suspend fun assertStartupFails(messagePart: String, start: suspend () -> Unit) {
 internal fun newTokenBlocklistService(clock: () -> Long): ch.nokillswit.auth.TokenBlocklistService =
     ch.nokillswit.auth.TokenBlocklistService(sharedTestDatabase, clock)
 
+internal fun newAuthSessionService(clock: () -> Long): ch.nokillswit.auth.AuthSessionService =
+    ch.nokillswit.auth.AuthSessionService(sharedTestDatabase, clock)
+
 private val sharedTestDatabase: R2dbcDatabase by lazy {
     R2dbcDatabase.connect(
         url = PostgresTestSupport.r2dbcUrl,
