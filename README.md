@@ -67,14 +67,23 @@ Errors report and the Graph have something to show.
 
 ## Running on Kubernetes (local)
 
-With a local cluster that shares the Docker image store (e.g. OrbStack):
+With a local cluster that shares the Docker image store (e.g. OrbStack) and an ingress-nginx
+controller (install recipe, host choice and the full walkthrough in
+`.claude/skills/run-stack/SKILL.md`):
 
 ```bash
 docker build -t toadie-app:latest .
 kubectl create namespace toadie
-# create the toadie-secrets Secret — see the header comment in k8s/secret.yaml
-kubectl apply -f k8s/
+# out-of-band config FIRST — the templates under k8s/templates/ carry placeholders and are never applied:
+#   the toadie-secrets Secret   — command in k8s/templates/secret.yaml
+#   the toadie-tls TLS Secret   — self-signed recipe in k8s/templates/tls-secret.yaml
+#   the toadie-config ConfigMap — kubectl -n toadie create configmap toadie-config --from-literal=MAIL_APP_URL=https://$HOST
+kubectl apply -f k8s/            # non-recursive on purpose: k8s/templates/ is skipped, so this is safe to re-run
+sed "s#toadie.example.com#$HOST#g" k8s/templates/app-ingress.yaml | kubectl apply -f -
 ```
+
+The app runs in production mode behind the TLS-terminating Ingress; its probes hit the dedicated
+`/healthz` (liveness) and `/readyz` (readiness) endpoints.
 
 ## Local development
 

@@ -59,7 +59,9 @@ services:
       SMTP_PORT: "1025"
       SMTP_STARTTLS: "false"
       MAIL_FROM: toadie@localhost
-      MAIL_APP_URL: http://localhost:8081
+      # The URL password-reset / MFA emails link to. localhost is right for the one-machine
+      # demo only — set MAIL_APP_URL to the address other people reach the stack at.
+      MAIL_APP_URL: "${MAIL_APP_URL:-http://localhost:8081}"
     ports:
       - "8081:8081"
     # Ceiling for the tuned JVM (SerialGC + -Xmx256m + C1, baked into bin/server): ~270 MiB RSS

@@ -25,9 +25,11 @@ WORKDIR /src
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY gradle/ gradle/
 RUN ./gradlew --version --no-daemon
-# Module build files, then sources.
-COPY core/build.gradle.kts core/
-COPY server/build.gradle.kts server/
+# Module build files + the dependency lockfiles (locking is ON — a missing lockfile fails the
+# resolution, which is the point), then sources.
+COPY settings-gradle.lockfile buildscript-gradle.lockfile ./
+COPY core/build.gradle.kts core/gradle.lockfile core/
+COPY server/build.gradle.kts server/gradle.lockfile server/
 COPY core/src/ core/src/
 COPY server/src/ server/src/
 # installDist keeps every dependency as its own JAR, so Flyway's ServiceLoader
@@ -36,7 +38,8 @@ COPY server/src/ server/src/
 RUN ./gradlew :server:installDist --no-daemon
 
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:25-jre AS runtime
+# The same JDK line as the build stage, mise.toml and jvmToolchain(21): one Java everywhere.
+FROM eclipse-temurin:21-jre AS runtime
 WORKDIR /app
 COPY --from=server /src/server/build/install/server/ ./
 COPY --from=web /web/dist web

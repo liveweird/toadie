@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - env:
-            # Secrets come from the `toadie-secrets` Secret — see k8s/secret.yaml for how to
+            # Secrets come from the `toadie-secrets` Secret — see k8s/templates/secret.yaml for how to
             # create it (never commit real values). The app fail-closes on placeholder/burned
             # JWT secrets and on unrotated seed passwords, so a misconfigured deploy crash-loops
             # instead of running with a backdoor.
@@ -50,15 +50,18 @@ spec:
             # and the seed credentials are tolerated, exactly like the compose demo.
             - name: KTOR_DEVELOPMENT
               value: "false"
-            # The app sits behind an ingress / LB that must terminate TLS and set
-            # X-Forwarded-For + X-Forwarded-Proto (and strip client-supplied values), so rate
-            # limiting keys on the real client IP and the HTTPS redirect sees the real scheme.
+            # The app sits behind a TLS-terminating ingress (k8s/templates/app-ingress.yaml) that sets
+            # X-Forwarded-For (replaced with the real client IP) + X-Forwarded-Proto/-Host, so rate
+            # limiting keys on the real client and the HTTPS redirect sees the real scheme and
+            # name. HTTP_PROXY_HOPS = trusted proxies that APPEND to X-Forwarded-For (1 = the
+            # ingress alone; see application.yaml `http.proxyHops`).
             - name: HTTP_BEHIND_PROXY
               value: "true"
-            # Outbound email (no consumer feature yet — password reset / MFA arrive with
-            # their Lettuce ports). Ships disabled — set "smtp" plus real SMTP_HOST/
-            # MAIL_FROM/MAIL_APP_URL to enable (production refuses the `log` transport).
-            # SMTP credentials come from the Secret.
+            - name: HTTP_PROXY_HOPS
+              value: "1"
+            # Outbound email (password reset, email MFA). Ships disabled — set "smtp" plus real
+            # SMTP_HOST/MAIL_FROM to enable (production refuses the `log` transport). SMTP
+            # credentials come from the Secret, the public URL from the ConfigMap below.
             - name: MAIL_TRANSPORT
               value: "disabled"
             - name: SMTP_HOST
@@ -69,8 +72,20 @@ spec:
               value: "true"
             - name: MAIL_FROM
               value: "toadie@localhost"
+            # The public URL the emails link to — keep in step with the Ingress host
+            # (k8s/templates/app-ingress.yaml) and the certificate SAN. Sourced from the
+            # out-of-band `toadie-config` ConfigMap (key MAIL_APP_URL) so no per-deployment
+            # hostname is baked into this file — `kubectl apply -f k8s/` is then safe to run
+            # repeatedly without reverting a substituted host. optional: true → a missing key
+            # leaves it blank, which the server tolerates with a startup WARN (link-less emails),
+            # never a crash. Create it beside toadie-secrets, e.g.:
+            #   kubectl -n toadie create configmap toadie-config --from-literal=MAIL_APP_URL=https://$HOST
             - name: MAIL_APP_URL
-              value: ""
+              valueFrom:
+                configMapKeyRef:
+                  name: toadie-config
+                  key: MAIL_APP_URL
+                  optional: true
             - name: SMTP_USER
               valueFrom:
                 secretKeyRef:
@@ -100,19 +115,44 @@ spec:
               memory: "320Mi"
             limits:
               memory: "512Mi"
-          # The image sets WEB_STATIC_DIR, so / serves the SPA. Initial delays
-          # cover JVM boot + Flyway; until postgres is ready the app restarts,
-          # which the rollout absorbs.
+          # Dedicated health endpoints (plugins/Health.kt), both unauthenticated and outside /api/:
+          #   /healthz — liveness: process-alive only, never touches the DB (so a DB outage does
+          #              NOT restart-storm the pod).
+          #   /readyz  — readiness: a trivial DB round-trip; 503 while the DB is unreachable, so the
+          #              pod is pulled from the Service until it can actually serve API traffic.
+          # The startupProbe gives JVM boot + Flyway migrations up to ~150s (30 × 5s) before the
+          # liveness clock starts, so a slow first boot cannot trigger a restart.
+          # Every probe sends X-Forwarded-Proto: https — the header the TLS-terminating ingress sets
+          # (HTTP_BEHIND_PROXY above makes the app trust it). Without it, production mode answers the
+          # plain-HTTP probe with a 301 to https://<pod-ip>/, which the kubelet FOLLOWS (same host)
+          # into a refused :443 — probes never pass and the pod crash-loops (Lettuce's v3.6.1
+          # incident, reproduced here by the 2026-09-05 deployment audit).
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+              httpHeaders:
+                - name: X-Forwarded-Proto
+                  value: https
+            periodSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
-              path: /
+              path: /readyz
               port: 8081
-            initialDelaySeconds: 15
+              httpHeaders:
+                - name: X-Forwarded-Proto
+                  value: https
             periodSeconds: 5
+            # Above the handler's own 2 s ceiling (READYZ_TIMEOUT_MS in plugins/Health.kt), so an
+            # unreachable database surfaces as the app's 503, not as the kubelet's client timeout.
+            timeoutSeconds: 3
           livenessProbe:
             httpGet:
-              path: /
+              path: /healthz
               port: 8081
-            initialDelaySeconds: 30
+              httpHeaders:
+                - name: X-Forwarded-Proto
+                  value: https
             periodSeconds: 10
       restartPolicy: Always

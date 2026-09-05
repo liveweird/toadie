@@ -1,0 +1,66 @@
+# The TLS-terminating front door the app deployment is written for (HTTP_BEHIND_PROXY=true,
+# production mode). Whole host → service app:8081, no path rewrite: the app is served at the
+# domain root (asset URLs and the router are root-absolute).
+#
+# THIS FILE LIVES IN k8s/templates/ ON PURPOSE — it carries the per-deployment host placeholder
+# (below, twice) and must never be applied unsubstituted. `kubectl apply -f k8s/` is non-recursive,
+# so it skips templates/ and can never clobber a substituted host. Apply it explicitly, last:
+#   sed "s#toadie.example.com#$HOST#g" k8s/templates/app-ingress.yaml | kubectl apply -f -
+# (MAIL_APP_URL is not baked into the deployment — it comes from the toadie-config ConfigMap;
+# keep the ConfigMap value, this host, and the certificate SAN in step.)
+#
+# ⚠ CONTROLLER RETIREMENT: community ingress-nginx was RETIRED in March 2026 (Kubernetes Steering
+# + Security Response Committees, https://kubernetes.io/blog/2026/01/29/ingress-nginx-statement/) —
+# no further security patches. This manifest remains the LOCAL-PROOF reference only. Any real
+# production deployment MUST migrate to a maintained ingress controller or the Gateway API; that is
+# a behavior migration, not an image-name swap — re-verify the proxy contract below (HTTP_PROXY_HOPS,
+# X-Forwarded-* handling incl. spoof removal, the 308/HSTS/XFF-replacement assumptions, and
+# ProductionHttpTest) against the replacement.
+#
+# The proxy contract the app relies on, satisfied by ingress-nginx's DEFAULTS:
+#   - X-Forwarded-For is REPLACED with the client address nginx saw (the client's own value moves
+#     to X-Original-Forwarded-For); X-Forwarded-Proto/-Host/-Port are set from the request.
+#     If you turn on the controller's `use-forwarded-headers` / `compute-full-forwarded-for`
+#     (an appending chain), raise HTTP_PROXY_HOPS in app-deployment.yaml accordingly.
+#   - Plain HTTP is answered by the controller with a 308 to https:// once the tls: block below
+#     exists (`ssl-redirect`, default on — pinned in the annotation); the app's own 301 stays for
+#     pod-direct traffic.
+#   - The controller OVERWRITES Strict-Transport-Security (configmap `hsts`,
+#     `hsts-include-subdomains`, default on/on) — HSTS policy is configured there, not in the app.
+#
+# Placeholders to keep in step (all three carry the deployment's real hostname): the host below
+# (twice), the MAIL_APP_URL key in the `toadie-config` ConfigMap (created out-of-band, consumed by
+# app-deployment.yaml), and the certificate SAN in the `toadie-tls` Secret
+# (k8s/templates/tls-secret.yaml has the self-signed recipe and the cert-manager alternative).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app
+  namespace: toadie
+  labels:
+    io.kompose.service: app
+  annotations:
+    # Edge HTTP→HTTPS redirect (308). ingress-nginx's default once tls: is present; pinned so a
+    # controller-wide `ssl-redirect: "false"` cannot silently switch it off for this host.
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # nginx's client_max_body_size default is 1m. The app's own request ceiling is 10 MiB
+    # (MAX_REQUEST_BODY_BYTES, plugins/Http.kt) — a bulk catalog import must reach the app's
+    # problem+json 413, not nginx's HTML one, so the edge limit sits just above it.
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - toadie.example.com
+      secretName: toadie-tls
+  rules:
+    - host: toadie.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app
+                port:
+                  number: 8081

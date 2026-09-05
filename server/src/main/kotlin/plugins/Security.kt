@@ -54,7 +54,7 @@ fun Application.configureSecurity() {
         "secret",
         // Committed to docker-compose.yaml for the local clone-&-run demo — public, thus burned.
         "dev-only-00366d050fa2c920f7efb9a880b8b9c60e693b1797e782a33ddbfb51f88ea9d0",
-        // The k8s/secret.yaml template placeholder — applying the template verbatim must not boot.
+        // The k8s/templates/secret.yaml template placeholder — applying the template verbatim must not boot.
         "CHANGE-ME-openssl-rand-hex-32",
     )
     if (jwtConfig.secret.isBlank() || jwtConfig.secret in burnedSecrets) {

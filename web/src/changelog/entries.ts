@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.22.0",
+    date: "2026-09-05",
+    en: `**Deployment readiness: the Kubernetes flow now works in production mode.**
+
+- The app answers dedicated **health endpoints** — \`/healthz\` (is the process up) and \`/readyz\` (can it reach the database) — and the Kubernetes probes use them, so a pod no longer restarts in a loop because its probe was redirected to HTTPS, and a database outage takes the pod out of service without restarting it.
+- A **TLS front door**: the manifests ship an Ingress template with a self-signed certificate recipe, the public address that emails link to comes from a ConfigMap, and the placeholder Secret and TLS templates moved out of the applied directory so re-deploying can never overwrite real credentials.
+- Behind the proxy only the canonical forwarded headers are trusted, and the client address is read from the proxy's end of the list — a client can no longer spoof its address or the redirect target.
+- Builds are reproducible: Gradle dependencies are locked, the Gradle distribution is checksum-verified, and one Java version runs everywhere.`,
+    pl: `**Gotowość wdrożeniowa: przepływ Kubernetes działa teraz w trybie produkcyjnym.**
+
+- Aplikacja odpowiada na dedykowane **punkty zdrowia** — \`/healthz\` (czy proces działa) i \`/readyz\` (czy dosięga bazy danych) — a sondy Kubernetes z nich korzystają, więc pod nie restartuje się już w pętli przez sondę przekierowaną na HTTPS, a awaria bazy wyłącza go z ruchu bez restartu.
+- **Frontowe drzwi TLS**: manifesty zawierają szablon Ingress z przepisem na certyfikat self-signed, publiczny adres w linkach e-maili pochodzi z ConfigMap, a szablony Secret i TLS z wartościami zastępczymi przeniesiono poza katalog stosowany przy wdrożeniu, więc ponowne wdrożenie nigdy nie nadpisze prawdziwych poświadczeń.
+- Za proxy zaufanie mają tylko kanoniczne nagłówki forwarded, a adres klienta jest czytany od strony proxy — klient nie może już podszyć się pod inny adres ani cel przekierowania.
+- Buildy są powtarzalne: zależności Gradle są zablokowane, dystrybucja Gradle jest weryfikowana sumą kontrolną, a wszędzie działa jedna wersja Javy.`,
+  },
+  {
     version: "1.21.0",
     date: "2026-09-03",
     en: `**Quick view: read a file without leaving the list.**

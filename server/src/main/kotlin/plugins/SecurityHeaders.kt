@@ -25,7 +25,12 @@ private const val APP_CSP =
 // react-markdown with no raw HTML); these headers contain the blast radius of any future
 // regression and harden against clickjacking / MIME sniffing / referrer leakage.
 fun Application.configureSecurityHeaders() {
-    intercept(ApplicationCallPipeline.Plugins) {
+    // Setup, not Plugins: in production mode the HttpsRedirect plugin (configureHttp) answers a
+    // plain-HTTP request with its 301 from the Plugins phase, and appending to an already
+    // committed response throws — every redirected request used to log an ERROR stack trace and
+    // the 301 went out without these headers (Lettuce's v3.6.1 finding; ProductionHttpTest pins
+    // it here). Setup runs before any plugin can respond, so the redirect carries them too.
+    intercept(ApplicationCallPipeline.Setup) {
         val headers = call.response.headers
         if (headers["X-Content-Type-Options"] == null) { // set once per call
             headers.append("X-Content-Type-Options", "nosniff")

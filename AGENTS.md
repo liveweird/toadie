@@ -13,13 +13,14 @@ reviews. If documentation and executable configuration disagree, the configurati
 update the affected guidance in the same change.
 
 Toadie deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce). The implemented
-surface includes authentication/session handling, admin-managed users and feature flags, email
-MFA and password reset, shared paging, catalog-file CRUD across the seven landscape kinds,
-strict namespace/label/tag/reference validation, cross-checking, relationship-graph rendering,
-and multi-document YAML import/export. When adding another capability Lettuce already has
-(encryption at rest, history/event logs, teams/management chains, changelog…), port Lettuce's
-implementation rather than inventing a new one — the docs above mark each such capability as a
-"port from Lettuce" note.
+surface includes authentication/session handling, admin-managed users and feature flags, synced
+user language, per-user graph layouts, email MFA and password reset, shared paging, saved filter
+lenses, catalog-file CRUD across the seven landscape kinds, curated namespace, label, annotation,
+tag, type, and lifecycle registries, the Errors report and live checks, hierarchy and relationship-graph
+views, multi-document YAML import/export with a dry run, repository-source synchronization, and
+per-file change history. When adding another capability Lettuce already has (encryption at rest,
+notifications, teams/management chains…), port Lettuce's implementation rather than inventing a
+new one — the docs above mark each such capability as a "port from Lettuce" note.
 
 `.claude/docs/backstage-descriptor-format.md` is the local domain reference for the catalog
 descriptor envelope, metadata validation, kinds, entity-reference defaults, substitutions, and
@@ -37,23 +38,30 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
 - `core/` is Kotlin Multiplatform (currently JVM-targeted) and owns the shared OpenTelemetry SDK
   bootstrap.
 - `server/` is the Kotlin/JVM Ktor application. Feature packages live directly under
-  `server/src/main/kotlin/`: `auth`, `users`, `catalog`, `dictionaries`, `labels`, `lenses`, and `tags`.
-  `catalog` is the feature reference implementation: seven Backstage kinds (Component, API,
-  System, Domain, Resource, Group, User), full CRUD + paginated list, strict reference checking,
-  the workspace Errors report and live check, graph, import/export, and SSRF-guarded URL fetch. Cross-cutting
-  wiring and policy live in `plugins/`, `audit/`, and `authz/`; database, mail, paging, and shared
-  validation infrastructure live in `infra/`.
+  `server/src/main/kotlin/`: `auth`, `users`, `catalog`, `dictionaries`, `labels`, `annotations`,
+  `tags`, `types`, and `lenses`. `catalog` is the feature reference implementation: seven
+  Backstage kinds (Component, API, System, Domain, Resource, Group, User), full CRUD + paginated
+  list, validation/checking, the workspace Errors report, graph, import/export and dry-run import,
+  SSRF-guarded URL fetch/repo sync, and immutable per-file events. `users` also owns synced
+  language and per-user Graph layout settings. Cross-cutting wiring and policy live in `plugins/`,
+  `audit/`, and `authz/`; database, mail, paging, and shared validation infrastructure live in
+  `infra/`.
 - `server/src/main/resources/application.yaml` declaratively registers application modules.
   `main.kt` only starts `EngineMain`; do not wire features from it. Module order matters because
   modules publish and consume Ktor application attributes.
 - PostgreSQL is the only database. Flyway migrations under
   `server/src/main/resources/db/migration/` are the schema source of truth; Exposed over R2DBC is
-  used for runtime queries. Never introduce runtime DDL such as `SchemaUtils.create`.
+  used for runtime queries. Never introduce runtime DDL such as `SchemaUtils.create`, and never
+  edit an applied migration, including its comments: Flyway checksums are pinned by
+  `MigrationChecksumTest`; add a new migration instead.
 - `server/src/main/resources/openapi/documentation.yaml` is the hand-maintained API contract.
 - `web/` is a standalone Vite + React 19 + TypeScript SPA. Gradle does not build it. Source is
   organized into `pages/`, `components/`, `hooks/`, `utils/`, `api/`, `changelog/`, and bilingual
-  resources under `locales/{en,pl}/`. It includes catalog editing/import/export, the render graph,
-  namespace/label/tag administration, user/feature administration, MFA login, and password reset.
+  resources under `locales/{en,pl}/`. It includes catalog editing, quick view, import/export and
+  source sync, hierarchy/graph/Errors views, lenses, all six catalog registries, catalog history,
+  user/feature administration, MFA, password reset, command palette, and changelog.
+- `sample-data/` contains the hand-imported multi-document example workspace. Migrations never
+  seed catalog files; a new environment deliberately starts with an empty catalog workspace.
 - Backend tests are in `server/src/test/kotlin/`, colocated frontend tests use `*.test.ts(x)`, and
   Playwright journeys are in `e2e/tests/*.spec.ts` with their design artifacts in
   `e2e/scenarios/*.md`.
@@ -112,15 +120,29 @@ Use `V<number>__description.sql` for migrations. Business entities follow the es
 soft-delete convention (`marked_as_deleted`, active-row filtering on every read/count/mutation,
 and partial unique indexes where deleted values may be reused); follow the detailed pattern in
 `.claude/docs/persistence.md` rather than inventing a variant. Emit structured `audit(...)`
-events for security-relevant mutations and denials, and never log passwords or tokens.
+events for security-relevant mutations and denials, and never log passwords or tokens. The
+per-user graph-layout PUT is the documented exception: it is high-frequency view state and is
+deliberately unaudited. Catalog-file product history is separate from the security audit trail;
+catalog mutations extend both where applicable.
 
 Catalog content is a shared authenticated workspace; ADMIN has no extra content privilege.
-Catalog writes are strict: namespaces must exist in the `NAMESPACE` dictionary (blank resolves to
-its flagged default), labels and tags must be allowed for the entity kind by their admin-curated
-registries, and every reference must resolve to an allowed stored kind without targeting the
-entity itself. Errors-report findings normally arise after a referenced entity is deleted and block
-the referencing file's next save until repaired. Keep the server validators, OpenAPI schemas,
-kind-aware frontend form rules, and YAML parser/generator synchronized.
+Catalog validation has two classes. Structural descriptor rules and namespace resolution are
+hard: namespaces must exist in the `NAMESPACE` dictionary (blank resolves to its flagged default)
+and cannot be waived. Registry and reference rules are soft: labels, annotation keys, tags,
+per-kind types, global lifecycles, and references must normally be allowed/resolvable, of an
+allowed kind, and non-self-referential, but create/replace may explicitly use `allowInvalid=true`.
+The editor exposes that waiver as Save anyway; import always waives soft findings and reports
+`CREATED_WITH_FINDINGS`, while `/files/import/check` performs the same classification without
+storing anything. The Errors report also includes report-only structural, namespace, and missing
+source verdicts. Keep server validators, OpenAPI schemas, kind-aware form rules, live-field finding
+routing, and the YAML generator/strict inverse parser synchronized.
+
+An optional catalog `sourceUrl` is envelope state, not part of the Backstage document or YAML
+export. It must be an absolute credential-free HTTPS URL and enables one-way repo-to-database
+sync through the SSRF-guarded fetch path. Ordinary PUT is a full replace, so clients must carry
+`sourceUrl` forward intentionally; sync/import-from-URL update the stored baseline and sync time.
+Every catalog mutation also maintains the immutable structural event history; free-text changes
+record only the fact of change, not the sensitive text itself.
 
 Use four-space indentation, preserve existing package boundaries, PascalCase for Kotlin types,
 and camelCase for functions and variables. Name backend test classes `*Test`.
@@ -130,8 +152,10 @@ and camelCase for functions and variables. Name backend test classes `*Test`.
 Use two-space indentation, PascalCase for React components, and the existing shared
 components/hooks instead of cloning transport, error-mapping, or session logic.
 The design system is owned by `web/src/theme.ts` and `web/src/theme.module.css`: the brand amber
-(`toadie` tuple) is the interactive accent; don't reintroduce stock-blue actions or stock-green
-success states. Keep accessibility roles, labels, and semantic tables stable.
+(`toadie` tuple) is reserved for primary actions, active navigation, and focus; don't reintroduce
+stock-blue actions or stock-green success states (success is teal). `KindBadge` is the single kind
+surface and its tier marker is visual only. Keep accessibility roles, labels, and semantic tables
+stable because tests and Playwright use them as contracts.
 
 All user-facing strings must use react-i18next. Keep English and Polish resources in parity
 (enforced by `locales/parity.test.ts`); Polish uses inclusive slash forms. Errors render inline
@@ -139,13 +163,33 @@ as red Alerts; follow `web/CLAUDE.md` for the exact transport, i18n, and theming
 
 Catalog forms are kind-aware and use the shared identity, namespace, label, and tag hooks; do not
 replace their constrained pickers with free-form clones. Keep `utils/catalogYaml.ts` and the
-strict inverse parser in `utils/catalogImport.ts` in lockstep. The `/graph` graph page keeps React
-Flow and dagre in its lazy chunk. User creation/reset passwords are generated client-side and
-revealed exactly once; the server never returns plaintext passwords.
+strict inverse parser in `utils/catalogImport.ts` in lockstep. Soft server findings remain
+presentational orange warnings and must not be put into Mantine's hard-error form state; hard
+client validation stays red and blocks submission.
+
+Files, Hierarchy, Graph, and Errors share `CatalogToolbar`, the nine-slot catalog filter state,
+always-visible kind pills, and saved lenses. Files/Hierarchy/Graph interpret filters as entities
+shown; Errors interprets them as files reported while resolving references workspace-wide. The
+quick-view drawer is URL-carried via `?file=<id>`; ordinary view filters remain per-view local
+storage. Whole-file operations are centralized and PUT callers must preserve full-replace fields.
+
+The `/graph` page keeps React Flow and dagre in its lazy chunk. It supports Auto and Manual modes,
+with mode, dragged positions, and collapsed node IDs persisted server-side in the current user's
+single graph-layout document. React Flow owns live drag state; persist accumulated positions only
+after a drag ends, merge with the full stored map rather than pruning filtered-out nodes, and keep
+mode/fold/reset saves as wholesale document replacements. Filtering runs before folding; folding
+uses `buildHierarchy`'s containment rules, and namespace frames derive from live node positions.
+Do not let a drag navigate, do not refit the viewport on drags/mode/reset, and keep fold controls
+outside the node's interactive face.
+
+Pages are lazy and use shared `PageHeader` chrome; navigation is defined once in
+`utils/navigation.ts` for the sidebar, user menu, and command palette. User creation/reset
+passwords are generated client-side and revealed exactly once; the server never returns plaintext
+passwords. The selected UI language is also stored on the user and drives server-composed email.
 
 `web/src/changelog/version.ts` (`APP_VERSION`) is the sole source of the displayed app version;
-the Gradle snapshot version is unrelated. The Lettuce changelog page/entries system is not yet
-ported — when it arrives, adding the newest entry becomes the release bump.
+the Gradle snapshot version is unrelated. A release adds the newest bilingual markdown entry to
+`web/src/changelog/entries.ts` and bumps `APP_VERSION` in the same change; tests pin their parity.
 
 ## Testing and Verification
 
@@ -156,14 +200,16 @@ markers (`uniqueEmail(...)`) instead of asserting global counts.
 
 Every `/api/` interaction made through the shared backend test clients is checked against OpenAPI.
 Prefer `jsonClient()`/`authedClient()` so tests do not bypass conformance validation. `check`
-enforces Kover floors of 95% lines and 70% branches. Frontend coverage floors in
-`web/vite.config.ts` are 97% lines, 94% statements, 92% functions, and 89% branches. Any test-local
+enforces Kover floors of 97% lines and 76% branches. Frontend coverage floors in
+`web/vite.config.ts` are 97% lines, 95% statements, 92% functions, and 91% branches. Re-measure and
+raise floors as coverage improves; do not lower them to accommodate new code. Any test-local
 Mantine provider must set `env="test"` so popovers and selects work under happy-dom.
 
 A new or behaviorally changed e2e test lands with its scenario file in `e2e/scenarios/` and its
 coverage-map line in `e2e/README.md` in the same commit (`npm run check:scenarios` enforces the
-parity). For nontrivial cross-stack behavior, verify through the SPA using the workflow in
-`.claude/skills/verify/SKILL.md`, and clean up any records created in the development database.
+parity); scenario headings and Playwright test titles must match exactly. For nontrivial cross-stack
+behavior, verify through the SPA using the workflow in `.claude/skills/verify/SKILL.md`, and clean
+up any records created in the development database.
 
 ## Commit, Documentation, and Security
 

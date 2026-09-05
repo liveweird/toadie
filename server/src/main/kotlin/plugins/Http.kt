@@ -64,11 +64,32 @@ fun Application.configureHttp() {
     // (rate-limit buckets) and scheme (HTTPS redirect) are the real client's, not the proxy's.
     // Off by default: honoring these headers from direct clients would let them spoof both.
     if (environment.config.propertyOrNull("http.behindProxy")?.getString()?.toBoolean() == true) {
-        install(XForwardedHeaders)
+        val proxyHops = environment.config.propertyOrNull("http.proxyHops")?.getString()
+            ?.takeIf { it.isNotBlank() }?.toInt() ?: 1
+        require(proxyHops >= 1) { "http.proxyHops must be >= 1 (was $proxyHops)" }
+        install(XForwardedHeaders) {
+            // Only the headers the proxy contract sets — and therefore overwrites. Ktor's defaults
+            // also honour X-Forwarded-Server / X-Forwarded-Protocol / X-Forwarded-SSL /
+            // Front-End-Https, which a proxy that sets just the canonical ones passes through
+            // from the client untouched (Lettuce's v3.6.2 finding; ProductionHttpTest).
+            hostHeaders.clear()
+            hostHeaders.add(HttpHeaders.XForwardedHost)
+            protoHeaders.clear()
+            protoHeaders.add(HttpHeaders.XForwardedProto)
+            httpsFlagHeaders.clear()
+            // Ktor's default is useFirstProxy() — the FIRST X-Forwarded-For value, i.e. whatever
+            // the client sent when a proxy appends rather than replaces. Trust from the END: the
+            // value the last proxy wrote, or the one http.proxyHops-1 places before it
+            // (application.yaml explains the count; ForwardedHeadersTest pins it).
+            if (proxyHops == 1) useLastProxy() else skipLastProxies(proxyHops - 1)
+        }
     }
     install(Compression)
     install(DefaultHeaders)
     if (!developmentMode) {
+        // Behind ingress-nginx this header is OVERWRITTEN by the controller (configmap `hsts`,
+        // `hsts-include-subdomains`, default on/on) — it matters pod-direct and behind proxies
+        // that pass upstream headers through, so the policy lives there, not in a knob here.
         install(HSTS) {
             includeSubDomains = true
         }
