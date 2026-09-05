@@ -149,7 +149,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
   authenticated pages (`/`, `/files`, `/files/new`, `/files/import`,
   `/errors`, `/graph`, `/labels`, `/annotations`, `/tags`, `/types`, `/lifecycles`,
-  `/namespaces`, `/users`, `/changelog`); `color-contrast` consciously waived theme-wide.
+  `/namespaces`, `/users`, `/changelog`), plus an explicitly held Errors loading state and
+  its completed report; `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`annotations.spec.ts`](scenarios/annotations.md) — the annotation-key registry: modal
   validation → register a key (kinds only — values stay free) → edit → the regular user's

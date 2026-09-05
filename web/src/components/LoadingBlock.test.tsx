@@ -5,6 +5,6 @@ import { renderWithProviders, screen } from "../test/render";
 describe("LoadingBlock", () => {
   test("renders one named spinner", () => {
     renderWithProviders(<LoadingBlock />);
-    expect(screen.getByLabelText("Loading…")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading…" })).toBeInTheDocument();
   });
 });

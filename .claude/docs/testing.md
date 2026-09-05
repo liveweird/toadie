@@ -1,5 +1,16 @@
 ### Testing
 
+**Hosted timing and loading regressions.** Catalog editor save-flow fixtures use user-event
+paste for complete text values; typing tests still exercise keystrokes. Do not spend the test
+budget re-rendering the entire form/preview for every character of unrelated fixture setup.
+Accessibility covers pending UI as well as completed pages: the Errors regression holds its
+real report request, scans the named loading status, releases the request in `finally`, and
+scans the completed report. This reproduced the previously intermittent `aria-prohibited-attr`
+failure on the shared spinner without adding an axe waiver or accepting retries.
+Mutation tests must wait for completed success UI (for example, the editor/confirmation
+dialog closing), not just a fetch spy recording a request: the response callback may still
+be updating modal state when the test otherwise tears down its DOM.
+
 **Session lifecycle regressions (V25).** `AuthSessionServiceTest` injects a clock and tests
 expiry, cross-instance revocation, stale-epoch issuance, competing credential writes, and
 logout/renewal races. `SessionRevocationTest` checks current and superseded pairs, independent

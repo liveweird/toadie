@@ -88,6 +88,21 @@ identified weakness, now with exact access/refresh revocation when the password 
 - Read-only inspection of the active master rules found no required **Quality gate** status
   check. Repository settings were not changed; that Stage 1 task remains open.
 
+### PR #2 verification follow-up
+
+Hosted checks for the initial session commit found two blockers despite its local passes:
+catalog-create tests exhausted their five-second budget, and an Errors accessibility scan
+caught a labelled generic spinner while the report loaded (passing on retry still failed CI).
+The follow-up uses user-event paste for unrelated editor fixture text while retaining keyboard
+tests, and gives the shared spinner a named `status` role. A deterministic browser regression
+holds the real report request and scans both pending and completed UI; it reproduced the exact
+`aria-prohibited-attr` violation against the old image and passed twice without retries against
+the fix. All 668 frontend tests and the build/lint/knip/API-drift gates passed locally;
+coverage floors, test timeouts, axe waivers, and fail-on-flaky policy are unchanged. Successful
+hosted verification of the follow-up is the merge criterion for PR #2, not local passes alone.
+The slower Linux check also exposed a Labels modal teardown race; its mutation tests now wait
+for the success UI to close the dialog, not merely for the request spy to be called.
+
 ## Stage 3 — failure handling and concurrency
 
 - [ ] Bound the entire outbound fetch, including DNS/body reads; stalled-body/cancellation tests.

@@ -10,6 +10,7 @@ Vite + React 19 + TypeScript SPA: the shell + auth plus the full feature surface
 
 ## Layout conventions
 
+- Heavy editor test fixtures use user-event click + paste for preconditions whose intermediate keystrokes are irrelevant (save flows and row operations). Keep real typing for keyboard/preview behavior. Each character re-renders the full catalog editor and live preview; unnecessary fixture typing exhausted the unchanged five-second test budget on hosted coverage runners.
 - **Flat directories**: `pages/`, `components/`, `hooks/`, `utils/`, `api/`, `changelog/`, `locales/{en,pl}/`, `test/` — no deeper nesting, no per-feature folders (a feature contributes files into these).
 - **Default exports for components/pages**, named exports for everything else; **no path aliases** — relative imports only.
 - **Co-located tests**: `Foo.test.tsx` sits beside `Foo.tsx`; shared test scaffolding lives in `src/test/` (`setup.ts` forces `en`, `render.tsx` is the provider wrapper — it and every file-local `MantineProvider` must pass `env="test"`, or Select/Popover interaction silently fails under happy-dom; `http.ts` holds the fetch stubs).
@@ -148,6 +149,11 @@ The SPA is **N-language by architecture** via react-i18next (`src/i18n.ts`); the
 - **Tests render English**: `src/test/setup.ts` imports `../i18n` and forces `en`, so text-based assertions match the EN resources.
 
 ## Theming
+
+Loading states are accessible UI too: `LoadingBlock` gives the Mantine spinner `role="status"`
+with its localized name. Mantine's default oval is a plain span, where `aria-label` alone is
+prohibited. Keep the held-request Errors accessibility regression; do not hide this defect by
+waiting for spinners to disappear before every scan.
 
 **The design language is theme-owned** (Lettuce's "clean enterprise SaaS" posture) — `src/theme.ts` + `src/theme.module.css` are the single source:
 
