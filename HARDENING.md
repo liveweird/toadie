@@ -238,6 +238,23 @@ backend build, detekt, coverage gates, and installDist passed again (**414 tests
 or skips), and independent review found no remaining issue. The Linux verification container
 was removed automatically; it never connected to the development database.
 
+### PR #10 verification follow-up: graph save acknowledgement
+
+The [PR browser run](https://github.com/liveweird/toadie/actions/runs/34058594170) caught a
+flaky graph reload assertion, despite the parallel branch run passing. The trace showed the
+drag waiter consuming an earlier Manual-mode PUT with empty positions. Reload began about
+48 ms after mouse-up, before the 600 ms drag-save debounce; no position-bearing PUT had been
+sent, so the restored computed position matched the document actually stored by the server.
+The test now matches the exact user's layout path and expected request document, including
+the dragged node's position, and asserts the response status. It owns a throwaway user instead
+of clearing the seed admin's layout. The scenario and coverage map describe this ownership.
+Production behavior, debounce, test timeouts, and fail-on-flaky policy are unchanged.
+
+The corrected graph journey passed **ten repetitions** with retries disabled. The full
+**48-test browser suite** then passed with four workers and zero retries on the disposable
+stack; TypeScript, all 28 scenario mappings, whitespace checks, and independent review passed.
+The disposable stack and data were removed after verification; development data was preserved.
+
 ### Atomic catalog-history batch (2026-09-06)
 
 Starting state verified: clean `master` at `84f8276` (PR #8 merged), displayed version

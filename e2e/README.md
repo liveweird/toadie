@@ -134,9 +134,9 @@ from Lettuce, that any new or edited spec must satisfy:
   survive runs (the volume's own demo files may reference it).
 - Seeded accounts are never mutated. The seed admin (`admin@toadie.local`) is a shared
   read-mostly actor: specs sign in as it but must not change its password, roles, or state — a
-  future spec that needs a mutated account creates a throwaway. The ONE sanctioned exception:
-  `render.spec.ts` owns the admin's per-user graph LAYOUT document (pure view state no other
-  spec reads) and restores the pristine default (Auto, no positions) before it ends.
+  future spec that needs a mutated account creates a throwaway.
+- `render.spec.ts` creates one throwaway user and exclusively owns that user's graph LAYOUT
+  document, restores its pristine default, and deletes the user with retained admin authorization.
 - `graph-persistence.spec.ts` creates one throwaway user and exclusively owns that user's graph
   layout document. It retains the unrevoked admin login only for `finally` cleanup, deletes the
   user through the normal API, and never reads or writes the seed admin's layout or catalog data.
@@ -240,8 +240,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   owner group left out; toggling a relation family prunes the missing nodes it strands;
   collapsing the System hides its component and re-attributes the component's relations to
   the System as dashed edges, survives a reload (server-side per user), and Expand all undoes
-  it; the Manual layout mode drags a node, the position survives a reload, and Reset + Auto
-  restore the pristine layout document.
+  it; a throwaway user's Manual layout mode drags a node, separately acknowledges the mode-only
+  and exact position-bearing saves, then verifies the position survives a reload; Reset + Auto
+  restore the pristine layout document before the user is deleted.
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   dry-run as Would-be-created (the Check button, nothing stored), import as Created, export
   downloads them as one `---`-separated file, and re-importing the export reports every row

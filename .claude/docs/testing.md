@@ -34,6 +34,9 @@ check loading, safe errors, and retry. Keep live drag frames separate from persi
 The browser regression owns a throwaway user's layout and uses response gates to exercise
 pending initialization and saves; it must never mutate the seed admin's layout. Response
 predicates match the exact user path and method; assert status after receiving the response.
+Match the saved document too when multiple writes overlap: a mode-only acknowledgement must
+not satisfy a drag waiter. Confirm the request contains that node's position before reloading;
+the checked Manual radio and moved canvas only prove local state, not completed persistence.
 
 **Refresh crossing sign-out.** Use held responses to exercise the shared transport after an
 old protected request receives 401: hold refresh, perform the real best-effort logout with
