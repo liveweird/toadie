@@ -3,6 +3,7 @@ package ch.nokillswit.tags
 import ch.nokillswit.authz.ConflictException
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
+import io.r2dbc.spi.IsolationLevel
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.json.Json
@@ -14,6 +15,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
+import org.jetbrains.exposed.v1.r2dbc.R2dbcTransaction
 import org.jetbrains.exposed.v1.r2dbc.insert
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
@@ -36,6 +38,19 @@ class TagCategoryService(private val database: R2dbcDatabase) {
     }
 
     private val json = Json
+
+    /**
+     * Serializes the registry's service-enforced ownership check across every application
+     * instance sharing this database. The table lock also covers an empty registry, unlike
+     * locking the currently active rows, and ordinary SELECTs remain available while a writer
+     * holds it. READ COMMITTED is explicit so a writer that waited for the lock sees the prior
+     * writer's committed tag document before checking ownership.
+     */
+    private suspend fun <T> writeTransaction(block: suspend R2dbcTransaction.() -> T): T =
+        suspendTransaction(database, transactionIsolation = IsolationLevel.READ_COMMITTED) {
+            exec("LOCK TABLE tag_categories IN SHARE ROW EXCLUSIVE MODE")
+            block()
+        }
 
     private fun active(): Op<Boolean> = TagCategories.markedAsDeleted eq false
 
@@ -82,18 +97,20 @@ class TagCategoryService(private val database: R2dbcDatabase) {
             }
     }
 
-    suspend fun create(request: TagCategoryRequest): UInt = suspendTransaction(database) {
+    suspend fun create(request: TagCategoryRequest): UInt {
         validateTagCategoryRequest(request) // re-checked service-side so direct callers stay guarded
-        if (TagCategories.selectAll().where { active() }.count() >= MAX_TAG_CATEGORIES) {
-            throw BadRequestException("The tag-category registry is full ($MAX_TAG_CATEGORIES categories)")
+        return writeTransaction {
+            if (TagCategories.selectAll().where { active() }.count() >= MAX_TAG_CATEGORIES) {
+                throw BadRequestException("The tag-category registry is full ($MAX_TAG_CATEGORIES categories)")
+            }
+            requireTagsUnclaimed(request, excludeId = null)
+            val newRecord = TagCategories.insert {
+                it[name] = request.name
+                it[allowedKinds] = json.encodeToString(request.kinds)
+                it[tags] = json.encodeToString(request.tags)
+            }
+            newRecord[TagCategories.id].value
         }
-        requireTagsUnclaimed(request, excludeId = null)
-        val newRecord = TagCategories.insert {
-            it[name] = request.name
-            it[allowedKinds] = json.encodeToString(request.kinds)
-            it[tags] = json.encodeToString(request.tags)
-        }
-        newRecord[TagCategories.id].value
     }
 
     /**
@@ -102,24 +119,26 @@ class TagCategoryService(private val database: R2dbcDatabase) {
      * categories is remove-then-add in TWO saves (adding it first trips the one-category 409).
      * Returns the affected-row count (0 → the route's 404).
      */
-    suspend fun update(id: UInt, request: TagCategoryRequest): Int = suspendTransaction(database) {
+    suspend fun update(id: UInt, request: TagCategoryRequest): Int {
         validateTagCategoryRequest(request) // re-checked service-side so direct callers stay guarded
-        // Existence first: a missing/deleted target must 404 like every sibling registry —
-        // without this check, a claimed tag in the payload would answer 409 for a row that
-        // isn't there (the tag-claim check is service-side, not index-raised like the others).
-        val exists = TagCategories.selectAll()
-            .where { (TagCategories.id eq id) and active() }
-            .count() > 0
-        if (!exists) return@suspendTransaction 0
-        requireTagsUnclaimed(request, excludeId = id)
-        TagCategories.update({ (TagCategories.id eq id) and (TagCategories.markedAsDeleted eq false) }) {
-            it[name] = request.name
-            it[allowedKinds] = json.encodeToString(request.kinds)
-            it[tags] = json.encodeToString(request.tags)
+        return writeTransaction {
+            // Existence first: a missing/deleted target must 404 like every sibling registry —
+            // without this check, a claimed tag in the payload would answer 409 for a row that
+            // isn't there (the tag-claim check is service-side, not index-raised like the others).
+            val exists = TagCategories.selectAll()
+                .where { (TagCategories.id eq id) and active() }
+                .count() > 0
+            if (!exists) return@writeTransaction 0
+            requireTagsUnclaimed(request, excludeId = id)
+            TagCategories.update({ (TagCategories.id eq id) and (TagCategories.markedAsDeleted eq false) }) {
+                it[name] = request.name
+                it[allowedKinds] = json.encodeToString(request.kinds)
+                it[tags] = json.encodeToString(request.tags)
+            }
         }
     }
 
-    suspend fun delete(id: UInt): Int = suspendTransaction(database) {
+    suspend fun delete(id: UInt): Int = writeTransaction {
         TagCategories.update({ (TagCategories.id eq id) and (TagCategories.markedAsDeleted eq false) }) {
             it[markedAsDeleted] = true
         }

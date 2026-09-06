@@ -41,6 +41,8 @@
 - **The registry payload rules and the one-category-per-tag invariant** (grammar/duplicate/
   cap 400s, the name 409, the cross-category tag 409, move-in-two-saves, soft-delete freeing
   name and tags, kind canonicalization, audit events) — pinned by `TagCategoryTest`.
+  Overlapping claims and database-lock behavior are exercised deterministically by
+  `TagCategoryConcurrencyTest`; browser timing is not used to manufacture contention.
 - **The 403 on a non-admin mutation** — the read-only branch never renders a mutation path;
   the guard itself is server-pinned (`TagCategoryTest`).
 - **The stale-stored-tag fallback group** (a stored file whose tag was since removed still

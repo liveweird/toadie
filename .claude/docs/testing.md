@@ -1,5 +1,18 @@
 ### Testing
 
+**Tag-category concurrency.** Exercise overlapping create/create, replace/replace, and
+create/replace claims against real PostgreSQL connections. Use a held database lock and
+observe blocked contenders before release, so the original check-then-write implementation
+fails deterministically; repeated ungated async calls are not proof of contention. Assert one
+successful claim and one conformant `409`, unchanged fields on a losing replacement, and
+release of ownership after removal or soft deletion. Keep ordinary reads available while
+writes wait, and verify rollback/failure releases locks. A cancelled blocked writer must
+store nothing and leave later writes usable once the blocking lock is released; the current
+R2DBC path does not guarantee immediate cancellation of a PostgreSQL lock wait. Use uniquely
+owned fixtures and cancellation-safe lock cleanup in `finally`; capacity tests may
+fill only free slots and remove only their fillers.
+Do not add production timing hooks, sleep-based race assertions, or an in-process mutex.
+
 **Graph-layout persistence.** Hook tests use deferred GET/PUT promises and controlled debounce
 time to prove that edits wait for the full baseline, only one PUT is outstanding, and queued
 changes collapse into the newest complete document. Pin unseen positions/collapsed ids,
