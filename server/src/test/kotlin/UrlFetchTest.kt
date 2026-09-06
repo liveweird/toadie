@@ -658,29 +658,60 @@ class UrlFetchTest {
 
     @Test
     fun `a non-200 response aborts its stalled body`() {
-        val bodyStarted = CompletableDeferred<Unit>()
-        val disconnected = CompletableDeferred<Unit>()
-        withFixtureServer(
-            configure = { server ->
-                server.createContext("/failed-stream") { exchange ->
-                    exchange.sendResponseHeaders(404, 0)
-                    exchange.responseBody.use { output ->
-                        output.write('x'.code)
-                        output.flush()
-                        bodyStarted.complete(Unit)
-                        writeUntilDisconnected(output, disconnected)
-                    }
+        val listener = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val responseStarted = CountDownLatch(1)
+        val disconnected = CountDownLatch(1)
+        val acceptedSocket = AtomicReference<java.net.Socket>()
+        val cleanupRequested = AtomicBoolean(false)
+        val executor = Executors.newSingleThreadExecutor()
+        executor.execute {
+            val accepted = listener.accept()
+            acceptedSocket.set(accepted)
+            if (cleanupRequested.get()) acceptedSocket.getAndSet(null)?.close()
+            accepted.use { socket ->
+                val input = socket.getInputStream()
+                var headerTail = 0
+                while (headerTail != 0x0D0A0D0A) {
+                    val next = input.read()
+                    if (next == -1) return@use
+                    headerTail = (headerTail shl 8) or next
                 }
-            },
-        ) { base ->
+                socket.getOutputStream().apply {
+                    write(
+                        ("HTTP/1.1 404 Not Found\r\n" +
+                            "Transfer-Encoding: chunked\r\n" +
+                            "Connection: keep-alive\r\n\r\n" +
+                            "1000\r\nx").toByteArray(),
+                    )
+                    flush()
+                }
+                responseStarted.countDown()
+                try {
+                    while (input.read() != -1) {
+                        // The response chunk remains incomplete until the client closes the call.
+                    }
+                } catch (_: IOException) {
+                    // A reset and an orderly EOF both prove the client closed the exchange.
+                } finally {
+                    disconnected.countDown()
+                    acceptedSocket.compareAndSet(accepted, null)
+                }
+            }
+        }
+        try {
             runBlocking {
                 val failure = assertFailsWith<BadGatewayException> {
-                    fixtureFetcher().fetch("$base/failed-stream")
+                    fixtureFetcher().fetch("http://127.0.0.1:${listener.localPort}/failed-stream")
                 }
                 assertEquals("The URL could not be fetched (HTTP 404)", failure.message)
-                withTimeout(2_000) { bodyStarted.await() }
-                withTimeout(2_000) { disconnected.await() }
+                responseStarted.awaitOrFail()
+                disconnected.awaitOrFail()
             }
+        } finally {
+            cleanupRequested.set(true)
+            acceptedSocket.getAndSet(null)?.close()
+            listener.close()
+            executor.shutdownNow()
         }
     }
 

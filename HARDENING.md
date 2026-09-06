@@ -223,6 +223,21 @@ These results record the pre-publication checkpoint: the batch was local and unc
 hosted CI had not run, and no push, merge, development-container rebuild, or deployment had
 been performed. Publication and deployment are verified separately.
 
+### PR #10 verification follow-up: disconnect observation
+
+The initial [branch backend run](https://github.com/liveweird/toadie/actions/runs/34058023912)
+failed the new non-200 disconnect regression, while the same commit's PR backend passed.
+The exact safe HTTP-404 failure was returned, but the test's finite 2 MiB writer could finish
+inside Linux socket buffers without throwing; its disconnect signal then never completed.
+The fix sends an incomplete chunked 404 through a raw socket and observes peer EOF/reset
+on the read side. The two-second closure assertion, safe error assertion, and cancellation-safe
+socket ownership remain intact. Production code and coverage thresholds are unchanged.
+
+The revised regression passed **30 repetitions in a disposable Linux container**. The full
+backend build, detekt, coverage gates, and installDist passed again (**414 tests**, no failures
+or skips), and independent review found no remaining issue. The Linux verification container
+was removed automatically; it never connected to the development database.
+
 ### Atomic catalog-history batch (2026-09-06)
 
 Starting state verified: clean `master` at `84f8276` (PR #8 merged), displayed version

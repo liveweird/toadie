@@ -70,6 +70,9 @@ held native resolution is released. Native DNS that ignores interruption must no
 caller past its deadline or initiate late HTTP. Its remaining bounded-worker limitation is
 documented in `security.md`; cancellation does not forcibly terminate native work. Fixture
 cleanup must retain ownership across coroutine dispatcher cancellation, including setup.
+For early status rejection, observe EOF/reset on the fixture socket's read side; a finite
+write loop may fit entirely into Linux socket buffers before cancellation and never throw.
+A raw incomplete chunked response makes the body stall independent of send-buffer capacity.
 
 **Hosted timing and loading regressions.** Catalog editor save-flow fixtures use user-event
 paste for complete text values; typing tests still exercise keystrokes. Do not spend the test
