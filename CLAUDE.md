@@ -21,6 +21,11 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Automated verification
 
+YAML comparisons in repo sync and Overwrite with YAML must bound both detailed LCS work
+and rendered row count. Large inputs fall back to complete stored/replacement YAML panes,
+with no truncation or change to confirmation payloads. Limits and regression expectations
+are documented in `web/CLAUDE.md` and `.claude/docs/testing.md`.
+
 Outbound catalog fetches have one 10-second deadline across validation/DNS, connection,
 headers, and the complete bounded body. Caller cancellation must propagate unchanged;
 only the fetch's own deadline and upstream failures become safe 502 problems. Initial DNS
@@ -39,6 +44,11 @@ one before interacting: DOM visibility alone can pass before a deferred slide st
 Lenses cleanup regression matches mutations to exact resource IDs, asserts their status, and
 waits for modal/row disappearance before continuing. `dialog-readiness.spec.ts` holds a real
 editor's entrance to pin that distinction without sleeps, click retries, or disabling animations.
+
+One-time password capture also waits for the named creation dialog's entrance and the
+reveal control's `aria-pressed=true` state before reading the code block. PR #6's Types
+trace showed a completed click followed by capture of the mask and a correct login 401;
+the shared helper's suppressed-click regression prevents this without changing authentication.
 
 CI uses the complete Temurin version from `mise.toml` (`21.0.11+10.0.LTS`); keep the build/LTS suffix. `setup-java` cannot resolve the truncated `21.0.11+10` selector. The infrastructure regression suite pins CI/local version parity.
 

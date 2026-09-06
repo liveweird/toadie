@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import OverwriteWithYamlModal, { type OverwriteTarget } from "./OverwriteWithYamlModal";
+import type { CatalogFileRequest } from "../api/catalogFiles";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import { catalogInfoYaml } from "../utils/catalogYaml";
 
 const TOKEN_KEY = "toadie.auth.token";
 
@@ -39,10 +41,14 @@ const yaml = (title: string, name = "svc") =>
     "",
   ].join("\n");
 
-function mockRoutes(mockFetch: FetchMock, put: Response = new Response(null, { status: 204 })) {
+function mockRoutes(
+  mockFetch: FetchMock,
+  put: Response = new Response(null, { status: 204 }),
+  detail: object = STORED,
+) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
-    if (url === "/api/v1/files/1" && method === "GET") return Promise.resolve(jsonResponse(200, STORED));
+    if (url === "/api/v1/files/1" && method === "GET") return Promise.resolve(jsonResponse(200, detail));
     if (url.startsWith("/api/v1/files/1") && method === "PUT") return Promise.resolve(put);
     if (url === "/api/v1/files/check" && method === "POST") {
       return Promise.resolve(jsonResponse(200, { findings: [] }));
@@ -161,6 +167,70 @@ describe("OverwriteWithYamlModal", () => {
     await user.upload(picker.parentElement!.querySelector("input")!, file);
 
     expect(await screen.findByText("+ title: From a file")).toBeInTheDocument();
+  });
+
+  test("large YAML shows both complete documents and confirms the full replacement", async () => {
+    const definition = Array.from(
+      { length: 600 },
+      (_, index) => `path-${index}: ${"x".repeat(80)}`,
+    ).join("\n");
+    const api = (version: string): CatalogFileRequest => ({
+      kind: "API",
+      metadata: { name: "large-api", namespace: "default" },
+      spec: {
+        type: "openapi",
+        lifecycle: "production",
+        owner: "group:default/platform",
+        definition: `${definition}\nversion: ${version}`,
+      },
+    });
+    const current = api("old");
+    const replacement = api("new");
+    const currentYaml = catalogInfoYaml(current);
+    const replacementYaml = catalogInfoYaml(replacement);
+    mockRoutes(mockFetch, new Response(null, { status: 204 }), {
+      ...STORED,
+      kind: current.kind,
+      metadata: current.metadata,
+      spec: current.spec,
+    });
+    const user = userEvent.setup();
+    renderWithProviders(
+      <OverwriteWithYamlModal
+        file={{ ...TARGET, kind: "API", name: "large-api" }}
+        onClose={onClose}
+      />,
+    );
+
+    const textarea = await screen.findByRole("textbox", { name: "YAML content" });
+    fireEvent.change(textarea, { target: { value: currentYaml } });
+    expect(
+      await screen.findByText("The YAML you supplied matches the stored copy — nothing to overwrite."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/too large for a detailed line comparison/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
+
+    fireEvent.change(textarea, {
+      target: { value: replacementYaml },
+    });
+    expect(await screen.findByText(/too large for a detailed line comparison/)).toBeInTheDocument();
+    const stored = screen.getByRole("group", { name: "Complete stored YAML" });
+    const next = screen.getByRole("group", { name: "Complete replacement YAML" });
+    expect(stored).toHaveAttribute("tabindex", "0");
+    expect(next).toHaveAttribute("tabindex", "0");
+    expect(stored.textContent).toBe(currentYaml);
+    expect(next.textContent).toBe(replacementYaml);
+    expect(stored.querySelectorAll("pre")).toHaveLength(1);
+    expect(next.querySelectorAll("pre")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Overwrite stored copy" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const put = mockFetch.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "PUT");
+    const body = JSON.parse((put![1] as RequestInit).body as string) as CatalogFileRequest & {
+      sourceUrl?: string;
+    };
+    expect(body.spec.definition).toBe(replacement.spec.definition);
+    expect(body.sourceUrl).toBe(STORED.sourceUrl);
   });
 
   test("Esc cannot dismiss the modal mid-overwrite; it closes once the PUT settles", async () => {

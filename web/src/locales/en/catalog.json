@@ -194,6 +194,11 @@
   "tier": {
     "tooltip": "Tier {{tier}} — fill lower tiers first"
   },
+  "diff": {
+    "tooLarge": "These documents are too large for a detailed line comparison. Review the complete stored and replacement YAML below.",
+    "storedLabel": "Complete stored YAML",
+    "replacementLabel": "Complete replacement YAML"
+  },
   "sync": {
     "action": "Sync from source",
     "title": "Sync from source — {{name}}",

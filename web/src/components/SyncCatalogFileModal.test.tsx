@@ -6,6 +6,7 @@ import { pickRepoDocument } from "../utils/catalogImport";
 import type { CatalogFileListItem, CatalogFileRequest } from "../api/catalogFiles";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import { catalogInfoYaml } from "../utils/catalogYaml";
 
 const TOKEN_KEY = "toadie.auth.token";
 
@@ -157,6 +158,61 @@ describe("SyncCatalogFileModal", () => {
     expect(await screen.findByText("Toadie and the repo are in sync")).toBeInTheDocument();
     expect(screen.queryByText("Changed in Toadie")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
+  });
+
+  test("large repo YAML shows complete copies and syncs the complete matching document", async () => {
+    const definition = Array.from(
+      { length: 600 },
+      (_, index) => `path-${index}: ${"x".repeat(80)}`,
+    ).join("\n");
+    const api = (version: string): CatalogFileRequest => ({
+      kind: "API",
+      metadata: { name: "large-api", namespace: "default" },
+      spec: {
+        type: "openapi",
+        lifecycle: "production",
+        owner: "group:default/platform",
+        definition: `${definition}\nversion: ${version}`,
+      },
+    });
+    const current = api("old");
+    const replacement = api("new");
+    const currentYaml = catalogInfoYaml(current);
+    const replacementYaml = catalogInfoYaml(replacement);
+    mockRoutes(mockFetch, {
+      fetch: jsonResponse(200, { content: replacementYaml }),
+      detail: jsonResponse(200, {
+        ...DETAIL,
+        kind: current.kind,
+        metadata: current.metadata,
+        spec: current.spec,
+      }),
+      state: jsonResponse(200, {
+        ...SYNC_STATE,
+        syncedDocument: current,
+      }),
+    });
+    const user = userEvent.setup();
+    renderModal({ ...FILE, kind: "API", name: "large-api" });
+
+    expect(await screen.findByText(/too large for a detailed line comparison/)).toBeInTheDocument();
+    const stored = screen.getByRole("group", { name: "Complete stored YAML" });
+    const next = screen.getByRole("group", { name: "Complete replacement YAML" });
+    expect(stored.textContent).toBe(currentYaml);
+    expect(next.textContent).toBe(replacementYaml);
+    expect(stored.querySelectorAll("pre")).toHaveLength(1);
+    expect(next.querySelectorAll("pre")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Overwrite stored copy" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const syncCall = mockFetch.mock.calls.find(
+      ([url, init]) => url === "/api/v1/files/1/sync" && (init as RequestInit)?.method === "POST",
+    );
+    const body = JSON.parse((syncCall![1] as RequestInit).body as string) as {
+      document: CatalogFileRequest;
+    };
+    expect(body.document.metadata.name).toBe("large-api");
+    expect(body.document.spec.definition).toBe(replacement.spec.definition);
   });
 
   test("repo findings raise the warning but never block the sync", async () => {

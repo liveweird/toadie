@@ -88,14 +88,26 @@ export async function createUserViaUi(
     page.getByRole("button", { name: "Create" }).click(),
   ]);
   const id: number = (await created.json()).id;
-  const dialog = page.getByRole("dialog");
-  // Masked as "*" until revealed — click the eye toggle first.
-  await dialog.getByRole("button", { name: "Show password" }).click();
-  const password = (await dialog.locator("code").textContent()) ?? "";
+  const password = await revealCreatedPassword(page);
+  const dialog = page.getByRole("dialog", { name: "User created", exact: true });
   // Mantine renders both a header X and the footer button named Close.
   await dialog.getByRole("button", { name: "Close", exact: true }).last().click();
   await expect(page).toHaveURL(/\/users$/);
   return { id, name, email, password };
+}
+
+/** Wait for the one-time create modal, reveal its password, and reject masked/empty reads. */
+export async function revealCreatedPassword(page: Page): Promise<string> {
+  const dialog = await readyDialog(page, "User created");
+  await dialog.getByRole("button", { name: "Show password" }).click();
+  await expect(dialog.getByRole("button", { name: "Hide password" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  const password = (await dialog.locator("code").textContent()) ?? "";
+  expect(password.length > 0, "the generated password must not be empty").toBe(true);
+  expect(/^\*+$/.test(password), "the generated password must be revealed").toBe(false);
+  return password;
 }
 
 /** Collision-free text so specs never depend on absolute counts or clean state. */
