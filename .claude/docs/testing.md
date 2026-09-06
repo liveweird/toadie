@@ -1,5 +1,16 @@
 ### Testing
 
+**Outbound-fetch deadlines and cancellation.** `UrlFetchTest` uses local fixture servers and
+held validation to exercise the single total deadline, pre-header/body stalls, explicit caller
+cancellation and enclosing timeouts, truncated-body I/O, exact-limit/oversize bodies, and the
+route's conformant 502 response. Use started/release gates and generous outer bounds; never
+make these tests depend on a slow public server or assume that cancelling a coroutine proves
+the HTTP exchange closed. Observe connection closure too. Keep the production HTTPS/public-host
+guard intact; only the injected test validator may allow loopback fixtures. Native DNS that
+ignores interruption must not hold the caller past its deadline or initiate a late request.
+The initial validation pool is bounded; the JDK's second lookup limitation is documented in
+`security.md`, not hidden by a claim that cancellation forcibly terminates all native work.
+
 **Hosted timing and loading regressions.** Catalog editor save-flow fixtures use user-event
 paste for complete text values; typing tests still exercise keystrokes. Do not spend the test
 budget re-rendering the entire form/preview for every character of unrelated fixture setup.

@@ -942,8 +942,12 @@ paths:
         host resolves ONLY to public addresses — anything else (http, userinfo, loopback,
         private/link-local/unique-local ranges, unresolvable hosts) is a uniform `400` that
         never echoes what was probed. Redirects are not followed (`502` — use the final URL),
-        the response body is capped at 1 MB, and upstream failures (non-200, timeout,
-        oversize) answer `502`.
+        the response body is capped at 1 MB, and one 10-second deadline covers validation,
+        DNS resolution, connection/headers, and the complete response body. Upstream
+        failures (non-200, deadline expiry, body-read failure, oversize) answer `502`.
+        Initial validation-resolver capacity exhaustion also answers `502`; its queue is
+        bounded. Native DNS may outlive cancellation, including the JDK transport's second
+        connection-time lookup; the deadline bounds the caller's wait, not native execution.
       requestBody:
         required: true
         content:

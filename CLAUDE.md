@@ -21,6 +21,14 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Automated verification
 
+Outbound catalog fetches have one 10-second deadline across validation/DNS, connection,
+headers, and the complete bounded body. Caller cancellation must propagate unchanged;
+only the fetch's own deadline and upstream failures become safe 502 problems. Initial DNS
+validation workers/queue are bounded; native lookup and JDK connection-time resolution have
+explicit residual limitations. Preserve the SSRF guards, redirect refusal, and 1 MB cap;
+see `.claude/docs/security.md` and the URL-fetch
+regressions in `.claude/docs/testing.md` before changing this path.
+
 CI regressions include the Errors page with its real report request held pending: loading
 spinners must expose a named `status`, not an `aria-label` on a generic span. Heavy catalog
 save-flow test fixtures use paste events; keyboard behavior keeps real typing. Preserve the

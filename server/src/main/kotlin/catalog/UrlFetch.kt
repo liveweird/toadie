@@ -2,6 +2,7 @@ package ch.nokillswit.catalog
 
 import ch.nokillswit.authz.BadGatewayException
 import io.ktor.server.plugins.BadRequestException
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.InetAddress
 import java.net.URI
@@ -11,9 +12,28 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import io.ktor.util.AttributeKey
+import java.nio.ByteBuffer
 import java.time.Duration
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
+import java.util.concurrent.CompletionStage
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executor
+import java.util.concurrent.Flow
+import java.util.concurrent.FutureTask
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 
 /**
@@ -30,6 +50,26 @@ import kotlinx.serialization.Serializable
 const val MAX_FETCH_URL_LENGTH = 2048
 const val MAX_FETCH_BYTES = 1_048_576
 private const val FETCH_TIMEOUT_SECONDS = 10L
+private const val DNS_WORKERS = 4
+private const val DNS_QUEUE_CAPACITY = 16
+private val DEFAULT_FETCH_TIMEOUT = Duration.ofSeconds(FETCH_TIMEOUT_SECONDS)
+
+/**
+ * DNS has no genuinely cancellable JVM API: a native resolver may ignore Thread.interrupt().
+ * A timed-out caller is still released immediately, while this fixed-size, bounded executor
+ * caps the number of resolver calls that may remain stranded and refuses excess queued work.
+ */
+private val URL_VALIDATION_EXECUTOR: Executor = ThreadPoolExecutor(
+    DNS_WORKERS,
+    DNS_WORKERS,
+    0L,
+    TimeUnit.MILLISECONDS,
+    ArrayBlockingQueue(DNS_QUEUE_CAPACITY),
+    ThreadFactory { runnable ->
+        Thread(runnable, "catalog-url-validation").apply { isDaemon = true }
+    },
+    ThreadPoolExecutor.AbortPolicy(),
+)
 
 /** The uniform 400 detail for every guard rejection — never echoes what was probed. */
 const val FETCH_URL_INVALID_DETAIL =
@@ -154,47 +194,190 @@ val CatalogUrlFetcherKey = AttributeKey<CatalogUrlFetcher>("CatalogUrlFetcher")
  * logic at a plain-HTTP 127.0.0.1 fixture server — production wiring always uses
  * [validateFetchUrl] (the default).
  */
-class CatalogUrlFetcher(private val urlValidator: (String) -> URI = ::validateFetchUrl) {
+class CatalogUrlFetcher(
+    private val urlValidator: (String) -> URI = ::validateFetchUrl,
+    private val timeout: Duration = DEFAULT_FETCH_TIMEOUT,
+    private val validationExecutor: Executor = URL_VALIDATION_EXECUTOR,
+) {
 
     private val client: HttpClient = HttpClient.newBuilder()
         // Load-bearing: following a redirect would re-open the private-address hole.
         .followRedirects(HttpClient.Redirect.NEVER)
-        .connectTimeout(Duration.ofSeconds(FETCH_TIMEOUT_SECONDS))
+        .connectTimeout(DEFAULT_FETCH_TIMEOUT)
+        // The JDK performs a second, connection-time DNS lookup inside HttpClient. Its public
+        // API cannot make that native lookup cancellable or separately bound its executor;
+        // replacing the transport is required to eliminate this part of the rebinding risk.
         .build()
 
     /** Throws [BlockedUrlException] (→ the route's 400) or [BadGatewayException] (→ 502). */
     suspend fun fetch(rawUrl: String): FetchedContent {
-        val uri = urlValidator(rawUrl)
-        return FetchedContent(uri = uri, content = withContext(Dispatchers.IO) { execute(uri) })
+        try {
+            return withTimeoutOrNull(timeout.toMillis()) {
+                val uri = validateAsync(rawUrl)
+                coroutineContext.ensureActive()
+                FetchedContent(uri = uri, content = execute(uri))
+            } ?: throw BadGatewayException("The URL could not be fetched")
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (_: FetchUnavailableException) {
+            throw BadGatewayException("The URL could not be fetched")
+        }
     }
 
-    private fun execute(uri: URI): String {
+    private suspend fun validateAsync(rawUrl: String): URI = suspendCancellableCoroutine { continuation ->
+        val task = object : FutureTask<URI>({ urlValidator(rawUrl) }) {
+            override fun done() {
+                try {
+                    continuation.resume(get())
+                } catch (_: java.util.concurrent.CancellationException) {
+                    // The coroutine cancellation handler already owns this outcome.
+                } catch (cause: ExecutionException) {
+                    continuation.resumeWithException(cause.cause ?: cause)
+                } catch (cause: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    continuation.resumeWithException(cause)
+                }
+            }
+        }
+        continuation.invokeOnCancellation {
+            task.cancel(true)
+            // A cancelled queued task may retain a query-string credential until a worker is
+            // free unless it is explicitly removed from the bounded production queue.
+            (validationExecutor as? ThreadPoolExecutor)?.remove(task)
+        }
+        try {
+            if (continuation.isActive) validationExecutor.execute(task)
+        } catch (_: RejectedExecutionException) {
+            task.cancel(true)
+            continuation.resumeWithException(FetchUnavailableException())
+        }
+    }
+
+    private suspend fun execute(uri: URI): String {
         val request = HttpRequest.newBuilder(uri)
-            .timeout(Duration.ofSeconds(FETCH_TIMEOUT_SECONDS))
+            .timeout(timeout)
             .header("Accept", "text/yaml, text/plain, */*")
             .GET()
             .build()
+        val exchange = FetchExchange()
         val response = try {
-            client.send(request, HttpResponse.BodyHandlers.ofInputStream())
-        } catch (_: IOException) {
+            val future = client.sendAsync(request) { responseInfo ->
+                BoundedBodySubscriber(exchange, responseInfo.statusCode() == 200)
+            }
+            awaitResponse(future, exchange)
+        } catch (_: FetchTooLargeException) {
+            throw BadGatewayException("The file is larger than the 1 MB fetch limit")
+        } catch (_: RejectedExecutionException) {
             throw BadGatewayException("The URL could not be fetched")
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
+        } catch (_: FetchUnavailableException) {
             throw BadGatewayException("The URL could not be fetched")
         }
-        response.body().use { body ->
-            if (response.statusCode() in 300..399) {
-                throw BadGatewayException("The URL redirects — use the final URL")
+        if (response.statusCode() in 300..399) {
+            throw BadGatewayException("The URL redirects — use the final URL")
+        }
+        if (response.statusCode() != 200) {
+            throw BadGatewayException("The URL could not be fetched (HTTP ${response.statusCode()})")
+        }
+        return String(response.body(), Charsets.UTF_8)
+    }
+}
+
+private class FetchUnavailableException : IOException()
+
+private class FetchTooLargeException : IOException()
+
+private class FetchExchange {
+    private val subscription = AtomicReference<Flow.Subscription?>()
+    private val cancelled = AtomicBoolean(false)
+
+    fun subscribed(value: Flow.Subscription): Boolean {
+        if (!subscription.compareAndSet(null, value)) {
+            value.cancel()
+            return false
+        }
+        if (cancelled.get()) {
+            value.cancel()
+            return false
+        }
+        return true
+    }
+
+    fun cancel() {
+        cancelled.set(true)
+        subscription.get()?.cancel()
+    }
+}
+
+private class BoundedBodySubscriber(
+    private val exchange: FetchExchange,
+    private val acceptBody: Boolean,
+) : HttpResponse.BodySubscriber<ByteArray> {
+    private val result = CompletableFuture<ByteArray>()
+    private val output = ByteArrayOutputStream()
+    private var subscription: Flow.Subscription? = null
+    private var received = 0
+
+    override fun getBody(): CompletionStage<ByteArray> = result
+
+    override fun onSubscribe(value: Flow.Subscription) {
+        subscription = value
+        if (!exchange.subscribed(value)) return
+        if (!acceptBody) {
+            value.cancel()
+            result.complete(ByteArray(0))
+        } else {
+            value.request(1)
+        }
+    }
+
+    override fun onNext(buffers: List<ByteBuffer>) {
+        try {
+            for (buffer in buffers) {
+                val count = buffer.remaining()
+                if (count > MAX_FETCH_BYTES - received) {
+                    subscription?.cancel()
+                    result.completeExceptionally(FetchTooLargeException())
+                    return
+                }
+                val bytes = ByteArray(count)
+                buffer.get(bytes)
+                output.write(bytes)
+                received += count
             }
-            if (response.statusCode() != 200) {
-                throw BadGatewayException("The URL could not be fetched (HTTP ${response.statusCode()})")
-            }
-            // Bounded read — a BodyHandlers.ofString would buffer an attacker-sized response.
-            val bytes = body.readNBytes(MAX_FETCH_BYTES + 1)
-            if (bytes.size > MAX_FETCH_BYTES) {
-                throw BadGatewayException("The file is larger than the 1 MB fetch limit")
-            }
-            return String(bytes, Charsets.UTF_8)
+            subscription?.request(1)
+        } catch (cause: RuntimeException) {
+            subscription?.cancel()
+            result.completeExceptionally(cause)
+        }
+    }
+
+    override fun onError(cause: Throwable) {
+        result.completeExceptionally(cause)
+    }
+
+    override fun onComplete() {
+        result.complete(output.toByteArray())
+    }
+}
+
+private suspend fun awaitResponse(
+    future: CompletableFuture<HttpResponse<ByteArray>>,
+    exchange: FetchExchange,
+): HttpResponse<ByteArray> = suspendCancellableCoroutine { continuation ->
+    continuation.invokeOnCancellation {
+        exchange.cancel()
+        // kotlinx-coroutines' standard CompletionStage await uses cancel(false). The exchange
+        // needs the stronger signal so the JDK client attempts to abort its I/O promptly.
+        future.cancel(true)
+    }
+    future.whenComplete { response, failure ->
+        if (failure == null) {
+            continuation.resume(response)
+        } else if (continuation.isActive) {
+            val cause = if (failure is CompletionException) failure.cause ?: failure else failure
+            continuation.resumeWithException(
+                if (cause is FetchTooLargeException) cause else FetchUnavailableException(),
+            )
         }
     }
 }

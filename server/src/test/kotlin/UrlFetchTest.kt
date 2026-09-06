@@ -17,15 +17,32 @@ import com.sun.net.httpserver.HttpServer
 import io.ktor.client.call.body
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
+import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.URI
+import java.time.Duration
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /**
  * The URL fetch's SSRF posture and response handling. The guards are tested for real; the
@@ -87,19 +104,23 @@ class UrlFetchTest {
 
     // ---- response handling against the 127.0.0.1 fixture server ------------------------
 
-    private fun fixtureFetcher() = CatalogUrlFetcher(urlValidator = { URI(it) })
+    private fun fixtureFetcher(timeout: Duration = Duration.ofSeconds(10)) =
+        CatalogUrlFetcher(urlValidator = { URI(it) }, timeout = timeout)
 
     private fun withFixtureServer(
         configure: (HttpServer) -> Unit,
         block: (base: String) -> Unit,
     ) {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val executor = Executors.newCachedThreadPool()
+        server.executor = executor
         configure(server)
         server.start()
         try {
             block("http://127.0.0.1:${server.address.port}")
         } finally {
             server.stop(0)
+            executor.shutdownNow()
         }
     }
 
@@ -111,12 +132,164 @@ class UrlFetchTest {
         }
     }
 
+    private suspend fun CountDownLatch.awaitOrFail() {
+        assertTrue(withContext(Dispatchers.IO) { await(2, TimeUnit.SECONDS) })
+    }
+
+    private fun writeUntilDisconnected(
+        output: java.io.OutputStream,
+        disconnected: CompletableDeferred<Unit>,
+    ) {
+        try {
+            repeat(256) {
+                output.write(ByteArray(8_192))
+                output.flush()
+            }
+        } catch (_: IOException) {
+            disconnected.complete(Unit)
+        }
+    }
+
     @Test
     fun `a 200 returns the body text`() = withFixtureServer(
         configure = { it.respond("/ok", 200, "kind: Component\nmetadata:\n  name: fetched\n".toByteArray()) },
     ) { base ->
         val fetched = runBlocking { fixtureFetcher().fetch("$base/ok") }
         assertTrue(fetched.content.contains("name: fetched"))
+    }
+
+    @Test
+    fun `validation is inside the fetch deadline and cancellation never starts the request`() {
+        val networkCalls = AtomicInteger()
+        withFixtureServer(
+            configure = { server ->
+                server.createContext("/should-not-start") { exchange ->
+                    networkCalls.incrementAndGet()
+                    exchange.sendResponseHeaders(200, 10)
+                    exchange.responseBody.use { it.write("unexpected".toByteArray()) }
+                }
+            },
+        ) { base ->
+            val validationStarted = CountDownLatch(2)
+            val releaseValidation = CountDownLatch(1)
+            val validationFinished = CountDownLatch(2)
+            val fetcher = CatalogUrlFetcher(
+                urlValidator = { raw ->
+                    validationStarted.countDown()
+                    // Model native DNS that ignores Thread.interrupt().
+                    while (releaseValidation.count > 0) {
+                        try {
+                            releaseValidation.await(20, TimeUnit.MILLISECONDS)
+                        } catch (_: InterruptedException) {
+                            // Native resolvers may remain blocked despite interruption.
+                        }
+                    }
+                    URI(raw).also { validationFinished.countDown() }
+                },
+                timeout = Duration.ofMillis(300),
+            )
+
+            try {
+                val timeout = assertFailsWith<BadGatewayException> {
+                    runBlocking { fetcher.fetch("$base/should-not-start") }
+                }
+                assertEquals("The URL could not be fetched", timeout.message)
+
+                runBlocking {
+                    val cancelled = async { fetcher.fetch("$base/should-not-start") }
+                    validationStarted.awaitOrFail()
+                    cancelled.cancelAndJoin()
+                }
+            } finally {
+                releaseValidation.countDown()
+            }
+            assertTrue(validationFinished.await(2, TimeUnit.SECONDS))
+            assertEquals(0, networkCalls.get())
+        }
+    }
+
+    @Test
+    fun `a parent coroutine timeout remains cancellation`() {
+        val validationStarted = CountDownLatch(1)
+        val releaseValidation = CountDownLatch(1)
+        val fetcher = CatalogUrlFetcher(
+            urlValidator = { raw ->
+                validationStarted.countDown()
+                while (releaseValidation.count > 0) {
+                    try {
+                        releaseValidation.await(20, TimeUnit.MILLISECONDS)
+                    } catch (_: InterruptedException) {
+                        // Deliberately model an uninterruptible native resolver.
+                    }
+                }
+                URI(raw)
+            },
+            timeout = Duration.ofSeconds(5),
+        )
+
+        try {
+            assertFailsWith<TimeoutCancellationException> {
+                runBlocking {
+                    withTimeout(100) { fetcher.fetch("http://127.0.0.1/never") }
+                }
+            }
+            assertTrue(validationStarted.await(2, TimeUnit.SECONDS))
+        } finally {
+            releaseValidation.countDown()
+        }
+    }
+
+    @Test
+    fun `validation saturation is a 502 and cancelling queued work removes it`() {
+        val releaseValidation = CountDownLatch(1)
+        val validationStarted = CountDownLatch(1)
+        val executor = ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            ArrayBlockingQueue(1),
+        )
+        val fetcher = CatalogUrlFetcher(
+            urlValidator = { raw ->
+                validationStarted.countDown()
+                while (releaseValidation.count > 0) {
+                    try {
+                        releaseValidation.await(20, TimeUnit.MILLISECONDS)
+                    } catch (_: InterruptedException) {
+                        // Model native DNS that remains in the sole worker after cancellation.
+                    }
+                }
+                URI(raw)
+            },
+            timeout = Duration.ofSeconds(5),
+            validationExecutor = executor,
+        )
+
+        try {
+            runBlocking {
+                val running = async { fetcher.fetch("http://127.0.0.1/running") }
+                validationStarted.awaitOrFail()
+                val queued = async { fetcher.fetch("http://127.0.0.1/queued-secret") }
+                withContext(Dispatchers.IO) {
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+                    while (executor.queue.size != 1 && System.nanoTime() < deadline) Thread.onSpinWait()
+                    assertEquals(1, executor.queue.size)
+                }
+
+                val saturated = assertFailsWith<BadGatewayException> {
+                    fetcher.fetch("http://127.0.0.1/rejected")
+                }
+                assertEquals("The URL could not be fetched", saturated.message)
+
+                queued.cancelAndJoin()
+                assertTrue(executor.queue.isEmpty())
+                running.cancelAndJoin()
+            }
+        } finally {
+            releaseValidation.countDown()
+            executor.shutdownNow()
+        }
     }
 
     @Test
@@ -137,6 +310,145 @@ class UrlFetchTest {
                 // A connection-refused IOException (nothing listens on the reserved port 1).
                 assertFailsWith<BadGatewayException> { fixtureFetcher().fetch("http://127.0.0.1:1/x") }
             }
+        }
+
+    @Test
+    fun `the body cap accepts the exact limit and rejects the next byte`() =
+        withFixtureServer(
+            configure = { server ->
+                server.respond("/exact", 200, ByteArray(MAX_FETCH_BYTES) { 'x'.code.toByte() })
+                server.respond("/over", 200, ByteArray(MAX_FETCH_BYTES + 1) { 'x'.code.toByte() })
+            },
+        ) { base ->
+            runBlocking {
+                assertEquals(MAX_FETCH_BYTES, fixtureFetcher().fetch("$base/exact").content.length)
+                val failure = assertFailsWith<BadGatewayException> { fixtureFetcher().fetch("$base/over") }
+                assertEquals("The file is larger than the 1 MB fetch limit", failure.message)
+            }
+        }
+
+    @Test
+    fun `pre-header and stalled-body timeouts release the caller and the fetcher remains reusable`() {
+        val headersStarted = CompletableDeferred<Unit>()
+        val releaseHeaders = CountDownLatch(1)
+        val headersDisconnected = CompletableDeferred<Unit>()
+        val bodyStarted = CompletableDeferred<Unit>()
+        val releaseBody = CountDownLatch(1)
+        val bodyDisconnected = CompletableDeferred<Unit>()
+        withFixtureServer(
+            configure = { server ->
+                server.createContext("/headers") { exchange ->
+                    headersStarted.complete(Unit)
+                    releaseHeaders.await()
+                    exchange.sendResponseHeaders(200, 0)
+                    exchange.responseBody.use { writeUntilDisconnected(it, headersDisconnected) }
+                }
+                server.createContext("/body") { exchange ->
+                    exchange.sendResponseHeaders(200, 0)
+                    exchange.responseBody.use { output ->
+                        output.write("partial".toByteArray())
+                        output.flush()
+                        bodyStarted.complete(Unit)
+                        releaseBody.await()
+                        writeUntilDisconnected(output, bodyDisconnected)
+                    }
+                }
+                server.respond("/ok-after-failure", 200, "ok".toByteArray())
+            },
+        ) { base ->
+            val fetcher = fixtureFetcher(Duration.ofMillis(500))
+            try {
+                runBlocking {
+                    withTimeout(5_000) {
+                        supervisorScope {
+                            val headers = async { fetcher.fetch("$base/headers") }
+                            headersStarted.await()
+                            assertFailsWith<BadGatewayException> { headers.await() }
+                            releaseHeaders.countDown()
+                            headersDisconnected.await()
+
+                            val body = async { fetcher.fetch("$base/body") }
+                            bodyStarted.await()
+                            assertFailsWith<BadGatewayException> { body.await() }
+                            releaseBody.countDown()
+                            bodyDisconnected.await()
+                            assertEquals("ok", fetcher.fetch("$base/ok-after-failure").content)
+                        }
+                    }
+                }
+            } finally {
+                releaseHeaders.countDown()
+                releaseBody.countDown()
+            }
+        }
+    }
+
+    @Test
+    fun `caller cancellation propagates while waiting for headers and body`() {
+        val headersStarted = CompletableDeferred<Unit>()
+        val releaseHeaders = CountDownLatch(1)
+        val headersDisconnected = CompletableDeferred<Unit>()
+        val bodyStarted = CompletableDeferred<Unit>()
+        val releaseBody = CountDownLatch(1)
+        val bodyDisconnected = CompletableDeferred<Unit>()
+        withFixtureServer(
+            configure = { server ->
+                server.createContext("/held-headers") { exchange ->
+                    headersStarted.complete(Unit)
+                    releaseHeaders.await()
+                    exchange.sendResponseHeaders(200, 0)
+                    exchange.responseBody.use { writeUntilDisconnected(it, headersDisconnected) }
+                }
+                server.createContext("/held-body") { exchange ->
+                    exchange.sendResponseHeaders(200, 0)
+                    exchange.responseBody.use { output ->
+                        output.write('x'.code)
+                        output.flush()
+                        bodyStarted.complete(Unit)
+                        releaseBody.await()
+                        writeUntilDisconnected(output, bodyDisconnected)
+                    }
+                }
+            },
+        ) { base ->
+            try {
+                runBlocking {
+                    val fetcher = fixtureFetcher()
+                    val headers = async { fetcher.fetch("$base/held-headers") }
+                    withTimeout(2_000) { headersStarted.await() }
+                    headers.cancel()
+                    assertFailsWith<CancellationException> { headers.await() }
+                    releaseHeaders.countDown()
+                    withTimeout(2_000) { headersDisconnected.await() }
+
+                    val body = async { fetcher.fetch("$base/held-body") }
+                    withTimeout(2_000) { bodyStarted.await() }
+                    body.cancel()
+                    assertFailsWith<CancellationException> { body.await() }
+                    releaseBody.countDown()
+                    withTimeout(2_000) { bodyDisconnected.await() }
+                }
+            } finally {
+                releaseHeaders.countDown()
+                releaseBody.countDown()
+            }
+        }
+    }
+
+    @Test
+    fun `a truncated response body is a 502-grade failure`() =
+        withFixtureServer(
+            configure = { server ->
+                server.createContext("/truncated") { exchange ->
+                    exchange.sendResponseHeaders(200, 12)
+                    exchange.responseBody.use { it.write("short".toByteArray()) }
+                }
+            },
+        ) { base ->
+            val failure = assertFailsWith<BadGatewayException> {
+                runBlocking { fixtureFetcher().fetch("$base/truncated") }
+            }
+            assertEquals("The URL could not be fetched", failure.message)
         }
 
     // ---- the route, with the REAL guard chain -------------------------------------------
@@ -171,35 +483,54 @@ class UrlFetchTest {
     }
 
     @Test
-    fun `the fetch route returns the fetched text and maps upstream failures to 502`() =
+    fun `the fetch route returns the fetched text and maps upstream failures and timeout to 502`() {
+        val slowStarted = CountDownLatch(1)
+        val releaseSlow = CountDownLatch(1)
         withFixtureServer(
             configure = { server ->
                 server.respond("/ok", 200, "kind: Component\nmetadata:\n  name: fetched\n".toByteArray())
                 server.respond("/missing", 404, "not here".toByteArray())
+                server.createContext("/slow") { exchange ->
+                    slowStarted.countDown()
+                    releaseSlow.await()
+                    exchange.close()
+                }
             },
         ) { base ->
-            testApplication {
-                configureApp()
-                // The test seam: a lenient-validator fetcher so the ROUTE can reach the
-                // 127.0.0.1 fixture; production wiring never sets this attribute.
-                application { attributes.put(CatalogUrlFetcherKey, fixtureFetcher()) }
-                startApplication()
-                val client = seededClient("fetchroute")
+            try {
+                testApplication {
+                    configureApp()
+                    // The test seam: a lenient-validator fetcher so the ROUTE can reach the
+                    // 127.0.0.1 fixture; production wiring never sets this attribute.
+                    application {
+                        attributes.put(CatalogUrlFetcherKey, fixtureFetcher(Duration.ofMillis(500)))
+                    }
+                    startApplication()
+                    val client = seededClient("fetchroute")
 
-                withAuditCapture { capture ->
-                    val ok = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/ok"))
-                    assertEquals(HttpStatusCode.OK, ok.status)
-                    assertTrue(ok.body<FetchUrlResponse>().content.contains("name: fetched"))
-                    // A successful outbound fetch leaves its own trail — scheme/host only,
-                    // never the full URL (it may embed query-string tokens).
-                    val fetched = capture.events.firstOrNull { it.message == "catalog_file.fetched" }
-                    assertNotNull(fetched)
-                    assertTrue(fetched.hasKeyValue("host", "127.0.0.1"))
+                    withAuditCapture { capture ->
+                        val ok = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/ok"))
+                        assertEquals(HttpStatusCode.OK, ok.status)
+                        assertTrue(ok.body<FetchUrlResponse>().content.contains("name: fetched"))
+                        // A successful outbound fetch leaves its own trail — scheme/host only,
+                        // never the full URL (it may embed query-string tokens).
+                        val fetched = capture.events.firstOrNull { it.message == "catalog_file.fetched" }
+                        assertNotNull(fetched)
+                        assertTrue(fetched.hasKeyValue("host", "127.0.0.1"))
+                    }
+
+                    val bad = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/missing"))
+                    assertEquals(HttpStatusCode.BadGateway, bad.status)
+                    assertTrue(bad.body<ProblemDetail>().detail!!.contains("HTTP 404"))
+
+                    val timedOut = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/slow"))
+                    assertTrue(slowStarted.await(2, TimeUnit.SECONDS))
+                    assertEquals(HttpStatusCode.BadGateway, timedOut.status)
+                    assertEquals("The URL could not be fetched", timedOut.body<ProblemDetail>().detail)
                 }
-
-                val bad = client.postJson("$CATALOG_FILES_PATH/fetch", FetchUrlRequest(url = "$base/missing"))
-                assertEquals(HttpStatusCode.BadGateway, bad.status)
-                assertTrue(bad.body<ProblemDetail>().detail!!.contains("HTTP 404"))
+            } finally {
+                releaseSlow.countDown()
             }
         }
+    }
 }
