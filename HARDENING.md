@@ -164,13 +164,96 @@ Verification against a disposable Compose stack using the unchanged merged app i
 ## Stage 3 — failure handling and concurrency
 
 - [x] Bound the outbound caller's total wait, including DNS/body reads; stalled-body/cancellation tests.
-- [ ] Separately evaluate connection-time DNS containment / address pinning: the JDK transport
-  may resolve again after the public-host check, and native resolution can outlive cancellation.
-  A rejecting bounded JDK executor is not a safe shortcut (selector rejection aborts the client).
+- [x] Pin connections to validated DNS addresses and bound the complete exchange. Native DNS
+  may still ignore interruption and occupy a bounded worker until the OS returns.
 - [x] Bound YAML-diff cost with a size threshold/fallback; large valid document regression.
 - [x] Protect graph-layout initialization, serialize/coalesce saves, show failure/retry state.
 - [x] Make cross-category tag ownership concurrency-safe and test overlapping writes.
 - [x] Make catalog mutations and product-history events atomic; fault-injection regression.
+
+### Pinned outbound-fetch destinations batch (2026-09-06)
+
+Starting state verified: clean `master` at `534d529` (PR #9 merged), displayed version
+**1.22.1**, successful master CI, and the rebuilt development app running with its original
+PostgreSQL volume. The atomic catalog-history batch is complete and deployed.
+
+The JDK client previously resolved the hostname again after validation, leaving a rebinding
+gap and a second native lookup outside the bounded validation pool. This batch uses the
+already-present OkHttp 5.4.0 transport as a direct dependency. Each fetch resolves and validates
+one address snapshot, connects directly to those addresses, retains logical hostname/TLS
+verification, and owns a private connection pool. Both the HTTP client and physical sockets
+explicitly bypass proxies; a regression exposed Java's SOCKS-selector lookup despite
+OkHttp's direct-proxy setting, so the socket factory also uses `Socket(Proxy.NO_PROXY)`.
+Redirects and retries remain refused; non-success responses cannot trigger an automatic
+status retry or background body drain.
+
+The complete exchange, including DNS, synchronous connection/TLS, and bounded body reads,
+runs on four workers with sixteen queued tasks. One ten-second deadline includes queueing.
+Cancellation removes queued work, closes an attached call, and prevents late DNS completion
+from starting HTTP. Native DNS can still ignore interruption and hold a bounded worker until
+the OS returns; this can exhaust fetch availability, but no second resolver or unbounded
+connection executor escapes the worker cap.
+
+Compatibility: this fetch path now requires direct HTTPS egress and ignores system HTTP
+and SOCKS proxies. Normal certificate trust and hostname verification remain mandatory.
+JSON/status contracts, the one-megabyte byte limit, uniform blocked-URL errors, and redacted
+audits are preserved. No migration or displayed-version change is needed.
+
+Verification:
+
+- Final full Gradle build, detekt, coverage gates, and `:server:installDist` passed:
+  **414 tests / 56 suites**, no failures or skips; **97.818% lines / 76.826% branches**.
+  Coverage thresholds are unchanged. The **24 URL-fetch tests** include nine new regressions.
+- The TLS success regression failed as expected in a disposable copy with the pinned resolver
+  replaced by `Dns.SYSTEM`. The queue-submission race regression failed as expected when
+  post-submission cancellation cleanup was removed. Both disposable source copies were removed.
+- Frontend build, API generation/drift checks, E2E typecheck, and scenario parity passed
+  (**28 spec/scenario pairs**). Spectral: **zero errors**, two registered warnings and
+  71 registered hints; the reference fixture passed.
+- Independent code/API review has no remaining findings. Manual API checklist:
+  **40 pass, two N/A, 11 registered gaps, zero failures**. Review also tightened the race
+  assertions and TLS fixture ownership so cancellation/failure cannot strand an accepted socket.
+- All **48 Playwright tests** passed with four workers and zero retries against the separately
+  built final production code in `toadie-dns-verify:local`. The disposable project's containers,
+  network, and database volume were removed afterwards.
+- Development users, catalog files, graph layouts, tag categories, and catalog history retained
+  identical before/after checksums. The app image and `toadie_postgres-data` volume are unchanged.
+
+These results record the pre-publication checkpoint: the batch was local and uncommitted,
+hosted CI had not run, and no push, merge, development-container rebuild, or deployment had
+been performed. Publication and deployment are verified separately.
+
+### PR #10 verification follow-up: disconnect observation
+
+The initial [branch backend run](https://github.com/liveweird/toadie/actions/runs/34058023912)
+failed the new non-200 disconnect regression, while the same commit's PR backend passed.
+The exact safe HTTP-404 failure was returned, but the test's finite 2 MiB writer could finish
+inside Linux socket buffers without throwing; its disconnect signal then never completed.
+The fix sends an incomplete chunked 404 through a raw socket and observes peer EOF/reset
+on the read side. The two-second closure assertion, safe error assertion, and cancellation-safe
+socket ownership remain intact. Production code and coverage thresholds are unchanged.
+
+The revised regression passed **30 repetitions in a disposable Linux container**. The full
+backend build, detekt, coverage gates, and installDist passed again (**414 tests**, no failures
+or skips), and independent review found no remaining issue. The Linux verification container
+was removed automatically; it never connected to the development database.
+
+### PR #10 verification follow-up: graph save acknowledgement
+
+The [PR browser run](https://github.com/liveweird/toadie/actions/runs/34058594170) caught a
+flaky graph reload assertion, despite the parallel branch run passing. The trace showed the
+drag waiter consuming an earlier Manual-mode PUT with empty positions. Reload began about
+48 ms after mouse-up, before the 600 ms drag-save debounce; no position-bearing PUT had been
+sent, so the restored computed position matched the document actually stored by the server.
+The test now matches the exact user's layout path and expected request document, including
+the dragged node's position, and asserts the response status. It owns a throwaway user instead
+of clearing the seed admin's layout. The scenario and coverage map describe this ownership.
+Production behavior, debounce, test timeouts, and fail-on-flaky policy are unchanged.
+
+The corrected graph journey passed **ten repetitions** with retries disabled. The full
+**48-test browser suite** then passed with four workers and zero retries on the disposable
+stack; TypeScript, all 28 scenario mappings, whitespace checks, and independent review passed.
+The disposable stack and data were removed after verification; development data was preserved.
 
 ### Atomic catalog-history batch (2026-09-06)
 

@@ -1,26 +1,26 @@
 # Rendering the files together (the relationship graph)
 
 - **Spec**: [tests/render.spec.ts](../tests/render.spec.ts)
-- **Actors**: the seed administrator (`admin@toadie.local`) — an ordinary user here (shared
-  workspace)
+- **Actors**: the seed administrator (`admin@toadie.local`) creates and later removes one
+  throwaway regular user, who exercises the shared catalog workspace and owns the tested layout
 - **Owns** (exclusive server-side state): four throwaway files sharing one per-attempt
   unique NAME stem, spread over this run's two throwaway NAMESPACES (`e2e-rns-…` and
   `e2e-rns2-…`, registered in the namespaces dictionary by global-setup) — a System and three
   components, one of the components deleted mid-journey to create the missing node, the other
   three files deleted at the end; the graph's NAME filter isolates the assertions from every
   other file in the shared database, and the second namespace is what puts two namespace
-  frames on one canvas. Also **the seed admin's graph layout document** (the per-user V19 row
+  frames on one canvas. Also **the throwaway user's graph layout document** (the per-user V19 row
   behind the Auto/Manual modes, which since V24 also holds the collapsed node ids) — only
   this spec touches it, and the journey ends by restoring it to the pristine default (Expand
-  all + Reset + Auto)
+  all + Reset + Auto) before the user is deleted
 
 ## Scenario: the graph renders stored and missing nodes for a namespace
 
-1. The admin signs in and creates four files sharing one name stem (namespaces picked from
-   the Namespace select): a System in the first run namespace, then three components — B in
-   the second run namespace, the doomed ghost in the first, then A — also in the first, **in
-   the System** — with **Depends on** entries for both; saves enforce reference resolution,
-   so targets exist first.
+1. The admin signs in, creates a throwaway regular user, and that user creates four files sharing
+   one name stem (namespaces picked from the Namespace select): a System in the first run
+   namespace, then three components — B in the second run namespace, the doomed ghost in the
+   first, then A — also in the first, **in the System** — with **Depends on** entries for both;
+   saves enforce reference resolution, so targets exist first.
 2. They delete the ghost from the filtered Files list.
    - *Expected*: deletion is allowed; A's reference to it is now dangling.
 3. They open the **Graph** page and filter by the shared name stem.
@@ -50,15 +50,17 @@
      all button disappears — nothing is collapsed any more.
 8. They switch the layout to **Manual** and drag node B across the canvas.
    - *Expected*: the canvas stays painted while dragging (nodes never flicker away
-     mid-gesture); the node moves and stays where dropped (the position save fires); the
-     drag does NOT open B's editor — the page stays on the graph.
+     mid-gesture); the node moves and stays where dropped (the server acknowledges a layout
+     document containing B's new position); the drag does NOT open B's editor — the page stays
+     on the graph.
 9. They reload the page.
    - *Expected*: the layout is still Manual and B still sits at the dragged position — the
      layout document persisted server-side per user, not in the browser.
 10. They click **Reset layout**, then switch back to **Auto**.
     - *Expected*: B returns to a computed auto-layout spot; the Reset button disappears in
-      Auto mode — the admin's layout document is back to the pristine default.
+      Auto mode — the throwaway user's layout document is back to the pristine default.
 11. They delete the three remaining throwaway files from the filtered Files list.
+12. The retained admin session deletes the throwaway user.
 
 ## Not covered here (and why)
 

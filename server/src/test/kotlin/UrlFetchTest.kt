@@ -8,18 +8,27 @@ import ch.nokillswit.catalog.FetchUrlResponse
 import ch.nokillswit.catalog.FetchUrlRequest
 import ch.nokillswit.catalog.FETCH_URL_INVALID_DETAIL
 import ch.nokillswit.catalog.MAX_FETCH_BYTES
+import ch.nokillswit.catalog.ValidatedFetchTarget
 import ch.nokillswit.catalog.isBlockedAddress
 import ch.nokillswit.catalog.parseFetchUrl
 import ch.nokillswit.catalog.requirePublicHost
+import ch.nokillswit.catalog.resolveFetchTarget
 import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserRole
 import com.sun.net.httpserver.HttpServer
+import com.sun.net.httpserver.HttpsConfigurator
+import com.sun.net.httpserver.HttpsExchange
+import com.sun.net.httpserver.HttpsServer
 import io.ktor.client.call.body
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.ProxySelector
+import java.net.ServerSocket
+import java.net.SocketAddress
 import java.net.URI
 import java.time.Duration
 import java.util.concurrent.ArrayBlockingQueue
@@ -28,6 +37,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import javax.net.ssl.ExtendedSSLSession
+import javax.net.ssl.SNIHostName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -43,6 +56,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.tls.HandshakeCertificates
+import okhttp3.tls.HeldCertificate
 
 /**
  * The URL fetch's SSRF posture and response handling. The guards are tested for real; the
@@ -102,10 +118,48 @@ class UrlFetchTest {
         assertEquals("192.168.0.10", blocked.host)
     }
 
+    @Test
+    fun `target resolution rejects empty and mixed answers and captures one canonical lookup`() {
+        val public = InetAddress.getByName("1.1.1.1")
+        val private = InetAddress.getByName("127.0.0.1")
+        assertFailsWith<BlockedUrlException> {
+            resolveFetchTarget("https://empty.example/x") { emptyList() }
+        }
+        assertFailsWith<BlockedUrlException> {
+            resolveFetchTarget("https://mixed.example/x") { listOf(public, private) }
+        }
+
+        val lookups = AtomicInteger()
+        val resolvedHost = AtomicReference<String>()
+        val target = resolveFetchTarget("HTTPS://Pin.Example:8443/x") { host ->
+            resolvedHost.set(host)
+            if (lookups.getAndIncrement() == 0) listOf(public) else listOf(private)
+        }
+        assertEquals(1, lookups.get())
+        assertEquals("pin.example", resolvedHost.get())
+        assertEquals("pin.example", target.url.host)
+        assertEquals(listOf(public), target.addresses)
+
+        val literalLookups = AtomicInteger()
+        val literal = resolveFetchTarget("https://[2606:4700:4700::1111]/x") { host ->
+            literalLookups.incrementAndGet()
+            assertEquals("2606:4700:4700::1111", host)
+            listOf(InetAddress.getByName(host))
+        }
+        assertEquals(1, literalLookups.get())
+        assertEquals("2606:4700:4700::1111", literal.url.host)
+    }
+
     // ---- response handling against the 127.0.0.1 fixture server ------------------------
 
     private fun fixtureFetcher(timeout: Duration = Duration.ofSeconds(10)) =
-        CatalogUrlFetcher(urlValidator = { URI(it) }, timeout = timeout)
+        CatalogUrlFetcher(targetResolver = ::fixtureTarget, timeout = timeout)
+
+    private fun fixtureTarget(raw: String) = ValidatedFetchTarget(
+        uri = URI(raw),
+        url = raw.toHttpUrl(),
+        addresses = listOf(InetAddress.getByName("127.0.0.1")),
+    )
 
     private fun withFixtureServer(
         configure: (HttpServer) -> Unit,
@@ -159,6 +213,122 @@ class UrlFetchTest {
     }
 
     @Test
+    fun `each fetch uses an isolated connection`() {
+        val remotePorts = mutableSetOf<Int>()
+        withFixtureServer(
+            configure = { server ->
+                server.createContext("/connection") { exchange ->
+                    synchronized(remotePorts) { remotePorts += exchange.remoteAddress.port }
+                    exchange.sendResponseHeaders(200, 2)
+                    exchange.responseBody.use { it.write("ok".toByteArray()) }
+                }
+            },
+        ) { base ->
+            val fetcher = fixtureFetcher()
+            runBlocking {
+                assertEquals("ok", fetcher.fetch("$base/connection").content)
+                assertEquals("ok", fetcher.fetch("$base/connection").content)
+            }
+        }
+        assertEquals(2, remotePorts.size)
+    }
+
+    @Test
+    fun `fetch bypasses the process proxy selector`() {
+        val selections = AtomicInteger()
+        val previous = ProxySelector.getDefault()
+        ProxySelector.setDefault(object : ProxySelector() {
+            override fun select(uri: URI): List<Proxy> {
+                selections.incrementAndGet()
+                return listOf(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 1)))
+            }
+
+            override fun connectFailed(_uri: URI, _socketAddress: SocketAddress, _failure: IOException) = Unit
+        })
+        try {
+            withFixtureServer(
+                configure = { it.respond("/direct", 200, "ok".toByteArray()) },
+            ) { base ->
+                assertEquals("ok", runBlocking { fixtureFetcher().fetch("$base/direct").content })
+            }
+            assertEquals(0, selections.get())
+        } finally {
+            ProxySelector.setDefault(previous)
+        }
+    }
+
+    @Test
+    fun `pinned TLS transport preserves logical hostname SNI and Host and enforces trust`() {
+        val logicalHost = "catalog.test"
+        val certificate = HeldCertificate.Builder()
+            .commonName(logicalHost)
+            .addSubjectAlternativeName(logicalHost)
+            .build()
+        val serverCertificates = HandshakeCertificates.Builder().heldCertificate(certificate).build()
+        val clientCertificates = HandshakeCertificates.Builder()
+            .addTrustedCertificate(certificate.certificate)
+            .build()
+        val seenHost = AtomicReference<String>()
+        val seenSni = AtomicReference<String>()
+        val server = HttpsServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val executor = Executors.newCachedThreadPool()
+        server.executor = executor
+        server.httpsConfigurator = HttpsConfigurator(serverCertificates.sslContext())
+        server.createContext("/tls") { exchange ->
+            seenHost.set(exchange.requestHeaders.getFirst("Host"))
+            val session = (exchange as HttpsExchange).sslSession as ExtendedSSLSession
+            seenSni.set((session.requestedServerNames.single() as SNIHostName).asciiName)
+            exchange.sendResponseHeaders(200, 2)
+            exchange.responseBody.use { it.write("ok".toByteArray()) }
+        }
+        server.start()
+        try {
+            val url = "https://$logicalHost:${server.address.port}/tls"
+            val target = ValidatedFetchTarget(
+                uri = URI(url),
+                url = url.toHttpUrl(),
+                addresses = listOf(InetAddress.getByName("127.0.0.1")),
+            )
+            val trustedLookups = AtomicInteger()
+            val trusted = CatalogUrlFetcher(
+                targetResolver = {
+                    trustedLookups.incrementAndGet()
+                    target
+                },
+                customizeClient = { builder ->
+                    builder.sslSocketFactory(clientCertificates.sslSocketFactory(), clientCertificates.trustManager)
+                },
+            )
+            assertEquals("ok", runBlocking { trusted.fetch(url).content })
+            assertEquals("$logicalHost:${server.address.port}", seenHost.get())
+            assertEquals(logicalHost, seenSni.get())
+            assertEquals(1, trustedLookups.get())
+
+            val wrongHostUrl = "https://wrong.test:${server.address.port}/tls"
+            val wrongHost = target.copy(uri = URI(wrongHostUrl), url = wrongHostUrl.toHttpUrl())
+            assertFailsWith<BadGatewayException> {
+                runBlocking {
+                    CatalogUrlFetcher(
+                        targetResolver = { wrongHost },
+                        customizeClient = { builder ->
+                            builder.sslSocketFactory(
+                                clientCertificates.sslSocketFactory(),
+                                clientCertificates.trustManager,
+                            )
+                        },
+                    ).fetch(wrongHostUrl)
+                }
+            }
+            assertFailsWith<BadGatewayException> {
+                runBlocking { CatalogUrlFetcher(targetResolver = { target }).fetch(url) }
+            }
+        } finally {
+            server.stop(0)
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun `validation is inside the fetch deadline and cancellation never starts the request`() {
         val networkCalls = AtomicInteger()
         withFixtureServer(
@@ -174,7 +344,7 @@ class UrlFetchTest {
             val releaseValidation = CountDownLatch(1)
             val validationFinished = CountDownLatch(2)
             val fetcher = CatalogUrlFetcher(
-                urlValidator = { raw ->
+                targetResolver = { raw ->
                     validationStarted.countDown()
                     // Model native DNS that ignores Thread.interrupt().
                     while (releaseValidation.count > 0) {
@@ -184,7 +354,7 @@ class UrlFetchTest {
                             // Native resolvers may remain blocked despite interruption.
                         }
                     }
-                    URI(raw).also { validationFinished.countDown() }
+                    fixtureTarget(raw).also { validationFinished.countDown() }
                 },
                 timeout = Duration.ofMillis(300),
             )
@@ -213,7 +383,7 @@ class UrlFetchTest {
         val validationStarted = CountDownLatch(1)
         val releaseValidation = CountDownLatch(1)
         val fetcher = CatalogUrlFetcher(
-            urlValidator = { raw ->
+            targetResolver = { raw ->
                 validationStarted.countDown()
                 while (releaseValidation.count > 0) {
                     try {
@@ -222,7 +392,7 @@ class UrlFetchTest {
                         // Deliberately model an uninterruptible native resolver.
                     }
                 }
-                URI(raw)
+                fixtureTarget(raw)
             },
             timeout = Duration.ofSeconds(5),
         )
@@ -251,7 +421,7 @@ class UrlFetchTest {
             ArrayBlockingQueue(1),
         )
         val fetcher = CatalogUrlFetcher(
-            urlValidator = { raw ->
+            targetResolver = { raw ->
                 validationStarted.countDown()
                 while (releaseValidation.count > 0) {
                     try {
@@ -260,10 +430,10 @@ class UrlFetchTest {
                         // Model native DNS that remains in the sole worker after cancellation.
                     }
                 }
-                URI(raw)
+                fixtureTarget(raw)
             },
             timeout = Duration.ofSeconds(5),
-            validationExecutor = executor,
+            fetchExecutor = executor,
         )
 
         try {
@@ -293,6 +463,158 @@ class UrlFetchTest {
     }
 
     @Test
+    fun `cancellation removes a task queued during submission`() {
+        val releaseWorker = CountDownLatch(1)
+        val submitted = CountDownLatch(1)
+        val allowSubmitReturn = CountDownLatch(1)
+        val gate = AtomicBoolean(false)
+        val executor = object : ThreadPoolExecutor(
+            1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(1),
+        ) {
+            fun occupyWorker() {
+                super.execute { releaseWorker.await() }
+            }
+
+            override fun execute(command: Runnable) {
+                if (gate.get()) {
+                    submitted.countDown()
+                    allowSubmitReturn.await()
+                }
+                super.execute(command)
+            }
+        }
+        executor.occupyWorker()
+        gate.set(true)
+        val fetcher = CatalogUrlFetcher(targetResolver = ::fixtureTarget, fetchExecutor = executor)
+        try {
+            runBlocking {
+                val queued = async(Dispatchers.Default) { fetcher.fetch("http://127.0.0.1/queued") }
+                submitted.awaitOrFail()
+                queued.cancel()
+                assertTrue(executor.queue.isEmpty())
+                allowSubmitReturn.countDown()
+                queued.cancelAndJoin()
+                assertTrue(executor.queue.isEmpty())
+            }
+        } finally {
+            allowSubmitReturn.countDown()
+            releaseWorker.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `body work occupies bounded fetch capacity and overload is a 502`() {
+        val bodyStarted = CountDownLatch(1)
+        val releaseBody = CountDownLatch(1)
+        val rejectedCalls = AtomicInteger()
+        val executor = ThreadPoolExecutor(
+            1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(1),
+        )
+        withFixtureServer(
+            configure = { server ->
+                server.createContext("/held") { exchange ->
+                    exchange.sendResponseHeaders(200, 0)
+                    exchange.responseBody.use { output ->
+                        output.write('x'.code)
+                        output.flush()
+                        bodyStarted.countDown()
+                        releaseBody.await()
+                    }
+                }
+                server.respond("/queued", 200, "ok".toByteArray())
+                server.createContext("/rejected") { exchange ->
+                    rejectedCalls.incrementAndGet()
+                    exchange.sendResponseHeaders(200, 2)
+                    exchange.responseBody.use { it.write("ok".toByteArray()) }
+                }
+            },
+        ) { base ->
+            val fetcher = CatalogUrlFetcher(
+                targetResolver = ::fixtureTarget,
+                timeout = Duration.ofSeconds(5),
+                fetchExecutor = executor,
+            )
+            try {
+                runBlocking {
+                    val running = async { fetcher.fetch("$base/held") }
+                    bodyStarted.awaitOrFail()
+                    val queued = async { fetcher.fetch("$base/queued") }
+                    withContext(Dispatchers.IO) {
+                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+                        while (executor.queue.size != 1 && System.nanoTime() < deadline) Thread.onSpinWait()
+                        assertEquals(1, executor.queue.size)
+                    }
+                    val failure = assertFailsWith<BadGatewayException> {
+                        fetcher.fetch("$base/rejected")
+                    }
+                    assertEquals("The URL could not be fetched", failure.message)
+                    assertEquals(0, rejectedCalls.get())
+                    queued.cancelAndJoin()
+                    running.cancelAndJoin()
+                }
+            } finally {
+                releaseBody.countDown()
+                executor.shutdownNow()
+            }
+        }
+    }
+
+    @Test
+    fun `TLS handshake timeout closes the socket`() {
+        val listener = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val handshakeStarted = CountDownLatch(1)
+        val socketClosed = CountDownLatch(1)
+        val acceptedSocket = AtomicReference<java.net.Socket>()
+        val cleanupRequested = AtomicBoolean(false)
+        val executor = Executors.newSingleThreadExecutor()
+        executor.execute {
+            val accepted = listener.accept()
+            acceptedSocket.set(accepted)
+            if (cleanupRequested.get()) acceptedSocket.getAndSet(null)?.close()
+            accepted.use { socket ->
+                val input = socket.getInputStream()
+                input.read(ByteArray(1))
+                handshakeStarted.countDown()
+                try {
+                    while (input.read() != -1) {
+                        // Wait for cancellation to close the TLS socket.
+                    }
+                } catch (_: IOException) {
+                    // A connection reset is also proof that cancellation closed the exchange.
+                } finally {
+                    socketClosed.countDown()
+                    acceptedSocket.compareAndSet(accepted, null)
+                }
+            }
+        }
+        val url = "https://catalog.test:${listener.localPort}/tls-stall"
+        val target = ValidatedFetchTarget(
+            uri = URI(url),
+            url = url.toHttpUrl(),
+            addresses = listOf(InetAddress.getByName("127.0.0.1")),
+        )
+        try {
+            val failure = assertFailsWith<BadGatewayException> {
+                runBlocking {
+                    CatalogUrlFetcher(
+                        targetResolver = { target },
+                        timeout = Duration.ofMillis(300),
+                    ).fetch(url)
+                }
+            }
+            assertEquals("The URL could not be fetched", failure.message)
+            assertTrue(handshakeStarted.await(2, TimeUnit.SECONDS))
+            assertTrue(socketClosed.await(2, TimeUnit.SECONDS))
+        } finally {
+            cleanupRequested.set(true)
+            acceptedSocket.getAndSet(null)?.close()
+            listener.close()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun `non-200, redirect, oversize, and unreachable all become 502-grade failures`() =
         withFixtureServer(
             configure = { server ->
@@ -311,6 +633,87 @@ class UrlFetchTest {
                 assertFailsWith<BadGatewayException> { fixtureFetcher().fetch("http://127.0.0.1:1/x") }
             }
         }
+
+    @Test
+    fun `a retryable 503 is refused before OkHttp can follow up`() {
+        val calls = AtomicInteger()
+        withFixtureServer(
+            configure = { server ->
+                server.createContext("/retryable") { exchange ->
+                    val attempt = calls.incrementAndGet()
+                    if (attempt == 1) exchange.responseHeaders.add("Retry-After", "0")
+                    val status = if (attempt == 1) 503 else 200
+                    exchange.sendResponseHeaders(status, 2)
+                    exchange.responseBody.use { it.write("ok".toByteArray()) }
+                }
+            },
+        ) { base ->
+            val failure = assertFailsWith<BadGatewayException> {
+                runBlocking { fixtureFetcher().fetch("$base/retryable") }
+            }
+            assertEquals("The URL could not be fetched (HTTP 503)", failure.message)
+        }
+        assertEquals(1, calls.get())
+    }
+
+    @Test
+    fun `a non-200 response aborts its stalled body`() {
+        val listener = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val responseStarted = CountDownLatch(1)
+        val disconnected = CountDownLatch(1)
+        val acceptedSocket = AtomicReference<java.net.Socket>()
+        val cleanupRequested = AtomicBoolean(false)
+        val executor = Executors.newSingleThreadExecutor()
+        executor.execute {
+            val accepted = listener.accept()
+            acceptedSocket.set(accepted)
+            if (cleanupRequested.get()) acceptedSocket.getAndSet(null)?.close()
+            accepted.use { socket ->
+                val input = socket.getInputStream()
+                var headerTail = 0
+                while (headerTail != 0x0D0A0D0A) {
+                    val next = input.read()
+                    if (next == -1) return@use
+                    headerTail = (headerTail shl 8) or next
+                }
+                socket.getOutputStream().apply {
+                    write(
+                        ("HTTP/1.1 404 Not Found\r\n" +
+                            "Transfer-Encoding: chunked\r\n" +
+                            "Connection: keep-alive\r\n\r\n" +
+                            "1000\r\nx").toByteArray(),
+                    )
+                    flush()
+                }
+                responseStarted.countDown()
+                try {
+                    while (input.read() != -1) {
+                        // The response chunk remains incomplete until the client closes the call.
+                    }
+                } catch (_: IOException) {
+                    // A reset and an orderly EOF both prove the client closed the exchange.
+                } finally {
+                    disconnected.countDown()
+                    acceptedSocket.compareAndSet(accepted, null)
+                }
+            }
+        }
+        try {
+            runBlocking {
+                val failure = assertFailsWith<BadGatewayException> {
+                    fixtureFetcher().fetch("http://127.0.0.1:${listener.localPort}/failed-stream")
+                }
+                assertEquals("The URL could not be fetched (HTTP 404)", failure.message)
+                responseStarted.awaitOrFail()
+                disconnected.awaitOrFail()
+            }
+        } finally {
+            cleanupRequested.set(true)
+            acceptedSocket.getAndSet(null)?.close()
+            listener.close()
+            executor.shutdownNow()
+        }
+    }
 
     @Test
     fun `the body cap accepts the exact limit and rejects the next byte`() =

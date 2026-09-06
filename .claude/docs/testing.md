@@ -34,6 +34,9 @@ check loading, safe errors, and retry. Keep live drag frames separate from persi
 The browser regression owns a throwaway user's layout and uses response gates to exercise
 pending initialization and saves; it must never mutate the seed admin's layout. Response
 predicates match the exact user path and method; assert status after receiving the response.
+Match the saved document too when multiple writes overlap: a mode-only acknowledgement must
+not satisfy a drag waiter. Confirm the request contains that node's position before reloading;
+the checked Manual radio and moved canvas only prove local state, not completed persistence.
 
 **Refresh crossing sign-out.** Use held responses to exercise the shared transport after an
 old protected request receives 401: hold refresh, perform the real best-effort logout with
@@ -52,16 +55,27 @@ The shared view and both confirmation-modal regressions must cover complete fall
 bounded text-block count, accessible scroll regions, and unchanged full replacement payloads
 (including `sourceUrl` for ordinary PUT). Identical large documents still disable confirmation.
 
-**Outbound-fetch deadlines and cancellation.** `UrlFetchTest` uses local fixture servers and
-held validation to exercise the single total deadline, pre-header/body stalls, explicit caller
-cancellation and enclosing timeouts, truncated-body I/O, exact-limit/oversize bodies, and the
-route's conformant 502 response. Use started/release gates and generous outer bounds; never
-make these tests depend on a slow public server or assume that cancelling a coroutine proves
-the HTTP exchange closed. Observe connection closure too. Keep the production HTTPS/public-host
-guard intact; only the injected test validator may allow loopback fixtures. Native DNS that
-ignores interruption must not hold the caller past its deadline or initiate a late request.
-The initial validation pool is bounded; the JDK's second lookup limitation is documented in
-`security.md`, not hidden by a claim that cancellation forcibly terminates all native work.
+**Outbound-fetch destinations, deadlines, and cancellation.** URL-fetch regressions use
+local HTTP/TLS fixtures and held resolution to exercise the single total deadline,
+pre-header/TLS/body stalls, caller cancellation and enclosing timeouts, truncated-body I/O,
+exact-limit/oversize bodies, and the route's conformant 502 response. Use started/release
+gates and generous outer bounds; never depend on a slow public server or assume cancelling
+a coroutine proves the HTTP exchange closed. Observe connection closure too. Keep the
+production HTTPS/public-host guard intact; only internal test target resolution may allow
+loopback fixtures. TLS fixtures trust a test-only CA and must still reject a wrong hostname
+or untrusted certificate. Verify the logical Host/SNI and physical destination separately.
+
+Pinning regressions must reject mixed public/private answers, use the validated address
+snapshot without a second resolver lookup, and prevent system proxies or cross-fetch pool
+reuse from bypassing it. Exercise first-status rejection (including `503 Retry-After: 0`),
+worker/queue saturation, cancellation during submission and while queued, and recovery after
+held native resolution is released. Native DNS that ignores interruption must not hold the
+caller past its deadline or initiate late HTTP. Its remaining bounded-worker limitation is
+documented in `security.md`; cancellation does not forcibly terminate native work. Fixture
+cleanup must retain ownership across coroutine dispatcher cancellation, including setup.
+For early status rejection, observe EOF/reset on the fixture socket's read side; a finite
+write loop may fit entirely into Linux socket buffers before cancellation and never throw.
+A raw incomplete chunked response makes the body stall independent of send-buffer capacity.
 
 **Hosted timing and loading regressions.** Catalog editor save-flow fixtures use user-event
 paste for complete text values; typing tests still exercise keystrokes. Do not spend the test

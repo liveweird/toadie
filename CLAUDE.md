@@ -48,11 +48,14 @@ are documented in `web/CLAUDE.md` and `.claude/docs/testing.md`.
 
 Outbound catalog fetches have one 10-second deadline across validation/DNS, connection,
 headers, and the complete bounded body. Caller cancellation must propagate unchanged;
-only the fetch's own deadline and upstream failures become safe 502 problems. Initial DNS
-validation workers/queue are bounded; native lookup and JDK connection-time resolution have
-explicit residual limitations. Preserve the SSRF guards, redirect refusal, and 1 MB cap;
-see `.claude/docs/security.md` and the URL-fetch
-regressions in `.claude/docs/testing.md` before changing this path.
+only the fetch's own deadline and upstream failures become safe 502 problems. Resolve once,
+reject any non-public address, and pin direct connections to that validated address snapshot
+while retaining the URL hostname for TLS verification. Each fetch owns its connection pool;
+proxies, redirects, and connection reuse between fetches must not bypass validation. The whole
+exchange uses a bounded worker pool/queue. Native DNS can still ignore interruption and hold
+one of those workers until the OS returns; cancellation must prevent a late HTTP request.
+See `.claude/docs/security.md` and the regressions in `.claude/docs/testing.md` before changing
+this path.
 
 CI regressions include the Errors page with its real report request held pending: loading
 spinners must expose a named `status`, not an `aria-label` on a generic span. Heavy catalog

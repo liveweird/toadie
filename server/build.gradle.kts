@@ -92,6 +92,7 @@ dependencies {
     implementation(libs.flyway.core)
     implementation(libs.flyway.database.postgresql)
     implementation(libs.logback.classic)
+    implementation(libs.okhttp)
     implementation(libs.opentelemetry.logbackAppender)
     implementation(libs.postgresql)
     implementation(libs.r2dbc.postgresql)
@@ -99,6 +100,7 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.client.contentNegotiation)
     testImplementation(ktorLibs.server.testHost)
+    testImplementation(libs.okhttp.tls)
     testImplementation(libs.swagger.request.validator.core)
     testImplementation(libs.testcontainers.postgresql)
 }
