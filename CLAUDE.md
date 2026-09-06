@@ -21,6 +21,12 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Automated verification
 
+Tag-category create, replace, and soft-delete serialize in PostgreSQL before reading registry
+state. The ownership check and mutation share one transaction, so overlapping claims cannot
+assign a tag to different active categories. Preserve the complete losing category on `409`,
+the concurrent 200-category limit, and existing authorization/validation/404 precedence.
+See `.claude/docs/persistence.md` and `.claude/docs/testing.md` for locking and regression rules.
+
 Graph-layout writes must wait for a successful baseline load and preserve the complete
 `{mode, positions, collapsed}` document, including filtered-out node ids. The dedicated
 persistence hook serializes saves, coalesces queued edits, and retains failed local changes
@@ -187,7 +193,7 @@ ch.nokillswit
 │                       (DTOs + sanitized/validateTagCategoryRequest — tag grammar + kinds
 │                       helpers borrowed from catalog's validators), TagCategoryService.kt
 │                       (one row = one category; tags/kinds as JSON arrays in TEXT; the
-│                       one-category-per-tag 409 enforced service-side in-transaction),
+│                       one-category-per-tag 409 enforced after a transaction-scoped PostgreSQL write lock),
 │                       TagCategoryRoutes.kt — GET /api/v1/tag-categories (any
 │                       authenticated, unpaged) + POST/PUT/DELETE (ADMIN). The whitelist
 │                       every catalog-file write's metadata.tags is checked against: tag

@@ -169,8 +169,49 @@ Verification against a disposable Compose stack using the unchanged merged app i
   A rejecting bounded JDK executor is not a safe shortcut (selector rejection aborts the client).
 - [x] Bound YAML-diff cost with a size threshold/fallback; large valid document regression.
 - [x] Protect graph-layout initialization, serialize/coalesce saves, show failure/retry state.
-- [ ] Make cross-category tag ownership concurrency-safe and test overlapping writes.
+- [x] Make cross-category tag ownership concurrency-safe and test overlapping writes.
 - [ ] Make catalog mutations and product-history events atomic; fault-injection regression.
+
+### Tag-ownership concurrency batch (2026-09-06)
+
+Starting state verified: clean `master` at `7f3fa8b` (PR #7 merged), displayed version
+**1.22.1**, and the existing Compose app, PostgreSQL, and Mailpit running on loopback ports.
+The graph-persistence batch's master CI and deployment checks passed with data preserved.
+
+Tag-category writes previously checked ownership before writing under ordinary transaction
+isolation; overlapping requests could both observe an unclaimed tag and both commit. The
+fix serializes create/replace/delete in PostgreSQL before reading registry state, preserving
+the existing JSON-array storage, soft deletion, `409` conflicts, and authorization/validation
+precedence. The same lock also protects the 200-active-category capacity check. No migration
+or new validation rule is needed. Concurrent replacements of one category still use
+last-write-wins semantics; all tag writers must use the lock protocol, and existing duplicate
+ownership is not silently repaired. Lettuce has no equivalent tag-category lock to port.
+
+Seven new regressions use real PostgreSQL contention with a held lock and observed waiters:
+create/create, replace/replace, create/replace, the 199→200 capacity boundary, delete with
+concurrent reads, rollback, and cancellation. Losing replacements retain their complete
+original document. The negative control against the original service deterministically
+returned `201 + 201` where the regression requires `201 + 409`; the fixed source was restored
+and all 18 focused tag tests passed. Existing tests retain remove-then-add and soft-delete
+tag reuse coverage. The current R2DBC path may finish cancellation only after the blocking
+lock clears; the regression verifies rollback and subsequent writes after that release.
+
+Verification:
+
+- Full Gradle build, detekt, coverage verification, and `:server:installDist` passed:
+  **401 tests / 55 suites**, no failures or skips; **97.715% lines / 76.796% branches**.
+- Frontend build, lint, knip, and coverage passed: **710 tests / 89 suites**;
+  **97.47% lines / 95.12% statements / 92.86% functions / 91.50% branches**.
+- API type generation/drift checks passed. Spectral: **0 errors**, two registered warnings,
+  71 registered hints, and a clean reference fixture. Independent API review: **28 pass,
+  16 N/A, nine registered gaps, zero failures**; no remaining code-review findings.
+- E2E typecheck and scenario parity passed (**28 spec/scenario pairs**). All **48 Playwright
+  tests** passed with four workers and zero retries against the separately built
+  `toadie-tags-verify:local` image and its own database volume. Only that disposable project's
+  containers, network, and volume were removed afterwards.
+- During pre-publication verification, development users, catalog files, graph layouts, and
+  tag categories retained identical before/after checksums; the existing app image and Compose
+  deployment were unchanged. No publication or development deployment was part of those checks.
 
 ### Graph-layout persistence batch (2026-09-06)
 

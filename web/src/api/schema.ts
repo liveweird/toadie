@@ -944,7 +944,10 @@ export interface paths {
          *     following the descriptor-format tag grammar), and the entity kinds those tags may be
          *     applied to (normalized to canonical casing and order). A name already held by an
          *     active category (case-insensitively), or a tag already belonging to ANOTHER active
-         *     category (each tag belongs to exactly one), is a `409`.
+         *     category (each tag belongs to exactly one), is a `409`. Concurrent requests claiming
+         *     the same unclaimed tag for different categories allow only one claim to succeed;
+         *     the conflicting request receives `409`. The 200-active-category limit also applies
+         *     to concurrent creates.
          */
         post: operations["createTagCategory"];
         delete?: never;
@@ -968,7 +971,10 @@ export interface paths {
          * @description ADMIN only — whole-category replacement (rename included: stored files carrying a
          *     removed tag simply fail the strict check on their next save). Same validation and
          *     `409` rules as create; moving a tag between categories is remove-then-add in TWO
-         *     saves (adding it while another active category still holds it is the `409`).
+         *     saves (adding it while another active category still holds it is the `409`). Concurrent
+         *     claims by different categories obey the same rule; a conflicting replacement changes
+         *     no fields of its target category. Concurrent replacements of the same category remain
+         *     whole-document, last-write-wins updates.
          */
         put: operations["replaceTagCategory"];
         post?: never;
