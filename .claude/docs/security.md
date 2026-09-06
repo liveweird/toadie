@@ -76,7 +76,48 @@ mail/localization/throttle primitives, not that weakness.
 
 **Request payload validation (convention — API-SEC-003/API-ERR-005).** Mutating routes validate payloads up-front and throw `BadRequestException` (→ `400` + `ProblemDetail`) instead of letting oversized/blank values die in the DB as `500`s. One cross-cutting example: password ≥ `MIN_PASSWORD_LENGTH` (10) chars AND ≤ 71 UTF-8 bytes (`validatePassword` in `users/UserRoutes.kt` + `MAX_PASSWORD_BYTES` in `auth/Passwords.kt` — **the bcrypt ceiling**: longer input makes bcrypt throw, and the 500-vs-401 split would be an account-enumeration oracle, so login's `verifyPassword` guards it too). Declare limits as `maxLength` in the OpenAPI spec. Keep new validators feature-local and enforce them **after** the authz guard (403 wins over 400). Covered by `PayloadValidationTest`.
 
-**Outbound URL fetch (SSRF posture).** `POST /api/v1/files/fetch` (`catalog/UrlFetch.kt`) makes the server issue outbound requests on user command — the import page's fetch-from-URL and the sync modal's repo fetch. Guards, in order: absolute `https` only, no userinfo, non-blank host ≤ 2048 chars (`parseFetchUrl`); then every resolved address must be public — loopback, site-local, link-local, any-local, multicast, IPv6 unique-local `fc00::/7` (NOT covered by `isSiteLocalAddress`), CGNAT `100.64.0.0/10`, `192.0.0.0/24`, benchmarking `198.18.0.0/15`, and NAT64 `64:ff9b::/96` addresses embedding a non-public IPv4 are refused, unresolvable hosts too (`requirePublicHost`). Every guard rejection is the **uniform 400** `FETCH_URL_INVALID_DETAIL` (never echoing what was probed) and audited as `catalog_file.fetch_blocked` with scheme/host ONLY (a URL may embed query-string tokens — never log the full URL); a SUCCESSFUL fetch leaves the same-shaped `catalog_file.fetched` trail, so the security log records who had the server pull from where, not only what it refused. The JDK `HttpClient` runs with `followRedirects(NEVER)` (following one would bypass the address check — load-bearing), 10 s timeouts, and a bounded 1 MB body read (`readNBytes`, never `ofString`); upstream failures (non-200, redirect, oversize, unreachable) are `BadGatewayException` → 502. **Accepted residual risks**: the resolve-check-then-connect gap (DNS rebinding) — closing it needs custom socket plumbing, out of proportion here; the stored `source_url` is persisted and served IN FULL to every authenticated user (`CatalogFileResponse`/list/`SyncStateResponse` — the shared-workspace point of the feature), so a query-string token embedded in a source reference is visible workspace-wide — don't put secrets in source URLs (the audit trail still never logs them); and the 502 detail echoes the upstream HTTP status (useful for diagnosing a broken reference, and only reachable for PUBLIC hosts the guard already admits). The `CatalogUrlFetcher(urlValidator)` seam exists ONLY so tests can point the response handling at a 127.0.0.1 fixture server; production wiring always uses the default `validateFetchUrl` chain (`UrlFetchTest` pins the guard matrix and the route behavior).
+**Outbound URL fetch (SSRF posture).** `POST /api/v1/files/fetch` (`catalog/UrlFetch.kt`)
+serves the import page and repo-sync modal. Guards, in order: absolute `https` only, no
+userinfo, non-blank host, URL ≤ 2048 chars (`parseFetchUrl`); then EVERY resolved address
+must be public (`requirePublicHost`). Loopback, site-local, link-local, any-local, multicast,
+IPv6 ULA `fc00::/7`, CGNAT `100.64.0.0/10`, `192.0.0.0/24`, benchmarking `198.18.0.0/15`,
+and NAT64 `64:ff9b::/96` embedding a non-public IPv4 are refused, as are unresolvable hosts.
+Guard rejections retain the uniform **400** `FETCH_URL_INVALID_DETAIL`. Audits remain
+`catalog_file.fetch_blocked` / `catalog_file.fetched`, with scheme/host ONLY, never the
+full URL or upstream exception text (either may contain query-string credentials).
+
+**One deadline, including the body.** The fetch's 10-second budget covers validation/DNS,
+connection/headers, and completion of the entire body; it is not a fresh budget per stage
+or per chunk. The JDK client still uses `followRedirects(NEVER)` and a connect/request
+timeout, but those settings alone do not bound a streaming body. An asynchronous bounded
+subscriber buffers at most **1,048,576 bytes**, requests chunks incrementally, and cancels
+on overflow. Non-200 responses are rejected without waiting for their bodies. Own-deadline
+expiry, exhausted resolver capacity, connection/body I/O failures, redirects, non-200 status,
+and oversize remain safe `BadGatewayException` → **502**. Caller cancellation (including
+an enclosing timeout) propagates unchanged; it cancels the subscription and HTTP future
+with interruption requested. No application-level retry, background body drain, or partial
+success; any transparent retries of the GET inside the JDK share the same outer deadline.
+
+**Native DNS limitation.** Validation runs on a shared daemon pool capped at four workers
+and sixteen queued tasks, with rejection mapped to 502. Cancellation interrupts its task
+and releases the waiting coroutine; a native resolver may ignore interruption and occupy
+a worker until the OS returns. This is bounded containment, NOT a claim that Java can
+forcibly terminate native DNS. Cancelled validation must never initiate an HTTP request.
+The JDK may resolve the host again while connecting: the pre-existing resolve-check/connect
+gap (DNS rebinding) remains an accepted residual risk, not closed by the deadline. That
+second native lookup runs on JDK-managed transport workers and is NOT fully resource-bounded
+by the initial validation pool. The caller's deadline still applies, but a native lookup
+may outlive cancellation. Full containment needs separate transport/resolver work. Do not
+install a rejecting bounded executor on the shared JDK client as a shortcut: in the pinned
+JDK, selector-side task rejection aborts the entire client and poisons subsequent requests.
+See the [JDK cancellation contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpClient.html)
+for its best-effort exchange-abort semantics.
+
+Other accepted risks: stored `source_url` is served IN FULL to all authenticated users in
+this shared workspace, so do not embed secrets in source references; 502 details retain
+the upstream HTTP status for diagnosis, only after the public-host check. The injected
+`CatalogUrlFetcher` validator/timeout/executor are test seams for local fixtures and short
+controlled deadlines; production uses the full default guard chain and ten-second budget.
 
 **CORS is off by default** (`plugins/Http.kt`): the plugin is installed only when `http.corsHosts` (`$CORS_ALLOWED_HOSTS`, comma-separated hosts) is non-empty. Production is single-origin (Ktor serves the SPA) and dev goes through the Vite proxy, so no cross-origin caller exists by default — no `anyHost()`. **Reverse proxy**: set `HTTP_BEHIND_PROXY=true` (config `http.behindProxy`) when TLS terminates at an ingress/proxy — it installs `XForwardedHeaders` so rate-limit buckets key on the real client IP and the HTTPS redirect sees the real scheme and host; the proxy must set (and overwrite client-supplied) `X-Forwarded-For`/`X-Forwarded-Proto`/`X-Forwarded-Host` — `k8s/templates/app-ingress.yaml` is the reference contract. Off by default because honoring those headers from direct clients lets them spoof both. Two hardenings ported from Lettuce (v1.22.0): the trusted header list is NARROWED to those canonical three (Ktor's default also honours `X-Forwarded-Server`/`-Protocol`/`-SSL`/`Front-End-Https`, which a proxy that sets only the canonical ones passes through from the client untouched — `ProductionHttpTest` pins that `X-Forwarded-Server` cannot name the redirect target), and `X-Forwarded-For` is read from the END of the list (`useLastProxy()`; `HTTP_PROXY_HOPS`, default 1, = trusted proxies that APPEND — `ForwardedHeadersTest` pins the bucket keying). The security headers are appended in the `Setup` pipeline phase so the production 301 carries them too (appending after `HttpsRedirect` commits the response throws on Netty). The Kubernetes probes send `X-Forwarded-Proto: https` for the same reason — without it production mode redirects the plain-HTTP probe and the pod crash-loops (see `k8s/app-deployment.yaml`).
 

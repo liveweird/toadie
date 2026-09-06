@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.22.1",
+    date: "2026-09-06",
+    en: `**More reliable catalog fetching.**
+
+- Fetching a catalog from a URL now has one ten-second limit covering validation, connection, and the complete response body. Stalled or interrupted responses fail cleanly instead of leaving the request waiting.
+- The existing public-HTTPS checks, redirect refusal, and 1 MB file limit remain unchanged.`,
+    pl: `**Pewniejsze pobieranie katalogów.**
+
+- Gdy pobierasz katalog z adresu URL, jeden limit dziesięciu sekund obejmuje walidację, połączenie i całą treść odpowiedzi. Gdy źródło przestaje odpowiadać lub połączenie się urywa, otrzymasz błąd zamiast czekać bez końca.
+- Nadal obowiązują publiczne adresy HTTPS, brak obsługi przekierowań i limit pliku 1 MB.`,
+  },
+  {
     version: "1.22.0",
     date: "2026-09-05",
     en: `**Deployment readiness: the Kubernetes flow now works in production mode.**

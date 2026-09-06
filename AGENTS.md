@@ -147,6 +147,13 @@ sync through the SSRF-guarded fetch path. Ordinary PUT is a full replace, so cli
 Every catalog mutation also maintains the immutable structural event history; free-text changes
 record only the fact of change, not the sensitive text itself.
 
+Outbound catalog fetches use one 10-second deadline including validation/DNS and the full
+response body, with a 1 MB cap and no redirects. Propagate caller cancellation; translate only
+the fetch's own expiry and upstream failures to safe 502 problems. Keep the initial validation
+pool bounded; native DNS may ignore interruption and the JDK's second lookup is not fully
+contained. See `.claude/docs/security.md` for that limitation and the accepted DNS-rebinding
+risk; neither is permission to weaken the public-host guard.
+
 Use four-space indentation, preserve existing package boundaries, PascalCase for Kotlin types,
 and camelCase for functions and variables. Name backend test classes `*Test`.
 

@@ -163,11 +163,52 @@ Verification against a disposable Compose stack using the unchanged merged app i
 
 ## Stage 3 — failure handling and concurrency
 
-- [ ] Bound the entire outbound fetch, including DNS/body reads; stalled-body/cancellation tests.
+- [x] Bound the outbound caller's total wait, including DNS/body reads; stalled-body/cancellation tests.
+- [ ] Separately evaluate connection-time DNS containment / address pinning: the JDK transport
+  may resolve again after the public-host check, and native resolution can outlive cancellation.
+  A rejecting bounded JDK executor is not a safe shortcut (selector rejection aborts the client).
 - [ ] Bound YAML-diff cost with a size threshold/fallback; large valid document regression.
 - [ ] Protect graph-layout initialization, serialize/coalesce saves, show failure/retry state.
 - [ ] Make cross-category tag ownership concurrency-safe and test overlapping writes.
 - [ ] Make catalog mutations and product-history events atomic; fault-injection regression.
+
+### Outbound-fetch deadline batch (2026-09-06)
+
+`CatalogUrlFetcher` now uses one ten-second caller deadline spanning validation, DNS guard,
+connection/headers, and complete body consumption. A bounded asynchronous subscriber keeps the
+one-megabyte ceiling; failed HTTP statuses do not wait for their bodies. Timeout, connection/body
+failure, and validation-capacity exhaustion preserve the safe 502 contract. Parent cancellation
+propagates unchanged and requests cancellation of both HTTP exchange and body subscription.
+
+Initial validation has four daemon workers and sixteen queue slots; cancelled queued tasks are
+removed. A held native resolver cannot hold its caller or start a late request after cancellation.
+Native resolution can still outlive interruption, and the JDK may perform a second lookup outside
+that pool. **Not solved:** full transport-DNS containment and DNS rebinding. An attempted bounded
+JDK executor was rejected during review because selector-side task rejection aborts the shared
+client; no such executor is shipped. No dependencies, migrations, redirects, or SSRF allowances
+were added. Lettuce was inspected and has no equivalent URL fetcher to port.
+
+Verification:
+
+- `./gradlew build :server:koverXmlReport :server:installDist`: passed, **394 tests**, no
+  failures/skips and zero detekt findings. Kover: **97.69% lines / 76.75% branches**, above
+  the unchanged 97% / 76% floors.
+- Focused `UrlFetchTest`: **15 passed**, then **three more complete runs (45 passed)** with
+  `--rerun-tasks`, without retries or failures. Full-suite coverage/count evidence was preserved
+  before these focused runs replaced the local test report.
+- Frontend build, API generation/drift check, and Spectral: passed. Spectral retains its
+  **2 registered warnings / 71 hints**, with **0 errors**; no contract shape or status changed.
+- Built a fresh isolated Compose image and ran the full browser suite with four workers and
+  retries disabled: **46 passed**, including URL-import refusal and source-sync journeys.
+- Independent review: no actionable findings in the final diff; **23 applicable API checks
+  passed**. The pre-existing `/fetch` verb naming exception (`API-RES-003`) and registered
+  global gaps are unchanged. The narrow cancellation-versus-subscription callback race is
+  supported by JDK source inspection and integration coverage, not a dedicated deterministic
+  callback-level test.
+
+Removed only the disposable verification containers/network/volume afterwards; generated test
+data can be recreated. The normal stack remained stopped and its volume was not touched;
+Kubernetes was not changed. These are pre-commit local results, not hosted CI results.
 
 ## Stage 4 — deployment
 
