@@ -43,6 +43,20 @@ does not resolve, releases the hold in `finally`, then cancels. The Lenses journ
 matches exact resource URLs/methods, asserts status outside the response predicate (a failed
 HTTP response must fail directly, not be ignored until timeout), and awaits completed UI.
 
+**One-time password capture.** The shared E2E `createUserViaUi` helper must wait for the
+named "User created" dialog to finish entering and for the reveal control to expose
+"Hide password" with `aria-pressed=true` before reading its code block. A successful
+Playwright click is not proof that the UI changed. The PR #6 Types trace captured the
+16-character mask while the control was still unrevealed, then submitted it and received
+the correct 401. Do not hide that failure with login retries or increased timeouts.
+`password-reveal-readiness.spec.ts` suppresses one real Show-password click and proves
+the shared capture helper rejects the still-masked state on its existing assertion timeout.
+A subsequent intentional reveal captures a credential that signs in successfully. This
+models the confirmed trace without a timing guess; `dialog-readiness.spec.ts` separately
+pins entrance readiness. Do not add fixed frame counts or relax assertion timeouts.
+The test owns a unique throwaway user and removes only that user in `finally`; diagnostics
+must compare credential relationships without printing the values.
+
 **Session lifecycle regressions (V25).** `AuthSessionServiceTest` injects a clock and tests
 expiry, cross-instance revocation, stale-epoch issuance, competing credential writes, and
 logout/renewal races. `SessionRevocationTest` checks current and superseded pairs, independent

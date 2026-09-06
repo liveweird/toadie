@@ -65,6 +65,7 @@ from Lettuce, that any new or edited spec must satisfy:
   read-only" when applicable). Today: `auth`, `accessibility`, `url-import`, and `changelog`
   (device-local localStorage only) are read-only;
   `dialog-readiness` opens and cancels an unsaved editor (browser-only entrance hold, no stored state);
+  `password-reveal-readiness` owns its throwaway user;
   `catalog-files`, `errors`, and `source-sync` own throwaway files (unique names in `default`); `kinds`,
   `render`, `round-trip`, and `hierarchy` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `i18n` owns its throwaway user (and ONLY that user's language —
@@ -223,6 +224,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   through Mailpit (old credentials survive request/GET; confirmation revokes sessions, enables
   the chosen password, and rejects replay — local-only skip
   without Mailpit; missing Mailpit fails CI).
+- [`password-reveal-readiness.spec.ts`](scenarios/password-reveal-readiness.md) — suppress one
+  real Show-password click, prove the helper rejects instead of returning the mask, then reveal
+  normally, sign in, and delete the throwaway user with retained admin authorization.
 - [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
   (deletion-orphaned) missing nodes for one per-attempt name stem, faced name + type, with the
   two-namespace canvas clustered inside labelled namespace frames and the unmatched shared

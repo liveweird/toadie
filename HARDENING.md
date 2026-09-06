@@ -258,6 +258,39 @@ Final local gates:
   not rerun for this frontend batch. Browser evidence above is a focused local probe,
   not a hosted CI run for this changeset.
 
+### PR #6 verification follow-up: one-time password capture
+
+The YAML-diff [push run](https://github.com/liveweird/toadie/actions/runs/34027968335)
+passed all gates, but the [PR run](https://github.com/liveweird/toadie/actions/runs/34027995378)
+failed the no-flaky gate: Types passed only on retry. The trace confirms that the shared
+user-creation helper read the 16-character mask after its Show-password click, while the
+control still exposed `aria-pressed=false`. The following login submitted that mask rather
+than the generated credential and correctly received 401. A dialog movement causing the
+missed click is plausible but not proven by the trace; the confirmed defect is capture
+without checking that the reveal completed.
+
+The follow-up waits for the named creation dialog to finish entering and for the reveal
+control to expose Hide password / `aria-pressed=true` before reading. A regression suppresses
+one actual Show-password click and checks that capture rejects the masked state using its
+existing assertion timeout. A subsequent intentional reveal captures a working credential.
+An initial entrance-hold test was rejected because it also passed against the old helper;
+the final test models the confirmed click-without-reveal failure directly. App behavior,
+timeouts, retries, and fail-on-flaky policy remain unchanged. Test credentials are compared
+without recording their plaintext here.
+
+The final regression passed with the fixed helper and failed against the original click/read
+behavior because that helper returned the mask instead of rejecting. Five repetitions each
+of Types and the new regression then passed (**10 runs**, one worker, retries disabled).
+E2E type-check and all **27** spec/scenario pairs passed. Independent review found no
+actionable issues in the final helper, regression, or documentation.
+
+The full browser suite also passed: **47 journeys**, four workers, retries disabled.
+Verification used the existing app image with the newly built SPA mounted read-only in
+the separate `toadie-pr6-verify` Compose project (app 8091, Mailpit 8036, no published DB
+port). Its containers/network/disposable database volume were removed afterwards; the
+regular development stack and volume were preserved. These are local follow-up results;
+the historical PR failure remains recorded above pending hosted verification of the fix.
+
 ## Stage 4 — deployment
 
 - [ ] Replace ingress-nginx with Traefik; verify TLS, HSTS, redirects, forwarded-header trust,
