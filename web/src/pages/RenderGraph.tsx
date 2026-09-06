@@ -28,8 +28,6 @@ import {
 import "@xyflow/react/dist/style.css";
 import { IconInfoCircle, IconTopologyStar3 } from "@tabler/icons-react";
 import { getCatalogGraph } from "../api/catalogFiles";
-import { getUserId } from "../api/session";
-import { getGraphLayout, setGraphLayout } from "../api/users";
 import CatalogGraphNode from "../components/CatalogGraphNode";
 import CatalogToolbar from "../components/CatalogToolbar";
 import EmptyState from "../components/EmptyState";
@@ -51,10 +49,13 @@ import { foldGraph } from "../utils/graphFold";
 import { buildHierarchy } from "../utils/hierarchy";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { loadErrorMessage } from "../utils/saveError";
+import { saveErrorMessage } from "../utils/saveError";
 import { editCatalogFilePath } from "../utils/catalogFileLinks";
 import LoadingBlock from "../components/LoadingBlock";
 import PageHeader from "../components/PageHeader";
 import classes from "../theme.module.css";
+import { useGraphLayout } from "../hooks/useGraphLayout";
+import { useSessionUserId } from "../auth";
 
 const NODE_TYPES = { catalog: CatalogGraphNode };
 
@@ -67,15 +68,16 @@ const LEGEND: { key: "stored" | "missing" | "collapsed"; style: React.CSSPropert
 ];
 
 type LayoutMode = "auto" | "manual";
-/** The per-user layout document as the page holds it — every PUT sends the whole triple. */
-type LayoutState = { mode: LayoutMode; positions: GraphPositions; collapsed: string[] };
 
 /** Stable fallbacks — a fresh `{}`/`[]` in deps would retrigger the layout sync effect every render. */
 const EMPTY_POSITIONS: GraphPositions = {};
 const EMPTY_COLLAPSED: string[] = [];
 
-/** Drag saves are debounced so a repositioning session is one PUT, not one per node. */
-const LAYOUT_SAVE_DEBOUNCE_MS = 600;
+function toggleCollapsed(current: { collapsed: string[] }, id: string) {
+  return current.collapsed.includes(id)
+    ? current.collapsed.filter((entry) => entry !== id)
+    : [...current.collapsed, id];
+}
 
 export default function RenderGraph() {
   const { t } = useTranslation();
@@ -95,54 +97,25 @@ export default function RenderGraph() {
     enabled: !filters.noKinds,
   });
 
-  // The per-user layout document (V19 + V24): server truth until the first local
-  // interaction, then `local` wins — every mutation writes local state AND fire-and-forget
-  // PUTs the FULL merged document (wholesale replace on the wire, merge in the client —
-  // positions and collapsed ids of filtered-out nodes must survive a save).
-  const userId = getUserId();
-  const layoutQuery = useQuery({
-    queryKey: ["graphLayout", userId],
-    queryFn: () => getGraphLayout(userId!),
-    enabled: userId != null,
-  });
-  const [local, setLocal] = useState<LayoutState | null>(null);
-  const mode: LayoutMode = local?.mode ?? (layoutQuery.data?.mode === "manual" ? "manual" : "auto");
-  const positions: GraphPositions = local?.positions ?? layoutQuery.data?.positions ?? EMPTY_POSITIONS;
-  const collapsed: string[] = local?.collapsed ?? layoutQuery.data?.collapsed ?? EMPTY_COLLAPSED;
-  // The current triple, readable from callbacks baked into node data without making the
-  // dagre memo below depend on positions (which change on every drag stop). Synced in an
-  // effect — never during render — which lands before any click could read it.
-  const layoutRef = useRef<LayoutState>({ mode, positions, collapsed });
-  useEffect(() => {
-    layoutRef.current = { mode, positions, collapsed };
-  }, [mode, positions, collapsed]);
-
-  const saveTimer = useRef<number | undefined>(undefined);
-  function persistLayout(next: LayoutState, debounce: boolean) {
-    setLocal(next);
-    if (userId == null) return;
-    const put = () =>
-      setGraphLayout(userId, next).catch((err: unknown) => {
-        // Fire-and-forget (the LanguageSwitcher precedent): the canvas already moved.
-        console.error("Failed to save the graph layout", err);
-      });
-    window.clearTimeout(saveTimer.current);
-    if (debounce) saveTimer.current = window.setTimeout(put, LAYOUT_SAVE_DEBOUNCE_MS);
-    else put();
-  }
+  const userId = useSessionUserId();
+  const layout = useGraphLayout(userId);
+  const updateLayout = layout.update;
+  const layoutReady = layout.phase === "ready" && layout.document != null;
+  const mode: LayoutMode = layout.document?.mode === "manual" ? "manual" : "auto";
+  const positions: GraphPositions = layout.document?.positions ?? EMPTY_POSITIONS;
+  const collapsed: string[] = layout.document?.collapsed ?? EMPTY_COLLAPSED;
 
   // A fold toggle persists at once, like a mode switch — a collapse is a deliberate act, not
   // a gesture to coalesce. Reached through a ref so the node data's callbacks stay stable.
   const toggleRef = useRef<(id: string) => void>(() => {});
   useEffect(() => {
     toggleRef.current = (id: string) => {
-      const current = layoutRef.current;
-      const next = current.collapsed.includes(id)
-        ? current.collapsed.filter((entry) => entry !== id)
-        : [...current.collapsed, id];
-      persistLayout({ ...current, collapsed: next }, false);
+      updateLayout((current) => ({
+        ...current,
+        collapsed: toggleCollapsed(current, id),
+      }));
     };
-  });
+  }, [updateLayout]);
 
   const noKinds = filters.noKinds;
   // Containment for the fold is the Hierarchy's, over the FULL payload — never the
@@ -155,11 +128,17 @@ export default function RenderGraph() {
     const laidOut = layoutGraph(folded);
     const nodes = laidOut.nodes.map((n) => {
       const info = folded.info.get(n.id);
-      return info ? { ...n, data: { ...n.data, fold: { ...info, onToggle: () => toggleRef.current(n.id) } } } : n;
+      return info ? {
+        ...n,
+        data: {
+          ...n.data,
+          fold: { ...info, disabled: !layoutReady, onToggle: () => toggleRef.current(n.id) },
+        },
+      } : n;
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges: laidOut.edges, anyCollapsed };
-  }, [data, enabled, noKinds, forest, collapsed]);
+  }, [data, enabled, noKinds, forest, collapsed, layoutReady]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
@@ -196,15 +175,20 @@ export default function RenderGraph() {
   // whole batch: a multi-select drag ends several nodes in ONE changes array.
   function onNodesChange(changes: NodeChange<LaidOutNode>[]) {
     setNodes((current) => applyNodeChanges(changes, current));
-    if (mode !== "manual") return;
-    let next = positions;
+    if (mode !== "manual" || !layoutReady) return;
+    const endedPositions: GraphPositions = {};
     let dragEnded = false;
     for (const change of changes) {
       if (change.type !== "position") continue;
-      if (change.position) next = { ...next, [change.id]: { x: change.position.x, y: change.position.y } };
+      if (change.position) endedPositions[change.id] = { x: change.position.x, y: change.position.y };
       if (change.dragging === false) dragEnded = true;
     }
-    if (dragEnded) persistLayout({ mode, positions: next, collapsed }, true);
+    if (dragEnded) {
+      layout.update((current) => ({
+        ...current,
+        positions: { ...current.positions, ...endedPositions },
+      }), true);
+    }
   }
 
   // A drag on a stored node must never navigate — React Flow can fire onNodeClick after a
@@ -249,9 +233,11 @@ export default function RenderGraph() {
               <SegmentedControl
                 size="xs"
                 value={mode}
-                onChange={(value) =>
-                  persistLayout({ mode: value as LayoutMode, positions, collapsed }, false)
-                }
+                disabled={!layoutReady}
+                onChange={(value) => layout.update((current) => ({
+                  ...current,
+                  mode: value as LayoutMode,
+                }))}
                 data={[
                   { value: "auto", label: t("render.layoutMode.auto") },
                   { value: "manual", label: t("render.layoutMode.manual") },
@@ -264,7 +250,8 @@ export default function RenderGraph() {
                 <Button
                   variant="default"
                   size="xs"
-                  onClick={() => persistLayout({ mode: "manual", positions: {}, collapsed }, false)}
+                  disabled={!layoutReady}
+                  onClick={() => layout.update((current) => ({ ...current, positions: {} }))}
                 >
                   {t("render.resetLayout")}
                 </Button>
@@ -276,7 +263,8 @@ export default function RenderGraph() {
                 <Button
                   variant="default"
                   size="xs"
-                  onClick={() => persistLayout({ mode, positions, collapsed: [] }, false)}
+                  disabled={!layoutReady}
+                  onClick={() => layout.update((current) => ({ ...current, collapsed: [] }))}
                 >
                   {t("render.expandAll")}
                 </Button>
@@ -312,8 +300,47 @@ export default function RenderGraph() {
         }
       />
 
+      {layout.phase === "loading" && (
+        <Text role="status" aria-label={t("render.layout.loading")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
+          {t("render.layout.loading")}
+        </Text>
+      )}
+      {layout.phase === "loadError" && (
+        <Alert color="red" variant="light" title={t("render.layout.loadFailed")} style={{ flexShrink: 0 }}>
+          <Stack gap="xs" align="flex-start">
+            <Text size="sm">{loadErrorMessage(layout.loadError, t)}</Text>
+            <Button variant="default" size="xs" onClick={layout.retryLoad}>
+              {t("render.layout.retryLoad")}
+            </Button>
+          </Stack>
+        </Alert>
+      )}
+      {layout.saveError != null && (
+        <Alert color="red" variant="light" title={t("render.layout.saveFailed")} style={{ flexShrink: 0 }}>
+          <Stack gap="xs" align="flex-start">
+            <Text size="sm">{saveErrorMessage(layout.saveError, t, {
+              failedStatus: "common.error.saveFailedStatus",
+              failed: "common.error.saveFailedNetwork",
+            })}</Text>
+            <Button variant="default" size="xs" onClick={layout.retrySave}>
+              {t("render.layout.retrySave")}
+            </Button>
+          </Stack>
+        </Alert>
+      )}
+      {!layout.saveError && layout.saving && (
+        <Text role="status" aria-label={t("render.layout.saving")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
+          {t("render.layout.saving")}
+        </Text>
+      )}
+      {!layout.saveError && !layout.saving && layout.pending && (
+        <Text role="status" aria-label={t("render.layout.pending")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
+          {t("render.layout.pending")}
+        </Text>
+      )}
+
       {isError && (
-        <Alert color="red" variant="light" title={t("render.loadFailed")}>
+        <Alert color="red" variant="light" title={t("render.loadFailed")} style={{ flexShrink: 0 }}>
           {loadErrorMessage(error, t)}
         </Alert>
       )}
@@ -342,7 +369,7 @@ export default function RenderGraph() {
             // workspace (or a namespace-clustered one, which dagre lays out taller) then
             // spills off the canvas with no way to see it whole.
             minZoom={0.2}
-            nodesDraggable={mode === "manual"}
+            nodesDraggable={layoutReady && mode === "manual"}
             nodesConnectable={false}
             edgesFocusable={false}
             proOptions={{ hideAttribution: false }}

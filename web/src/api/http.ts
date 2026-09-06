@@ -3,7 +3,14 @@
 
 import { flagSignedOut, notifyAuthChange } from "../auth";
 import type { components } from "./schema";
-import { clearSession, getRefreshToken, getToken, persistSession } from "./session";
+import {
+  clearSession,
+  getClearSessionGeneration,
+  getRefreshToken,
+  getSessionFamilyId,
+  getToken,
+  persistSession,
+} from "./session";
 
 export const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -35,27 +42,63 @@ export function isTimeoutError(err: unknown): boolean {
 // through a transient failure, so signing the user out would discard a working session (and
 // any in-progress form) over a hiccup.
 type RefreshOutcome =
-  | { kind: "ok"; token: string }
-  | { kind: "rejected" }
-  | { kind: "unavailable" };
+  | { kind: "ok"; token: string; owner: SessionBoundary; current: SessionBoundary }
+  | { kind: "rejected"; owner: SessionBoundary }
+  | { kind: "unavailable"; owner: SessionBoundary };
+
+type SessionBoundary = {
+  familyId: string | null;
+  clearGeneration: number;
+  refreshToken: string | null;
+};
+
+function sessionBoundary(): SessionBoundary {
+  return {
+    familyId: getSessionFamilyId(),
+    clearGeneration: getClearSessionGeneration(),
+    refreshToken: getRefreshToken(),
+  };
+}
+
+function sameSession(left: SessionBoundary, right: SessionBoundary): boolean {
+  if (left.clearGeneration !== right.clearGeneration) return false;
+  // `sid` is only a client-side partition key. A missing/currently different sid is a
+  // boundary, while fixtures and legacy tokens fall back to the stored refresh token.
+  if (left.familyId !== null || right.familyId !== null) {
+    return left.familyId !== null && left.familyId === right.familyId;
+  }
+  return left.refreshToken === right.refreshToken;
+}
+
+function ownsCurrentSession(owner: SessionBoundary): boolean {
+  return sameSession(owner, sessionBoundary());
+}
 
 // Exchange the stored refresh token for a fresh access + refresh pair. Single-flighted:
 // concurrent callers (e.g. several requests that all 401 at once) share one in-flight
 // /refresh call.
-let refreshInflight: Promise<RefreshOutcome> | null = null;
+type RefreshSlot = { owner: SessionBoundary; promise: Promise<RefreshOutcome> };
 
-function refresh(): Promise<RefreshOutcome> {
-  if (refreshInflight === null) {
-    refreshInflight = doRefresh().finally(() => {
-      refreshInflight = null;
-    });
+let refreshInflight: RefreshSlot | null = null;
+
+function refresh(owner: SessionBoundary): Promise<RefreshOutcome> {
+  if (refreshInflight !== null && sameSession(refreshInflight.owner, owner)) {
+    return refreshInflight.promise;
   }
-  return refreshInflight;
+  const slot = {} as RefreshSlot;
+  slot.owner = owner;
+  slot.promise = doRefresh(owner).finally(() => {
+    // A new login may have installed its own slot while this request was settling.
+    if (refreshInflight === slot) refreshInflight = null;
+  });
+  refreshInflight = slot;
+  return slot.promise;
 }
 
-async function doRefresh(): Promise<RefreshOutcome> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return { kind: "rejected" };
+async function doRefresh(owner: SessionBoundary): Promise<RefreshOutcome> {
+  if (!ownsCurrentSession(owner)) return { kind: "unavailable", owner };
+  const refreshToken = owner.refreshToken;
+  if (!refreshToken) return { kind: "rejected", owner };
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/api/v1/refresh`, {
@@ -65,29 +108,43 @@ async function doRefresh(): Promise<RefreshOutcome> {
       signal: timeoutSignal(),
     });
   } catch {
-    return { kind: "unavailable" };
+    return { kind: "unavailable", owner };
   }
-  if (res.status === 401 || res.status === 403) return { kind: "rejected" };
-  if (!res.ok) return { kind: "unavailable" };
+  if (!ownsCurrentSession(owner)) return { kind: "unavailable", owner };
+  if (res.status === 401 || res.status === 403) return { kind: "rejected", owner };
+  if (!res.ok) return { kind: "unavailable", owner };
   let data: LoginSuccess;
   try {
     data = (await res.json()) as LoginSuccess;
   } catch {
-    return { kind: "unavailable" };
+    return { kind: "unavailable", owner };
   }
-  if (typeof data.token !== "string") return { kind: "unavailable" };
+  if (!ownsCurrentSession(owner)) return { kind: "unavailable", owner };
+  if (typeof data.token !== "string") return { kind: "unavailable", owner };
   persistSession(data);
-  return { kind: "ok", token: data.token };
+  return { kind: "ok", token: data.token, owner, current: sessionBoundary() };
 }
 
 export async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const owner = sessionBoundary();
   let res = await sendWithToken(path, init, getToken());
   if (res.status === 401) {
+    // A response from before logout or another login cannot start work in the new session.
+    if (!ownsCurrentSession(owner)) return res;
+    // Another request may already have refreshed this family while this response was pending.
+    // Capture the current pair so a late 401 never submits the superseded refresh token.
+    const refreshOwner = sessionBoundary();
     // The access token is likely expired. Try one silent refresh (single-flighted), then retry once.
-    const outcome = await refresh();
+    const outcome = await refresh(refreshOwner);
     if (outcome.kind === "ok") {
-      res = await sendWithToken(path, init, outcome.token);
-    } else if (outcome.kind === "rejected") {
+      if (sameSession(owner, outcome.owner) && ownsCurrentSession(outcome.current)) {
+        res = await sendWithToken(path, init, outcome.token);
+      }
+    } else if (
+      outcome.kind === "rejected" &&
+      sameSession(owner, outcome.owner) &&
+      ownsCurrentSession(outcome.owner)
+    ) {
       // No refresh token, or the server rejected it — the session is over.
       clearSession();
       flagSignedOut();

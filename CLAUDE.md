@@ -21,6 +21,14 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Automated verification
 
+Graph-layout writes must wait for a successful baseline load and preserve the complete
+`{mode, positions, collapsed}` document, including filtered-out node ids. The dedicated
+persistence hook serializes saves, coalesces queued edits, and retains failed local changes
+for explicit retry. Preserve ordinary SPA navigation, account isolation, and React Flow's
+live drag state; see `web/CLAUDE.md` and `.claude/docs/testing.md` for the lifecycle rules.
+Shared HTTP refresh must also respect login boundaries: late responses cannot restore a
+signed-out session, replay an old mutation, or clear a newer login.
+
 YAML comparisons in repo sync and Overwrite with YAML must bound both detailed LCS work
 and rendered row count. Large inputs fall back to complete stored/replacement YAML panes,
 with no truncation or change to confirmation payloads. Limits and regression expectations

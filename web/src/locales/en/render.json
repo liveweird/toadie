@@ -24,6 +24,15 @@
     "manual": "Manual"
   },
   "resetLayout": "Reset layout",
+  "layout": {
+    "loading": "Loading saved layout…",
+    "loadFailed": "Failed to load the saved layout",
+    "retryLoad": "Retry loading layout",
+    "saving": "Saving layout…",
+    "pending": "Layout changes pending…",
+    "saveFailed": "Failed to save the layout",
+    "retrySave": "Retry saving layout"
+  },
   "empty": "Nothing to render — no stored files match.",
   "nodeAria": "Open {{name}}",
   "fold": {

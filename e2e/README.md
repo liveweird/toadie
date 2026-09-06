@@ -137,6 +137,9 @@ from Lettuce, that any new or edited spec must satisfy:
   future spec that needs a mutated account creates a throwaway. The ONE sanctioned exception:
   `render.spec.ts` owns the admin's per-user graph LAYOUT document (pure view state no other
   spec reads) and restores the pristine default (Auto, no positions) before it ends.
+- `graph-persistence.spec.ts` creates one throwaway user and exclusively owns that user's graph
+  layout document. It retains the unrevoked admin login only for `finally` cleanup, deletes the
+  user through the normal API, and never reads or writes the seed admin's layout or catalog data.
 - E2e-created entities carry a sweepable marker — every e2e-created file's name/namespace and
   every e2e-created user's email contains `e2e`, and nothing that must SURVIVE runs is ever
   named that way. Each spec deletes its own state, so the rule is currently satisfied by
@@ -184,6 +187,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
   Save-anyway modal (cancel and confirm paths); the waived save's finding shows on the
   Errors page and is repaired in the editor; deleting a referenced target creates a finding
   (hidden/restored by the References error-type pill), which recreating the target clears.
+- [`graph-persistence.spec.ts`](scenarios/graph-persistence.md) — a throwaway user's Graph
+  layout waits for its complete baseline before enabling mutations; deterministic response
+  gates prove load retry, serialized and coalesced full-document PUTs, retained off-screen
+  fields, visible save failure, explicit retry of the latest state, and reload persistence.
 - [`history.spec.ts`](scenarios/history.md) — a file's change history on the editor: the
   creation entry, then an edit whose sentence names both changed fields while only the
   scalar gets a before/after line (free text is recorded as the bare fact).

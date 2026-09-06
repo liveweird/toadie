@@ -1,5 +1,24 @@
 ### Testing
 
+**Graph-layout persistence.** Hook tests use deferred GET/PUT promises and controlled debounce
+time to prove that edits wait for the full baseline, only one PUT is outstanding, and queued
+changes collapse into the newest complete document. Pin unseen positions/collapsed ids,
+same-turn functional updates, late GET responses, explicit retry after failure, and old
+acknowledgements that must not mark newer edits saved. Include StrictMode, SPA unmount/remount,
+and account/cache-clear boundaries; old work must not be sent using a new account's session.
+Page tests expose the real layout-control/drag/fold contracts through the React Flow stub and
+check loading, safe errors, and retry. Keep live drag frames separate from persisted positions.
+The browser regression owns a throwaway user's layout and uses response gates to exercise
+pending initialization and saves; it must never mutate the seed admin's layout. Response
+predicates match the exact user path and method; assert status after receiving the response.
+
+**Refresh crossing sign-out.** Use held responses to exercise the shared transport after an
+old protected request receives 401: hold refresh, perform the real best-effort logout with
+its revoke request failing, then release refresh. The browser session must remain cleared
+and the old mutation must not be replayed. Cover a new login before a delayed 401, refresh
+success/rejection/body completion, and concurrent requests in the same/new families. Do not
+print token values in diagnostics or replace the server's authentication checks with JWT decoding.
+
 **Bounded YAML diffs.** `yamlDiff.test.ts` pins detailed-comparison budget boundaries,
 asymmetric inputs, repeated short lines, long lines, and the exact reconstruction of both
 inputs (including empty/trailing lines). Large API descriptors must remain valid through

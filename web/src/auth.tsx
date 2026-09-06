@@ -2,13 +2,20 @@
 // -- the auth store helpers (signIn/signOut/useAuthed) live beside the route guards on purpose; a mixed file opts out of fast-refresh, which is fine for this rarely-edited module
 import { useSyncExternalStore, type ReactElement } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { getToken, TOKEN_KEY } from "./api/session";
+import {
+  getSessionFamilyId,
+  getSessionUserId,
+  getToken,
+  TOKEN_KEY,
+  USER_ID_KEY,
+} from "./api/session";
 
 const listeners = new Set<() => void>();
+const lifecycleListeners = new Set<() => void>();
 
-function subscribe(cb: () => void): () => void {
+function subscribeAuthChanges(cb: () => void): () => void {
   const onStorage = (e: StorageEvent) => {
-    if (e.key === TOKEN_KEY || e.key === null) cb();
+    if (e.key === TOKEN_KEY || e.key === USER_ID_KEY || e.key === null) cb();
   };
   window.addEventListener("storage", onStorage);
   listeners.add(cb);
@@ -19,7 +26,30 @@ function subscribe(cb: () => void): () => void {
 }
 
 export function notifyAuthChange(): void {
-  listeners.forEach((cb) => cb());
+  [...listeners].forEach((cb) => cb());
+  // A lifecycle callback may dispose a store and subscribe its replacement. Iterate a
+  // snapshot so that replacement belongs to the new session rather than this notification.
+  [...lifecycleListeners].forEach((cb) => cb());
+}
+
+/** Current-SPA login/logout boundary; unlike the render subscription, token refresh storage
+ *  events do not fire it. Consumers use this to discard state owned by the former session. */
+export function subscribeAuthLifecycle(cb: () => void): () => void {
+  let sessionFamilyId = getSessionFamilyId();
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== TOKEN_KEY && event.key !== USER_ID_KEY && event.key !== null) return;
+    const next = getSessionFamilyId();
+    // Refresh rotates both JWTs but retains `sid`; logout and another login do not.
+    if (next === sessionFamilyId) return;
+    sessionFamilyId = next;
+    cb();
+  };
+  window.addEventListener("storage", onStorage);
+  lifecycleListeners.add(cb);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    lifecycleListeners.delete(cb);
+  };
 }
 
 let pendingSignedOutBanner = false;
@@ -35,8 +65,13 @@ export function consumeSignedOut(): boolean {
 }
 
 function useAuth(): { token: string | null; isAuthenticated: boolean } {
-  const token = useSyncExternalStore(subscribe, getToken, () => null);
+  const token = useSyncExternalStore(subscribeAuthChanges, getToken, () => null);
   return { token, isAuthenticated: token !== null };
+}
+
+/** Reactive session owner for state whose cache is partitioned per account. */
+export function useSessionUserId(): number | null {
+  return useSyncExternalStore(subscribeAuthChanges, getSessionUserId, () => null);
 }
 
 type LocationStateWithFrom = { from?: { pathname?: string } } | null;

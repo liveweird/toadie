@@ -24,6 +24,15 @@
     "manual": "Ręczny"
   },
   "resetLayout": "Resetuj układ",
+  "layout": {
+    "loading": "Wczytywanie zapisanego układu…",
+    "loadFailed": "Nie udało się wczytać zapisanego układu",
+    "retryLoad": "Ponów wczytywanie układu",
+    "saving": "Zapisywanie układu…",
+    "pending": "Zmiany układu oczekują…",
+    "saveFailed": "Nie udało się zapisać układu",
+    "retrySave": "Ponów zapisywanie układu"
+  },
   "empty": "Nie ma czego renderować — żaden zapisany plik nie pasuje.",
   "nodeAria": "Otwórz {{name}}",
   "fold": {
