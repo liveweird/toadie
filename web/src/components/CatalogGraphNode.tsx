@@ -62,6 +62,7 @@ function FoldToggle({ name, fold }: { name: string; fold: NodeFold }) {
       leftSection={<IconChevronRight size={12} />}
       style={style}
       aria-label={t("render.fold.expandAria", { name, count: fold.descendants })}
+      disabled={fold.disabled}
       onClick={onClick}
     >
       {fold.descendants}
@@ -74,6 +75,7 @@ function FoldToggle({ name, fold }: { name: string; fold: NodeFold }) {
       color="gray"
       style={style}
       aria-label={t("render.fold.collapseAria", { name })}
+      disabled={fold.disabled}
       onClick={onClick}
     >
       <IconChevronDown size={14} />

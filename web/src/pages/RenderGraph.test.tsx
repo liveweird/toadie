@@ -83,6 +83,7 @@ vi.mock("@xyflow/react", async () => {
                     ? `Expand ${n.data.apiNode.name} (${n.data.fold.descendants} hidden)`
                     : `Collapse ${n.data.apiNode.name}`
                 }
+                disabled={n.data.fold.disabled}
                 onClick={n.data.fold.onToggle}
               >
                 fold
@@ -310,6 +311,56 @@ describe("RenderGraph page", () => {
     renderPage();
 
     expect(await screen.findByText("Failed to load the graph")).toBeInTheDocument();
+  });
+
+  test("blocks layout controls while the saved layout is loading", async () => {
+    let resolveLayout!: (response: Response) => void;
+    const layoutResponse = new Promise<Response>((resolve) => {
+      resolveLayout = resolve;
+    });
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/v1/dictionaries/namespaces"))
+        return Promise.resolve(jsonResponse(200, NAMESPACE_ENTRIES));
+      if (url === "/api/v1/users/9/graph-layout" && init?.method !== "PUT") return layoutResponse;
+      if (url.startsWith("/api/v1/files/graph")) return Promise.resolve(jsonResponse(200, FOLD_GRAPH));
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderPage();
+
+    await screen.findByText(/shop \[STORED\]/);
+    expect(screen.getByRole("status", { name: "Loading saved layout…" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Manual" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Collapse shop" })).toBeDisabled();
+    expect(screen.getByTestId("flow")).toHaveAttribute("data-draggable", "false");
+
+    resolveLayout(jsonResponse(200, { mode: "auto", positions: {}, collapsed: [] }));
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Manual" })).toBeEnabled());
+  });
+
+  test("shows a safe saved-layout load error and retries only on request", async () => {
+    let layoutGets = 0;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/v1/dictionaries/namespaces"))
+        return Promise.resolve(jsonResponse(200, NAMESPACE_ENTRIES));
+      if (url === "/api/v1/users/9/graph-layout" && init?.method !== "PUT") {
+        layoutGets += 1;
+        return Promise.resolve(layoutGets === 1
+          ? jsonResponse(503, { detail: "secret upstream detail" })
+          : jsonResponse(200, { mode: "auto", positions: {}, collapsed: [] }));
+      }
+      if (url.startsWith("/api/v1/files/graph")) return Promise.resolve(jsonResponse(200, GRAPH));
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText("Failed to load the saved layout")).toBeInTheDocument();
+    expect(screen.getByText("Load failed (503)")).toBeInTheDocument();
+    expect(screen.queryByText("secret upstream detail")).not.toBeInTheDocument();
+    expect(layoutGets).toBe(1);
+    await user.click(screen.getByRole("button", { name: "Retry loading layout" }));
+    await waitFor(() => expect(screen.queryByText("Failed to load the saved layout")).not.toBeInTheDocument());
+    expect(layoutGets).toBe(2);
   });
 
   test("switching to Manual persists the mode, enables dragging, and reveals Reset", async () => {

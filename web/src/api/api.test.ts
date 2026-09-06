@@ -37,6 +37,30 @@ const SESSION = {
   language: "en" as const,
 };
 
+const NEXT_SESSION = {
+  ...SESSION,
+  token: "next-access",
+  refreshToken: "next-refresh",
+  userId: 8,
+};
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function sessionWithSid(sid: string, generation: number) {
+  const payload = btoa(JSON.stringify({ sid })).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  return {
+    ...SESSION,
+    token: `header.${payload}.signature-${generation}`,
+    refreshToken: `refresh-${sid}-${generation}`,
+  };
+}
+
 describe("session", () => {
   test("persistSession applies the stored language to the UI and skips a language-less payload", async () => {
     persistSession({ ...SESSION, language: "pl" });
@@ -196,6 +220,172 @@ describe("authedFetch", () => {
     expect(res.status).toBe(401);
     expect(getToken()).toBe("access-1");
     expect(getRefreshToken()).toBe("refresh-1");
+  });
+
+  test("concurrent 401s share one refresh and both replay in the same session", async () => {
+    persistSession(SESSION);
+    const refreshResponse = deferred<Response>();
+    fetchMock()
+      .mockResolvedValueOnce(jsonResponse(401, {}))
+      .mockResolvedValueOnce(jsonResponse(401, {}))
+      .mockReturnValueOnce(refreshResponse.promise)
+      .mockResolvedValueOnce(jsonResponse(200, { request: "a" }))
+      .mockResolvedValueOnce(jsonResponse(200, { request: "b" }));
+
+    const first = authedFetch("/api/v1/a");
+    const second = authedFetch("/api/v1/b");
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(3));
+    refreshResponse.resolve(
+      jsonResponse(200, { ...SESSION, token: "access-2", refreshToken: "refresh-2" }),
+    );
+
+    await expect(Promise.all([first, second])).resolves.toMatchObject([{ status: 200 }, { status: 200 }]);
+    expect(fetchMock().mock.calls.filter(([url]) => url === "/api/v1/refresh")).toHaveLength(1);
+  });
+
+  test("a late 401 in the same family refreshes with the latest rotated pair", async () => {
+    const firstPair = sessionWithSid("family-a", 1);
+    const secondPair = sessionWithSid("family-a", 2);
+    const thirdPair = sessionWithSid("family-a", 3);
+    persistSession(firstPair);
+    const lateResponse = deferred<Response>();
+    fetchMock()
+      .mockResolvedValueOnce(jsonResponse(401, {}))
+      .mockReturnValueOnce(lateResponse.promise)
+      .mockResolvedValueOnce(jsonResponse(200, secondPair))
+      .mockResolvedValueOnce(jsonResponse(200, { request: "first" }))
+      .mockResolvedValueOnce(jsonResponse(200, thirdPair))
+      .mockResolvedValueOnce(jsonResponse(200, { request: "late" }));
+
+    const first = authedFetch("/api/v1/first");
+    const late = authedFetch("/api/v1/late");
+    await expect(first).resolves.toMatchObject({ status: 200 });
+    lateResponse.resolve(jsonResponse(401, {}));
+    await expect(late).resolves.toMatchObject({ status: 200 });
+
+    const refreshCalls = fetchMock().mock.calls.filter(([url]) => url === "/api/v1/refresh");
+    expect(refreshCalls).toHaveLength(2);
+    expect(JSON.parse((refreshCalls[1][1] as RequestInit).body as string)).toEqual({
+      refreshToken: secondPair.refreshToken,
+    });
+    expect(getToken()).toBe(thirdPair.token);
+  });
+
+  test("a new login family neither shares nor loses its refresh slot to the old family", async () => {
+    const oldPair = sessionWithSid("family-old", 1);
+    const oldRotated = sessionWithSid("family-old", 2);
+    const newPair = sessionWithSid("family-new", 1);
+    const newRotated = sessionWithSid("family-new", 2);
+    persistSession(oldPair);
+    const oldRefresh = deferred<Response>();
+    const newRefresh = deferred<Response>();
+    fetchMock()
+      .mockResolvedValueOnce(jsonResponse(401, {}))
+      .mockReturnValueOnce(oldRefresh.promise)
+      .mockResolvedValueOnce(jsonResponse(200, newPair))
+      .mockResolvedValueOnce(jsonResponse(401, {}))
+      .mockReturnValueOnce(newRefresh.promise)
+      .mockResolvedValueOnce(jsonResponse(401, {}))
+      .mockResolvedValueOnce(jsonResponse(200, { request: "new-a" }))
+      .mockResolvedValueOnce(jsonResponse(200, { request: "new-b" }));
+
+    const oldRequest = authedFetch("/api/v1/old");
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(2));
+    await login({ email: "same-user@test", password: "pw" });
+    const newFirst = authedFetch("/api/v1/new-a");
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(5));
+
+    oldRefresh.resolve(jsonResponse(200, oldRotated));
+    await expect(oldRequest).resolves.toMatchObject({ status: 401 });
+    const newSecond = authedFetch("/api/v1/new-b");
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(6));
+    newRefresh.resolve(jsonResponse(200, newRotated));
+
+    await expect(Promise.all([newFirst, newSecond])).resolves.toMatchObject([
+      { status: 200 },
+      { status: 200 },
+    ]);
+    expect(fetchMock().mock.calls.filter(([url]) => url === "/api/v1/refresh")).toHaveLength(2);
+    expect(getToken()).toBe(newRotated.token);
+  });
+
+  test("logout cannot be undone by an older successful refresh", async () => {
+    persistSession(SESSION);
+    const refreshResponse = deferred<Response>();
+    fetchMock()
+      .mockResolvedValueOnce(jsonResponse(401, {}))
+      .mockReturnValueOnce(refreshResponse.promise);
+
+    const request = authedFetch("/api/v1/graph-layout", { method: "PUT", body: "{}" });
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(2));
+    fetchMock().mockRejectedValueOnce(new Error("offline"));
+    await logout();
+    refreshResponse.resolve(
+      jsonResponse(200, { ...SESSION, token: "access-2", refreshToken: "refresh-2" }),
+    );
+
+    await expect(request).resolves.toMatchObject({ status: 401 });
+    expect(getToken()).toBeNull();
+    expect(getRefreshToken()).toBeNull();
+    expect(fetchMock()).toHaveBeenCalledTimes(3);
+  });
+
+  test("an old 401 cannot refresh after a new login", async () => {
+    persistSession(SESSION);
+    const oldResponse = deferred<Response>();
+    fetchMock()
+      .mockReturnValueOnce(oldResponse.promise)
+      .mockResolvedValueOnce(jsonResponse(200, NEXT_SESSION));
+
+    const request = authedFetch("/api/v1/thing");
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(1));
+    await login({ email: "next@test", password: "pw" });
+    oldResponse.resolve(jsonResponse(401, {}));
+
+    await expect(request).resolves.toMatchObject({ status: 401 });
+    expect(getToken()).toBe("next-access");
+    expect(getRefreshToken()).toBe("next-refresh");
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
+  });
+
+  test("an old rejected refresh cannot clear a new login", async () => {
+    persistSession(SESSION);
+    const refreshResponse = deferred<Response>();
+    fetchMock()
+      .mockResolvedValueOnce(jsonResponse(401, {}))
+      .mockReturnValueOnce(refreshResponse.promise)
+      .mockResolvedValueOnce(jsonResponse(200, NEXT_SESSION));
+
+    const request = authedFetch("/api/v1/thing");
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(2));
+    await login({ email: "next@test", password: "pw" });
+    refreshResponse.resolve(jsonResponse(401, {}));
+
+    await expect(request).resolves.toMatchObject({ status: 401 });
+    expect(getToken()).toBe("next-access");
+    expect(getRefreshToken()).toBe("next-refresh");
+    expect(fetchMock()).toHaveBeenCalledTimes(3);
+  });
+
+  test("an old parsed refresh response cannot replace or replay a new login", async () => {
+    persistSession(SESSION);
+    const refreshBody = deferred<typeof SESSION>();
+    const heldRefresh = jsonResponse(200, {});
+    const json = vi.spyOn(heldRefresh, "json").mockImplementation(() => refreshBody.promise);
+    fetchMock()
+      .mockResolvedValueOnce(jsonResponse(401, {}))
+      .mockResolvedValueOnce(heldRefresh)
+      .mockResolvedValueOnce(jsonResponse(200, NEXT_SESSION));
+
+    const request = authedFetch("/api/v1/thing");
+    await vi.waitFor(() => expect(json).toHaveBeenCalledOnce());
+    await login({ email: "next@test", password: "pw" });
+    refreshBody.resolve({ ...SESSION, token: "old-access-2", refreshToken: "old-refresh-2" });
+
+    await expect(request).resolves.toMatchObject({ status: 401 });
+    expect(getToken()).toBe("next-access");
+    expect(getRefreshToken()).toBe("next-refresh");
+    expect(fetchMock()).toHaveBeenCalledTimes(3);
   });
 
   test("jsonRequest parses the body and voidRequest throws ApiError on failure", async () => {

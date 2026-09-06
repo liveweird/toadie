@@ -57,6 +57,7 @@ export interface NodeFold {
   collapsed: boolean;
   /** Its drawn containment descendants — the hidden count the collapsed pill shows. */
   descendants: number;
+  disabled?: boolean;
   onToggle: () => void;
 }
 

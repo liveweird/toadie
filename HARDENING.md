@@ -168,9 +168,56 @@ Verification against a disposable Compose stack using the unchanged merged app i
   may resolve again after the public-host check, and native resolution can outlive cancellation.
   A rejecting bounded JDK executor is not a safe shortcut (selector rejection aborts the client).
 - [x] Bound YAML-diff cost with a size threshold/fallback; large valid document regression.
-- [ ] Protect graph-layout initialization, serialize/coalesce saves, show failure/retry state.
+- [x] Protect graph-layout initialization, serialize/coalesce saves, show failure/retry state.
 - [ ] Make cross-category tag ownership concurrency-safe and test overlapping writes.
 - [ ] Make catalog mutations and product-history events atomic; fault-injection regression.
+
+### Graph-layout persistence batch (2026-09-06)
+
+Starting state verified: clean `master` at `fb62cec` (merged PR #6), displayed version
+**1.22.1**, and the existing Compose app, PostgreSQL, and Mailpit running on loopback ports.
+The previous batch's master CI was green. This batch changes frontend persistence only;
+there is no API, migration, release-version, or backend change.
+
+The graph waits for its complete per-user layout before allowing layout changes. A dedicated
+hook owns initialization and a single-flight save queue: drag stops debounce for 600 ms,
+immediate controls supersede that debounce, and overlapping edits coalesce into the latest
+complete `{mode, positions, collapsed}` document. Filtered-out positions and folded ids are
+preserved. Inline loading/save status and safe EN/PL errors make pending work and failures
+visible; Retry resubmits the latest local document. Ordinary SPA navigation retains pending
+work; session/account boundaries invalidate it. Browser termination and writes from separate
+tabs/devices remain outside this client ordering guarantee.
+
+Independent review also identified a shared-transport race: a successful refresh held across
+best-effort sign-out could restore the old credentials and replay the graph mutation. This
+batch therefore guards HTTP refresh/retry work at session boundaries as well as the graph
+queue. A new login cannot inherit old in-flight refresh work or be cleared by its rejection.
+
+Verification uses an isolated `toadie-graph-verify` Compose project on port **8091**, Mailpit
+on **8036**, and its own `toadie-graph-verify_postgres-data` volume. It reuses the unchanged
+backend image and mounts the locally built SPA; the development app and volume are untouched.
+Final local verification:
+
+- Frontend build, lint, Knip, and generated API type drift check: passed. Knip retains only
+  its existing generated-schema configuration hint.
+- Frontend coverage: **710 tests / 89 suites**, all passed; **97.47% lines, 95.12%
+  statements, 92.86% functions, 91.50% branches**, above the unchanged floors.
+- Full browser suite against the final built SPA: **48 passed**, four workers, retries
+  disabled. Includes real graph folding, manual dragging/reset, authentication, and the new
+  held-load/serialized-save/failure/retry journey. E2E type-check and **28** scenario pairs passed.
+- Independent review: all confirmed findings resolved, including cross-tab account changes,
+  token-first storage ordering, and refresh crossing sign-out; no remaining actionable findings.
+- Screenshot inspection caught a flex-shrunk error banner; the final banner keeps the safe
+  message and Retry button visible above the canvas. Screenshot: [layout save failure](e2e/screenshots/graph-layout-retry.png).
+- Deterministic hook/transport regressions cover deferred responses, newest-document retry,
+  navigation, cache cleanup, account/session changes, concurrent refreshes, and a failed revoke
+  followed by a late refresh. No increased timeouts or lowered coverage gates.
+
+Removed only the disposable project's containers/network/volume after verification. The
+existing development stack and its data were preserved. Backend code, migrations, and API
+contract were unchanged; backend tests were not rerun locally. These are pre-commit local
+results; subsequent hosted CI results are tracked on the pull request. No release or
+deployment was performed as part of local verification.
 
 ### Outbound-fetch deadline batch (2026-09-06)
 
@@ -304,7 +351,7 @@ Controller installation/cutover is a cluster-level action: inventory existing wo
 
 ## Stage 5 — selective refactoring
 
-- [ ] Extract graph persistence into a dedicated hook as part of Stage 3.
+- [x] Extract graph persistence into a dedicated hook as part of Stage 3.
 - [ ] Split catalog service/form responsibilities where concrete changes repeatedly overlap.
 - [ ] Add optimistic concurrency for catalog edits before relying on multi-user editing.
 

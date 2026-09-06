@@ -120,7 +120,7 @@ describe("CatalogGraphNode", () => {
   });
 
   describe("the fold toggle", () => {
-    function withFold(fold: { collapsed: boolean; descendants: number; onToggle: () => void }) {
+    function withFold(fold: { collapsed: boolean; descendants: number; disabled?: boolean; onToggle: () => void }) {
       const props = nodeProps();
       return { ...props, data: { ...props.data, fold } } as NodeProps<LaidOutNode>;
     }
@@ -128,6 +128,13 @@ describe("CatalogGraphNode", () => {
     test("a node with nothing beneath it has no toggle at all", () => {
       renderWithProviders(<CatalogGraphNode {...nodeProps()} />);
       expect(screen.queryByRole("button", { name: /Collapse|Expand/ })).not.toBeInTheDocument();
+    });
+
+    test("the page can disable folding until its saved layout is loaded", () => {
+      renderWithProviders(
+        <CatalogGraphNode {...withFold({ collapsed: false, descendants: 2, disabled: true, onToggle: vi.fn() })} />,
+      );
+      expect(screen.getByRole("button", { name: "Collapse svc-x" })).toBeDisabled();
     });
 
     test("expanded: a Collapse control whose click toggles and never reaches the node wrapper", async () => {

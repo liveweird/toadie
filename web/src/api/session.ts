@@ -9,8 +9,12 @@ type LoginSuccess = components["schemas"]["LoginResponse"];
 export const TOKEN_KEY = "toadie.auth.token";
 const REFRESH_TOKEN_KEY = "toadie.auth.refreshToken";
 const ROLES_KEY = "toadie.auth.roles";
-const USER_ID_KEY = "toadie.auth.userId";
+export const USER_ID_KEY = "toadie.auth.userId";
 const DISABLED_FEATURES_KEY = "toadie.auth.disabledFeatures";
+
+// Same-tab logout boundary. Refresh deliberately does not advance it: rotated credentials
+// still belong to the same login family, while clearSession invalidates all pending work.
+let clearSessionGeneration = 0;
 
 /** Additional roles — every user is implicitly a regular user; an empty set means no extra privileges. */
 const USER_ROLES = ["ADMIN"] as const;
@@ -24,6 +28,25 @@ export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+function decodedSessionClaims(): Record<string, unknown> | null {
+  const payload = getToken()?.split(".")[1];
+  if (!payload) return null;
+  try {
+    const base64 = payload.replaceAll("-", "+").replaceAll("_", "/");
+    const decoded: unknown = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")));
+    return decoded !== null && typeof decoded === "object" ? decoded as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stable login-family identity carried by both access-token generations. This is decoded
+ *  only to partition client state; authentication still belongs entirely to the server. */
+export function getSessionFamilyId(): string | null {
+  const sid = decodedSessionClaims()?.sid;
+  return typeof sid === "string" && sid.length > 0 ? sid : null;
+}
+
 export function setToken(token: string | null): void {
   if (token === null) localStorage.removeItem(TOKEN_KEY);
   else localStorage.setItem(TOKEN_KEY, token);
@@ -31,6 +54,10 @@ export function setToken(token: string | null): void {
 
 export function getRefreshToken(): string | null {
   return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function getClearSessionGeneration(): number {
+  return clearSessionGeneration;
 }
 
 function setRefreshToken(token: string | null): void {
@@ -54,6 +81,18 @@ export function getUserId(): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Atomic graph-cache owner: real access tokens bind userId to sid in one storage value.
+ *  Mock/legacy tokens without both safe claims retain the established stored-user fallback. */
+export function getSessionUserId(): number | null {
+  const claims = decodedSessionClaims();
+  const sid = claims?.sid;
+  const userId = claims?.userId;
+  return typeof sid === "string" && sid.length > 0 &&
+    typeof userId === "number" && Number.isSafeInteger(userId) && userId >= 0
+    ? userId
+    : getUserId();
+}
+
 export function getDisabledFeatures(): Feature[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(DISABLED_FEATURES_KEY) ?? "[]");
@@ -72,6 +111,7 @@ export function isAdmin(): boolean {
 }
 
 export function clearSession(): void {
+  clearSessionGeneration += 1;
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(ROLES_KEY);
