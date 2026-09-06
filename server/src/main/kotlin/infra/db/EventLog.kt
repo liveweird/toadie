@@ -88,17 +88,17 @@ class EventLog(private val database: R2dbcDatabase, private val table: EventLogT
         mapOf("id" to table.id, "timestamp" to table.timestamp)
 
     /**
-     * Inserts an audit event. The timestamp is set here, never taken from a caller. Rows are
-     * immutable: there is no update or delete, and none is wanted — an event outlives its
-     * (soft-deleted) record.
+     * Inserts an event using the caller's current transaction. The timestamp is set here,
+     * never taken from a caller. Rows are immutable: there is no update or delete, and none
+     * is wanted — an event outlives its (soft-deleted) record.
      */
-    suspend fun create(
+    internal suspend fun createInTransaction(
         ownerId: UInt,
         actingUserId: UInt,
         type: String,
         eventParams: Map<String, String>,
-    ): UInt = suspendTransaction(database) {
-        table.insert {
+    ): UInt {
+        return table.insert {
             it[table.ownerId] = ownerId
             it[table.userId] = actingUserId
             it[table.timestamp] = System.currentTimeMillis()

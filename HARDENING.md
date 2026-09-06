@@ -170,7 +170,56 @@ Verification against a disposable Compose stack using the unchanged merged app i
 - [x] Bound YAML-diff cost with a size threshold/fallback; large valid document regression.
 - [x] Protect graph-layout initialization, serialize/coalesce saves, show failure/retry state.
 - [x] Make cross-category tag ownership concurrency-safe and test overlapping writes.
-- [ ] Make catalog mutations and product-history events atomic; fault-injection regression.
+- [x] Make catalog mutations and product-history events atomic; fault-injection regression.
+
+### Atomic catalog-history batch (2026-09-06)
+
+Starting state verified: clean `master` at `84f8276` (PR #8 merged), displayed version
+**1.22.1**, master CI green, and the rebuilt development app running with its original
+PostgreSQL volume and preserved data. The tag-ownership batch is complete and deployed.
+
+Catalog writes previously committed before routes appended their product-history events in
+separate transactions. An event failure could therefore leave a changed file without history.
+This batch replaces that convention across create, replace, soft delete, repo sync, and import:
+each file write and its required event commit or roll back together. Import retains independent
+per-document results; a history failure rolls back its row and yields a safe ERROR, while other
+documents continue. Replacement/sync lock the current row before deriving the history diff.
+
+No-op PUT suppression, always-recorded syncs, actor identity, source/sync state, redaction,
+soft deletion, and the existing validation/authorization rules remain part of the contract.
+Security audit logs stay route-side after service success. Response delivery/read-back may
+still fail after commit, and whole-document replacement remains last-write-wins. This is a
+deliberate whole-feature change from Lettuce's split-transaction history convention; its event
+storage has no existing caller-transaction helper to port. No migration is needed.
+
+Four new HTTP regressions use real PostgreSQL event-insert failures and observed row-lock
+contention. They verify failed create leaves neither file nor event; failed replace/sync/delete
+preserve the complete stored row and event count; a success/failure/success URL import keeps
+both successful files, sync baselines, and import-origin events; and overlapping updates
+produce consecutive before/after diffs. Existing history coverage now explicitly checks an
+identical sync still records an event. Test triggers and held connections have cancellation-safe
+cleanup across dispatcher handoff.
+
+The retained creation regression was run against the actual pre-fix code in a disposable
+`git archive HEAD` checkout: after the forced event-insert failure, its zero-row assertion
+failed with **one stored row**. The fixed implementation passes that regression with zero
+rows and zero events. The disposable baseline checkout was removed.
+
+Verification:
+
+- Final full Gradle build, detekt, coverage verification, and `:server:installDist` passed:
+  **405 tests / 56 suites**, no failures or skips; **97.849% lines / 77.030% branches**.
+- Frontend build, API generation/drift checks, E2E typecheck, and scenario parity passed
+  (**28 spec/scenario pairs**). Spectral: **zero errors**, two registered warnings and
+  71 registered hints; the reference fixture passed.
+- Independent code/API review has no remaining findings. Manual API checklist:
+  **35 pass, seven N/A, 11 registered gaps, zero failures**.
+- All **48 Playwright tests** passed with four workers and zero retries against the separately
+  built `toadie-atomic-verify:local` app. Only the disposable project's containers, network,
+  and database volume were removed afterwards.
+- During pre-publication verification, development users, catalog files, graph layouts, tag
+  categories, and catalog history retained identical before/after checksums. The development
+  app image and database volume were unchanged; publication and deployment were separate steps.
 
 ### Tag-ownership concurrency batch (2026-09-06)
 

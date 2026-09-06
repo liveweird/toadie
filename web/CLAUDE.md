@@ -172,6 +172,12 @@ semantics. No server revision or cross-tab conflict resolution is implied.
 
 ## File history (`components/CatalogFileHistory.tsx`)
 
+Each server mutation commits its required history event in the same transaction as the file.
+A history-insertion failure rolls back that file write; imports preserve this guarantee per
+document and continue reporting independent row results. A no-op PUT still adds no entry, and
+sync still records an entry even when the document matches. Failed responses can still occur
+after commit (for example during response delivery), so avoid assuming every error proves no save.
+
 The per-file change trail, rendered as a Mantine `Timeline` in a full-width **History** section below the editor's two columns (`CatalogFileEditor`'s optional `history` prop — the `actions` precedent; the Create page passes nothing, an unsaved document has no history). Deliberately NOT a `Tabs` strip: the document is the form directly above it, so a "Document" tab would only name what is already on screen. The query keys under `["catalogFiles", "events", id, page]` — inside the shared prefix, so every catalog mutation refreshes it — and paginates 10 at a time (a bare `Pagination`, shown only past one page; the server orders newest-first and the client NEVER re-sorts).
 
 Events arrive **structural** (`type` + a `params` string map, no rendered text — the server stores none), so the component owns the whole rendering: `describeEvent` turns each into one localized sentence (`catalog.event.*`, with i18next `context` picking `created_import`), and each changed field that carries VALUES gets a dimmed body line (`catalog.change.fromTo`/`set`/`cleared`/`added`/`removed`/`addedRemoved`). Rules worth keeping:

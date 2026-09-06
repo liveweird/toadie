@@ -25,6 +25,9 @@
 
 ## Not covered here (and why)
 
+- **Rollback when history insertion fails and concurrent before/after diffs.** Backend tests
+  inject PostgreSQL failures and observe lock contention against owned fixtures; browser
+  timing cannot prove transaction boundaries. The SPA journey verifies normal history wiring.
 - **Sync and import events, the params vocabulary, paging, the newest-first ordering with its
   same-instant tiebreaker, the 404 on a deleted file, and the no-op save that records
   nothing** — pinned by the server suite (`CatalogFileHistoryTest`) and the pure diff matrix

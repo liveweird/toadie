@@ -108,8 +108,33 @@ shortens its expiry. No runtime DDL; prior migration checksums remain untouched.
 
 **`infra/db/EventLog.kt` + `JsonParams.kt`** (ported from Lettuce with the first history trail, v1.15.0): the shared per-record audit-event machinery. A feature declares `object XEvents : EventLogTable("x_events", "x_id", XTable)` — an FK to the owning record, the acting `user_id`, a server-set `created_at`, `event_type VARCHAR(40)` (no CHECK — the Kotlin enum is the whitelist) and a `params TEXT` JSON `Map<String,String>` — and keeps only its typed `create`/`listFor` wrapper (`catalog/CatalogFileEventService.kt` is the first and so far only one). **Events are stored STRUCTURALLY so the SPA localizes them: no rendered string is ever stored.** Two deliberate departures from Lettuce's copy: its opt-in `commentColumn` hook (an encrypted free-text column on `goal_events`) was left behind — Toadie's events store no free text at all, recording only the FACT that a free-text field changed — and `listFor` is PAGED (`EventLogPage`), because a catalog file's event count is unbounded while Lettuce's per-record counts are intrinsically tiny (see `.claude/docs/list-endpoints.md`). Rows are IMMUTABLE: minted as a side-effect of the mutations, with no create/update/delete API.
 
-**Consistency model (mutations vs. events) — deliberate.** A business mutation and its history event do **not** share one transaction, by design (Lettuce's shape, adopted wholesale rather than varied): the service method commits the mutation in its own `suspendTransaction` and returns what changed, then the ROUTE appends the event via `EventLog.create` (own transaction) beside the `audit(...)` line it already emits, and responds. Consequence, accepted at this app's scale (single instance, small payloads, low contention): a failure after the mutation commit yields a `500` with the state already changed and the event missing. Do **not** "fix" individual routes toward atomicity piecemeal — that would fork the convention; if audit-grade history or a multi-instance deployment ever becomes a requirement, revisit wholesale (a transaction-aware unit of work, or an outbox) as its own project. The same shape governs notifications when they arrive.
+**Atomic catalog mutations and product history.** Every catalog create, replacement, repo
+sync, and soft delete appends its required structural history event inside the mutation's
+own database transaction. The shared event insertion helper must use the caller's transaction;
+never open another transaction or defer the event to the route. The actor is required for every
+write. Failed event insertion rolls back the entire file write, including source reference,
+sync baseline, timestamps, and deletion flag. A no-op replacement has no history event; a sync
+always has one, and missing/deleted targets produce none. Existing structural params and
+free-text redaction remain unchanged.
+
+Replacement and sync lock the current file row before deriving the before/after diff, so
+concurrent writes describe the state they actually replace. Keep these transactions short;
+URL fetching stays outside them. This is per-file transaction consistency, not optimistic
+concurrency control: competing full replacements still have last-write-wins behavior.
+
+Import remains report-and-skip with one transaction per document. Each successful row commits
+its file and CREATED event (`origin=import`) together. An unexpected storage/history failure
+rolls back that row and returns ERROR without a fileId; other rows proceed, and earlier successful
+rows remain committed. Cancellation stops further work without undoing completed rows. The
+batch itself is not an all-or-nothing transaction, and sibling identities may still refer to a
+row that later fails to store (the existing Errors-report residual).
+
+Security `audit(...)` logs stay route-side after successful service returns; they are separate
+from the transactional product history and are not an atomic external-delivery guarantee.
+The create response's post-commit read-back can also fail after both file and event committed;
+atomic storage does not promise that every failed HTTP response means nothing was committed.
+This whole-feature convention deliberately supersedes Lettuce's split mutation/event shape.
 
 ### Not yet ported from Lettuce
 
-- **Notifications** and their leg of the consistency model above (the route persists each notification descriptor before appending the history event): adopt Lettuce's shape wholesale when they arrive — don't design a variant.
+- **Notifications**: port Lettuce's feature when it arrives, while retaining the atomic catalog mutation/history boundary above. External notification delivery needs its own explicit consistency decision.

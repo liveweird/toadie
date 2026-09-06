@@ -1,5 +1,15 @@
 ### Testing
 
+**Catalog history atomicity.** Inject a real PostgreSQL failure at history insertion and assert
+that create, replace, sync, and soft delete roll back their entire file state with the event.
+Check content, source reference, timestamps, sync baseline, and deletion flag, not just the
+response status. Imports retain per-document transactions: a failed row has ERROR/no fileId,
+while adjacent successful rows and their import-origin events persist. Preserve no-op updates,
+always-recorded syncs, required actor identity, and free-text redaction. Exercise same-file
+overlap with an observed database lock barrier to verify the event diff's actual predecessor.
+Fault injection belongs only in tests, scoped to uniquely owned fixtures, with cancellation-safe
+cleanup; never add production timing/failure hooks or alter applied migrations.
+
 **Tag-category concurrency.** Exercise overlapping create/create, replace/replace, and
 create/replace claims against real PostgreSQL connections. Use a held database lock and
 observe blocked contenders before release, so the original check-then-write implementation
