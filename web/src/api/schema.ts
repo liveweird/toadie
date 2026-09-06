@@ -438,6 +438,9 @@ export interface paths {
          *     repo copy — static guards only: absolute https, no credentials, at most 2048
          *     characters, else `400`). A file created this way is NOT synced yet (`lastSyncedAt`
          *     stays 0) — only a sync or a fetch-from-URL import stamps the sync state.
+         *
+         *     The new file and its CREATED history event commit together. Failure to store the
+         *     event rolls back the new file, including its source state.
          */
         post: operations["createCatalogFile"];
         delete?: never;
@@ -632,6 +635,11 @@ export interface paths {
          *
          *     With `sourceUrl` set (the fetch-from-URL flow), every STORED row gets it as its
          *     source reference and starts synced — an import from a repo URL IS a sync.
+         *
+         *     Each document and its import-origin CREATED history event commit in one transaction.
+         *     An unexpected history/storage failure rolls back that document and returns `ERROR`
+         *     without a `fileId`; its message does not expose storage internals. Other documents
+         *     continue independently, and successful rows remain committed.
          */
         post: operations["importCatalogFiles"];
         delete?: never;
@@ -728,12 +736,19 @@ export interface paths {
          *     (`lastSyncedAt` back to 0, the baseline dropped). `updatedAt` bumps only on an
          *     actual DOCUMENT change — a reference-only edit never reads as "modified in the DB
          *     since the sync".
+         *
+         *     The replacement and any UPDATED history event commit together. Failure to store
+         *     the event preserves the previous file, source reference, timestamps, and sync state.
+         *     An unchanged save creates no event. Concurrent replacements remain last-write-wins;
+         *     each event describes the state its transaction actually replaced.
          */
         put: operations["replaceCatalogFile"];
         post?: never;
         /**
          * Delete a catalog file
          * @description Soft delete — the file leaves every list and read, and its identity is freed.
+         *     The deletion flag and DELETED history event commit together; failure to store the
+         *     event leaves the file active. The event outlives the soft-deleted file.
          */
         delete: operations["deleteCatalogFile"];
         options?: never;
@@ -755,6 +770,10 @@ export interface paths {
          * @description The file's immutable audit trail — one entry per creation (the import loop included),
          *     edit, repo→DB sync, and deletion — newest first (`timestamp` descending, `id`
          *     descending as the same-instant tiebreaker).
+         *
+         *     Required events commit in the same transaction as their catalog mutation. Imports
+         *     preserve this guarantee per document; a failed row cannot leave a stored file
+         *     without its creation event.
          *
          *     Each entry is STRUCTURAL: an event `type` plus a `params` map, with the acting user
          *     resolved to `userName`. No rendered string is stored — clients localize the
@@ -811,6 +830,10 @@ export interface paths {
          *     a source reference (`400` otherwise — set one first). A repo-side rename landing on
          *     an identity another active file holds is a `409`. Confirmation is a client concern
          *     (the sync modal); DB→repo sync deliberately does not exist.
+         *
+         *     The document, sync timestamp, baseline, and SYNCED history event commit together.
+         *     Failure to store the event preserves the complete previous state. A matching
+         *     document still records a sync event because performing the sync is itself an action.
          */
         post: operations["syncCatalogFile"];
         delete?: never;

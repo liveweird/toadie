@@ -75,12 +75,25 @@ class CatalogFileHistoryTest {
         usePostgresTestcontainer()
         val client = seededClient("histnoop")
         val name = uniqueEntityName("noop")
-        val created = client.createCatalogFile(componentFile(name))
+        val created: CatalogFileResponse = client.postJson(
+            CATALOG_FILES_PATH,
+            withSource(componentFile(name), "https://example.com/$name/catalog-info.yaml"),
+        ).body()
 
-        client.putJson("$CATALOG_FILES_PATH/${created.id}", componentFile(name))
+        client.putJson(
+            "$CATALOG_FILES_PATH/${created.id}",
+            withSource(componentFile(name), created.sourceUrl),
+        )
+        client.postJson(
+            "$CATALOG_FILES_PATH/${created.id}/sync",
+            SyncCatalogFileRequest(componentFile(name)),
+        )
 
         val page = client.events(created.id)
-        assertEquals(listOf(CatalogFileEventType.CREATED), page.items.map { it.type })
+        assertEquals(
+            listOf(CatalogFileEventType.SYNCED, CatalogFileEventType.CREATED),
+            page.items.map { it.type },
+        )
 
         client.delete("$CATALOG_FILES_PATH/${created.id}")
     }

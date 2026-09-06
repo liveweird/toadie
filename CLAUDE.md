@@ -21,6 +21,12 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Automated verification
 
+Catalog mutations and their structural history events commit in one transaction. Keep event
+insertion inside the service write, with a required actor; routes emit security audit logs only
+after success. Imports retain one transaction per document. Fault-injection tests must prove
+history failures roll back the full file state and leave adjacent successful import rows intact.
+Preserve no-op PUT suppression, always-recorded syncs, redaction, and truthful concurrent diffs.
+
 Tag-category create, replace, and soft-delete serialize in PostgreSQL before reading registry
 state. The ownership check and mutation share one transaction, so overlapping claims cannot
 assign a tag to different active categories. Preserve the complete losing category on `409`,

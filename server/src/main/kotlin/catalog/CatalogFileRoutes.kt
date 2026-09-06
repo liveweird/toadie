@@ -164,10 +164,6 @@ fun Application.configureCatalogFileRoutes() {
                     sourceUrl = sourceUrl,
                 )
                 audit("catalog_file.created", *catalogAuditFields(caller.userId, saved.id, waived = saved.waived.size))
-                // The user-facing history, beside the SIEM-facing audit line above (the two
-                // trails are documented in observability.md). Appended AFTER the mutation
-                // commits, in its own transaction — the ported consistency model.
-                eventService.record(saved.id, caller.userId, catalogFileCreationEvent(file.kind))
                 // Read back for the creator/timestamp envelope — post-commit, so a miss is a 500.
                 val created = catalogFileService.read(saved.id).orVanished("CatalogFile", saved.id)
                 call.response.header(HttpHeaders.Location, call.application.href(CatalogFiles.Id(id = saved.id)))
@@ -215,9 +211,8 @@ fun Application.configureCatalogFileRoutes() {
                 if (request.files.size > MAX_IMPORT_FILES) {
                     throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
                 }
-                // Report & skip: the per-document orchestration lives in the service; audits
-                // stay route-side (the repo convention) — one created event per stored row
-                // (waived documents store too, marked withFindings).
+                // Report & skip: the per-document orchestration lives in the service; security
+                // audits stay route-side (waived documents store too, marked withFindings).
                 val storedStatuses = setOf(ImportResultStatus.CREATED, ImportResultStatus.CREATED_WITH_FINDINGS)
                 val results = catalogFileService.import(
                     request.files,
@@ -235,7 +230,6 @@ fun Application.configureCatalogFileRoutes() {
                             withFindings = result.status == ImportResultStatus.CREATED_WITH_FINDINGS,
                         ),
                     )
-                    eventService.record(fileId, caller.userId, catalogFileCreationEvent(result.kind, viaImport = true))
                 }
                 call.respond(HttpStatusCode.OK, ImportResponse(results = results))
             }
@@ -280,13 +274,12 @@ fun Application.configureCatalogFileRoutes() {
                 val result = catalogFileService.update(
                     route.id,
                     file,
+                    caller.userId,
                     allowInvalid = allowInvalid,
                     sourceUrl = sourceUrl,
                 )
                 result.rows.orNotFound("Catalog file")
                 audit("catalog_file.updated", *catalogAuditFields(caller.userId, route.id, waived = result.waived.size))
-                // A save that changed nothing records nothing (no empty history entries).
-                catalogFileUpdateEvent(result.changes)?.let { eventService.record(route.id, caller.userId, it) }
                 call.respond(HttpStatusCode.NoContent)
             }
             get<CatalogFiles.Id.Sync> { route ->
@@ -303,15 +296,12 @@ fun Application.configureCatalogFileRoutes() {
                 val request = call.receive<SyncCatalogFileRequest>()
                 val file = sanitizedCatalogFile(request.document)
                 validateCatalogFile(file)
-                val result = catalogFileService.syncFromRepo(route.parent.id, file)
+                val result = catalogFileService.syncFromRepo(route.parent.id, file, caller.userId)
                 result.rows.orNotFound("Catalog file")
                 audit(
                     "catalog_file.synced",
                     *catalogAuditFields(caller.userId, route.parent.id, waived = result.waived.size),
                 )
-                // Recorded even when the repo copy matched: pulling it IS the act (it stamps
-                // the sync state), unlike a no-op PUT.
-                eventService.record(route.parent.id, caller.userId, catalogFileSyncEvent(result.changes))
                 call.respond(HttpStatusCode.NoContent)
             }
             get<CatalogFiles.Id.Events> { route ->
@@ -328,15 +318,12 @@ fun Application.configureCatalogFileRoutes() {
             }
             delete<CatalogFiles.Id> { route ->
                 val caller = call.caller()
-                catalogFileService.delete(route.id).orNotFound("Catalog file")
+                catalogFileService.delete(route.id, caller.userId).orNotFound("Catalog file")
                 audit(
                     "catalog_file.deleted",
                     "byUserId" to caller.userId.toLong(),
                     "catalogFileId" to route.id.toLong(),
                 )
-                // The file soft-deletes, so its events outlive it — this one lands in a history
-                // the UI can no longer reach, kept deliberately for the record.
-                eventService.record(route.id, caller.userId, catalogFileDeletionEvent())
                 call.respond(HttpStatusCode.NoContent)
             }
         }

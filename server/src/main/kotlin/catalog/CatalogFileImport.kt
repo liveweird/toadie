@@ -18,6 +18,8 @@ private sealed interface Preflight {
     data class Rejected(val row: ImportFileResult) : Preflight
 }
 
+private const val STORAGE_FAILED_MESSAGE = "Storage failed"
+
 private fun rowBase(index: Int, f: CatalogFile) = ImportFileResult(
     index = index,
     kind = f.kind,
@@ -54,9 +56,9 @@ private suspend fun preflight(
         return Preflight.Rejected(
             rowBase(index, sanitized).copy(status = ImportResultStatus.INVALID, message = e.message),
         )
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         return Preflight.Rejected(
-            rowBase(index, sanitized).copy(status = ImportResultStatus.ERROR, message = e.message ?: "Storage failed"),
+            rowBase(index, sanitized).copy(status = ImportResultStatus.ERROR, message = STORAGE_FAILED_MESSAGE),
         )
     }
     return Preflight.Ready(stored)
@@ -84,8 +86,8 @@ private fun storedRow(base: ImportFileResult, findings: List<SoftFinding>, fileI
  * is getting the batch IN so errors can be fixed incrementally (the Errors report tracks
  * them). Only structural validation and namespace resolution still skip a document as
  * INVALID. Nothing rethrows except cancellation, so the batch always runs to completion and
- * the result rows ARE the outcome. The route emits the audit events for the stored rows
- * (the repo convention: audits live route-side).
+ * the result rows ARE the outcome. Each successful create includes its product-history event
+ * in the row transaction; security audits remain route-side.
  */
 suspend fun CatalogFileService.import(
     files: List<CatalogFile>,
@@ -183,6 +185,7 @@ private suspend fun CatalogFileService.importOne(
             allowInvalid = true,
             sourceUrl = sourceUrl,
             markSynced = true,
+            viaImport = true,
         )
         storedRow(base, saved.waived, fileId = saved.id)
     } catch (e: CancellationException) {
@@ -196,7 +199,7 @@ private suspend fun CatalogFileService.importOne(
         if (e.isUniqueViolation()) {
             base.copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
         } else {
-            base.copy(status = ImportResultStatus.ERROR, message = e.message ?: "Storage failed")
+            base.copy(status = ImportResultStatus.ERROR, message = STORAGE_FAILED_MESSAGE)
         }
     }
 }

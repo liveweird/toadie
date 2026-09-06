@@ -16,9 +16,9 @@ data class CatalogFileEventListResult(
 
 /**
  * The catalog file's audit trail — a thin wrapper over the shared [EventLog] mechanics
- * (`infra/db/EventLog.kt`); only the typed DTO mapping lives here. Events are minted as a
- * side-effect of the catalog mutations by their ROUTES (never by [CatalogFileService]), so
- * there is no create endpoint and nothing here ever updates or deletes a row.
+ * (`infra/db/EventLog.kt`); only the typed DTO mapping lives here. Catalog mutations append
+ * through [recordInTransaction], so each event commits or rolls back with its owning write.
+ * There is no create endpoint and nothing here ever updates or deletes a row.
  */
 class CatalogFileEventService(database: R2dbcDatabase) {
 
@@ -33,9 +33,12 @@ class CatalogFileEventService(database: R2dbcDatabase) {
 
     private val log = EventLog(database, CatalogFileEvents)
 
-    /** Appends one event. The timestamp is server-set; the descriptor carries type + params. */
-    suspend fun record(catalogFileId: UInt, byUserId: UInt, descriptor: CatalogFileEventDescriptor): UInt =
-        log.create(catalogFileId, byUserId, descriptor.type.name, descriptor.params)
+    /** Appends one event in the catalog write's current transaction. */
+    internal suspend fun recordInTransaction(
+        catalogFileId: UInt,
+        byUserId: UInt,
+        descriptor: CatalogFileEventDescriptor,
+    ): UInt = log.createInTransaction(catalogFileId, byUserId, descriptor.type.name, descriptor.params)
 
     /** The file's history, newest first (id descending as the same-instant tiebreaker). */
     suspend fun listForFile(catalogFileId: UInt, paging: PageRequest): CatalogFileEventListResult {

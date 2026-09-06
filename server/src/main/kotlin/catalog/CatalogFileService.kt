@@ -78,9 +78,8 @@ data class CatalogFileSaveResult(val id: UInt, val waived: List<SoftFinding>)
 
 /**
  * A successful update (rows=0 → the route's 404) plus the waived soft findings and the
- * field-level [changes] the write made. The diff is computed here because this is the only
- * place holding both sides in one transaction; the ROUTE turns it into the history event (see
- * the consistency model in `.claude/docs/persistence.md`).
+ * field-level [changes] the write made. The diff and its history event are produced in the
+ * same transaction as the row mutation.
  */
 data class CatalogFileUpdateResult(
     val rows: Int,
@@ -102,7 +101,10 @@ private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
  *  above, so the two can never drift apart (a mismatch used to be a runtime 500). */
 val CATALOG_FILE_SORT_FIELDS: Set<String> = SORTABLE_COLUMNS.keys
 
-class CatalogFileService(private val database: R2dbcDatabase) {
+class CatalogFileService(
+    private val database: R2dbcDatabase,
+    private val eventService: CatalogFileEventService = CatalogFileEventService(database),
+) {
     object CatalogFiles : UIntIdTable("catalog_files") {
         val kind = varchar("kind", length = 63).default("Component")
         // Identity uniqueness (case-insensitive per kind+namespace, active rows only) is
@@ -299,6 +301,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
         // synced (stamp + baseline). An editor-typed reference does not — content and repo
         // were never compared, so the row reads "never synced".
         markSynced: Boolean = false,
+        viaImport: Boolean = false,
     ): CatalogFileSaveResult = suspendTransaction(database) {
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         val source = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
@@ -320,7 +323,13 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             it[lastSyncedAt] = if (synced) now else 0
             it[syncedContent] = if (synced) encoded else null
         }
-        CatalogFileSaveResult(id = newRecord[CatalogFiles.id].value, waived = findings)
+        val id = newRecord[CatalogFiles.id].value
+        eventService.recordInTransaction(
+            id,
+            createdByUserId,
+            catalogFileCreationEvent(stored.kind, viaImport = viaImport),
+        )
+        CatalogFileSaveResult(id = id, waived = findings)
     }
 
     /** The strict-or-waive gate shared by create and update: throws unless waived, returns what was. */
@@ -346,6 +355,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
     suspend fun update(
         id: UInt,
         file: CatalogFile,
+        actingUserId: UInt,
         allowInvalid: Boolean = false,
         sourceUrl: String? = null,
     ): CatalogFileUpdateResult =
@@ -361,6 +371,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             // "modified in the DB since the sync" (updatedAt > lastSyncedAt is that signal).
             val current = CatalogFiles.select(CatalogFiles.content, CatalogFiles.sourceUrl)
                 .where { (CatalogFiles.id eq id) and active() }
+                .forUpdate()
                 .toList()
                 .singleOrNull()
                 ?: return@suspendTransaction CatalogFileUpdateResult(rows = 0, waived = findings)
@@ -386,6 +397,9 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                     it[syncedContent] = null
                 }
             }
+            catalogFileUpdateEvent(changes)?.let {
+                eventService.recordInTransaction(id, actingUserId, it)
+            }
             CatalogFileUpdateResult(rows = rows, waived = findings, changes = changes)
         }
 
@@ -397,7 +411,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
      * hold a source reference (400 otherwise); an identity rename colliding with another
      * active file surfaces as the ordinary 23505 → 409.
      */
-    suspend fun syncFromRepo(id: UInt, file: CatalogFile): CatalogFileUpdateResult =
+    suspend fun syncFromRepo(id: UInt, file: CatalogFile, actingUserId: UInt): CatalogFileUpdateResult =
         suspendTransaction(database) {
             validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
             // The cheap row checks come FIRST: a 404/400 must not pay for the workspace +
@@ -406,6 +420,7 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             // document wholesale, so what it CHANGED is the interesting part).
             val current = CatalogFiles.select(CatalogFiles.sourceUrl, CatalogFiles.content)
                 .where { (CatalogFiles.id eq id) and active() }
+                .forUpdate()
                 .toList()
                 .singleOrNull()
                 ?: return@suspendTransaction CatalogFileUpdateResult(rows = 0, waived = emptyList())
@@ -425,10 +440,12 @@ class CatalogFileService(private val database: R2dbcDatabase) {
                 it[lastSyncedAt] = now
                 it[syncedContent] = encoded
             }
+            val changes = documentChanges(json.decodeFromString(current[CatalogFiles.content]), stored)
+            eventService.recordInTransaction(id, actingUserId, catalogFileSyncEvent(changes))
             CatalogFileUpdateResult(
                 rows = rows,
                 waived = findings,
-                changes = documentChanges(json.decodeFromString(current[CatalogFiles.content]), stored),
+                changes = changes,
             )
         }
 
@@ -448,10 +465,14 @@ class CatalogFileService(private val database: R2dbcDatabase) {
             }
     }
 
-    suspend fun delete(id: UInt): Int = suspendTransaction(database) {
-        CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
+    suspend fun delete(id: UInt, actingUserId: UInt): Int = suspendTransaction(database) {
+        val rows = CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
             it[markedAsDeleted] = true
         }
+        if (rows > 0) {
+            eventService.recordInTransaction(id, actingUserId, catalogFileDeletionEvent())
+        }
+        rows
     }
 
     /**
