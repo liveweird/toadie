@@ -167,7 +167,7 @@ Verification against a disposable Compose stack using the unchanged merged app i
 - [ ] Separately evaluate connection-time DNS containment / address pinning: the JDK transport
   may resolve again after the public-host check, and native resolution can outlive cancellation.
   A rejecting bounded JDK executor is not a safe shortcut (selector rejection aborts the client).
-- [ ] Bound YAML-diff cost with a size threshold/fallback; large valid document regression.
+- [x] Bound YAML-diff cost with a size threshold/fallback; large valid document regression.
 - [ ] Protect graph-layout initialization, serialize/coalesce saves, show failure/retry state.
 - [ ] Make cross-category tag ownership concurrency-safe and test overlapping writes.
 - [ ] Make catalog mutations and product-history events atomic; fault-injection regression.
@@ -209,6 +209,54 @@ Verification:
 Removed only the disposable verification containers/network/volume afterwards; generated test
 data can be recreated. The normal stack remained stopped and its volume was not touched;
 Kubernetes was not changed. These are pre-commit local results, not hosted CI results.
+
+### YAML-diff budget batch (2026-09-06)
+
+Starting state verified: clean `master` at `d865aa0`, displayed version **1.22.1**, PR #5
+merged, and its [master CI run](https://github.com/liveweird/toadie/actions/runs/34026699079)
+successful. The existing Compose app, PostgreSQL, and Mailpit were running with loopback ports.
+
+Both repo sync and Overwrite with YAML now use a bounded detailed comparison: at most
+**200,000 combined UTF-16 code units**, **2,000 combined lines**, and **250,000 matrix
+cells**, including sentinel rows/columns. Character size is checked before splitting;
+every budget is checked before matrix allocation. Above any budget, the shared view shows
+an EN/PL explanation and both complete canonical documents in visibly labeled, keyboard-
+scrollable panes with one text block per document. No truncation, new dependencies, API
+changes, or catalog validation limits were introduced. Canonical equality, side attribution,
+soft findings, explicit confirmation, and full replacement payloads retain their semantics.
+
+This bounds detailed LCS work and per-line DOM creation. YAML parsing, canonical generation,
+and displaying complete fallback text still scale with document size; it is not a claim
+that arbitrary input rendering has constant cost.
+
+Verification includes exact/above-budget boundaries, asymmetric inputs, repeated short
+lines, long lines, deterministic skipped-allocation checks, and valid API descriptor
+round trips. Both modal regressions check complete replacement content; ordinary PUT
+also preserves `sourceUrl`. Oversized identical documents keep confirmation disabled.
+
+Browser verification used the edited Vite SPA against the existing backend, with a
+**48,028-character API definition / 12,012 canonical YAML lines**. The file-picker overwrite
+and source-sync dialogs showed complete text in two focusable blocks; actual PUT/sync POST
+stored the full replacement and retained its source URL. Large exact matches disabled both
+confirmations. Only the repo-fetch response was a browser fixture; sync persistence used
+the real API. Desktop/mobile screenshots were inspected and no page errors were observed.
+The two uniquely named test records were removed through the API, and active counts returned
+to **35 catalog files / 2 users**, exactly as before the probe. Compose and its database
+volume were not recreated. At this local-verification checkpoint, no commit, push, release,
+or deployment had been performed. Screenshots: [desktop](e2e/screenshots/yaml-diff-desktop.png)
+and [mobile](e2e/screenshots/yaml-diff-mobile.png).
+
+Final local gates:
+
+- Frontend build, lint, knip, and generated API type drift check: passed. Knip retains
+  only its pre-existing generated-schema configuration hint.
+- Frontend coverage: **684 tests / 88 suites**, all passed; **97.64% lines, 95.44%
+  statements, 92.63% functions, 91.75% branches**, above the unchanged floors.
+- Independent review: no actionable findings; the four focused suites also passed
+  (**35 tests**). `git diff --check` passed.
+- Backend code and contract were unchanged; backend tests and the full E2E suite were
+  not rerun for this frontend batch. Browser evidence above is a focused local probe,
+  not a hosted CI run for this changeset.
 
 ## Stage 4 — deployment
 

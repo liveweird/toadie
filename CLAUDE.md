@@ -21,6 +21,11 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Automated verification
 
+YAML comparisons in repo sync and Overwrite with YAML must bound both detailed LCS work
+and rendered row count. Large inputs fall back to complete stored/replacement YAML panes,
+with no truncation or change to confirmation payloads. Limits and regression expectations
+are documented in `web/CLAUDE.md` and `.claude/docs/testing.md`.
+
 Outbound catalog fetches have one 10-second deadline across validation/DNS, connection,
 headers, and the complete bounded body. Caller cancellation must propagate unchanged;
 only the fetch's own deadline and upstream failures become safe 502 problems. Initial DNS

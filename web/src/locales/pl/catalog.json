@@ -198,6 +198,11 @@
   "tier": {
     "tooltip": "Poziom {{tier}} — najpierw uzupełnij niższe poziomy"
   },
+  "diff": {
+    "tooLarge": "Te dokumenty są zbyt duże, aby pokazać szczegółowe porównanie wierszy. Poniżej znajdziesz pełny zapisany i zastępujący YAML.",
+    "storedLabel": "Pełny zapisany YAML",
+    "replacementLabel": "Pełny zastępujący YAML"
+  },
   "sync": {
     "action": "Synchronizuj ze źródłem",
     "title": "Synchronizuj ze źródłem — {{name}}",

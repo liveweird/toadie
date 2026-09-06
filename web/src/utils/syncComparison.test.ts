@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { compareSyncSides, hasLocalChanges } from "./syncComparison";
+import { YAML_DIFF_CHARACTER_LIMIT } from "./yamlDiff";
 
 describe("hasLocalChanges", () => {
   test("true only for a SYNCED row whose updatedAt moved past lastSyncedAt", () => {
@@ -28,17 +29,28 @@ describe("compareSyncSides", () => {
     expect(result.repoChanged).toBe(false);
   });
 
+  test("oversized identical renders stay exactly in sync without preparing a fallback", () => {
+    const yaml = "x".repeat(YAML_DIFF_CHARACTER_LIMIT + 1);
+    const result = compareSyncSides({ ...base, currentYaml: yaml, repoYaml: yaml });
+
+    expect(result.inSync).toBe(true);
+    expect(result.diff).toBeNull();
+  });
+
   test("a repo drift from the baseline lights repoChanged and yields the diff", () => {
     const result = compareSyncSides(base);
     expect(result.inSync).toBe(false);
     expect(result.repoChanged).toBe(true);
     expect(result.dbChanged).toBe(false);
-    expect(result.diff).toEqual([
-      { kind: "same", text: "a" },
-      { kind: "removed", text: "b" },
-      { kind: "added", text: "c" },
-      { kind: "same", text: "" },
-    ]);
+    expect(result.diff).toEqual({
+      kind: "detailed",
+      lines: [
+        { kind: "same", text: "a" },
+        { kind: "removed", text: "b" },
+        { kind: "added", text: "c" },
+        { kind: "same", text: "" },
+      ],
+    });
   });
 
   test("a DB move past the sync stamp lights dbChanged; both sides can light together", () => {

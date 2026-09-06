@@ -76,6 +76,15 @@ mail/localization/throttle primitives, not that weakness.
 
 **Request payload validation (convention — API-SEC-003/API-ERR-005).** Mutating routes validate payloads up-front and throw `BadRequestException` (→ `400` + `ProblemDetail`) instead of letting oversized/blank values die in the DB as `500`s. One cross-cutting example: password ≥ `MIN_PASSWORD_LENGTH` (10) chars AND ≤ 71 UTF-8 bytes (`validatePassword` in `users/UserRoutes.kt` + `MAX_PASSWORD_BYTES` in `auth/Passwords.kt` — **the bcrypt ceiling**: longer input makes bcrypt throw, and the 500-vs-401 split would be an account-enumeration oracle, so login's `verifyPassword` guards it too). Declare limits as `maxLength` in the OpenAPI spec. Keep new validators feature-local and enforce them **after** the authz guard (403 wins over 400). Covered by `PayloadValidationTest`.
 
+**YAML comparison resource bounds.** A valid API definition can contain enough short lines
+to make an unrestricted LCS matrix exhaust the browser's memory. The SPA gates detailed
+diffs by combined characters, combined lines, and full matrix cells before allocating it
+(`web/src/utils/yamlDiff.ts`; exact budgets in `web/CLAUDE.md`). Oversized comparisons show
+both complete canonical documents as plain React text in two scrollable blocks, without
+per-line DOM creation. This is a presentation fallback, not a validation bypass or an
+upload limit: parsing/rendering the full document still costs work proportional to its
+size, and the normal validation and explicit overwrite confirmation remain in force.
+
 **Outbound URL fetch (SSRF posture).** `POST /api/v1/files/fetch` (`catalog/UrlFetch.kt`)
 serves the import page and repo-sync modal. Guards, in order: absolute `https` only, no
 userinfo, non-blank host, URL ≤ 2048 chars (`parseFetchUrl`); then EVERY resolved address

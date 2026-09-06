@@ -89,6 +89,19 @@ Every list page composes the same ported Lettuce blocks — copy `pages/CatalogF
 
 ## Source references & repo sync (`components/SyncCatalogFileModal.tsx`)
 
+**Bounded YAML comparison.** Repo sync and Overwrite with YAML share `utils/yamlDiff.ts`
+and `components/YamlDiffView.tsx`. Detailed LCS is allowed only up to **200,000 combined
+UTF-16 code units**, **2,000 combined lines**, and **250,000 matrix cells** (including
+the sentinel row/column). Check character size before splitting and all limits before
+allocating the matrix. These are presentation budgets, not catalog validation rules.
+Above any limit, show a localized explanation and the **complete** stored/replacement
+canonical YAML in two named, keyboard-scrollable panes, with one text block per document
+instead of a DOM node per line. Never truncate the submitted document or imply that an
+omitted detailed diff means equality. Canonical equality, side attribution, soft findings,
+explicit confirmation, and overwrite's `sourceUrl` preservation keep their existing semantics.
+This bounds detailed comparison and DOM row creation; parsing, canonical rendering, and
+displaying the complete fallback text still scale with input size.
+
 Each file may carry a `sourceUrl` (its repo copy's https URL) — envelope state beside the document, never in the YAML/round-trip. The editor's `SourceFieldset` edits it (`sourceUrl` in the form values; the pages share ONE strict-save → Save-anyway flow, `hooks/useCatalogFileSave.ts`, sending `{ ...toCatalogFileRequest(values), sourceUrl }` while `/check` keeps receiving the PURE document); the import page tracks `fetchedFrom` (set on a successful URL fetch, cleared by any text change) and passes it to `importCatalogFiles` so fetched batches store referenced-and-synced. The Files list adds the sortable **Last sync** column (`SyncStateCell`: "No source" / "Never synced" / `relativeTimeAgo` (`utils/relativeTime.ts`, `Intl.RelativeTimeFormat` — the ONE relative-time util) + the orange "Local changes" badge via `hasLocalChanges`, `utils/syncComparison.ts`) and passes `onSync` to `CatalogFileOperations` only for sourced rows (the optional prop — Hierarchy never passes it). The modal loads the detail, `GET /files/{id}/sync` (the baseline), and the repo copy via the existing `POST /files/fetch` + `parseCatalogYaml` + `pickRepoDocument` (`utils/catalogImport.ts` — single-doc as-is, multi-doc by identity), compares everything through the CANONICAL `catalogInfoYaml` render (the pure `compareSyncSides` in `utils/syncComparison.ts`: repo≠baseline = changed in repo; `hasLocalChanges` = changed in Toadie; current=repo = in-sync, confirm disabled), renders a hand-rolled LCS line diff (`utils/yamlDiff.ts` — no diff dependency) through `components/YamlDiffView.tsx` (a named `role="group"`, keyboard-focusable scroll region), warns via `POST /files/check` findings, and confirms into `POST /files/{id}/sync` (server-side always-waive) — toast + close FIRST, then the `["catalogFiles"]` invalidation (the modal's repo queries are keyed OUTSIDE that prefix so no outbound re-fetch fires), with Esc/overlay blocked while the POST is in flight (the ConfirmActionModal busy-guard idiom). A missing reference is the Errors report's `SOURCE_MISSING` class (`utils/errorClasses.ts` "source" pill).
 
 ## User management (`pages/Users|CreateUser|EditUser|ChangePassword.tsx`)

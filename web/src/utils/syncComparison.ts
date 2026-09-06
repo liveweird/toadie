@@ -2,7 +2,7 @@
 // line diff to show. All equality runs over the canonical catalogInfoYaml render — one
 // semantics for the badges AND the diff (see SyncCatalogFileModal).
 
-import { diffLines, type DiffLine } from "./yamlDiff";
+import { diffLines, type YamlDiff } from "./yamlDiff";
 
 export interface SyncComparison {
   /** Stored and repo renders are identical — nothing to overwrite. */
@@ -12,7 +12,7 @@ export interface SyncComparison {
   /** The repo copy differs from the baseline snapshot taken at the last sync. */
   repoChanged: boolean;
   /** Stored → repo line diff; null while either side is missing or already in sync. */
-  diff: DiffLine[] | null;
+  diff: YamlDiff | null;
 }
 
 /**

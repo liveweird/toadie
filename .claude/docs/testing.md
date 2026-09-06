@@ -1,5 +1,15 @@
 ### Testing
 
+**Bounded YAML diffs.** `yamlDiff.test.ts` pins detailed-comparison budget boundaries,
+asymmetric inputs, repeated short lines, long lines, and the exact reconstruction of both
+inputs (including empty/trailing lines). Large API descriptors must remain valid through
+the real canonical generator and strict parser, with `spec.definition` within its 100,000
+character limit. Assert the fallback choice and skipped matrix allocation deterministically;
+do not rely on a tight elapsed-time assertion or try to allocate the former quadratic matrix.
+The shared view and both confirmation-modal regressions must cover complete fallback text,
+bounded text-block count, accessible scroll regions, and unchanged full replacement payloads
+(including `sourceUrl` for ordinary PUT). Identical large documents still disable confirmation.
+
 **Outbound-fetch deadlines and cancellation.** `UrlFetchTest` uses local fixture servers and
 held validation to exercise the single total deadline, pre-header/body stalls, explicit caller
 cancellation and enclosing timeouts, truncated-body I/O, exact-limit/oversize bodies, and the
