@@ -97,45 +97,58 @@ size, and the normal validation and explicit overwrite confirmation remain in fo
 **Outbound URL fetch (SSRF posture).** `POST /api/v1/files/fetch` (`catalog/UrlFetch.kt`)
 serves the import page and repo-sync modal. Guards, in order: absolute `https` only, no
 userinfo, non-blank host, URL ≤ 2048 chars (`parseFetchUrl`); then EVERY resolved address
-must be public (`requirePublicHost`). Loopback, site-local, link-local, any-local, multicast,
+must be public (`resolveFetchTarget` / `requirePublicAddresses`). Loopback, site-local, link-local, any-local, multicast,
 IPv6 ULA `fc00::/7`, CGNAT `100.64.0.0/10`, `192.0.0.0/24`, benchmarking `198.18.0.0/15`,
 and NAT64 `64:ff9b::/96` embedding a non-public IPv4 are refused, as are unresolvable hosts.
 Guard rejections retain the uniform **400** `FETCH_URL_INVALID_DETAIL`. Audits remain
 `catalog_file.fetch_blocked` / `catalog_file.fetched`, with scheme/host ONLY, never the
 full URL or upstream exception text (either may contain query-string credentials).
 
-**One deadline, including the body.** The fetch's 10-second budget covers validation/DNS,
-connection/headers, and completion of the entire body; it is not a fresh budget per stage
-or per chunk. The JDK client still uses `followRedirects(NEVER)` and a connect/request
-timeout, but those settings alone do not bound a streaming body. An asynchronous bounded
-subscriber buffers at most **1,048,576 bytes**, requests chunks incrementally, and cancels
-on overflow. Non-200 responses are rejected without waiting for their bodies. Own-deadline
-expiry, exhausted resolver capacity, connection/body I/O failures, redirects, non-200 status,
-and oversize remain safe `BadGatewayException` → **502**. Caller cancellation (including
-an enclosing timeout) propagates unchanged; it cancels the subscription and HTTP future
-with interruption requested. No application-level retry, background body drain, or partial
-success; any transparent retries of the GET inside the JDK share the same outer deadline.
+**Validated destinations, including connection time.** The OkHttp transport resolves the
+canonical URL hostname once and rejects an empty result or any non-public address. It copies
+the approved address bytes into a per-fetch snapshot; its `Dns` hook supplies only that
+snapshot and rejects an unexpected hostname. The request keeps the logical URL hostname for
+TLS certificate verification, SNI, and Host. Numeric literals must pass the same address
+checks; they cannot introduce a different connection-time destination. Each fetch owns a
+private zero-idle connection pool, evicted on completion, so pooling/coalescing cannot reuse
+another fetch's authorization. Both redirect settings are disabled, and direct connections
+(`Proxy.NO_PROXY`) prevent a system proxy from resolving a different destination. The
+physical socket is also created with `Socket(Proxy.NO_PROXY)`: disabling only OkHttp's
+proxy setting still lets Java's default socket consult a SOCKS proxy. Its socket factory
+supports only unconnected socket creation; unused connected overloads fail closed. No global
+resolver or permissive TLS verifier is installed. The transport is the already-present,
+lockfile-pinned OkHttp version, now declared as a direct dependency.
 
-**Native DNS limitation.** Validation runs on a shared daemon pool capped at four workers
-and sixteen queued tasks, with rejection mapped to 502. Cancellation interrupts its task
-and releases the waiting coroutine; a native resolver may ignore interruption and occupy
-a worker until the OS returns. This is bounded containment, NOT a claim that Java can
-forcibly terminate native DNS. Cancelled validation must never initiate an HTTP request.
-The JDK may resolve the host again while connecting: the pre-existing resolve-check/connect
-gap (DNS rebinding) remains an accepted residual risk, not closed by the deadline. That
-second native lookup runs on JDK-managed transport workers and is NOT fully resource-bounded
-by the initial validation pool. The caller's deadline still applies, but a native lookup
-may outlive cancellation. Full containment needs separate transport/resolver work. Do not
-install a rejecting bounded executor on the shared JDK client as a shortcut: in the pinned
-JDK, selector-side task rejection aborts the entire client and poisons subsequent requests.
-See the [JDK cancellation contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpClient.html)
-for its best-effort exchange-abort semantics.
+**One deadline, including the body.** The fetch's 10-second budget covers queueing,
+validation/DNS, connection/TLS/headers, and completion of the entire body; it is not a fresh
+budget per stage or chunk. Synchronous transport and body reads run in the same bounded
+worker task as DNS. Reads enforce **1,048,576 bytes**, accept exactly that limit, and abort
+on overflow. `Accept-Encoding: identity` disables transparent decompression, keeping the
+limit on the upstream representation. Non-200 responses are rejected before follow-up or
+body draining; failure and cancellation close the exchange. Own-deadline expiry, exhausted
+worker capacity, connection/body I/O failures, redirects, non-200 status, and oversize remain
+safe `BadGatewayException` → **502**. Caller cancellation, including an enclosing timeout,
+propagates unchanged. Application retries and automatic connection retries are disabled;
+`503 Retry-After: 0` must not trigger a hidden status retry. No partial success is returned.
 
-Other accepted risks: stored `source_url` is served IN FULL to all authenticated users in
-this shared workspace, so do not embed secrets in source references; 502 details retain
-the upstream HTTP status for diagnosis, only after the public-host check. The injected
-`CatalogUrlFetcher` validator/timeout/executor are test seams for local fixtures and short
-controlled deadlines; production uses the full default guard chain and ten-second budget.
+**Native DNS limitation and bounded containment.** The entire exchange uses a shared daemon
+pool capped at four workers and sixteen queued tasks, with rejection mapped to 502.
+Cancellation interrupts the task, removes queued work, cancels any attached HTTP call, and
+releases the waiting coroutine. A native resolver may ignore interruption and occupy one of
+those four workers until the OS returns; this can exhaust fetch availability, but cannot
+create an unbounded population of stranded resolver workers. Cancelled resolution must never
+initiate a later HTTP request. Address pinning closes the previous resolve-check/connect
+rebinding gap and removes the JDK transport's second DNS lookup; it does not claim Java can
+forcibly terminate native DNS. Do not replace the pinned resolver with `Dns.SYSTEM`, share
+connection pools between fetches, or move body/connection work onto an unbounded executor.
+
+**Compatibility.** Hosts requiring a system HTTP or SOCKS proxy now fail safely because
+this path requires direct outbound HTTPS. Normal TLS trust and hostname checks remain in force. Stored
+`source_url` is still served IN FULL to all authenticated users in this shared workspace, so
+do not embed secrets in source references. Safe 502 details retain the upstream HTTP status
+for diagnosis, only after the public-host check. Internal target-resolution, timeout,
+executor, and client-customization seams support local fixtures and a test-only trusted CA;
+production uses the full default guard chain and ten-second budget.
 
 **CORS is off by default** (`plugins/Http.kt`): the plugin is installed only when `http.corsHosts` (`$CORS_ALLOWED_HOSTS`, comma-separated hosts) is non-empty. Production is single-origin (Ktor serves the SPA) and dev goes through the Vite proxy, so no cross-origin caller exists by default — no `anyHost()`. **Reverse proxy**: set `HTTP_BEHIND_PROXY=true` (config `http.behindProxy`) when TLS terminates at an ingress/proxy — it installs `XForwardedHeaders` so rate-limit buckets key on the real client IP and the HTTPS redirect sees the real scheme and host; the proxy must set (and overwrite client-supplied) `X-Forwarded-For`/`X-Forwarded-Proto`/`X-Forwarded-Host` — `k8s/templates/app-ingress.yaml` is the reference contract. Off by default because honoring those headers from direct clients lets them spoof both. Two hardenings ported from Lettuce (v1.22.0): the trusted header list is NARROWED to those canonical three (Ktor's default also honours `X-Forwarded-Server`/`-Protocol`/`-SSL`/`Front-End-Https`, which a proxy that sets only the canonical ones passes through from the client untouched — `ProductionHttpTest` pins that `X-Forwarded-Server` cannot name the redirect target), and `X-Forwarded-For` is read from the END of the list (`useLastProxy()`; `HTTP_PROXY_HOPS`, default 1, = trusted proxies that APPEND — `ForwardedHeadersTest` pins the bucket keying). The security headers are appended in the `Setup` pipeline phase so the production 301 carries them too (appending after `HttpsRedirect` commits the response throws on Netty). The Kubernetes probes send `X-Forwarded-Proto: https` for the same reason — without it production mode redirects the plain-HTTP probe and the pod crash-loops (see `k8s/app-deployment.yaml`).
 

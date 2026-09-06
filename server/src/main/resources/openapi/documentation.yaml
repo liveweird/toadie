@@ -953,9 +953,11 @@ paths:
         the response body is capped at 1 MB, and one 10-second deadline covers validation,
         DNS resolution, connection/headers, and the complete response body. Upstream
         failures (non-200, deadline expiry, body-read failure, oversize) answer `502`.
-        Initial validation-resolver capacity exhaustion also answers `502`; its queue is
-        bounded. Native DNS may outlive cancellation, including the JDK transport's second
-        connection-time lookup; the deadline bounds the caller's wait, not native execution.
+        Connections go directly to the addresses from that validated DNS result, retaining
+        the URL hostname for certificate verification. System HTTP and SOCKS proxies are not used.
+        Fetch worker/queue capacity exhaustion also answers `502`. Native DNS may outlive
+        cancellation on a bounded worker; the deadline bounds the caller's wait, not native
+        execution. Cancelled resolution cannot initiate a later HTTP request.
       requestBody:
         required: true
         content:
