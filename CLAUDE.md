@@ -101,6 +101,10 @@ Group is `ch.nokillswit`, version `1.0.0-SNAPSHOT` (set in root `build.gradle.kt
 
 **`.claude/docs/backstage-descriptor-format.md` is the local offline reference for the `catalog-info.yaml` format** Toadie exists to create, cross-check, and render — the envelope, metadata validation rules, all kinds and their spec fields, entity-reference resolution defaults, substitutions, and well-known annotations. Consult it when designing any catalog feature instead of browsing; the upstream source it snapshots is <https://backstage.io/docs/features/software-catalog/descriptor-format/> — re-check upstream (and update the snapshot) when adding a new validation rule.
 
+### The Port data model (the direction of travel)
+
+**Toadie is moving from Backstage's fixed System Model to [Port.io](https://docs.port.io/context-lake/data-model/configure-data-model/)'s ontology in phases** — user-definable **blueprints** (typed properties, relations, mirror/calculation/aggregation properties, ownership) replace the seven predefined kinds, and entities will attach to blueprints. Phase 1 (v1.23.0) is the `blueprints/` registry: create/edit/list/delete blueprint definitions in Port's native JSON shape, ADMIN-curated and readable by everyone, with nothing in the catalog/kinds machinery changed yet. **`.claude/docs/port-data-model.md` is the local offline reference for Port's blueprint rules** (every property type/format/colour, the relation/mirror/calculation/aggregation/ownership grammars, meta-properties, the identifier-charset assumption) — consult it when designing any blueprint/entity feature instead of browsing, and update it when a rule is added.
+
 ### API guidelines (the authoritative API standard)
 
 **`api-guidelines/API-GUIDELINES.md` is the single authoritative rulebook for API style** — document shape, URLs, versioning, list conventions, naming, data formats, status codes, errors, auth, caching, rate limiting, idempotency, security, and OpenAPI/conformance practice. Every rule has a stable ID (`API-LIST-002`); cite IDs when discussing API design. Validate spec changes with the `/api-review` skill (Spectral lint + LLM review checklist).
@@ -219,6 +223,24 @@ ch.nokillswit
 │                       well-known Backstage values per kind, V22 re-curates them. The
 │                       whitelist every catalog-file write's spec.type is checked against
 │                       (strict; a kind with no dictionary allows NO types)
+├── blueprints/         Port.io-style user-definable entity kinds (v1.23.0, Toadie-first —
+│                       Lettuce has none): Blueprint.kt (the Port-native wire DTOs — a typed
+│                       skeleton with JsonElement only for Port's open sub-trees: `default`,
+│                       `enum`, object `properties`/`patternProperties`/`additionalProperties`,
+│                       aggregation `query.rules`/`pathFilter` — plus `blueprintJson`, the
+│                       explicitNulls=false serializer used for BOTH the stored TEXT and the
+│                       responses so unset optionals are ABSENT, never null),
+│                       BlueprintValidation.kt + PropertyValidation.kt (the data-driven
+│                       applicability table + one thrower per rule; every rule in
+│                       .claude/docs/port-data-model.md), BlueprintReferences.kt (pure
+│                       `blueprintTargets`/`withTargetRenamed`), BlueprintService.kt (one row =
+│                       one blueprint: identity columns + one `definition` JSON; every mutation
+│                       under the tag-category table lock — relation/aggregation targets must
+│                       exist (self allowed), an identifier RENAME cascades into every row
+│                       targeting it in the same transaction, deleting a targeted blueprint is
+│                       409 naming the referrers), BlueprintRoutes.kt — GET /api/v1/blueprints
+│                       + GET {id} (any authenticated, unpaged, ≤200) + POST/PUT/DELETE (ADMIN,
+│                       guard-before-read). No seed: the registry starts empty
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),
                         CatalogFileValidation.kt (the sanitizer + per-kind required/forbidden

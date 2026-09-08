@@ -6,6 +6,7 @@
     "catalogFiles": "Files",
     "errors": "Errors",
     "graph": "Graph",
+    "blueprints": "Blueprints",
     "namespaces": "Namespaces",
     "labels": "Labels",
     "tags": "Tags",
@@ -19,6 +20,7 @@
   },
   "section": {
     "catalog": "Catalog",
+    "dataModel": "Data model",
     "registries": "Registries",
     "administration": "Administration"
   },

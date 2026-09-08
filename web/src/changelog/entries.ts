@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.23.0",
+    date: "2026-09-08",
+    en: `**Blueprints — the first step toward Port compatibility.**
+
+- Define your own entity kinds under the new **Data model** section: typed properties, relations, mirror/calculation/aggregation properties, and ownership.
+- A full-page editor shows a live JSON preview as you build a blueprint.
+- Blueprints are administrator-curated and readable by everyone, alongside the existing registries.`,
+    pl: `**Blueprinty — pierwszy krok w stronę zgodności z Port.**
+
+- Zdefiniuj własne rodzaje encji w nowej sekcji **Model danych**: typowane właściwości, relacje, właściwości lustrzane/obliczane/agregowane oraz własność.
+- Pełnoekranowy edytor pokazuje na bieżąco podgląd JSON podczas tworzenia blueprintu.
+- Blueprinty są kuratorowane przez administratorów/ki i dostępne do odczytu dla wszystkich, obok istniejących rejestrów.`,
+  },
+  {
     version: "1.22.1",
     date: "2026-09-06",
     en: `**More reliable catalog fetching.**

@@ -1,0 +1,70 @@
+import { useTranslation } from "react-i18next";
+import { Link as RouterLink } from "react-router-dom";
+import { Alert, Button, Grid, Group, Paper, Stack } from "@mantine/core";
+import { type UseFormReturnType } from "@mantine/form";
+import BlueprintFormFields from "./BlueprintFormFields";
+import CodePreviewCard from "./CodePreviewCard";
+import PageHeader from "./PageHeader";
+import { toBlueprintRequest, type BlueprintFormValues } from "../utils/blueprintForm";
+import { blueprintsPath } from "../utils/blueprintLinks";
+import classes from "../theme.module.css";
+
+/**
+ * The Blueprint editor shell shared by the create and edit pages — the CatalogFileEditor
+ * split (7/5 grid, sticky live preview, sticky Cancel/Save bar, no tabs), minus the
+ * findings/history panels a blueprint definition has no equivalent of: there are no soft
+ * findings (nothing here resolves against other stored content the way a catalog reference
+ * does) and no per-file change history yet.
+ */
+export default function BlueprintEditor({
+  title,
+  submitLabel,
+  form,
+  onSubmit,
+  error,
+  submitting,
+}: {
+  title: string;
+  submitLabel: string;
+  form: UseFormReturnType<BlueprintFormValues>;
+  onSubmit: (values: BlueprintFormValues) => Promise<void>;
+  error: string | null;
+  submitting: boolean;
+}) {
+  const { t } = useTranslation();
+  const preview = JSON.stringify(toBlueprintRequest(form.values), null, 2);
+  return (
+    <Stack gap="md">
+      <PageHeader title={title} backTo={{ to: blueprintsPath, label: t("blueprints.backToList") }} />
+      <Grid>
+        <Grid.Col span={{ base: 12, md: 7 }}>
+          <Paper withBorder p="lg" radius="md">
+            <form onSubmit={form.onSubmit(onSubmit)} noValidate>
+              <Stack>
+                <BlueprintFormFields form={form} />
+                {error && (
+                  <Alert color="red" variant="light">
+                    {error}
+                  </Alert>
+                )}
+                <Group justify="flex-end" gap="sm" className={classes.stickyActions}>
+                  <Button component={RouterLink} to={blueprintsPath} variant="default">
+                    {t("common.action.cancel")}
+                  </Button>
+                  <Button type="submit" loading={submitting}>
+                    {submitLabel}
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
+          </Paper>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 5 }}>
+          <Stack className={classes.stickyAside}>
+            <CodePreviewCard title={t("blueprints.preview")} label={t("blueprints.preview")} text={preview} />
+          </Stack>
+        </Grid.Col>
+      </Grid>
+    </Stack>
+  );
+}

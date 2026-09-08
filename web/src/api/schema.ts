@@ -1204,6 +1204,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blueprints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the blueprint registry
+         * @description Any authenticated user. Returns every active blueprint, identifier-ordered
+         *     case-insensitively — deliberately unpaged (the registry holds at most 200 blueprints
+         *     by validation), NOT a standard list endpoint. Phase 1 of Toadie's move from
+         *     Backstage's fixed System Model to Port.io's data model
+         *     (see `.claude/docs/port-data-model.md`): blueprints are user-definable entity-kind
+         *     definitions, stored and validated structurally; nothing yet attaches entities to them.
+         */
+        get: operations["listBlueprints"];
+        put?: never;
+        /**
+         * Register a blueprint
+         * @description ADMIN only. Registers a new blueprint per Port's blueprint schema — a blueprint JSON
+         *     exported from Port is accepted verbatim, modulo `teamInheritance` and
+         *     `changelogDestination` (Port platform features, out of scope: an unknown top-level key
+         *     is a strict `400`). Relation and aggregation targets must name an existing blueprint
+         *     (self allowed); the registry holds at most 200 active blueprints. An identifier
+         *     already held by an active blueprint (case-insensitively) is a `409`.
+         */
+        post: operations["createBlueprint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blueprints/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get a blueprint
+         * @description Any authenticated user.
+         */
+        get: operations["getBlueprint"];
+        /**
+         * Replace a blueprint
+         * @description ADMIN only — whole-blueprint replacement, identifier rename included. Renaming
+         *     CASCADES: every other active blueprint's relation/aggregation targets naming the old
+         *     identifier are rewritten to the new one, in the same locked transaction. Same
+         *     validation and `409` rules as create; a self-relation survives a rename.
+         */
+        put: operations["replaceBlueprint"];
+        post?: never;
+        /**
+         * Delete a blueprint
+         * @description ADMIN only — soft delete; the identifier becomes reusable by a NEW blueprint. A
+         *     blueprint that is the TARGET of another active blueprint's relation or aggregation is
+         *     `409` (a self-relation on the blueprint being deleted never blocks its own deletion).
+         */
+        delete: operations["deleteBlueprint"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1863,6 +1932,234 @@ export interface components {
             key: string;
             /** @description At least one of the seven landscape kinds (case-insensitive input; stored in canonical casing and order); no duplicates. */
             kinds: string[];
+        };
+        /** @description OAuth-style authentication for a string/object property's `spec` (open-api / async-api / embedded-url). Requires `spec` to be set. */
+        SpecAuthentication: {
+            /** Format: uri */
+            authorizationUrl: string;
+            /** Format: uri */
+            tokenUrl: string;
+            clientId: string;
+            authorizationScope?: string[];
+        };
+        /** @description An array property's element shape. */
+        ArrayItems: {
+            /** @enum {string} */
+            type: "string" | "number" | "boolean" | "object";
+            /** @description String items only (the same format whitelist as a string property). */
+            format?: string;
+            enum?: (string | number)[];
+            enumColors?: {
+                [key: string]: components["schemas"]["EnumColor"];
+            };
+        };
+        /** @enum {string} */
+        EnumColor: "blue" | "turquoise" | "orange" | "purple" | "pink" | "yellow" | "green" | "red" | "darkGray" | "lightGray" | "bronze" | "gold" | "silver" | "paleBlue";
+        /** @description One `schema.properties` entry. Every field besides `type` is optional and applies to only some types (string/number/array/object) — see `.claude/docs/port-data-model.md` for the full per-type applicability table; a field present on a type it doesn't apply to is a `400`. */
+        PropertyDefinition: {
+            /** @enum {string} */
+            type: "string" | "number" | "boolean" | "array" | "object";
+            title?: string;
+            description?: string;
+            icon?: string;
+            /** @description Any JSON value matching `type` (an empty schema is "any" in OpenAPI 3.0); with `enum` set, must be one of its values. */
+            default?: unknown;
+            /** @description String: url, email, idn-email, user, team, date-time, timer, yaml, markdown, proto, ipv4, ipv6. Object: labeled-url. */
+            format?: string;
+            /**
+             * @description String only, and only alongside format date-time.
+             * @enum {string}
+             */
+            date_format?: "relative" | "12-hour" | "24-hour" | "YYYY-MM-DD HH:mm";
+            /** @description String only; a valid regular expression. */
+            pattern?: string;
+            /** @description String only. */
+            minLength?: number;
+            /** @description String only. */
+            maxLength?: number;
+            /** @description String or number only; entries must match `type`; no duplicates. */
+            enum?: (string | number)[];
+            /** @description String or number only; keys must be declared `enum` values. */
+            enumColors?: {
+                [key: string]: components["schemas"]["EnumColor"];
+            };
+            /**
+             * @description String or object only.
+             * @enum {string}
+             */
+            spec?: "open-api" | "async-api" | "embedded-url";
+            specAuthentication?: components["schemas"]["SpecAuthentication"];
+            /** @description Number only. */
+            minimum?: number;
+            /** @description Number only. */
+            maximum?: number;
+            /** @description Number only. */
+            exclusiveMinimum?: number;
+            /** @description Number only. */
+            exclusiveMaximum?: number;
+            items?: components["schemas"]["ArrayItems"];
+            /** @description Array only. */
+            minItems?: number;
+            /** @description Array only. */
+            maxItems?: number;
+            /** @description Array only. */
+            uniqueItems?: boolean;
+            /** @description Object only — an open JSON-Schema sub-tree (values must be objects); stored and shape-checked only, never evaluated. */
+            properties?: Record<string, never>;
+            /** @description Object only — an open JSON-Schema sub-tree (values must be objects); stored and shape-checked only, never evaluated. Quoted key: not a valid OpenAPI 3.0 keyword, only a Port field name. */
+            patternProperties?: Record<string, never>;
+            /** @description Object only — a boolean, or an open JSON-Schema sub-tree. */
+            additionalProperties?: unknown;
+        };
+        /** @description A blueprint's property definitions and which of them are required. */
+        BlueprintSchema: {
+            /** @description Property definitions keyed by their identifier. */
+            properties: {
+                [key: string]: components["schemas"]["PropertyDefinition"];
+            };
+            /** @description Property identifiers that must be present on every entity of this blueprint. */
+            required: string[];
+        };
+        /** @description A directed edge from this blueprint to a target blueprint (self allowed). */
+        RelationDefinition: {
+            title: string;
+            description?: string;
+            /** @description The target blueprint's identifier. */
+            target: string;
+            required: boolean;
+            /** @description Cannot be true together with `required`. */
+            many: boolean;
+        };
+        MirrorPropertyDefinition: {
+            title: string;
+            /** @description "rel[.rel…].prop" or "rel[.rel…].$meta" — 1-10 dot-separated segments; the first must name a relation of this blueprint, and only the last segment may be a meta-property ($identifier, $title, $team, $icon, $createdAt, $updatedAt, $createdBy, $updatedBy, $blueprint). */
+            path: string;
+        };
+        CalculationPropertyDefinition: {
+            title: string;
+            /** @enum {string} */
+            type: "string" | "number" | "boolean" | "array" | "object";
+            /** @description String/object only — the PropertyDefinition format whitelist for that type. */
+            format?: string;
+            /**
+             * @description String/object only.
+             * @enum {string}
+             */
+            spec?: "open-api" | "async-api" | "embedded-url";
+            /** @description A jq expression — stored and shape-checked (length only); never evaluated. */
+            calculation: string;
+            colorized?: boolean;
+            colors?: {
+                [key: string]: components["schemas"]["EnumColor"];
+            };
+        };
+        AggregationCalculationSpec: {
+            /** @enum {string} */
+            calculationBy: "entities" | "property";
+            /**
+             * @description calculationBy entities allows only count/average with no `property`; calculationBy property requires `property` and forbids func count.
+             * @enum {string}
+             */
+            func: "count" | "average" | "sum" | "min" | "max" | "median";
+            /** @description Required when calculationBy is property; absent when entities. */
+            property?: string;
+            /** @enum {string} */
+            averageOf?: "hour" | "day" | "week" | "month" | "total";
+            measureTimeBy?: string;
+        };
+        AggregationQuery: {
+            /** @enum {string} */
+            combinator: "and" | "or";
+            /** @description Open JSON-Schema-shaped rule entries — stored and shape-checked only. */
+            rules?: Record<string, never>[];
+        };
+        AggregationPropertyDefinition: {
+            title: string;
+            /** @description The target blueprint's identifier. */
+            target: string;
+            calculationSpec: components["schemas"]["AggregationCalculationSpec"];
+            query?: components["schemas"]["AggregationQuery"];
+            /** @description Open JSON-Schema-shaped filter entries — stored and shape-checked only. */
+            pathFilter?: Record<string, never>[];
+        };
+        OwnershipDefinition: {
+            /** @enum {string} */
+            type: "Direct" | "Inherited";
+            title?: string;
+            /** @description Required (and only meaningful) when type is Inherited — 1-10 dot-separated segments, the first naming a relation of this blueprint. Forbidden when type is Direct. */
+            path?: string;
+        };
+        /** @description A registered blueprint (Phase 1 of the Port data-model move — see `.claude/docs/port-data-model.md`). Every optional field is simply ABSENT when unset (never `null`). */
+        Blueprint: {
+            /** Format: int32 */
+            id: number;
+            /** @description Charset [A-Za-z0-9@_.:/=-]. Unique case-insensitively among active blueprints. */
+            identifier: string;
+            title: string;
+            description?: string | null;
+            /** @description Port's icon NAME — a free string; icon pictures are out of scope. */
+            icon?: string | null;
+            schema: components["schemas"]["BlueprintSchema"];
+            relations: {
+                [key: string]: components["schemas"]["RelationDefinition"];
+            };
+            mirrorProperties: {
+                [key: string]: components["schemas"]["MirrorPropertyDefinition"];
+            };
+            calculationProperties: {
+                [key: string]: components["schemas"]["CalculationPropertyDefinition"];
+            };
+            aggregationProperties: {
+                [key: string]: components["schemas"]["AggregationPropertyDefinition"];
+            };
+            ownership?: components["schemas"]["OwnershipDefinition"];
+            /**
+             * Format: int32
+             * @description The creator's user id.
+             */
+            createdBy: number;
+            creatorName: string;
+            creatorDeleted: boolean;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            createdAt: number;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            updatedAt: number;
+        };
+        BlueprintList: {
+            /** @description Active blueprints, identifier-ordered case-insensitively. */
+            items: components["schemas"]["Blueprint"][];
+        };
+        BlueprintRequest: {
+            /** @description Trimmed; charset [A-Za-z0-9@_.:/=-]. */
+            identifier: string;
+            /** @description Trimmed; must not be blank. */
+            title: string;
+            description?: string | null;
+            icon?: string | null;
+            schema?: components["schemas"]["BlueprintSchema"];
+            /** @description Defaults to empty when omitted. */
+            relations?: {
+                [key: string]: components["schemas"]["RelationDefinition"];
+            };
+            /** @description Defaults to empty when omitted. */
+            mirrorProperties?: {
+                [key: string]: components["schemas"]["MirrorPropertyDefinition"];
+            };
+            /** @description Defaults to empty when omitted. */
+            calculationProperties?: {
+                [key: string]: components["schemas"]["CalculationPropertyDefinition"];
+            };
+            /** @description Defaults to empty when omitted. */
+            aggregationProperties?: {
+                [key: string]: components["schemas"]["AggregationPropertyDefinition"];
+            };
+            ownership?: components["schemas"]["OwnershipDefinition"];
         };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
@@ -3659,6 +3956,139 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listBlueprints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlueprintList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createBlueprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlueprintRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new blueprint resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blueprint"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getBlueprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Blueprint"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceBlueprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlueprintRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteBlueprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };

@@ -46,6 +46,7 @@ class MigrationChecksumTest {
         "V24__graph_layout_collapsed.sql" to -1606020242,
         "V25__authentication_sessions.sql" to 298109900,
         "V26__password_reset_tokens.sql" to 414198139,
+        "V27__create_blueprints.sql" to -1662308320,
     )
 
     @Test

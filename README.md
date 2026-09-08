@@ -19,6 +19,11 @@ generated-password reveal, self-service password change):
   included — registry violations, structurally drifted legacy rows, removed namespaces),
   filterable like the Files list plus error-type pills — plus a live reference panel in the
   editor; findings never block saving,
+- **blueprints** (the first step toward [Port.io](https://docs.port.io/context-lake/data-model/configure-data-model/)
+  compatibility): define your own entity kinds at `/blueprints` — typed properties with
+  formats, enums and colours, relations between blueprints, mirror/calculation/aggregation
+  properties and ownership — in a full-page editor with a live preview of the Port-native
+  JSON; ADMIN-curated, readable by everyone,
 - **lenses**: save the current filter set under a name and re-apply it from a combo box on
   any of the Hierarchy, Files, Graph, and Errors views — each lens private (only you) or
   public (visible to everyone, changeable only by its creator),

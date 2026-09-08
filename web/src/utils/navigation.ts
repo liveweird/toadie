@@ -9,6 +9,7 @@ import {
   IconListCheck,
   IconNote,
   IconRecycle,
+  IconSchema,
   IconSitemap,
   IconTag,
   IconToggleLeft,
@@ -16,6 +17,7 @@ import {
   IconUsers,
   type Icon,
 } from "@tabler/icons-react";
+import { blueprintsPath } from "./blueprintLinks";
 import { catalogFilesPath } from "./catalogFileLinks";
 
 export type NavLeaf = {
@@ -49,6 +51,10 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
       { to: "/errors", label: "appShell.nav.errors", icon: IconListCheck },
       { to: "/graph", label: "appShell.nav.graph", icon: IconTopologyStar3 },
     ],
+  },
+  {
+    label: "appShell.section.dataModel",
+    items: [{ to: blueprintsPath, label: "appShell.nav.blueprints", icon: IconSchema }],
   },
   {
     label: "appShell.section.registries",

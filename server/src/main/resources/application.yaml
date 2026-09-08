@@ -35,6 +35,7 @@ ktor:
       - ch.nokillswit.types.EntityTypesRoutesKt.configureEntityTypesRoutes
       - ch.nokillswit.annotations.AnnotationKeyRoutesKt.configureAnnotationKeyRoutes
       - ch.nokillswit.lenses.LensRoutesKt.configureLensRoutes
+      - ch.nokillswit.blueprints.BlueprintRoutesKt.configureBlueprintRoutes
       - ch.nokillswit.auth.AuthRoutesKt.configureAuthRoutes
       - ch.nokillswit.auth.PasswordResetRoutesKt.configurePasswordResetRoutes
       # — catch-all router

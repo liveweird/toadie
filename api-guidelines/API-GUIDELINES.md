@@ -668,6 +668,7 @@ prioritized. Reviewers cite these as "registered gap"; the Spectral ruleset carr
 | API-IDEM-001 | No `Idempotency-Key` handling | Domain no-duplicate `409`s cover double-submits today; adopt the header if external/retrying clients appear |
 | API-HTTP-001 | HTTP/1.1 only (Netty defaults; no edge HTTP/2) | Configure HTTP/2 at the TLS-terminating ingress when one exists |
 | API-META-001/002 | No `x-sla`, no `info.termsOfService` in the spec | Add both to `documentation.yaml` when commitments/terms exist to publish |
+| API-NAME-001 | `date_format` inside a blueprint's `PropertyDefinition` is snake_case | Deliberate: the blueprint wire shape is Port.io's own JSON (`.claude/docs/port-data-model.md`) so a Port export posts unchanged; `@SerialName("date_format")` on `dateFormat` in `blueprints/Blueprint.kt`. Closes only if Port renames the field |
 | API-DOC-004 | Some generic error declarations are inline duplicates rather than `$ref`s | Fold pure duplicates into `#/components/responses` opportunistically; keep case-specific descriptions inline |
 
 ### Lost-update inventory (the API-CACHE-003 row's per-write record)
