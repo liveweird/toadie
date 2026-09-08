@@ -1,0 +1,51 @@
+{
+  "identifier": "team",
+  "title": "Team",
+  "description": "A group of people who own and operate part of the system. Every domain and service points back to one of these — it is where an on-call page or a design question ends up. Set the Slack channel and lead so newcomers know exactly where to ask.",
+  "icon": "Team",
+  "schema": {
+    "properties": {
+      "slack_channel": {
+        "type": "string",
+        "title": "Slack channel",
+        "description": "Where to ask this team a question.",
+        "format": "url"
+      },
+      "lead": {
+        "type": "string",
+        "title": "Lead",
+        "format": "user"
+      },
+      "members": {
+        "type": "array",
+        "title": "Members",
+        "description": "Everyone currently on the team.",
+        "items": { "type": "string", "format": "user" },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "timezone": {
+        "type": "string",
+        "title": "Primary timezone",
+        "enum": ["UTC", "CET", "EST", "PST"],
+        "enumColors": { "UTC": "blue", "CET": "turquoise", "EST": "orange", "PST": "purple" }
+      },
+      "contact": {
+        "type": "string",
+        "title": "Contact email",
+        "format": "email"
+      },
+      "on_call_rotation": {
+        "type": "object",
+        "title": "On-call rotation",
+        "description": "Who to page first, and who to page next.",
+        "properties": {
+          "primary": { "type": "string" },
+          "secondary": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": ["lead"]
+  }
+}

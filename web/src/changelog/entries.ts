@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.23.1",
+    date: "2026-09-08",
+    en: `**A sample blueprint set to load.**
+
+- \`sample-data/blueprints/\` ships eight Port-style blueprints — team/domain/environment/service/workload/deployment/incident/organization — covering every property type, format, relation shape and ownership mode, ready to browse under **Data model**.
+- Load them with \`sample-data/blueprints/load.sh\` (re-runnable, and \`--delete\` to remove the set again). Deliberately not seeded, like the rest of \`sample-data/\`.`,
+    pl: `**Przykładowy zestaw blueprintów do wczytania.**
+
+- \`sample-data/blueprints/\` zawiera osiem blueprintów w stylu Port — team/domain/environment/service/workload/deployment/incident/organization — obejmujących każdy typ i format właściwości, kształt relacji oraz tryb własności, gotowych do przejrzenia w sekcji **Model danych**.
+- Wczytaj je poleceniem \`sample-data/blueprints/load.sh\` (można uruchamiać wielokrotnie, a \`--delete\` usuwa cały zestaw). Podobnie jak reszta \`sample-data/\`, celowo nie są zaseedowane.`,
+  },
+  {
     version: "1.23.0",
     date: "2026-09-08",
     en: `**Blueprints — the first step toward Port compatibility.**

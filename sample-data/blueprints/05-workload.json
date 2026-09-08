@@ -1,0 +1,74 @@
+{
+  "identifier": "workload",
+  "title": "Workload",
+  "description": "Another of Port's default blueprints: one running instance of a service inside one environment — the thing that actually holds replicas and a resource limit. Ownership is inherited from the service it runs, so you never have to set it twice.",
+  "icon": "Deployment",
+  "schema": {
+    "properties": {
+      "replicas": {
+        "type": "number",
+        "title": "Replicas",
+        "minimum": 0
+      },
+      "image_tag": {
+        "type": "string",
+        "title": "Image tag",
+        "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+      },
+      "health": {
+        "type": "string",
+        "title": "Health",
+        "enum": ["healthy", "degraded", "unhealthy"],
+        "enumColors": { "healthy": "green", "degraded": "yellow", "unhealthy": "red" }
+      },
+      "last_deployed": {
+        "type": "string",
+        "title": "Last deployed",
+        "format": "date-time",
+        "date_format": "12-hour"
+      },
+      "resources": {
+        "type": "object",
+        "title": "Resources",
+        "description": "CPU/memory requests and limits, keyed by their k8s field name.",
+        "patternProperties": {
+          "^cpu_": { "type": "string" },
+          "^memory_": { "type": "string" }
+        }
+      }
+    },
+    "required": ["image_tag"]
+  },
+  "relations": {
+    "service": {
+      "title": "Runs service",
+      "target": "service",
+      "required": true,
+      "many": false
+    },
+    "environment": {
+      "title": "Runs in",
+      "target": "environment",
+      "required": true,
+      "many": false
+    }
+  },
+  "mirrorProperties": {
+    "language": {
+      "title": "Language",
+      "path": "service.language"
+    },
+    "env_type": {
+      "title": "Environment type",
+      "path": "environment.type"
+    },
+    "domain": {
+      "title": "Domain",
+      "path": "service.domain.$title"
+    }
+  },
+  "ownership": {
+    "type": "Inherited",
+    "path": "service"
+  }
+}

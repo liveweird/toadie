@@ -1,0 +1,78 @@
+{
+  "identifier": "incident",
+  "title": "Incident",
+  "description": "Something went wrong with a service, and here is the record of it — severity, who responded, and how long it took to resolve. Ownership is inherited from the affected service, so an incident always shows up under the right team without anyone assigning it by hand.",
+  "icon": "Alert",
+  "schema": {
+    "properties": {
+      "severity": {
+        "type": "string",
+        "title": "Severity",
+        "enum": ["sev1", "sev2", "sev3", "sev4"],
+        "enumColors": { "sev1": "red", "sev2": "orange", "sev3": "yellow", "sev4": "lightGray" }
+      },
+      "status": {
+        "type": "string",
+        "title": "Status",
+        "enum": ["open", "investigating", "resolved"],
+        "enumColors": { "open": "red", "investigating": "orange", "resolved": "green" }
+      },
+      "escalation_team": {
+        "type": "string",
+        "title": "Escalation team",
+        "description": "The team this incident escalates to if the responder can't keep up.",
+        "format": "team"
+      },
+      "opened_at": {
+        "type": "string",
+        "title": "Opened at",
+        "format": "date-time"
+      },
+      "resolved_at": {
+        "type": "string",
+        "title": "Resolved at",
+        "format": "date-time"
+      },
+      "resolution_minutes": {
+        "type": "number",
+        "title": "Resolution minutes",
+        "minimum": 0
+      },
+      "postmortem": {
+        "type": "string",
+        "title": "Postmortem",
+        "format": "markdown"
+      },
+      "pagerduty": {
+        "type": "object",
+        "title": "PagerDuty incident",
+        "format": "labeled-url"
+      }
+    },
+    "required": ["severity"]
+  },
+  "relations": {
+    "service": {
+      "title": "Affects service",
+      "target": "service",
+      "required": true,
+      "many": false
+    },
+    "workload": {
+      "title": "Affects workload",
+      "target": "workload",
+      "required": false,
+      "many": false
+    },
+    "responder": {
+      "title": "Responder",
+      "target": "team",
+      "required": false,
+      "many": false
+    }
+  },
+  "ownership": {
+    "type": "Inherited",
+    "path": "service"
+  }
+}
