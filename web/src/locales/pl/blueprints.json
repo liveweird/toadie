@@ -10,6 +10,21 @@
   "preview": "Podgląd JSON",
   "notFound": "Nie znaleziono blueprintu.",
   "advanced": "Zaawansowane",
+  "rows": {
+    "jump": "Przejdź do…",
+    "jumpAria": "Przejdź do wiersza w sekcji {{section}}",
+    "expandAll": "Rozwiń wszystko w sekcji {{section}}",
+    "collapseAll": "Zwiń wszystko w sekcji {{section}}",
+    "toggleAria": "Przełącz {{name}}",
+    "hasErrors": "Ten wiersz zawiera błędy",
+    "new": {
+      "properties": "Nowa właściwość",
+      "relations": "Nowa relacja",
+      "mirrorProperties": "Nowa właściwość lustrzana",
+      "calculationProperties": "Nowa właściwość obliczana",
+      "aggregationProperties": "Nowa właściwość agregowana"
+    }
+  },
   "column": {
     "identifier": "Identyfikator",
     "title": "Tytuł",
@@ -130,12 +145,20 @@
   "movePropertyDown": "Przesuń właściwość {{position}} w dół",
   "addRelation": "Dodaj relację",
   "removeRelationAria": "Usuń relację {{position}}",
+  "moveRelationUp": "Przesuń relację {{position}} w górę",
+  "moveRelationDown": "Przesuń relację {{position}} w dół",
   "addMirror": "Dodaj właściwość lustrzaną",
   "removeMirrorAria": "Usuń właściwość lustrzaną {{position}}",
+  "moveMirrorUp": "Przesuń właściwość lustrzaną {{position}} w górę",
+  "moveMirrorDown": "Przesuń właściwość lustrzaną {{position}} w dół",
   "addCalculation": "Dodaj właściwość obliczaną",
   "removeCalculationAria": "Usuń właściwość obliczaną {{position}}",
+  "moveCalculationUp": "Przesuń właściwość obliczaną {{position}} w górę",
+  "moveCalculationDown": "Przesuń właściwość obliczaną {{position}} w dół",
   "addAggregation": "Dodaj właściwość agregowaną",
   "removeAggregationAria": "Usuń właściwość agregowaną {{position}}",
+  "moveAggregationUp": "Przesuń właściwość agregowaną {{position}} w górę",
+  "moveAggregationDown": "Przesuń właściwość agregowaną {{position}} w dół",
   "toast": {
     "created": "Utworzono blueprint",
     "saved": "Zapisano blueprint",

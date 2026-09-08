@@ -10,6 +10,21 @@
   "preview": "JSON preview",
   "notFound": "Blueprint not found.",
   "advanced": "Advanced",
+  "rows": {
+    "jump": "Jump to…",
+    "jumpAria": "Jump to a row in {{section}}",
+    "expandAll": "Expand all in {{section}}",
+    "collapseAll": "Collapse all in {{section}}",
+    "toggleAria": "Toggle {{name}}",
+    "hasErrors": "This row has errors",
+    "new": {
+      "properties": "New property",
+      "relations": "New relation",
+      "mirrorProperties": "New mirror property",
+      "calculationProperties": "New calculation property",
+      "aggregationProperties": "New aggregation property"
+    }
+  },
   "column": {
     "identifier": "Identifier",
     "title": "Title",
@@ -130,12 +145,20 @@
   "movePropertyDown": "Move property {{position}} down",
   "addRelation": "Add relation",
   "removeRelationAria": "Remove relation {{position}}",
+  "moveRelationUp": "Move relation {{position}} up",
+  "moveRelationDown": "Move relation {{position}} down",
   "addMirror": "Add mirror property",
   "removeMirrorAria": "Remove mirror property {{position}}",
+  "moveMirrorUp": "Move mirror property {{position}} up",
+  "moveMirrorDown": "Move mirror property {{position}} down",
   "addCalculation": "Add calculation property",
   "removeCalculationAria": "Remove calculation property {{position}}",
+  "moveCalculationUp": "Move calculation property {{position}} up",
+  "moveCalculationDown": "Move calculation property {{position}} down",
   "addAggregation": "Add aggregation property",
   "removeAggregationAria": "Remove aggregation property {{position}}",
+  "moveAggregationUp": "Move aggregation property {{position}} up",
+  "moveAggregationDown": "Move aggregation property {{position}} down",
   "toast": {
     "created": "Blueprint created",
     "saved": "Blueprint saved",

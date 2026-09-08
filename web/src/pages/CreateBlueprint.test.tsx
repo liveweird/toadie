@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import CreateBlueprint from "./CreateBlueprint";
 import { jsonResponse } from "../test/http";
@@ -91,6 +91,36 @@ describe("CreateBlueprint page", () => {
     expect(body.identifier).toBe("microservice");
     expect(body.title).toBe("Microservice");
     expect(body.schema).toEqual({ properties: {}, required: [] });
+  });
+
+  test("a collapsed row with a blank title auto-expands on Create and no POST fires", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url === "/api/v1/blueprints") {
+        return Promise.resolve(jsonResponse(200, { items: [] }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderCreate();
+
+    await user.type(await screen.findByLabelText(/^identifier/i), "microservice");
+    await user.type(screen.getByLabelText(/^title/i), "Microservice");
+
+    await user.click(screen.getByRole("button", { name: "Add property" }));
+    const row = screen.getByTestId("properties-row-0");
+    await user.type(within(row).getByRole("textbox", { name: /^property id/i }), "lang");
+    // Leave the property's own Title blank, then collapse the row before saving.
+    await user.click(within(row).getByRole("button", { name: "Toggle lang" }));
+    expect(within(row).queryByRole("textbox", { name: /^title/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    // The blocked submit re-opens the row and focuses it — the hidden required error is
+    // never stranded behind a collapsed header.
+    expect(await within(row).findByRole("textbox", { name: /^title/i })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Toggle lang" })).toHaveAttribute("aria-expanded", "true");
+    expect(within(row).getByRole("textbox", { name: /^title/i })).toHaveAttribute("aria-invalid", "true");
+    expect(mockFetch.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toBe(false);
   });
 
   test("the JSON preview follows the identifier field", async () => {

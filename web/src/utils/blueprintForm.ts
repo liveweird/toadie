@@ -1,3 +1,4 @@
+import type { FormErrors } from "@mantine/form";
 import type { TFunction } from "i18next";
 import type { Blueprint, BlueprintBody } from "../api/blueprints";
 import { saveErrorMessage } from "./saveError";
@@ -186,6 +187,43 @@ export type BlueprintFormValues = {
   ownershipTitle: string;
   ownershipPath: string;
 };
+
+// -- The five row families (EditorRowList, v1.23.2) -------------------------------------
+
+/** The five foldable row lists, in the fixed order the editor renders them — also the
+ *  order a blocked submit reveals errors in (family, then row position). */
+export const ROW_FAMILIES = [
+  "properties",
+  "relations",
+  "mirrorProperties",
+  "calculationProperties",
+  "aggregationProperties",
+] as const;
+export type RowFamily = (typeof ROW_FAMILIES)[number];
+
+const ROW_FAMILY_ERROR_RE =
+  /^(properties|relations|mirrorProperties|calculationProperties|aggregationProperties)\.(\d+)\./;
+
+/** The rows carrying at least one validation error, deduped and ordered family-then-index
+ *  (`ROW_FAMILIES` order, then row position) — feeds the blocked-submit auto-reveal
+ *  (`hooks/useBlueprintRowExpansion.ts`'s `revealErrors`). */
+export function rowsWithErrors(errors: FormErrors): { family: RowFamily; index: number }[] {
+  const seen = new Set<string>();
+  const found: { family: RowFamily; index: number }[] = [];
+  for (const key of Object.keys(errors)) {
+    const match = ROW_FAMILY_ERROR_RE.exec(key);
+    if (!match) continue;
+    const family = match[1] as RowFamily;
+    const index = Number(match[2]);
+    const dedupeKey = `${family}.${index}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    found.push({ family, index });
+  }
+  return ROW_FAMILIES.flatMap((family) =>
+    found.filter((entry) => entry.family === family).sort((a, b) => a.index - b.index),
+  );
+}
 
 let keyCounter = 0;
 function newDraftKey(prefix: string): string {
