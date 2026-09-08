@@ -72,6 +72,8 @@ const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/files/import", heading: "Import catalog files" },
   { path: "/errors", heading: "Errors" },
   { path: "/graph", heading: "Graph" },
+  { path: "/blueprints", heading: "Blueprints" },
+  { path: "/blueprints/new", heading: "New blueprint" },
   { path: "/labels", heading: "Labels" },
   { path: "/annotations", heading: "Annotations" },
   { path: "/tags", heading: "Tags" },

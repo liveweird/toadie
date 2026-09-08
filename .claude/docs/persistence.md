@@ -27,10 +27,18 @@ The current R2DBC path may finish cancellation only after a blocking database lo
 released. A cancelled write then rolls back; this protocol does not add a lock-wait deadline
 or promise immediate database-query cancellation.
 
+**Blueprint targets under concurrency (V27).** `BlueprintService` takes the same
+transaction-scoped `SHARE ROW EXCLUSIVE` lock on `blueprints` before the first read in
+create/update/delete: every relation/aggregation `target` inside a definition is a byte-exact
+blueprint identifier held in JSON, not a foreign key, so the "target exists", "rename cascades
+into the referrers" and "a targeted blueprint cannot be deleted" rules are cooperating-writer
+rules over ≤200 rows loaded once under the lock. The same caveats apply verbatim: direct SQL
+writers bypass it, readers never wait, cancellation may land only after the lock releases.
+
 The lock-mode compatibility and transaction lifetime follow the
 [PostgreSQL explicit-locking rules](https://www.postgresql.org/docs/18/explicit-locking.html).
 
-Current migrations are `V1`–`V26` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V27` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -81,6 +89,21 @@ compose two independent service transactions. Concurrent same/sibling confirmati
 winner; epoch checks also invalidate links after email/role/password changes or deletion.
 Migration checksums, including V26, are pinned in `MigrationChecksumTest`.
 
+**V27 — blueprints.** `blueprints` (Port.io-style user-definable entity kinds, v1.23.0):
+identity columns denormalized for listing and uniqueness — `identifier` (≤100, the Port charset)
+, `title` (≤100), nullable `description` (≤2000) and `icon` (a Port icon NAME) — plus ONE
+`definition` TEXT holding the rest of the Port document (`schema`, `relations`,
+`mirrorProperties`, `calculationProperties`, `aggregationProperties`, `ownership`) as JSON
+encoded with `explicitNulls = false` (the `catalog_files.content`/`lenses.filters` precedent,
+replaced whole on every save), `created_by` FK (`ON DELETE RESTRICT`, the V5/V20 shape),
+epoch-millis timestamps, soft-delete, the partial unique index `uq_blueprints_identifier_active`
+over `LOWER(identifier)` active rows (no case twins; a soft-deleted blueprint frees its
+identifier — its `UNIQUE_CONSTRAINT_DETAILS` entry names the clash), and the created_by /
+marked_as_deleted indexes. Relation and aggregation targets inside definitions are byte-exact
+identifiers cascaded on rename by the service under the table lock (above). No seed — Port's
+default and system blueprints (`_user`, `_team`, …) arrive with the phase that models them.
+Migration checksums, including V27, are pinned in `MigrationChecksumTest`.
+
 ### Soft delete (convention)
 
 **V25 — authentication sessions.** `users.auth_version BIGINT NOT NULL DEFAULT 0` is the
@@ -94,7 +117,7 @@ before touching the session and reject a stale epoch. Cleanup uses its own trans
 avoid reversing that lock order. Renewal updates only an existing live family and never
 shortens its expiry. No runtime DDL; prior migration checksums remain untouched.
 
-`users`, `catalog_files`, `dictionary_entries`, `labels`, `annotation_keys`, `tag_categories`, `entity_types`, and `lenses` are **soft-deleted** — rows are flagged, never physically removed; every future business entity follows the same convention. Only join/audit/detail tables (today: `password_reset_tokens` (V26, expiring single-use credentials), `auth_sessions` (V25, expiring login families deleted at logout and pruned on login), `revoked_tokens`, a pure token registry, `user_disabled_features`, a pure flag join whose PUT is a wholesale replace, `graph_layouts` (V19), a pure per-user settings row whose PUT is a wholesale replace, and `catalog_file_events` (V23), the immutable audit trail itself — none carry history worth keeping, or ARE the history) hard-delete — a new hard-delete table needs a documented justification, exactly like Lettuce's exceptions list. To add soft-delete to a new entity, follow the established pattern (reference implementations: `users/UserService.kt`, `catalog/CatalogFileService.kt` — the latter shows the full CRUD shape incl. the delete route):
+`users`, `catalog_files`, `dictionary_entries`, `labels`, `annotation_keys`, `tag_categories`, `entity_types`, `lenses`, and `blueprints` are **soft-deleted** — rows are flagged, never physically removed; every future business entity follows the same convention. Only join/audit/detail tables (today: `password_reset_tokens` (V26, expiring single-use credentials), `auth_sessions` (V25, expiring login families deleted at logout and pruned on login), `revoked_tokens`, a pure token registry, `user_disabled_features`, a pure flag join whose PUT is a wholesale replace, `graph_layouts` (V19), a pure per-user settings row whose PUT is a wholesale replace, and `catalog_file_events` (V23), the immutable audit trail itself — none carry history worth keeping, or ARE the history) hard-delete — a new hard-delete table needs a documented justification, exactly like Lettuce's exceptions list. To add soft-delete to a new entity, follow the established pattern (reference implementations: `users/UserService.kt`, `catalog/CatalogFileService.kt` — the latter shows the full CRUD shape incl. the delete route):
 
 1. **Migration** — `marked_as_deleted BOOLEAN NOT NULL DEFAULT FALSE` in the CREATE (a retrofit adds the column plus `CREATE INDEX idx_<t>_marked_as_deleted ON <t>(marked_as_deleted);`).
 2. **Exposed table** — add `val markedAsDeleted = bool("marked_as_deleted").default(false)` and a private helper `fun active(): Op<Boolean> = <T>.markedAsDeleted eq false`.

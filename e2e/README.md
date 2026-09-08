@@ -73,6 +73,8 @@ from Lettuce, that any new or edited spec must satisfy:
   session's UI, so a Polish seed admin would flip parallel specs mid-run);
   `namespaces` owns its throwaway dictionary entries and user;
   `lenses` owns its throwaway lenses, files, and users (see its own bullet below);
+  `blueprints` owns its two throwaway `e2e-bp-*` blueprints and its user (the blueprint
+  registry's only in-run writer);
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
@@ -106,6 +108,11 @@ from Lettuce, that any new or edited spec must satisfy:
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
   first moving label registration into global-setup (the run-namespace pattern). V22 seeds
   eight curated keys — no spec may edit or delete those either.
+- **The blueprint registry is single-writer state the same way.** Blueprint identifiers are
+  unique and relation targets name other blueprints, so a concurrently deleted or renamed
+  blueprint breaks a parallel spec's saves — **`blueprints.spec.ts` is that registry's ONLY
+  in-run writer**, creating and deleting only its own unique `e2e-bp-*` blueprints (the
+  registry has no seed to protect).
 - **The lens store is per-run unique-name state.** Lenses are per-user content (private by
   default) and names are only unique per owner, so parallel specs cannot clash as long as
   every lens a spec saves carries a run-unique `e2e-lens-*` name and is deleted by its own
@@ -180,6 +187,12 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`quick-view.spec.ts`](scenarios/quick-view.md) — the quick-view drawer opens from a
   row menu, is addressed by `?file=`, survives a reload, scans clean, and hands over to the
   editor (owns one throwaway System in the `render` run namespace).
+- [`blueprints.spec.ts`](scenarios/blueprints.md) — the blueprint registry (Port
+  compatibility, phase 1): editor validation → create a blueprint with an enum string property
+  and a required number property, watching the JSON preview → a second blueprint relating to
+  it → the blocked delete of a targeted blueprint → a rename that cascades into the dependent's
+  relation target → the regular user's read-only view and the editor-route bounce → cleanup;
+  the registry's only in-run writer.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).
