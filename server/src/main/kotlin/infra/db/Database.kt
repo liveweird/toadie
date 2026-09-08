@@ -2,6 +2,8 @@ package ch.nokillswit.infra.db
 
 import ch.nokillswit.annotations.AnnotationKeyService
 import ch.nokillswit.annotations.AnnotationKeyServiceKey
+import ch.nokillswit.blueprints.BlueprintService
+import ch.nokillswit.blueprints.BlueprintServiceKey
 import ch.nokillswit.auth.TokenBlocklistService
 import ch.nokillswit.auth.TokenBlocklistServiceKey
 import ch.nokillswit.auth.AuthSessionService
@@ -51,6 +53,7 @@ suspend fun Application.configureDatabase() {
     attributes.put(TagCategoryServiceKey, TagCategoryService(database))
     attributes.put(EntityTypesServiceKey, EntityTypesService(database))
     attributes.put(AnnotationKeyServiceKey, AnnotationKeyService(database))
+    attributes.put(BlueprintServiceKey, BlueprintService(database))
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
     attributes.put(AuthSessionServiceKey, AuthSessionService(database))
     attributes.put(PasswordResetServiceKey, PasswordResetService(

@@ -648,6 +648,52 @@ object TestEntityTypes {
     }
 }
 
+/**
+ * Direct access to the blueprint registry (V27) — a Toadie-first feature (no shared seed
+ * state, unlike labels/tags/entity-types: the registry starts empty). Every test mints a
+ * unique `bp-<uuid8>` identifier and removes what it created via [remove] (soft-delete
+ * only — there is nothing to "ensure" in place of, unlike the seeded registries above).
+ */
+object TestBlueprints {
+    val service: ch.nokillswit.blueprints.BlueprintService by lazy {
+        ch.nokillswit.blueprints.BlueprintService(sharedTestDatabase)
+    }
+
+    data class RawRow(val id: UInt, val identifier: String, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.blueprints.BlueprintService.Blueprints
+        t.selectAll().map { RawRow(it[t.id].value, it[t.identifier], it[t.markedAsDeleted]) }.toList()
+    }
+
+    /**
+     * Soft-deletes the active blueprints holding [identifiers] (a no-op for identifiers not
+     * present) — ORDER-INDEPENDENT: a blueprint targeted by another in the same set 409s until
+     * its referrer is removed first, so this loops, catching that conflict and retrying the
+     * survivors, until a full pass makes no further progress (a real leftover referrer outside
+     * this call's set, or nothing left to do).
+     */
+    suspend fun remove(vararg identifiers: String) {
+        var remaining = identifiers.toSet()
+        while (remaining.isNotEmpty()) {
+            val toDelete = service.list().filter { bp -> remaining.any { it.equals(bp.identifier, ignoreCase = true) } }
+            if (toDelete.isEmpty()) return
+            val survivors = mutableSetOf<String>()
+            var progressed = false
+            for (blueprint in toDelete) {
+                try {
+                    service.delete(blueprint.id)
+                    progressed = true
+                } catch (_: ch.nokillswit.authz.ConflictException) {
+                    survivors += blueprint.identifier
+                }
+            }
+            if (!progressed) return
+            remaining = survivors
+        }
+    }
+}
+
 // Bootstrap tests (and prod-mode boot tests) rotate the seed admin password in the SHARED
 // container. Call this afterwards to put the V3 seed state back so later tests (and re-runs)
 // see the pristine seed.

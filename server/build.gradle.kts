@@ -36,14 +36,44 @@ kotlin {
 
 kover {
     reports {
+        filters {
+            excludes {
+                // The Port blueprint wire DTOs (blueprints/Blueprint.kt) are PURE data classes — every
+                // rule lives in BlueprintValidation.kt/PropertyValidation.kt, every mapper in BlueprintKt.
+                // Their ~65 optional fields make the compiler-generated default-args and kotlinx-serialization
+                // constructors carry one synthetic branch per field, half of which no Kotlin call site can
+                // reach (measured: three test strategies left PropertyDefinition at exactly 97/97). Excluding
+                // the data classes (and their generated $serializer/$Companion) keeps the branch floor honest
+                // about LOGIC; BlueprintWireNamesTest still pins their wire shape. Extend this list only with
+                // another logic-free @Serializable DTO family, never with a class that carries a rule.
+                classes(
+                    "ch.nokillswit.blueprints.PropertyDefinition", "ch.nokillswit.blueprints.PropertyDefinition$*",
+                    "ch.nokillswit.blueprints.ArrayItems", "ch.nokillswit.blueprints.ArrayItems$*",
+                    "ch.nokillswit.blueprints.SpecAuthentication", "ch.nokillswit.blueprints.SpecAuthentication$*",
+                    "ch.nokillswit.blueprints.BlueprintSchema", "ch.nokillswit.blueprints.BlueprintSchema$*",
+                    "ch.nokillswit.blueprints.RelationDefinition", "ch.nokillswit.blueprints.RelationDefinition$*",
+                    "ch.nokillswit.blueprints.MirrorPropertyDefinition", "ch.nokillswit.blueprints.MirrorPropertyDefinition$*",
+                    "ch.nokillswit.blueprints.CalculationPropertyDefinition", "ch.nokillswit.blueprints.CalculationPropertyDefinition$*",
+                    "ch.nokillswit.blueprints.AggregationCalculationSpec", "ch.nokillswit.blueprints.AggregationCalculationSpec$*",
+                    "ch.nokillswit.blueprints.AggregationQuery", "ch.nokillswit.blueprints.AggregationQuery$*",
+                    "ch.nokillswit.blueprints.AggregationPropertyDefinition", "ch.nokillswit.blueprints.AggregationPropertyDefinition$*",
+                    "ch.nokillswit.blueprints.OwnershipDefinition", "ch.nokillswit.blueprints.OwnershipDefinition$*",
+                    "ch.nokillswit.blueprints.BlueprintDefinition", "ch.nokillswit.blueprints.BlueprintDefinition$*",
+                    "ch.nokillswit.blueprints.BlueprintRequest", "ch.nokillswit.blueprints.BlueprintRequest$*",
+                    "ch.nokillswit.blueprints.BlueprintResponse", "ch.nokillswit.blueprints.BlueprintResponse$*",
+                    "ch.nokillswit.blueprints.BlueprintList", "ch.nokillswit.blueprints.BlueprintList$*",
+                )
+            }
+        }
         verify {
             rule {
-                // Line-coverage floor (actual ~97.7%, 2026-08-31 check-up re-measure).
-                minBound(97)
-                // Branch-coverage floor (actual ~76.0%, 2026-08-31 check-up re-measure; the gap to 100% is dominated
-                // by kotlinx-serialization synthetic branches in @Serializable data classes). NOTE:
-                // `check` runs only koverVerify — run `:server:koverXmlReport` for fresh actuals.
-                minBound(76, coverageUnits = kotlinx.kover.gradle.plugin.dsl.CoverageUnit.BRANCH)
+                // Line-coverage floor (actual ~98.0%, 2026-09-08 blueprints re-measure).
+                minBound(98)
+                // Branch-coverage floor (actual ~79.3%, 2026-09-08 blueprints re-measure, with the blueprint DTO
+                // exclusion above; the remaining gap to 100% is dominated by kotlinx-serialization synthetic
+                // branches in the other @Serializable data classes). NOTE: `check` runs only koverVerify — run
+                // `:server:koverXmlReport` for fresh actuals.
+                minBound(79, coverageUnits = kotlinx.kover.gradle.plugin.dsl.CoverageUnit.BRANCH)
             }
         }
     }
