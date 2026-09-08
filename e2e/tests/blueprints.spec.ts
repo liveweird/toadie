@@ -27,7 +27,7 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   const firstIdentifier = uniqueText("e2e-bp");
   const depIdentifier = uniqueText("e2e-bp-dep");
 
-  // 1. Open Blueprints from the nav's Data model section.
+  // 1. Open Blueprints from the nav's Port Ontology section.
   await page.getByRole("link", { name: "Blueprints" }).click();
   await expect(page.getByRole("heading", { name: "Blueprints" })).toBeVisible();
   await expect(page.getByRole("link", { name: "New blueprint" })).toBeVisible();

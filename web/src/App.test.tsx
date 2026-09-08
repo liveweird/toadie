@@ -53,7 +53,7 @@ describe("App shell", () => {
     test("the sidebar renders its sections with every leaf link addressable", async () => {
       renderApp("/");
       // Sections are labelled groups, never toggles — every leaf is in the DOM immediately.
-      const registries = await screen.findByRole("group", { name: "Registries" });
+      const registries = await screen.findByRole("group", { name: "Dictionaries" });
       for (const [name, href] of [
         ["Namespaces", "/namespaces"],
         ["Types", "/types"],
