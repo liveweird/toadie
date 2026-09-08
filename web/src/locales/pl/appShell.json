@@ -6,6 +6,7 @@
     "catalogFiles": "Pliki",
     "errors": "Błędy",
     "graph": "Graf",
+    "blueprints": "Blueprinty",
     "namespaces": "Przestrzenie nazw",
     "labels": "Etykiety",
     "tags": "Tagi",
@@ -19,6 +20,7 @@
   },
   "section": {
     "catalog": "Katalog",
+    "dataModel": "Model danych",
     "registries": "Rejestry",
     "administration": "Administracja"
   },

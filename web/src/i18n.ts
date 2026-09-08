@@ -11,6 +11,7 @@ import enCommon from "./locales/en/common.json";
 import enAppShell from "./locales/en/appShell.json";
 import enAnnotations from "./locales/en/annotations.json";
 import enAuth from "./locales/en/auth.json";
+import enBlueprints from "./locales/en/blueprints.json";
 import enCatalog from "./locales/en/catalog.json";
 import enChangelog from "./locales/en/changelog.json";
 import enErrors from "./locales/en/errors.json";
@@ -63,6 +64,7 @@ export const en = {
   appShell: enAppShell,
   annotations: enAnnotations,
   auth: enAuth,
+  blueprints: enBlueprints,
   catalog: enCatalog,
   changelog: enChangelog,
   errors: enErrors,
