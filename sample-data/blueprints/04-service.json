@@ -1,0 +1,182 @@
+{
+  "identifier": "service",
+  "title": "Service",
+  "description": "A deployable unit of software owned by a team — this is the blueprint you will touch most often. It belongs to a domain, is owned by a team, and may depend on other services (including itself, transitively, through the dependency graph). Its `status` is derived rather than typed in by hand.",
+  "icon": "Microservice",
+  "schema": {
+    "properties": {
+      "language": {
+        "type": "string",
+        "title": "Language",
+        "enum": ["kotlin", "java", "python", "go", "typescript"],
+        "enumColors": {
+          "kotlin": "gold",
+          "java": "silver",
+          "python": "paleBlue",
+          "go": "blue",
+          "typescript": "turquoise"
+        },
+        "default": "kotlin"
+      },
+      "repository": {
+        "type": "string",
+        "title": "Repository",
+        "format": "url"
+      },
+      "readme": {
+        "type": "string",
+        "title": "README",
+        "format": "markdown"
+      },
+      "openapi": {
+        "type": "string",
+        "title": "OpenAPI definition",
+        "format": "url",
+        "spec": "open-api"
+      },
+      "asyncapi": {
+        "type": "string",
+        "title": "AsyncAPI definition",
+        "format": "url",
+        "spec": "async-api"
+      },
+      "metrics": {
+        "type": "string",
+        "title": "Metrics dashboard",
+        "description": "Embedded behind SSO — Toadie stores the authorization details, never a credential.",
+        "format": "url",
+        "spec": "embedded-url",
+        "specAuthentication": {
+          "authorizationUrl": "https://auth.example.com/oauth/authorize",
+          "tokenUrl": "https://auth.example.com/oauth/token",
+          "clientId": "metrics-viewer",
+          "authorizationScope": ["read:metrics"]
+        }
+      },
+      "on_call": {
+        "type": "string",
+        "title": "On-call",
+        "format": "user"
+      },
+      "tier": {
+        "type": "number",
+        "title": "Tier",
+        "description": "1 is the most critical.",
+        "enum": [1, 2, 3, 4],
+        "enumColors": { "1": "red", "2": "orange", "3": "yellow", "4": "green" }
+      },
+      "lines_of_code": {
+        "type": "number",
+        "title": "Lines of code",
+        "minimum": 0,
+        "exclusiveMaximum": 1000000
+      },
+      "error_budget": {
+        "type": "number",
+        "title": "Error budget (%)",
+        "minimum": 0,
+        "maximum": 100,
+        "default": 99.9
+      },
+      "handles_pii": {
+        "type": "boolean",
+        "title": "Handles PII"
+      },
+      "labels": {
+        "type": "array",
+        "title": "Labels",
+        "items": { "type": "string" },
+        "default": ["public"]
+      },
+      "ports": {
+        "type": "array",
+        "title": "Ports",
+        "items": { "type": "number" },
+        "maxItems": 10
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "description": "Runbooks, dashboards, anything worth bookmarking.",
+        "items": { "type": "object" }
+      },
+      "dashboard": {
+        "type": "object",
+        "title": "Dashboard",
+        "format": "labeled-url",
+        "default": { "url": "https://dashboard.example.com/service", "displayText": "Dashboard" }
+      },
+      "contract": {
+        "type": "string",
+        "title": "Contract",
+        "format": "proto"
+      },
+      "launched": {
+        "type": "string",
+        "title": "Launched",
+        "format": "date-time",
+        "date_format": "relative"
+      },
+      "sunset_at": {
+        "type": "string",
+        "title": "Sunset at",
+        "description": "Fires TIMER_EXPIRED once this passes — set it when a service is on its way out.",
+        "format": "timer"
+      },
+      "alerts_email": {
+        "type": "string",
+        "title": "Alerts email",
+        "format": "idn-email"
+      }
+    },
+    "required": ["repository"]
+  },
+  "relations": {
+    "domain": {
+      "title": "Part of domain",
+      "target": "domain",
+      "required": true,
+      "many": false
+    },
+    "owned_by": {
+      "title": "Owned by",
+      "target": "team",
+      "required": false,
+      "many": false
+    },
+    "depends_on": {
+      "title": "Depends on",
+      "description": "Other services this one calls — may include itself, if a self-hosted sidecar counts.",
+      "target": "service",
+      "required": false,
+      "many": true
+    }
+  },
+  "mirrorProperties": {
+    "domain_criticality": {
+      "title": "Domain criticality",
+      "path": "domain.criticality"
+    },
+    "domain_title": {
+      "title": "Domain",
+      "path": "domain.$title"
+    }
+  },
+  "calculationProperties": {
+    "status": {
+      "title": "Status",
+      "type": "string",
+      "calculation": "if .properties.handles_pii then \"REVIEW\" else \"OK\" end",
+      "colorized": true,
+      "colors": { "OK": "green", "REVIEW": "yellow" }
+    },
+    "is_critical": {
+      "title": "Is critical",
+      "type": "boolean",
+      "calculation": ".properties.tier == 1"
+    }
+  },
+  "ownership": {
+    "type": "Direct"
+  }
+}

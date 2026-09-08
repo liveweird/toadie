@@ -1,0 +1,90 @@
+{
+  "identifier": "organization",
+  "title": "Organization",
+  "description": "Another of Port's default blueprints — the single top-of-tree entity summarizing the whole landscape below it: every domain, every team, and every rollup number that answers \"how are we doing\" without opening a dashboard.",
+  "icon": "Org",
+  "schema": {
+    "properties": {
+      "legal_name": {
+        "type": "string",
+        "title": "Legal name"
+      }
+    },
+    "required": ["legal_name"]
+  },
+  "relations": {
+    "domains": {
+      "title": "Domains",
+      "target": "domain",
+      "required": false,
+      "many": true
+    },
+    "teams": {
+      "title": "Teams",
+      "target": "team",
+      "required": false,
+      "many": true
+    }
+  },
+  "aggregationProperties": {
+    "service_count": {
+      "title": "Service count",
+      "target": "service",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" }
+    },
+    "open_incidents": {
+      "title": "Open incidents",
+      "target": "incident",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "query": {
+        "combinator": "and",
+        "rules": [{ "property": "status", "operator": "!=", "value": "resolved" }]
+      }
+    },
+    "deploys_per_week": {
+      "title": "Deploys per week",
+      "target": "deployment",
+      "calculationSpec": {
+        "calculationBy": "entities",
+        "func": "average",
+        "averageOf": "week",
+        "measureTimeBy": "$createdAt"
+      }
+    },
+    "mean_time_to_resolve": {
+      "title": "Mean time to resolve",
+      "target": "incident",
+      "calculationSpec": { "calculationBy": "property", "func": "average", "property": "resolution_minutes" }
+    },
+    "sev1_incidents": {
+      "title": "Sev1 incidents",
+      "target": "incident",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "query": {
+        "combinator": "and",
+        "rules": [{ "property": "severity", "operator": "=", "value": "sev1" }]
+      },
+      "pathFilter": [{ "relation": "responder" }]
+    },
+    "total_lines_of_code": {
+      "title": "Total lines of code",
+      "target": "service",
+      "calculationSpec": { "calculationBy": "property", "func": "sum", "property": "lines_of_code" }
+    },
+    "min_replicas": {
+      "title": "Smallest workload",
+      "target": "workload",
+      "calculationSpec": { "calculationBy": "property", "func": "min", "property": "replicas" }
+    },
+    "max_duration": {
+      "title": "Longest deployment",
+      "target": "deployment",
+      "calculationSpec": { "calculationBy": "property", "func": "max", "property": "duration_seconds" }
+    },
+    "median_error_budget": {
+      "title": "Median error budget",
+      "target": "service",
+      "calculationSpec": { "calculationBy": "property", "func": "median", "property": "error_budget" }
+    }
+  }
+}

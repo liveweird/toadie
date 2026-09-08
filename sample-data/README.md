@@ -125,3 +125,51 @@ whole difference.
 The catalog is soft-deleted like everything else — delete the files from the Files list, or
 `docker compose down -v` to drop the volume and come back to a database seeded with just the
 registries.
+
+## Blueprints (Port)
+
+`blueprints/` is a second, independent sample set for the **Blueprints** feature (v1.23.0 —
+Toadie's first step toward Port.io's data model, `.claude/docs/port-data-model.md`): eight
+Port-native blueprint JSON documents, one `POST /api/v1/blueprints` body each, numbered in
+**dependency order** — a relation or aggregation `target` must already exist (or be the
+blueprint itself), so `service.depends_on` can self-reference but `workload.service` needs
+`service` to have loaded first. There is no import UI for blueprints (unlike the catalog
+above), so this ships its own loader.
+
+| # | identifier | What it showcases |
+|---|---|---|
+| 01 | `team` | the stand-in for Port's `_team`: url/user/email string formats, an array of user with `uniqueItems`/`minItems`, an enum with colours, an object with `properties`/`additionalProperties` |
+| 02 | `domain` | a relation to `team`; `pattern`+`minLength`/`maxLength`; markdown; Direct ownership with a title |
+| 03 | `environment` | Port's default: yaml, ipv4/ipv6, a boolean default, three more enum colours (the last three land on `service.language`), `date_format: 24-hour` |
+| 04 | `service` | the showcase: all three `spec` values (`open-api`/`async-api`/`embedded-url` with `specAuthentication`), `labeled-url`, proto/timer/idn-email, every number bound, a `default` of every type, relations single/many/required/self (`depends_on` → itself), mirror properties including `domain.$title`, colorized string + boolean calculation properties, Direct ownership |
+| 05 | `workload` | Port's default: two required relations, `patternProperties`, a nested mirror path `service.domain.$title`, Inherited ownership |
+| 06 | `deployment` | `exclusiveMinimum`, a self-target `entities/count` aggregation (`sibling_deploys`) |
+| 07 | `incident` | the `team` string format, severity/status enums with colours, Inherited ownership |
+| 08 | `organization` | Port's default, the aggregation showcase: nine aggregations spanning `entities`/`property` calculation, every `func` (count/average/sum/min/max/median), a `query`, and a `pathFilter` |
+
+Across the set: all 5 property types, all 12 string formats, `labeled-url`, all 3 `spec`s, all
+14 enum colours, every validation field (`pattern`/min·max length/items/numeric bounds),
+every `date_format` variant, every relation shape, both ownership modes, and every
+aggregation `func` — pinned by `SampleBlueprintsTest` (`.claude/docs/testing.md`).
+
+**Loading it** — `sample-data/blueprints/load.sh` (bash, needs `curl` + `jq`): logs in as the
+seed admin (override with `TOADIE_URL`/`TOADIE_EMAIL`/`TOADIE_PASSWORD`) and `POST`s each file
+in order, printing `created <identifier>` (`201`) or `exists, skipped: <identifier>` (`409` —
+re-runnable) per file, and exiting `1` on any other status with the problem detail. The token
+is never printed.
+
+```bash
+sample-data/blueprints/load.sh
+```
+
+**Clearing it** — `sample-data/blueprints/load.sh --delete` removes the set in REVERSE
+dependency order (so a target is never deleted while an earlier blueprint still relates or
+aggregates to it); a `409` means something outside the sample set still targets it, and is
+reported rather than forced.
+
+```bash
+sample-data/blueprints/load.sh --delete
+```
+
+Like the catalog file above, the blueprint registry is deliberately **NOT seeded** — no
+migration inserts a blueprint, so a fresh environment's `/blueprints` page starts empty.

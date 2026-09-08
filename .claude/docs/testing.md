@@ -161,7 +161,12 @@ that a response carries NO `null` members (assert on the raw body, not a decoded
 feature-local `explicitNulls = false` serializer is what keeps the wire Port-native), the
 unknown-key 400, the cascade rename observed on the dependent's GET, and the delete 409 naming
 the referrers; `BlueprintConcurrencyTest` is the tag-category held-lock proof for a relation
-create racing its target's delete (one wins, never a dangling target).
+create racing its target's delete (one wins, never a dangling target). `SampleBlueprintsTest`
+(v1.23.1) is executable documentation for `sample-data/blueprints/`: it POSTs the eight
+numbered sample files in dependency order, pins their `blueprintJson` round trip, and asserts
+the showcase union (every property type/format/spec, all 14 enum colours, both ownership
+modes, a self-relation, and both aggregation `calculationBy` modes) so the set can never
+silently lose a feature it claims to demonstrate.
 
 **Dependency locking.** The Gradle build resolves against the committed lockfiles (`core/` + `server/gradle.lockfile`, the root `settings-` and `buildscript-gradle.lockfile`; enabled in the root `build.gradle.kts`, DEFAULT lock mode): a transitive version outside the lock state fails resolution. After a dependency change run `./gradlew build --write-locks` and commit the lockfiles; the Dockerfile copies them into the build stage, so a forgotten lockfile also fails the image build.
 

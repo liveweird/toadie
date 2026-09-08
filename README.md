@@ -73,7 +73,10 @@ lifecycles, per-kind types, labels, tag categories and annotation keys — but w
 catalog**. To get something to look at, load [`sample-data/`](sample-data/README.md): a
 34-entity landscape covering all seven kinds, pasted or picked on the **Import** page. It
 speaks only the seeded vocabulary, and carries four deliberately broken references so the
-Errors report and the Graph have something to show.
+Errors report and the Graph have something to show. The blueprint registry (`/blueprints`)
+starts empty too — load [`sample-data/blueprints/`](sample-data/README.md#blueprints-port)
+with `sample-data/blueprints/load.sh` for eight Port-native blueprints covering every
+property type, format, relation shape and ownership mode.
 
 ## Running on Kubernetes (local)
 
