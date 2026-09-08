@@ -16,7 +16,13 @@ const STORED = {
   identifier: "microservice",
   title: "Microservice",
   description: "A deployable unit.",
-  schema: { properties: { language: { type: "string", title: "Language" } }, required: ["language"] },
+  schema: {
+    properties: {
+      language: { type: "string", title: "Language" },
+      priority: { type: "number", title: "Priority" },
+    },
+    required: ["language"],
+  },
   relations: {},
   mirrorProperties: {},
   calculationProperties: {},
@@ -105,6 +111,25 @@ describe("EditBlueprint page", () => {
     const body = JSON.parse((putCall![1] as RequestInit).body as string);
     expect(body.identifier).toBe("microservice");
     expect(body.schema.required).toEqual(["language"]);
+  });
+
+  test("the stored first property starts expanded, the second starts collapsed", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url === "/api/v1/blueprints/7") {
+        return Promise.resolve(jsonResponse(200, STORED));
+      }
+      if (method === "GET" && url === "/api/v1/blueprints") {
+        return Promise.resolve(jsonResponse(200, { items: [STORED] }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderEdit();
+
+    const languageToggle = await screen.findByRole("button", { name: "Toggle language" });
+    expect(languageToggle).toHaveAttribute("aria-expanded", "true");
+    const priorityToggle = screen.getByRole("button", { name: "Toggle priority" });
+    expect(priorityToggle).toHaveAttribute("aria-expanded", "false");
   });
 
   test("404 on load shows the not-found alert with a back link", async () => {

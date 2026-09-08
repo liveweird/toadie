@@ -5,6 +5,7 @@ import { type UseFormReturnType } from "@mantine/form";
 import BlueprintFormFields from "./BlueprintFormFields";
 import CodePreviewCard from "./CodePreviewCard";
 import PageHeader from "./PageHeader";
+import { useBlueprintRowExpansion } from "../hooks/useBlueprintRowExpansion";
 import { toBlueprintRequest, type BlueprintFormValues } from "../utils/blueprintForm";
 import { blueprintsPath } from "../utils/blueprintLinks";
 import classes from "../theme.module.css";
@@ -14,7 +15,10 @@ import classes from "../theme.module.css";
  * split (7/5 grid, sticky live preview, sticky Cancel/Save bar, no tabs), minus the
  * findings/history panels a blueprint definition has no equivalent of: there are no soft
  * findings (nothing here resolves against other stored content the way a catalog reference
- * does) and no per-file change history yet.
+ * does) and no per-file change history yet. Owns the row-fold state (v1.23.2,
+ * `hooks/useBlueprintRowExpansion.ts`) shared by every family's `EditorRowList` and wires it
+ * into the validation-failure branch of `form.onSubmit`, so a blocked save reveals every
+ * offending row instead of stranding its error behind a collapsed header.
  */
 export default function BlueprintEditor({
   title,
@@ -32,6 +36,7 @@ export default function BlueprintEditor({
   submitting: boolean;
 }) {
   const { t } = useTranslation();
+  const expansion = useBlueprintRowExpansion(form);
   const preview = JSON.stringify(toBlueprintRequest(form.values), null, 2);
   return (
     <Stack gap="md">
@@ -39,9 +44,9 @@ export default function BlueprintEditor({
       <Grid>
         <Grid.Col span={{ base: 12, md: 7 }}>
           <Paper withBorder p="lg" radius="md">
-            <form onSubmit={form.onSubmit(onSubmit)} noValidate>
+            <form onSubmit={form.onSubmit(onSubmit, (errors) => expansion.revealErrors(errors))} noValidate>
               <Stack>
-                <BlueprintFormFields form={form} />
+                <BlueprintFormFields form={form} expansion={expansion} />
                 {error && (
                   <Alert color="red" variant="light">
                     {error}

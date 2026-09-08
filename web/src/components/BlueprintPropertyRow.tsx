@@ -367,13 +367,14 @@ function AdvancedFields({ form, index }: { form: Form; index: number }) {
  * type-specific block (switching wholesale on `type` — propertyFieldApplies keeps unrelated
  * wire fields from carrying stale values across a type switch), then the Advanced toggle for
  * the two fields every type has but few schemas set. Removal/reordering is the enclosing
- * PropertiesFieldset's RowControls — the shared reorder-editor unit used everywhere else in
- * the app (Namespaces, Lifecycles) — rather than a second, redundant remove control here.
+ * PropertiesFieldset's `EditorRowList` — the shared row-list editor used by every Blueprint
+ * fieldset — rather than a second, redundant remove control here. The row's own testid lives
+ * on that list's wrapper (`properties-row-N`), not here.
  */
 export default function BlueprintPropertyRow({ form, index }: { form: Form; index: number }) {
   const { t } = useTranslation();
   return (
-    <Stack gap="sm" data-testid={`property-row-${index}`}>
+    <Stack gap="sm">
       <Group align="flex-start" gap="sm" wrap="wrap">
         <TextInput
           style={{ flex: 1, minWidth: 160 }}

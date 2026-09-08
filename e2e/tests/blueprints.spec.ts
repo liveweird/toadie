@@ -50,8 +50,10 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   await identifierInput.fill(firstIdentifier);
   await page.getByRole("textbox", { name: "Title" }).fill("E2E Blueprint");
 
+  const propertiesGroup = page.getByRole("group", { name: "Properties" });
+
   await page.getByRole("button", { name: "Add property" }).click();
-  const row0 = page.getByTestId("property-row-0");
+  const row0 = page.getByTestId("properties-row-0");
   await row0.getByRole("textbox", { name: "Property ID" }).fill("envTier");
   await row0.getByRole("textbox", { name: "Title" }).fill("Environment tier");
   const enumInput = row0.getByRole("combobox", { name: "Allowed values" });
@@ -64,12 +66,46 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   await page.getByRole("option", { name: "blue", exact: true }).click();
 
   await page.getByRole("button", { name: "Add property" }).click();
-  const row1 = page.getByTestId("property-row-1");
+  const row1 = page.getByTestId("properties-row-1");
   await row1.getByRole("textbox", { name: "Property ID" }).fill("priority");
   await row1.getByRole("combobox", { name: "Type" }).click();
   await page.getByRole("option", { name: "number", exact: true }).click();
   await row1.getByRole("textbox", { name: "Title" }).fill("Priority");
   await row1.getByRole("switch", { name: "Required" }).click();
+
+  // A newly added row opens on its own (and would scroll into view), carrying the Required
+  // badge once flagged.
+  const row1Toggle = row1.getByRole("button", { name: "Toggle priority" });
+  await expect(row1Toggle).toHaveAttribute("aria-expanded", "true");
+  // The toggle's own Required OUTLINE badge — the row body also carries the switch labelled
+  // "Required" that set the flag, so scope to the header button, not the whole row.
+  await expect(row1Toggle.getByText("Required")).toBeVisible();
+
+  // Collapse/expand round-trip: row0's body unmounts while collapsed and remounts with its
+  // typed values intact (the form, not the DOM, owns the value).
+  const row0Toggle = row0.getByRole("button", { name: "Toggle envTier" });
+  await row0Toggle.click();
+  await expect(row0.getByRole("textbox", { name: "Property ID" })).toHaveCount(0);
+  await row0Toggle.click();
+  await expect(row0.getByRole("textbox", { name: "Property ID" })).toHaveValue("envTier");
+
+  // Blocked-save reveal: clear row0's title, collapse it, and try to save — the row re-opens
+  // with the error instead of stranding it behind a collapsed header, and nothing is sent.
+  await row0.getByRole("textbox", { name: "Title" }).fill("");
+  await row0Toggle.click();
+  await expect(row0.getByRole("textbox", { name: "Title" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(row0Toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(row0.getByRole("textbox", { name: "Title" })).toHaveAttribute("aria-invalid", "true");
+  await expect(page).toHaveURL(/\/blueprints\/new$/);
+  await row0.getByRole("textbox", { name: "Title" }).fill("Environment tier");
+
+  // Jump to a row: the Select focuses the picked row's header.
+  const jumpSelect = propertiesGroup.getByRole("combobox", { name: "Jump to a row in Properties" });
+  await jumpSelect.click();
+  await jumpSelect.fill("priority");
+  await page.getByRole("option", { name: "priority — Priority" }).click();
+  await expect(row1.getByRole("button", { name: "Toggle priority" })).toBeFocused();
 
   // The live JSON preview reflects both rows BEFORE saving.
   const preview = page.getByLabel("JSON preview");
@@ -154,6 +190,12 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
 
   await page.getByRole("button", { name: `Edit ${depIdentifier}` }).click();
   await expect(identifierInput).toHaveValue(depIdentifier);
+  // The dependent blueprint's one stored relation is the first (and only) row of its
+  // family — it starts expanded on load, same as any other family.
+  await expect(relationsGroup.getByRole("button", { name: "Toggle target" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
   const depTargetSelect = relationsGroup.getByRole("combobox", { name: "Target blueprint" });
   await expect(depTargetSelect).toHaveValue(renamedIdentifier);
   await page.getByRole("link", { name: "Back to blueprints" }).click();

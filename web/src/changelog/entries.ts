@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.23.2",
+    date: "2026-09-08",
+    en: `**Blueprint editor: rows you can fold and jump to.**
+
+- Every blueprint row list — properties, relations, mirror/calculation/aggregation properties — now renders as delimited, collapsible headers instead of one long unbroken form, so a blueprint with many rows (the sample \`service\` blueprint's 19 properties) stays scannable.
+- The first row of each list starts open on load, the rest collapsed; adding a row opens and scrolls to it; a blocked save re-opens every row carrying an error so its reason is never hidden.
+- Each section gets a searchable "Jump to…" picker plus Expand all / Collapse all.`,
+    pl: `**Edytor blueprintów: wiersze, które można zwijać i do których można przejść.**
+
+- Każda lista wierszy blueprintu — właściwości, relacje, właściwości lustrzane/obliczane/agregowane — jest teraz renderowana jako wyraźnie oddzielone, zwijane nagłówki zamiast jednego długiego formularza, dzięki czemu blueprint z wieloma wierszami (przykładowy blueprint \`service\` z 19 właściwościami) pozostaje czytelny.
+- Pierwszy wiersz każdej listy jest domyślnie rozwinięty po wczytaniu, pozostałe są zwinięte; dodanie wiersza rozwija go i przewija do niego widok; zablokowany zapis ponownie rozwija każdy wiersz zawierający błąd, więc jego powód nigdy nie jest ukryty.
+- Każda sekcja zyskuje przeszukiwalny wybór „Przejdź do…” oraz przyciski Rozwiń wszystko / Zwiń wszystko.`,
+  },
+  {
     version: "1.23.1",
     date: "2026-09-08",
     en: `**A sample blueprint set to load.**

@@ -338,3 +338,40 @@
 .listRow + .listRow {
   border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
+
+/* The Blueprint editor's foldable row lists (v1.23.2, components/EditorRowList.tsx): each
+   family reuses .listRows/.listRow above for the outer frame; these four lay the
+   collapsible header/body chrome on top. */
+.rowHeader {
+  /* Cancels .listRow's own horizontal padding so the hover tint reaches the list edge
+     (the .stickyActions full-bleed trick), then restores it so content still aligns. */
+  margin: 0 calc(-1 * var(--mantine-spacing-sm));
+  padding: 0 var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.rowHeader:hover {
+  background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+}
+
+.rowToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  scroll-margin-top: 80px;
+}
+
+.rowBody {
+  padding: var(--mantine-spacing-sm) 0 0 22px;
+}
+
+.rowErrorDot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background-color: var(--mantine-color-red-6);
+}

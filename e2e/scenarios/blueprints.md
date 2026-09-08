@@ -16,7 +16,12 @@
    - *Expected*: the identifier and title field errors render inline; no request reaches the
      server.
 3. They fill the unique `e2e-bp-…` identifier and a title, add a string property with two enum
-   values (one coloured), and a number property flagged required, and save.
+   values (one coloured), and a number property flagged required.
+   - *Expected*: the newly added second row opens on its own, carrying the Required badge.
+     Collapsing and re-expanding the first row remounts its fields with the typed values
+     intact. Clearing the first row's title, collapsing it, and trying to save re-opens that
+     row with the error instead of navigating away, and nothing is sent; refilling the title
+     and picking the second row from the "Jump to…" Select focuses its header. They save.
    - *Expected*: the JSON preview beside the form shows the property under `"properties"` and
      the number property under `"required"` before saving; the POST succeeds; the list shows
      the row with its property count.
@@ -27,8 +32,9 @@
    - *Expected*: the confirm modal's request is refused with the "referenced by other
      blueprints" message; the row stays.
 6. They edit the first blueprint, change its identifier, and save; then open the second.
-   - *Expected*: the PUT succeeds; the second blueprint's relation target shows the NEW
-     identifier (the rename cascaded server-side).
+   - *Expected*: the PUT succeeds; the second blueprint's one stored relation — its family's
+     first and only row — starts expanded; its target shows the NEW identifier (the rename
+     cascaded server-side).
 7. A throwaway regular user (created via the one-time reveal flow) signs in, opens
    **Blueprints**, and then navigates to `/blueprints/new` directly.
    - *Expected*: the same list read-only — both blueprints visible, no **New blueprint**, edit,
@@ -49,3 +55,7 @@
 - **The advanced property families' editors** (mirror, calculation, aggregation, ownership)
   and every property type's widget — pinned by the co-located unit suites
   (`BlueprintPropertyRow.test.tsx`, `BlueprintFormFields.test.tsx`, `blueprintForm.test.ts`).
+- **The foldable row list's own contract** (mount/unmount, badges, Expand/Collapse all, the
+  jump Select's focus behaviour, the collapsed error dot, the first-row/reveal/revealErrors
+  rules) — pinned by `EditorRowList.test.tsx`, `useBlueprintRowExpansion.test.tsx`, and
+  `blueprintRowSummary.test.ts`; the journey proves the same behaviour once, end to end.

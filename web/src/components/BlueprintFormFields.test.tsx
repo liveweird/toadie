@@ -4,10 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { screen } from "@testing-library/react";
 import { useForm } from "@mantine/form";
 import BlueprintFormFields from "./BlueprintFormFields";
+import { useBlueprintRowExpansion } from "../hooks/useBlueprintRowExpansion";
 import {
   emptyAggregationDraft,
   emptyBlueprintForm,
   emptyCalculationDraft,
+  emptyPropertyDraft,
   emptyRelationDraft,
   type BlueprintFormValues,
 } from "../utils/blueprintForm";
@@ -27,7 +29,10 @@ function serveBlueprintList(mockFetch: FetchMock, items: { id: number; identifie
 
 function Harness({ initial }: { initial: Partial<BlueprintFormValues> }) {
   const form = useForm<BlueprintFormValues>({ initialValues: { ...emptyBlueprintForm(), ...initial } });
-  return <BlueprintFormFields form={form} />;
+  // The test harness wires the row-expansion hook itself — BlueprintEditor's job in the
+  // real app, required so EditorRowList's fold state has something to read/write.
+  const expansion = useBlueprintRowExpansion(form);
+  return <BlueprintFormFields form={form} expansion={expansion} />;
 }
 
 async function openCombobox(name: RegExp) {
@@ -87,6 +92,24 @@ describe("BlueprintFormFields", () => {
     expect(screen.getAllByLabelText(/^property id( \*)?$/i)).toHaveLength(1);
   });
 
+  test("properties: with two stored rows, only the first starts expanded", () => {
+    serveBlueprintList(mockFetch);
+    renderWithProviders(
+      <Harness
+        initial={{
+          properties: [
+            { ...emptyPropertyDraft(), id: "language", title: "Language" },
+            { ...emptyPropertyDraft(), id: "priority", title: "Priority" },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Toggle language" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Toggle priority" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByLabelText(/^property id( \*)?$/i)).toHaveLength(1);
+  });
+
   test("relations: Add inserts a row, and required+many together is invalid via the shared rule (row renders both switches)", async () => {
     serveBlueprintList(mockFetch);
     renderWithProviders(<Harness initial={{}} />);
@@ -101,6 +124,9 @@ describe("BlueprintFormFields", () => {
     expect(screen.getByLabelText("Required")).toBeInTheDocument();
     expect(screen.getByLabelText("Many")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Add relation" }));
+    await user.click(screen.getByRole("button", { name: "Move relation 1 down" }));
+    await user.click(screen.getByRole("button", { name: "Remove relation 1" }));
     await user.click(screen.getByRole("button", { name: "Remove relation 1" }));
     expect(screen.queryByLabelText(/^relation id( \*)?$/i)).not.toBeInTheDocument();
   });
@@ -114,6 +140,9 @@ describe("BlueprintFormFields", () => {
     expect(screen.getByLabelText(/^property id( \*)?$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^path( \*)?$/i)).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Add mirror property" }));
+    await user.click(screen.getByRole("button", { name: "Move mirror property 1 down" }));
+    await user.click(screen.getByRole("button", { name: "Remove mirror property 1" }));
     await user.click(screen.getByRole("button", { name: "Remove mirror property 1" }));
     expect(screen.queryByLabelText(/^path( \*)?$/i)).not.toBeInTheDocument();
   });
@@ -129,6 +158,9 @@ describe("BlueprintFormFields", () => {
     await user.click(screen.getByLabelText("Colorized"));
     expect(await screen.findByLabelText("Colors (JSON)")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Add calculation property" }));
+    await user.click(screen.getByRole("button", { name: "Move calculation property 1 down" }));
+    await user.click(screen.getByRole("button", { name: "Remove calculation property 1" }));
     await user.click(screen.getByRole("button", { name: "Remove calculation property 1" }));
     expect(screen.queryByLabelText("Colorized")).not.toBeInTheDocument();
   });
@@ -176,6 +208,9 @@ describe("BlueprintFormFields", () => {
     await user.click(screen.getByRole("button", { name: "Add aggregation property" }));
     expect(screen.getByRole("combobox", { name: "Target blueprint" })).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Add aggregation property" }));
+    await user.click(screen.getByRole("button", { name: "Move aggregation property 1 down" }));
+    await user.click(screen.getByRole("button", { name: "Remove aggregation property 1" }));
     await user.click(screen.getByRole("button", { name: "Remove aggregation property 1" }));
     expect(screen.queryByRole("combobox", { name: "Target blueprint" })).not.toBeInTheDocument();
   });
