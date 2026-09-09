@@ -1,0 +1,50 @@
+[
+  {
+    "blueprint": "incident",
+    "identifier": "checkout-outage-2026-08-20",
+    "title": "Checkout outage",
+    "icon": "Alert",
+    "properties": {
+      "severity": "sev1",
+      "status": "resolved",
+      "escalation_team": "payments",
+      "opened_at": "2026-08-20T08:00:00Z",
+      "resolved_at": "2026-08-20T09:30:00Z",
+      "resolution_minutes": 90,
+      "postmortem": "# Postmortem\n\nA bad deploy of checkout-service caused elevated 5xx rates for 90 minutes. Rolled back to v2.0.9.",
+      "pagerduty": { "url": "https://pagerduty.example.com/incidents/PD-1001", "displayText": "PD-1001" }
+    },
+    "relations": { "service": "checkout-service", "workload": "checkout-service-prod", "responder": "payments" }
+  },
+  {
+    "blueprint": "incident",
+    "identifier": "pricing-latency-spike",
+    "title": "Pricing latency spike",
+    "properties": {
+      "severity": "sev2",
+      "status": "investigating",
+      "opened_at": "2026-08-25T14:00:00Z"
+    },
+    "relations": { "service": "pricing-service", "responder": "payments" }
+  },
+  {
+    "blueprint": "incident",
+    "identifier": "search-index-lag",
+    "title": "Search index lag",
+    "properties": {
+      "severity": "sev3",
+      "status": "open"
+    },
+    "relations": { "service": "search-service", "responder": "search" }
+  },
+  {
+    "blueprint": "incident",
+    "identifier": "notif-delivery-delay",
+    "title": "Notification delivery delay",
+    "properties": {
+      "severity": "sev4",
+      "status": "resolved"
+    },
+    "relations": { "service": "notification-service" }
+  }
+]
