@@ -62,6 +62,7 @@ class SampleBlueprintsTest {
         calculationProperties = calculationProperties,
         aggregationProperties = aggregationProperties,
         ownership = ownership,
+        hierarchyRelation = hierarchyRelation,
     )
 
     private suspend fun HttpClient.postRaw(text: String): HttpResponse =
@@ -141,5 +142,15 @@ class SampleBlueprintsTest {
         assertTrue(aggregations.size >= 5, "at least 5 aggregations must appear across the set")
         val calculationByModes = aggregations.map { it.calculationSpec.calculationBy }.toSet()
         assertEquals(setOf("entities", "property"), calculationByModes, "both calculationBy modes must appear")
+
+        val hierarchical = requests.filter { it.hierarchyRelation != null }
+        assertTrue(hierarchical.isNotEmpty(), "at least one sample blueprint must set hierarchyRelation")
+        hierarchical.forEach { req ->
+            val relation = req.relations[req.hierarchyRelation]
+            assertTrue(
+                relation != null && !relation.many,
+                "${req.identifier}'s hierarchyRelation must name one of its own relations with many == false",
+            )
+        }
     }
 }

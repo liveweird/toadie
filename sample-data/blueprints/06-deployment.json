@@ -3,6 +3,7 @@
   "title": "Deployment",
   "description": "One rollout of a workload — a single row in the deploy history a team scrolls through after an incident. `sibling_deploys` counts every other deployment of the same shape, including itself as a target, so the count never breaks when the workload grows a new deploy.",
   "icon": "GitCommit",
+  "hierarchyRelation": "workload",
   "schema": {
     "properties": {
       "version": {

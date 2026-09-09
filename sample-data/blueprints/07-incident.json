@@ -3,6 +3,7 @@
   "title": "Incident",
   "description": "Something went wrong with a service, and here is the record of it — severity, who responded, and how long it took to resolve. Ownership is inherited from the affected service, so an incident always shows up under the right team without anyone assigning it by hand.",
   "icon": "Alert",
+  "hierarchyRelation": "service",
   "schema": {
     "properties": {
       "severity": {

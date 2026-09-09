@@ -3,6 +3,7 @@
   "title": "Domain",
   "description": "A business area that groups related services under one accountable team — think \"Payments\" or \"Storefront\" rather than any one microservice. Start here when you're new: a domain's overview and criticality tell you how carefully to tread.",
   "icon": "Folder",
+  "hierarchyRelation": "owned_by",
   "schema": {
     "properties": {
       "overview": {
