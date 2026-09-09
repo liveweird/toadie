@@ -173,3 +173,54 @@ sample-data/blueprints/load.sh --delete
 
 Like the catalog file above, the blueprint registry is deliberately **NOT seeded** — no
 migration inserts a blueprint, so a fresh environment's `/blueprints` page starts empty.
+
+## Entities (Port)
+
+`entities/` is a third sample set, for the **Entities** feature (v1.24.0 — Port migration
+phase 2, `.claude/docs/port-data-model.md`'s "Entities" section): eight numbered JSON files,
+one per sample blueprint, each a JSON ARRAY of `POST /api/v1/entities` bodies — 32 entities in
+all. Numbered in the same **dependency order** as the blueprints above (`01-team` →
+`02-domain` → `03-environment` → `04-service` → `05-workload` → `06-deployment` →
+`07-incident` → `08-organization`), because a relation value must already exist: `service`'s
+self-relation `depends_on` needs earlier services in its own file, `workload.service` needs
+`04-service.json` to have loaded first, and so on. **Load the blueprint set first** — an
+entity names its blueprint, and the registry must already hold it.
+
+| # | blueprint | Entities | What it showcases |
+|---|---|---|---|
+| 01 | `team` | `platform`, `payments`, `search`, `growth` | every `team` property, all 4 `timezone` colours |
+| 02 | `domain` | `commerce`, `payments`, `platform-ops`, `growth` | all 4 `criticality` values, a relation sent as explicit JSON `null` (`growth.owned_by`), the entity-level `team` field as both a string (`commerce`) and an array (`payments`) |
+| 03 | `environment` | `prod`, `staging`, `dev` | all 3 `type`/`region` values, ipv4/ipv6 literals, yaml text |
+| 04 | `service` | `catalog-service`, `pricing-service`, `checkout-service`, `search-service`, `notification-service` | every property (all 5 `language` values, all 4 `tier` values, every string format incl. `labeled-url`/`proto`/`timer`/`idn-email`), a self-relation many-array (`checkout-service.depends_on`) |
+| 05 | `workload` | 6 workloads across the 5 services and 3 environments | all 3 `health` values |
+| 06 | `deployment` | 5 deployments | all 4 `status` values |
+| 07 | `incident` | 4 incidents | all 4 `severity` and all 3 `status` values |
+| 08 | `organization` | `toadie-sample` | many relations to every domain and every team |
+
+Across the set: every property of every sample blueprint is set at least once with a value
+valid for its type/format, every enum value of every enum property is used at least once, the
+entity-level `team` field appears both as a string and as an array (and absent elsewhere),
+and at least one relation is a multi-element array. Pinned by `SampleEntitiesTest`
+(`.claude/docs/testing.md`), which also loads the blueprint set and asserts the file
+numbering is itself dependency-safe.
+
+**Loading it** — `sample-data/entities/load.sh` (needs `curl` + `jq`, same login idiom as the
+blueprints loader): logs in and `POST`s each entity in file order, printing
+`created <blueprint>/<identifier>` (`201`) or `exists, skipped: <blueprint>/<identifier>`
+(`409` — re-runnable) per entity, exiting `1` on any other status.
+
+```bash
+sample-data/blueprints/load.sh   # first, if not already loaded
+sample-data/entities/load.sh
+```
+
+**Clearing it** — `sample-data/entities/load.sh --delete` removes the set in REVERSE
+dependency order (files highest-numbered first, entities within a file in reverse creation
+order), resolving each entity's id via an exact-identifier list lookup; a `409` means
+something outside the sample set still relates to it, and is reported rather than forced.
+
+```bash
+sample-data/entities/load.sh --delete
+```
+
+Like the blueprint registry, entities are deliberately **NOT seeded**.

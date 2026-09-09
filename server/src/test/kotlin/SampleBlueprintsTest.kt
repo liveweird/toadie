@@ -44,10 +44,7 @@ import kotlin.test.assertTrue
  */
 class SampleBlueprintsTest {
 
-    private fun blueprintFiles(): List<File> =
-        File("../sample-data/blueprints").listFiles { f -> f.name.matches(Regex("[0-9]{2}-.*\\.json")) }
-            ?.sortedBy { it.name }
-            ?: error("sample-data/blueprints not found relative to the test working directory")
+    private fun blueprintFiles(): List<File> = SampleData.numberedFiles("blueprints")
 
     /** [text] decoded as a request and re-encoded via [blueprintJson] — the canonical, defaults-expanded form. */
     private fun canonicalForm(text: String): kotlinx.serialization.json.JsonElement =

@@ -1,0 +1,70 @@
+[
+  {
+    "blueprint": "workload",
+    "identifier": "catalog-service-prod",
+    "title": "catalog-service in prod",
+    "properties": {
+      "replicas": 3,
+      "image_tag": "1.4.2",
+      "health": "healthy",
+      "last_deployed": "2026-09-01T10:00:00Z",
+      "resources": { "cpu_request": "250m", "memory_limit": "512Mi" }
+    },
+    "relations": { "service": "catalog-service", "environment": "prod" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "checkout-service-prod",
+    "title": "checkout-service in prod",
+    "properties": {
+      "replicas": 5,
+      "image_tag": "2.1.0",
+      "health": "degraded"
+    },
+    "relations": { "service": "checkout-service", "environment": "prod" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "checkout-service-staging",
+    "title": "checkout-service in staging",
+    "properties": {
+      "replicas": 2,
+      "image_tag": "2.0.9",
+      "health": "unhealthy"
+    },
+    "relations": { "service": "checkout-service", "environment": "staging" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "pricing-service-prod",
+    "title": "pricing-service in prod",
+    "properties": {
+      "replicas": 4,
+      "image_tag": "1.0.0",
+      "health": "healthy"
+    },
+    "relations": { "service": "pricing-service", "environment": "prod" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "search-service-dev",
+    "title": "search-service in dev",
+    "properties": {
+      "replicas": 1,
+      "image_tag": "0.9.1",
+      "health": "degraded"
+    },
+    "relations": { "service": "search-service", "environment": "dev" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "notification-service-staging",
+    "title": "notification-service in staging",
+    "properties": {
+      "replicas": 2,
+      "image_tag": "3.2.1",
+      "health": "healthy"
+    },
+    "relations": { "service": "notification-service", "environment": "staging" }
+  }
+]

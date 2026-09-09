@@ -17,6 +17,16 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.24.1",
+    date: "2026-09-09",
+    en: `**Sample entities.**
+
+- Sample entities: a dependency-ordered set of ~30 Port entities for the sample blueprints, loaded by hand with \`sample-data/entities/load.sh\`.`,
+    pl: `**Przykładowe encje.**
+
+- Przykładowe encje: uporządkowany według zależności zestaw ~30 encji Port dla przykładowych blueprintów, wczytywany ręcznie za pomocą \`sample-data/entities/load.sh\`.`,
+  },
+  {
     version: "1.24.0",
     date: "2026-09-09",
     en: `**Entities — the second step toward Port compatibility.**

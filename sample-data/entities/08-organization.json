@@ -1,0 +1,15 @@
+[
+  {
+    "blueprint": "organization",
+    "identifier": "toadie-sample",
+    "title": "Toadie Sample Corp",
+    "icon": "Org",
+    "properties": {
+      "legal_name": "Toadie Sample Corp Ltd."
+    },
+    "relations": {
+      "domains": ["commerce", "payments", "platform-ops", "growth"],
+      "teams": ["platform", "payments", "search", "growth"]
+    }
+  }
+]

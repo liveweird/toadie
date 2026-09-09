@@ -1,0 +1,36 @@
+[
+  {
+    "blueprint": "environment",
+    "identifier": "prod",
+    "title": "Production",
+    "icon": "Environment",
+    "properties": {
+      "type": "production",
+      "region": "us-east-1",
+      "is_locked": true,
+      "cluster_config": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: prod\n",
+      "created": "2026-01-15T00:00:00Z"
+    }
+  },
+  {
+    "blueprint": "environment",
+    "identifier": "staging",
+    "title": "Staging",
+    "properties": {
+      "type": "staging",
+      "region": "eu-west-1",
+      "nightly_shutdown": true,
+      "ingress_ip": "203.0.113.20"
+    }
+  },
+  {
+    "blueprint": "environment",
+    "identifier": "dev",
+    "title": "Development",
+    "properties": {
+      "type": "test",
+      "region": "ap-southeast-1",
+      "ingress_ipv6": "2001:db8::20"
+    }
+  }
+]

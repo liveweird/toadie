@@ -1,0 +1,46 @@
+[
+  {
+    "blueprint": "team",
+    "identifier": "platform",
+    "title": "Platform",
+    "icon": "Team",
+    "properties": {
+      "slack_channel": "https://platform-eng.slack.com/channels/eng-platform",
+      "lead": "alice@toadie.dev",
+      "members": ["alice@toadie.dev", "bob@toadie.dev", "carol@toadie.dev"],
+      "timezone": "UTC",
+      "contact": "platform-team@toadie.dev",
+      "on_call_rotation": { "primary": "alice@toadie.dev", "secondary": "bob@toadie.dev" }
+    }
+  },
+  {
+    "blueprint": "team",
+    "identifier": "payments",
+    "title": "Payments",
+    "properties": {
+      "lead": "dana@toadie.dev",
+      "members": ["dana@toadie.dev", "erin@toadie.dev"],
+      "timezone": "CET"
+    }
+  },
+  {
+    "blueprint": "team",
+    "identifier": "search",
+    "title": "Search",
+    "properties": {
+      "lead": "farid@toadie.dev",
+      "members": ["farid@toadie.dev", "grace@toadie.dev"],
+      "timezone": "EST"
+    }
+  },
+  {
+    "blueprint": "team",
+    "identifier": "growth",
+    "title": "Growth",
+    "properties": {
+      "lead": "hana@toadie.dev",
+      "members": ["hana@toadie.dev", "ivan@toadie.dev"],
+      "timezone": "PST"
+    }
+  }
+]
