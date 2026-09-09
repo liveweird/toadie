@@ -3,6 +3,7 @@
   "title": "Service",
   "description": "A deployable unit of software owned by a team — this is the blueprint you will touch most often. It belongs to a domain, is owned by a team, and may depend on other services (including itself, transitively, through the dependency graph). Its `status` is derived rather than typed in by hand.",
   "icon": "Microservice",
+  "hierarchyRelation": "domain",
   "schema": {
     "properties": {
       "language": {

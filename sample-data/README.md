@@ -152,6 +152,18 @@ Across the set: all 5 property types, all 12 string formats, `labeled-url`, all 
 every `date_format` variant, every relation shape, both ownership modes, and every
 aggregation `func` — pinned by `SampleBlueprintsTest` (`.claude/docs/testing.md`).
 
+Five blueprints also carry a top-level `hierarchyRelation` (v1.25.1), naming one of their own
+`many: false` relations as the parent edge the Entity hierarchy page climbs: `domain` →
+`owned_by` (team), `service` → `domain`, `workload` → `service`, `deployment` → `workload`, and
+`incident` → `service` — so teams, domains, services, workloads, and deployments form one tree,
+with incidents nested under the services they affect. `team`, `environment`, and `organization`
+carry none, so they root their own entities rather than climbing further. Because `load.sh` only
+creates (a `409` on an existing identifier is skipped, not updated), an installation that already
+loaded an earlier set picks up these relations by `PUT`-ing each affected blueprint by hand, or —
+since a blueprint targeted by an entity or by another blueprint cannot be deleted — by deleting
+every sample entity, then the sample blueprints via `load.sh --delete`, then reloading with a
+fresh `load.sh`.
+
 **Loading it** — `sample-data/blueprints/load.sh` (bash, needs `curl` + `jq`): logs in as the
 seed admin (override with `TOADIE_URL`/`TOADIE_EMAIL`/`TOADIE_PASSWORD`) and `POST`s each file
 in order, printing `created <identifier>` (`201`) or `exists, skipped: <identifier>` (`409` —

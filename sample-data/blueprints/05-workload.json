@@ -3,6 +3,7 @@
   "title": "Workload",
   "description": "Another of Port's default blueprints: one running instance of a service inside one environment — the thing that actually holds replicas and a resource limit. Ownership is inherited from the service it runs, so you never have to set it twice.",
   "icon": "Deployment",
+  "hierarchyRelation": "service",
   "schema": {
     "properties": {
       "replicas": {

@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.25.1",
+    date: "2026-09-10",
+    en: `**Sample blueprints carry hierarchy relations, so the sample entities form a tree on the Entity hierarchy page.**`,
+    pl: `**Przykładowe blueprinty mają relacje hierarchii, więc przykładowe encje tworzą drzewo na stronie hierarchii encji.**`,
+  },
+  {
     version: "1.25.0",
     date: "2026-09-10",
     en: `**Entity graph & hierarchy — the third step toward Port compatibility.**
