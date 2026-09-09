@@ -12,9 +12,9 @@ describe("visibleSections", () => {
     expect(sections.flatMap((s) => s.items.map((l) => l.to))).not.toContain("/users");
   });
 
-  test("the Port Ontology section holds the Blueprints leaf, visible to everyone", () => {
+  test("the Port Ontology section holds the Blueprints and Entities leaves, visible to everyone", () => {
     const dataModel = visibleSections(false).find((s) => s.label === "appShell.section.dataModel");
-    expect(dataModel?.items.map((l) => l.to)).toEqual(["/blueprints"]);
+    expect(dataModel?.items.map((l) => l.to)).toEqual(["/blueprints", "/entities"]);
   });
 
   test("an admin session gets the Administration section with both leaves", () => {

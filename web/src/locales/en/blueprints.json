@@ -4,6 +4,7 @@
   "empty": "No blueprints defined yet",
   "loadFailed": "Could not load the blueprints",
   "newBlueprint": "New blueprint",
+  "viewEntities": "Entities",
   "createBlueprint": "New blueprint",
   "editBlueprint": "Edit blueprint",
   "backToList": "Back to blueprints",
@@ -29,7 +30,8 @@
     "identifier": "Identifier",
     "title": "Title",
     "properties": "Properties",
-    "relations": "Relations"
+    "relations": "Relations",
+    "entities": "Entities"
   },
   "section": {
     "properties": "Properties",

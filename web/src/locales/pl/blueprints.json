@@ -4,6 +4,7 @@
   "empty": "Nie zdefiniowano jeszcze żadnych blueprintów",
   "loadFailed": "Nie udało się wczytać blueprintów",
   "newBlueprint": "Nowy blueprint",
+  "viewEntities": "Encje",
   "createBlueprint": "Nowy blueprint",
   "editBlueprint": "Edytuj blueprint",
   "backToList": "Powrót do blueprintów",
@@ -29,7 +30,8 @@
     "identifier": "Identyfikator",
     "title": "Tytuł",
     "properties": "Właściwości",
-    "relations": "Relacje"
+    "relations": "Relacje",
+    "entities": "Encje"
   },
   "section": {
     "properties": "Właściwości",

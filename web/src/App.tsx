@@ -21,6 +21,9 @@ const Hierarchy = lazy(() => import("./pages/Hierarchy"));
 const Blueprints = lazy(() => import("./pages/Blueprints"));
 const CreateBlueprint = lazy(() => import("./pages/CreateBlueprint"));
 const EditBlueprint = lazy(() => import("./pages/EditBlueprint"));
+const Entities = lazy(() => import("./pages/Entities"));
+const CreateEntity = lazy(() => import("./pages/CreateEntity"));
+const EditEntity = lazy(() => import("./pages/EditEntity"));
 const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
 const ImportCatalogFiles = lazy(() => import("./pages/ImportCatalogFiles"));
@@ -161,6 +164,9 @@ export default function App() {
             <Route path="blueprints" element={<Blueprints />} />
             <Route path="blueprints/new" element={<CreateBlueprint />} />
             <Route path="blueprints/:id/edit" element={<EditBlueprint />} />
+            <Route path="entities" element={<Entities />} />
+            <Route path="entities/new" element={<CreateEntity />} />
+            <Route path="entities/:id/edit" element={<EditEntity />} />
             <Route path="errors" element={<ErrorsPage />} />
             <Route path="graph" element={<RenderGraph />} />
             <Route path="namespaces" element={<Namespaces />} />

@@ -1,0 +1,95 @@
+{
+  "title": "Entities",
+  "intro": "Instances of a blueprint — pick one below to see, create, and edit its entities. Any authenticated user may create, edit, and delete entities, the same shared-workspace rule as catalog files.",
+  "empty": "No entities for this blueprint yet",
+  "pickBlueprintEmpty": "Pick a blueprint above to see its entities",
+  "loadFailed": "Could not load the entities",
+  "notFound": "Entity not found.",
+  "newEntity": "New entity",
+  "createEntity": "New entity",
+  "editEntity": "Edit entity",
+  "backToList": "Back to entities",
+  "preview": "JSON preview",
+  "pickBlueprint": "Pick a blueprint…",
+  "staleTitle": "This entity is out of date with its blueprint",
+  "staleBody": "The blueprint changed since this entity was last saved. Fix the properties/relations below before you can save again.",
+  "column": {
+    "findings": "Findings"
+  },
+  "field": {
+    "blueprint": "Blueprint",
+    "identifier": "Identifier",
+    "title": "Title",
+    "icon": "Icon",
+    "team": "Team",
+    "updated": "Updated",
+    "unset": "Unset",
+    "true": "True",
+    "false": "False",
+    "isoHint": "ISO 8601, e.g. 2026-09-09T12:00:00Z",
+    "labeledUrlUrl": "URL",
+    "labeledUrlDisplayText": "Display text",
+    "unknownPropertyHint": "This key is no longer part of the blueprint's schema — edit the raw JSON value, or clear it to remove the key.",
+    "relationOptionsFailed": "Could not load the target entities"
+  },
+  "section": {
+    "identity": "Identity",
+    "properties": "Properties",
+    "relations": "Relations"
+  },
+  "editor": {
+    "blueprintLabel": "Blueprint: {{identifier}}",
+    "noTargets": "No entities of the target blueprint yet",
+    "blueprintMissing": "The blueprint of this entity no longer exists."
+  },
+  "hint": {
+    "team": "A free-text team name or names — not validated (teams arrive with the users/teams phase)."
+  },
+  "filter": {
+    "q": "Search",
+    "clearQ": "Clear search filter"
+  },
+  "findings": {
+    "count_one": "{{count}} finding",
+    "count_other": "{{count}} findings"
+  },
+  "deleteTitle": "Delete entity",
+  "deleteBody": "Delete entity \"{{identifier}}\"? This cannot be undone.",
+  "deleteFailed": "Delete failed",
+  "deleteConflict": "This entity is still targeted by another entity's relation.",
+  "saveConflict": "An entity with this identifier already exists in this blueprint.",
+  "saveInvalid": "This entity is not valid. Check the highlighted fields.",
+  "saveGone": "This entity or its blueprint no longer exists.",
+  "toast": {
+    "created": "Entity created",
+    "saved": "Entity saved",
+    "deleted": "Entity deleted"
+  },
+  "validation": {
+    "required": "Required",
+    "identifier": "Enter a valid identifier (letters, digits and @_.+:\\/='- , not \".\" or \"..\")",
+    "title": "Enter a title (max 200 characters)",
+    "iconLength": "Icon name is too long (max 100 characters)",
+    "teamCount": "Too many team entries (max 50)",
+    "teamEntryLength": "A team entry is too long (max 100 characters)",
+    "minLength": "Must be at least {{min}} characters",
+    "maxLength": "Must be at most {{max}} characters",
+    "pattern": "Does not match the required pattern",
+    "enum": "Not one of the allowed values",
+    "url": "Enter an absolute URL",
+    "email": "Enter a valid email address",
+    "dateTimeOffset": "Enter a valid ISO 8601 date/time with an offset (Z or ±HH:MM)",
+    "timerZulu": "Enter a valid ISO 8601 date/time in UTC, e.g. 2026-01-01T00:00:00Z",
+    "ipv4": "Enter a valid IPv4 address",
+    "numberInvalid": "Enter a valid number",
+    "minimum": "Must be at least {{min}}",
+    "maximum": "Must be at most {{max}}",
+    "exclusiveMinimum": "Must be greater than {{min}}",
+    "exclusiveMaximum": "Must be less than {{max}}",
+    "minItems": "Needs at least {{min}} items",
+    "maxItems": "Needs at most {{max}} items",
+    "uniqueItems": "Items must be unique",
+    "jsonInvalid": "Enter valid JSON",
+    "objectShape": "Enter a URL and, optionally, a display text — nothing else"
+  }
+}
