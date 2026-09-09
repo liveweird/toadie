@@ -47,6 +47,7 @@ class MigrationChecksumTest {
         "V25__authentication_sessions.sql" to 298109900,
         "V26__password_reset_tokens.sql" to 414198139,
         "V27__create_blueprints.sql" to -1662308320,
+        "V28__create_entities.sql" to -463945597,
     )
 
     @Test

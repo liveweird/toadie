@@ -1266,8 +1266,99 @@ export interface paths {
          * @description ADMIN only — soft delete; the identifier becomes reusable by a NEW blueprint. A
          *     blueprint that is the TARGET of another active blueprint's relation or aggregation is
          *     `409` (a self-relation on the blueprint being deleted never blocks its own deletion).
+         *     A blueprint with active ENTITIES is refused too — `409` naming the count.
          */
         delete: operations["deleteBlueprint"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List entities
+         * @description Any authenticated user — entities are a shared workspace like the catalog files
+         *     (Phase 2 of Toadie's move from Backstage's fixed System Model to Port.io's data
+         *     model, instances of the Phase 1 blueprint registry — see
+         *     `.claude/docs/port-data-model.md`); no admin gate.
+         *
+         *     Supports offset pagination, sorting and filtering.
+         *
+         *     - Sortable fields: `identifier`, `title`, `updatedAt`. Default sort is `identifier`
+         *       ascending; `id` ascending is always appended as a deterministic tiebreaker.
+         *     - Filters (optional): `blueprint` — exact (case-insensitive) match against the
+         *       blueprint identifier (an unknown identifier answers an empty page, not `404`);
+         *       `q` — case- and accent-insensitive substring match against `identifier` OR
+         *       `title`.
+         *
+         *     Each returned item carries `findings` — the same validation a strict save would
+         *     enforce, re-evaluated against the blueprint's CURRENT definition, so an entity left
+         *     stale by a blueprint edit is flagged here without waiting for a save attempt.
+         */
+        get: operations["listEntities"];
+        put?: never;
+        /**
+         * Create an entity
+         * @description Any authenticated user — entities are a shared workspace like catalog files; no
+         *     admin gate. Stores a new instance of the named blueprint. The payload is validated
+         *     STRICTLY against the blueprint's CURRENT `schema`/`relations` (every
+         *     `properties`/`relations` key must be declared by the blueprint; mirror/calculation/
+         *     aggregation property ids are COMPUTED and rejected as input; the type/format/range/
+         *     pattern/enum rules in `.claude/docs/port-data-model.md` apply) — any violation is
+         *     `400` with the full `findings` list, one entry per violated rule. Every relation
+         *     target must resolve to an ACTIVE entity of the relation's target blueprint
+         *     (self-relations allowed); an unresolved target is `400`. `blueprint` must name an
+         *     active, registered blueprint, else `400`. `identifier` is unique PER BLUEPRINT,
+         *     case-insensitively — a clash is `409` (the same identifier may be reused across
+         *     different blueprints). The registry is capped per-blueprint and overall (`400`
+         *     "full" once reached).
+         */
+        post: operations["createEntity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get an entity
+         * @description Any authenticated user. Plain `404` for a missing or soft-deleted entity — the workspace idiom, no existence secrecy. Carries `findings` re-evaluated against the blueprint's CURRENT definition, so an entity left stale by a blueprint edit since this entity's last save is flagged without waiting for a save attempt.
+         */
+        get: operations["getEntity"];
+        /**
+         * Replace an entity
+         * @description Any authenticated user — whole-entity replacement, identifier rename included. The
+         *     `blueprint` field must equal the entity's STORED blueprint; naming a different
+         *     blueprint is `400` (moving an entity between blueprints is not supported). Same
+         *     shape/findings/target/`409` rules as create. Renaming the identifier CASCADES:
+         *     every other active entity's `relations` naming the old identifier are rewritten to
+         *     the new one, in the same locked transaction.
+         */
+        put: operations["replaceEntity"];
+        post?: never;
+        /**
+         * Delete an entity
+         * @description Any authenticated user — soft delete; the identifier becomes reusable within the
+         *     same blueprint. An entity that is the TARGET of another active entity's relation is
+         *     `409`, naming the referrers as `blueprint/identifier` (a self-relation on the entity
+         *     being deleted never blocks its own deletion).
+         */
+        delete: operations["deleteEntity"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2161,6 +2252,97 @@ export interface components {
             };
             ownership?: components["schemas"]["OwnershipDefinition"];
         };
+        /** @description Phase 2 of the Port data-model move (see `.claude/docs/port-data-model.md`): an entity is an instance of a registered blueprint. */
+        EntityRequest: {
+            /** @description The target blueprint's identifier. On PUT, must equal the entity's stored blueprint (changing it is `400`). */
+            blueprint: string;
+            /** @description Trimmed. Port's identifier grammar: `^(?!\.{1,2}$)[\p{L}0-9@_.+:\\/='-]+$` (unicode letters plus `+`, `'`, `\` — wider than the blueprint charset; Port allows up to 1000 characters, Toadie caps at 200). Unique per blueprint, case-insensitively; the same identifier may be reused across different blueprints. */
+            identifier: string;
+            /** @description Trimmed; must not be blank. */
+            title: string;
+            /** @description Port icon NAME — a free string. Absent when unset. */
+            icon?: string;
+            /** @description A team name, or an array of team names, stored exactly as sent — unvalidated (teams arrive with a later phase). Absent when unset. */
+            team?: string | string[];
+            /**
+             * @description `<propertyId>: JSON value`, keyed by the blueprint's declared property ids. Defaults to empty when omitted.
+             * @default {}
+             */
+            properties: {
+                [key: string]: unknown;
+            };
+            /** @description relation identifier → target entity identifier (single) | array of identifiers (many) | null (unset). Defaults to empty when omitted. */
+            relations?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint).
+         * @enum {string}
+         */
+        EntityFindingCode: "UNKNOWN_PROPERTY" | "COMPUTED_PROPERTY" | "REQUIRED_MISSING" | "TYPE_MISMATCH" | "ENUM_MISMATCH" | "FORMAT_INVALID" | "LENGTH_OUT_OF_RANGE" | "PATTERN_MISMATCH" | "RANGE_OUT_OF_BOUNDS" | "ARRAY_SIZE" | "ARRAY_NOT_UNIQUE" | "OBJECT_SHAPE" | "UNKNOWN_RELATION" | "RELATION_SHAPE" | "RELATION_REQUIRED" | "RELATION_TARGET_MISSING";
+        /** @description One violation of the owning blueprint's current schema/relations — the same rule a strict save enforces. A non-empty `findings` list on a GET/list response means the entity is STALE (its blueprint changed since its last save) and its next save is refused until fixed. */
+        EntityFinding: {
+            code: components["schemas"]["EntityFindingCode"];
+            /** @description `properties.<id>` or `relations.<id>` naming the offending key. */
+            field: string;
+            message: string;
+        };
+        /** @description An entity — an instance of a blueprint (Phase 2 of the Port data-model move — see `.claude/docs/port-data-model.md`). Every optional field is simply ABSENT when unset (never `null`). */
+        Entity: {
+            /** Format: int32 */
+            id: number;
+            /** @description The owning blueprint's identifier. */
+            blueprint: string;
+            /**
+             * Format: int32
+             * @description The owning blueprint's id.
+             */
+            blueprintId: number;
+            identifier: string;
+            title: string;
+            /** @description Port icon NAME — a free string. Absent when unset. */
+            icon?: string;
+            /** @description A team name, or an array of team names, stored exactly as sent. Absent when unset. */
+            team?: string | string[];
+            /** @description `<propertyId>: JSON value`, keyed by the blueprint's declared property ids. */
+            properties: {
+                [key: string]: unknown;
+            };
+            /** @description relation identifier → target entity identifier (single) | array of identifiers (many) | null (unset). */
+            relations: {
+                [key: string]: unknown;
+            };
+            /** @description The same validation a strict save would enforce, re-evaluated against the blueprint's CURRENT definition — non-empty means this entity is STALE and its next save is refused until fixed. */
+            findings: components["schemas"]["EntityFinding"][];
+            /**
+             * Format: int32
+             * @description The creator's user id.
+             */
+            createdBy: number;
+            creatorName: string;
+            creatorDeleted: boolean;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            createdAt: number;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            updatedAt: number;
+        };
+        EntityPage: {
+            items: components["schemas"]["Entity"][];
+            page: number;
+            pageSize: number;
+            /**
+             * Format: int64
+             * @description Row count after filters, before pagination.
+             */
+            total: number;
+        };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
             /**
@@ -2282,6 +2464,8 @@ export interface components {
          *     always appended as a deterministic tiebreaker.
          */
         Sort: string;
+        /** @description Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the matched fields are declared per endpoint. */
+        Q: string;
         /** @description Case- and accent-insensitive substring match against the entity name. */
         CatalogNameFilter: string;
         /** @description Exact (case-insensitive) namespace match. */
@@ -4087,6 +4271,153 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listEntities: {
+        parameters: {
+            query?: {
+                /** @description 1-based page index. Defaults to 1. */
+                page?: components["parameters"]["Page"];
+                /** @description Rows per page. Defaults to 20, maximum 100. */
+                pageSize?: components["parameters"]["PageSize"];
+                /**
+                 * @description Sort spec. Format: `field` (ascending) or `-field` (descending). Multiple fields are
+                 *     comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
+                 *     sortable-field whitelist; unknown fields are rejected with `400`. `id` ascending is
+                 *     always appended as a deterministic tiebreaker.
+                 */
+                sort?: components["parameters"]["Sort"];
+                /** @description Exact (case-insensitive) match against the blueprint identifier. An unknown identifier yields an empty page. */
+                blueprint?: string;
+                /** @description Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the matched fields are declared per endpoint. */
+                q?: components["parameters"]["Q"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of entities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new entity resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entity"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entity"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];

@@ -22,6 +22,7 @@
 - `tag_category.created` (byUserId/categoryId/name/tags count/kinds) / `tag_category.updated` (same fields) / `tag_category.deleted` (byUserId/categoryId) — every tag-category mutation; a rejected save emits nothing,
 - `lens.created` (byUserId/lensId/name/visibility) / `lens.updated` (same fields) / `lens.deleted` (byUserId/lensId) — every lens mutation; a rejected save emits nothing,
 - `blueprint.created` (byUserId/blueprintId/identifier/properties count/relations count) / `blueprint.updated` (same fields, plus `renamedFrom` and the `cascaded` count of other blueprints whose relation/aggregation targets were rewritten when the identifier changed) / `blueprint.deleted` (byUserId/blueprintId/identifier) — every blueprint mutation; a rejected save (400/409) emits nothing,
+- `entity.created` (byUserId/entityId/blueprint/identifier/properties count/relations count) / `entity.updated` (same fields, plus `cascaded` — the count of other entities whose `relations` were rewritten when the identifier changed — and `renamedFrom`) / `entity.deleted` (byUserId/entityId/blueprint/identifier) — every entity mutation (Phase 2 of the Port data-model move); a rejected save (400/409) emits nothing,
 - `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail).
 

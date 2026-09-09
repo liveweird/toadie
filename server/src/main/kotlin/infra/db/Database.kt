@@ -16,6 +16,8 @@ import ch.nokillswit.catalog.CatalogFileService
 import ch.nokillswit.catalog.CatalogFileServiceKey
 import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.dictionaries.DictionaryServiceKey
+import ch.nokillswit.entities.EntityService
+import ch.nokillswit.entities.EntityServiceKey
 import ch.nokillswit.labels.LabelService
 import ch.nokillswit.labels.LabelServiceKey
 import ch.nokillswit.lenses.LensService
@@ -54,6 +56,7 @@ suspend fun Application.configureDatabase() {
     attributes.put(EntityTypesServiceKey, EntityTypesService(database))
     attributes.put(AnnotationKeyServiceKey, AnnotationKeyService(database))
     attributes.put(BlueprintServiceKey, BlueprintService(database))
+    attributes.put(EntityServiceKey, EntityService(database))
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
     attributes.put(AuthSessionServiceKey, AuthSessionService(database))
     attributes.put(PasswordResetServiceKey, PasswordResetService(

@@ -152,7 +152,7 @@ private fun validateSpecAuthentication(id: String, spec: String?, auth: SpecAuth
     }
 }
 
-private fun isAbsoluteUrl(value: String): Boolean = try {
+internal fun isAbsoluteUrl(value: String): Boolean = try {
     value.isNotEmpty() && URI(value).isAbsolute
 } catch (_: URISyntaxException) {
     false
@@ -262,7 +262,7 @@ private fun enumEntryMatchesType(type: String, entry: JsonPrimitive): Boolean = 
 /** JSON kind matches `type`; array elements match `items.type`; with an enum, default ∈ enum. */
 internal fun validateDefault(id: String, def: PropertyDefinition) {
     val default = def.default ?: return
-    if (!defaultMatchesType(def.type, default)) {
+    if (!jsonMatchesType(def.type, default)) {
         throw BadRequestException("schema.properties['$id'].default does not match type ${def.type}")
     }
     if (default is JsonArray) validateDefaultArrayElements(id, def.items?.type, default)
@@ -274,12 +274,17 @@ internal fun validateDefault(id: String, def: PropertyDefinition) {
     }
 }
 
-private fun defaultMatchesType(type: String, default: JsonElement): Boolean = when (type) {
-    "string" -> default is JsonPrimitive && default.isString
-    "number" -> default is JsonPrimitive && !default.isString && default.doubleOrNull != null
-    "boolean" -> default is JsonPrimitive && default.booleanOrNull != null
-    "array" -> default is JsonArray
-    "object" -> default is JsonObject
+/**
+ * Whether [element]'s JSON kind matches [type] — shared by a property's own `default` value
+ * (this file) and, since phase 2, an entity's stored property VALUE (`entities/
+ * EntityValidation.kt`'s `TYPE_MISMATCH` check): one type check, so the two can never disagree.
+ */
+internal fun jsonMatchesType(type: String, element: JsonElement): Boolean = when (type) {
+    "string" -> element is JsonPrimitive && element.isString
+    "number" -> element is JsonPrimitive && !element.isString && element.doubleOrNull != null
+    "boolean" -> element is JsonPrimitive && element.booleanOrNull != null
+    "array" -> element is JsonArray
+    "object" -> element is JsonObject
     else -> false
 }
 
@@ -292,7 +297,7 @@ private fun validateDefaultArrayElements(id: String, itemsType: String?, default
     }
 }
 
-private fun enumEntryMatchesArrayItemType(itemsType: String, element: JsonPrimitive): Boolean = when (itemsType) {
+internal fun enumEntryMatchesArrayItemType(itemsType: String, element: JsonPrimitive): Boolean = when (itemsType) {
     "string" -> element.isString
     "number" -> !element.isString && element.doubleOrNull != null
     "boolean" -> element.booleanOrNull != null

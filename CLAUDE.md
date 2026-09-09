@@ -103,7 +103,7 @@ Group is `ch.nokillswit`, version `1.0.0-SNAPSHOT` (set in root `build.gradle.kt
 
 ### The Port data model (the direction of travel)
 
-**Toadie is moving from Backstage's fixed System Model to [Port.io](https://docs.port.io/context-lake/data-model/configure-data-model/)'s ontology in phases** — user-definable **blueprints** (typed properties, relations, mirror/calculation/aggregation properties, ownership) replace the seven predefined kinds, and entities will attach to blueprints. Phase 1 (v1.23.0) is the `blueprints/` registry: create/edit/list/delete blueprint definitions in Port's native JSON shape, ADMIN-curated and readable by everyone, with nothing in the catalog/kinds machinery changed yet. **`.claude/docs/port-data-model.md` is the local offline reference for Port's blueprint rules** (every property type/format/colour, the relation/mirror/calculation/aggregation/ownership grammars, meta-properties, the identifier-charset assumption) — consult it when designing any blueprint/entity feature instead of browsing, and update it when a rule is added.
+**Toadie is moving from Backstage's fixed System Model to [Port.io](https://docs.port.io/context-lake/data-model/configure-data-model/)'s ontology in phases** — user-definable **blueprints** (typed properties, relations, mirror/calculation/aggregation properties, ownership) replace the seven predefined kinds, and **entities** are instances attached to a blueprint. Phase 1 (v1.23.0) is the `blueprints/` registry: create/edit/list/delete blueprint definitions in Port's native JSON shape, ADMIN-curated and readable by everyone, with nothing in the catalog/kinds machinery changed yet. Phase 2 (v1.24.0) is the `entities/` package: instances of blueprints — any authenticated user may create/read/update/delete any entity (the catalog-file shared-workspace rule, no admin gate), `properties` typed by the owning blueprint's `schema`, `relations` naming other entities of the target blueprints, and strict per-write validation (`entityFindings`) reused unchanged by every GET/list `findings` field so an entity left stale by a later blueprint edit is visibly flagged without a background job; `catalog/` itself is untouched by this phase. **`.claude/docs/port-data-model.md` is the local offline reference for Port's blueprint AND entity rules** (every property type/format/colour, the relation/mirror/calculation/aggregation/ownership grammars, meta-properties, the identifier-charset assumption, and — since phase 2 — the entity wire shape, its value-validation rule table, and the lifecycle rules) — consult it when designing any blueprint/entity feature instead of browsing, and update it when a rule is added.
 
 ### API guidelines (the authoritative API standard)
 
@@ -238,9 +238,30 @@ ch.nokillswit
 │                       under the tag-category table lock — relation/aggregation targets must
 │                       exist (self allowed), an identifier RENAME cascades into every row
 │                       targeting it in the same transaction, deleting a targeted blueprint is
-│                       409 naming the referrers), BlueprintRoutes.kt — GET /api/v1/blueprints
+│                       409 naming the referrers, or that has active ENTITIES 409 naming the
+│                       count (V28)), BlueprintRoutes.kt — GET /api/v1/blueprints
 │                       + GET {id} (any authenticated, unpaged, ≤200) + POST/PUT/DELETE (ADMIN,
 │                       guard-before-read). No seed: the registry starts empty
+├── entities/           instances of a blueprint (v1.24.0, Phase 2 of the Port data-model
+│                       move): Entity.kt (the wire DTOs — EntityRequest/Entity/EntityFinding,
+│                       reusing `blueprintJson` for the stored `document` = {properties,
+│                       relations} and for ABSENT-not-null responses), EntityValidation.kt
+│                       (the blueprint-free shape rules — identifier/title/icon/team/document
+│                       size — plus the pure `entityFindings`, the blueprint-dependent
+│                       property/relation rule table in .claude/docs/port-data-model.md, reused
+│                       unchanged by both the strict-save 400 and every GET/list `findings`),
+│                       EntityReferences.kt (pure `entityTargets`/`withEntityTargetRenamed`),
+│                       EntityService.kt (one row = one entity, FK to blueprints.id; every
+│                       mutation under the two-table `blueprints`-then-`entities` lock —
+│                       .claude/docs/persistence.md "Entity targets under concurrency (V28)" —
+│                       relation targets must be ACTIVE entities of the target blueprint,
+│                       identifier unique per blueprint, a RENAME cascades into every
+│                       referring entity's relations, deleting a targeted entity is 409 naming
+│                       the referrers), EntityRoutes.kt — GET /api/v1/entities (any
+│                       authenticated, paged: identifier/title/updatedAt sort, blueprint +
+│                       q filters) + GET/POST/PUT/DELETE {id} (any authenticated, no admin
+│                       gate anywhere — the catalog-file shared-workspace rule). No seed: the
+│                       registry starts empty
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),
                         CatalogFileValidation.kt (the sanitizer + per-kind required/forbidden
