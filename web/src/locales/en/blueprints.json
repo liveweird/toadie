@@ -39,7 +39,8 @@
     "mirrorProperties": "Mirror properties",
     "calculationProperties": "Calculation properties",
     "aggregationProperties": "Aggregation properties",
-    "ownership": "Ownership"
+    "ownership": "Ownership",
+    "hierarchy": "Hierarchy"
   },
   "field": {
     "identifier": "Identifier",
@@ -91,7 +92,8 @@
     "query": "Query (JSON)",
     "pathFilter": "Path filter (JSON)",
     "ownershipType": "Ownership",
-    "ownershipNone": "None"
+    "ownershipNone": "None",
+    "hierarchyRelation": "Hierarchy relation"
   },
   "hint": {
     "icon": "The NAME of a Port icon (e.g. Microservice) — a free string, not a picture.",
@@ -101,7 +103,8 @@
     "path": "Dot-separated relation identifiers, ending in a property or a $meta name (e.g. system.domain.$title).",
     "calculation": "A jq expression over the entity — stored as text, never evaluated here.",
     "colors": "A JSON object mapping calculated values to one of Port's 14 colours.",
-    "query": "Port's search-rule syntax ({ combinator, rules }) — stored and shape-checked only."
+    "query": "Port's search-rule syntax ({ combinator, rules }) — stored and shape-checked only.",
+    "hierarchyRelation": "A Toadie-only extension, not a Port field: pick one of this blueprint's own single relations (not \"many\") to mark it as the containment parent for the Entity graph and hierarchy pages. Leave unset for a blueprint with no natural parent."
   },
   "validation": {
     "identifier": "Must be 1–100 characters of letters, digits, and [@_.:/=-], and not start with $",

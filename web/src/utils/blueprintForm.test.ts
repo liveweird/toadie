@@ -323,6 +323,78 @@ describe("toBlueprintRequest", () => {
   });
 });
 
+describe("hierarchyRelation — derive, don't clear (v1.25.0)", () => {
+  function withRelation(hierarchyRelation: string, many = false) {
+    return values({
+      relations: [{ ...emptyRelationDraft(), id: "owningTeam", title: "Owned by", target: "team", many }],
+      hierarchyRelation,
+    });
+  }
+
+  test("emits the field while it names a current single relation", () => {
+    const r = toBlueprintRequest(withRelation("owningTeam"));
+    expect(r.hierarchyRelation).toBe("owningTeam");
+  });
+
+  test("omits the field once the named relation is removed — no effect needed", () => {
+    const r = toBlueprintRequest(values({ relations: [], hierarchyRelation: "owningTeam" }));
+    expect(r.hierarchyRelation).toBeUndefined();
+  });
+
+  test("omits the field once the named relation flips to many — a single-value rule became stale", () => {
+    const r = toBlueprintRequest(withRelation("owningTeam", true));
+    expect(r.hierarchyRelation).toBeUndefined();
+  });
+
+  test("a blank hierarchyRelation omits the field", () => {
+    const r = toBlueprintRequest(withRelation(""));
+    expect(r.hierarchyRelation).toBeUndefined();
+  });
+
+  test("fromBlueprintResponse round-trips a set hierarchyRelation", () => {
+    const response = {
+      id: 1,
+      createdBy: 1,
+      creatorName: "Alice",
+      creatorDeleted: false,
+      createdAt: 1,
+      updatedAt: 1,
+      identifier: "service",
+      title: "Service",
+      schema: { properties: {}, required: [] },
+      relations: { owningTeam: { title: "Owned by", target: "team", required: false, many: false } },
+      mirrorProperties: {},
+      calculationProperties: {},
+      aggregationProperties: {},
+      hierarchyRelation: "owningTeam",
+    } as unknown as Blueprint;
+
+    const form = fromBlueprintResponse(response);
+    expect(form.hierarchyRelation).toBe("owningTeam");
+    expect(toBlueprintRequest(form).hierarchyRelation).toBe("owningTeam");
+  });
+
+  test("fromBlueprintResponse leaves it blank when the wire response carries none", () => {
+    const response = {
+      id: 1,
+      createdBy: 1,
+      creatorName: "Alice",
+      creatorDeleted: false,
+      createdAt: 1,
+      updatedAt: 1,
+      identifier: "service",
+      title: "Service",
+      schema: { properties: {}, required: [] },
+      relations: {},
+      mirrorProperties: {},
+      calculationProperties: {},
+      aggregationProperties: {},
+    } as unknown as Blueprint;
+
+    expect(fromBlueprintResponse(response).hierarchyRelation).toBe("");
+  });
+});
+
 describe("fromBlueprintResponse edge branches", () => {
   function responseWith(overrides: Record<string, unknown>): Blueprint {
     return {

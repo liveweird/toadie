@@ -31,14 +31,15 @@ import { getCatalogGraph } from "../api/catalogFiles";
 import CatalogGraphNode from "../components/CatalogGraphNode";
 import CatalogToolbar from "../components/CatalogToolbar";
 import EmptyState from "../components/EmptyState";
-import NamespaceFrames from "../components/NamespaceFrames";
+import ClusterFrames from "../components/ClusterFrames";
 import {
   applyManualPositions,
+  clusterFrames,
   COLLAPSED_FACE_STYLE,
   filterGraph,
   FOLDED_EDGE_STYLE,
   layoutGraph,
-  namespaceFrames,
+  NAMESPACE_CLUSTER,
   RELATION_FAMILIES,
   STATUS_STYLE,
   type GraphPositions,
@@ -125,7 +126,7 @@ export default function RenderGraph() {
     if (!data || noKinds) return { nodes: [] as LaidOutNode[], edges: [] as Edge[], anyCollapsed: false };
     // Chips first, fold second: a MISSING child a chip pruned is neither counted nor hidden.
     const folded = foldGraph(filterGraph(data, enabled), forest, new Set(collapsed));
-    const laidOut = layoutGraph(folded);
+    const laidOut = layoutGraph(folded, NAMESPACE_CLUSTER);
     const nodes = laidOut.nodes.map((n) => {
       const info = folded.info.get(n.id);
       return info ? {
@@ -167,7 +168,7 @@ export default function RenderGraph() {
   // Frames come off the LIVE node array, not off baseLayout: mid-drag movement lands in
   // `nodes` through applyNodeChanges, so a dragged node stretches its namespace's box as it
   // moves, which is the whole of Manual mode's re-fitting.
-  const frames = useMemo(() => namespaceFrames(nodes), [nodes]);
+  const frames = useMemo(() => clusterFrames(nodes, NAMESPACE_CLUSTER.keyOf), [nodes]);
 
   // Live drag: applyNodeChanges keeps the gesture fluent — mid-drag frames never touch
   // `positions` (writing them re-ran dagre and wholesale-replaced the node array
@@ -374,7 +375,7 @@ export default function RenderGraph() {
             edgesFocusable={false}
             proOptions={{ hideAttribution: false }}
           >
-            <NamespaceFrames frames={frames} />
+            <ClusterFrames frames={frames} />
             <Background />
             <Controls showInteractive={false} />
           </ReactFlow>

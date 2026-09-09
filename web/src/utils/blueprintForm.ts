@@ -186,7 +186,20 @@ export type BlueprintFormValues = {
   ownershipType: string;
   ownershipTitle: string;
   ownershipPath: string;
+  /**
+   * "" = no hierarchy relation (a Toadie-only extension, v1.25.0 — the entity graph/tree's
+   * containment source). DERIVE, DON'T CLEAR: the Select's own value is guarded the same way
+   * `toBlueprintRequest` guards emission below, so flipping a relation to `many` or removing
+   * it drops this from the preview/request WITHOUT an effect keeping the two in sync.
+   */
+  hierarchyRelation: string;
 };
+
+/** The relations a blueprint's hierarchyRelation may name — single (`many === false`) ones
+ *  with a non-blank id (the server's rule, `BlueprintValidation.kt`). */
+export function singleRelationIds(relations: RelationDraft[]): string[] {
+  return relations.filter((r) => r.id.trim() && !r.many).map((r) => r.id.trim());
+}
 
 // -- The five row families (EditorRowList, v1.23.2) -------------------------------------
 
@@ -322,6 +335,7 @@ export function emptyBlueprintForm(): BlueprintFormValues {
     ownershipType: "",
     ownershipTitle: "",
     ownershipPath: "",
+    hierarchyRelation: "",
   };
 }
 
@@ -531,6 +545,12 @@ export function toBlueprintRequest(values: BlueprintFormValues): BlueprintBody {
     const id = draft.id.trim();
     if (id) aggregationProperties[id] = aggregationDefinitionFor(draft);
   }
+  // Derive, don't clear: emitted only while it STILL names a current single relation, so
+  // flipping a relation to `many` or removing it drops the field from the request without
+  // any effect keeping the two in sync (the Select guards its own value the same way).
+  const hierarchyRelation = singleRelationIds(values.relations).includes(values.hierarchyRelation.trim())
+    ? values.hierarchyRelation.trim()
+    : undefined;
   return {
     identifier: values.identifier.trim(),
     title: values.title.trim(),
@@ -542,6 +562,7 @@ export function toBlueprintRequest(values: BlueprintFormValues): BlueprintBody {
     calculationProperties,
     aggregationProperties,
     ownership: ownershipFor(values),
+    hierarchyRelation,
   } as BlueprintBody;
 }
 
@@ -693,6 +714,7 @@ export function fromBlueprintResponse(blueprint: Blueprint): BlueprintFormValues
     ownershipType: blueprint.ownership?.type ?? "",
     ownershipTitle: blueprint.ownership?.title ?? "",
     ownershipPath: blueprint.ownership?.path ?? "",
+    hierarchyRelation: blueprint.hierarchyRelation ?? "",
   };
 }
 

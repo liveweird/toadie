@@ -232,4 +232,34 @@ describe("BlueprintFormFields", () => {
 
     expect(await screen.findByLabelText(/^path( \*)?$/i)).toBeInTheDocument();
   });
+
+  test("hierarchy: offers only the blueprint's CURRENT single relations, not many ones", async () => {
+    serveBlueprintList(mockFetch);
+    renderWithProviders(
+      <Harness
+        initial={{
+          relations: [
+            { ...emptyRelationDraft(), id: "owningTeam", title: "T", target: "team", many: false },
+            { ...emptyRelationDraft(), id: "peers", title: "P", target: "team", many: true },
+          ],
+        }}
+      />,
+    );
+    await openCombobox(/^hierarchy relation$/i);
+    expect(await screen.findByRole("option", { name: "owningTeam" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "peers" })).not.toBeInTheDocument();
+  });
+
+  test("hierarchy: a stored value naming a many relation renders as unset (derive, don't clear)", () => {
+    serveBlueprintList(mockFetch);
+    renderWithProviders(
+      <Harness
+        initial={{
+          relations: [{ ...emptyRelationDraft(), id: "peers", title: "P", target: "team", many: true }],
+          hierarchyRelation: "peers",
+        }}
+      />,
+    );
+    expect(screen.getByRole("combobox", { name: /^hierarchy relation$/i })).toHaveValue("");
+  });
 });

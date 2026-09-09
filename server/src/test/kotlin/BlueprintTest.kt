@@ -318,6 +318,53 @@ class BlueprintTest {
     }
 
     @Test
+    fun `hierarchyRelation round-trips, is absent when unset, and is validated`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("bphier", UserRole.ADMIN)
+        val id = identifier("bphier")
+        try {
+            // Absent when unset: no key at all on the raw body, not an explicit null.
+            val plain = admin.postJson("/api/v1/blueprints", simpleRequest(id))
+            assertFalse(plain.bodyAsText().contains("hierarchyRelation"))
+            val plainCreated = plain.body<BlueprintResponse>()
+            assertEquals(null, plainCreated.hierarchyRelation)
+
+            // Must name a relation of this blueprint's own request.
+            val unknown = admin.putJson(
+                "/api/v1/blueprints/${plainCreated.id}",
+                simpleRequest(id).copy(hierarchyRelation = "nope"),
+            )
+            assertEquals(HttpStatusCode.BadRequest, unknown.status)
+            assertTrue(unknown.body<ProblemDetail>().detail!!.contains("hierarchyRelation must name a relation"))
+
+            // Must be single-valued (many = false).
+            val withRelations = simpleRequest(id).copy(
+                relations = mapOf(
+                    "parent" to relationTo(id, many = false),
+                    "peers" to relationTo(id, many = true),
+                ),
+            )
+            val many = admin.putJson("/api/v1/blueprints/${plainCreated.id}", withRelations.copy(hierarchyRelation = "peers"))
+            assertEquals(HttpStatusCode.BadRequest, many.status)
+            assertTrue(many.body<ProblemDetail>().detail!!.contains("must name a single relation"))
+
+            // Round trip: names the single relation.
+            val ok = admin.putJson("/api/v1/blueprints/${plainCreated.id}", withRelations.copy(hierarchyRelation = "parent"))
+            assertEquals(HttpStatusCode.NoContent, ok.status)
+            val read = admin.get("/api/v1/blueprints/${plainCreated.id}")
+            assertEquals("parent", read.body<BlueprintResponse>().hierarchyRelation)
+            assertTrue(read.bodyAsText().contains("\"hierarchyRelation\":\"parent\""))
+
+            // Clearing it (omitted from the PUT body) drops it again.
+            val cleared = admin.putJson("/api/v1/blueprints/${plainCreated.id}", withRelations)
+            assertEquals(HttpStatusCode.NoContent, cleared.status)
+            assertFalse(admin.get("/api/v1/blueprints/${plainCreated.id}").bodyAsText().contains("hierarchyRelation"))
+        } finally {
+            TestBlueprints.remove(id)
+        }
+    }
+
+    @Test
     fun `an unknown top-level key such as teamInheritance is rejected as 400`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("bpunknown", UserRole.ADMIN)

@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.25.0",
+    date: "2026-09-10",
+    en: `**Entity graph & hierarchy — the third step toward Port compatibility.**
+
+- Two new pages under **Port Ontology**: **Entity graph** renders entities and their relations as an interactive diagram (blueprint frames, folding, manual layout), and **Entity hierarchy** shows the same entities as a collapsible tree.
+- Blueprints can now name one relation as their **hierarchy relation** — a Toadie-only extension that decides an entity's place in the tree/graph's containment.
+- Both pages get their own per-user saved layout, filters (blueprint + search), and a legend explaining hierarchy and folded edges.`,
+    pl: `**Graf i hierarchia encji — trzeci krok w stronę zgodności z Port.**
+
+- Dwa nowe ekrany w **Ontologii Port**: **Graf encji** renderuje encje i ich relacje jako interaktywny diagram (ramki blueprintów, zwijanie, ręczny układ), a **Hierarchia encji** pokazuje te same encje jako zwijane drzewo.
+- Blueprinty mogą teraz wskazać jedną relację jako **relację hierarchii** — rozszerzenie właściwe tylko Toadie, decydujące o miejscu encji w drzewie/grafie.
+- Obie strony mają własny, zapisywany per użytkownika układ, filtry (blueprint + wyszukiwanie) i legendę wyjaśniającą relacje hierarchii i zwinięte relacje.`,
+  },
+  {
     version: "1.24.1",
     date: "2026-09-09",
     en: `**Sample entities.**

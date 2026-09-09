@@ -13,34 +13,50 @@ import org.jetbrains.exposed.v1.r2dbc.upsert
 val GraphLayoutServiceKey = AttributeKey<GraphLayoutService>("GraphLayoutService")
 
 /**
- * The per-user Graph-page layout store (V19): one row per user holding the whole
- * [GraphLayoutDocument] — mode as a plain column, positions as a JSON object and (V24) the
- * collapsed ids as a JSON array, both in TEXT (the labels/tags precedent). Hard-delete by
- * design (the user_disabled_features exception): pure view state replaced wholesale on every
- * save, no history worth keeping.
+ * Port migration phase 3 (`.claude/docs/port-data-model.md`): the Entity graph's own layout
+ * store is a SECOND, independent instance of this same service over `entity_graph_layouts`
+ * (V30) — so a manual layout/collapse edit on `/entity-graph` never collides with the
+ * Backstage `/graph` page's saved layout for the same user.
  */
-class GraphLayoutService(private val database: R2dbcDatabase) {
-    object GraphLayouts : Table("graph_layouts") {
-        val userId = reference("user_id", UserService.Users)
-        val mode = varchar("mode", length = 10).default("auto")
-        val positions = text("positions").default("{}")
-        val collapsed = text("collapsed").default("[]")
-        val updatedAt = long("updated_at")
-        override val primaryKey = PrimaryKey(userId)
-    }
+val EntityGraphLayoutServiceKey = AttributeKey<GraphLayoutService>("EntityGraphLayoutService")
+
+/**
+ * The column shape shared by every per-user Graph-layout table (V19+V24's `graph_layouts` and
+ * V30's `entity_graph_layouts`): mode as a plain column, positions as a JSON object and the
+ * collapsed ids as a JSON array, both in TEXT (the labels/tags precedent).
+ */
+abstract class GraphLayoutTable(name: String) : Table(name) {
+    val userId = reference("user_id", UserService.Users)
+    val mode = varchar("mode", length = 10).default("auto")
+    val positions = text("positions").default("{}")
+    val collapsed = text("collapsed").default("[]")
+    val updatedAt = long("updated_at")
+    override val primaryKey = PrimaryKey(userId)
+}
+
+/**
+ * The per-user Graph-page layout store (V19): one row per user holding the whole
+ * [GraphLayoutDocument]. Hard-delete by design (the user_disabled_features exception): pure
+ * view state replaced wholesale on every save, no history worth keeping. Parameterized over
+ * [table] so a second page's layout (the Entity graph's, V30) reuses this service unchanged
+ * against its own, independent table — [GraphLayouts] and [EntityGraphLayouts] below.
+ */
+class GraphLayoutService(private val database: R2dbcDatabase, private val table: GraphLayoutTable) {
+    object GraphLayouts : GraphLayoutTable("graph_layouts")
+    object EntityGraphLayouts : GraphLayoutTable("entity_graph_layouts")
 
     private val json = Json
 
     /** The stored document, or the default (auto mode, nothing dragged) when never saved. */
     suspend fun read(userId: UInt): GraphLayoutDocument = suspendTransaction(database) {
-        GraphLayouts.selectAll()
-            .where { GraphLayouts.userId eq userId }
+        table.selectAll()
+            .where { table.userId eq userId }
             .singleOrNull()
             ?.let {
                 GraphLayoutDocument(
-                    mode = it[GraphLayouts.mode],
-                    positions = json.decodeFromString(it[GraphLayouts.positions]),
-                    collapsed = json.decodeFromString(it[GraphLayouts.collapsed]),
+                    mode = it[table.mode],
+                    positions = json.decodeFromString(it[table.positions]),
+                    collapsed = json.decodeFromString(it[table.collapsed]),
                 )
             }
             ?: GraphLayoutDocument()
@@ -53,12 +69,12 @@ class GraphLayoutService(private val database: R2dbcDatabase) {
      */
     suspend fun replace(userId: UInt, doc: GraphLayoutDocument): Unit = suspendTransaction(database) {
         validateGraphLayout(doc)
-        GraphLayouts.upsert {
-            it[GraphLayouts.userId] = userId
-            it[mode] = doc.mode
-            it[positions] = json.encodeToString(doc.positions)
-            it[collapsed] = json.encodeToString(doc.collapsed)
-            it[updatedAt] = System.currentTimeMillis()
+        table.upsert {
+            it[table.userId] = userId
+            it[table.mode] = doc.mode
+            it[table.positions] = json.encodeToString(doc.positions)
+            it[table.collapsed] = json.encodeToString(doc.collapsed)
+            it[table.updatedAt] = System.currentTimeMillis()
         }
     }
 }

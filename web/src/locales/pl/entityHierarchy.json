@@ -1,0 +1,14 @@
+{
+  "title": "Hierarchia encji",
+  "loadFailed": "Nie udało się wczytać hierarchii encji",
+  "empty": "Nie ma nic do pokazania — żadna encja nie pasuje.",
+  "expandAll": "Rozwiń wszystko",
+  "collapseAll": "Zwiń wszystko",
+  "toggleAria": "Przełącz elementy podrzędne {{name}}",
+  "pin": "Przypnij",
+  "unpin": "Odepnij",
+  "pinned": {
+    "badge": "Przypięte: {{name}}",
+    "clearAria": "Odepnij {{name}}"
+  }
+}

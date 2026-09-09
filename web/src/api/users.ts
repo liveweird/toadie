@@ -101,3 +101,19 @@ export async function setGraphLayout(id: number, doc: GraphLayoutDocument): Prom
     body: JSON.stringify(doc),
   });
 }
+
+/**
+ * The Entity graph page's OWN per-user layout document (v1.25.0) — a second table server-side
+ * (`entity_graph_layouts`), same `GraphLayoutDocument` shape, so the two views never share one
+ * saved layout. See `hooks/useGraphLayout.ts`'s `LAYOUT_VIEWS` table.
+ */
+export async function getEntityGraphLayout(id: number): Promise<GraphLayoutDocument> {
+  return jsonRequest<GraphLayoutDocument>(`/api/v1/users/${id}/entity-graph-layout`);
+}
+
+export async function setEntityGraphLayout(id: number, doc: GraphLayoutDocument): Promise<void> {
+  await voidRequest(`/api/v1/users/${id}/entity-graph-layout`, {
+    method: "PUT",
+    body: JSON.stringify(doc),
+  });
+}

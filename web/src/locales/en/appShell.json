@@ -8,6 +8,8 @@
     "graph": "Graph",
     "blueprints": "Blueprints",
     "entities": "Entities",
+    "entityGraph": "Entity graph",
+    "entityHierarchy": "Entity hierarchy",
     "namespaces": "Namespaces",
     "labels": "Labels",
     "tags": "Tags",

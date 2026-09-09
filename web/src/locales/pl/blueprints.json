@@ -39,7 +39,8 @@
     "mirrorProperties": "Właściwości lustrzane",
     "calculationProperties": "Właściwości obliczane",
     "aggregationProperties": "Właściwości agregowane",
-    "ownership": "Własność"
+    "ownership": "Własność",
+    "hierarchy": "Hierarchia"
   },
   "field": {
     "identifier": "Identyfikator",
@@ -91,7 +92,8 @@
     "query": "Zapytanie (JSON)",
     "pathFilter": "Filtr ścieżki (JSON)",
     "ownershipType": "Własność",
-    "ownershipNone": "Brak"
+    "ownershipNone": "Brak",
+    "hierarchyRelation": "Relacja hierarchii"
   },
   "hint": {
     "icon": "NAZWA ikony Port (np. Microservice) — wolny tekst, nie obraz.",
@@ -101,7 +103,8 @@
     "path": "Identyfikatory relacji oddzielone kropkami, kończące się właściwością lub nazwą $meta (np. system.domain.$title).",
     "calculation": "Wyrażenie jq nad encją — przechowywane jako tekst, nigdy tu nie obliczane.",
     "colors": "Obiekt JSON mapujący obliczone wartości na jeden z 14 kolorów Port.",
-    "query": "Składnia reguł wyszukiwania Port ({ combinator, rules }) — tylko przechowywana i sprawdzana strukturalnie."
+    "query": "Składnia reguł wyszukiwania Port ({ combinator, rules }) — tylko przechowywana i sprawdzana strukturalnie.",
+    "hierarchyRelation": "Rozszerzenie właściwe tylko Toadie, nie pole Port: wybierz jedną z własnych relacji jednowartościowych tego blueprintu (nie „wiele”), aby oznaczyć ją jako rodzica w hierarchii dla grafu i drzewa encji. Pozostaw nieustawione, jeśli blueprint nie ma naturalnego rodzica."
   },
   "validation": {
     "identifier": "Musi mieć 1–100 znaków liter, cyfr i [@_.:/=-] oraz nie zaczynać się od $",

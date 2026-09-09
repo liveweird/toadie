@@ -35,9 +35,5 @@
   },
   "empty": "Nothing to render — no stored files match.",
   "nodeAria": "Open {{name}}",
-  "fold": {
-    "collapseAria": "Collapse {{name}}",
-    "expandAria": "Expand {{name}} ({{count}} hidden)"
-  },
   "expandAll": "Expand all"
 }

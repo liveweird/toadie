@@ -187,6 +187,25 @@ non-empty and its own next PUT is refused `400` until the missing property is su
 wins, never a dangling target), and a blueprint delete racing an entity create against it (no
 orphaned entity survives a blueprint that vanished underneath it).
 
+**Entity graph (V29/V30).** `EntityGraphTest` is the pure builder (`entities/EntityGraph.kt`,
+no database): the both-ends rule including a hidden or stale relation target dropped rather
+than surfaced as a MISSING node, relation array-value expansion and edge dedupe, the
+`hierarchy` flag set only for the edge whose `relation` equals the SOURCE entity's blueprint's
+`hierarchyRelation`, the `"<blueprint>|<identifier>"` node-id grammar, and pass-through of
+every other field. `EntityTest` carries the route-level graph cases: no filter, `blueprint` as
+an IN with two values, an all-unknown `blueprint` list answering an empty graph rather than
+`400`, `q` folding (`"Żółw"`/`"zolw"`), `401` for an anonymous caller, and `hierarchy: true`
+observed end to end after PUTting a blueprint's `hierarchyRelation` — plus pins that the
+response carries NO `null` members. Three cases join `BlueprintValidationTest`'s rule table for
+`hierarchyRelation` itself: unset stays absent, naming an unknown relation is `400`, and naming
+a `many: true` relation is `400`. `EntityGraphLayoutTest` is the `GraphLayoutTest` twin over the
+V30 table PLUS one dedicated case proving the two layout documents are independent — a save
+through `/entity-graph-layout` never appears on `/graph-layout` for the same user, and vice
+versa. On the frontend, `web/src/test/reactFlowStub.tsx` is the shared React Flow stub
+(extracted from `RenderGraph.test.tsx`) that both the Backstage `RenderGraph`/`Hierarchy` page
+tests and the new `EntityGraph`/`EntityHierarchy` page tests drive, so the canvas contract is
+pinned once rather than duplicated per page.
+
 **Dependency locking.** The Gradle build resolves against the committed lockfiles (`core/` + `server/gradle.lockfile`, the root `settings-` and `buildscript-gradle.lockfile`; enabled in the root `build.gradle.kts`, DEFAULT lock mode): a transitive version outside the lock state fails resolution. After a dependency change run `./gradlew build --write-locks` and commit the lockfiles; the Dockerfile copies them into the build stage, so a forgotten lockfile also fails the image build.
 
 **Schemathesis (optional manual fuzz pass, not in CI).** Property-based fuzzing of the running stack from the spec: `docker compose up --build` (compose ships dev mode, so `/openapi` is exposed), grab a token — `TOKEN=$(curl -s -X POST localhost:8081/api/v1/login -H 'Content-Type: application/json' -d '{"email":"admin@toadie.local","password":"changeme"}' | jq -r .token)` — then `uvx schemathesis run -c all -H "Authorization: Bearer $TOKEN" --exclude-path /api/v1/logout http://localhost:8081/openapi/documentation.yaml --url http://localhost:8081`. The `/logout` exclusion is load-bearing: fuzzing it **revokes the bearer token** (everything after 401s). Login fuzzing also trips the per-account lockout for `admin@toadie.local` (the spec's example email) — in-memory, so `docker compose restart app` clears it. Expect residual noise from stateful invariants the spec cannot express (rate-limit 429s, TRACE probes); a **`Server error` count above zero is the real signal**. It complements, not replaces, the suite-piggybacked conformance layer above; fuzz junk lives only in the compose volume (`docker compose down -v` resets). Needs `uv` (or `pipx`); no Python dependency lives in the repo.

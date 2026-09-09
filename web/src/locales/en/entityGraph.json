@@ -1,0 +1,35 @@
+{
+  "title": "Entity graph",
+  "loadFailed": "Failed to load the entity graph",
+  "relationsLabel": "Relations",
+  "filter": {
+    "blueprints": "Blueprints",
+    "q": "Search",
+    "clearQ": "Clear search filter"
+  },
+  "legend": {
+    "title": "Legend",
+    "entity": "Entity",
+    "collapsed": "Collapsed — its contents are hidden inside",
+    "hierarchyEdge": "Hierarchy edge",
+    "folded": "Relation of a hidden entity"
+  },
+  "layoutMode": {
+    "label": "Layout",
+    "auto": "Auto",
+    "manual": "Manual"
+  },
+  "resetLayout": "Reset layout",
+  "layout": {
+    "loading": "Loading saved layout…",
+    "loadFailed": "Failed to load the saved layout",
+    "retryLoad": "Retry loading layout",
+    "saving": "Saving layout…",
+    "pending": "Layout changes pending…",
+    "saveFailed": "Failed to save the layout",
+    "retrySave": "Retry saving layout"
+  },
+  "empty": "Nothing to render — no entities match.",
+  "nodeAria": "Open {{name}}",
+  "expandAll": "Expand all"
+}

@@ -103,7 +103,7 @@ Group is `ch.nokillswit`, version `1.0.0-SNAPSHOT` (set in root `build.gradle.kt
 
 ### The Port data model (the direction of travel)
 
-**Toadie is moving from Backstage's fixed System Model to [Port.io](https://docs.port.io/context-lake/data-model/configure-data-model/)'s ontology in phases** — user-definable **blueprints** (typed properties, relations, mirror/calculation/aggregation properties, ownership) replace the seven predefined kinds, and **entities** are instances attached to a blueprint. Phase 1 (v1.23.0) is the `blueprints/` registry: create/edit/list/delete blueprint definitions in Port's native JSON shape, ADMIN-curated and readable by everyone, with nothing in the catalog/kinds machinery changed yet. Phase 2 (v1.24.0) is the `entities/` package: instances of blueprints — any authenticated user may create/read/update/delete any entity (the catalog-file shared-workspace rule, no admin gate), `properties` typed by the owning blueprint's `schema`, `relations` naming other entities of the target blueprints, and strict per-write validation (`entityFindings`) reused unchanged by every GET/list `findings` field so an entity left stale by a later blueprint edit is visibly flagged without a background job; `catalog/` itself is untouched by this phase. **`.claude/docs/port-data-model.md` is the local offline reference for Port's blueprint AND entity rules** (every property type/format/colour, the relation/mirror/calculation/aggregation/ownership grammars, meta-properties, the identifier-charset assumption, and — since phase 2 — the entity wire shape, its value-validation rule table, and the lifecycle rules) — consult it when designing any blueprint/entity feature instead of browsing, and update it when a rule is added.
+**Toadie is moving from Backstage's fixed System Model to [Port.io](https://docs.port.io/context-lake/data-model/configure-data-model/)'s ontology in phases** — user-definable **blueprints** (typed properties, relations, mirror/calculation/aggregation properties, ownership) replace the seven predefined kinds, and **entities** are instances attached to a blueprint. Phase 1 (v1.23.0) is the `blueprints/` registry: create/edit/list/delete blueprint definitions in Port's native JSON shape, ADMIN-curated and readable by everyone, with nothing in the catalog/kinds machinery changed yet. Phase 2 (v1.24.0) is the `entities/` package: instances of blueprints — any authenticated user may create/read/update/delete any entity (the catalog-file shared-workspace rule, no admin gate), `properties` typed by the owning blueprint's `schema`, `relations` naming other entities of the target blueprints, and strict per-write validation (`entityFindings`) reused unchanged by every GET/list `findings` field so an entity left stale by a later blueprint edit is visibly flagged without a background job; `catalog/` itself is untouched by this phase. Phase 3 (v1.25.0): the Entity graph and Entity hierarchy pages under Port Ontology, driven by the Toadie-only `hierarchyRelation` — a per-blueprint pointer at one of its own `many: false` relations naming the entity hierarchy's parent link, stored beside the Port document (V29) so the document itself stays untouched; `GET /api/v1/entities/graph` renders entities and their relations together the way `catalog/Graph.kt` does one level down, with its own per-user layout persistence (V30) independent of the Backstage Graph page's. **`.claude/docs/port-data-model.md` is the local offline reference for Port's blueprint AND entity rules** (every property type/format/colour, the relation/mirror/calculation/aggregation/ownership grammars, meta-properties, the identifier-charset assumption, and — since phase 2 — the entity wire shape, its value-validation rule table, and the lifecycle rules) — consult it when designing any blueprint/entity feature instead of browsing, and update it when a rule is added.
 
 ### API guidelines (the authoritative API standard)
 
@@ -156,7 +156,10 @@ ch.nokillswit
 │                       UI+email language) + the per-user Graph layout (V19: GET/PUT
 │                       {id}/graph-layout, self-or-admin — the Graph page's Auto/Manual
 │                       modes + dragged positions; GraphLayout.kt/GraphLayoutService.kt,
-│                       deliberately unaudited) + Validation.kt
+│                       deliberately unaudited) + its Phase 3 twin, the Entity graph's OWN
+│                       layout (V30: GET/PUT {id}/entity-graph-layout, same shape/rules over
+│                       an independent table — GraphLayoutService generalized to take its
+│                       Exposed table object, GraphLayouts/EntityGraphLayouts) + Validation.kt
 ├── dictionaries/       admin-curated ordered value lists (Lettuce's dictionaries, single-
 │                       valued — no translations): Dictionary.kt (the Dictionary enum whitelist
 │                       + DTOs + validateDictionaryUpdate), Languages.kt (SUPPORTED_LANGUAGES —
@@ -239,7 +242,11 @@ ch.nokillswit
 │                       exist (self allowed), an identifier RENAME cascades into every row
 │                       targeting it in the same transaction, deleting a targeted blueprint is
 │                       409 naming the referrers, or that has active ENTITIES 409 naming the
-│                       count (V28)), BlueprintRoutes.kt — GET /api/v1/blueprints
+│                       count (V28)); Phase 3's `hierarchyRelation` (V29 — a nullable column
+│                       beside `definition`, so the stored Port document stays byte-identical)
+│                       names one of the SAME row's `relations` with `many == false`, validated
+│                       in BlueprintValidation.kt, read/written alongside `definition`,
+│                       BlueprintRoutes.kt — GET /api/v1/blueprints
 │                       + GET {id} (any authenticated, unpaged, ≤200) + POST/PUT/DELETE (ADMIN,
 │                       guard-before-read). No seed: the registry starts empty
 ├── entities/           instances of a blueprint (v1.24.0, Phase 2 of the Port data-model
@@ -257,10 +264,17 @@ ch.nokillswit
 │                       relation targets must be ACTIVE entities of the target blueprint,
 │                       identifier unique per blueprint, a RENAME cascades into every
 │                       referring entity's relations, deleting a targeted entity is 409 naming
-│                       the referrers), EntityRoutes.kt — GET /api/v1/entities (any
+│                       the referrers), EntityGraph.kt (Phase 3, v1.25.0 — a pure builder +
+│                       DTOs, no database: `buildEntityGraph` over the shown rows, one edge per
+│                       relation value with the both-ends rule and no virtual/MISSING nodes,
+│                       `hierarchy` flagged for the source blueprint's `hierarchyRelation`, the
+│                       `"<blueprint>|<identifier>"` node-id grammar), EntityRoutes.kt —
+│                       GET /api/v1/entities (any
 │                       authenticated, paged: identifier/title/updatedAt sort, blueprint +
 │                       q filters) + GET/POST/PUT/DELETE {id} (any authenticated, no admin
-│                       gate anywhere — the catalog-file shared-workspace rule). No seed: the
+│                       gate anywhere — the catalog-file shared-workspace rule) +
+│                       GET …/entities/graph (any authenticated, unpaged — the same
+│                       `blueprint` any-of/`q` filters, both-ends rule). No seed: the
 │                       registry starts empty
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),

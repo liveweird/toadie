@@ -1,0 +1,35 @@
+{
+  "title": "Graf encji",
+  "loadFailed": "Nie udało się wczytać grafu encji",
+  "relationsLabel": "Relacje",
+  "filter": {
+    "blueprints": "Blueprinty",
+    "q": "Szukaj",
+    "clearQ": "Wyczyść filtr wyszukiwania"
+  },
+  "legend": {
+    "title": "Legenda",
+    "entity": "Encja",
+    "collapsed": "Zwinięty — jego zawartość jest ukryta w środku",
+    "hierarchyEdge": "Relacja hierarchii",
+    "folded": "Relacja ukrytej encji"
+  },
+  "layoutMode": {
+    "label": "Układ",
+    "auto": "Automatyczny",
+    "manual": "Ręczny"
+  },
+  "resetLayout": "Resetuj układ",
+  "layout": {
+    "loading": "Wczytywanie zapisanego układu…",
+    "loadFailed": "Nie udało się wczytać zapisanego układu",
+    "retryLoad": "Ponów wczytywanie układu",
+    "saving": "Zapisywanie układu…",
+    "pending": "Zmiany układu oczekują…",
+    "saveFailed": "Nie udało się zapisać układu",
+    "retrySave": "Ponów zapisywanie układu"
+  },
+  "empty": "Nie ma czego renderować — żadna encja nie pasuje.",
+  "nodeAria": "Otwórz {{name}}",
+  "expandAll": "Rozwiń wszystko"
+}

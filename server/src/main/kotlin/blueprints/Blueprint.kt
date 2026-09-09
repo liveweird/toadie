@@ -200,6 +200,10 @@ data class BlueprintRequest(
     val calculationProperties: Map<String, CalculationPropertyDefinition> = emptyMap(),
     val aggregationProperties: Map<String, AggregationPropertyDefinition> = emptyMap(),
     val ownership: OwnershipDefinition? = null,
+    // Port migration phase 3 (.claude/docs/port-data-model.md): a Toadie-only extension, NOT
+    // part of the Port document — stored beside `definition`, absent when unset. Must name a
+    // key of `relations` above whose `many` is false (validateBlueprintRequest).
+    val hierarchyRelation: String? = null,
 )
 
 /** The flattened request/response shape: identity columns + [BlueprintDefinition]'s fields. */
@@ -216,6 +220,7 @@ data class BlueprintResponse(
     val calculationProperties: Map<String, CalculationPropertyDefinition> = emptyMap(),
     val aggregationProperties: Map<String, AggregationPropertyDefinition> = emptyMap(),
     val ownership: OwnershipDefinition? = null,
+    val hierarchyRelation: String? = null,
     val createdBy: UInt,
     val creatorName: String,
     val creatorDeleted: Boolean,
@@ -254,6 +259,7 @@ fun sanitizedBlueprintRequest(request: BlueprintRequest): BlueprintRequest = req
     calculationProperties = request.calculationProperties.mapValues { (_, calc) -> sanitizedCalculation(calc) },
     aggregationProperties = request.aggregationProperties.mapValues { (_, agg) -> sanitizedAggregation(agg) },
     ownership = request.ownership?.let { sanitizedOwnership(it) },
+    hierarchyRelation = request.hierarchyRelation?.trim(),
 )
 
 private fun sanitizedProperty(def: PropertyDefinition): PropertyDefinition = def.copy(

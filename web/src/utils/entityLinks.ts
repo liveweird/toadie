@@ -17,3 +17,7 @@ export function newEntityPath(blueprint: string): string {
 export function editEntityPath(id: number): string {
   return `${entitiesBasePath}/${id}/edit`;
 }
+
+// The Entity graph/hierarchy pages (Port migration phase 3, v1.25.0) — leaves after Entities.
+export const entityGraphPath = "/entity-graph";
+export const entityHierarchyPath = "/entity-hierarchy";

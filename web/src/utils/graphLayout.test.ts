@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { CatalogGraph } from "../api/catalogFiles";
 import {
   applyManualPositions,
+  clusterFrames,
   edgeLabel,
   filterGraph,
   FOLDED_EDGE_STYLE,
@@ -10,6 +11,7 @@ import {
   layoutGraph,
   namespaceFrames,
   RELATION_FAMILIES,
+  type ClusterAccessor,
 } from "./graphLayout";
 
 const GRAPH: CatalogGraph = {
@@ -241,5 +243,95 @@ describe("layoutGraph folded edges", () => {
     expect(edges[2].style).toBeUndefined();
     // Ids stay the fold's own merge key, so React Flow sees one edge per merged pair+field.
     expect(edges[0].id).toBe("component:default/a->component:default/b:spec.dependsOn");
+  });
+});
+
+// The Entity graph page's clustering key (blueprint, not namespace) — a minimal stand-in
+// payload proving [layoutGraph]/[clusterFrames] generalize over ANY `ClusterAccessor<N>`,
+// not just [NAMESPACE_CLUSTER].
+interface FakeNode {
+  id: string;
+  group: string;
+}
+const CUSTOM_CLUSTER: ClusterAccessor<FakeNode> = { keyOf: (n) => n.group, nodeType: "fake" };
+
+describe("layoutGraph with a custom cluster accessor", () => {
+  test("two cluster keys compound-layout the nodes, clumped apart per key", () => {
+    const graph = {
+      nodes: [
+        { id: "a", group: "alpha" },
+        { id: "b", group: "alpha" },
+        { id: "x", group: "beta" },
+      ],
+      edges: [],
+    };
+    const { nodes } = layoutGraph(graph, CUSTOM_CLUSTER);
+    expect(nodes.every((n) => n.type === "fake")).toBe(true);
+    const frames = clusterFrames(nodes, CUSTOM_CLUSTER.keyOf);
+    expect(frames.map((f) => f.key)).toEqual(["alpha", "beta"]);
+    const [alpha, beta] = frames;
+    const apart =
+      alpha.x + alpha.width <= beta.x ||
+      beta.x + beta.width <= alpha.x ||
+      alpha.y + alpha.height <= beta.y ||
+      beta.y + beta.height <= alpha.y;
+    expect(apart).toBe(true);
+  });
+
+  test("a single cluster key never clusters — no frame is drawn", () => {
+    const graph = {
+      nodes: [
+        { id: "a", group: "only" },
+        { id: "b", group: "only" },
+      ],
+      edges: [],
+    };
+    const { nodes } = layoutGraph(graph, CUSTOM_CLUSTER);
+    expect(clusterFrames(nodes, CUSTOM_CLUSTER.keyOf)).toEqual([]);
+  });
+
+  test("dagre's internal cluster:<key> pseudo-nodes never leak into the output", () => {
+    const graph = {
+      nodes: [
+        { id: "a", group: "alpha" },
+        { id: "b", group: "alpha" },
+        { id: "x", group: "beta" },
+      ],
+      edges: [],
+    };
+    const { nodes } = layoutGraph(graph, CUSTOM_CLUSTER);
+    // Exactly the three real nodes come back — `cluster:alpha`/`cluster:beta` (dagre's own
+    // grouping nodes, per the "never set rankdir on a cluster" note in graphLayout.ts) are
+    // an internal layout detail, never returned as if they were graph entities.
+    expect(nodes.map((n) => n.id)).toEqual(["a", "b", "x"]);
+    expect(nodes.some((n) => n.id.startsWith("cluster:"))).toBe(false);
+  });
+});
+
+describe("clusterFrames with a custom keyOf", () => {
+  const laidOutFake = (id: string, group: string, x: number, y: number) => ({
+    id,
+    type: "fake" as const,
+    position: { x, y },
+    data: { apiNode: { id, group } },
+  });
+
+  test("labels each frame by the accessor's own key (not a hardcoded 'namespace' field)", () => {
+    const frames = clusterFrames(
+      [laidOutFake("a", "alpha", 0, 0), laidOutFake("b", "beta", 900, 0)],
+      (n: FakeNode) => n.group,
+    );
+    expect(frames.map((f) => ({ key: f.key, label: f.label }))).toEqual([
+      { key: "alpha", label: "alpha" },
+      { key: "beta", label: "beta" },
+    ]);
+  });
+
+  test("fewer than two keys draws no frame", () => {
+    const frames = clusterFrames(
+      [laidOutFake("a", "alpha", 0, 0), laidOutFake("b", "alpha", 300, 0)],
+      (n: FakeNode) => n.group,
+    );
+    expect(frames).toEqual([]);
   });
 });

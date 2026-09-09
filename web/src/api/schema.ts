@@ -350,6 +350,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/entity-graph-layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a user's Entity graph-page layout (target user or ADMIN)
+         * @description The per-user Entity graph layout document — the Entity graph page's own document,
+         *     independent of `graph-layout` (the Backstage catalog Graph page's document): the
+         *     layout mode (`auto` = dagre computed on every render, `manual` = the dragged
+         *     positions apply) plus every manually dragged node's canvas position, keyed by node
+         *     id (`<blueprint>|<identifier>`). A user who never saved gets the default (`auto`, no
+         *     positions) — never a 404 for a live target. **Target user or ADMIN**,
+         *     guard-before-read (a forbidden caller gets a uniform 403 whether or not the id
+         *     exists).
+         */
+        get: operations["getEntityGraphLayout"];
+        /**
+         * Replace a user's Entity graph-page layout (target user or ADMIN)
+         * @description A **wholesale replace** of the whole layout document — the client merges (it holds
+         *     the full positions map from the GET and updates only dragged entries), so a PUT
+         *     carrying only the currently visible nodes' positions would silently drop the rest.
+         *     Written by the Entity graph page on every mode switch, drag stop (debounced), and
+         *     layout reset. Idempotent; **target user or ADMIN**. Deliberately unaudited (pure
+         *     high-frequency view state, the same sanctioned exception as its `graph-layout`
+         *     twin); denials still emit `authz.denied`.
+         */
+        put: operations["replaceEntityGraphLayout"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/password": {
         parameters: {
             query?: never;
@@ -1229,7 +1268,10 @@ export interface paths {
          *     `changelogDestination` (Port platform features, out of scope: an unknown top-level key
          *     is a strict `400`). Relation and aggregation targets must name an existing blueprint
          *     (self allowed); the registry holds at most 200 active blueprints. An identifier
-         *     already held by an active blueprint (case-insensitively) is a `409`.
+         *     already held by an active blueprint (case-insensitively) is a `409`. Optionally
+         *     carries `hierarchyRelation`, a Toadie-only extension (not part of Port's document)
+         *     naming one of this blueprint's `many: false` relations — the entity hierarchy's
+         *     parent link; naming an unknown or many-valued relation is `400`.
          */
         post: operations["createBlueprint"];
         delete?: never;
@@ -1257,7 +1299,8 @@ export interface paths {
          * @description ADMIN only — whole-blueprint replacement, identifier rename included. Renaming
          *     CASCADES: every other active blueprint's relation/aggregation targets naming the old
          *     identifier are rewritten to the new one, in the same locked transaction. Same
-         *     validation and `409` rules as create; a self-relation survives a rename.
+         *     validation and `409` rules as create, including `hierarchyRelation`'s
+         *     must-be-a-current-single-relation rule; a self-relation survives a rename.
          */
         put: operations["replaceBlueprint"];
         post?: never;
@@ -1320,6 +1363,43 @@ export interface paths {
          *     "full" once reached).
          */
         post: operations["createEntity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entities/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The stored entities rendered together as a relationship graph
+         * @description Any authenticated user. The shown entities and the relation edges between them
+         *     (Phase 3 of Toadie's move from Backstage's fixed System Model to Port.io's data
+         *     model — see `.claude/docs/port-data-model.md`).
+         *
+         *     The optional filters select which entities are SHOWN: `blueprint` is an any-of (IN)
+         *     match over blueprint identifiers (case-insensitive; unknown identifiers ignored, and
+         *     if every supplied identifier is unknown the graph is empty), `q` is a case- and
+         *     accent-insensitive substring match against `identifier` OR `title`. An edge is
+         *     emitted only when BOTH of its ends are among the returned nodes — there are no
+         *     virtual/MISSING nodes here (unlike the catalog graph): a relation value naming an
+         *     entity the filter excluded, or one that no longer resolves, simply contributes no
+         *     edge.
+         *
+         *     Each node's id follows the grammar `"<blueprint>|<identifier>"` (`|` never appears in
+         *     either charset, so the split is unambiguous). An edge's `hierarchy` flag is `true`
+         *     exactly when `relation` is the SOURCE entity's blueprint's `hierarchyRelation`.
+         *
+         *     Unpaged by design — a report-style computation over the workspace.
+         */
+        get: operations["getEntityGraph"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2204,6 +2284,8 @@ export interface components {
                 [key: string]: components["schemas"]["AggregationPropertyDefinition"];
             };
             ownership?: components["schemas"]["OwnershipDefinition"];
+            /** @description Toadie-only extension (not part of Port's blueprint document): the identifier of ONE of this blueprint's single (many=false) relations whose target is the entity's PARENT in the entity hierarchy. Absent when unset; a request naming an unknown or many relation is 400. */
+            hierarchyRelation?: string;
             /**
              * Format: int32
              * @description The creator's user id.
@@ -2251,6 +2333,8 @@ export interface components {
                 [key: string]: components["schemas"]["AggregationPropertyDefinition"];
             };
             ownership?: components["schemas"]["OwnershipDefinition"];
+            /** @description Toadie-only extension (not part of Port's blueprint document): the identifier of ONE of this blueprint's single (many=false) relations whose target is the entity's PARENT in the entity hierarchy. Absent when unset; a request naming an unknown or many relation is 400. */
+            hierarchyRelation?: string;
         };
         /** @description Phase 2 of the Port data-model move (see `.claude/docs/port-data-model.md`): an entity is an instance of a registered blueprint. */
         EntityRequest: {
@@ -2342,6 +2426,34 @@ export interface components {
              * @description Row count after filters, before pagination.
              */
             total: number;
+        };
+        EntityGraphNode: {
+            /** @description Canonical node id `"<blueprint>|<identifier>"` (the dedupe key; `|` appears in neither charset, so the split is unambiguous). */
+            id: string;
+            /** Format: int32 */
+            entityId: number;
+            /** @description The owning blueprint's identifier. */
+            blueprint: string;
+            /** @description The owning blueprint's title. */
+            blueprintTitle: string;
+            identifier: string;
+            title: string;
+            /** @description Port icon NAME carried from the entity, when set. Absent when unset. */
+            icon?: string;
+            /** @description Count of validation findings against the blueprint's CURRENT definition — the stale marker (the same computation as the entity list/read, collapsed to a count). */
+            findings: number;
+        };
+        EntityGraphEdge: {
+            sourceId: string;
+            targetId: string;
+            /** @description The relation identifier the edge came from. */
+            relation: string;
+            /** @description True when `relation` is the source entity's blueprint's `hierarchyRelation` — the entity hierarchy's parent link. */
+            hierarchy: boolean;
+        };
+        EntityGraph: {
+            nodes: components["schemas"]["EntityGraphNode"][];
+            edges: components["schemas"]["EntityGraphEdge"][];
         };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
@@ -2484,6 +2596,8 @@ export interface components {
         CatalogLabelFilter: string;
         /** @description Any-of (IN) match over the selected label's value, case-insensitive — the one parameter where repetition is the documented IN idiom (API-LIST-004). Requires the label parameter (labelValue without label is a 400). */
         CatalogLabelValueFilter: string[];
+        /** @description Any-of (IN) match over blueprint identifiers, case-insensitive — repetition is the documented IN idiom on this parameter (alongside `kind` and `labelValue`). Unknown identifiers are ignored; if every supplied identifier is unknown the graph is empty. */
+        EntityBlueprintFilter: string[];
     };
     requestBodies: never;
     headers: never;
@@ -2951,6 +3065,78 @@ export interface operations {
         };
     };
     setUserGraphLayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphLayoutDocument"];
+            };
+        };
+        responses: {
+            /** @description Layout replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not the target user and not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getEntityGraphLayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stored (or default) layout document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphLayoutDocument"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not the target user and not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceEntityGraphLayout: {
         parameters: {
             query?: never;
             header?: never;
@@ -4342,6 +4528,34 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getEntityGraph: {
+        parameters: {
+            query?: {
+                /** @description Any-of (IN) match over blueprint identifiers, case-insensitive — repetition is the documented IN idiom on this parameter (alongside `kind` and `labelValue`). Unknown identifiers are ignored; if every supplied identifier is unknown the graph is empty. */
+                blueprint?: components["parameters"]["EntityBlueprintFilter"];
+                /** @description Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the matched fields are declared per endpoint. */
+                q?: components["parameters"]["Q"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The graph */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityGraph"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalServerError"];
         };
     };

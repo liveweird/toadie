@@ -1,9 +1,11 @@
 import { ViewportPortal } from "@xyflow/react";
-import type { NamespaceFrame } from "../utils/graphLayout";
+import type { ClusterFrame } from "../utils/graphLayout";
 import classes from "../theme.module.css";
 
 /**
- * The regions drawn behind the nodes, one per namespace.
+ * The regions drawn behind the nodes, one per cluster (a namespace on the Render page, a
+ * blueprint on the Entity graph page — v1.25.0's rename from `NamespaceFrames.tsx` once the
+ * shaping in `utils/graphLayout.ts` generalized to `clusterFrames`).
  *
  * They live in React Flow's VIEWPORT PORTAL rather than being nodes themselves — a frame is
  * decoration, not an entity: it must not be selectable, draggable, hit-testable, or counted
@@ -15,13 +17,13 @@ import classes from "../theme.module.css";
  * avoid: a parent turns its members' positions parent-RELATIVE, which would silently
  * reinterpret every absolute position already stored in the per-user layout document.
  */
-export default function NamespaceFrames({ frames }: { frames: NamespaceFrame[] }) {
+export default function ClusterFrames({ frames }: { frames: ClusterFrame[] }) {
   if (frames.length === 0) return null;
   return (
     <ViewportPortal>
       {frames.map((frame) => (
         <div
-          key={frame.namespace}
+          key={frame.key}
           className={classes.namespaceFrame}
           style={{
             position: "absolute",
@@ -31,7 +33,7 @@ export default function NamespaceFrames({ frames }: { frames: NamespaceFrame[] }
             zIndex: -1,
           }}
         >
-          <span className={classes.namespaceFrameLabel}>{frame.namespace}</span>
+          <span className={classes.namespaceFrameLabel}>{frame.label}</span>
         </div>
       ))}
     </ViewportPortal>
