@@ -19,9 +19,9 @@
     "changelog": "Changelog"
   },
   "section": {
-    "catalog": "Catalog",
-    "dataModel": "Data model",
-    "registries": "Registries",
+    "catalog": "Backstage System Model",
+    "dataModel": "Port Ontology",
+    "registries": "Dictionaries",
     "administration": "Administration"
   },
   "userMenu": {

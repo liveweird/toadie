@@ -17,6 +17,16 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.23.3",
+    date: "2026-09-09",
+    en: `**Sidebar sections renamed.**
+
+- The navigation now names the two models side by side while the Port migration is under way: **Backstage System Model** (Hierarchy, Files, Errors, Graph), **Port Ontology** (Blueprints) and **Dictionaries** (namespaces, types, lifecycles, labels, tags, annotations). Nothing moved — only the captions changed.`,
+    pl: `**Zmienione nazwy sekcji paska bocznego.**
+
+- Nawigacja nazywa teraz oba modele obok siebie, dopóki trwa migracja do Port: **Model systemowy Backstage** (Hierarchia, Pliki, Błędy, Graf), **Ontologia Port** (Blueprinty) i **Słowniki** (przestrzenie nazw, typy, cykle życia, etykiety, tagi, adnotacje). Nic się nie przesunęło — zmieniły się tylko podpisy.`,
+  },
+  {
     version: "1.23.2",
     date: "2026-09-08",
     en: `**Blueprint editor: rows you can fold and jump to.**

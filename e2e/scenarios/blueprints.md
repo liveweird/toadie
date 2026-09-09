@@ -10,7 +10,7 @@
 
 ## Scenario: admin curates the blueprint registry; a rename cascades; a regular user reads it
 
-1. The admin signs in and opens **Blueprints** from the nav's Data model section.
+1. The admin signs in and opens **Blueprints** from the nav's Port Ontology section.
    - *Expected*: the registry page renders with the **New blueprint** action (ADMIN-only).
 2. They open the editor and submit it empty.
    - *Expected*: the identifier and title field errors render inline; no request reaches the

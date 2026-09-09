@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { ACCOUNT_NAV, activeNavPath, visibleSections } from "./navigation";
 
 describe("visibleSections", () => {
-  test("a regular session sees Catalog, Data model and Registries only — the empty Administration section is dropped", () => {
+  test("a regular session sees Backstage System Model, Port Ontology and Dictionaries only — the empty Administration section is dropped", () => {
     const sections = visibleSections(false);
     expect(sections.map((s) => s.label)).toEqual([
       "appShell.section.catalog",
@@ -12,7 +12,7 @@ describe("visibleSections", () => {
     expect(sections.flatMap((s) => s.items.map((l) => l.to))).not.toContain("/users");
   });
 
-  test("the Data model section holds the Blueprints leaf, visible to everyone", () => {
+  test("the Port Ontology section holds the Blueprints leaf, visible to everyone", () => {
     const dataModel = visibleSections(false).find((s) => s.label === "appShell.section.dataModel");
     expect(dataModel?.items.map((l) => l.to)).toEqual(["/blueprints"]);
   });
