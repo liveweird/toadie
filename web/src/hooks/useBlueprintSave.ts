@@ -32,6 +32,10 @@ export function useBlueprintSave({
     try {
       await saveRequest(toBlueprintRequest(values));
       await queryClient.invalidateQueries({ queryKey: ["blueprints"] });
+      // A hierarchy-relation edit changes both the Entity graph/hierarchy shaping AND every
+      // affected entity's findings (a relation no longer marked as hierarchy, or newly marked,
+      // changes nothing about validity — but the graph/tree pages must re-fetch regardless).
+      await queryClient.invalidateQueries({ queryKey: ["entities"] });
       showSuccessToast(t(toastKey));
       navigate(blueprintsPath, { replace: true });
     } catch (err) {

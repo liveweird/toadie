@@ -19,10 +19,15 @@ import type { EntityKind } from "./catalogFileForm";
  *   out of the tree entirely.
  * - Cycles (storable: A subcomponentOf B, B subcomponentOf A) are broken by promoting the
  *   first node of the unreached island to a root; the in-path repeat edge is dropped.
+ *
+ * `HierarchyNode<N>` is generic over the node payload (default `GraphNode`, the catalog
+ * graph's) so the Entity graph/hierarchy pages (`utils/entityGraph.ts`, v1.25.0) can build
+ * their OWN forest — via the hierarchy relation, not these Backstage containment fields — and
+ * still reuse `findPlacement`'s pin lookup below over their own `EntityGraphNode` forest.
  */
-export interface HierarchyNode {
-  node: GraphNode;
-  children: HierarchyNode[];
+export interface HierarchyNode<N = GraphNode> {
+  node: N;
+  children: HierarchyNode<N>[];
 }
 
 type GraphEdge = CatalogGraph["edges"][number];
@@ -168,8 +173,8 @@ export function buildHierarchy(graph: CatalogGraph): HierarchyNode[] {
 }
 
 /** A node's position in a built forest: the subtree itself, plus the path it hangs at. */
-export interface HierarchyPlacement {
-  item: HierarchyNode;
+export interface HierarchyPlacement<N = GraphNode> {
+  item: HierarchyNode<N>;
   /**
    * The path of the subtree's PARENT — what `TreeItem` would have passed down. Rendering a
    * pinned subtree with this instead of `""` keeps the page's collapse keys (`<path>/<id>`)
@@ -181,17 +186,18 @@ export interface HierarchyPlacement {
 /**
  * Finds where [id] renders in [roots] — the Hierarchy page's pin, which shows one entity and
  * its descendants and nothing else. Null when the id is not in the forest (the entity left
- * the filtered set, or was deleted), which is what the page's auto-unpin keys off.
+ * the filtered set, or was deleted), which is what the page's auto-unpin keys off. Generic
+ * over the node payload so the Entity hierarchy page's pin reuses this unchanged.
  *
  * Group membership places the same node under EVERY containing Group, so an id can have
  * several placements; the first in document order wins. Both carry the same children, so
  * which one is picked is invisible — not worth machinery.
  */
-export function findPlacement(
-  roots: HierarchyNode[],
+export function findPlacement<N extends { id: string }>(
+  roots: HierarchyNode<N>[],
   id: string,
   path = "",
-): HierarchyPlacement | null {
+): HierarchyPlacement<N> | null {
   for (const item of roots) {
     if (item.node.id === id) return { item, path };
     const nested = findPlacement(item.children, id, `${path}/${item.node.id}`);

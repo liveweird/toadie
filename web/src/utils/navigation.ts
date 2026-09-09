@@ -20,7 +20,7 @@ import {
 } from "@tabler/icons-react";
 import { blueprintsPath } from "./blueprintLinks";
 import { catalogFilesPath } from "./catalogFileLinks";
-import { entitiesBasePath } from "./entityLinks";
+import { entitiesBasePath, entityGraphPath, entityHierarchyPath } from "./entityLinks";
 
 export type NavLeaf = {
   to: string;
@@ -59,6 +59,8 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
     items: [
       { to: blueprintsPath, label: "appShell.nav.blueprints", icon: IconSchema },
       { to: entitiesBasePath, label: "appShell.nav.entities", icon: IconBox },
+      { to: entityGraphPath, label: "appShell.nav.entityGraph", icon: IconTopologyStar3 },
+      { to: entityHierarchyPath, label: "appShell.nav.entityHierarchy", icon: IconSitemap },
     ],
   },
   {

@@ -1,19 +1,21 @@
 import { StrictMode } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { notifyAuthChange, useSessionUserId } from "../auth";
 import type { GraphLayoutDocument } from "../api/users";
-import { useGraphLayout } from "./useGraphLayout";
+import { useGraphLayout, type LayoutView } from "./useGraphLayout";
 
-const { getGraphLayout, setGraphLayout } = vi.hoisted(() => ({
+const { getGraphLayout, setGraphLayout, getEntityGraphLayout, setEntityGraphLayout } = vi.hoisted(() => ({
   getGraphLayout: vi.fn(),
   setGraphLayout: vi.fn(),
+  getEntityGraphLayout: vi.fn(),
+  setEntityGraphLayout: vi.fn(),
 }));
 
 vi.mock("../api/users", async (importOriginal) => {
   const original = await importOriginal<typeof import("../api/users")>();
-  return { ...original, getGraphLayout, setGraphLayout };
+  return { ...original, getGraphLayout, setGraphLayout, getEntityGraphLayout, setEntityGraphLayout };
 });
 
 function deferred<T>() {
@@ -26,8 +28,8 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function Harness({ userId }: { userId: number }) {
-  const layout = useGraphLayout(userId);
+function Harness({ userId, view = "graph" }: { userId: number; view?: LayoutView }) {
+  const layout = useGraphLayout(userId, view);
   return (
     <div>
       <span data-testid="phase">{layout.phase}</span>
@@ -96,6 +98,21 @@ function renderHarness(client: QueryClient, userId = 9, strict = false) {
   );
 }
 
+function renderBothViews(client: QueryClient, userId = 9) {
+  return render(
+    <QueryClientProvider client={client}>
+      <div>
+        <div data-testid="graph-view">
+          <Harness userId={userId} view="graph" />
+        </div>
+        <div data-testid="entity-view">
+          <Harness userId={userId} view="entityGraph" />
+        </div>
+      </div>
+    </QueryClientProvider>,
+  );
+}
+
 const BASELINE: GraphLayoutDocument = {
   mode: "auto",
   positions: { unseen: { x: 1, y: 2 } },
@@ -111,6 +128,8 @@ describe("useGraphLayout", () => {
     localStorage.setItem("toadie.auth.userId", "9");
     getGraphLayout.mockReset();
     setGraphLayout.mockReset();
+    getEntityGraphLayout.mockReset();
+    setEntityGraphLayout.mockReset();
   });
 
   afterEach(() => {
@@ -417,5 +436,46 @@ describe("useGraphLayout", () => {
     act(() => client.clear());
     await waitFor(() => expect(getGraphLayout).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId("phase")).toHaveTextContent("ready");
+  });
+
+  test("the graph and entityGraph views run independent controllers over the same user, hitting their own endpoints", async () => {
+    getGraphLayout.mockResolvedValue(BASELINE);
+    const entityBaseline: GraphLayoutDocument = { mode: "auto", positions: { one: { x: 1, y: 1 } }, collapsed: [] };
+    getEntityGraphLayout.mockResolvedValue(entityBaseline);
+    const client = testClient();
+    renderBothViews(client);
+
+    const graphView = within(screen.getByTestId("graph-view"));
+    const entityView = within(screen.getByTestId("entity-view"));
+    await waitFor(() => expect(graphView.getByTestId("phase")).toHaveTextContent("ready"));
+    await waitFor(() => expect(entityView.getByTestId("phase")).toHaveTextContent("ready"));
+    expect(getGraphLayout).toHaveBeenCalledTimes(1);
+    expect(getEntityGraphLayout).toHaveBeenCalledTimes(1);
+    expect(graphView.getByTestId("document")).toHaveTextContent("unseen");
+    expect(entityView.getByTestId("document")).not.toHaveTextContent("unseen");
+
+    fireEvent.click(graphView.getByRole("button", { name: "manual" }));
+    await waitFor(() => expect(setGraphLayout).toHaveBeenCalledTimes(1));
+    expect(setEntityGraphLayout).not.toHaveBeenCalled();
+
+    fireEvent.click(entityView.getByRole("button", { name: "collapse" }));
+    await waitFor(() => expect(setEntityGraphLayout).toHaveBeenCalledTimes(1));
+    expect(setGraphLayout).toHaveBeenCalledTimes(1);
+    // The entity view's document is unaffected by the graph view's edit, and vice versa.
+    expect(entityView.getByTestId("document")).not.toHaveTextContent("manual");
+    expect(graphView.getByTestId("document")).not.toHaveTextContent("system:default/shop");
+  });
+
+  test("the entityGraph view's cache anchor is its own controllerKey — clearing one view's query does not touch the other", async () => {
+    getGraphLayout.mockResolvedValue(BASELINE);
+    getEntityGraphLayout.mockResolvedValue({ mode: "auto", positions: {}, collapsed: [] });
+    const client = testClient();
+    renderBothViews(client);
+    await waitFor(() => expect(getGraphLayout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getEntityGraphLayout).toHaveBeenCalledTimes(1));
+
+    client.removeQueries({ queryKey: ["entityGraphLayoutController", 9], exact: true });
+    await waitFor(() => expect(getEntityGraphLayout).toHaveBeenCalledTimes(2));
+    expect(getGraphLayout).toHaveBeenCalledTimes(1);
   });
 });

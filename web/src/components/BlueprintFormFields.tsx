@@ -27,6 +27,7 @@ import {
   emptyMirrorDraft,
   emptyPropertyDraft,
   emptyRelationDraft,
+  singleRelationIds,
   type RowFamily,
   type BlueprintFormValues,
 } from "../utils/blueprintForm";
@@ -261,11 +262,39 @@ function OwnershipFieldset({ form }: { form: Form }) {
 }
 
 /**
+ * The Hierarchy fieldset (v1.25.0, Port migration phase 3) — a Toadie-only extension, not a
+ * Port field: an admin-marked relation naming this blueprint's containment parent, backing
+ * the Entity graph/hierarchy pages. Options are the blueprint's own CURRENT single relations
+ * (`many === false`), so the Select can never hold an invalid value; a relation flipped to
+ * `many` or removed silently drops out of the option list, and `toBlueprintRequest`'s
+ * derive-don't-clear guard (not an effect) keeps the submitted value in sync the same way.
+ */
+function HierarchyFieldset({ form }: { form: Form }) {
+  const { t } = useTranslation();
+  const options = singleRelationIds(form.values.relations);
+  const value = options.includes(form.values.hierarchyRelation) ? form.values.hierarchyRelation : "";
+  return (
+    <Fieldset legend={t("blueprints.section.hierarchy")}>
+      <Select
+        label={t("blueprints.field.hierarchyRelation")}
+        description={t("blueprints.hint.hierarchyRelation")}
+        data={options}
+        value={value || null}
+        onChange={(v) => form.setFieldValue("hierarchyRelation", v ?? "")}
+        clearable
+        searchable
+      />
+    </Fieldset>
+  );
+}
+
+/**
  * The field block for the Blueprint editor (create/edit pages own submit/error handling and
  * the JSON preview). Identity fields first, then the six Port fieldsets in schema order, each
  * row family (all but Ownership) rendered through the shared `EditorRowList` (v1.23.2) — one
  * `expansion` state (`hooks/useBlueprintRowExpansion.ts`) owned by `BlueprintEditor` and
  * threaded through every family so a blocked submit can reveal errors across all five lists.
+ * The Hierarchy fieldset follows Ownership, last, since it depends on the Relations rows above.
  */
 export default function BlueprintFormFields({ form, expansion }: { form: Form; expansion: BlueprintRowExpansion }) {
   return (
@@ -277,6 +306,7 @@ export default function BlueprintFormFields({ form, expansion }: { form: Form; e
       <CalculationFieldset form={form} expansion={expansion} />
       <AggregationFieldset form={form} expansion={expansion} />
       <OwnershipFieldset form={form} />
+      <HierarchyFieldset form={form} />
     </Stack>
   );
 }

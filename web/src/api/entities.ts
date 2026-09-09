@@ -50,3 +50,26 @@ export async function updateEntity(id: number, body: EntityBody): Promise<void> 
 export async function deleteEntity(id: number): Promise<void> {
   await voidRequest(`/api/v1/entities/${id}`, { method: "DELETE" });
 }
+
+// -- Entity graph (Port migration phase 3, v1.25.0) --------------------------------------
+// GET /api/v1/entities/graph?blueprint=<repeated>&q= — the rendered-together view over
+// entities: nodes are shown entities (blueprint/search filtered), edges are relation values
+// with both ends shown (the catalog graph's rule); `hierarchy` marks the edge as the source
+// blueprint's admin-picked `hierarchyRelation`. Node id grammar: `"<blueprint>|<identifier>"`.
+
+export type EntityGraph =
+  paths["/api/v1/entities/graph"]["get"]["responses"]["200"]["content"]["application/json"];
+export type EntityGraphNode = EntityGraph["nodes"][number];
+export type EntityGraphEdge = EntityGraph["edges"][number];
+
+export type GetEntityGraphQuery = {
+  /** Any-of over blueprint identifiers; an unknown identifier folds to an empty graph. */
+  blueprints?: readonly string[];
+  /** Substring over identifier OR title. */
+  q?: string;
+};
+
+export async function getEntityGraph(query: GetEntityGraphQuery = {}): Promise<EntityGraph> {
+  const params = buildQuery({ blueprint: query.blueprints, q: query.q });
+  return jsonRequest<EntityGraph>(`/api/v1/entities/graph${params ? `?${params}` : ""}`);
+}

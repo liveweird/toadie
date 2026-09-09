@@ -1,22 +1,18 @@
 {
-  "title": "Graf",
-  "loadFailed": "Nie udało się wczytać grafu",
+  "title": "Graf encji",
+  "loadFailed": "Nie udało się wczytać grafu encji",
   "relationsLabel": "Relacje",
-  "relation": {
-    "dependsOn": "Zależy od",
-    "subcomponentOf": "Jest podkomponentem",
-    "apis": "Dostarcza/konsumuje API",
-    "owner": "Własność",
-    "system": "Należy do systemu",
-    "domain": "Należy do domeny",
-    "membership": "Członkostwo w grupie"
+  "filter": {
+    "blueprints": "Blueprinty",
+    "q": "Szukaj",
+    "clearQ": "Wyczyść filtr wyszukiwania"
   },
   "legend": {
-    "stored": "Zapisany plik",
-    "missing": "Brakująca encja",
+    "title": "Legenda",
+    "entity": "Encja",
     "collapsed": "Zwinięty — jego zawartość jest ukryta w środku",
-    "folded": "Relacja ukrytej encji",
-    "title": "Legenda"
+    "hierarchyEdge": "Relacja hierarchii",
+    "folded": "Relacja ukrytej encji"
   },
   "layoutMode": {
     "label": "Układ",
@@ -33,7 +29,7 @@
     "saveFailed": "Nie udało się zapisać układu",
     "retrySave": "Ponów zapisywanie układu"
   },
-  "empty": "Nie ma czego renderować — żaden zapisany plik nie pasuje.",
+  "empty": "Nie ma czego renderować — żadna encja nie pasuje.",
   "nodeAria": "Otwórz {{name}}",
   "expandAll": "Rozwiń wszystko"
 }

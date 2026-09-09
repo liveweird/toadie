@@ -1,0 +1,14 @@
+{
+  "title": "Entity hierarchy",
+  "loadFailed": "Could not load the entity hierarchy",
+  "empty": "Nothing to show — no entities match.",
+  "expandAll": "Expand all",
+  "collapseAll": "Collapse all",
+  "toggleAria": "Toggle children of {{name}}",
+  "pin": "Pin",
+  "unpin": "Unpin",
+  "pinned": {
+    "badge": "Pinned: {{name}}",
+    "clearAria": "Unpin {{name}}"
+  }
+}
