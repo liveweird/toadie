@@ -1,6 +1,11 @@
 package ch.nokillswit
 
 import ch.nokillswit.auth.LoginRequest
+import ch.nokillswit.blueprints.BlueprintRequest
+import ch.nokillswit.blueprints.BlueprintResponse
+import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.entities.EntityRequest
+import ch.nokillswit.entities.EntityResponse
 import io.ktor.client.call.body
 import ch.nokillswit.users.UserRole
 import io.ktor.client.request.delete
@@ -10,6 +15,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -52,6 +58,46 @@ class AuditTest {
                 assertNotNull(event, "expected a $eventName audit event for file $fileId")
                 assertTrue(event.hasKeyValue("byUserId", userId.toLong()))
             }
+        }
+    }
+
+    @Test
+    fun `entity mutations emit audit events`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("entityaudit")
+        val userId = TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
+        val adminEmail = uniqueEmail("entityaudit-admin")
+        TestUsers.seed(email = adminEmail, password = "pw", role = UserRole.ADMIN)
+        val bpId = "bp-audit-${UUID.randomUUID().toString().substring(0, 8)}"
+        val entId = "ent-audit-${UUID.randomUUID().toString().substring(0, 8)}"
+        try {
+            withAuditCapture { capture ->
+                val client = authedClient(email, "pw")
+                // Blueprints are ADMIN-only (phase 1); entities are not (phase 2) — the USER
+                // above only ever mutates the entity, so byUserId below is unambiguous.
+                authedClient(adminEmail, "pw")
+                    .postJson("/api/v1/blueprints", BlueprintRequest(identifier = bpId, title = "T", schema = BlueprintSchema()))
+                    .body<BlueprintResponse>()
+                val entity = client.postJson(
+                    "/api/v1/entities",
+                    EntityRequest(blueprint = bpId, identifier = entId, title = "T"),
+                ).body<EntityResponse>()
+                client.putJson(
+                    "/api/v1/entities/${entity.id}",
+                    EntityRequest(blueprint = bpId, identifier = entId, title = "Edited"),
+                )
+                client.delete("/api/v1/entities/${entity.id}")
+
+                for (eventName in listOf("entity.created", "entity.updated", "entity.deleted")) {
+                    val event = capture.awaitEvent { it.message == eventName && it.hasKeyValue("entityId", entity.id.toLong()) }
+                    assertNotNull(event, "expected a $eventName audit event for entity ${entity.id}")
+                    assertTrue(event.hasKeyValue("byUserId", userId.toLong()))
+                    assertTrue(event.hasKeyValue("blueprint", bpId))
+                }
+            }
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
         }
     }
 

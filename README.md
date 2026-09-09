@@ -24,6 +24,11 @@ generated-password reveal, self-service password change):
   formats, enums and colours, relations between blueprints, mirror/calculation/aggregation
   properties and ownership — in a full-page editor with a live preview of the Port-native
   JSON; ADMIN-curated, readable by everyone,
+- **entities** (Port migration phase 2): instances of a blueprint at `/entities` — properties
+  typed by the owning blueprint's schema, relations naming other entities, and live validation
+  findings on every read so an entity a later blueprint edit made stale is visibly flagged;
+  any authenticated user may create, edit, and delete them, the same shared-workspace rule as
+  catalog files,
 - **lenses**: save the current filter set under a name and re-apply it from a combo box on
   any of the Hierarchy, Files, Graph, and Errors views — each lens private (only you) or
   public (visible to everyone, changeable only by its creator),

@@ -682,10 +682,68 @@ object TestBlueprints {
             var progressed = false
             for (blueprint in toDelete) {
                 try {
+                    // BlueprintService.delete 409s while the blueprint still has active
+                    // entities (v1.24.0) — a direct table update here bypasses that guard
+                    // (and TestEntities' own referrer check), so a test fixture never has to
+                    // enumerate and remove its own entities before its blueprints.
+                    softDeleteEntitiesOf(blueprint.id)
                     service.delete(blueprint.id)
                     progressed = true
                 } catch (_: ch.nokillswit.authz.ConflictException) {
                     survivors += blueprint.identifier
+                }
+            }
+            if (!progressed) return
+            remaining = survivors
+        }
+    }
+
+    private suspend fun softDeleteEntitiesOf(blueprintId: UInt) = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.entities.EntityService.Entities
+        t.update({ (t.blueprintId eq blueprintId) and (t.markedAsDeleted eq false) }) { it[t.markedAsDeleted] = true }
+    }
+}
+
+/**
+ * The entity registry (v1.24.0) — a Toadie-first feature, the [TestBlueprints] shape: no shared
+ * seed state, every test mints a unique `ent-<uuid8>` identifier per blueprint and cleans up via
+ * [remove]. Unlike blueprints, entities have no cross-referrer soft-delete concern to bypass
+ * here — [EntityService.delete]'s 409 only fires while a REFERRER still exists, so the same
+ * order-independent retry loop suffices without a direct table update.
+ */
+object TestEntities {
+    val service: ch.nokillswit.entities.EntityService by lazy {
+        ch.nokillswit.entities.EntityService(sharedTestDatabase)
+    }
+
+    data class RawRow(val id: UInt, val identifier: String, val blueprintId: UInt, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.entities.EntityService.Entities
+        t.selectAll().map { RawRow(it[t.id].value, it[t.identifier], it[t.blueprintId].value, it[t.markedAsDeleted]) }.toList()
+    }
+
+    /**
+     * Soft-deletes the active entities holding [identifiers] (order-independent — the
+     * [TestBlueprints.remove] retry shape). Scans [rawRows] directly — the [TestBlueprints.remove]
+     * unpaged idiom — rather than a single `service.list` page, so fixtures never leak once the
+     * suite holds more active entities than one page.
+     */
+    suspend fun remove(vararg identifiers: String) {
+        var remaining = identifiers.toSet()
+        while (remaining.isNotEmpty()) {
+            val toDelete = rawRows()
+                .filter { !it.markedAsDeleted }
+                .filter { row -> remaining.any { it.equals(row.identifier, ignoreCase = true) } }
+            if (toDelete.isEmpty()) return
+            val survivors = mutableSetOf<String>()
+            var progressed = false
+            for (row in toDelete) {
+                try {
+                    service.delete(row.id)
+                    progressed = true
+                } catch (_: ch.nokillswit.authz.ConflictException) {
+                    survivors += row.identifier
                 }
             }
             if (!progressed) return

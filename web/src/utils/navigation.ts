@@ -1,5 +1,6 @@
 import type { ParseKeys } from "i18next";
 import {
+  IconBox,
   IconCategory,
   IconFileDescription,
   IconFolders,
@@ -19,6 +20,7 @@ import {
 } from "@tabler/icons-react";
 import { blueprintsPath } from "./blueprintLinks";
 import { catalogFilesPath } from "./catalogFileLinks";
+import { entitiesBasePath } from "./entityLinks";
 
 export type NavLeaf = {
   to: string;
@@ -54,7 +56,10 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
   },
   {
     label: "appShell.section.dataModel",
-    items: [{ to: blueprintsPath, label: "appShell.nav.blueprints", icon: IconSchema }],
+    items: [
+      { to: blueprintsPath, label: "appShell.nav.blueprints", icon: IconSchema },
+      { to: entitiesBasePath, label: "appShell.nav.entities", icon: IconBox },
+    ],
   },
   {
     label: "appShell.section.registries",

@@ -35,6 +35,7 @@ tags:
   - name: annotation-keys
   - name: lenses
   - name: blueprints
+  - name: entities
 
 paths:
   /api/v1/login:
@@ -1804,10 +1805,158 @@ paths:
         ADMIN only — soft delete; the identifier becomes reusable by a NEW blueprint. A
         blueprint that is the TARGET of another active blueprint's relation or aggregation is
         `409` (a self-relation on the blueprint being deleted never blocks its own deletion).
+        A blueprint with active ENTITIES is refused too — `409` naming the count.
       responses:
         '204': { description: Deleted }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/entities:
+    get:
+      tags: [entities]
+      operationId: listEntities
+      summary: List entities
+      description: |
+        Any authenticated user — entities are a shared workspace like the catalog files
+        (Phase 2 of Toadie's move from Backstage's fixed System Model to Port.io's data
+        model, instances of the Phase 1 blueprint registry — see
+        `.claude/docs/port-data-model.md`); no admin gate.
+
+        Supports offset pagination, sorting and filtering.
+
+        - Sortable fields: `identifier`, `title`, `updatedAt`. Default sort is `identifier`
+          ascending; `id` ascending is always appended as a deterministic tiebreaker.
+        - Filters (optional): `blueprint` — exact (case-insensitive) match against the
+          blueprint identifier (an unknown identifier answers an empty page, not `404`);
+          `q` — case- and accent-insensitive substring match against `identifier` OR
+          `title`.
+
+        Each returned item carries `findings` — the same validation a strict save would
+        enforce, re-evaluated against the blueprint's CURRENT definition, so an entity left
+        stale by a blueprint edit is flagged here without waiting for a save attempt.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Sort'
+        - name: blueprint
+          in: query
+          required: false
+          schema: { type: string }
+          description: >-
+            Exact (case-insensitive) match against the blueprint identifier. An unknown
+            identifier yields an empty page.
+        - $ref: '#/components/parameters/Q'
+      responses:
+        '200':
+          description: A page of entities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityPage'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    post:
+      tags: [entities]
+      operationId: createEntity
+      summary: Create an entity
+      description: |
+        Any authenticated user — entities are a shared workspace like catalog files; no
+        admin gate. Stores a new instance of the named blueprint. The payload is validated
+        STRICTLY against the blueprint's CURRENT `schema`/`relations` (every
+        `properties`/`relations` key must be declared by the blueprint; mirror/calculation/
+        aggregation property ids are COMPUTED and rejected as input; the type/format/range/
+        pattern/enum rules in `.claude/docs/port-data-model.md` apply) — any violation is
+        `400` with the full `findings` list, one entry per violated rule. Every relation
+        target must resolve to an ACTIVE entity of the relation's target blueprint
+        (self-relations allowed); an unresolved target is `400`. `blueprint` must name an
+        active, registered blueprint, else `400`. `identifier` is unique PER BLUEPRINT,
+        case-insensitively — a clash is `409` (the same identifier may be reused across
+        different blueprints). The registry is capped per-blueprint and overall (`400`
+        "full" once reached).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema: { type: string }
+              description: URL of the new entity resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/entities/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [entities]
+      operationId: getEntity
+      summary: Get an entity
+      description: >-
+        Any authenticated user. Plain `404` for a missing or soft-deleted entity — the
+        workspace idiom, no existence secrecy. Carries `findings` re-evaluated against the
+        blueprint's CURRENT definition, so an entity left stale by a blueprint edit since
+        this entity's last save is flagged without waiting for a save attempt.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    put:
+      tags: [entities]
+      operationId: replaceEntity
+      summary: Replace an entity
+      description: |
+        Any authenticated user — whole-entity replacement, identifier rename included. The
+        `blueprint` field must equal the entity's STORED blueprint; naming a different
+        blueprint is `400` (moving an entity between blueprints is not supported). Same
+        shape/findings/target/`409` rules as create. Renaming the identifier CASCADES:
+        every other active entity's `relations` naming the old identifier are rewritten to
+        the new one, in the same locked transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityRequest'
+      responses:
+        '204': { description: Replaced }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    delete:
+      tags: [entities]
+      operationId: deleteEntity
+      summary: Delete an entity
+      description: |
+        Any authenticated user — soft delete; the identifier becomes reusable within the
+        same blueprint. An entity that is the TARGET of another active entity's relation is
+        `409`, naming the referrers as `blueprint/identifier` (a self-relation on the entity
+        being deleted never blocks its own deletion).
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalServerError' }
@@ -1859,6 +2008,14 @@ components:
         comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
         sortable-field whitelist; unknown fields are rejected with `400`. `id` ascending is
         always appended as a deterministic tiebreaker.
+    Q:
+      name: q
+      in: query
+      required: false
+      schema: { type: string }
+      description: >-
+        Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the
+        matched fields are declared per endpoint.
     # The shared catalog-file filter set — declared identically by the list and graph
     # endpoints (the list applies it in SQL, the graph in memory; one semantics).
     CatalogNameFilter:
@@ -3693,6 +3850,194 @@ components:
           description: Defaults to empty when omitted.
         ownership:
           $ref: '#/components/schemas/OwnershipDefinition'
+
+    EntityRequest:
+      type: object
+      required: [blueprint, identifier, title]
+      description: >-
+        Phase 2 of the Port data-model move (see `.claude/docs/port-data-model.md`): an
+        entity is an instance of a registered blueprint.
+      properties:
+        blueprint:
+          type: string
+          maxLength: 100
+          description: >-
+            The target blueprint's identifier. On PUT, must equal the entity's stored
+            blueprint (changing it is `400`).
+        identifier:
+          type: string
+          maxLength: 200
+          description: >-
+            Trimmed. Port's identifier grammar: `^(?!\.{1,2}$)[\p{L}0-9@_.+:\\/='-]+$`
+            (unicode letters plus `+`, `'`, `\` — wider than the blueprint charset; Port
+            allows up to 1000 characters, Toadie caps at 200). Unique per blueprint,
+            case-insensitively; the same identifier may be reused across different
+            blueprints.
+        title:
+          type: string
+          maxLength: 200
+          description: Trimmed; must not be blank.
+        icon:
+          type: string
+          maxLength: 100
+          description: Port icon NAME — a free string. Absent when unset.
+        team:
+          description: >-
+            A team name, or an array of team names, stored exactly as sent — unvalidated
+            (teams arrive with a later phase). Absent when unset.
+          oneOf:
+            - type: string
+              maxLength: 100
+            - type: array
+              items: { type: string, maxLength: 100 }
+              maxItems: 50
+        properties:
+          type: object
+          additionalProperties: true
+          default: {}
+          description: >-
+            `<propertyId>: JSON value`, keyed by the blueprint's declared property ids.
+            Defaults to empty when omitted.
+        relations:
+          type: object
+          additionalProperties: true
+          description: >-
+            relation identifier → target entity identifier (single) | array of identifiers
+            (many) | null (unset). Defaults to empty when omitted.
+
+    EntityFindingCode:
+      type: string
+      enum:
+        - UNKNOWN_PROPERTY
+        - COMPUTED_PROPERTY
+        - REQUIRED_MISSING
+        - TYPE_MISMATCH
+        - ENUM_MISMATCH
+        - FORMAT_INVALID
+        - LENGTH_OUT_OF_RANGE
+        - PATTERN_MISMATCH
+        - RANGE_OUT_OF_BOUNDS
+        - ARRAY_SIZE
+        - ARRAY_NOT_UNIQUE
+        - OBJECT_SHAPE
+        - UNKNOWN_RELATION
+        - RELATION_SHAPE
+        - RELATION_REQUIRED
+        - RELATION_TARGET_MISSING
+      description: >-
+        Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY
+        (key is a mirror/calculation/aggregation id — never accepted as input),
+        REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID,
+        LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE,
+        ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared),
+        RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty
+        required relation), RELATION_TARGET_MISSING (target does not resolve to an active
+        entity of the target blueprint).
+
+    EntityFinding:
+      type: object
+      required: [code, field, message]
+      description: >-
+        One violation of the owning blueprint's current schema/relations — the same rule a
+        strict save enforces. A non-empty `findings` list on a GET/list response means the
+        entity is STALE (its blueprint changed since its last save) and its next save is
+        refused until fixed.
+      properties:
+        code: { $ref: '#/components/schemas/EntityFindingCode' }
+        field:
+          type: string
+          description: '`properties.<id>` or `relations.<id>` naming the offending key.'
+        message: { type: string }
+
+    Entity:
+      type: object
+      required:
+        - id
+        - blueprint
+        - blueprintId
+        - identifier
+        - title
+        - properties
+        - relations
+        - findings
+        - createdBy
+        - creatorName
+        - creatorDeleted
+        - createdAt
+        - updatedAt
+      description: >-
+        An entity — an instance of a blueprint (Phase 2 of the Port data-model move — see
+        `.claude/docs/port-data-model.md`). Every optional field is simply ABSENT when
+        unset (never `null`).
+      properties:
+        id: { type: integer, format: int32, minimum: 0 }
+        blueprint:
+          type: string
+          description: The owning blueprint's identifier.
+        blueprintId:
+          type: integer
+          format: int32
+          minimum: 0
+          description: The owning blueprint's id.
+        identifier: { type: string, maxLength: 200 }
+        title: { type: string, maxLength: 200 }
+        icon:
+          type: string
+          maxLength: 100
+          description: Port icon NAME — a free string. Absent when unset.
+        team:
+          description: >-
+            A team name, or an array of team names, stored exactly as sent. Absent when
+            unset.
+          oneOf:
+            - type: string
+              maxLength: 100
+            - type: array
+              items: { type: string, maxLength: 100 }
+              maxItems: 50
+        properties:
+          type: object
+          additionalProperties: true
+          description: '`<propertyId>: JSON value`, keyed by the blueprint''s declared property ids.'
+        relations:
+          type: object
+          additionalProperties: true
+          description: >-
+            relation identifier → target entity identifier (single) | array of identifiers
+            (many) | null (unset).
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityFinding'
+          description: >-
+            The same validation a strict save would enforce, re-evaluated against the
+            blueprint's CURRENT definition — non-empty means this entity is STALE and its
+            next save is refused until fixed.
+        createdBy:
+          type: integer
+          format: int32
+          minimum: 0
+          description: The creator's user id.
+        creatorName: { type: string }
+        creatorDeleted: { type: boolean }
+        createdAt: { type: integer, format: int64, description: Epoch millis. }
+        updatedAt: { type: integer, format: int64, description: Epoch millis. }
+
+    EntityPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entity'
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Row count after filters, before pagination.
 
     ProblemDetail:
       type: object

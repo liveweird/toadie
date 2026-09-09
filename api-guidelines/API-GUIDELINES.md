@@ -670,6 +670,7 @@ prioritized. Reviewers cite these as "registered gap"; the Spectral ruleset carr
 | API-META-001/002 | No `x-sla`, no `info.termsOfService` in the spec | Add both to `documentation.yaml` when commitments/terms exist to publish |
 | API-NAME-001 | `date_format` inside a blueprint's `PropertyDefinition` is snake_case | Deliberate: the blueprint wire shape is Port.io's own JSON (`.claude/docs/port-data-model.md`) so a Port export posts unchanged; `@SerialName("date_format")` on `dateFormat` in `blueprints/Blueprint.kt`. Closes only if Port renames the field |
 | API-DOC-004 | Some generic error declarations are inline duplicates rather than `$ref`s | Fold pure duplicates into `#/components/responses` opportunistically; keep case-specific descriptions inline |
+| API-DATA-001 | `EntityRequest.team`/`Entity.team` is `oneOf: [string, array of string]` rather than one fixed shape | Deliberate: the entity wire shape is Port.io's own (`.claude/docs/port-data-model.md` "Entities") — `team` is a bare string or an array of strings in Port's API, mirrored verbatim so a Port export posts unchanged. Closes only if Port normalizes the field to one shape |
 
 ### Lost-update inventory (the API-CACHE-003 row's per-write record)
 

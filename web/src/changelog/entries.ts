@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.24.0",
+    date: "2026-09-09",
+    en: `**Entities — the second step toward Port compatibility.**
+
+- Blueprints now have instances: create, edit, and delete **entities** of any blueprint under the new **Port Ontology → Entities** screen, with a schema-driven editor built straight from the blueprint's properties and relations.
+- Every field gets the right widget for its type — text, number, boolean, enum, array, object, and relation pickers to other entities — and strict validation before save.
+- A blueprint can change after entities already exist. When that happens, an affected entity is flagged **stale**: the list and editor show its findings, and a strict save is blocked until they're fixed.
+- Entities are a shared workspace, like catalog files — any signed-in user can create, edit, and delete them.`,
+    pl: `**Encje — drugi krok w stronę zgodności z Port.**
+
+- Blueprinty mają teraz instancje: twórz, edytuj i usuwaj **encje** dowolnego blueprintu w nowym ekranie **Ontologia Port → Encje**, z edytorem prowadzonym wprost właściwościami i relacjami blueprintu.
+- Każde pole otrzymuje odpowiedni widżet dla swojego typu — tekst, liczba, wartość logiczna, enum, tablica, obiekt oraz selektory relacji do innych encji — wraz ze ścisłą walidacją przed zapisem.
+- Blueprint może zmienić się już po utworzeniu encji. Wtedy dotknięta encja jest oznaczana jako **nieaktualna**: lista i edytor pokazują jej ustalenia, a ścisły zapis jest zablokowany, dopóki nie zostaną poprawione.
+- Encje są współdzielonym obszarem roboczym, podobnie jak pliki katalogu — każdy zalogowany użytkownik/każda zalogowana użytkowniczka może je tworzyć, edytować i usuwać.`,
+  },
+  {
     version: "1.23.3",
     date: "2026-09-09",
     en: `**Sidebar sections renamed.**

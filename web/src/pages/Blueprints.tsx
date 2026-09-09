@@ -1,4 +1,4 @@
-import { Alert, Badge, Box, Button, Stack, Table, Text } from "@mantine/core";
+import { Alert, Anchor, Badge, Box, Button, Stack, Table, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
@@ -14,6 +14,7 @@ import { useBlueprints } from "../hooks/useBlueprints";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { blueprintDeleteErrorMessage } from "../utils/blueprintForm";
 import { editBlueprintPath, newBlueprintPath } from "../utils/blueprintLinks";
+import { entitiesPath } from "../utils/entityLinks";
 import { CONTENT_MAX_WIDTH } from "../utils/layout";
 import { loadErrorMessage } from "../utils/saveError";
 
@@ -66,6 +67,7 @@ export default function Blueprints() {
                   <Table.Th>{t("blueprints.column.title")}</Table.Th>
                   <Table.Th>{t("blueprints.column.properties")}</Table.Th>
                   <Table.Th>{t("blueprints.column.relations")}</Table.Th>
+                  <Table.Th>{t("blueprints.column.entities")}</Table.Th>
                   {isAdmin() && <Table.Th aria-label={t("common.table.operations")} />}
                 </Table.Tr>
               </Table.Thead>
@@ -87,6 +89,11 @@ export default function Blueprints() {
                       <Badge variant="light" size="sm">
                         {Object.keys(blueprint.relations).length}
                       </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Anchor component={RouterLink} to={entitiesPath(blueprint.identifier)} size="sm">
+                        {t("blueprints.viewEntities")}
+                      </Anchor>
                     </Table.Td>
                     {isAdmin() && (
                       <Table.Td>

@@ -18,7 +18,8 @@ Where Port's documentation states no explicit rule, the assumption Toadie made i
 - **Relation** — a logical, directed connection between two blueprints ("a service *depends on*
   a package"). Relations, mirror properties and aggregation properties together are the
   "ontology" layer: descriptions and semantic relation titles are what give the schema meaning.
-- **Entity** — an instance of a blueprint (phase 2+; not modeled yet).
+- **Entity** — an instance of a blueprint (phase 2, v1.24.0 — the `entities/` package; see
+  "Entities" below).
 - **Meta-properties** — attributes every entity carries automatically, `$`-prefixed:
   `$identifier`, `$title`, `$team`, `$icon`, `$blueprint`, `$createdAt`, `$updatedAt`,
   `$createdBy`, `$updatedBy`. The `$` prefix is reserved: no user-defined property or relation
@@ -200,6 +201,91 @@ to Port's `Team` blueprint (`$team`). `{ "type": "Inherited", "path": "service.o
 ownership comes from a related blueprint with Direct ownership; `path` is a dot-chain of
 relation identifiers (first must be this blueprint's). Absent = no ownership.
 
+## Entities (phase 2, v1.24.0)
+
+Phase 2 adds **entities** — instances of a blueprint — as the new `entities/` package beside
+the untouched Backstage `catalog/`. Every entity belongs to one blueprint, carries `properties`
+typed by that blueprint's `schema`, and `relations` naming other entities of the target
+blueprints. Any authenticated user may create/read/update/delete any entity (the catalog-file
+shared-workspace rule, no `isAdmin` gate). Templates: `blueprints/*.kt` for the service/route
+shape, `catalog/CatalogFileService.list`/`CatalogFileFilter.kt` for the paged list.
+
+### The entity wire shape (from Port's public OpenAPI)
+
+```json
+{ "identifier": "checkout", "title": "Checkout", "icon": "Microservice", "team": ["payments"],
+  "properties": { "language": "kotlin", "tier": 1, "ports": [8080] },
+  "relations": { "domain": "commerce", "depends_on": ["catalog", "pricing"] } }
+```
+
+Responses add `blueprint` (the owning blueprint's identifier) + `blueprintId` + Toadie's usual
+`id`/`createdBy`/`creatorName`/`creatorDeleted`/`createdAt`/`updatedAt` + `findings` (below).
+Unset optionals are ABSENT, never `null` — the `blueprintJson` convention, reused verbatim.
+
+| Field | Required | Rule |
+| --- | --- | --- |
+| `identifier` | yes | Port pattern `^(?!\.{1,2}$)[\p{L}0-9@_.+:\\/='-]+$` — unicode letters plus `+`, `'`, `\`, WIDER than the blueprint charset; Port caps it at 1000, Toadie at **200 (assumption)**. Unique PER BLUEPRINT, case-insensitively (the partial-index convention); the same identifier may be reused across different blueprints. |
+| `title` | yes | ≤ 200 chars **(assumption)**; must not be blank. |
+| `icon` | no | ≤ 100 chars — a Port icon NAME, free string (the blueprint convention). |
+| `team` | no | `string \| string[]` (≤ 50 entries, each ≤ 100 chars **(assumption)**), stored and returned EXACTLY as sent, unvalidated — teams arrive with the users/teams phase. Absent when unset. |
+| `properties` | no | `{ <propertyId>: JSON value }`, keyed by the blueprint's declared property ids; defaults to empty. |
+| `relations` | no | `{ <relationId>: string \| string[] \| null }` — single vs many follows the blueprint relation's `many`; `null` means unset (never an error by itself). Defaults to empty. |
+
+### Validation — `entityFindings`, a PURE function
+
+Two layers, the phase-1 shape: `validateEntityRequest` enforces the blueprint-FREE shape rules
+above (identifier grammar/length, title, `team` shape, key grammar, a 256 KiB document cap) as
+an ordinary `400`. `entityFindings(document, definition, targetExists)` is the
+BLUEPRINT-DEPENDENT rule table below — it never throws, so the exact same list backs both the
+strict-save `400` (non-empty → one aggregated failure) and the `findings` field every GET/list
+response carries (see "Lifecycle rules" below). `EntityFinding{code, field, message}`, `field` =
+`properties.<id>` or `relations.<id>`.
+
+| Case | Rule | Finding code |
+| --- | --- | --- |
+| property key ∉ `schema.properties` | rejected | `UNKNOWN_PROPERTY` |
+| property key ∈ mirror/calculation/aggregation ids | COMPUTED in Port, never accepted as input | `COMPUTED_PROPERTY` |
+| `schema.required` key absent or `null` | a non-required `null` = unset (stored as absent) | `REQUIRED_MISSING` |
+| any `properties`/`relations` key with an explicit JSON `null` value | `toDocument()` drops every explicit null uniformly BEFORE `entityFindings` ever sees the document, so a `null` against an unrecognized key (e.g. `{"properties": {"unknownKey": null}}`) is stored as absent and never raises `UNKNOWN_PROPERTY`/`UNKNOWN_RELATION` either | (none — key silently unset) |
+| string value | JSON string; `minLength`/`maxLength` by code points; `pattern` unanchored `containsMatchIn` (JSON-Schema semantics); `enum`; formats: `url` → `isAbsoluteUrl`; `email`/`idn-email` → non-empty local@domain on the LAST `@`; `date-time`/`timer` → `OffsetDateTime`/`Instant` parse; `ipv4` → four octets; `ipv6` → hex/colon literal via `InetAddress` (never DNS); `user`/`team`/`yaml`/`markdown`/`proto` → free text | `TYPE_MISMATCH` / `ENUM_MISMATCH` / `FORMAT_INVALID` / `LENGTH_OUT_OF_RANGE` / `PATTERN_MISMATCH` |
+| number value | JSON number; `minimum`/`maximum` inclusive, `exclusive*` strict; `enum` numeric | `TYPE_MISMATCH` / `RANGE_OUT_OF_BOUNDS` / `ENUM_MISMATCH` |
+| boolean value | JSON boolean | `TYPE_MISMATCH` |
+| array value | JSON array; each element matches `items.type`/`items.enum`/`items.format`; `minItems`/`maxItems`; `uniqueItems` by structural equality | `TYPE_MISMATCH` / `ARRAY_SIZE` / `ARRAY_NOT_UNIQUE` |
+| object value | JSON object; `format: labeled-url` → exactly `{url: absolute, displayText?}`; else verbatim — NO JSON-Schema evaluation of `properties`/`patternProperties`/`additionalProperties` (documented, matches the blueprint's own storage-only posture on those sub-trees) | `TYPE_MISMATCH` / `OBJECT_SHAPE` |
+| relation key ∉ `relations` | rejected | `UNKNOWN_RELATION` |
+| relation shape | `many: false` → string or null; `many: true` → array of distinct strings or null; else rejected | `RELATION_SHAPE` |
+| `required: true` relation | non-null and (arrays) non-empty, else rejected | `RELATION_REQUIRED` |
+| each relation target | `targetExists(targetBlueprint, targetIdentifier)` over ACTIVE entities of the relation's target blueprint, byte-exact (self allowed — Port allows self-relations) | `RELATION_TARGET_MISSING` |
+
+### Not modeled in phase 2
+
+- Port's `upsert`/`merge`/`validation_only`/`create_missing_related_entities` write params —
+  Toadie's POST/PUT are plain creates/replacements.
+- The search-query relation form (naming a target by a Port search rule instead of an
+  identifier) and `delete_dependents` (cascading deletes) — a relation target is always a
+  byte-exact identifier, and DELETE never cascades past the referrer check below. An unknown
+  top-level key on the request is `400` via the strict `DefaultJson` (the blueprint precedent).
+- Evaluation of mirror/calculation/aggregation properties — they stay definitions on the
+  blueprint; entity `properties` carrying one of their ids is `COMPUTED_PROPERTY`, `400`, never
+  accepted as input, and Toadie never computes their values.
+
+### Lifecycle rules
+
+- **Blueprint delete with active entities is `409`**, naming the count — checked under the same
+  `blueprints` table lock phase 1 already uses, before the existing referrer check.
+- **Blueprint schema/relation EDITS go through unopposed** — entities are NOT re-validated at
+  edit time (no grandfathering enforcement on write, the phase-1 posture). Instead, every
+  `EntityService.list`/`read` re-runs `entityFindings` against the blueprint's CURRENT
+  definition on every read, so an entity a blueprint edit left non-conformant shows up STALE —
+  non-empty `findings` in its GET/list response — without any background job. Its next save
+  (PUT) re-validates and is refused (`400`) until the findings clear.
+- **A relation target must exist** at write time (`RELATION_TARGET_MISSING`, `400`); an entity
+  that is the TARGET of another active entity's relation cannot be deleted (`409`, naming the
+  referrers as `blueprint/identifier` — the phase-1 blueprint-target idiom, one level down).
+- **Identifier rename cascades**: a PUT that changes `identifier` rewrites every OTHER active
+  entity's `relations` naming the old identifier, in the same locked transaction (audited
+  `cascaded`/`renamedFrom`, the phase-1 shape).
+
 ## Default and system blueprints (not seeded by Toadie)
 
 Port ships `service`, `environment`, `workload`, `deployment`, `organization` as editable
@@ -221,3 +307,9 @@ with the phase that models users/teams.
 - <https://docs.port.io/context-lake/data-model/setup-blueprint/default-blueprints/>
 - <https://docs.port.io/context-lake/data-model/define-your-ontology/>
 - <https://docs.port.io/context-lake/business-context/ownership/>
+
+Added 2026-09-09 (phase 2, entities):
+
+- <https://docs.port.io/api-reference/create-an-entity/>
+- <https://api.getport.io/swagger/json> — Port's public OpenAPI document; the source of the
+  entity wire shape above.

@@ -1,6 +1,7 @@
 package ch.nokillswit.blueprints
 
 import ch.nokillswit.authz.ConflictException
+import ch.nokillswit.entities.EntityService
 import ch.nokillswit.users.UserService
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
@@ -205,10 +206,23 @@ class BlueprintService(private val database: R2dbcDatabase) {
         return affected.map { it.identifier }
     }
 
-    /** Dependents = other active rows targeting this identifier; a self-relation never blocks. */
+    /**
+     * Dependents = other active rows targeting this identifier; a self-relation never blocks.
+     * A blueprint with active ENTITIES (`entities/EntityService.kt` — a sanctioned cross-feature
+     * table read, held under this same SHARE ROW EXCLUSIVE lock so no entity write races it) is
+     * 409 before the referrer check: deleting it out from under live instances would strand
+     * every one of them without a definition to validate against.
+     */
     suspend fun delete(id: UInt): BlueprintDeleteResult = writeTransaction {
         val rows = activeRows()
         val current = rows.firstOrNull { it.id == id } ?: return@writeTransaction BlueprintDeleteResult(0, null)
+        val activeEntities = EntityService.Entities
+            .selectAll()
+            .where { (EntityService.Entities.blueprintId eq id) and (EntityService.Entities.markedAsDeleted eq false) }
+            .count()
+        if (activeEntities > 0) {
+            throw ConflictException("Blueprint '${current.identifier}' has $activeEntities active entities")
+        }
         val dependents = rows.filterNot { it.id == id }.filter { current.identifier in blueprintTargets(it.definition) }
         if (dependents.isNotEmpty()) {
             throw ConflictException(

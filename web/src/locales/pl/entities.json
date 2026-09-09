@@ -1,0 +1,97 @@
+{
+  "title": "Encje",
+  "intro": "Instancje blueprintu — wybierz jeden poniżej, aby zobaczyć, tworzyć i edytować jego encje. Każdy zalogowany użytkownik/każda zalogowana użytkowniczka może tworzyć, edytować i usuwać encje — ta sama zasada współdzielonego obszaru roboczego co w przypadku plików katalogu.",
+  "empty": "Brak encji dla tego blueprintu",
+  "pickBlueprintEmpty": "Wybierz blueprint powyżej, aby zobaczyć jego encje",
+  "loadFailed": "Nie udało się wczytać encji",
+  "notFound": "Nie znaleziono encji.",
+  "newEntity": "Nowa encja",
+  "createEntity": "Nowa encja",
+  "editEntity": "Edytuj encję",
+  "backToList": "Powrót do encji",
+  "preview": "Podgląd JSON",
+  "pickBlueprint": "Wybierz blueprint…",
+  "staleTitle": "Ta encja jest nieaktualna względem swojego blueprintu",
+  "staleBody": "Blueprint zmienił się od czasu ostatniego zapisu tej encji. Popraw poniższe właściwości/relacje, aby móc zapisać ponownie.",
+  "column": {
+    "findings": "Ustalenia"
+  },
+  "field": {
+    "blueprint": "Blueprint",
+    "identifier": "Identyfikator",
+    "title": "Tytuł",
+    "icon": "Ikona",
+    "team": "Zespół",
+    "updated": "Zaktualizowano",
+    "unset": "Nieustawione",
+    "true": "Prawda",
+    "false": "Fałsz",
+    "isoHint": "ISO 8601, np. 2026-09-09T12:00:00Z",
+    "labeledUrlUrl": "Adres URL",
+    "labeledUrlDisplayText": "Tekst wyświetlany",
+    "unknownPropertyHint": "Ten klucz nie jest już częścią schematu blueprintu — edytuj surową wartość JSON albo wyczyść ją, aby usunąć klucz.",
+    "relationOptionsFailed": "Nie udało się wczytać encji docelowych"
+  },
+  "section": {
+    "identity": "Tożsamość",
+    "properties": "Właściwości",
+    "relations": "Relacje"
+  },
+  "editor": {
+    "blueprintLabel": "Blueprint: {{identifier}}",
+    "noTargets": "Brak jeszcze encji blueprintu docelowego",
+    "blueprintMissing": "Blueprint tej encji już nie istnieje."
+  },
+  "hint": {
+    "team": "Dowolna nazwa lub nazwy zespołu jako wolny tekst — bez walidacji (zespoły pojawią się wraz z etapem użytkowników/zespołów)."
+  },
+  "filter": {
+    "q": "Szukaj",
+    "clearQ": "Wyczyść filtr wyszukiwania"
+  },
+  "findings": {
+    "count_one": "{{count}} ustalenie",
+    "count_few": "{{count}} ustalenia",
+    "count_many": "{{count}} ustaleń",
+    "count_other": "{{count}} ustalenia"
+  },
+  "deleteTitle": "Usuń encję",
+  "deleteBody": "Usunąć encję „{{identifier}}”? Tej operacji nie można cofnąć.",
+  "deleteFailed": "Usuwanie nie powiodło się",
+  "deleteConflict": "Ta encja jest nadal celem relacji innej encji.",
+  "saveConflict": "Encja o tym identyfikatorze już istnieje w tym blueprincie.",
+  "saveInvalid": "Ta encja jest nieprawidłowa. Sprawdź podświetlone pola.",
+  "saveGone": "Ta encja lub jej blueprint już nie istnieje.",
+  "toast": {
+    "created": "Encja utworzona",
+    "saved": "Encja zapisana",
+    "deleted": "Encja usunięta"
+  },
+  "validation": {
+    "required": "Wymagane",
+    "identifier": "Podaj prawidłowy identyfikator (litery, cyfry i @_.+:\\/='- , nie „.” ani „..”)",
+    "title": "Podaj tytuł (maks. 200 znaków)",
+    "iconLength": "Nazwa ikony jest za długa (maks. 100 znaków)",
+    "teamCount": "Za dużo wpisów zespołu (maks. 50)",
+    "teamEntryLength": "Wpis zespołu jest za długi (maks. 100 znaków)",
+    "minLength": "Musi mieć co najmniej {{min}} znaków",
+    "maxLength": "Musi mieć co najwyżej {{max}} znaków",
+    "pattern": "Nie pasuje do wymaganego wzorca",
+    "enum": "Nie jest jedną z dozwolonych wartości",
+    "url": "Podaj bezwzględny adres URL",
+    "email": "Podaj prawidłowy adres e-mail",
+    "dateTimeOffset": "Podaj prawidłową datę/godzinę w formacie ISO 8601 ze strefą (Z lub ±GG:MM)",
+    "timerZulu": "Podaj prawidłową datę/godzinę w formacie ISO 8601 w UTC, np. 2026-01-01T00:00:00Z",
+    "ipv4": "Podaj prawidłowy adres IPv4",
+    "numberInvalid": "Podaj prawidłową liczbę",
+    "minimum": "Musi być co najmniej {{min}}",
+    "maximum": "Musi być co najwyżej {{max}}",
+    "exclusiveMinimum": "Musi być większe niż {{min}}",
+    "exclusiveMaximum": "Musi być mniejsze niż {{max}}",
+    "minItems": "Wymaga co najmniej {{min}} elementów",
+    "maxItems": "Wymaga co najwyżej {{max}} elementów",
+    "uniqueItems": "Elementy muszą być unikalne",
+    "jsonInvalid": "Podaj prawidłowy JSON",
+    "objectShape": "Podaj adres URL i opcjonalnie tekst wyświetlany — nic więcej"
+  }
+}
