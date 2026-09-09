@@ -28,7 +28,11 @@ generated-password reveal, self-service password change):
   typed by the owning blueprint's schema, relations naming other entities, and live validation
   findings on every read so an entity a later blueprint edit made stale is visibly flagged;
   any authenticated user may create, edit, and delete them, the same shared-workspace rule as
-  catalog files,
+  catalog files. Phase 3 renders them together: the `/entity-graph` relationship graph and the
+  `/entity-hierarchy` containment tree, reusing the catalog's own dagre layout, folding, and
+  per-user manual-layout persistence, with each blueprint able to name one of its own
+  single relations as its `hierarchyRelation` — the Toadie-only extension that decides an
+  entity's parent for the tree/fold,
 - **lenses**: save the current filter set under a name and re-apply it from a combo box on
   any of the Hierarchy, Files, Graph, and Errors views — each lens private (only you) or
   public (visible to everyone, changeable only by its creator),

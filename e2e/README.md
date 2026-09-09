@@ -75,8 +75,12 @@ from Lettuce, that any new or edited spec must satisfy:
   `lenses` owns its throwaway lenses, files, and users (see its own bullet below);
   `blueprints` owns its two throwaway `e2e-bp-*` blueprints and its user;
   `entities` owns its two throwaway `e2e-ent-bp-*` blueprints and their `e2e-ent-*` entities
-  (together with `blueprints`, the blueprint registry's two in-run writers — see the dedicated
-  bullet below);
+  (together with `blueprints`, one of the blueprint registry's four in-run writers — see the
+  dedicated bullet below);
+  `entity-graph` owns its two throwaway `e2e-eg-*` blueprints and entities plus its throwaway
+  user's `entity-graph-layout` document (see its own bullet below, alongside
+  `graph-persistence`/`render`); `entity-hierarchy` owns its two throwaway `e2e-eh-*`
+  blueprints and entities (run as the seed admin — entities carry no admin gate);
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
@@ -110,18 +114,18 @@ from Lettuce, that any new or edited spec must satisfy:
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
   first moving label registration into global-setup (the run-namespace pattern). V22 seeds
   eight curated keys — no spec may edit or delete those either.
-- **The blueprint registry is single-writer state the same way, now with TWO writers.**
+- **The blueprint registry is single-writer state the same way, now with FOUR writers.**
   Blueprint identifiers are unique and relation targets name other blueprints, so a
-  concurrently deleted or renamed blueprint breaks a parallel spec's saves —
-  **`blueprints.spec.ts` and `entities.spec.ts` are the registry's two in-run writers**, each
-  creating and deleting only its own uniquely named rows (`e2e-bp-*` for `blueprints.spec.ts`,
-  `e2e-ent-bp-*` for `entities.spec.ts`; the registry has no seed to protect). Identifier
-  uniqueness plus never editing a foreign row is what makes their concurrent creates safe —
-  the same rule the other registries' single writers rely on. **The entity store follows the
-  same per-spec-ownership rule**: every entity a spec creates carries its own unique marker
-  (today only `entities.spec.ts`'s `e2e-ent-*` rows) and is removed by that same spec before
-  it returns, so a future second entity-creating spec can join safely as long as it never
-  touches another spec's rows.
+  concurrently deleted or renamed blueprint breaks a parallel spec's saves — **each spec
+  owns its own uniquely named blueprints and entities and never edits or deletes a foreign
+  row**: `blueprints.spec.ts` (`e2e-bp-*`), `entities.spec.ts` (`e2e-ent-bp-*`),
+  `entity-graph.spec.ts` (`e2e-eg-*`), and `entity-hierarchy.spec.ts` (`e2e-eh-*`); the
+  registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
+  what makes their concurrent creates safe — the same rule the other registries' single
+  writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
+  a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*` today) and
+  is removed by that same spec before it returns, so a future entity-creating spec can join
+  safely as long as it never touches another spec's rows.
 - **The lens store is per-run unique-name state.** Lenses are per-user content (private by
   default) and names are only unique per owner, so parallel specs cannot clash as long as
   every lens a spec saves carries a run-unique `e2e-lens-*` name and is deleted by its own
@@ -156,6 +160,12 @@ from Lettuce, that any new or edited spec must satisfy:
 - `graph-persistence.spec.ts` creates one throwaway user and exclusively owns that user's graph
   layout document. It retains the unrevoked admin login only for `finally` cleanup, deletes the
   user through the normal API, and never reads or writes the seed admin's layout or catalog data.
+- `entity-graph.spec.ts` creates one throwaway user and exclusively owns that user's SEPARATE
+  `entity-graph-layout` document (its own table/endpoint, independent of `graph-layout` above) —
+  never the seed admin's. It seeds its throwaway blueprints/entities as the admin first (the
+  registry writer role above), then signs in as the throwaway user for the filter/fold/drag
+  journey, and deletes everything (entities, blueprints, the user) via the retained admin
+  authorization in `finally`.
 - E2e-created entities carry a sweepable marker — every e2e-created file's name/namespace and
   every e2e-created user's email contains `e2e`, and nothing that must SURVIVE runs is ever
   named that way. Each spec deletes its own state, so the rule is currently satisfied by
@@ -211,6 +221,17 @@ the same commit** — this list is the coverage map, the scenario file is the de
   the entity stale (the list's findings badge) → the editor's stale alert names the missing
   field, fixed and saved, clears it → cleanup (entities, then blueprints); the blueprint
   registry's other in-run writer, alongside `blueprints.spec.ts`.
+- [`entity-graph.spec.ts`](scenarios/entity-graph.md) — the Entity graph (Port migration phase
+  3): two throwaway blueprints (a parent with a `peer` many self-relation, a child whose single
+  `parent` relation is flagged as its `hierarchyRelation`) and four entities seeded via the API
+  → a throwaway user filters the graph to the two blueprints, toggles the `peer` relation chip
+  to prune and restore an edge, folds/unfolds the hierarchy-relation parent, and drags it in
+  Manual mode, whose PUT is awaited by exact node id and confirmed after a reload → cleanup.
+- [`entity-hierarchy.spec.ts`](scenarios/entity-hierarchy.md) — the Entity hierarchy (Port
+  migration phase 3): the same throwaway blueprint pair with one parent, two children, and one
+  orphan child → the tree nests the children under the parent via the hierarchy relation while
+  the orphan stays a root, Pin narrows the tree to the parent's subtree, and deleting the
+  parent is refused (`409`) naming the referring children → cleanup.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).
