@@ -36,6 +36,9 @@ val EntityServiceKey = AttributeKey<EntityService>("EntityService")
 
 data class EntityFilter(val blueprint: String?, val q: String?)
 
+/** `GET …/entities/graph`'s filter: `blueprints` is the repeated any-of param (IN semantics). */
+data class EntityGraphFilter(val blueprints: List<String>, val q: String?)
+
 data class EntityListResult(val items: List<EntityResponse>, val total: Long)
 
 /** [EntityService.update]'s outcome: affected-row count plus what the rename cascaded (for the audit). */
@@ -101,7 +104,13 @@ class EntityService(private val database: R2dbcDatabase) {
         .join(UserService.Users, JoinType.INNER, onColumn = Entities.createdBy, otherColumn = UserService.Users.id)
         .join(BlueprintService.Blueprints, JoinType.INNER, onColumn = Entities.blueprintId, otherColumn = BlueprintService.Blueprints.id)
 
-    private data class ActiveBlueprint(val id: UInt, val identifier: String, val definition: BlueprintDefinition)
+    private data class ActiveBlueprint(
+        val id: UInt,
+        val identifier: String,
+        val title: String,
+        val definition: BlueprintDefinition,
+        val hierarchyRelation: String?,
+    )
 
     private suspend fun loadActiveBlueprints(): List<ActiveBlueprint> =
         BlueprintService.Blueprints.selectAll().where { activeBlueprints() }
@@ -109,7 +118,9 @@ class EntityService(private val database: R2dbcDatabase) {
                 ActiveBlueprint(
                     it[BlueprintService.Blueprints.id].value,
                     it[BlueprintService.Blueprints.identifier],
+                    it[BlueprintService.Blueprints.title],
                     blueprintJson.decodeFromString<BlueprintDefinition>(it[BlueprintService.Blueprints.definition]),
+                    it[BlueprintService.Blueprints.hierarchyRelation],
                 )
             }
             .toList()
@@ -192,6 +203,51 @@ class EntityService(private val database: R2dbcDatabase) {
         val definitions = rows.mapNotNull { blueprintsById[it[Entities.blueprintId].value]?.definition }
         val targetExists = buildTargetExists(definitions, blueprintsByIdentifier)
         EntityListResult(rows.map { it.toResponse(blueprintsById, targetExists) }, total)
+    }
+
+    /**
+     * `GET …/entities/graph`: a plain read (no write-lock — reads never wait behind the
+     * blueprints/entities writer lock). `blueprints` folds case-insensitively against the
+     * active blueprint identifiers (the list filter's own idiom); if the filter names at
+     * least one blueprint and NONE resolve, the graph is empty rather than "no predicate"
+     * (an empty resolved-id set must narrow to nothing, not widen to everything). Loads ONLY
+     * the rows the filter shows — an edge needs both ends shown, so a hidden row can never
+     * contribute a node or an edge (`catalog/Graph.kt`'s rule, one level down) — with no
+     * users join (the graph never needs creator display fields).
+     */
+    suspend fun graph(filter: EntityGraphFilter): EntityGraph = suspendTransaction(database) {
+        val activeBlueprints = loadActiveBlueprints()
+        val blueprintsById = activeBlueprints.associateBy { it.id }
+        val blueprintsByIdentifierFolded = activeBlueprints.associateBy { it.identifier.lowercase() }
+
+        var predicate: Op<Boolean> = active()
+        if (filter.blueprints.isNotEmpty()) {
+            val ids = filter.blueprints.mapNotNull { blueprintsByIdentifierFolded[it.lowercase()]?.id }.distinct()
+            if (ids.isEmpty()) return@suspendTransaction EntityGraph(emptyList(), emptyList())
+            predicate = predicate and (Entities.blueprintId inList ids)
+        }
+        filter.q?.let { q -> predicate = predicate and (Entities.identifier.containsNormalized(q) or Entities.title.containsNormalized(q)) }
+
+        val sources = Entities.selectAll().where { predicate }.map {
+            EntityGraphSource(
+                id = it[Entities.id].value,
+                blueprintId = it[Entities.blueprintId].value,
+                identifier = it[Entities.identifier],
+                title = it[Entities.title],
+                icon = it[Entities.icon],
+                document = blueprintJson.decodeFromString(it[Entities.document]),
+            )
+        }.toList()
+
+        val shownDefinitions = sources.mapNotNull { blueprintsById[it.blueprintId]?.definition }
+        val targetExists = buildTargetExists(shownDefinitions, activeBlueprints.associateBy { it.identifier })
+        val graphBlueprintsById = blueprintsById.mapValues {
+            GraphBlueprint(it.value.identifier, it.value.title, it.value.definition, it.value.hierarchyRelation)
+        }
+        buildEntityGraph(sources, graphBlueprintsById) { source ->
+            val blueprint = blueprintsById.getValue(source.blueprintId)
+            entityFindings(source.document, blueprint.definition, targetExists).size
+        }
     }
 
     suspend fun read(id: UInt): EntityResponse? = suspendTransaction(database) {

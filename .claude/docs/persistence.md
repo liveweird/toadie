@@ -3,7 +3,7 @@
 PostgreSQL is the only database. Connection settings come from the `postgres:` block in `application.yaml` (env-overridable via `POSTGRES_JDBC_URL`, `POSTGRES_R2DBC_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`); defaults match the `docker compose up postgres` service (host port **5433** — Lettuce may occupy 5432 on the same machine; in-network consumers use `postgres:5432`). There is one persistence stack:
 
 - **Flyway** (`infra/db/Flyway.kt`) — runs schema migrations from `server/src/main/resources/db/migration/` at startup via the Java API, opening a short-lived JDBC connection. Migrations are the single source of truth for schema; do not call `SchemaUtils.create` anywhere. **An applied migration's bytes are immutable — comments included**: Flyway validates stored checksums at startup, so any edit to an existing `V*.sql` makes every long-lived database refuse to boot (a failure no fresh-container CI run can see). `MigrationChecksumTest` pins every file's checksum; a new migration adds one manifest line, and a red pin means REVERT the edit (clarifications go into this doc), never update the pinned value.
-- **Exposed + R2DBC** (`infra/db/Database.kt` + the feature services) — runtime DB access. `Database.kt` connects the `R2dbcDatabase` and is the composition root: it constructs the services and publishes them into `Application.attributes` (`UserServiceKey`, `GraphLayoutServiceKey`, `TokenBlocklistServiceKey`, `CatalogFileServiceKey`, `CatalogFileEventServiceKey`, `DictionaryServiceKey`, `LabelServiceKey`, `AnnotationKeyServiceKey`, `TagCategoryServiceKey`, `EntityTypesServiceKey`, `LensServiceKey`, `BlueprintServiceKey`, `EntityServiceKey`); each service itself lives next to the feature it serves (`users/UserService.kt`, `users/GraphLayoutService.kt`, `auth/TokenBlocklistService.kt`, `catalog/CatalogFileService.kt`, `catalog/CatalogFileEventService.kt`, `dictionaries/DictionaryService.kt`, `labels/LabelService.kt`, `annotations/AnnotationKeyService.kt`, `tags/TagCategoryService.kt`, `types/EntityTypesService.kt`, `lenses/LensService.kt`, `blueprints/BlueprintService.kt`, `entities/EntityService.kt`). The Exposed table `object`s (e.g. `UserService.Users`, nested inside their service) are used for queries only, not DDL. Ids are `UIntIdTable` — unsigned end-to-end (the spec declares `minimum: 0`, and `ErrorHandling.kt` 400s negative path segments before kotlinx's `UInt` decoding can silently wrap them); one wrinkle: V1 created `users.id` as `BIGSERIAL` (64-bit in SQL, 32-bit everywhere above it) while V5 uses `SERIAL` — harmless at this scale, documented so nobody "fixes" one to match the other without a migration.
+- **Exposed + R2DBC** (`infra/db/Database.kt` + the feature services) — runtime DB access. `Database.kt` connects the `R2dbcDatabase` and is the composition root: it constructs the services and publishes them into `Application.attributes` (`UserServiceKey`, `GraphLayoutServiceKey`, `EntityGraphLayoutServiceKey`, `TokenBlocklistServiceKey`, `CatalogFileServiceKey`, `CatalogFileEventServiceKey`, `DictionaryServiceKey`, `LabelServiceKey`, `AnnotationKeyServiceKey`, `TagCategoryServiceKey`, `EntityTypesServiceKey`, `LensServiceKey`, `BlueprintServiceKey`, `EntityServiceKey`); each service itself lives next to the feature it serves (`users/UserService.kt`, `users/GraphLayoutService.kt` — the second `EntityGraphLayoutServiceKey` instance is the SAME class over a second table, see V30 below —, `auth/TokenBlocklistService.kt`, `catalog/CatalogFileService.kt`, `catalog/CatalogFileEventService.kt`, `dictionaries/DictionaryService.kt`, `labels/LabelService.kt`, `annotations/AnnotationKeyService.kt`, `tags/TagCategoryService.kt`, `types/EntityTypesService.kt`, `lenses/LensService.kt`, `blueprints/BlueprintService.kt`, `entities/EntityService.kt`). The Exposed table `object`s (e.g. `UserService.Users`, nested inside their service) are used for queries only, not DDL. Ids are `UIntIdTable` — unsigned end-to-end (the spec declares `minimum: 0`, and `ErrorHandling.kt` 400s negative path segments before kotlinx's `UInt` decoding can silently wrap them); one wrinkle: V1 created `users.id` as `BIGSERIAL` (64-bit in SQL, 32-bit everywhere above it) while V5 uses `SERIAL` — harmless at this scale, documented so nobody "fixes" one to match the other without a migration.
 
 The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flyway; runtime queries go through R2DBC.
 
@@ -26,6 +26,14 @@ full replacements of one category still use last-write-wins semantics.
 The current R2DBC path may finish cancellation only after a blocking database lock is
 released. A cancelled write then rolls back; this protocol does not add a lock-wait deadline
 or promise immediate database-query cancellation.
+
+**Entity graph reads.** `EntityService.graph(EntityGraphFilter)` (Phase 3, v1.25.0) is a plain
+read transaction, not a write path: it loads ONLY the rows the `blueprint`/`q` filters show
+(the catalog graph's rule, one level down — an edge needs BOTH ends shown, so a row the filter
+hid contributes neither a node nor an edge, never a virtual/MISSING one), joins the active
+blueprint snapshot for titles/`hierarchyRelation`, and computes each returned row's `findings`
+with the SAME `entityFindings` the list/read endpoints use, condensed to a count. No lock is
+taken — a plain committed read, like the entity list.
 
 **Blueprint targets under concurrency (V27).** `BlueprintService` takes the same
 transaction-scoped `SHARE ROW EXCLUSIVE` lock on `blueprints` before the first read in
@@ -54,7 +62,7 @@ protocol, readers never wait, and cancellation may land only after a held lock r
 The lock-mode compatibility and transaction lifetime follow the
 [PostgreSQL explicit-locking rules](https://www.postgresql.org/docs/18/explicit-locking.html).
 
-Current migrations are `V1`–`V28` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V30` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -82,7 +90,7 @@ Current migrations are `V1`–`V28` — small enough that this section is the ca
 
 - `V18__add_users_language` — the per-user language (Lettuce's V61): `users.language VARCHAR(10) NOT NULL DEFAULT 'en'` — no index, no CHECK (`SUPPORTED_LANGUAGES` in `dictionaries/Languages.kt` is the whitelist, the V12 idiom). Drives the UI at sign-in and every server-composed email's language; set at create, changed only via `PUT /users/{id}/language` (see `.claude/docs/authorization.md`).
 
-- `V19__create_graph_layouts` — the per-user Graph-page layout (`graph_layouts`, one row per user, `user_id` PK/FK `ON DELETE CASCADE`): `mode VARCHAR(10)` (`auto`/`manual` — no CHECK, `GRAPH_LAYOUT_MODES` in `users/GraphLayout.kt` is the whitelist) + the manually dragged node positions as ONE JSON object in TEXT keyed by node id `kind:namespace/name` (the `catalog_files.content` precedent) + `updated_at` (+ the collapsed node ids since `V24`, below). A **hard-delete table** (the `user_disabled_features` exception class): a pure per-user settings row whose PUT is a wholesale replace — no history worth keeping. Read/replaced only via GET/PUT `/users/{id}/graph-layout` (`users/GraphLayoutService.kt`, upsert — a drag stop and a mode switch may race from one client).
+- `V19__create_graph_layouts` — the per-user Graph-page layout (`graph_layouts`, one row per user, `user_id` PK/FK `ON DELETE CASCADE`): `mode VARCHAR(10)` (`auto`/`manual` — no CHECK, `GRAPH_LAYOUT_MODES` in `users/GraphLayout.kt` is the whitelist) + the manually dragged node positions as ONE JSON object in TEXT keyed by node id `kind:namespace/name` (the `catalog_files.content` precedent) + `updated_at` (+ the collapsed node ids since `V24`, below). A **hard-delete table** (the `user_disabled_features` exception class): a pure per-user settings row whose PUT is a wholesale replace — no history worth keeping. Read/replaced only via GET/PUT `/users/{id}/graph-layout` (`users/GraphLayoutService.kt`, upsert — a drag stop and a mode switch may race from one client). `V30` gives the Entity graph page an independent twin table, `entity_graph_layouts`, behind its own `/users/{id}/entity-graph-layout` pair (below).
 
 - `V20__create_lenses` — saved filter sets (`lenses`, the labels CRUD shape + V5's creator column): `name` (≤100), `visibility VARCHAR(10)` (`PRIVATE`/`PUBLIC` — no CHECK, the Kotlin `LensVisibility` enum is the whitelist, the V12/V18 idiom), the nine shared filter slots as ONE JSON object in TEXT (`filters` — the `catalog_files.content` precedent), `created_by` FK (`ON DELETE RESTRICT`, the V5 shape), epoch-millis timestamps, soft-delete, plus the partial unique index `uq_lenses_owner_name_active` over `(created_by, LOWER(name))` active rows — names are unique PER OWNER only (public lenses from different creators may share one; the picker disambiguates by creator name). PRIVATE rows are visible only to their creator; PUBLIC rows to everyone, both creator-only mutable (see `.claude/docs/authorization.md`).
 
@@ -140,6 +148,34 @@ identifier rename by the service under the two-table lock (above). No seed — t
 EMPTY, like blueprints. Migration checksums, including V28, are pinned in
 `MigrationChecksumTest`.
 
+**V29 — hierarchy relation.** `ALTER TABLE blueprints ADD COLUMN hierarchy_relation
+VARCHAR(100) NULL` (Phase 3 of the Port data-model move, v1.25.0 — see
+`.claude/docs/port-data-model.md` "Toadie extensions"): an identity column beside
+`definition`, so the stored Port document (`toDefinition()`'s output) stays byte-identical —
+a future Port export drops the column rather than stripping anything out of the JSON. No
+index, no CHECK: `BlueprintValidation.kt` enforces that a non-null value names a KEY of the
+same row's `relations` with `many == false`; no cascade on relation rename, since the column
+names a relation KEY of its OWN row, not another blueprint's identity. Read/written alongside
+`definition` in `BlueprintService.insertRow`/`update`/`toResponse`, under the same V27 table
+lock (a relation the value points at may be renamed/removed in the very definition being
+saved). Migration checksums, including V29, are pinned in `MigrationChecksumTest`.
+
+**V30 — the Entity graph's own layout.** `CREATE TABLE entity_graph_layouts`, a byte-copy of
+V19+V24's `graph_layouts` shape (`user_id PK/FK ON DELETE CASCADE`, `mode`, `positions TEXT`,
+`collapsed TEXT`, `updated_at`) behind the Entity graph page's own
+GET/PUT `/api/v1/users/{id}/entity-graph-layout`. It is a SEPARATE table, not a shared row
+with `graph_layouts`: the Backstage Graph page and the Entity graph page persist independent
+documents, keyed by a different node-id grammar (`kind:namespace/name` vs.
+`<blueprint>|<identifier>`), so one page's manual layout/fold state never leaks into the
+other's. `users/GraphLayoutService.kt` is generalized to `GraphLayoutService(database, table:
+GraphLayoutTable)` over an `abstract class GraphLayoutTable(name)`, with `GraphLayouts` and
+`EntityGraphLayouts` as its two concrete Exposed table objects — `Database.kt` constructs and
+publishes two independent service instances, one per table, both under the
+`GraphLayoutServiceKey`/`EntityGraphLayoutServiceKey` pair. A **hard-delete table**, the same
+exception class as V19 (`graph_layouts`) and `user_disabled_features`: a pure per-user
+settings row whose PUT is a wholesale replace, no history worth keeping. Migration checksums,
+including V30, are pinned in `MigrationChecksumTest`.
+
 ### Soft delete (convention)
 
 **V25 — authentication sessions.** `users.auth_version BIGINT NOT NULL DEFAULT 0` is the
@@ -153,7 +189,7 @@ before touching the session and reject a stale epoch. Cleanup uses its own trans
 avoid reversing that lock order. Renewal updates only an existing live family and never
 shortens its expiry. No runtime DDL; prior migration checksums remain untouched.
 
-`users`, `catalog_files`, `dictionary_entries`, `labels`, `annotation_keys`, `tag_categories`, `entity_types`, `lenses`, `blueprints`, and `entities` are **soft-deleted** — rows are flagged, never physically removed; every future business entity follows the same convention. Only join/audit/detail tables (today: `password_reset_tokens` (V26, expiring single-use credentials), `auth_sessions` (V25, expiring login families deleted at logout and pruned on login), `revoked_tokens`, a pure token registry, `user_disabled_features`, a pure flag join whose PUT is a wholesale replace, `graph_layouts` (V19), a pure per-user settings row whose PUT is a wholesale replace, and `catalog_file_events` (V23), the immutable audit trail itself — none carry history worth keeping, or ARE the history) hard-delete — a new hard-delete table needs a documented justification, exactly like Lettuce's exceptions list. To add soft-delete to a new entity, follow the established pattern (reference implementations: `users/UserService.kt`, `catalog/CatalogFileService.kt` — the latter shows the full CRUD shape incl. the delete route):
+`users`, `catalog_files`, `dictionary_entries`, `labels`, `annotation_keys`, `tag_categories`, `entity_types`, `lenses`, `blueprints`, and `entities` are **soft-deleted** — rows are flagged, never physically removed; every future business entity follows the same convention. Only join/audit/detail tables (today: `password_reset_tokens` (V26, expiring single-use credentials), `auth_sessions` (V25, expiring login families deleted at logout and pruned on login), `revoked_tokens`, a pure token registry, `user_disabled_features`, a pure flag join whose PUT is a wholesale replace, `graph_layouts` (V19) and its V30 twin `entity_graph_layouts`, both pure per-user settings rows whose PUT is a wholesale replace, and `catalog_file_events` (V23), the immutable audit trail itself — none carry history worth keeping, or ARE the history) hard-delete — a new hard-delete table needs a documented justification, exactly like Lettuce's exceptions list. To add soft-delete to a new entity, follow the established pattern (reference implementations: `users/UserService.kt`, `catalog/CatalogFileService.kt` — the latter shows the full CRUD shape incl. the delete route):
 
 1. **Migration** — `marked_as_deleted BOOLEAN NOT NULL DEFAULT FALSE` in the CREATE (a retrofit adds the column plus `CREATE INDEX idx_<t>_marked_as_deleted ON <t>(marked_as_deleted);`).
 2. **Exposed table** — add `val markedAsDeleted = bool("marked_as_deleted").default(false)` and a private helper `fun active(): Op<Boolean> = <T>.markedAsDeleted eq false`.

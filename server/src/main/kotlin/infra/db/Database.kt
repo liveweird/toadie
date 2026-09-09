@@ -26,6 +26,7 @@ import ch.nokillswit.tags.TagCategoryService
 import ch.nokillswit.tags.TagCategoryServiceKey
 import ch.nokillswit.types.EntityTypesService
 import ch.nokillswit.types.EntityTypesServiceKey
+import ch.nokillswit.users.EntityGraphLayoutServiceKey
 import ch.nokillswit.users.GraphLayoutService
 import ch.nokillswit.users.GraphLayoutServiceKey
 import ch.nokillswit.users.UserService
@@ -45,7 +46,8 @@ suspend fun Application.configureDatabase() {
         password = environment.config.property("postgres.password").getString(),
     )
     attributes.put(UserServiceKey, UserService(database))
-    attributes.put(GraphLayoutServiceKey, GraphLayoutService(database))
+    attributes.put(GraphLayoutServiceKey, GraphLayoutService(database, GraphLayoutService.GraphLayouts))
+    attributes.put(EntityGraphLayoutServiceKey, GraphLayoutService(database, GraphLayoutService.EntityGraphLayouts))
     val catalogFileEventService = CatalogFileEventService(database)
     attributes.put(CatalogFileServiceKey, CatalogFileService(database, catalogFileEventService))
     attributes.put(CatalogFileEventServiceKey, catalogFileEventService)

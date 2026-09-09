@@ -7,6 +7,7 @@ import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.infra.paging.SortField
 import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
+import ch.nokillswit.infra.paging.repeatedValues
 import ch.nokillswit.infra.paging.toPage
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -33,6 +34,11 @@ class EntitiesRoute {
     @Serializable
     @Resource("{id}")
     class Id(val parent: EntitiesRoute = EntitiesRoute(), val id: UInt)
+
+    // A literal segment beats {id} in Ktor's route resolution (the CatalogFiles.Graph idiom).
+    @Serializable
+    @Resource("graph")
+    class Graph(val parent: EntitiesRoute = EntitiesRoute())
 }
 
 /**
@@ -69,6 +75,14 @@ fun Application.configureEntityRoutes() {
                 call.caller()
                 val entity = entityService.read(route.id).orNotFound("Entity")
                 call.respondEntity(HttpStatusCode.OK, entity)
+            }
+            get<EntitiesRoute.Graph> {
+                call.caller()
+                val filter = EntityGraphFilter(
+                    blueprints = call.request.queryParameters.repeatedValues("blueprint"),
+                    q = call.request.queryParameters.optionalString("q"),
+                )
+                call.respondEntity(HttpStatusCode.OK, entityService.graph(filter))
             }
             post<EntitiesRoute> {
                 val caller = call.caller()

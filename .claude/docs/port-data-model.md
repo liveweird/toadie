@@ -20,6 +20,9 @@ Where Port's documentation states no explicit rule, the assumption Toadie made i
   "ontology" layer: descriptions and semantic relation titles are what give the schema meaning.
 - **Entity** — an instance of a blueprint (phase 2, v1.24.0 — the `entities/` package; see
   "Entities" below).
+- **Hierarchy relation (Toadie)** — an optional per-blueprint pointer at one of its own
+  `many: false` relations, naming the entity hierarchy's parent link (phase 3, v1.25.0 — not a
+  Port concept; see "Toadie extensions" below).
 - **Meta-properties** — attributes every entity carries automatically, `$`-prefixed:
   `$identifier`, `$title`, `$team`, `$icon`, `$blueprint`, `$createdAt`, `$updatedAt`,
   `$createdBy`, `$updatedBy`. The `$` prefix is reserved: no user-defined property or relation
@@ -285,6 +288,38 @@ response carries (see "Lifecycle rules" below). `EntityFinding{code, field, mess
 - **Identifier rename cascades**: a PUT that changes `identifier` rewrites every OTHER active
   entity's `relations` naming the old identifier, in the same locked transaction (audited
   `cascaded`/`renamedFrom`, the phase-1 shape).
+
+## Toadie extensions (not Port)
+
+Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's own model:
+
+- **Hierarchy relation** — `Blueprint.hierarchyRelation: String?`, an optional identifier of ONE
+  of the blueprint's own `relations` entries. The rule: it must be a KEY of `relations`, and that
+  relation must have `many: false` (a hierarchy parent is singular by definition) — naming an
+  unknown or `many: true` relation is `400`. It is stored BESIDE the Port document, in its own
+  column (V29), never inside `definition`/`schema`/`relations` — so `toDefinition()`'s emitted
+  Port JSON stays byte-identical to what phase 1 already produced, and any future Port export
+  simply drops the column rather than needing to strip anything out of the document. Wire shape
+  follows the blueprint convention: optional, NOT `nullable`, ABSENT when unset (never `null`);
+  renaming/removing the named relation is not cross-checked (the same no-grandfathering-on-edit
+  posture as the schema/relations themselves — see "Lifecycle rules" above).
+
+  The **entity hierarchy** derives from it, purely: an entity's parent is the target of its
+  OWN blueprint's `hierarchyRelation` relation value (a `many: false` relation, so at most one
+  target); blueprints that set no `hierarchyRelation` are hierarchy roots, and so is any entity
+  whose relation value is unset or does not resolve. The entity graph (below) flags the edges
+  that carry this relation with `hierarchy: true`, so the hierarchy tree and the general
+  relation graph are two views over the same data, never a separately stored parent pointer.
+
+- **Entity graph** — `GET /api/v1/entities/graph` renders entities and their relations together
+  (`entities/EntityGraph.kt`, the `catalog/Graph.kt` counterpart one level down). Each node's id
+  follows the grammar `"<blueprint>|<identifier>"` (`|` appears in neither the blueprint nor the
+  entity identifier charset, so exactly one `|` per id and the split is unambiguous). Unlike the
+  catalog graph, there are no virtual/MISSING nodes: an edge is emitted only when BOTH its ends
+  are among the entities the `blueprint`/`q` filters selected, so a relation value naming a
+  filtered-out or no-longer-resolving target simply contributes no edge — never a placeholder
+  node. Each node carries `findings` as a plain COUNT (not the detailed list `GET`/list return)
+  of the same `entityFindings` computation — the stale marker, condensed for a graph face.
 
 ## Default and system blueprints (not seeded by Toadie)
 

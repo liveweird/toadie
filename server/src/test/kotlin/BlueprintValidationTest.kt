@@ -141,6 +141,26 @@ class BlueprintValidationTest {
         assertInvalid(base(relations = mapOf("has space" to relation())))
     }
 
+    // ─── hierarchyRelation (Toadie-only extension, V29) ─────────────────────────────────────
+
+    @Test
+    fun `hierarchyRelation must name a relation of this blueprint`() {
+        assertInvalid(base(relations = mapOf("r" to relation()), ownership = null).copy(hierarchyRelation = "nope"))
+        assertValid(base(relations = mapOf("r" to relation())).copy(hierarchyRelation = "r"))
+    }
+
+    @Test
+    fun `hierarchyRelation must name a single relation, not a many one`() {
+        assertInvalid(base(relations = mapOf("r" to relation(many = true))).copy(hierarchyRelation = "r"))
+        assertValid(base(relations = mapOf("r" to relation(many = false))).copy(hierarchyRelation = "r"))
+    }
+
+    @Test
+    fun `hierarchyRelation is optional and absent by default`() {
+        assertValid(base())
+        assertValid(base(relations = mapOf("r" to relation())))
+    }
+
     // ─── mirror properties ───────────────────────────────────────────────────────────────
 
     @Test

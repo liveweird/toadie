@@ -44,6 +44,9 @@ class BlueprintService(private val database: R2dbcDatabase) {
         // Everything else (schema/relations/mirror/calculation/aggregation/ownership) as one
         // JSON document in TEXT (the catalog_files.content/lenses.filters precedent).
         val definition = text("definition")
+        // Port migration phase 3 (V29): a Toadie-only view extension stored BESIDE the Port
+        // document, never inside it — so `definition`/`toDefinition()` stay byte-identical.
+        val hierarchyRelation = varchar("hierarchy_relation", length = MAX_BLUEPRINT_IDENTIFIER_LENGTH).nullable()
         val createdBy = reference("created_by", UserService.Users)
         val createdAt = long("created_at")
         val updatedAt = long("updated_at")
@@ -88,6 +91,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             calculationProperties = definition.calculationProperties,
             aggregationProperties = definition.aggregationProperties,
             ownership = definition.ownership,
+            hierarchyRelation = this[Blueprints.hierarchyRelation],
             createdBy = this[Blueprints.createdBy].value,
             creatorName = this[UserService.Users.name],
             creatorDeleted = this[UserService.Users.markedAsDeleted],
@@ -109,8 +113,13 @@ class BlueprintService(private val database: R2dbcDatabase) {
         joined().selectAll().where { (Blueprints.id eq id) and active() }.map { it.toResponse() }.singleOrNull()
     }
 
-    /** One row's id, identifier, and decoded definition — the snapshot every mutation loads once. */
-    private data class ActiveRow(val id: UInt, val identifier: String, val definition: BlueprintDefinition)
+    /** One row's id, identifier, decoded definition, and hierarchy relation — the snapshot every mutation loads once. */
+    private data class ActiveRow(
+        val id: UInt,
+        val identifier: String,
+        val definition: BlueprintDefinition,
+        val hierarchyRelation: String?,
+    )
 
     private suspend fun activeRows(): List<ActiveRow> = Blueprints.selectAll().where { active() }
         .map {
@@ -118,6 +127,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
                 it[Blueprints.id].value,
                 it[Blueprints.identifier],
                 blueprintJson.decodeFromString<BlueprintDefinition>(it[Blueprints.definition]),
+                it[Blueprints.hierarchyRelation],
             )
         }
         .toList()
@@ -152,6 +162,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             it[description] = request.description
             it[icon] = request.icon
             it[Blueprints.definition] = blueprintJson.encodeToString(definition)
+            it[hierarchyRelation] = request.hierarchyRelation
             it[createdBy] = callerId
             it[createdAt] = now
             it[updatedAt] = now
@@ -187,6 +198,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             it[description] = request.description
             it[icon] = request.icon
             it[Blueprints.definition] = blueprintJson.encodeToString(definition)
+            it[hierarchyRelation] = request.hierarchyRelation
             it[updatedAt] = System.currentTimeMillis()
         }
         BlueprintUpdateResult(1, cascaded, if (renamed) current.identifier else null)

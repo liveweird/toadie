@@ -5,6 +5,7 @@ import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
+import ch.nokillswit.entities.EntityGraph
 import ch.nokillswit.entities.EntityPageResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
@@ -508,6 +509,148 @@ class EntityTest {
         } finally {
             TestEntities.remove(entId)
             TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `the graph endpoint requires authentication and dodges the id route`() = testApplication {
+        usePostgresTestcontainer()
+        assertEquals(HttpStatusCode.Unauthorized, jsonClient().get("/api/v1/entities/graph").status)
+        // Would be a 400 ("id must be a UInt") if {id} captured the literal segment.
+        assertEquals(HttpStatusCode.OK, seededClient("ent-graph-auth").get("/api/v1/entities/graph").status)
+    }
+
+    @Test
+    fun `graph - no filter returns the test's own entities as nodes, with a relation edge`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-graph-basic", UserRole.ADMIN)
+        val teamBp = unique("bp-graph-team")
+        val personBp = unique("bp-graph-person")
+        val teamEnt = unique("ent-graph-team")
+        val personEnt = unique("ent-graph-person")
+        try {
+            client.createBlueprint(simpleBlueprint(personBp))
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = teamBp,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("owner" to RelationDefinition(title = "Owner", target = personBp, required = false, many = false)),
+                ),
+            )
+            client.postJson("/api/v1/entities", entityRequest(personBp, personEnt))
+            client.postJson(
+                "/api/v1/entities",
+                entityRequest(teamBp, teamEnt).copy(relations = buildJsonObject { put("owner", personEnt) }),
+            )
+
+            val graph = client.get("/api/v1/entities/graph").body<EntityGraph>()
+            val nodeIds = graph.nodes.map { it.id }.toSet()
+            assertTrue(nodeIds.containsAll(listOf("$personBp|$personEnt", "$teamBp|$teamEnt")))
+            val ownerEdge = graph.edges.single { it.relation == "owner" }
+            assertEquals("$teamBp|$teamEnt", ownerEdge.sourceId)
+            assertEquals("$personBp|$personEnt", ownerEdge.targetId)
+            assertTrue(graph.nodes.none { it.id.contains(":null") })
+        } finally {
+            TestEntities.remove(teamEnt, personEnt)
+            TestBlueprints.remove(teamBp, personBp)
+        }
+    }
+
+    @Test
+    fun `graph - blueprint filter is IN semantics over repeated params, unknown resolves to an empty graph`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-graph-filter", UserRole.ADMIN)
+        val bpA = unique("bp-graph-a")
+        val bpB = unique("bp-graph-b")
+        val bpC = unique("bp-graph-c")
+        val entA = unique("ent-graph-a")
+        val entB = unique("ent-graph-b")
+        val entC = unique("ent-graph-c")
+        try {
+            client.createBlueprint(simpleBlueprint(bpA))
+            client.createBlueprint(simpleBlueprint(bpB))
+            client.createBlueprint(simpleBlueprint(bpC))
+            client.postJson("/api/v1/entities", entityRequest(bpA, entA))
+            client.postJson("/api/v1/entities", entityRequest(bpB, entB))
+            client.postJson("/api/v1/entities", entityRequest(bpC, entC))
+
+            val filtered = client.get("/api/v1/entities/graph?blueprint=$bpA&blueprint=$bpB").body<EntityGraph>()
+            assertEquals(setOf("$bpA|$entA", "$bpB|$entB"), filtered.nodes.map { it.id }.toSet())
+
+            val unknown = client.get("/api/v1/entities/graph?blueprint=${unique("bp-graph-never")}").body<EntityGraph>()
+            assertTrue(unknown.nodes.isEmpty())
+            assertTrue(unknown.edges.isEmpty())
+        } finally {
+            TestEntities.remove(entA, entB, entC)
+            TestBlueprints.remove(bpA, bpB, bpC)
+        }
+    }
+
+    @Test
+    fun `graph - q folds accents and case`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-graph-q", UserRole.ADMIN)
+        val bpId = unique("bp-graph-q")
+        val entId = unique("ent-graph-q")
+        try {
+            client.createBlueprint(simpleBlueprint(bpId))
+            client.postJson("/api/v1/entities", entityRequest(bpId, entId).copy(title = "Żółw"))
+
+            val found = client.get("/api/v1/entities/graph?q=zolw").body<EntityGraph>()
+            assertTrue(found.nodes.any { it.id == "$bpId|$entId" })
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `graph - hierarchy is true end to end once the blueprint's hierarchyRelation is PUT`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-graph-hierarchy", UserRole.ADMIN)
+        val parentBp = unique("bp-graph-hp")
+        val childBp = unique("bp-graph-hc")
+        val parentEnt = unique("ent-graph-hp")
+        val childEnt = unique("ent-graph-hc")
+        try {
+            client.createBlueprint(simpleBlueprint(parentBp))
+            val child = client.createBlueprint(
+                BlueprintRequest(
+                    identifier = childBp,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("parent" to RelationDefinition(title = "Parent", target = parentBp, required = false, many = false)),
+                ),
+            )
+            client.postJson("/api/v1/entities", entityRequest(parentBp, parentEnt))
+            client.postJson(
+                "/api/v1/entities",
+                entityRequest(childBp, childEnt).copy(relations = buildJsonObject { put("parent", parentEnt) }),
+            )
+
+            val before = client.get("/api/v1/entities/graph").body<EntityGraph>()
+            assertTrue(before.edges.single { it.relation == "parent" }.hierarchy.not())
+
+            val setHierarchy = client.putJson(
+                "/api/v1/blueprints/${child.id}",
+                BlueprintRequest(
+                    identifier = childBp,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("parent" to RelationDefinition(title = "Parent", target = parentBp, required = false, many = false)),
+                    hierarchyRelation = "parent",
+                ),
+            )
+            assertEquals(HttpStatusCode.NoContent, setHierarchy.status)
+
+            val after = client.get("/api/v1/entities/graph").body<EntityGraph>()
+            assertTrue(after.edges.single { it.relation == "parent" }.hierarchy)
+
+            assertFalse(client.get("/api/v1/entities/graph").bodyAsText().contains(":null"))
+        } finally {
+            TestEntities.remove(parentEnt, childEnt)
+            TestBlueprints.remove(parentBp, childBp)
         }
     }
 }

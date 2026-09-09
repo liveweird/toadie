@@ -48,6 +48,8 @@ class MigrationChecksumTest {
         "V26__password_reset_tokens.sql" to 414198139,
         "V27__create_blueprints.sql" to -1662308320,
         "V28__create_entities.sql" to -463945597,
+        "V29__blueprint_hierarchy_relation.sql" to 977291765,
+        "V30__create_entity_graph_layouts.sql" to -249979447,
     )
 
     @Test

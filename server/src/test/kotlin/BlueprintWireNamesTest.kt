@@ -392,6 +392,12 @@ class BlueprintWireNamesTest {
             "ownership",
             isObject,
         )
+        assertOnlyOptional(
+            BlueprintRequest(identifier = "bp", title = "T", hierarchyRelation = "r"),
+            alwaysPresent,
+            "hierarchyRelation",
+            eq(JsonPrimitive("r")),
+        )
 
         fun expectedWith(key: String, value: JsonElement) = JsonObject(
             mapOf("identifier" to JsonPrimitive("bp"), "title" to JsonPrimitive("T")) + defaultContainers + (key to value),
@@ -457,6 +463,15 @@ class BlueprintWireNamesTest {
             alwaysPresent,
             "ownership",
             isObject,
+        )
+        assertOnlyOptional(
+            BlueprintResponse(
+                id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, hierarchyRelation = "r",
+            ),
+            alwaysPresent,
+            "hierarchyRelation",
+            eq(JsonPrimitive("r")),
         )
 
         val schema = BlueprintSchema(properties = mapOf("p" to PropertyDefinition(type = "string")))

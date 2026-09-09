@@ -97,12 +97,19 @@ class Users {
         @Serializable
         @Resource("graph-layout")
         class GraphLayout(val parent: Id)
+
+        // Port migration phase 3: the Entity graph's own layout document, independent of the
+        // Backstage Graph's above (a second table, `entity_graph_layouts`, V30).
+        @Serializable
+        @Resource("entity-graph-layout")
+        class EntityGraphLayout(val parent: Id)
     }
 }
 
 fun Application.configureUserRoutes() {
     val userService = attributes[UserServiceKey]
     val graphLayoutService = attributes[GraphLayoutServiceKey]
+    val entityGraphLayoutService = attributes[EntityGraphLayoutServiceKey]
 
     routing {
         authenticate {
@@ -335,6 +342,22 @@ fun Application.configureUserRoutes() {
                 validateGraphLayout(req)
                 userService.read(route.parent.id).orNotFound("User")
                 graphLayoutService.replace(route.parent.id, req)
+                call.respond(HttpStatusCode.NoContent)
+            }
+            // The Entity graph's own layout (Port migration phase 3): the exact GraphLayout
+            // pair above, over the independent entity_graph_layouts table (V30). Same guard-
+            // before-read, same validation, same deliberately-unaudited posture.
+            get<Users.Id.EntityGraphLayout> { route ->
+                requireSelfOrAdmin(call.caller(), route.parent.id)
+                userService.read(route.parent.id).orNotFound("User")
+                call.respond(HttpStatusCode.OK, entityGraphLayoutService.read(route.parent.id))
+            }
+            put<Users.Id.EntityGraphLayout> { route ->
+                requireSelfOrAdmin(call.caller(), route.parent.id)
+                val req = call.receive<GraphLayoutDocument>()
+                validateGraphLayout(req)
+                userService.read(route.parent.id).orNotFound("User")
+                entityGraphLayoutService.replace(route.parent.id, req)
                 call.respond(HttpStatusCode.NoContent)
             }
         }

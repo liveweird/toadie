@@ -65,7 +65,23 @@ fun validateBlueprintRequest(request: BlueprintRequest) {
     validateCalculationProperties(request.calculationProperties)
     validateAggregationProperties(request.aggregationProperties)
     request.ownership?.let { validateOwnership(it, request.relations.keys) }
+    validateHierarchyRelation(request)
     validateDefinitionSize(request)
+}
+
+/**
+ * A Toadie-only extension (`.claude/docs/port-data-model.md`), so this rule lives here rather
+ * than in [validateDefinitionSize]'s Port-shaped byte budget: `hierarchyRelation` must name a
+ * key of THIS request's own `relations` map, and that relation must be single-valued — a
+ * many-relation names a set of parents, not one, so it can never define a tree.
+ */
+private fun validateHierarchyRelation(request: BlueprintRequest) {
+    val hierarchyRelation = request.hierarchyRelation ?: return
+    val relation = request.relations[hierarchyRelation]
+        ?: throw BadRequestException("hierarchyRelation must name a relation of this blueprint")
+    if (relation.many) {
+        throw BadRequestException("hierarchyRelation must name a single relation")
+    }
 }
 
 private fun requireOptionalLength(value: String, field: String, max: Int) {
