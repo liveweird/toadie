@@ -1,0 +1,34 @@
+{
+  "identifier": "environment",
+  "title": "Environment",
+  "description": "A place workloads run — production, staging, test, development. Port's default blueprint; Backstage has no counterpart, so an export drops it.",
+  "icon": "Environment",
+  "schema": {
+    "properties": {
+      "type": {
+        "type": "string",
+        "title": "Type",
+        "enum": ["production", "staging", "test", "development"],
+        "enumColors": { "production": "green", "staging": "yellow", "test": "paleBlue", "development": "lightGray" }
+      },
+      "is_locked": {
+        "type": "boolean",
+        "title": "Locked",
+        "description": "Changes need a change ticket (production, typically).",
+        "default": false
+      },
+      "datacenter": {
+        "type": "string",
+        "title": "Datacenter",
+        "description": "The site or region the environment lives in."
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "description": "Environment-wide dashboards and runbooks ({title, url}).",
+        "items": { "type": "object" }
+      }
+    },
+    "required": ["type"]
+  }
+}

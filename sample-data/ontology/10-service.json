@@ -1,0 +1,178 @@
+{
+  "identifier": "service",
+  "title": "Service",
+  "description": "Every deployable runtime unit a team builds and runs: a backend service, a web front-end (SPA or server-rendered), a scheduled job, a data pipeline. The most-touched blueprint. Backstage kind: Component (type → spec.type, lifecycle → spec.lifecycle, system → spec.system, owned_by → spec.owner, subcomponent_of → spec.subcomponentOf, depends_on + uses + uses_libraries → spec.dependsOn, provides_apis/consumes_apis → the same, languages/frameworks → tags, exposure/hosting_model/technology_status → labels, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref, kubernetes_* → the two kubernetes annotations).",
+  "icon": "Microservice",
+  "hierarchyRelation": "system",
+  "schema": {
+    "properties": {
+      "type": {
+        "type": "string",
+        "title": "Type",
+        "description": "The Component type dictionary minus library (which is its own blueprint); website covers SPAs and server-rendered UIs alike.",
+        "enum": ["service", "website", "job", "data-pipeline"],
+        "enumColors": { "service": "blue", "website": "turquoise", "job": "orange", "data-pipeline": "purple" }
+      },
+      "lifecycle": {
+        "type": "string",
+        "title": "Lifecycle",
+        "description": "The lifecycles dictionary.",
+        "enum": ["experimental", "production", "sunsetting", "deprecated"],
+        "enumColors": { "experimental": "paleBlue", "production": "green", "sunsetting": "orange", "deprecated": "red" }
+      },
+      "languages": {
+        "type": "array",
+        "title": "Languages",
+        "description": "The Languages tag category.",
+        "items": {
+          "type": "string",
+          "enum": ["java", "python", "php", "javascript", "typescript"],
+          "enumColors": { "java": "gold", "python": "blue", "php": "purple", "javascript": "yellow", "typescript": "paleBlue" }
+        },
+        "uniqueItems": true
+      },
+      "frameworks": {
+        "type": "array",
+        "title": "Frameworks",
+        "description": "The Framework tag category.",
+        "items": {
+          "type": "string",
+          "enum": ["spring-boot", "quarkus", "micronaut", "symphony", "react", "vue"],
+          "enumColors": { "spring-boot": "green", "quarkus": "blue", "micronaut": "turquoise", "symphony": "purple", "react": "paleBlue", "vue": "gold" }
+        },
+        "uniqueItems": true
+      },
+      "exposure": {
+        "type": "string",
+        "title": "Exposure",
+        "description": "Label exposure: who can reach it.",
+        "enum": ["public", "partner", "internal"],
+        "enumColors": { "public": "red", "partner": "orange", "internal": "green" }
+      },
+      "hosting_model": {
+        "type": "string",
+        "title": "Hosting model",
+        "description": "Label hosting-model.",
+        "enum": ["public-cloud", "on-premise"],
+        "enumColors": { "public-cloud": "blue", "on-premise": "bronze" }
+      },
+      "technology_status": {
+        "type": "string",
+        "title": "Technology status",
+        "description": "Label technology-status: the technology radar verdict on its stack.",
+        "enum": ["white-list", "black-list", "grey-zone"],
+        "enumColors": { "white-list": "green", "black-list": "red", "grey-zone": "yellow" }
+      },
+      "repository": {
+        "type": "string",
+        "title": "Repository",
+        "description": "backstage.io/source-location.",
+        "format": "url"
+      },
+      "docs": {
+        "type": "string",
+        "title": "Documentation",
+        "description": "backstage.io/techdocs-ref.",
+        "format": "url"
+      },
+      "ci_pipeline": {
+        "type": "string",
+        "title": "CI/CD pipeline",
+        "format": "url"
+      },
+      "dashboard": {
+        "type": "string",
+        "title": "Dashboard",
+        "description": "The observability dashboard (metrics).",
+        "format": "url"
+      },
+      "logs": {
+        "type": "string",
+        "title": "Logs",
+        "format": "url"
+      },
+      "runbook": {
+        "type": "string",
+        "title": "Runbook",
+        "format": "url"
+      },
+      "kubernetes_id": {
+        "type": "string",
+        "title": "Kubernetes id",
+        "description": "backstage.io/kubernetes-id."
+      },
+      "kubernetes_label_selector": {
+        "type": "string",
+        "title": "Kubernetes label selector",
+        "description": "backstage.io/kubernetes-label-selector."
+      },
+      "schedule": {
+        "type": "string",
+        "title": "Schedule",
+        "description": "Cron expression — jobs and pipelines only. Port-only: Backstage has no field for it."
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "description": "Further links ({title, url}) — Backstage metadata.links.",
+        "items": { "type": "object" }
+      }
+    },
+    "required": ["type", "lifecycle", "repository"]
+  },
+  "relations": {
+    "system": {
+      "title": "System",
+      "target": "system",
+      "required": false,
+      "many": false
+    },
+    "owned_by": {
+      "title": "Owned by",
+      "target": "team",
+      "required": true,
+      "many": false
+    },
+    "subcomponent_of": {
+      "title": "Subcomponent of",
+      "description": "The service this one is a part of (a plugin, a sidecar).",
+      "target": "service",
+      "required": false,
+      "many": false
+    },
+    "depends_on": {
+      "title": "Depends on",
+      "description": "Other services it calls or needs at runtime.",
+      "target": "service",
+      "required": false,
+      "many": true
+    },
+    "uses": {
+      "title": "Uses",
+      "description": "The databases, caches, brokers and logs it reads or writes.",
+      "target": "resource",
+      "required": false,
+      "many": true
+    },
+    "uses_libraries": {
+      "title": "Uses libraries",
+      "target": "library",
+      "required": false,
+      "many": true
+    },
+    "provides_apis": {
+      "title": "Provides APIs",
+      "description": "The contracts it implements, topics it produces included.",
+      "target": "api",
+      "required": false,
+      "many": true
+    },
+    "consumes_apis": {
+      "title": "Consumes APIs",
+      "description": "The contracts it calls, topics it subscribes to included.",
+      "target": "api",
+      "required": false,
+      "many": true
+    }
+  }
+}

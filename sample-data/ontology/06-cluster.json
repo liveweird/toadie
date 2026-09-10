@@ -1,0 +1,69 @@
+{
+  "identifier": "cluster",
+  "title": "Cluster",
+  "description": "One Kubernetes cluster inside one environment — the thing workloads and cluster-hosted resources are scheduled on. Port-only; if ever exported to Backstage it becomes a Resource of type kubernetes-cluster. The VMs and hypervisors underneath are deliberately not modelled: virtualization, hosting_model and datacenter say what the map needs.",
+  "icon": "Cluster",
+  "hierarchyRelation": "environment",
+  "schema": {
+    "properties": {
+      "distribution": {
+        "type": "string",
+        "title": "Distribution",
+        "enum": ["vanilla", "openshift", "rancher", "k3s"],
+        "enumColors": { "vanilla": "lightGray", "openshift": "red", "rancher": "blue", "k3s": "yellow" }
+      },
+      "version": {
+        "type": "string",
+        "title": "Kubernetes version"
+      },
+      "hosting_model": {
+        "type": "string",
+        "title": "Hosting model",
+        "description": "Label hosting-model.",
+        "enum": ["public-cloud", "on-premise"],
+        "enumColors": { "public-cloud": "blue", "on-premise": "bronze" }
+      },
+      "virtualization": {
+        "type": "string",
+        "title": "Virtualization",
+        "description": "What the nodes run on.",
+        "enum": ["vmware", "kvm", "hyper-v", "proxmox", "bare-metal"],
+        "enumColors": { "vmware": "blue", "kvm": "orange", "hyper-v": "paleBlue", "proxmox": "darkGray", "bare-metal": "bronze" }
+      },
+      "datacenter": {
+        "type": "string",
+        "title": "Datacenter"
+      },
+      "node_count": {
+        "type": "number",
+        "title": "Nodes",
+        "minimum": 0
+      },
+      "dashboard": {
+        "type": "string",
+        "title": "Dashboard",
+        "format": "url"
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "items": { "type": "object" }
+      }
+    }
+  },
+  "relations": {
+    "environment": {
+      "title": "Environment",
+      "target": "environment",
+      "required": true,
+      "many": false
+    },
+    "owned_by": {
+      "title": "Operated by",
+      "description": "The platform team running the cluster.",
+      "target": "team",
+      "required": false,
+      "many": false
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "identifier": "api",
+  "title": "API",
+  "description": "A contract other software calls or subscribes to: a REST/GraphQL/gRPC/WebSocket interface, or a Kafka topic described by an AsyncAPI document. The service that implements it lists it under provides_apis; callers under consumes_apis. Backstage kind: API (type → spec.type, definition_url → spec.definition via $text, system → spec.system, owned_by → spec.owner; exposure/hosting_model → labels).",
+  "icon": "Link",
+  "hierarchyRelation": "system",
+  "schema": {
+    "properties": {
+      "type": {
+        "type": "string",
+        "title": "Type",
+        "description": "The API type dictionary; a Kafka topic is asyncapi.",
+        "enum": ["openapi", "asyncapi", "graphql", "grpc", "web-sockets"],
+        "enumColors": { "openapi": "green", "asyncapi": "purple", "graphql": "pink", "grpc": "turquoise", "web-sockets": "blue" }
+      },
+      "lifecycle": {
+        "type": "string",
+        "title": "Lifecycle",
+        "description": "The lifecycles dictionary.",
+        "enum": ["experimental", "production", "sunsetting", "deprecated"],
+        "enumColors": { "experimental": "paleBlue", "production": "green", "sunsetting": "orange", "deprecated": "red" }
+      },
+      "definition_url": {
+        "type": "string",
+        "title": "Definition",
+        "description": "Where the OpenAPI/AsyncAPI/GraphQL/proto document lives (Backstage spec.definition: $text).",
+        "format": "url"
+      },
+      "definition": {
+        "type": "string",
+        "title": "Inline definition",
+        "description": "The document itself, when it has no home of its own.",
+        "format": "yaml"
+      },
+      "exposure": {
+        "type": "string",
+        "title": "Exposure",
+        "description": "Label exposure.",
+        "enum": ["public", "partner", "internal"],
+        "enumColors": { "public": "red", "partner": "orange", "internal": "green" }
+      },
+      "hosting_model": {
+        "type": "string",
+        "title": "Hosting model",
+        "description": "Label hosting-model.",
+        "enum": ["public-cloud", "on-premise"],
+        "enumColors": { "public-cloud": "blue", "on-premise": "bronze" }
+      },
+      "external": {
+        "type": "boolean",
+        "title": "External",
+        "description": "A third party's API we call but do not own (Backstage namespace external).",
+        "default": false
+      },
+      "docs": {
+        "type": "string",
+        "title": "Documentation",
+        "description": "backstage.io/techdocs-ref.",
+        "format": "url"
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "items": { "type": "object" }
+      }
+    },
+    "required": ["type", "lifecycle"]
+  },
+  "relations": {
+    "system": {
+      "title": "System",
+      "target": "system",
+      "required": false,
+      "many": false
+    },
+    "owned_by": {
+      "title": "Owned by",
+      "target": "team",
+      "required": true,
+      "many": false
+    }
+  }
+}

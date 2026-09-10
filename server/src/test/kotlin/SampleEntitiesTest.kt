@@ -45,7 +45,8 @@ import kotlin.test.assertTrue
  * via `../sample-data/{blueprints,entities}`. The blueprint identifiers (`team`, `domain`, …) and
  * entity identifiers (`platform`, `commerce`, …) are plain, but the shared Testcontainers
  * database is fine: this test removes every one of them in `finally` (entities first, then
- * blueprints — the plan's order), and no other test mints these exact identifiers.
+ * blueprints — the plan's order); [SampleOntologyTest] mints five of the same blueprint identifiers
+ * but runs in the same single-fork sequence and cleans up the same way.
  */
 class SampleEntitiesTest {
 

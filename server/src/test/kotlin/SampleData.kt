@@ -1,16 +1,41 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintRequest
+import ch.nokillswit.blueprints.BlueprintResponse
+import ch.nokillswit.blueprints.blueprintJson
 import java.io.File
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 
 /**
- * Shared file-loading helper for the numbered JSON sample sets under `sample-data/` — the
- * blueprints set (v1.23.1, [SampleBlueprintsTest]) and the entities set (v1.24.1,
- * [SampleEntitiesTest]) both read their fixtures this way. Test cwd is `server/` (the Gradle
- * test task's default working directory), so files are read via `../sample-data/<dir>`.
+ * Shared helpers for the numbered JSON sample sets under `sample-data/` — the blueprints
+ * showcase (v1.23.1, [SampleBlueprintsTest]), the entities set (v1.24.1, [SampleEntitiesTest])
+ * and the baseline ontology (v1.25.2, [SampleOntologyTest]) all read their fixtures this way.
+ * Test cwd is `server/` (the Gradle test task's default working directory), so files are read
+ * via `../sample-data/<dir>`.
  */
 object SampleData {
     fun numberedFiles(dir: String): List<File> =
         File("../sample-data/$dir").listFiles { f -> f.name.matches(Regex("[0-9]{2}-.*\\.json")) }
             ?.sortedBy { it.name }
             ?: error("sample-data/$dir not found relative to the test working directory")
+
+    /** [text] decoded as a request and re-encoded via [blueprintJson] — the canonical, defaults-expanded form. */
+    fun canonicalBlueprint(text: String): JsonElement =
+        Json.parseToJsonElement(blueprintJson.encodeToString(blueprintJson.decodeFromString<BlueprintRequest>(text)))
+
+    /** The definitional fields of a stored [BlueprintResponse], reshaped back into a [BlueprintRequest]. */
+    fun BlueprintResponse.asRequest() = BlueprintRequest(
+        identifier = identifier,
+        title = title,
+        description = description,
+        icon = icon,
+        schema = schema,
+        relations = relations,
+        mirrorProperties = mirrorProperties,
+        calculationProperties = calculationProperties,
+        aggregationProperties = aggregationProperties,
+        ownership = ownership,
+        hierarchyRelation = hierarchyRelation,
+    )
 }

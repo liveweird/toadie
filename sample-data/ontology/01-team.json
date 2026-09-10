@@ -1,0 +1,45 @@
+{
+  "identifier": "team",
+  "title": "Team",
+  "description": "A group of people who own things — the unit every owned_by relation points at. Backstage kind: Group (type team / org-unit / org-division; parent → spec.parent, children and members derived).",
+  "icon": "Team",
+  "hierarchyRelation": "parent",
+  "schema": {
+    "properties": {
+      "type": {
+        "type": "string",
+        "title": "Type",
+        "description": "Where this group sits in the org: a delivery team, an org unit grouping teams, or a division grouping units (the Group type dictionary).",
+        "enum": ["team", "org-unit", "org-division"],
+        "enumColors": { "team": "green", "org-unit": "blue", "org-division": "purple" }
+      },
+      "email": {
+        "type": "string",
+        "title": "Email",
+        "description": "The group mailbox or distribution list.",
+        "format": "email"
+      },
+      "slack_channel": {
+        "type": "string",
+        "title": "Slack channel",
+        "format": "url"
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "description": "Further links ({title, url}) — Backstage metadata.links.",
+        "items": { "type": "object" }
+      }
+    },
+    "required": ["type"]
+  },
+  "relations": {
+    "parent": {
+      "title": "Parent",
+      "description": "The group this one belongs to; empty for the top of the org tree.",
+      "target": "team",
+      "required": false,
+      "many": false
+    }
+  }
+}
