@@ -4,6 +4,8 @@ import ch.nokillswit.blueprints.ArrayItems
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
+import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
+import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.blueprints.isAbsoluteUrl
 import ch.nokillswit.blueprints.jsonMatchesType
@@ -27,6 +29,13 @@ import kotlinx.serialization.json.double
  * `.claude/docs/port-data-model.md`). Both layers stay well under detekt's complexity/length
  * limits by following `PropertyValidation.kt`'s shape: one small function per rule.
  */
+
+/**
+ * (blueprintIdentifier, entityIdentifier) -> exists as an ACTIVE entity — the snapshot closure
+ * [EntityService] builds once per call (create/update/list/read/graph) and threads through the
+ * pure [entityFindings] rule table below.
+ */
+typealias TargetExists = (blueprintIdentifier: String, entityIdentifier: String) -> Boolean
 
 // Port's entity identifier pattern (WIDER than a blueprint identifier: unicode letters, `+`,
 // `'`, `\`) — see the plan's "Port's entity wire shape" section.
@@ -79,6 +88,14 @@ private fun requireTeamString(value: JsonPrimitive) {
     }
 }
 
+/** The shape-agnostic value list a `team` field carries — never throws (a pure companion to [validateTeam]'s shape check). */
+fun teamValues(team: JsonElement?): List<String> = when (team) {
+    null -> emptyList()
+    is JsonPrimitive -> if (team.isString) listOf(team.content) else emptyList()
+    is JsonArray -> team.filterIsInstance<JsonPrimitive>().filter { it.isString }.map { it.content }
+    else -> emptyList()
+}
+
 private fun validateDocumentSize(request: EntityRequest) {
     val encoded = blueprintJson.encodeToString(request.toDocument())
     val bytes = encoded.toByteArray(Charsets.UTF_8).size
@@ -93,20 +110,47 @@ private fun validateDocumentSize(request: EntityRequest) {
 
 /**
  * Every [EntityFinding] a strict save would reject and GET/list attach as-is (the `softFindings`
- * precedent) — computed against [definition] (the entity's OWN blueprint) and [targetExists], a
- * closure over one snapshot of active entities per targeted blueprint (`EntityService` builds it
- * once per call). Never throws.
+ * precedent) — computed against [definition] (the entity's OWN blueprint), [targetExists] (a
+ * closure over one snapshot of active entities per targeted blueprint, `EntityService` builds it
+ * once per call) and the entity's STORED [team] (Phase 4 ownership — absent for a blueprint whose
+ * `ownership.path` is not stored, only ever validated for Direct/absent ownership; see
+ * `entities/EntityOwnership.kt`). Never throws.
  */
 fun entityFindings(
     document: EntityDocument,
     definition: BlueprintDefinition,
-    targetExists: (blueprintIdentifier: String, entityIdentifier: String) -> Boolean,
-): List<EntityFinding> = propertyFindings(document.properties, definition) + relationFindings(document.relations, definition, targetExists)
+    targetExists: TargetExists,
+    team: JsonElement? = null,
+): List<EntityFinding> = propertyFindings(document.properties, definition, targetExists) +
+    relationFindings(document.relations, definition, targetExists) +
+    teamFindings(definition, targetExists, team)
 
 private fun computedPropertyIds(definition: BlueprintDefinition): Set<String> =
     definition.mirrorProperties.keys + definition.calculationProperties.keys + definition.aggregationProperties.keys
 
-private fun propertyFindings(properties: JsonObject, definition: BlueprintDefinition): List<EntityFinding> {
+/**
+ * Inherited ownership means `team` is computed, never supplied — supplying one is
+ * `TEAM_NOT_ALLOWED`. Direct/absent ownership means every supplied value must resolve to an
+ * ACTIVE `_team` entity — `TEAM_TARGET_MISSING` otherwise. Both on field `team`.
+ */
+private fun teamFindings(definition: BlueprintDefinition, targetExists: TargetExists, team: JsonElement?): List<EntityFinding> {
+    if (isInherited(definition)) {
+        return if (team != null) {
+            listOf(EntityFinding("TEAM_NOT_ALLOWED", "team", "This blueprint's ownership is Inherited; team cannot be set directly"))
+        } else {
+            emptyList()
+        }
+    }
+    return teamValues(team).mapNotNull { value ->
+        if (targetExists(SYSTEM_TEAM_BLUEPRINT, value)) {
+            null
+        } else {
+            EntityFinding("TEAM_TARGET_MISSING", "team", "Team '$value' does not exist")
+        }
+    }
+}
+
+private fun propertyFindings(properties: JsonObject, definition: BlueprintDefinition, targetExists: TargetExists): List<EntityFinding> {
     val findings = mutableListOf<EntityFinding>()
     val computed = computedPropertyIds(definition)
     properties.forEach { (id, value) ->
@@ -115,7 +159,7 @@ private fun propertyFindings(properties: JsonObject, definition: BlueprintDefini
         if (propertyDef == null) {
             findings += unknownPropertyFinding(id, field, computed)
         } else {
-            findings += propertyValueFindings(field, propertyDef, value)
+            findings += propertyValueFindings(field, propertyDef, value, targetExists)
         }
     }
     definition.schema.required.forEach { id ->
@@ -131,16 +175,41 @@ private fun unknownPropertyFinding(id: String, field: String, computed: Set<Stri
         EntityFinding("UNKNOWN_PROPERTY", field, "'$id' is not a declared property of this blueprint")
     }
 
-private fun propertyValueFindings(field: String, def: PropertyDefinition, value: JsonElement): List<EntityFinding> {
+private fun propertyValueFindings(
+    field: String,
+    def: PropertyDefinition,
+    value: JsonElement,
+    targetExists: TargetExists,
+): List<EntityFinding> {
     if (!jsonMatchesType(def.type, value)) {
         return listOf(EntityFinding("TYPE_MISMATCH", field, "Value does not match type ${def.type}"))
     }
     return when (def.type) {
-        "string" -> stringFindings(field, def, value as JsonPrimitive) + enumFindings(field, def, value)
+        "string" -> stringFindings(field, def, value as JsonPrimitive, targetExists) + enumFindings(field, def, value)
         "number" -> numberFindings(field, def, value as JsonPrimitive) + enumFindings(field, def, value)
-        "array" -> arrayFindings(field, def, value as JsonArray)
+        "array" -> arrayFindings(field, def, value as JsonArray, targetExists)
         "object" -> objectFindings(field, def, value as JsonObject)
         else -> emptyList()
+    }
+}
+
+/**
+ * `format: team | user` names a hidden reference to Port's system `_team`/`_user` blueprints
+ * (Phase 4 ownership) — [checkStringFormat] stays purely syntactic (free text for both), so the
+ * TARGET check lives here, applied uniformly to a scalar string property and to each string item
+ * of an array property (both call sites pass the SAME [field] — the property's own, never an
+ * indexed per-element field, the existing array-item convention).
+ */
+private fun referenceTargetFinding(field: String, format: String?, value: String, targetExists: TargetExists): EntityFinding? {
+    val (targetBlueprint, code) = when (format) {
+        "team" -> SYSTEM_TEAM_BLUEPRINT to "TEAM_TARGET_MISSING"
+        "user" -> SYSTEM_USER_BLUEPRINT to "USER_TARGET_MISSING"
+        else -> return null
+    }
+    return if (targetExists(targetBlueprint, value)) {
+        null
+    } else {
+        EntityFinding(code, field, "'$value' does not resolve to an active $targetBlueprint entity")
     }
 }
 
@@ -153,7 +222,7 @@ private fun enumFindings(field: String, def: PropertyDefinition, value: JsonPrim
     }
 }
 
-private fun stringFindings(field: String, def: PropertyDefinition, value: JsonPrimitive): List<EntityFinding> {
+private fun stringFindings(field: String, def: PropertyDefinition, value: JsonPrimitive, targetExists: TargetExists): List<EntityFinding> {
     val findings = mutableListOf<EntityFinding>()
     val length = value.content.codePointCount(0, value.content.length)
     def.minLength?.let { if (length < it) findings += EntityFinding("LENGTH_OUT_OF_RANGE", field, "Value must be at least $it characters") }
@@ -164,6 +233,7 @@ private fun stringFindings(field: String, def: PropertyDefinition, value: JsonPr
         }
     }
     checkStringFormat(field, def.format, value.content)?.let { findings += it }
+    referenceTargetFinding(field, def.format, value.content, targetExists)?.let { findings += it }
     return findings
 }
 
@@ -176,7 +246,8 @@ private fun checkStringFormat(field: String, format: String?, value: String): En
         "timer" -> runCatching { Instant.parse(value) }.isSuccess
         "ipv4" -> isValidIpv4(value)
         "ipv6" -> isValidIpv6(value)
-        // user/team/yaml/markdown/proto: free text, no format check.
+        // user/team: free text SYNTACTICALLY (the reference-target check lives in
+        // referenceTargetFinding above); yaml/markdown/proto: free text, no format check at all.
         else -> true
     }
     return if (valid) null else EntityFinding("FORMAT_INVALID", field, "Value does not match format $format")
@@ -214,9 +285,9 @@ private fun numberFindings(field: String, def: PropertyDefinition, value: JsonPr
     return findings
 }
 
-private fun arrayFindings(field: String, def: PropertyDefinition, value: JsonArray): List<EntityFinding> {
+private fun arrayFindings(field: String, def: PropertyDefinition, value: JsonArray, targetExists: TargetExists): List<EntityFinding> {
     val findings = mutableListOf<EntityFinding>()
-    def.items?.let { items -> findings += arrayItemFindings(field, items, value) }
+    def.items?.let { items -> findings += arrayItemFindings(field, items, value, targetExists) }
     def.minItems?.let { if (value.size < it) findings += EntityFinding("ARRAY_SIZE", field, "Array must have at least $it items") }
     def.maxItems?.let { if (value.size > it) findings += EntityFinding("ARRAY_SIZE", field, "Array must have at most $it items") }
     if (def.uniqueItems == true && value.toSet().size != value.size) {
@@ -225,11 +296,12 @@ private fun arrayFindings(field: String, def: PropertyDefinition, value: JsonArr
     return findings
 }
 
-private fun arrayItemFindings(field: String, items: ArrayItems, value: JsonArray): List<EntityFinding> {
+private fun arrayItemFindings(field: String, items: ArrayItems, value: JsonArray, targetExists: TargetExists): List<EntityFinding> {
     val findings = mutableListOf<EntityFinding>()
     value.forEachIndexed { index, element ->
         // One type check for every items.type (object elements included), then the primitive-only
-        // rules — enum membership and string formats — which only apply to string/number items.
+        // rules — enum membership, string formats and format-team/user targets — which only apply
+        // to string/number items.
         if (!jsonMatchesType(items.type, element)) {
             findings += EntityFinding("TYPE_MISMATCH", field, "Array element $index does not match type ${items.type}")
             return@forEachIndexed
@@ -240,7 +312,10 @@ private fun arrayItemFindings(field: String, items: ArrayItems, value: JsonArray
                 findings += EntityFinding("ENUM_MISMATCH", field, "Array element $index must be one of the declared enum values")
             }
         }
-        if (items.type == "string") checkStringFormat(field, items.format, element.content)?.let { findings += it }
+        if (items.type == "string") {
+            checkStringFormat(field, items.format, element.content)?.let { findings += it }
+            referenceTargetFinding(field, items.format, element.content, targetExists)?.let { findings += it }
+        }
     }
     return findings
 }

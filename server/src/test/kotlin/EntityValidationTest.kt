@@ -5,6 +5,7 @@ import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.CalculationPropertyDefinition
 import ch.nokillswit.blueprints.MirrorPropertyDefinition
+import ch.nokillswit.blueprints.OwnershipDefinition
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.entities.EntityDocument
@@ -162,11 +163,13 @@ class EntityValidationTest {
         relations: Map<String, RelationDefinition> = emptyMap(),
         mirror: Map<String, MirrorPropertyDefinition> = emptyMap(),
         calculation: Map<String, CalculationPropertyDefinition> = emptyMap(),
+        ownership: OwnershipDefinition? = null,
     ) = BlueprintDefinition(
         schema = BlueprintSchema(properties = properties, required = required),
         relations = relations,
         mirrorProperties = mirror,
         calculationProperties = calculation,
+        ownership = ownership,
     )
 
     private fun doc(properties: JsonObject = JsonObject(emptyMap()), relations: JsonObject = JsonObject(emptyMap())) =
@@ -311,11 +314,41 @@ class EntityValidationTest {
     }
 
     @Test
-    fun `formats user, team, yaml, markdown, proto are free text`() {
-        listOf("user", "team", "yaml", "markdown", "proto").forEach { format ->
+    fun `formats yaml, markdown, proto are free text`() {
+        listOf("yaml", "markdown", "proto").forEach { format ->
             val def = definition(properties = mapOf("p" to PropertyDefinition(type = "string", format = format)))
             assertTrue(entityFindings(doc(buildJsonObject { put("p", "anything at all") }), def, neverExists).isEmpty())
         }
+    }
+
+    @Test
+    fun `format team resolves against an active _team entity - TEAM_TARGET_MISSING otherwise`() {
+        val def = definition(properties = mapOf("p" to PropertyDefinition(type = "string", format = "team")))
+        val exists: (String, String) -> Boolean = { bp, id -> bp == "_team" && id == "platform" }
+        assertTrue(entityFindings(doc(buildJsonObject { put("p", "platform") }), def, exists).isEmpty())
+        val findings = entityFindings(doc(buildJsonObject { put("p", "ghost") }), def, exists)
+        assertEquals(listOf("TEAM_TARGET_MISSING"), findings.map { it.code })
+        assertEquals("properties.p", findings.single().field)
+    }
+
+    @Test
+    fun `format user resolves against an active _user entity - USER_TARGET_MISSING otherwise`() {
+        val def = definition(properties = mapOf("p" to PropertyDefinition(type = "string", format = "user")))
+        val exists: (String, String) -> Boolean = { bp, id -> bp == "_user" && id == "alice@example.test" }
+        assertTrue(entityFindings(doc(buildJsonObject { put("p", "alice@example.test") }), def, exists).isEmpty())
+        val findings = entityFindings(doc(buildJsonObject { put("p", "ghost@example.test") }), def, exists)
+        assertEquals(listOf("USER_TARGET_MISSING"), findings.map { it.code })
+    }
+
+    @Test
+    fun `array items of format user are target-checked one by one`() {
+        val def = definition(
+            properties = mapOf("p" to PropertyDefinition(type = "array", items = ArrayItems(type = "string", format = "user"))),
+        )
+        val exists: (String, String) -> Boolean = { bp, id -> bp == "_user" && id == "known" }
+        assertTrue(entityFindings(doc(buildJsonObject { putJsonArray("p") { add("known") } }), def, exists).isEmpty())
+        val findings = entityFindings(doc(buildJsonObject { putJsonArray("p") { add("known"); add("ghost") } }), def, exists)
+        assertEquals(listOf("USER_TARGET_MISSING"), findings.map { it.code })
     }
 
     @Test
@@ -478,5 +511,45 @@ class EntityValidationTest {
         val exists: (String, String) -> Boolean = { bp, id -> bp == "self" && id == "e1" }
         val findings = entityFindings(doc(relations = buildJsonObject { put("r", "e1") }), def, exists)
         assertTrue(findings.isEmpty())
+    }
+
+    // -------------------------------------------------------------------------------------
+    // entityFindings - team (Phase 4 ownership)
+    // -------------------------------------------------------------------------------------
+
+    private val teamExists: (String, String) -> Boolean = { bp, id -> bp == "_team" && id == "platform" }
+
+    @Test
+    fun `Direct-absent ownership - a string team must resolve to an active _team entity`() {
+        assertTrue(entityFindings(doc(), definition(), teamExists, JsonPrimitive("platform")).isEmpty())
+        val findings = entityFindings(doc(), definition(), teamExists, JsonPrimitive("ghost"))
+        assertEquals(listOf("TEAM_TARGET_MISSING"), findings.map { it.code })
+        assertEquals("team", findings.single().field)
+    }
+
+    @Test
+    fun `Direct-absent ownership - every array team value must resolve, unknown values are reported individually`() {
+        val team = JsonArray(listOf(JsonPrimitive("platform"), JsonPrimitive("ghost")))
+        val findings = entityFindings(doc(), definition(), teamExists, team)
+        assertEquals(listOf("TEAM_TARGET_MISSING"), findings.map { it.code })
+    }
+
+    @Test
+    fun `Direct-absent ownership - no team is not a finding`() {
+        assertTrue(entityFindings(doc(), definition(), teamExists, null).isEmpty())
+    }
+
+    @Test
+    fun `Inherited ownership - a supplied team is TEAM_NOT_ALLOWED`() {
+        val def = definition(ownership = OwnershipDefinition(type = "Inherited", path = "service"))
+        val findings = entityFindings(doc(), def, teamExists, JsonPrimitive("platform"))
+        assertEquals(listOf("TEAM_NOT_ALLOWED"), findings.map { it.code })
+        assertEquals("team", findings.single().field)
+    }
+
+    @Test
+    fun `Inherited ownership - no team is not a finding`() {
+        val def = definition(ownership = OwnershipDefinition(type = "Inherited", path = "service"))
+        assertTrue(entityFindings(doc(), def, teamExists, null).isEmpty())
     }
 }

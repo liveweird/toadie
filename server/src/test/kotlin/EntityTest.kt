@@ -6,6 +6,7 @@ import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.entities.EntityGraph
+import ch.nokillswit.entities.EntityInvalidProblem
 import ch.nokillswit.entities.EntityPageResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
@@ -135,7 +136,7 @@ class EntityTest {
                 entityRequest(bpId, unique("ent"), buildJsonObject { put("nope", "x") }),
             )
             assertEquals(HttpStatusCode.BadRequest, response.status)
-            assertTrue(response.body<ProblemDetail>().detail!!.contains("properties.nope"))
+            assertTrue(response.body<EntityInvalidProblem>().detail!!.contains("properties.nope"))
         } finally {
             TestBlueprints.remove(bpId)
         }
@@ -150,7 +151,7 @@ class EntityTest {
             client.createBlueprint(microserviceBlueprint(bpId))
             val response = client.postJson("/api/v1/entities", entityRequest(bpId, unique("ent")))
             assertEquals(HttpStatusCode.BadRequest, response.status)
-            assertTrue(response.body<ProblemDetail>().detail!!.contains("properties.language"))
+            assertTrue(response.body<EntityInvalidProblem>().detail!!.contains("properties.language"))
         } finally {
             TestBlueprints.remove(bpId)
         }
@@ -174,7 +175,7 @@ class EntityTest {
                 .copy(relations = buildJsonObject { put("owner", "does-not-exist") })
             val response = client.postJson("/api/v1/entities", request)
             assertEquals(HttpStatusCode.BadRequest, response.status)
-            assertTrue(response.body<ProblemDetail>().detail!!.contains("relations.owner"))
+            assertTrue(response.body<EntityInvalidProblem>().detail!!.contains("relations.owner"))
         } finally {
             TestBlueprints.remove(bpId)
         }

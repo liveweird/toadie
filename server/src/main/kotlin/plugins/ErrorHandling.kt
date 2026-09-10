@@ -7,6 +7,8 @@ import ch.nokillswit.authz.ForbiddenException
 import ch.nokillswit.authz.NotFoundException
 import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.authz.UnauthorizedException
+import ch.nokillswit.entities.EntityInvalidException
+import ch.nokillswit.entities.EntityInvalidProblem
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.http.ContentType
@@ -193,6 +195,27 @@ fun Application.configureErrorHandling() {
         }
         exception<BadRequestException> { call, cause ->
             call.respondProblem(HttpStatusCode.BadRequest, clientSafeBadRequestDetail(cause))
+        }
+        // Phase 4 entity ownership (.claude/docs/port-data-model.md): the aggregated strict-save
+        // 400 the entity create/replace routes throw when entityFindings() is non-empty — the
+        // ONLY 400 body that carries a `findings` extension member (EntityInvalidProblem in the
+        // OpenAPI contract), so the SPA can paint per-field errors without re-parsing `detail`.
+        exception<EntityInvalidException> { call, cause ->
+            call.respond(
+                TextContent(
+                    problemSerializer.encodeToString(
+                        EntityInvalidProblem.serializer(),
+                        EntityInvalidProblem(
+                            title = HttpStatusCode.BadRequest.description,
+                            status = HttpStatusCode.BadRequest.value,
+                            detail = cause.message,
+                            findings = cause.findings,
+                        ),
+                    ),
+                    ProblemJson.withCharset(Charsets.UTF_8),
+                    HttpStatusCode.BadRequest,
+                ),
+            )
         }
         // A POST/PUT with NO Content-Type (a truly body-less request) never enters
         // ContentNegotiation (no converter matches ContentType.Any), so `call.receive` throws
