@@ -429,18 +429,20 @@ class BlueprintWireNamesTest {
         // Every case below names ONLY the required constructor args plus exactly one optional
         // one — never `.copy()`, which always calls the master (all-args) constructor and so
         // would never exercise the default-args bridge constructor's per-field mask branch.
-        val requiredKeys = setOf("id", "identifier", "title", "createdBy", "creatorName", "creatorDeleted", "createdAt", "updatedAt")
+        val requiredKeys =
+            setOf("id", "identifier", "title", "createdBy", "creatorName", "creatorDeleted", "createdAt", "updatedAt", "system")
         val alwaysPresent = requiredKeys + defaultContainers.keys
         val requiredValues = mapOf(
             "id" to JsonPrimitive(1), "identifier" to JsonPrimitive("bp"), "title" to JsonPrimitive("T"),
             "createdBy" to JsonPrimitive(2), "creatorName" to JsonPrimitive("Creator"),
             "creatorDeleted" to JsonPrimitive(false), "createdAt" to JsonPrimitive(1), "updatedAt" to JsonPrimitive(2),
+            "system" to JsonPrimitive(false),
         )
 
         assertOnlyOptional(
             BlueprintResponse(
                 id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
-                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, description = "D",
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, description = "D",
             ),
             alwaysPresent,
             "description",
@@ -449,7 +451,7 @@ class BlueprintWireNamesTest {
         assertOnlyOptional(
             BlueprintResponse(
                 id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
-                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, icon = "I",
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, icon = "I",
             ),
             alwaysPresent,
             "icon",
@@ -458,7 +460,7 @@ class BlueprintWireNamesTest {
         assertOnlyOptional(
             BlueprintResponse(
                 id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
-                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, ownership = OwnershipDefinition(type = "Direct"),
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, ownership = OwnershipDefinition(type = "Direct"),
             ),
             alwaysPresent,
             "ownership",
@@ -467,7 +469,7 @@ class BlueprintWireNamesTest {
         assertOnlyOptional(
             BlueprintResponse(
                 id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
-                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, hierarchyRelation = "r",
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, hierarchyRelation = "r",
             ),
             alwaysPresent,
             "hierarchyRelation",
@@ -489,35 +491,35 @@ class BlueprintWireNamesTest {
         assertWireJson(
             BlueprintResponse(
                 id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
-                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, schema = schema,
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, schema = schema,
             ),
             expectedWith("schema", Json.parseToJsonElement(blueprintJson.encodeToString(schema))),
         )
         assertWireJson(
             BlueprintResponse(
                 id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
-                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, relations = relations,
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, relations = relations,
             ),
             expectedWith("relations", Json.parseToJsonElement(blueprintJson.encodeToString(relations))),
         )
         assertWireJson(
             BlueprintResponse(
                 id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
-                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, mirrorProperties = mirror,
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, mirrorProperties = mirror,
             ),
             expectedWith("mirrorProperties", Json.parseToJsonElement(blueprintJson.encodeToString(mirror))),
         )
         assertWireJson(
             BlueprintResponse(
                 id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
-                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, calculationProperties = calc,
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, calculationProperties = calc,
             ),
             expectedWith("calculationProperties", Json.parseToJsonElement(blueprintJson.encodeToString(calc))),
         )
         assertWireJson(
             BlueprintResponse(
                 id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
-                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, aggregationProperties = agg,
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, aggregationProperties = agg,
             ),
             expectedWith("aggregationProperties", Json.parseToJsonElement(blueprintJson.encodeToString(agg))),
         )

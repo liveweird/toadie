@@ -674,7 +674,11 @@ object TestBlueprints {
      * this call's set, or nothing left to do).
      */
     suspend fun remove(vararg identifiers: String) {
-        var remaining = identifiers.toSet()
+        // `_`-prefixed identifiers are the system blueprints (V31) — BlueprintService.delete
+        // always 409s on them, so skip them rather than let the retry loop churn on a
+        // guaranteed-losing case; tests restore their base shape via [restoreSystemBlueprints]
+        // instead of removing them.
+        var remaining = identifiers.filterNot { ch.nokillswit.blueprints.isSystemIdentifier(it) }.toSet()
         while (remaining.isNotEmpty()) {
             val toDelete = service.list().filter { bp -> remaining.any { it.equals(bp.identifier, ignoreCase = true) } }
             if (toDelete.isEmpty()) return
@@ -701,6 +705,40 @@ object TestBlueprints {
     private suspend fun softDeleteEntitiesOf(blueprintId: UInt) = suspendTransaction(sharedTestDatabase) {
         val t = ch.nokillswit.entities.EntityService.Entities
         t.update({ (t.blueprintId eq blueprintId) and (t.markedAsDeleted eq false) }) { it[t.markedAsDeleted] = true }
+    }
+
+    /**
+     * PUTs `_team`/`_user` back to their [ch.nokillswit.blueprints.SYSTEM_BLUEPRINT_BASES]
+     * shape — the shared-suite-state restore for the two system blueprints (V31), the
+     * `TestNamespaces`/`TestSeedState` idiom: a test that extends a system blueprint's base
+     * (extra properties/relations/`hierarchyRelation`) calls this in `finally` instead of
+     * removing the row, which [remove] refuses to do.
+     */
+    suspend fun restoreSystemBlueprints() {
+        // The V31-seeded hierarchyRelation per identifier (only `_team` names one) — restored
+        // explicitly rather than read back from the current row, since a test may have changed
+        // or cleared it.
+        val seededHierarchyRelation = mapOf(ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT to "parent")
+        val rows = service.list()
+        ch.nokillswit.blueprints.SYSTEM_BLUEPRINT_BASES.forEach { (identifier, base) ->
+            val row = rows.firstOrNull { it.identifier.equals(identifier, ignoreCase = true) } ?: return@forEach
+            service.update(
+                row.id,
+                ch.nokillswit.blueprints.BlueprintRequest(
+                    identifier = identifier,
+                    title = row.title,
+                    description = row.description,
+                    icon = row.icon,
+                    schema = base.schema,
+                    relations = base.relations,
+                    mirrorProperties = base.mirrorProperties,
+                    calculationProperties = base.calculationProperties,
+                    aggregationProperties = base.aggregationProperties,
+                    ownership = base.ownership,
+                    hierarchyRelation = seededHierarchyRelation[identifier],
+                ),
+            )
+        }
     }
 }
 

@@ -1258,6 +1258,8 @@ export interface paths {
          *     Backstage's fixed System Model to Port.io's data model
          *     (see `.claude/docs/port-data-model.md`): blueprints are user-definable entity-kind
          *     definitions, stored and validated structurally; nothing yet attaches entities to them.
+         *     The registry always holds the two Port system blueprints `_team`/`_user`, seeded by
+         *     migration (Phase 4, v1.26.0) and flagged `system: true`.
          */
         get: operations["listBlueprints"];
         put?: never;
@@ -1271,7 +1273,9 @@ export interface paths {
          *     already held by an active blueprint (case-insensitively) is a `409`. Optionally
          *     carries `hierarchyRelation`, a Toadie-only extension (not part of Port's document)
          *     naming one of this blueprint's `many: false` relations — the entity hierarchy's
-         *     parent link; naming an unknown or many-valued relation is `400`.
+         *     parent link; naming an unknown or many-valued relation is `400`. Identifiers starting
+         *     with `_` are reserved for Port's own system blueprints (`_team`/`_user`) and are
+         *     rejected with `400`.
          */
         post: operations["createBlueprint"];
         delete?: never;
@@ -1300,7 +1304,11 @@ export interface paths {
          *     CASCADES: every other active blueprint's relation/aggregation targets naming the old
          *     identifier are rewritten to the new one, in the same locked transaction. Same
          *     validation and `409` rules as create, including `hierarchyRelation`'s
-         *     must-be-a-current-single-relation rule; a self-relation survives a rename.
+         *     must-be-a-current-single-relation rule; a self-relation survives a rename. A system
+         *     blueprint (`_team`/`_user`, `system: true`) additionally rejects an identifier rename
+         *     and any removal or retyping of its base properties/relations with `400`; everything
+         *     else about it (titles, extra properties/relations, `hierarchyRelation`, `ownership`)
+         *     remains an ordinary admin edit.
          */
         put: operations["replaceBlueprint"];
         post?: never;
@@ -1309,7 +1317,9 @@ export interface paths {
          * @description ADMIN only — soft delete; the identifier becomes reusable by a NEW blueprint. A
          *     blueprint that is the TARGET of another active blueprint's relation or aggregation is
          *     `409` (a self-relation on the blueprint being deleted never blocks its own deletion).
-         *     A blueprint with active ENTITIES is refused too — `409` naming the count.
+         *     A blueprint with active ENTITIES is refused too — `409` naming the count. A system
+         *     blueprint (`_team`/`_user`, `system: true`) can never be deleted — `409` — checked
+         *     before the entity-count and referrer checks.
          */
         delete: operations["deleteBlueprint"];
         options?: never;
@@ -2303,6 +2313,8 @@ export interface components {
              * @description Epoch millis.
              */
             updatedAt: number;
+            /** @description True for Port's own system blueprints (`_team`/`_user`, seeded by migration — Phase 4, v1.26.0). A system blueprint can never be deleted or renamed, and its base properties/relations can never be removed or retyped; everything else about it is an ordinary admin edit. Response-only — a request carrying this field is rejected by strict decoding. */
+            system: boolean;
         };
         BlueprintList: {
             /** @description Active blueprints, identifier-ordered case-insensitively. */

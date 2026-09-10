@@ -27,7 +27,7 @@ import org.jetbrains.exposed.v1.r2dbc.update
 val BlueprintServiceKey = AttributeKey<BlueprintService>("BlueprintService")
 
 /** [BlueprintService.update]'s outcome: the affected-row count plus what the rename cascaded (for the audit). */
-data class BlueprintUpdateResult(val affected: Int, val cascaded: List<String>, val renamedFrom: String?)
+data class BlueprintUpdateResult(val affected: Int, val cascaded: List<String>, val renamedFrom: String?, val system: Boolean)
 
 /** [BlueprintService.delete]'s outcome: the affected-row count plus the deleted identifier (for the audit). */
 data class BlueprintDeleteResult(val affected: Int, val identifier: String?)
@@ -47,6 +47,9 @@ class BlueprintService(private val database: R2dbcDatabase) {
         // Port migration phase 3 (V29): a Toadie-only view extension stored BESIDE the Port
         // document, never inside it — so `definition`/`toDefinition()` stay byte-identical.
         val hierarchyRelation = varchar("hierarchy_relation", length = MAX_BLUEPRINT_IDENTIFIER_LENGTH).nullable()
+        // Phase 4 (V31): `_team`/`_user`, seeded by the migration — never set by application
+        // code (see blueprints/SystemBlueprints.kt for the protections this flag gates).
+        val isSystem = bool("is_system").default(false)
         val createdBy = reference("created_by", UserService.Users)
         val createdAt = long("created_at")
         val updatedAt = long("updated_at")
@@ -97,6 +100,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             creatorDeleted = this[UserService.Users.markedAsDeleted],
             createdAt = this[Blueprints.createdAt],
             updatedAt = this[Blueprints.updatedAt],
+            system = this[Blueprints.isSystem],
         )
     }
 
@@ -119,6 +123,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
         val identifier: String,
         val definition: BlueprintDefinition,
         val hierarchyRelation: String?,
+        val isSystem: Boolean,
     )
 
     private suspend fun activeRows(): List<ActiveRow> = Blueprints.selectAll().where { active() }
@@ -128,6 +133,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
                 it[Blueprints.identifier],
                 blueprintJson.decodeFromString<BlueprintDefinition>(it[Blueprints.definition]),
                 it[Blueprints.hierarchyRelation],
+                it[Blueprints.isSystem],
             )
         }
         .toList()
@@ -142,6 +148,11 @@ class BlueprintService(private val database: R2dbcDatabase) {
     suspend fun create(request: BlueprintRequest, callerId: UInt): BlueprintResponse {
         validateBlueprintRequest(request) // re-checked service-side so direct callers stay guarded
         return writeTransaction {
+            // Identifiers starting with `_` are reserved for Port's own system blueprints
+            // (V31's `_team`/`_user`); a new one can never be created through this route.
+            if (isSystemIdentifier(request.identifier)) {
+                throw BadRequestException("Identifier '${request.identifier}' is reserved for system blueprints")
+            }
             if (Blueprints.selectAll().where { active() }.count() >= MAX_BLUEPRINTS) {
                 throw BadRequestException("The blueprint registry is full ($MAX_BLUEPRINTS blueprints)")
             }
@@ -181,8 +192,14 @@ class BlueprintService(private val database: R2dbcDatabase) {
     suspend fun update(id: UInt, request: BlueprintRequest): BlueprintUpdateResult = writeTransaction {
         val rows = activeRows()
         val current = rows.firstOrNull { it.id == id }
-            ?: return@writeTransaction BlueprintUpdateResult(0, emptyList(), null)
+            ?: return@writeTransaction BlueprintUpdateResult(0, emptyList(), null, false)
         validateBlueprintRequest(request) // re-checked service-side so direct callers stay guarded
+        if (current.isSystem) {
+            // No rename, no removal/retyping of the base shape — the rename cascade below
+            // never runs for a system row because validateSystemExtension already rejected
+            // an identifier change.
+            validateSystemExtension(current.identifier, request)
+        }
         val others = rows.filterNot { it.id == id }
         val renamed = current.identifier != request.identifier
         val definition = request.toDefinition().let {
@@ -201,7 +218,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             it[hierarchyRelation] = request.hierarchyRelation
             it[updatedAt] = System.currentTimeMillis()
         }
-        BlueprintUpdateResult(1, cascaded, if (renamed) current.identifier else null)
+        BlueprintUpdateResult(1, cascaded, if (renamed) current.identifier else null, current.isSystem)
     }
 
     /** Rewrites every OTHER active row targeting [oldIdentifier], returning the rewritten identifiers. */
@@ -228,6 +245,9 @@ class BlueprintService(private val database: R2dbcDatabase) {
     suspend fun delete(id: UInt): BlueprintDeleteResult = writeTransaction {
         val rows = activeRows()
         val current = rows.firstOrNull { it.id == id } ?: return@writeTransaction BlueprintDeleteResult(0, null)
+        if (current.isSystem) {
+            throw ConflictException("Blueprint '${current.identifier}' is a system blueprint and cannot be deleted")
+        }
         val activeEntities = EntityService.Entities
             .selectAll()
             .where { (EntityService.Entities.blueprintId eq id) and (EntityService.Entities.markedAsDeleted eq false) }

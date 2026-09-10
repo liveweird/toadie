@@ -92,6 +92,7 @@ fun Application.configureBlueprintRoutes() {
                     add("properties" to request.schema.properties.size)
                     add("relations" to request.relations.size)
                     add("cascaded" to result.cascaded.size)
+                    add("system" to result.system)
                     result.renamedFrom?.let { add("renamedFrom" to it) }
                 }
                 audit("blueprint.updated", *fields.toTypedArray())
