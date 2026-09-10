@@ -9,6 +9,7 @@ import {
   entitySaveErrorMessage,
   fromEntityResponse,
   isValidEntityIdentifier,
+  teamValuesOf,
   toEntityRequest,
   type EntityFormValues,
   type PropertyValueDraft,
@@ -159,6 +160,24 @@ describe("toEntityRequest / fromEntityResponse round trip", () => {
   test("a string team round-trips through the array-only draft as a one-entry array", () => {
     const entity = { blueprint: "service", identifier: "x", title: "X", team: "payments", properties: {}, relations: {} } as unknown as Entity;
     expect(fromEntityResponse(entity, BLUEPRINT).team).toEqual(["payments"]);
+  });
+
+  test("teamValuesOf normalizes the scalar/array/absent wire shape", () => {
+    expect(teamValuesOf(undefined)).toEqual([]);
+    expect(teamValuesOf("payments")).toEqual(["payments"]);
+    expect(teamValuesOf(["payments", "platform"])).toEqual(["payments", "platform"]);
+  });
+
+  test("an Inherited-ownership blueprint omits team even when the form field holds values", () => {
+    const inherited = { ...BLUEPRINT, ownership: { type: "Inherited", path: "system" } } as unknown as Blueprint;
+    const form = values({ team: ["payments"] });
+    expect(toEntityRequest(form, inherited).team).toBeUndefined();
+  });
+
+  test("a Direct-ownership blueprint still sends team normally", () => {
+    const direct = { ...BLUEPRINT, ownership: { type: "Direct" } } as unknown as Blueprint;
+    const form = values({ team: ["payments"] });
+    expect(toEntityRequest(form, direct).team).toEqual(["payments"]);
   });
 
   test("a dotted property id round-trips (index-addressed, never id-keyed)", () => {

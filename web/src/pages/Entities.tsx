@@ -1,4 +1,4 @@
-import { Alert, Anchor, Badge, Button, Select, Stack, Table, Text } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Group, Select, Stack, Table, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
@@ -13,16 +13,18 @@ import PaginationBar from "../components/PaginationBar";
 import RowEditDelete from "../components/RowEditDelete";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
-import { useBlueprintParam } from "../hooks/useBlueprintParam";
+import { useBlueprintParam, useTeamParam } from "../hooks/useBlueprintParam";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useEntities } from "../hooks/useEntities";
+import { useEntityOptions } from "../hooks/useEntityOptions";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { isString, useStoredState } from "../hooks/useStoredState";
-import { entityDeleteErrorMessage } from "../utils/entityForm";
+import { entityDeleteErrorMessage, teamValuesOf } from "../utils/entityForm";
 import { editEntityPath, newEntityPath } from "../utils/entityLinks";
 import { formatDateTime, relativeTimeAgo } from "../utils/relativeTime";
 import { loadErrorMessage } from "../utils/saveError";
+import { TEAM_BLUEPRINT } from "../utils/systemBlueprints";
 
 const SORT_FIELDS = ["identifier", "title", "updatedAt"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
@@ -43,17 +45,26 @@ export default function Entities() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { blueprint, setBlueprint } = useBlueprintParam();
+  const { team, setTeam } = useTeamParam();
   const { blueprints } = useBlueprints();
+  const { options: teamOptions } = useEntityOptions(TEAM_BLUEPRINT);
   const selectedBlueprint = blueprint ? blueprints.find((b) => b.identifier === blueprint) : undefined;
   const [q, setQ] = useStoredState<string>(`${SETTINGS_KEY}.filter.q`, "", isString);
 
   const { page, setPage, pageSize, setPageSize, sortField, sortDir, sortParam, toggleSort } =
-    usePagedSort<SortField>("identifier", [blueprint, q], {
+    usePagedSort<SortField>("identifier", [blueprint, team, q], {
       key: SETTINGS_KEY,
       sortFields: SORT_FIELDS,
     });
 
-  const query = useEntities({ blueprint: blueprint ?? undefined, q: q || undefined, page, pageSize, sort: sortParam });
+  const query = useEntities({
+    blueprint: blueprint ?? undefined,
+    team: team ?? undefined,
+    q: q || undefined,
+    page,
+    pageSize,
+    sort: sortParam,
+  });
   const { data, isLoading, isError, error } = query;
 
   const deleteConfirm = useDeleteConfirm<Entity>({
@@ -69,7 +80,13 @@ export default function Entities() {
     : [];
 
   const total = data?.total ?? 0;
-  const columnCount = 3 + previewProperties.length + 2;
+  const columnCount = 4 + previewProperties.length + 2;
+
+  const knownTeams = new Set(teamOptions.map((e) => e.identifier));
+  const teamSelectData = [
+    ...teamOptions.map((e) => ({ value: e.identifier, label: `${e.identifier} — ${e.title}` })),
+    ...(team && !knownTeams.has(team) ? [{ value: team, label: team }] : []),
+  ];
 
   return (
     <Stack gap="md">
@@ -98,6 +115,17 @@ export default function Entities() {
               clearable
               w={280}
             />
+            <Select
+              label={t("entities.filter.team")}
+              placeholder={t("entities.filter.anyTeam")}
+              data={teamSelectData}
+              value={team}
+              onChange={setTeam}
+              searchable
+              clearable
+              clearButtonProps={{ "aria-label": t("entities.filter.clearTeam") }}
+              w={240}
+            />
             <ClearableTextInput label={t("entities.filter.q")} value={q} onChange={setQ} clearLabel={t("entities.filter.clearQ")} />
           </Stack>
         }
@@ -115,6 +143,7 @@ export default function Entities() {
             <Table.Tr>
               <SortHeader field="identifier" label={t("entities.field.identifier")} activeField={sortField} activeDir={sortDir} onToggle={toggleSort} />
               <SortHeader field="title" label={t("entities.field.title")} activeField={sortField} activeDir={sortDir} onToggle={toggleSort} />
+              <Table.Th>{t("entities.column.team")}</Table.Th>
               {previewProperties.map(([id, def]) => (
                 <Table.Th key={id}>{def.title ?? id}</Table.Th>
               ))}
@@ -147,6 +176,19 @@ export default function Entities() {
                     </Anchor>
                   </Table.Td>
                   <Table.Td>{entity.title}</Table.Td>
+                  <Table.Td>
+                    {teamValuesOf(entity.team).length > 0 ? (
+                      <Group gap={4}>
+                        {teamValuesOf(entity.team).map((value) => (
+                          <Badge key={value} variant="light" color="gray">
+                            {value}
+                          </Badge>
+                        ))}
+                      </Group>
+                    ) : (
+                      <Text c="dimmed">—</Text>
+                    )}
+                  </Table.Td>
                   {previewProperties.map(([id, def]) => {
                     const value = entity.properties[id];
                     return (

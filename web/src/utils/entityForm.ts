@@ -129,7 +129,10 @@ export function emptyEntityForm(blueprint: Blueprint): EntityFormValues {
   };
 }
 
-function teamFromWire(team: TeamWire): string[] {
+/** `team`'s wire shape (a scalar, an array, or absent) -> the form's array-only draft — also
+ *  used directly by `EntityTeamField` to normalize the STORED/EFFECTIVE `team` an entity
+ *  response carries into the pills it renders. */
+export function teamValuesOf(team: TeamWire): string[] {
   if (team === undefined) return [];
   return Array.isArray(team) ? [...team] : [team];
 }
@@ -159,7 +162,7 @@ export function fromEntityResponse(entity: Entity, blueprint: Blueprint): Entity
     identifier: entity.identifier,
     title: entity.title,
     icon: entity.icon ?? "",
-    team: teamFromWire(entity.team as TeamWire),
+    team: teamValuesOf(entity.team as TeamWire),
     properties,
     relations,
   };
@@ -215,7 +218,12 @@ function teamToWire(team: string[]): TeamWire {
 
 /** Form values -> the wire create/replace body. `blueprint` here is the FULL resolved
  *  blueprint (its schema/relations drive coercion) — distinct from `values.blueprint`, the
- *  identifier string the request actually carries. */
+ *  identifier string the request actually carries.
+ *
+ *  Phase 4 ownership: an Inherited-ownership blueprint computes `team` from a related
+ *  blueprint's Direct ownership at READ time (`entities/EntityOwnership.kt`) and rejects a
+ *  supplied one (`TEAM_NOT_ALLOWED`) — `team` is therefore always OMITTED here, never sent as
+ *  an explicit empty value, regardless of what the (non-editable) form field happens to hold. */
 export function toEntityRequest(values: EntityFormValues, blueprint: Blueprint): EntityBody {
   const properties: Record<string, unknown> = {};
   for (const draft of values.properties) {
@@ -232,12 +240,13 @@ export function toEntityRequest(values: EntityFormValues, blueprint: Blueprint):
     const value = relationValueToWire(def, draft);
     if (value !== undefined) relations[id] = value;
   }
+  const team = blueprint.ownership?.type === "Inherited" ? undefined : teamToWire(values.team);
   return {
     blueprint: values.blueprint.trim(),
     identifier: values.identifier.trim(),
     title: values.title.trim(),
     icon: values.icon.trim() || undefined,
-    team: teamToWire(values.team),
+    team,
     properties,
     relations,
   } as EntityBody;

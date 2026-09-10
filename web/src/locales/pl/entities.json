@@ -14,7 +14,8 @@
   "staleTitle": "Ta encja jest nieaktualna względem swojego blueprintu",
   "staleBody": "Blueprint zmienił się od czasu ostatniego zapisu tej encji. Popraw poniższe właściwości/relacje, aby móc zapisać ponownie.",
   "column": {
-    "findings": "Ustalenia"
+    "findings": "Ustalenia",
+    "team": "Zespół"
   },
   "field": {
     "blueprint": "Blueprint",
@@ -30,7 +31,10 @@
     "labeledUrlUrl": "Adres URL",
     "labeledUrlDisplayText": "Tekst wyświetlany",
     "unknownPropertyHint": "Ten klucz nie jest już częścią schematu blueprintu — edytuj surową wartość JSON albo wyczyść ją, aby usunąć klucz.",
-    "relationOptionsFailed": "Nie udało się wczytać encji docelowych"
+    "relationOptionsFailed": "Nie udało się wczytać encji docelowych",
+    "teamOptionsFailed": "Nie udało się wczytać zespołów",
+    "userOptionsFailed": "Nie udało się wczytać użytkowników/użytkowniczek",
+    "teamInheritedEmpty": "Nie udało się ustalić zespołu dla tej encji"
   },
   "section": {
     "identity": "Tożsamość",
@@ -43,11 +47,20 @@
     "blueprintMissing": "Blueprint tej encji już nie istnieje."
   },
   "hint": {
-    "team": "Dowolna nazwa lub nazwy zespołu jako wolny tekst — bez walidacji (zespoły pojawią się wraz z etapem użytkowników/zespołów)."
+    "team": "Każda wartość musi wskazywać aktywny zespół (encję „_team”).",
+    "teamInherited": "Obliczane automatycznie na podstawie łańcucha relacji „{{path}}” — nie do edycji tutaj."
   },
+  "finding": {
+    "teamTargetMissing": "Ten zespół już nie istnieje."
+  },
+  "rejectedTitle": "Ta encja została odrzucona",
+  "rejectedBody": "Popraw podświetlone pola, aby zapisać ponownie.",
   "filter": {
     "q": "Szukaj",
-    "clearQ": "Wyczyść filtr wyszukiwania"
+    "clearQ": "Wyczyść filtr wyszukiwania",
+    "team": "Zespół",
+    "anyTeam": "Dowolny zespół",
+    "clearTeam": "Wyczyść filtr zespołu"
   },
   "findings": {
     "count_one": "{{count}} ustalenie",

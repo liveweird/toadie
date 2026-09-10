@@ -14,7 +14,8 @@
   "staleTitle": "This entity is out of date with its blueprint",
   "staleBody": "The blueprint changed since this entity was last saved. Fix the properties/relations below before you can save again.",
   "column": {
-    "findings": "Findings"
+    "findings": "Findings",
+    "team": "Team"
   },
   "field": {
     "blueprint": "Blueprint",
@@ -30,7 +31,10 @@
     "labeledUrlUrl": "URL",
     "labeledUrlDisplayText": "Display text",
     "unknownPropertyHint": "This key is no longer part of the blueprint's schema — edit the raw JSON value, or clear it to remove the key.",
-    "relationOptionsFailed": "Could not load the target entities"
+    "relationOptionsFailed": "Could not load the target entities",
+    "teamOptionsFailed": "Could not load the teams",
+    "userOptionsFailed": "Could not load the users",
+    "teamInheritedEmpty": "No team could be determined for this entity"
   },
   "section": {
     "identity": "Identity",
@@ -43,11 +47,20 @@
     "blueprintMissing": "The blueprint of this entity no longer exists."
   },
   "hint": {
-    "team": "A free-text team name or names — not validated (teams arrive with the users/teams phase)."
+    "team": "Every value must resolve to an active team (a \"_team\" entity).",
+    "teamInherited": "Computed automatically from the \"{{path}}\" relation chain — not editable here."
   },
+  "finding": {
+    "teamTargetMissing": "This team no longer exists."
+  },
+  "rejectedTitle": "This entity was rejected",
+  "rejectedBody": "Fix the highlighted fields before saving again.",
   "filter": {
     "q": "Search",
-    "clearQ": "Clear search filter"
+    "clearQ": "Clear search filter",
+    "team": "Team",
+    "anyTeam": "Any team",
+    "clearTeam": "Clear team filter"
   },
   "findings": {
     "count_one": "{{count}} finding",

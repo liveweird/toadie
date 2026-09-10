@@ -1,12 +1,19 @@
 // Port's own system blueprints (`_team`/`_user`, Phase 4 v1.26.0) — seeded by migration and
 // protected server-side (`blueprints/SystemBlueprints.kt`): no delete, no identifier rename,
-// no removal/retyping of the base shape. This step (the Blueprints editor's row locks/badges)
-// only needs `lockedRowIds`; the two identifiers, `OWNERSHIP_RELATION`, and
-// `referenceTargetOf` are added and exported by the entity-side step that follows — keeping
-// them unexported here (rather than exported-but-unconsumed) keeps knip clean in the meantime.
+// no removal/retyping of the base shape.
 
-const TEAM_BLUEPRINT = "_team";
-const USER_BLUEPRINT = "_user";
+/** The `_team` system blueprint's identifier — every entity's `team`/`format: team` values
+ *  must resolve to one of its active rows (`entities/EntityOwnership.kt`). */
+export const TEAM_BLUEPRINT = "_team";
+/** The `_user` system blueprint's identifier — every `format: user` property value must
+ *  resolve to one of its active rows. */
+export const USER_BLUEPRINT = "_user";
+
+/** The Port relation id carrying entity ownership on the wire — never a declared blueprint
+ *  relation (`entities/EntityOwnership.kt`'s `OWNERSHIP_RELATION_ID`); `$` sits outside every
+ *  identifier charset, so it can never collide with a real relation. Used only to recognize
+ *  and style ownership edges on the Entity graph. */
+export const OWNERSHIP_RELATION = "$team";
 
 /**
  * The client mirror of the server's seeded base rows (`SYSTEM_BLUEPRINT_BASES` in
@@ -26,4 +33,15 @@ export function lockedRowIds(identifier: string, family: "properties" | "relatio
   const base = SYSTEM_BASE_ROWS[identifier];
   if (!base) return new Set();
   return new Set(base[family]);
+}
+
+/**
+ * `format: team` / `format: user` -> the system blueprint that format's values must resolve
+ * to (`EntityValidation.kt`'s `checkStringFormat` rule) — `undefined` for every other format,
+ * including no format at all.
+ */
+export function referenceTargetOf(format: string | undefined): string | undefined {
+  if (format === "team") return TEAM_BLUEPRINT;
+  if (format === "user") return USER_BLUEPRINT;
+  return undefined;
 }

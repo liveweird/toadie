@@ -11,7 +11,7 @@ import EntityEditor from "../components/EntityEditor";
 import PageHeader from "../components/PageHeader";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useEntitySave } from "../hooks/useEntitySave";
-import { entityFormValidation, fromEntityResponse, type EntityFormValues } from "../utils/entityForm";
+import { entityFormValidation, fromEntityResponse, teamValuesOf, type EntityFormValues } from "../utils/entityForm";
 import { entitiesPath } from "../utils/entityLinks";
 import { FORM_MAX_WIDTH } from "../utils/layout";
 import { loadErrorMessage } from "../utils/saveError";
@@ -39,6 +39,8 @@ function EditEntityForm({ entity, blueprint }: { entity: Entity; blueprint: Blue
       error={save.error}
       submitting={save.submitting}
       staleFindings={entity.findings}
+      saveFindings={save.findings}
+      computedTeam={teamValuesOf(entity.team)}
     />
   );
 }

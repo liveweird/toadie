@@ -33,6 +33,7 @@ const ENTITY = {
   blueprintId: 1,
   identifier: "checkout",
   title: "Checkout",
+  team: ["platform"],
   properties: { language: "kotlin", active: true },
   relations: {},
   findings: [{ code: "REQUIRED_MISSING", field: "properties.tier", message: "Required" }],
@@ -48,6 +49,7 @@ const ENTITY_NO_PREVIEW_VALUES = {
   id: 6,
   identifier: "billing",
   title: "Billing",
+  team: undefined,
   properties: {},
   findings: [],
 };
@@ -84,7 +86,13 @@ describe("Entities page", () => {
 
     expect(await screen.findByText("Pick a blueprint above to see its entities")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "New entity" })).toHaveAttribute("data-disabled", "true");
-    expect(mockFetch.mock.calls.some(([url]) => (url as string).startsWith("/api/v1/entities?"))).toBe(false);
+    // The Team filter's own options pool (`_team`) loads independently of the picked
+    // blueprint — only the primary, blueprint-scoped list must stay unfetched.
+    expect(
+      mockFetch.mock.calls.some(
+        ([url]) => (url as string).startsWith("/api/v1/entities?") && !(url as string).includes("blueprint=_team"),
+      ),
+    ).toBe(false);
   });
 
   test("picking a blueprint via the URL lists its entities with identifier link and findings badge", async () => {
@@ -93,6 +101,8 @@ describe("Entities page", () => {
 
     expect(await screen.findByRole("link", { name: "Edit checkout" })).toBeInTheDocument();
     expect(screen.getByText("1 finding")).toBeInTheDocument();
+    // The Team column renders the entity's own team as a badge.
+    expect(screen.getByText("platform")).toBeInTheDocument();
     // The boolean preview column renders a badge for its true value.
     expect(screen.getByText("True")).toBeInTheDocument();
     // A picked blueprint renders "New entity" as a real link (Mantine only forces a plain
@@ -100,6 +110,38 @@ describe("Entities page", () => {
     expect(screen.getByRole("link", { name: "New entity" })).toHaveAttribute(
       "href",
       "/entities/new?blueprint=service",
+    );
+  });
+
+  test("a row with no team shows a dash in the Team column", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (url.startsWith("/api/v1/entities?")) {
+        return Promise.resolve(jsonResponse(200, { items: [ENTITY_NO_PREVIEW_VALUES], page: 1, pageSize: 20, total: 1 }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+    await screen.findByRole("link", { name: "Edit billing" });
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  test("picking a team in the filter refetches with team= and the URL carries ?team=", async () => {
+    mockRoutes(mockFetch);
+    const user = userEvent.setup();
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    const teamSelect = screen.getByLabelText("Team", { selector: "input" });
+    await user.click(teamSelect);
+    await user.click(await screen.findByRole("option", { name: "checkout — Checkout" }));
+
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(
+          ([url]) => typeof url === "string" && url.includes("/api/v1/entities?") && url.includes("team=checkout"),
+        ),
+      ).toBe(true),
     );
   });
 

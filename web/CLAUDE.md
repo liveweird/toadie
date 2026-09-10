@@ -158,6 +158,41 @@ Port migration phase 2 (v1.24.0): instances of a blueprint, under the same **Por
 
 **The stale surface.** A blueprint's schema/relations can change after entities already exist (edits go through; nothing re-validates existing rows at write time). Every `GET`/list response carries the entity's CURRENT `findings` — computed fresh against the live blueprint, never stored — so `EntityFindingsBadge` on the list and the orange `Alert` on the edit page are always accurate, and a strict save stays blocked until the entity's rows genuinely satisfy the current schema (no waiver flow for entities, unlike the catalog's Save-anyway: this is Port's constraint, not a registry soft-check, and the plan does not model one).
 
+## Users and teams (v1.26.0)
+
+Phase 4 of the Port data-model move makes `team` real ownership instead of a free string.
+`utils/systemBlueprints.ts` names the two seeded system blueprints (`TEAM_BLUEPRINT = "_team"`,
+`USER_BLUEPRINT = "_user"`) and `referenceTargetOf(format)` maps `format: team`/`format: user`
+onto them. `components/EntityOptionsSelect.tsx` is the target-pool Select/MultiSelect extracted
+from `EntityRelationField` (now a thin wrapper) and reused by `components/EntityTeamField.tsx`
+(replacing the old free-text `TagsInput` in `EntityFormFields`'s Identity fieldset) and by
+`EntityPropertyField`'s `ReferencePropertyField` helper (`format: team|user` properties, scalar
+or array). `EntityTeamField` branches on the owning blueprint's `ownership`: Direct/absent
+renders a MultiSelect over active `_team` entities (labelled by `ownership.title` when set);
+Inherited renders read-only pills of the entity's own EFFECTIVE `team` (computed server-side at
+read time, `utils/entityForm.ts#teamValuesOf`) plus a hint naming the `ownership.path` — no
+fetch, since nothing here is editable. `utils/entityForm.ts#toEntityRequest` omits `team`
+entirely on an Inherited blueprint, matching the server's `TEAM_NOT_ALLOWED` rule.
+
+**Findings paint the fields, not just the Alert.** `utils/entityFieldFindings.ts` indexes an
+entity's `findings` by their wire `field` (`team`, `properties.<id>`, `relations.<id>`) and
+`entityFindingProps` spreads the same orange finding skin `utils/findingProps.tsx` uses for the
+catalog editor (spread AFTER `getInputProps`, `hardError` always wins) — `TEAM_TARGET_MISSING`
+gets a localized message, every other code shows the server's own. `EntityEditor` merges the
+loaded entity's STALE findings with a just-rejected save's findings
+(`api/entities.ts#entitySaveFindings`, read defensively off the 400 body's `findings` member via
+`ApiError.body`) through `dedupeEntityFindings` (by `field`+`code`) for one Alert (title
+`entities.rejectedTitle` when the save was the source, `entities.staleTitle` otherwise) and one
+findings index threaded into `EntityFormFields`. `hooks/useEntitySave.ts` exposes `findings`
+(cleared at the start of every submit) alongside the existing `error`/`submitting`.
+
+**Team column and filter.** `pages/Entities.tsx` renders a Team column (gray light Badges,
+`utils/entityForm.ts#teamValuesOf`) right after Title, and a Team filter Select fed by
+`useEntityOptions(TEAM_BLUEPRINT)` bound to the URL's `?team=` (`hooks/useBlueprintParam.ts`'s
+internal `useUrlParam` generalized to also export `useTeamParam` — the `?blueprint=` sibling);
+`hooks/useEntities.ts` and `api/entities.ts#listEntities`/`getEntityGraph` thread `team` through
+to the server's own EFFECTIVE-team-or-self-`_team`-match filter.
+
 ## Entity graph & hierarchy (`pages/EntityGraph.tsx`, `pages/EntityHierarchy.tsx`)
 
 Port migration phase 3 (v1.25.0): the entity counterparts of the Render/Hierarchy pages, over `GET /api/v1/entities/graph` (blueprint/search filtered, both-ends-shown edges — the catalog graph's rule, enforced server-side; there is no MISSING-node concept for entities) instead of `GET /files/graph`. Both pages share `hooks/useEntityGraphFilterState.ts` — the two-slot scale-down of `useCatalogFileFilterState`: a blueprint multi-select plus a 300ms-debounced `q`, persisted per view under `toadie.viewSettings.<viewKey>.filter.*` (**not** the URL, the catalog views' posture — unrelated to the Entities LIST page's own `?blueprint=` param) — rendered through `components/EntityGraphToolbar.tsx` (the `CatalogToolbar` shape scaled down) + `EntityGraphFilterControls`.

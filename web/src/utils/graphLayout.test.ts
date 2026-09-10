@@ -95,6 +95,9 @@ describe("layoutGraph", () => {
     });
     // Edge ids are unique even for parallel edges over different fields.
     expect(new Set(edges.map((e) => e.id)).size).toBe(3);
+    // `field` also rides `data` — a caller must never parse it back out of the composite id
+    // (blueprint identifiers may contain `:`).
+    expect(edges[0].data).toEqual({ field: "spec.dependsOn" });
   });
 
   test("carries the API node through as data for the custom node", () => {

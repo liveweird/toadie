@@ -5,14 +5,18 @@
   "filter": {
     "blueprints": "Blueprinty",
     "q": "Szukaj",
-    "clearQ": "Wyczyść filtr wyszukiwania"
+    "clearQ": "Wyczyść filtr wyszukiwania",
+    "team": "Zespół",
+    "anyTeam": "Dowolny zespół",
+    "clearTeam": "Wyczyść filtr zespołu"
   },
   "legend": {
     "title": "Legenda",
     "entity": "Encja",
     "collapsed": "Zwinięty — jego zawartość jest ukryta w środku",
     "hierarchyEdge": "Relacja hierarchii",
-    "folded": "Relacja ukrytej encji"
+    "folded": "Relacja ukrytej encji",
+    "ownershipEdge": "Relacja własności"
   },
   "layoutMode": {
     "label": "Układ",

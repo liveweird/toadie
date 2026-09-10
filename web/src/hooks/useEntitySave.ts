@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import type { EntityBody } from "../api/entities";
+import { entitySaveFindings, type EntityBody, type EntityFinding } from "../api/entities";
 import { entitySaveErrorMessage, toEntityRequest, type EntityFormValues } from "../utils/entityForm";
 import { entitiesPath } from "../utils/entityLinks";
 import { showSuccessToast } from "../utils/toast";
@@ -32,10 +32,12 @@ export function useEntitySave({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [findings, setFindings] = useState<EntityFinding[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(values: EntityFormValues) {
     setError(null);
+    setFindings([]);
     setSubmitting(true);
     try {
       await saveRequest(toEntityRequest(values, blueprint));
@@ -44,10 +46,11 @@ export function useEntitySave({
       navigate(entitiesPath(values.blueprint), { replace: true });
     } catch (err) {
       setError(entitySaveErrorMessage(err, t));
+      setFindings(entitySaveFindings(err));
     } finally {
       setSubmitting(false);
     }
   }
 
-  return { error, submitting, onSubmit };
+  return { error, findings, submitting, onSubmit };
 }

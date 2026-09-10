@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { EntityGraph, EntityGraphEdge, EntityGraphNode } from "../api/entities";
+import { foldGraph } from "./graphFold";
 import { buildEntityHierarchy, filterEntityGraph, relationsOf, toFoldable } from "./entityGraph";
 
 let nextEntityId = 1;
@@ -15,8 +16,8 @@ function node(blueprint: string, identifier: string, title = identifier, finding
   } as EntityGraphNode;
 }
 
-function edge(sourceId: string, targetId: string, relation: string, hierarchy = false): EntityGraphEdge {
-  return { sourceId, targetId, relation, hierarchy };
+function edge(sourceId: string, targetId: string, relation: string, hierarchy = false, ownership = false): EntityGraphEdge {
+  return { sourceId, targetId, relation, hierarchy, ownership };
 }
 
 describe("filterEntityGraph", () => {
@@ -124,6 +125,20 @@ describe("buildEntityHierarchy", () => {
     expect(buildEntityHierarchy(graph).map((r) => r.node.id)).toEqual([child.id]);
   });
 
+  test("an ownership edge is never a parent link, even if flagged hierarchy", () => {
+    const child = node("workload", "svc");
+    const team = node("team", "platform");
+    const graph: EntityGraph = {
+      nodes: [child, team],
+      // The server never actually sends `hierarchy: true` on an ownership edge, but
+      // ownership must never nest even in that case.
+      edges: [edge(child.id, team.id, "$team", true, true)],
+    };
+    const roots = buildEntityHierarchy(graph);
+    expect(roots.map((r) => r.node.id).sort()).toEqual([child.id, team.id].sort());
+    expect(roots.flatMap((r) => r.children)).toHaveLength(0);
+  });
+
   test("a cycle breaks by promoting the sorted-first island node to a root", () => {
     const a = node("team", "a");
     const b = node("team", "b");
@@ -135,5 +150,32 @@ describe("buildEntityHierarchy", () => {
     // Every node renders exactly once; the sorted-first (a) is promoted to root.
     expect(roots.map((r) => r.node.id)).toEqual([a.id]);
     expect(roots[0].children.map((c) => c.node.id)).toEqual([b.id]);
+  });
+});
+
+describe("ownership edges fold like other relations", () => {
+  test("collapsing a hidden owner's ancestor redraws its $team edge from the collapsed node", () => {
+    const parent = node("service", "checkout");
+    const child = node("workload", "checkout-api");
+    const team = node("team", "platform");
+    const graph: EntityGraph = {
+      nodes: [parent, child, team],
+      edges: [
+        edge(child.id, parent.id, "service", true),
+        edge(child.id, team.id, "$team", false, true),
+      ],
+    };
+    const forest = buildEntityHierarchy(graph);
+    const folded = foldGraph(toFoldable(graph), forest, new Set([parent.id]));
+    // child is hidden under the collapsed parent; its ownership edge stands in as one FROM
+    // the parent — never dropped just because it carries `ownership` rather than a plain
+    // declared relation.
+    expect(folded.edges).toContainEqual({
+      sourceId: parent.id,
+      targetId: team.id,
+      field: "$team",
+      relations: 1,
+      folded: 1,
+    });
   });
 });
