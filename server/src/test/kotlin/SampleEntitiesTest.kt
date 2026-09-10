@@ -185,7 +185,6 @@ class SampleEntitiesTest {
                 usedRelationKeys,
                 "every relation of blueprint '$blueprintId' must be used at least once across its sample entities",
             )
-
         }
 
         // The registry-mirroring dictionaries (per-kind types, lifecycles) are exercised in full,
