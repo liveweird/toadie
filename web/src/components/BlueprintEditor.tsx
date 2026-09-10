@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Button, Grid, Group, Paper, Stack } from "@mantine/core";
+import { Alert, Badge, Button, Grid, Group, Paper, Stack } from "@mantine/core";
 import { type UseFormReturnType } from "@mantine/form";
 import BlueprintFormFields from "./BlueprintFormFields";
 import CodePreviewCard from "./CodePreviewCard";
@@ -27,6 +27,7 @@ export default function BlueprintEditor({
   onSubmit,
   error,
   submitting,
+  system = false,
 }: {
   title: string;
   submitLabel: string;
@@ -34,19 +35,32 @@ export default function BlueprintEditor({
   onSubmit: (values: BlueprintFormValues) => Promise<void>;
   error: string | null;
   submitting: boolean;
+  /** A system blueprint (`_team`/`_user`, Phase 4 v1.26.0) — never true from CreateBlueprint,
+   *  since a system row can only ever be edited, not created. */
+  system?: boolean;
 }) {
   const { t } = useTranslation();
   const expansion = useBlueprintRowExpansion(form);
   const preview = JSON.stringify(toBlueprintRequest(form.values), null, 2);
   return (
     <Stack gap="md">
-      <PageHeader title={title} backTo={{ to: blueprintsPath, label: t("blueprints.backToList") }} />
+      <PageHeader
+        title={title}
+        description={
+          system && (
+            <Badge variant="outline" color="gray">
+              {t("blueprints.systemBadge")}
+            </Badge>
+          )
+        }
+        backTo={{ to: blueprintsPath, label: t("blueprints.backToList") }}
+      />
       <Grid>
         <Grid.Col span={{ base: 12, md: 7 }}>
           <Paper withBorder p="lg" radius="md">
             <form onSubmit={form.onSubmit(onSubmit, (errors) => expansion.revealErrors(errors))} noValidate>
               <Stack>
-                <BlueprintFormFields form={form} expansion={expansion} />
+                <BlueprintFormFields form={form} expansion={expansion} system={system} />
                 {error && (
                   <Alert color="red" variant="light">
                     {error}

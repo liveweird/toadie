@@ -11,7 +11,16 @@ type Form = UseFormReturnType<BlueprintFormValues>;
  * switches. Removal/reordering lives one level up, in RelationsFieldset's `EditorRowList`
  * (the BlueprintPropertyRow precedent — no second, redundant remove control here).
  */
-export default function BlueprintRelationRow({ form, index }: { form: Form; index: number }) {
+export default function BlueprintRelationRow({
+  form,
+  index,
+  locked = false,
+}: {
+  form: Form;
+  index: number;
+  /** A system-seeded base relation (Phase 4, v1.26.0): the id cannot be renamed. */
+  locked?: boolean;
+}) {
   const { t } = useTranslation();
   const row = form.values.relations[index];
   return (
@@ -21,6 +30,7 @@ export default function BlueprintRelationRow({ form, index }: { form: Form; inde
         label={t("blueprints.field.relationId")}
         required
         {...form.getInputProps(`relations.${index}.id`)}
+        readOnly={locked}
       />
       <TextInput
         style={{ flex: 1, minWidth: 140 }}

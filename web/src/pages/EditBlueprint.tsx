@@ -84,6 +84,7 @@ export default function EditBlueprint() {
       onSubmit={save.onSubmit}
       error={save.error}
       submitting={save.submitting}
+      system={data?.system}
     />
   );
 }

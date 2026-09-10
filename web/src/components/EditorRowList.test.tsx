@@ -53,10 +53,12 @@ function Harness({
   rows,
   initialExpanded = [],
   errors = {},
+  isLocked,
 }: {
   rows: Row[];
   initialExpanded?: string[];
   errors?: Record<string, string>;
+  isLocked?: (row: Row) => boolean;
 }) {
   const expansion = useTestExpansion(initialExpanded);
   const [items, setItems] = useState(rows);
@@ -71,6 +73,7 @@ function Harness({
       newRowLabel="New widget"
       badge={(row) => (row.id.trim() ? `kind-${row.id}` : "")}
       isRequired={(row) => row.required}
+      isLocked={isLocked}
       renderBody={(row) => (
         <input
           aria-label={`Body ${row.key}`}
@@ -187,6 +190,16 @@ describe("EditorRowList", () => {
     expect(await screen.findByLabelText("Body b")).toBeInTheDocument();
     expect(scrollSpy).toHaveBeenCalledWith({ block: "start" });
     expect(betaToggle).toHaveFocus();
+  });
+
+  test("a locked row shows the Seeded badge and disables its remove control; move stays enabled", () => {
+    renderWithProviders(
+      <Harness rows={twoRows()} initialExpanded={[]} isLocked={(row) => row.id === "alpha"} />,
+    );
+    expect(screen.getByText("Seeded")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove property 1" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove property 2" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Move property 1 down" })).toBeEnabled();
   });
 
   test("the error dot shows only while its row stays collapsed", async () => {

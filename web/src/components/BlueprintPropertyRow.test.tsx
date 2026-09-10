@@ -9,14 +9,14 @@ import { renderWithProviders } from "../test/render";
 // Removal/reordering lives one level up, in PropertiesFieldset's shared RowControls (the
 // BlueprintFormFields.test.tsx "properties: Add inserts a row..." case) — this row renders
 // no remove control of its own, avoiding a second, redundantly-labelled affordance.
-function Harness({ initialType }: { initialType: PropertyType }) {
+function Harness({ initialType, locked }: { initialType: PropertyType; locked?: boolean }) {
   const form = useForm<BlueprintFormValues>({
     initialValues: {
       ...emptyBlueprintForm(),
       properties: [{ ...emptyPropertyDraft(), type: initialType }],
     },
   });
-  return <BlueprintPropertyRow form={form} index={0} />;
+  return <BlueprintPropertyRow form={form} index={0} locked={locked} />;
 }
 
 // Mantine's Select/TagsInput render a labelled options listbox alongside the input (even
@@ -141,6 +141,11 @@ describe("BlueprintPropertyRow", () => {
     expect(screen.getByRole("combobox", { name: "Spec" })).toBeInTheDocument();
     expect(screen.getByLabelText("Sub-schema (JSON)")).toBeInTheDocument();
     expect(screen.getByLabelText("Default")).toBeInTheDocument();
+  });
+
+  test("locked marks the property id field read-only", () => {
+    renderWithProviders(<Harness initialType="string" locked />);
+    expect(screen.getByLabelText(/^property id/i)).toHaveAttribute("readonly");
   });
 
   test("the Advanced toggle reveals description/icon and tracks aria-expanded", async () => {

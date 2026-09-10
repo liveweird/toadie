@@ -27,6 +27,7 @@ const REGISTRY = {
       creatorDeleted: false,
       createdAt: 1,
       updatedAt: 1,
+      system: false,
     },
     {
       id: 2,
@@ -42,6 +43,23 @@ const REGISTRY = {
       creatorDeleted: false,
       createdAt: 1,
       updatedAt: 1,
+      system: false,
+    },
+    {
+      id: 3,
+      identifier: "_team",
+      title: "Team",
+      schema: { properties: {}, required: [] },
+      relations: { parent: { title: "Parent team", target: "_team", required: false, many: false } },
+      mirrorProperties: {},
+      calculationProperties: {},
+      aggregationProperties: {},
+      createdBy: 1,
+      creatorName: "Alice",
+      creatorDeleted: false,
+      createdAt: 1,
+      updatedAt: 1,
+      system: true,
     },
   ],
 };
@@ -162,6 +180,25 @@ describe("Blueprints page", () => {
       await screen.findByText(/still referenced by another blueprint's relation or aggregation property/i),
     ).toBeInTheDocument();
     expect(findCall(mockFetch, "DELETE", "/api/v1/blueprints/2")).toBeDefined();
+  });
+
+  test("a system row shows the System badge, disables Delete with a tooltip, and Edit still navigates", async () => {
+    serveBlueprints(mockFetch);
+    const user = userEvent.setup();
+    renderBlueprints();
+
+    await screen.findByText("_team");
+    const row = screen.getByText("_team").closest("tr")!;
+    expect(row).toHaveTextContent("System");
+
+    const deleteButton = screen.getByRole("button", { name: "Delete _team" });
+    expect(deleteButton).toBeDisabled();
+    await user.hover(deleteButton);
+    expect(await screen.findByText("System blueprints cannot be deleted")).toBeInTheDocument();
+    expect(findCall(mockFetch, "DELETE", "/api/v1/blueprints/3")).toBeUndefined();
+
+    await user.click(screen.getByRole("button", { name: "Edit _team" }));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/blueprints/3/edit"));
   });
 
   test("an admin deletes a blueprint after confirming", async () => {

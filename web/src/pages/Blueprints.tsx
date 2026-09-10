@@ -1,4 +1,4 @@
-import { Alert, Anchor, Badge, Box, Button, Stack, Table, Text } from "@mantine/core";
+import { Alert, Anchor, Badge, Box, Button, Group, Stack, Table, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
@@ -75,9 +75,16 @@ export default function Blueprints() {
                 {blueprints.map((blueprint) => (
                   <Table.Tr key={blueprint.id}>
                     <Table.Td>
-                      <Text size="sm" ff="monospace">
-                        {blueprint.identifier}
-                      </Text>
+                      <Group gap="xs" wrap="nowrap">
+                        <Text size="sm" ff="monospace">
+                          {blueprint.identifier}
+                        </Text>
+                        {blueprint.system && (
+                          <Badge variant="outline" color="gray" size="sm">
+                            {t("blueprints.systemBadge")}
+                          </Badge>
+                        )}
+                      </Group>
                     </Table.Td>
                     <Table.Td>{blueprint.title}</Table.Td>
                     <Table.Td>
@@ -101,6 +108,8 @@ export default function Blueprints() {
                           name={blueprint.identifier}
                           onEdit={() => navigate(editBlueprintPath(blueprint.id))}
                           onDelete={() => remove.requestDelete(blueprint)}
+                          deleteDisabled={blueprint.system}
+                          deleteTooltip={t("blueprints.systemDeleteTooltip")}
                         />
                       </Table.Td>
                     )}

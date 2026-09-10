@@ -27,12 +27,12 @@ function serveBlueprintList(mockFetch: FetchMock, items: { id: number; identifie
   });
 }
 
-function Harness({ initial }: { initial: Partial<BlueprintFormValues> }) {
+function Harness({ initial, system = false }: { initial: Partial<BlueprintFormValues>; system?: boolean }) {
   const form = useForm<BlueprintFormValues>({ initialValues: { ...emptyBlueprintForm(), ...initial } });
   // The test harness wires the row-expansion hook itself — BlueprintEditor's job in the
   // real app, required so EditorRowList's fold state has something to read/write.
   const expansion = useBlueprintRowExpansion(form);
-  return <BlueprintFormFields form={form} expansion={expansion} />;
+  return <BlueprintFormFields form={form} expansion={expansion} system={system} />;
 }
 
 async function openCombobox(name: RegExp) {
@@ -248,6 +248,66 @@ describe("BlueprintFormFields", () => {
     await openCombobox(/^hierarchy relation$/i);
     expect(await screen.findByRole("option", { name: "owningTeam" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "peers" })).not.toBeInTheDocument();
+  });
+
+  test("system locks: _user's base email property and team relation are locked, remove disabled", async () => {
+    serveBlueprintList(mockFetch);
+    renderWithProviders(
+      <Harness
+        system
+        initial={{
+          identifier: "_user",
+          properties: [{ ...emptyPropertyDraft(), id: "email", title: "Email" }],
+          relations: [{ ...emptyRelationDraft(), id: "team", title: "Team", target: "_team" }],
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Seeded")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Remove property 1" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove relation 1" })).toBeDisabled();
+  });
+
+  test("system locks: _team locks its base parent relation only, an extra property stays unlocked", async () => {
+    serveBlueprintList(mockFetch);
+    renderWithProviders(
+      <Harness
+        system
+        initial={{
+          identifier: "_team",
+          properties: [{ ...emptyPropertyDraft(), id: "custom", title: "Custom" }],
+          relations: [{ ...emptyRelationDraft(), id: "parent", title: "Parent", target: "_team" }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Seeded")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove property 1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Remove relation 1" })).toBeDisabled();
+  });
+
+  test("a plain blueprint locks nothing, even a relation named the same as a system base row", () => {
+    serveBlueprintList(mockFetch);
+    renderWithProviders(
+      <Harness
+        initial={{
+          identifier: "microservice",
+          relations: [{ ...emptyRelationDraft(), id: "team", title: "Team", target: "_team" }],
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Seeded")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove relation 1" })).toBeEnabled();
+  });
+
+  test("identifier is read-only with the system hint when system", () => {
+    serveBlueprintList(mockFetch);
+    renderWithProviders(<Harness system initial={{ identifier: "_team" }} />);
+
+    const identifierInput = screen.getByLabelText(/^identifier/i);
+    expect(identifierInput).toHaveAttribute("readonly");
+    expect(screen.getByText("A system blueprint's identifier cannot be changed.")).toBeInTheDocument();
   });
 
   test("hierarchy: a stored value naming a many relation renders as unset (derive, don't clear)", () => {

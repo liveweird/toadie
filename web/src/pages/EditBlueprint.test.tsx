@@ -32,6 +32,27 @@ const STORED = {
   creatorDeleted: false,
   createdAt: 1,
   updatedAt: 1,
+  system: false,
+};
+
+const SYSTEM_TEAM = {
+  id: 3,
+  identifier: "_team",
+  title: "Team",
+  description: "",
+  schema: { properties: {}, required: [] },
+  relations: {
+    parent: { title: "Parent team", target: "_team", required: false, many: false },
+  },
+  mirrorProperties: {},
+  calculationProperties: {},
+  aggregationProperties: {},
+  createdBy: 1,
+  creatorName: "Alice",
+  creatorDeleted: false,
+  createdAt: 1,
+  updatedAt: 1,
+  system: true,
 };
 
 function PathProbe() {
@@ -164,5 +185,28 @@ describe("EditBlueprint page", () => {
 
     expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
+  });
+
+  test("a system blueprint shows the System badge, a read-only identifier, and locks its seeded row", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url === "/api/v1/blueprints/3") {
+        return Promise.resolve(jsonResponse(200, SYSTEM_TEAM));
+      }
+      if (method === "GET" && url === "/api/v1/blueprints") {
+        return Promise.resolve(jsonResponse(200, { items: [SYSTEM_TEAM] }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderEdit("/blueprints/3/edit");
+
+    const identifierInput = (await screen.findByLabelText(/^identifier/i)) as HTMLInputElement;
+    expect(identifierInput).toHaveAttribute("readonly");
+    expect(identifierInput.value).toBe("_team");
+    expect(screen.getByText("A system blueprint's identifier cannot be changed.")).toBeInTheDocument();
+    expect(screen.getByText("System")).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "Remove relation 1" })).toBeDisabled();
+    expect(screen.getByText("Seeded")).toBeInTheDocument();
   });
 });
