@@ -1,7 +1,7 @@
 {
-  "identifier": "team",
+  "identifier": "_team",
   "title": "Team",
-  "description": "A group of people who own things — the unit every owned_by relation points at. Backstage kind: Group (type team / org-unit / org-division; parent → spec.parent, children and members derived).",
+  "description": "A group of people who own things — the unit every team field points at. Backstage kind: Group (type team / org-unit / org-division; parent → spec.parent, children and members derived).",
   "icon": "Team",
   "hierarchyRelation": "parent",
   "schema": {
@@ -35,9 +35,9 @@
   },
   "relations": {
     "parent": {
-      "title": "Parent",
+      "title": "Parent team",
       "description": "The group this one belongs to; empty for the top of the org tree.",
-      "target": "team",
+      "target": "_team",
       "required": false,
       "many": false
     }

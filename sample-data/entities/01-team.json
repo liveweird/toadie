@@ -1,6 +1,6 @@
 [
   {
-    "blueprint": "team",
+    "blueprint": "_team",
     "identifier": "platform-tribe",
     "title": "Platform Tribe",
     "icon": "Team",
@@ -15,7 +15,7 @@
     "relations": {}
   },
   {
-    "blueprint": "team",
+    "blueprint": "_team",
     "identifier": "retail-tribe",
     "title": "Retail Tribe",
     "icon": "Team",
@@ -27,7 +27,7 @@
     "relations": {}
   },
   {
-    "blueprint": "team",
+    "blueprint": "_team",
     "identifier": "payments-squad",
     "title": "Payments Squad",
     "icon": "Team",
@@ -39,7 +39,7 @@
     "relations": { "parent": "platform-tribe" }
   },
   {
-    "blueprint": "team",
+    "blueprint": "_team",
     "identifier": "storefront-squad",
     "title": "Storefront Squad",
     "properties": {

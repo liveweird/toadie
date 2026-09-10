@@ -4,6 +4,7 @@
     "identifier": "storefront",
     "title": "Storefront",
     "icon": "Box",
+    "team": "retail-tribe",
     "properties": {
       "type": "product",
       "criticality": "critical",
@@ -17,13 +18,14 @@
         { "title": "Production storefront", "url": "https://shop.example.com" }
       ]
     },
-    "relations": { "domain": "commerce", "owned_by": "retail-tribe" }
+    "relations": { "domain": "commerce" }
   },
   {
     "blueprint": "system",
     "identifier": "payments",
     "title": "Payments Platform",
     "icon": "Box",
+    "team": "payments-squad",
     "properties": {
       "type": "capability",
       "criticality": "critical",
@@ -32,12 +34,13 @@
       "hosting_model": "on-premise",
       "kubernetes_id": "payments"
     },
-    "relations": { "domain": "payments", "owned_by": "payments-squad" }
+    "relations": { "domain": "payments" }
   },
   {
     "blueprint": "system",
     "identifier": "acquirer",
     "title": "Acquirer (third party)",
+    "team": "payments-squad",
     "properties": {
       "type": "capability",
       "criticality": "critical",
@@ -48,12 +51,13 @@
         { "title": "Acquirer status page", "url": "https://status.acquirer.example.com" }
       ]
     },
-    "relations": { "owned_by": "payments-squad" }
+    "relations": {}
   },
   {
     "blueprint": "system",
     "identifier": "invoicing",
     "title": "Invoicing",
+    "team": "payments-squad",
     "properties": {
       "type": "capability",
       "criticality": "non-critical",
@@ -61,12 +65,13 @@
       "exposure": "internal",
       "hosting_model": "on-premise"
     },
-    "relations": { "domain": "back-office", "owned_by": "payments-squad" }
+    "relations": { "domain": "back-office" }
   },
   {
     "blueprint": "system",
     "identifier": "developer-portal",
     "title": "Developer Portal",
+    "team": "platform-tribe",
     "properties": {
       "type": "product",
       "criticality": "non-critical",
@@ -75,6 +80,6 @@
       "hosting_model": "on-premise",
       "docs": "https://docs.example.com/systems/developer-portal"
     },
-    "relations": { "domain": "platform", "owned_by": "platform-tribe" }
+    "relations": { "domain": "platform" }
   }
 ]

@@ -4,6 +4,7 @@
     "identifier": "acme-commons",
     "title": "Acme Commons",
     "icon": "Package",
+    "team": "platform-tribe",
     "properties": {
       "lifecycle": "production",
       "languages": ["java"],
@@ -12,7 +13,7 @@
       "repository": "https://github.com/acme/commons",
       "ci_pipeline": "https://ci.example.com/acme/commons"
     },
-    "relations": { "owned_by": "platform-tribe" }
+    "relations": {}
   },
   {
     "blueprint": "library",
@@ -33,6 +34,9 @@
         { "title": "Release notes", "url": "https://github.com/acme/payments-sdk/releases" }
       ]
     },
-    "relations": { "system": "payments", "owned_by": "payments-squad", "depends_on": ["acme-commons"] }
+    "relations": {
+      "system": "payments",
+      "depends_on": ["acme-commons"]
+    }
   }
 ]

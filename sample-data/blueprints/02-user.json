@@ -1,7 +1,7 @@
 {
-  "identifier": "user",
+  "identifier": "_user",
   "title": "User",
-  "description": "A person. Kept minimal on purpose: teams own things, people belong to teams. Backstage kind: User (member_of → spec.memberOf, email → spec.profile.email).",
+  "description": "A person. Kept minimal on purpose: teams own things, people belong to teams. Backstage kind: User (team → spec.memberOf, email → spec.profile.email).",
   "icon": "User",
   "schema": {
     "properties": {
@@ -26,9 +26,9 @@
     "required": ["email"]
   },
   "relations": {
-    "member_of": {
-      "title": "Member of",
-      "target": "team",
+    "team": {
+      "title": "Teams",
+      "target": "_team",
       "required": false,
       "many": true
     }

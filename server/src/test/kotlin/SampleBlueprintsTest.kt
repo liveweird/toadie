@@ -2,7 +2,6 @@ package ch.nokillswit
 
 import ch.nokillswit.SampleData.asRequest
 import ch.nokillswit.blueprints.BlueprintRequest
-import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.dictionaries.DictionaryEntryList
@@ -13,12 +12,6 @@ import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -30,54 +23,55 @@ import kotlin.test.assertTrue
 /**
  * Executable documentation for `sample-data/blueprints/` — the eleven-blueprint baseline
  * ontology the platform catalog is built on (`.claude/docs/ontology.md`, v1.25.2; the sample
- * set since v1.25.3). Loads the numbered files through the real API in dependency order (every
- * relation target must already exist), pins the `blueprintJson` round trip, and then pins the
- * three contracts the set makes:
+ * set since v1.25.3; adopting the v1.26.0 system blueprints and real ownership since v1.26.0).
+ * Loads the numbered files through the real API in dependency order (every relation target must
+ * already exist) via [SampleData.loadBlueprint] — `_team`/`_user` (`_`-prefixed identifiers) are
+ * `PUT` extensions of the rows `V31__system_blueprints.sql` seeds, every other blueprint is a
+ * fresh `POST` — pins the `blueprintJson` round trip (for `_team`/`_user` the file IS the full
+ * desired definition, base shape included, so byte-for-structure equality still holds), and then
+ * pins the four contracts the set makes:
  *
  * 1. **Vocabulary**: every enum that mirrors a V22-seeded registry (the per-kind type
  *    dictionaries, the lifecycles dictionary, the labels' closed value lists, the tag
  *    categories) carries EXACTLY the registry's values, read back from the running app — so a
  *    Backstage export is a copy and a registry edit that forgets the blueprint fails here.
  * 2. **Hierarchy**: the `hierarchyRelation` of each blueprint is the one the doc names, forming
- *    the org tree (team → team) and the architecture tree (domain → system → service/library/
- *    api/resource → workload, cluster → environment).
- * 3. **Backstage ownership**: every blueprint that maps to a Backstage kind requiring
- *    `spec.owner` has `owned_by → team` required and single.
+ *    the org tree (`_team` → `_team`) and the architecture tree (domain → system → service/
+ *    library/api/resource → workload, cluster → environment).
+ * 3. **Ownership**: every blueprint but `_team`/`_user`/environment declares `ownership` — Direct
+ *    on domain/system/service/library/api/resource/cluster (no `owned_by` relation: the team
+ *    field IS the ownership, v1.26.0), Inherited via `service` on workload.
+ * 4. **System blueprints stay put**: `_team`/`_user` are the seeded rows, not fresh creates.
  *
  * Test cwd is `server/` (the Gradle test task's default working directory), so the fixture
- * files are read via `../sample-data/blueprints`. The identifiers (`team`, `domain`, …) are
- * plain, but the shared Testcontainers database is fine: this test removes every one of them
- * in `finally`, and [SampleEntitiesTest] — which loads the same set — runs in the same
- * single-fork sequence and cleans up the same way.
+ * files are read via `../sample-data/blueprints`. The identifiers (`_team`, `domain`, …) are
+ * plain, but the shared Testcontainers database is fine: this test restores the system
+ * blueprints' base shape and removes every non-system identifier in `finally`, and
+ * [SampleEntitiesTest] — which loads the same set — runs in the same single-fork sequence and
+ * cleans up the same way.
  */
 class SampleBlueprintsTest {
-
-    private suspend fun HttpClient.postRaw(text: String) =
-        post("/api/v1/blueprints") {
-            contentType(ContentType.Application.Json)
-            setBody(text)
-        }
 
     @Test
     fun `the sample set loads in order and speaks the seeded vocabulary`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("bpsample", UserRole.ADMIN)
         val files = SampleData.numberedFiles("blueprints")
-        assertEquals(EXPECTED_ORDER, files.map { it.name.substringAfter('-').removeSuffix(".json") })
+        // The `01-team.json`/`02-user.json` FILE names stay unrenamed (their JSON `identifier`
+        // became `_team`/`_user`, not the filename) — so the loaded-in-order check compares the
+        // decoded identifiers, the thing that actually matters for dependency order.
+        val decoded = files.map { it to blueprintJson.decodeFromString<BlueprintRequest>(it.readText()) }
+        assertEquals(EXPECTED_ORDER, decoded.map { it.second.identifier })
 
         val identifiers = mutableListOf<String>()
         val requests = mutableMapOf<String, BlueprintRequest>()
         try {
-            files.forEach { file ->
+            decoded.forEach { (file, request) ->
                 val text = file.readText()
-                val request = blueprintJson.decodeFromString<BlueprintRequest>(text)
                 requests[request.identifier] = request
                 identifiers += request.identifier
 
-                val create = admin.postRaw(text)
-                assertEquals(HttpStatusCode.Created, create.status, "POST ${file.name}: ${create.bodyAsText()}")
-                val created = create.body<BlueprintResponse>()
-                val reread = admin.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>()
+                val reread = SampleData.loadBlueprint(admin, text)
                 assertEquals(
                     SampleData.canonicalBlueprint(text),
                     Json.parseToJsonElement(blueprintJson.encodeToString(reread.asRequest())),
@@ -86,9 +80,10 @@ class SampleBlueprintsTest {
             }
 
             assertHierarchy(requests)
-            assertBackstageOwnership(requests)
+            assertOwnership(requests)
             assertVocabulary(admin, requests)
         } finally {
+            TestBlueprints.restoreSystemBlueprints()
             TestBlueprints.remove(*identifiers.toTypedArray())
         }
     }
@@ -103,15 +98,24 @@ class SampleBlueprintsTest {
         }
     }
 
-    private fun assertBackstageOwnership(requests: Map<String, BlueprintRequest>) {
-        OWNER_REQUIRED.forEach { blueprint ->
-            val owner = assertNotNull(requests.getValue(blueprint).relations["owned_by"], "$blueprint.owned_by")
-            assertEquals("team", owner.target)
-            assertTrue(owner.required && !owner.many, "$blueprint.owned_by must be required and single")
+    /**
+     * v1.26.0: ownership is the entity-level `team` field, not a Backstage `owned_by` relation.
+     * Every blueprint but `_team`/`_user`/environment declares `ownership`: Direct for the plain
+     * owning blueprints (no `owned_by` relation left over from the pre-v1.26.0 shape), Inherited
+     * via `service` for workload.
+     */
+    private fun assertOwnership(requests: Map<String, BlueprintRequest>) {
+        DIRECT_OWNERSHIP.forEach { blueprint ->
+            val request = requests.getValue(blueprint)
+            assertNull(request.relations["owned_by"], "$blueprint must not keep a Backstage owned_by relation")
+            assertEquals("Direct", request.ownership?.type, "$blueprint.ownership.type")
         }
         assertNull(requests.getValue("workload").relations["owned_by"], "workload inherits ownership")
         assertEquals("Inherited", requests.getValue("workload").ownership?.type)
         assertEquals("service", requests.getValue("workload").ownership?.path)
+        listOf("_team", "_user", "environment").forEach {
+            assertNull(requests.getValue(it).ownership, "$it must declare no ownership")
+        }
     }
 
     private suspend fun assertVocabulary(admin: HttpClient, requests: Map<String, BlueprintRequest>) {
@@ -128,7 +132,7 @@ class SampleBlueprintsTest {
 
         // Per-kind type dictionaries: the blueprint's `type` enum IS the kind's dictionary
         // (service = Component minus `library`, which is its own blueprint).
-        assertEquals(types.getValue("Group"), enumOf("team", "type"))
+        assertEquals(types.getValue("Group"), enumOf("_team", "type"))
         assertEquals(types.getValue("Domain"), enumOf("domain", "type"))
         assertEquals(types.getValue("System"), enumOf("system", "type"))
         assertEquals(types.getValue("Component") - "library", enumOf("service", "type"))
@@ -164,13 +168,13 @@ class SampleBlueprintsTest {
 
     private companion object {
         val EXPECTED_ORDER = listOf(
-            "team", "user", "domain", "system", "environment", "cluster", "resource", "library", "api", "service", "workload",
+            "_team", "_user", "domain", "system", "environment", "cluster", "resource", "library", "api", "service", "workload",
         )
 
         /** blueprint → its `hierarchyRelation` (null = roots its own entities). */
         val EXPECTED_HIERARCHY = mapOf(
-            "team" to "parent",
-            "user" to null,
+            "_team" to "parent",
+            "_user" to null,
             "domain" to "parent_domain",
             "system" to "domain",
             "environment" to null,
@@ -184,7 +188,7 @@ class SampleBlueprintsTest {
 
         /** blueprint → the blueprint its hierarchy relation targets. */
         val EXPECTED_PARENT = mapOf(
-            "team" to "team",
+            "_team" to "_team",
             "domain" to "domain",
             "system" to "domain",
             "cluster" to "environment",
@@ -195,8 +199,11 @@ class SampleBlueprintsTest {
             "workload" to "service",
         )
 
-        /** Backstage requires `spec.owner` on Domain, System, Component, API and Resource. */
-        val OWNER_REQUIRED = listOf("domain", "system", "service", "library", "api", "resource")
+        /**
+         * v1.26.0: `ownership.type == "Direct"` (the entity-level `team` field), no leftover
+         * `owned_by` relation — every plain owning blueprint, `workload` excepted (Inherited).
+         */
+        val DIRECT_OWNERSHIP = listOf("domain", "system", "service", "library", "api", "resource", "cluster")
 
         /** label key → the (blueprint, property) enums that mirror its closed value list. */
         val LABEL_PROPERTIES = mapOf(

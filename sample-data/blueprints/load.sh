@@ -2,7 +2,10 @@
 # Loads (or, with --delete, removes) the sample blueprint set at sample-data/blueprints/*.json —
 # the eleven-blueprint baseline ontology (.claude/docs/ontology.md) — against a running toadie
 # instance, using the blueprint API: there is no import UI for blueprints. Re-runnable: an
-# already-loaded file is reported "exists, skipped", not an error.
+# already-loaded file is reported "exists, skipped", not an error. The `_team`/`_user` system
+# blueprints (V31) are never created or deleted here — they are seeded by migration, and a
+# `_`-prefixed file is instead looked up by identifier and PUT to extend it with the sample
+# ontology's shape ("extended <identifier>"); `--delete` always keeps them ("system, kept: <id>").
 #
 # Env:
 #   TOADIE_URL       default http://localhost:8081
@@ -56,9 +59,31 @@ login() {
 sample_files() { printf '%s\n' "$SCRIPT_DIR"/[0-9][0-9]-*.json | sort; }
 
 load() {
-  local failed=0 file identifier status
+  local failed=0 file identifier status id list
   while IFS= read -r file; do
     identifier=$(jq -r '.identifier' "$file")
+    if [[ "$identifier" == _* ]]; then
+      status=$(request "$TOADIE_URL/api/v1/blueprints" -H @"$HEADERS")
+      if [ "$status" != "200" ]; then
+        echo "FAILED $identifier ($status): $(problem)" >&2
+        failed=1
+        continue
+      fi
+      list=$(cat "$BODY")
+      id=$(jq -r --arg id "$identifier" '.items[] | select(.identifier == $id) | .id' <<<"$list")
+      if [ -z "$id" ]; then
+        echo "FAILED $identifier (404): server predates V31?" >&2
+        failed=1
+        continue
+      fi
+      status=$(request -X PUT "$TOADIE_URL/api/v1/blueprints/$id" -H @"$HEADERS" \
+        -H 'Content-Type: application/json' --data-binary @"$file")
+      case "$status" in
+        204) echo "extended $identifier" ;;
+        *) echo "FAILED $identifier ($status): $(problem)" >&2; failed=1 ;;
+      esac
+      continue
+    fi
     status=$(request -X POST "$TOADIE_URL/api/v1/blueprints" -H @"$HEADERS" \
       -H 'Content-Type: application/json' --data-binary @"$file")
     case "$status" in
@@ -81,6 +106,10 @@ delete_set() {
   # while an earlier blueprint still relates/aggregates to it.
   while IFS= read -r file; do
     identifier=$(jq -r '.identifier' "$file")
+    if [[ "$identifier" == _* ]]; then
+      echo "system, kept: $identifier"
+      continue
+    fi
     id=$(jq -r --arg id "$identifier" '.items[] | select(.identifier == $id) | .id' <<<"$list")
     if [ -z "$id" ]; then
       echo "not found, skipped: $identifier"

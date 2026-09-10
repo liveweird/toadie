@@ -4,6 +4,7 @@
     "identifier": "prod-k8s",
     "title": "Production cluster (dc-1)",
     "icon": "Cluster",
+    "team": "platform-tribe",
     "properties": {
       "distribution": "openshift",
       "version": "1.31",
@@ -16,12 +17,13 @@
         { "title": "OpenShift console", "url": "https://console.prod-k8s.example.com" }
       ]
     },
-    "relations": { "environment": "production", "owned_by": "platform-tribe" }
+    "relations": { "environment": "production" }
   },
   {
     "blueprint": "cluster",
     "identifier": "prod-cloud-k8s",
     "title": "Production cluster (cloud)",
+    "team": "platform-tribe",
     "properties": {
       "distribution": "vanilla",
       "version": "1.32",
@@ -30,12 +32,13 @@
       "node_count": 12,
       "dashboard": "https://grafana.example.com/d/prod-cloud-k8s"
     },
-    "relations": { "environment": "production", "owned_by": "platform-tribe" }
+    "relations": { "environment": "production" }
   },
   {
     "blueprint": "cluster",
     "identifier": "staging-k8s",
     "title": "Staging cluster",
+    "team": "platform-tribe",
     "properties": {
       "distribution": "rancher",
       "version": "1.31",
@@ -44,12 +47,13 @@
       "datacenter": "dc-1",
       "node_count": 6
     },
-    "relations": { "environment": "staging", "owned_by": "platform-tribe" }
+    "relations": { "environment": "staging" }
   },
   {
     "blueprint": "cluster",
     "identifier": "test-k8s",
     "title": "Test cluster",
+    "team": "platform-tribe",
     "properties": {
       "distribution": "k3s",
       "version": "1.30",

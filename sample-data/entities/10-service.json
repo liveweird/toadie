@@ -26,7 +26,6 @@
     },
     "relations": {
       "system": "storefront",
-      "owned_by": "retail-tribe",
       "consumes_apis": ["catalog-graphql", "checkout-rest", "live-cart"],
       "uses": ["session-cache"]
     }
@@ -35,6 +34,7 @@
     "blueprint": "service",
     "identifier": "storefront-bff",
     "title": "Storefront BFF",
+    "team": "retail-tribe",
     "properties": {
       "type": "service",
       "lifecycle": "production",
@@ -47,7 +47,6 @@
     },
     "relations": {
       "system": "storefront",
-      "owned_by": "retail-tribe",
       "subcomponent_of": "storefront-web",
       "consumes_apis": ["catalog-graphql"]
     }
@@ -72,7 +71,6 @@
     },
     "relations": {
       "system": "storefront",
-      "owned_by": "retail-tribe",
       "provides_apis": ["catalog-graphql"],
       "uses": ["catalog-db"],
       "uses_libraries": ["acme-commons"]
@@ -82,6 +80,7 @@
     "blueprint": "service",
     "identifier": "checkout-service",
     "title": "Checkout Service",
+    "team": "retail-tribe",
     "properties": {
       "type": "service",
       "lifecycle": "production",
@@ -98,7 +97,6 @@
     },
     "relations": {
       "system": "storefront",
-      "owned_by": "retail-tribe",
       "depends_on": ["catalog-service"],
       "provides_apis": ["checkout-rest", "order-events"],
       "consumes_apis": ["payments-grpc"],
@@ -110,6 +108,7 @@
     "blueprint": "service",
     "identifier": "live-cart-gateway",
     "title": "Live Cart Gateway",
+    "team": "retail-tribe",
     "properties": {
       "type": "service",
       "lifecycle": "experimental",
@@ -120,7 +119,6 @@
     },
     "relations": {
       "system": "storefront",
-      "owned_by": "retail-tribe",
       "depends_on": ["checkout-service"],
       "provides_apis": ["live-cart"],
       "uses": ["session-cache"]
@@ -149,7 +147,6 @@
     },
     "relations": {
       "system": "payments",
-      "owned_by": "payments-squad",
       "provides_apis": ["payments-grpc"],
       "consumes_apis": ["acquirer-rest"],
       "uses": ["payments-db"],
@@ -160,6 +157,7 @@
     "blueprint": "service",
     "identifier": "ledger-worker",
     "title": "Ledger Worker",
+    "team": "payments-squad",
     "properties": {
       "type": "job",
       "lifecycle": "production",
@@ -174,7 +172,6 @@
     },
     "relations": {
       "system": "payments",
-      "owned_by": "payments-squad",
       "uses": ["payments-db", "ledger-log"],
       "consumes_apis": ["order-events"]
     }
@@ -183,6 +180,7 @@
     "blueprint": "service",
     "identifier": "settlement-pipeline",
     "title": "Settlement Pipeline",
+    "team": "payments-squad",
     "properties": {
       "type": "data-pipeline",
       "lifecycle": "sunsetting",
@@ -195,7 +193,6 @@
     },
     "relations": {
       "system": "payments",
-      "owned_by": "payments-squad",
       "uses": ["payments-db", "settlement-warehouse"]
     }
   },
@@ -203,6 +200,7 @@
     "blueprint": "service",
     "identifier": "legacy-invoicing",
     "title": "Legacy Invoicing",
+    "team": "payments-squad",
     "properties": {
       "type": "service",
       "lifecycle": "deprecated",
@@ -215,7 +213,6 @@
     },
     "relations": {
       "system": "invoicing",
-      "owned_by": "payments-squad",
       "uses": ["orders-db"]
     }
   },
@@ -223,6 +220,7 @@
     "blueprint": "service",
     "identifier": "toadie",
     "title": "Toadie",
+    "team": "platform-tribe",
     "properties": {
       "type": "website",
       "lifecycle": "experimental",
@@ -238,7 +236,6 @@
     },
     "relations": {
       "system": "developer-portal",
-      "owned_by": "platform-tribe",
       "uses": ["portal-db"]
     }
   }

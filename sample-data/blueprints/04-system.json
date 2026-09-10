@@ -1,7 +1,7 @@
 {
   "identifier": "system",
   "title": "System",
-  "description": "A set of services, APIs and resources that together deliver one product or capability — the unit whose criticality and support mode are agreed with the business. Backstage kind: System (domain → spec.domain, owned_by → spec.owner; criticality/support_mode/exposure/hosting_model → the labels of the same name).",
+  "description": "A set of services, APIs and resources that together deliver one product or capability — the unit whose criticality and support mode are agreed with the business. Backstage kind: System (domain → spec.domain, the team field → spec.owner; criticality/support_mode/exposure/hosting_model → the labels of the same name).",
   "icon": "Box",
   "hierarchyRelation": "domain",
   "schema": {
@@ -72,12 +72,10 @@
       "target": "domain",
       "required": false,
       "many": false
-    },
-    "owned_by": {
-      "title": "Owned by",
-      "target": "team",
-      "required": true,
-      "many": false
     }
+  },
+  "ownership": {
+    "type": "Direct",
+    "title": "Owned by"
   }
 }

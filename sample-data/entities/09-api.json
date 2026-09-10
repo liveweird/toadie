@@ -4,6 +4,7 @@
     "identifier": "catalog-graphql",
     "title": "Catalog GraphQL API",
     "icon": "Link",
+    "team": "retail-tribe",
     "properties": {
       "type": "graphql",
       "lifecycle": "production",
@@ -12,12 +13,13 @@
       "hosting_model": "public-cloud",
       "docs": "https://docs.example.com/apis/catalog-graphql"
     },
-    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+    "relations": { "system": "storefront" }
   },
   {
     "blueprint": "api",
     "identifier": "checkout-rest",
     "title": "Checkout REST API",
+    "team": "retail-tribe",
     "properties": {
       "type": "openapi",
       "lifecycle": "production",
@@ -29,12 +31,13 @@
         { "title": "API portal", "url": "https://api.example.com/docs/checkout" }
       ]
     },
-    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+    "relations": { "system": "storefront" }
   },
   {
     "blueprint": "api",
     "identifier": "live-cart",
     "title": "Live Cart socket",
+    "team": "retail-tribe",
     "properties": {
       "type": "web-sockets",
       "lifecycle": "experimental",
@@ -42,12 +45,13 @@
       "exposure": "public",
       "hosting_model": "public-cloud"
     },
-    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+    "relations": { "system": "storefront" }
   },
   {
     "blueprint": "api",
     "identifier": "order-events",
     "title": "Order events stream",
+    "team": "retail-tribe",
     "properties": {
       "type": "asyncapi",
       "lifecycle": "experimental",
@@ -55,12 +59,13 @@
       "exposure": "internal",
       "hosting_model": "on-premise"
     },
-    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+    "relations": { "system": "storefront" }
   },
   {
     "blueprint": "api",
     "identifier": "payments-grpc",
     "title": "Payments gRPC API",
+    "team": "payments-squad",
     "properties": {
       "type": "grpc",
       "lifecycle": "production",
@@ -69,12 +74,13 @@
       "hosting_model": "on-premise",
       "docs": "https://docs.example.com/apis/payments-grpc"
     },
-    "relations": { "system": "payments", "owned_by": "payments-squad" }
+    "relations": { "system": "payments" }
   },
   {
     "blueprint": "api",
     "identifier": "acquirer-rest",
     "title": "Acquirer REST API (third party)",
+    "team": "payments-squad",
     "properties": {
       "type": "openapi",
       "lifecycle": "production",
@@ -82,6 +88,6 @@
       "exposure": "partner",
       "external": true
     },
-    "relations": { "system": "acquirer", "owned_by": "payments-squad" }
+    "relations": { "system": "acquirer" }
   }
 ]

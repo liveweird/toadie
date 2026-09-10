@@ -135,16 +135,17 @@ one of the seven kinds or is a documented Port-only extra), speaking the V22-see
 verbatim (the per-kind types, lifecycles, label value lists and tag categories ARE its enums),
 and shaped for an on-premise, virtualised Kubernetes platform: Java services, sync APIs and
 Kafka topics, SPAs and server-rendered UIs, jobs and pipelines, PostgreSQL/ClickHouse/Redis, a
-few environments, team ownership, links to CI/observability/docs/specs. Eleven Port-native
-blueprint JSON documents, one `POST /api/v1/blueprints` body each, numbered in **dependency
-order** — a relation `target` must already exist, so `workload` (→ service, environment,
-cluster) loads last. There is no import UI for blueprints (unlike the catalog above), so this
-ships its own loader.
+few environments, team ownership, links to CI/observability/docs/specs. The first two blueprints
+**extend** the two Port system blueprints seeded by migration V31 (`_team` and `_user`); the rest
+are created fresh. Eleven Port-native blueprint JSON documents, one action per file, numbered in
+**dependency order** — a relation `target` must already exist, so `workload` (→ service,
+environment, cluster) loads last. There is no import UI for blueprints (unlike the catalog above),
+so this ships its own loader.
 
 | # | identifier | Backstage kind | Parent in the hierarchy |
 |---|---|---|---|
-| 01 | `team` | Group (`team`/`org-unit`/`org-division`) | `parent` → team |
-| 02 | `user` | User | — (`member_of` is many) |
+| 01 | `_team` | Group (`team`/`org-unit`/`org-division`), system, extended | `parent` → team |
+| 02 | `_user` | User, system, extended | — (team relation, many) |
 | 03 | `domain` | Domain | `parent_domain` → domain |
 | 04 | `system` | System | `domain` |
 | 05 | `environment` | — (Port default) | — |
@@ -156,16 +157,21 @@ ships its own loader.
 | 11 | `workload` | — (Port's running service) | `service` |
 
 Pinned by `SampleBlueprintsTest` (`.claude/docs/testing.md`): the round trip, the
-registry-verbatim enums (read back through the API), the hierarchy map and the required
-`owned_by` wherever Backstage requires `spec.owner`. The earlier feature-showcase set (every
-property type/format/colour, v1.23.1–v1.25.2) was retired with v1.25.3 — the validator rule
-tables (`BlueprintValidationTest`, `EntityValidationTest`) carry that coverage.
+registry-verbatim enums (read back through the API), the hierarchy map (`_team → parent`,
+domain/system/service/library/api/resource → their hierarchy relations, workload → service),
+and ownership — `ownership: {type: Direct}` on domain, system, service, library, api, resource,
+cluster; `ownership: {type: Inherited, path: service}` on workload — where the entity `team`
+field names an active `_team` entity (Direct) or is computed from the ownership path (Inherited).
+The earlier feature-showcase set (every property type/format/colour, v1.23.1–v1.25.2) was retired
+with v1.25.3 — the validator rule tables (`BlueprintValidationTest`, `EntityValidationTest`)
+carry that coverage.
 
 **Loading it** — `sample-data/blueprints/load.sh` (bash, needs `curl` + `jq`): logs in as the
-seed admin (override with `TOADIE_URL`/`TOADIE_EMAIL`/`TOADIE_PASSWORD`) and `POST`s each file
-in order, printing `created <identifier>` (`201`) or `exists, skipped: <identifier>` (`409` —
-re-runnable) per file, and exiting `1` on any other status with the problem detail. The token
-is never printed.
+seed admin (override with `TOADIE_URL`/`TOADIE_EMAIL`/`TOADIE_PASSWORD`) and processes each file
+in order, printing `extended _team`, `extended _user` (the system blueprints are PUT to extend
+them with the sample's shape, `204`) or `created <identifier>` (`201`) for the rest, or
+`exists, skipped: <identifier>` (`409` — re-runnable), exiting `1` on any other status with the
+problem detail. The token is never printed.
 
 ```bash
 sample-data/blueprints/load.sh
@@ -173,15 +179,17 @@ sample-data/blueprints/load.sh
 
 **Clearing it** — `sample-data/blueprints/load.sh --delete` removes the set in REVERSE
 dependency order (so a target is never deleted while an earlier blueprint still relates to
-it); a `409` means something outside the sample set still targets it — an entity, typically —
-and is reported rather than forced.
+it), keeping the system blueprints (`system, kept: _team`, `system, kept: _user`); a `409` means
+something outside the sample set still targets it — an entity, typically — and is reported rather
+than forced.
 
 ```bash
 sample-data/blueprints/load.sh --delete
 ```
 
-Like the catalog file above, the blueprint registry is deliberately **NOT seeded** — no
-migration inserts a blueprint, so a fresh environment's `/blueprints` page starts empty.
+The blueprint registry is deliberately **NOT seeded** — no migration inserts a blueprint except
+the two V31 system blueprints, which the sample only extends — so a fresh environment's
+`/blueprints` page starts with just `_team` and `_user`.
 
 ## Entities (Port)
 
@@ -201,8 +209,8 @@ already hold it.
 
 | # | blueprint | Entities |
 |---|---|---|
-| 01 | `team` | `platform-tribe` (org-division), `retail-tribe` (org-unit), `payments-squad`, `storefront-squad` (teams, under their tribes) |
-| 02 | `user` | `anna.kowalska` (two teams — a multi-element relation), `marek.nowak` |
+| 01 | `_team` | `platform-tribe` (org-division), `retail-tribe` (org-unit), `payments-squad`, `storefront-squad` (teams, under their tribes) |
+| 02 | `_user` | `anna.kowalska` (two teams via the `team` relation), `marek.nowak` (one team) |
 | 03 | `domain` | `commerce`, `payments` (sub-domain of commerce), `platform`, `shared-services`, `back-office` (`parent_domain` sent as an explicit `null`) |
 | 04 | `system` | `storefront`, `payments`, `acquirer` (external, no domain — a hierarchy root), `invoicing`, `developer-portal` |
 | 05 | `environment` | `production` (locked), `staging`, `test`, `development` |
@@ -216,9 +224,13 @@ already hold it.
 Across the set: every blueprint has entities, every property AND every relation of every
 blueprint is used at least once, every value of every `type` dictionary and of the shared
 `lifecycle` dictionary is used at least once (so the Type/Lifecycle pickers are all
-checkable), the entity-level `team` field appears both as a string and as an array, and every
-entity saves with ZERO findings. Pinned by `SampleEntitiesTest` (`.claude/docs/testing.md`),
-which also loads the blueprint set and asserts the file numbering is itself dependency-safe.
+checkable), every entity of a Direct-ownership blueprint carries a `team` naming a `_team`
+entity (as a string for single ownership, or an array for multiple), workloads carry no
+`team` field and read back their service's team, and every entity saves with ZERO findings.
+The entity list and graph accept a `team` filter, and the graph draws dashed ownership edges
+(relation id `$team`, `ownership: true`) to the `_team` node when it is among the shown
+blueprints. Pinned by `SampleEntitiesTest` (`.claude/docs/testing.md`), which also loads the
+blueprint set and asserts the file numbering is itself dependency-safe.
 
 **Loading it** — `sample-data/entities/load.sh` (needs `curl` + `jq`, same login idiom as the
 blueprints loader): logs in and `POST`s each entity in file order, printing
