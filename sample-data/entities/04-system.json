@@ -1,0 +1,80 @@
+[
+  {
+    "blueprint": "system",
+    "identifier": "storefront",
+    "title": "Storefront",
+    "icon": "Box",
+    "properties": {
+      "type": "product",
+      "criticality": "critical",
+      "support_mode": "24-7",
+      "exposure": "public",
+      "hosting_model": "public-cloud",
+      "external": false,
+      "docs": "https://docs.example.com/systems/storefront",
+      "kubernetes_id": "storefront",
+      "links": [
+        { "title": "Production storefront", "url": "https://shop.example.com" }
+      ]
+    },
+    "relations": { "domain": "commerce", "owned_by": "retail-tribe" }
+  },
+  {
+    "blueprint": "system",
+    "identifier": "payments",
+    "title": "Payments Platform",
+    "icon": "Box",
+    "properties": {
+      "type": "capability",
+      "criticality": "critical",
+      "support_mode": "24-7",
+      "exposure": "partner",
+      "hosting_model": "on-premise",
+      "kubernetes_id": "payments"
+    },
+    "relations": { "domain": "payments", "owned_by": "payments-squad" }
+  },
+  {
+    "blueprint": "system",
+    "identifier": "acquirer",
+    "title": "Acquirer (third party)",
+    "properties": {
+      "type": "capability",
+      "criticality": "critical",
+      "support_mode": "business-hours",
+      "exposure": "partner",
+      "external": true,
+      "links": [
+        { "title": "Acquirer status page", "url": "https://status.acquirer.example.com" }
+      ]
+    },
+    "relations": { "owned_by": "payments-squad" }
+  },
+  {
+    "blueprint": "system",
+    "identifier": "invoicing",
+    "title": "Invoicing",
+    "properties": {
+      "type": "capability",
+      "criticality": "non-critical",
+      "support_mode": "business-days",
+      "exposure": "internal",
+      "hosting_model": "on-premise"
+    },
+    "relations": { "domain": "back-office", "owned_by": "payments-squad" }
+  },
+  {
+    "blueprint": "system",
+    "identifier": "developer-portal",
+    "title": "Developer Portal",
+    "properties": {
+      "type": "product",
+      "criticality": "non-critical",
+      "support_mode": "best-effort",
+      "exposure": "internal",
+      "hosting_model": "on-premise",
+      "docs": "https://docs.example.com/systems/developer-portal"
+    },
+    "relations": { "domain": "platform", "owned_by": "platform-tribe" }
+  }
+]

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Loads (or, with --delete, removes) the sample blueprint set at sample-data/blueprints/*.json
-# against a running toadie instance, using the blueprint API — there is no import UI for
-# blueprints. Re-runnable: an already-loaded file is reported "exists, skipped", not an error.
+# Loads (or, with --delete, removes) the sample blueprint set at sample-data/blueprints/*.json —
+# the eleven-blueprint baseline ontology (.claude/docs/ontology.md) — against a running toadie
+# instance, using the blueprint API: there is no import UI for blueprints. Re-runnable: an
+# already-loaded file is reported "exists, skipped", not an error.
 #
 # Env:
 #   TOADIE_URL       default http://localhost:8081

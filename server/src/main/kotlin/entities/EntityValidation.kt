@@ -5,7 +5,6 @@ import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.blueprintJson
-import ch.nokillswit.blueprints.enumEntryMatchesArrayItemType
 import ch.nokillswit.blueprints.isAbsoluteUrl
 import ch.nokillswit.blueprints.jsonMatchesType
 import ch.nokillswit.blueprints.requireIdentifierGrammar
@@ -229,10 +228,13 @@ private fun arrayFindings(field: String, def: PropertyDefinition, value: JsonArr
 private fun arrayItemFindings(field: String, items: ArrayItems, value: JsonArray): List<EntityFinding> {
     val findings = mutableListOf<EntityFinding>()
     value.forEachIndexed { index, element ->
-        if (element !is JsonPrimitive || !enumEntryMatchesArrayItemType(items.type, element)) {
+        // One type check for every items.type (object elements included), then the primitive-only
+        // rules — enum membership and string formats — which only apply to string/number items.
+        if (!jsonMatchesType(items.type, element)) {
             findings += EntityFinding("TYPE_MISMATCH", field, "Array element $index does not match type ${items.type}")
             return@forEachIndexed
         }
+        if (element !is JsonPrimitive) return@forEachIndexed
         items.enum?.let { enum ->
             if (element.content !in enum.map { it.content }) {
                 findings += EntityFinding("ENUM_MISMATCH", field, "Array element $index must be one of the declared enum values")

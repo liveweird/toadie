@@ -1,0 +1,124 @@
+[
+  {
+    "blueprint": "workload",
+    "identifier": "storefront-web-production",
+    "title": "Storefront Web · production",
+    "icon": "Deployment",
+    "properties": {
+      "version": "4.12.0",
+      "replicas": 6,
+      "kubernetes_namespace": "storefront",
+      "health": "healthy",
+      "last_deployed": "2026-09-08T14:30:00Z",
+      "dashboard": "https://grafana.example.com/d/storefront-web?var-env=production",
+      "logs": "https://logs.example.com/app/storefront-web?env=production",
+      "links": [
+        { "title": "Rollout history", "url": "https://argocd.example.com/applications/storefront-web" }
+      ]
+    },
+    "relations": { "service": "storefront-web", "environment": "production", "cluster": "prod-cloud-k8s" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "catalog-service-production",
+    "title": "Catalog Service · production",
+    "properties": {
+      "version": "2.31.1",
+      "replicas": 4,
+      "kubernetes_namespace": "storefront",
+      "health": "healthy",
+      "last_deployed": "2026-09-05T09:10:00Z"
+    },
+    "relations": { "service": "catalog-service", "environment": "production", "cluster": "prod-cloud-k8s" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "checkout-service-production",
+    "title": "Checkout Service · production",
+    "properties": {
+      "version": "7.4.2",
+      "replicas": 4,
+      "kubernetes_namespace": "storefront",
+      "health": "healthy",
+      "last_deployed": "2026-09-09T16:45:00Z"
+    },
+    "relations": { "service": "checkout-service", "environment": "production", "cluster": "prod-cloud-k8s" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "checkout-service-staging",
+    "title": "Checkout Service · staging",
+    "properties": {
+      "version": "7.5.0-rc.1",
+      "replicas": 1,
+      "kubernetes_namespace": "storefront",
+      "health": "degraded",
+      "last_deployed": "2026-09-10T08:00:00Z"
+    },
+    "relations": { "service": "checkout-service", "environment": "staging", "cluster": "staging-k8s" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "live-cart-gateway-test",
+    "title": "Live Cart Gateway · test",
+    "properties": {
+      "version": "0.3.0",
+      "replicas": 1,
+      "kubernetes_namespace": "storefront",
+      "health": "unhealthy",
+      "last_deployed": "2026-09-10T11:20:00Z"
+    },
+    "relations": { "service": "live-cart-gateway", "environment": "test", "cluster": "test-k8s" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "payments-gateway-production",
+    "title": "Payments Gateway · production",
+    "properties": {
+      "version": "3.9.4",
+      "replicas": 3,
+      "kubernetes_namespace": "payments",
+      "health": "healthy",
+      "last_deployed": "2026-09-02T10:00:00Z",
+      "dashboard": "https://grafana.example.com/d/payments-gateway?var-env=production"
+    },
+    "relations": { "service": "payments-gateway", "environment": "production", "cluster": "prod-k8s" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "ledger-worker-production",
+    "title": "Ledger Worker · production",
+    "properties": {
+      "version": "1.14.0",
+      "replicas": 1,
+      "kubernetes_namespace": "payments",
+      "health": "healthy",
+      "last_deployed": "2026-08-28T07:30:00Z"
+    },
+    "relations": { "service": "ledger-worker", "environment": "production", "cluster": "prod-k8s" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "settlement-pipeline-production",
+    "title": "Settlement Pipeline · production",
+    "properties": {
+      "version": "0.9.7",
+      "health": "healthy",
+      "last_deployed": "2026-06-14T02:00:00Z"
+    },
+    "relations": { "service": "settlement-pipeline", "environment": "production" }
+  },
+  {
+    "blueprint": "workload",
+    "identifier": "toadie-production",
+    "title": "Toadie · production",
+    "properties": {
+      "version": "1.25.2",
+      "replicas": 1,
+      "kubernetes_namespace": "toadie",
+      "health": "healthy",
+      "last_deployed": "2026-09-10T21:18:00Z"
+    },
+    "relations": { "service": "toadie", "environment": "production", "cluster": "prod-k8s" }
+  }
+]

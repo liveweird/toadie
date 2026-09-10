@@ -1,0 +1,48 @@
+[
+  {
+    "blueprint": "environment",
+    "identifier": "production",
+    "title": "Production",
+    "icon": "Environment",
+    "properties": {
+      "type": "production",
+      "is_locked": true,
+      "datacenter": "dc-1",
+      "links": [
+        { "title": "Production overview", "url": "https://grafana.example.com/d/production" }
+      ]
+    },
+    "relations": {}
+  },
+  {
+    "blueprint": "environment",
+    "identifier": "staging",
+    "title": "Staging",
+    "properties": {
+      "type": "staging",
+      "is_locked": false,
+      "datacenter": "dc-1"
+    },
+    "relations": {}
+  },
+  {
+    "blueprint": "environment",
+    "identifier": "test",
+    "title": "Test",
+    "properties": {
+      "type": "test",
+      "datacenter": "dc-2"
+    },
+    "relations": {}
+  },
+  {
+    "blueprint": "environment",
+    "identifier": "development",
+    "title": "Development",
+    "properties": {
+      "type": "development",
+      "is_locked": false
+    },
+    "relations": {}
+  }
+]

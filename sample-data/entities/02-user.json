@@ -1,0 +1,24 @@
+[
+  {
+    "blueprint": "user",
+    "identifier": "anna.kowalska",
+    "title": "Anna Kowalska",
+    "properties": {
+      "email": "anna.kowalska@toadie.local",
+      "picture": "https://avatars.example.com/anna.kowalska.png",
+      "links": [
+        { "title": "GitHub", "url": "https://github.com/anna-kowalska" }
+      ]
+    },
+    "relations": { "member_of": ["platform-tribe", "payments-squad"] }
+  },
+  {
+    "blueprint": "user",
+    "identifier": "marek.nowak",
+    "title": "Marek Nowak",
+    "properties": {
+      "email": "marek.nowak@toadie.local"
+    },
+    "relations": { "member_of": ["retail-tribe"] }
+  }
+]

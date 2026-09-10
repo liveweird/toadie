@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.25.3",
+    date: "2026-09-10",
+    en: `**The baseline ontology is now the sample data.**
+
+- \`sample-data/blueprints/\` holds the eleven baseline blueprints (the feature-showcase set is retired), and \`sample-data/entities/\` a new 59-entity sample written against them — the same storefront/payments landscape as the catalog sample, as Port entities.
+- Fixed: an entity property typed as an array of objects (Port's \`links\`) rejected every element; objects are now accepted and only primitives are checked against enum and format rules.`,
+    pl: `**Bazowa ontologia jest teraz danymi przykładowymi.**
+
+- \`sample-data/blueprints/\` zawiera jedenaście bazowych blueprintów (zestaw pokazowy został wycofany), a \`sample-data/entities/\` nowy przykład 59 encji napisany pod nie — ten sam krajobraz sklepu/płatności co przykładowy katalog, jako encje Port.
+- Poprawka: właściwość encji typu tablica obiektów (\`links\` w Port) odrzucała każdy element; obiekty są teraz akceptowane, a tylko wartości proste sprawdzane są względem reguł enum i formatu.`,
+  },
+  {
     version: "1.25.2",
     date: "2026-09-10",
     en: `**Baseline ontology.**

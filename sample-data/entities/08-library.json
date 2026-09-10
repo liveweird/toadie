@@ -1,0 +1,38 @@
+[
+  {
+    "blueprint": "library",
+    "identifier": "acme-commons",
+    "title": "Acme Commons",
+    "icon": "Package",
+    "properties": {
+      "lifecycle": "production",
+      "languages": ["java"],
+      "artifact": "com.acme:commons",
+      "technology_status": "white-list",
+      "repository": "https://github.com/acme/commons",
+      "ci_pipeline": "https://ci.example.com/acme/commons"
+    },
+    "relations": { "owned_by": "platform-tribe" }
+  },
+  {
+    "blueprint": "library",
+    "identifier": "payments-sdk",
+    "title": "Payments SDK",
+    "icon": "Package",
+    "team": "payments-squad",
+    "properties": {
+      "lifecycle": "production",
+      "languages": ["java"],
+      "frameworks": ["spring-boot"],
+      "artifact": "com.acme.payments:payments-sdk",
+      "technology_status": "white-list",
+      "repository": "https://github.com/acme/payments-sdk",
+      "docs": "https://docs.example.com/libraries/payments-sdk",
+      "ci_pipeline": "https://ci.example.com/acme/payments-sdk",
+      "links": [
+        { "title": "Release notes", "url": "https://github.com/acme/payments-sdk/releases" }
+      ]
+    },
+    "relations": { "system": "payments", "owned_by": "payments-squad", "depends_on": ["acme-commons"] }
+  }
+]

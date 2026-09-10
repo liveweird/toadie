@@ -84,10 +84,10 @@ catalog**. To get something to look at, load [`sample-data/`](sample-data/README
 speaks only the seeded vocabulary, and carries four deliberately broken references so the
 Errors report and the Graph have something to show. The blueprint registry (`/blueprints`)
 starts empty too — load [`sample-data/blueprints/`](sample-data/README.md#blueprints-port)
-with `sample-data/blueprints/load.sh` for eight Port-native blueprints covering every
-property type, format, relation shape and ownership mode — or, for the model the real catalog
-is built on, [`sample-data/ontology/`](sample-data/README.md#baseline-ontology-port) with its
-own `load.sh` (the two sets are alternatives; see [`.claude/docs/ontology.md`](.claude/docs/ontology.md)).
+with `sample-data/blueprints/load.sh` for the eleven-blueprint baseline ontology the catalog is
+built on ([`.claude/docs/ontology.md`](.claude/docs/ontology.md)), then
+[`sample-data/entities/`](sample-data/README.md#entities-port) with its own `load.sh` for the
+same landscape as Port entities.
 
 ## Running on Kubernetes (local)
 
