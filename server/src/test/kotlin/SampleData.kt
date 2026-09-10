@@ -8,11 +8,10 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
 /**
- * Shared helpers for the numbered JSON sample sets under `sample-data/` — the blueprints
- * showcase (v1.23.1, [SampleBlueprintsTest]), the entities set (v1.24.1, [SampleEntitiesTest])
- * and the baseline ontology (v1.25.2, [SampleOntologyTest]) all read their fixtures this way.
- * Test cwd is `server/` (the Gradle test task's default working directory), so files are read
- * via `../sample-data/<dir>`.
+ * Shared helpers for the numbered JSON sample sets under `sample-data/` — the blueprint set
+ * (the baseline ontology, [SampleBlueprintsTest]) and its entity set ([SampleEntitiesTest]) both
+ * read their fixtures this way. Test cwd is `server/` (the Gradle test task's default working
+ * directory), so files are read via `../sample-data/<dir>`.
  */
 object SampleData {
     fun numberedFiles(dir: String): List<File> =

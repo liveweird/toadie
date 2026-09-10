@@ -1,14 +1,15 @@
 ### The baseline ontology (Port blueprints)
 
-**`sample-data/ontology/` is the eleven-blueprint model the platform catalog is built on** —
-distinct from `sample-data/blueprints/`, the feature *showcase* (every property type/format/colour,
-kept for `SampleBlueprintsTest`). The two sets share identifiers (`team`, `domain`, `service`,
-`environment`, `workload`) and are alternatives: load one or the other into a registry, never both.
+**`sample-data/blueprints/` is the eleven-blueprint model the platform catalog is built on**
+(the baseline ontology, v1.25.2; the sample set itself since v1.25.3, when it replaced the
+feature-showcase set), and `sample-data/entities/` is the same landscape as
+`sample-data/catalog-info.yaml` re-told as its entities — the two samples tell one story, which
+is what the Backstage round trip below is about.
 The design decisions, taken 2026-09-10: `service` + `library` rather than one `component` or a
 five-way split (a Port relation targets ONE blueprint, so every extra blueprint multiplies the
 dependency relations); the full runtime layer `environment` + `cluster` + `workload`; Kafka topics
-are `api` of type `asyncapi`; a minimal `user`. `SampleOntologyTest` pins everything below that is
-mechanical (`.claude/docs/testing.md`).
+are `api` of type `asyncapi`; a minimal `user`. `SampleBlueprintsTest` pins everything below that is
+mechanical, and `SampleEntitiesTest` proves the entity sample saves with zero findings (`.claude/docs/testing.md`).
 
 **Four constraints the set satisfies.** (1) Every blueprint maps to one of the seven Backstage
 kinds or is a documented Port-only extra an export drops — the round trip is the contract below.

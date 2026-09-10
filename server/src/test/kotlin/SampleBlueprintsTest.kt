@@ -3,82 +3,81 @@ package ch.nokillswit
 import ch.nokillswit.SampleData.asRequest
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
-import ch.nokillswit.blueprints.ENUM_COLORS
-import ch.nokillswit.blueprints.OBJECT_FORMATS
-import ch.nokillswit.blueprints.PROPERTY_TYPES
-import ch.nokillswit.blueprints.SPEC_VALUES
-import ch.nokillswit.blueprints.STRING_FORMATS
+import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.dictionaries.DictionaryEntryList
+import ch.nokillswit.labels.LabelList
+import ch.nokillswit.tags.TagCategoryList
+import ch.nokillswit.types.EntityTypesList
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
-import java.io.File
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Loads the numbered JSON files under `sample-data/blueprints` (the browsable Port-style set, v1.23.1) through the
- * real API in dependency order, proving every file is a valid `POST /api/v1/blueprints` body
- * under the EXACT validator ([ch.nokillswit.blueprints.validateBlueprintRequest] +
- * [ch.nokillswit.blueprints.validateProperty]) and that the stored/returned document round
- * trips byte-for-structure through [blueprintJson]. A second pass pins the "showcase" union
- * over the whole set — property types, string/object formats, specs, the 14 enum colours, both
- * ownership types, a self-relation, a `many` relation, a `required` relation, and enough
- * aggregations to cover both `calculationBy` modes — so the set can never silently lose a
- * feature it claims to demonstrate. The set is executable documentation for `sample-data/`.
+ * Executable documentation for `sample-data/blueprints/` — the eleven-blueprint baseline
+ * ontology the platform catalog is built on (`.claude/docs/ontology.md`, v1.25.2; the sample
+ * set since v1.25.3). Loads the numbered files through the real API in dependency order (every
+ * relation target must already exist), pins the `blueprintJson` round trip, and then pins the
+ * three contracts the set makes:
+ *
+ * 1. **Vocabulary**: every enum that mirrors a V22-seeded registry (the per-kind type
+ *    dictionaries, the lifecycles dictionary, the labels' closed value lists, the tag
+ *    categories) carries EXACTLY the registry's values, read back from the running app — so a
+ *    Backstage export is a copy and a registry edit that forgets the blueprint fails here.
+ * 2. **Hierarchy**: the `hierarchyRelation` of each blueprint is the one the doc names, forming
+ *    the org tree (team → team) and the architecture tree (domain → system → service/library/
+ *    api/resource → workload, cluster → environment).
+ * 3. **Backstage ownership**: every blueprint that maps to a Backstage kind requiring
+ *    `spec.owner` has `owned_by → team` required and single.
  *
  * Test cwd is `server/` (the Gradle test task's default working directory), so the fixture
- * files are read via `../sample-data/blueprints`. The set's identifiers (`team`, `domain`, …)
- * are plain, but the shared Testcontainers database is fine: this test removes every one of
- * them in `finally`; [SampleOntologyTest] mints five of the same identifiers but runs in the
- * same single-fork sequence and cleans up the same way.
+ * files are read via `../sample-data/blueprints`. The identifiers (`team`, `domain`, …) are
+ * plain, but the shared Testcontainers database is fine: this test removes every one of them
+ * in `finally`, and [SampleEntitiesTest] — which loads the same set — runs in the same
+ * single-fork sequence and cleans up the same way.
  */
 class SampleBlueprintsTest {
 
-    private fun blueprintFiles(): List<File> = SampleData.numberedFiles("blueprints")
-
-    private suspend fun HttpClient.postRaw(text: String): HttpResponse =
+    private suspend fun HttpClient.postRaw(text: String) =
         post("/api/v1/blueprints") {
             contentType(ContentType.Application.Json)
             setBody(text)
         }
 
     @Test
-    fun `the sample set loads in order and round-trips through the API`() = testApplication {
+    fun `the sample set loads in order and speaks the seeded vocabulary`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("bpsample", UserRole.ADMIN)
-        val files = blueprintFiles()
-        assertEquals(8, files.size, "expected the eight numbered sample files")
+        val files = SampleData.numberedFiles("blueprints")
+        assertEquals(EXPECTED_ORDER, files.map { it.name.substringAfter('-').removeSuffix(".json") })
 
         val identifiers = mutableListOf<String>()
-        val requests = mutableListOf<BlueprintRequest>()
+        val requests = mutableMapOf<String, BlueprintRequest>()
         try {
             files.forEach { file ->
                 val text = file.readText()
                 val request = blueprintJson.decodeFromString<BlueprintRequest>(text)
-                requests += request
+                requests[request.identifier] = request
                 identifiers += request.identifier
 
                 val create = admin.postRaw(text)
                 assertEquals(HttpStatusCode.Created, create.status, "POST ${file.name}: ${create.bodyAsText()}")
                 val created = create.body<BlueprintResponse>()
-                assertEquals(request.identifier, created.identifier, "${file.name} identifier mismatch")
-
-                val get = admin.get("/api/v1/blueprints/${created.id}")
-                assertEquals(HttpStatusCode.OK, get.status)
-                val reread = get.body<BlueprintResponse>()
-
+                val reread = admin.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>()
                 assertEquals(
                     SampleData.canonicalBlueprint(text),
                     Json.parseToJsonElement(blueprintJson.encodeToString(reread.asRequest())),
@@ -86,54 +85,132 @@ class SampleBlueprintsTest {
                 )
             }
 
-            assertShowcaseCoverage(requests)
+            assertHierarchy(requests)
+            assertBackstageOwnership(requests)
+            assertVocabulary(admin, requests)
         } finally {
             TestBlueprints.remove(*identifiers.toTypedArray())
         }
     }
 
-    /** Pins the union of Port features the set claims to demonstrate (`sample-data/README.md`'s table). */
-    private fun assertShowcaseCoverage(requests: List<BlueprintRequest>) {
-        val properties = requests.flatMap { it.schema.properties.values }
-
-        val types = properties.map { it.type }.toSet()
-        assertEquals(PROPERTY_TYPES, types, "every property type must appear at least once")
-
-        val stringFormats = properties.filter { it.type == "string" }.mapNotNull { it.format }.toSet()
-        assertEquals(STRING_FORMATS, stringFormats, "every string format must appear at least once")
-
-        val objectFormats = properties.filter { it.type == "object" }.mapNotNull { it.format }.toSet()
-        assertEquals(OBJECT_FORMATS, objectFormats, "the object labeled-url format must appear")
-
-        val specs = properties.mapNotNull { it.spec }.toSet()
-        assertEquals(SPEC_VALUES, specs, "every spec value must appear at least once")
-        assertTrue(properties.any { it.specAuthentication != null }, "specAuthentication must be used on the embedded-url property")
-
-        val colours = properties.flatMap { it.enumColors?.values.orEmpty() } +
-            requests.flatMap { it.calculationProperties.values }.flatMap { it.colors?.values.orEmpty() }
-        assertEquals(ENUM_COLORS, colours.toSet(), "all 14 enum colours must appear at least once")
-
-        val ownershipTypes = requests.mapNotNull { it.ownership?.type }.toSet()
-        assertEquals(setOf("Direct", "Inherited"), ownershipTypes, "both ownership types must appear")
-
-        val relations = requests.flatMap { req -> req.relations.values.map { req.identifier to it } }
-        assertTrue(relations.any { (owner, rel) -> rel.target == owner }, "a self-relation must appear (service.depends_on)")
-        assertTrue(relations.any { (_, rel) -> rel.many }, "a many relation must appear")
-        assertTrue(relations.any { (_, rel) -> rel.required }, "a required relation must appear")
-
-        val aggregations = requests.flatMap { it.aggregationProperties.values }
-        assertTrue(aggregations.size >= 5, "at least 5 aggregations must appear across the set")
-        val calculationByModes = aggregations.map { it.calculationSpec.calculationBy }.toSet()
-        assertEquals(setOf("entities", "property"), calculationByModes, "both calculationBy modes must appear")
-
-        val hierarchical = requests.filter { it.hierarchyRelation != null }
-        assertTrue(hierarchical.isNotEmpty(), "at least one sample blueprint must set hierarchyRelation")
-        hierarchical.forEach { req ->
-            val relation = req.relations[req.hierarchyRelation]
-            assertTrue(
-                relation != null && !relation.many,
-                "${req.identifier}'s hierarchyRelation must name one of its own relations with many == false",
-            )
+    private fun assertHierarchy(requests: Map<String, BlueprintRequest>) {
+        assertEquals(EXPECTED_HIERARCHY, requests.mapValues { it.value.hierarchyRelation })
+        EXPECTED_HIERARCHY.forEach { (blueprint, relation) ->
+            if (relation == null) return@forEach
+            val definition = assertNotNull(requests.getValue(blueprint).relations[relation], "$blueprint.$relation")
+            assertTrue(!definition.many, "$blueprint's hierarchy relation must be single")
+            assertEquals(EXPECTED_PARENT.getValue(blueprint), definition.target, "$blueprint's parent blueprint")
         }
+    }
+
+    private fun assertBackstageOwnership(requests: Map<String, BlueprintRequest>) {
+        OWNER_REQUIRED.forEach { blueprint ->
+            val owner = assertNotNull(requests.getValue(blueprint).relations["owned_by"], "$blueprint.owned_by")
+            assertEquals("team", owner.target)
+            assertTrue(owner.required && !owner.many, "$blueprint.owned_by must be required and single")
+        }
+        assertNull(requests.getValue("workload").relations["owned_by"], "workload inherits ownership")
+        assertEquals("Inherited", requests.getValue("workload").ownership?.type)
+        assertEquals("service", requests.getValue("workload").ownership?.path)
+    }
+
+    private suspend fun assertVocabulary(admin: HttpClient, requests: Map<String, BlueprintRequest>) {
+        val types = admin.get("/api/v1/entity-types").body<EntityTypesList>().items.associate { it.kind to it.types.toSet() }
+        val lifecycles = admin.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items.map { it.value }.toSet()
+        val labels = admin.get("/api/v1/labels").body<LabelList>().items.associate { it.key to it.values.toSet() }
+        val tags = admin.get("/api/v1/tag-categories").body<TagCategoryList>().items.associate { it.name to it.tags.toSet() }
+
+        fun enumOf(blueprint: String, property: String): Set<String> {
+            val definition = assertNotNull(requests.getValue(blueprint).schema.properties[property], "$blueprint.$property")
+            val enum = definition.enum ?: definition.items?.enum
+            return assertNotNull(enum, "$blueprint.$property must be an enum").map { it.content }.toSet()
+        }
+
+        // Per-kind type dictionaries: the blueprint's `type` enum IS the kind's dictionary
+        // (service = Component minus `library`, which is its own blueprint).
+        assertEquals(types.getValue("Group"), enumOf("team", "type"))
+        assertEquals(types.getValue("Domain"), enumOf("domain", "type"))
+        assertEquals(types.getValue("System"), enumOf("system", "type"))
+        assertEquals(types.getValue("Component") - "library", enumOf("service", "type"))
+        assertTrue("library" in types.getValue("Component"), "the Component dictionary must still carry library")
+        assertEquals(types.getValue("API"), enumOf("api", "type"))
+        assertEquals(types.getValue("Resource"), enumOf("resource", "type"))
+
+        // The lifecycles dictionary on every Backstage kind that carries spec.lifecycle.
+        listOf("service", "library", "api").forEach { assertEquals(lifecycles, enumOf(it, "lifecycle"), "$it.lifecycle") }
+
+        // Labels: closed value lists, verbatim; the yes/no ones are booleans.
+        LABEL_PROPERTIES.forEach { (label, sites) ->
+            sites.forEach { (blueprint, property) ->
+                assertEquals(labels.getValue(label), enumOf(blueprint, property), "$blueprint.$property ↔ label $label")
+            }
+        }
+        listOf("gdpr", "pci_dss").forEach { property ->
+            assertEquals("boolean", requests.getValue("resource").schema.properties.getValue(property).type, "resource.$property")
+        }
+
+        // Tag categories: languages/frameworks as unique-item arrays, engine as the Database ∪ Events union.
+        listOf("service", "library").forEach { blueprint ->
+            assertEquals(tags.getValue("Languages"), enumOf(blueprint, "languages"), "$blueprint.languages")
+            assertEquals(tags.getValue("Framework"), enumOf(blueprint, "frameworks"), "$blueprint.frameworks")
+            listOf("languages", "frameworks").forEach { property ->
+                val definition: PropertyDefinition = requests.getValue(blueprint).schema.properties.getValue(property)
+                assertEquals("array", definition.type, "$blueprint.$property")
+                assertEquals(true, definition.uniqueItems, "$blueprint.$property must be uniqueItems")
+            }
+        }
+        assertEquals(tags.getValue("Database") + tags.getValue("Events"), enumOf("resource", "engine"))
+    }
+
+    private companion object {
+        val EXPECTED_ORDER = listOf(
+            "team", "user", "domain", "system", "environment", "cluster", "resource", "library", "api", "service", "workload",
+        )
+
+        /** blueprint → its `hierarchyRelation` (null = roots its own entities). */
+        val EXPECTED_HIERARCHY = mapOf(
+            "team" to "parent",
+            "user" to null,
+            "domain" to "parent_domain",
+            "system" to "domain",
+            "environment" to null,
+            "cluster" to "environment",
+            "resource" to "system",
+            "library" to "system",
+            "api" to "system",
+            "service" to "system",
+            "workload" to "service",
+        )
+
+        /** blueprint → the blueprint its hierarchy relation targets. */
+        val EXPECTED_PARENT = mapOf(
+            "team" to "team",
+            "domain" to "domain",
+            "system" to "domain",
+            "cluster" to "environment",
+            "resource" to "system",
+            "library" to "system",
+            "api" to "system",
+            "service" to "system",
+            "workload" to "service",
+        )
+
+        /** Backstage requires `spec.owner` on Domain, System, Component, API and Resource. */
+        val OWNER_REQUIRED = listOf("domain", "system", "service", "library", "api", "resource")
+
+        /** label key → the (blueprint, property) enums that mirror its closed value list. */
+        val LABEL_PROPERTIES = mapOf(
+            "criticality-tier" to listOf("system" to "criticality"),
+            "support-mode" to listOf("system" to "support_mode"),
+            "exposure" to listOf("system" to "exposure", "service" to "exposure", "api" to "exposure", "resource" to "exposure"),
+            "hosting-model" to listOf(
+                "system" to "hosting_model", "service" to "hosting_model", "api" to "hosting_model",
+                "resource" to "hosting_model", "cluster" to "hosting_model",
+            ),
+            "technology-status" to listOf(
+                "service" to "technology_status", "library" to "technology_status", "resource" to "technology_status",
+            ),
+            "data-classification" to listOf("resource" to "data_classification"),
+        )
     }
 }

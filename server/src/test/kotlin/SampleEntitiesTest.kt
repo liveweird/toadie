@@ -26,27 +26,29 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Loads the numbered JSON files under `sample-data/entities` (the browsable Port-style entity
- * set, v1.24.1) through the real API, in dependency order, on top of the sample blueprint set
- * ([SampleBlueprintsTest]'s eight files, loaded here too since entities cannot exist without
- * their blueprint). Proves every file is a valid `POST /api/v1/entities` body under the EXACT
- * validators ([ch.nokillswit.entities.validateEntityRequest] + [ch.nokillswit.entities.entityFindings])
- * — every created row and its re-GET carry NO findings — and that the stored document round
- * trips (`properties`/`relations` equal the request's, after [toDocument]'s null-drop). A second
- * pass pins the "showcase" union over the whole set (`sample-data/README.md`'s promise): every
- * property of every sample blueprint is set on at least one of its entities, every enum value of
- * every enum property is used at least once, the `team` field is used both as a string and as an
- * array, at least one relation value is a (multi-element) array, and at least one relation was
- * sent as an explicit JSON `null`. A third pass proves the file numbering is itself
- * dependency-safe: every relation target's blueprint file index is `<=` the referring entity's
- * file index.
+ * Loads the numbered JSON files under `sample-data/entities` — the sample landscape for the
+ * baseline ontology (v1.25.3): the e-commerce/payments catalog `sample-data/catalog-info.yaml`
+ * describes, re-told as Port entities of the eleven `sample-data/blueprints/` — through the real
+ * API, in dependency order, on top of the blueprint set ([SampleBlueprintsTest]'s files, loaded
+ * here too since entities cannot exist without their blueprint). Proves every file is a valid
+ * `POST /api/v1/entities` body under the EXACT validators
+ * ([ch.nokillswit.entities.validateEntityRequest] + [ch.nokillswit.entities.entityFindings]) —
+ * every created row and its re-GET carry NO findings — and that the stored document round trips
+ * (`properties`/`relations` equal the request's, after [toDocument]'s null-drop). A second pass
+ * pins the coverage the set promises (`sample-data/README.md`): every blueprint has entities,
+ * every property AND every relation of every blueprint is used at least once, every value of the
+ * registry-mirroring `type` and `lifecycle` enums is used at least once (the dictionary pickers
+ * are all checkable), the `team` field is used both as a string and as an array, at least one
+ * relation value is a multi-element array, and at least one relation was sent as an explicit
+ * JSON `null`. A third pass proves the file numbering is itself dependency-safe: every relation
+ * target's blueprint file index is `<=` the referring entity's file index.
  *
  * Test cwd is `server/` (the Gradle test task's default working directory), so fixtures are read
  * via `../sample-data/{blueprints,entities}`. The blueprint identifiers (`team`, `domain`, …) and
- * entity identifiers (`platform`, `commerce`, …) are plain, but the shared Testcontainers
+ * entity identifiers (`storefront`, `commerce`, …) are plain, but the shared Testcontainers
  * database is fine: this test removes every one of them in `finally` (entities first, then
- * blueprints — the plan's order); [SampleOntologyTest] mints five of the same blueprint identifiers
- * but runs in the same single-fork sequence and cleans up the same way.
+ * blueprints — the plan's order); [SampleBlueprintsTest] loads the same blueprint set but runs in
+ * the same single-fork sequence and cleans up the same way.
  */
 class SampleEntitiesTest {
 
@@ -71,9 +73,9 @@ class SampleEntitiesTest {
         val admin = seededClient("entsample", UserRole.ADMIN)
 
         val bpFiles = blueprintFiles()
-        assertEquals(8, bpFiles.size, "expected the eight numbered sample blueprint files")
+        assertEquals(11, bpFiles.size, "expected the eleven numbered sample blueprint files")
         val entFiles = entityFiles()
-        assertEquals(8, entFiles.size, "expected the eight numbered sample entity files")
+        assertEquals(11, entFiles.size, "expected the eleven numbered sample entity files")
 
         val blueprintIdentifiers = mutableListOf<String>()
         val entityIdentifiers = mutableListOf<String>()
@@ -155,7 +157,12 @@ class SampleEntitiesTest {
         }
     }
 
-    /** Pins the union of Port entity features the set claims to demonstrate (`sample-data/README.md`'s table). */
+    private companion object {
+        /** The enum properties whose values are a seeded dictionary, exercised in full. */
+        val DICTIONARY_PROPERTIES = setOf("type", "lifecycle")
+    }
+
+    /** Pins the coverage the set claims (`sample-data/README.md`'s table). */
     private fun assertShowcaseCoverage(
         requestsByFile: List<List<EntityRequest>>,
         blueprintRequestsByIdentifier: Map<String, BlueprintRequest>,
@@ -172,15 +179,31 @@ class SampleEntitiesTest {
                 "every property of blueprint '$blueprintId' must be set at least once across its sample entities",
             )
 
-            blueprintRequest.schema.properties.forEach { (propertyId, propertyDef) ->
-                val enum = propertyDef.enum ?: return@forEach
-                val usedValues = entityRequests.mapNotNull { (it.properties[propertyId] as? JsonPrimitive)?.content }.toSet()
-                assertEquals(
-                    enum.map { it.content }.toSet(),
-                    usedValues,
-                    "every enum value of '$blueprintId.$propertyId' must be used at least once",
-                )
+            val usedRelationKeys = entityRequests.flatMap { it.relations.keys }.toSet()
+            assertEquals(
+                blueprintRequest.relations.keys,
+                usedRelationKeys,
+                "every relation of blueprint '$blueprintId' must be used at least once across its sample entities",
+            )
+        }
+
+        // The registry-mirroring dictionaries (per-kind types, lifecycles) are exercised in full,
+        // so every value of the Type/Lifecycle pickers has a sample entity behind it. A dictionary
+        // is identified by (property id, enum values): `type` is one dictionary PER blueprint,
+        // while `lifecycle` is the one global list shared by service/library/api, so its values
+        // are counted across all three. Label/tag/Port-only enums only need the property set.
+        val dictionaries = blueprintRequestsByIdentifier.values
+            .flatMap { bp ->
+                bp.schema.properties.filterKeys { it in DICTIONARY_PROPERTIES }.map { (id, def) -> Triple(bp.identifier, id, def.enum) }
             }
+            .filter { it.third != null }
+            .groupBy({ (_, id, enum) -> id to enum!!.map { it.content }.toSet() }, { (blueprintId, _, _) -> blueprintId })
+        dictionaries.forEach { (dictionary, blueprintIds) ->
+            val (propertyId, expected) = dictionary
+            val used = blueprintIds.flatMap { requestsByBlueprint[it].orEmpty() }
+                .mapNotNull { (it.properties[propertyId] as? JsonPrimitive)?.content }
+                .toSet()
+            assertEquals(expected, used, "every value of '$propertyId' on ${blueprintIds.sorted()} must be used at least once")
         }
 
         val teamValues = allRequests.mapNotNull { it.team }

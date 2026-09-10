@@ -1,46 +1,51 @@
 [
   {
     "blueprint": "team",
-    "identifier": "platform",
-    "title": "Platform",
+    "identifier": "platform-tribe",
+    "title": "Platform Tribe",
     "icon": "Team",
     "properties": {
-      "slack_channel": "https://platform-eng.slack.com/channels/eng-platform",
-      "lead": "alice@toadie.dev",
-      "members": ["alice@toadie.dev", "bob@toadie.dev", "carol@toadie.dev"],
-      "timezone": "UTC",
-      "contact": "platform-team@toadie.dev",
-      "on_call_rotation": { "primary": "alice@toadie.dev", "secondary": "bob@toadie.dev" }
-    }
+      "type": "org-division",
+      "email": "platform-tribe@toadie.local",
+      "slack_channel": "https://acme.slack.com/archives/platform-tribe",
+      "links": [
+        { "title": "Tribe wiki", "url": "https://wiki.example.com/platform-tribe" }
+      ]
+    },
+    "relations": {}
   },
   {
     "blueprint": "team",
-    "identifier": "payments",
-    "title": "Payments",
+    "identifier": "retail-tribe",
+    "title": "Retail Tribe",
+    "icon": "Team",
     "properties": {
-      "lead": "dana@toadie.dev",
-      "members": ["dana@toadie.dev", "erin@toadie.dev"],
-      "timezone": "CET"
-    }
+      "type": "org-unit",
+      "email": "retail-tribe@toadie.local",
+      "slack_channel": "https://acme.slack.com/archives/retail-tribe"
+    },
+    "relations": {}
   },
   {
     "blueprint": "team",
-    "identifier": "search",
-    "title": "Search",
+    "identifier": "payments-squad",
+    "title": "Payments Squad",
+    "icon": "Team",
     "properties": {
-      "lead": "farid@toadie.dev",
-      "members": ["farid@toadie.dev", "grace@toadie.dev"],
-      "timezone": "EST"
-    }
+      "type": "team",
+      "email": "payments-squad@toadie.local",
+      "slack_channel": "https://acme.slack.com/archives/payments-squad"
+    },
+    "relations": { "parent": "platform-tribe" }
   },
   {
     "blueprint": "team",
-    "identifier": "growth",
-    "title": "Growth",
+    "identifier": "storefront-squad",
+    "title": "Storefront Squad",
     "properties": {
-      "lead": "hana@toadie.dev",
-      "members": ["hana@toadie.dev", "ivan@toadie.dev"],
-      "timezone": "PST"
-    }
+      "type": "team",
+      "email": "storefront-squad@toadie.local"
+    },
+    "relations": { "parent": "retail-tribe" }
   }
 ]

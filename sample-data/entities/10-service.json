@@ -1,0 +1,245 @@
+[
+  {
+    "blueprint": "service",
+    "identifier": "storefront-web",
+    "title": "Storefront Web",
+    "icon": "Microservice",
+    "team": "retail-tribe",
+    "properties": {
+      "type": "website",
+      "lifecycle": "production",
+      "languages": ["typescript", "javascript"],
+      "frameworks": ["react"],
+      "exposure": "public",
+      "hosting_model": "public-cloud",
+      "technology_status": "white-list",
+      "repository": "https://github.com/acme/storefront-web",
+      "docs": "https://docs.example.com/services/storefront-web",
+      "ci_pipeline": "https://ci.example.com/acme/storefront-web",
+      "dashboard": "https://grafana.example.com/d/storefront-web",
+      "logs": "https://logs.example.com/app/storefront-web",
+      "runbook": "https://runbooks.example.com/storefront-web",
+      "kubernetes_id": "storefront-web",
+      "links": [
+        { "title": "Production", "url": "https://shop.example.com" }
+      ]
+    },
+    "relations": {
+      "system": "storefront",
+      "owned_by": "retail-tribe",
+      "consumes_apis": ["catalog-graphql", "checkout-rest", "live-cart"],
+      "uses": ["session-cache"]
+    }
+  },
+  {
+    "blueprint": "service",
+    "identifier": "storefront-bff",
+    "title": "Storefront BFF",
+    "properties": {
+      "type": "service",
+      "lifecycle": "production",
+      "languages": ["typescript"],
+      "exposure": "internal",
+      "hosting_model": "public-cloud",
+      "technology_status": "white-list",
+      "repository": "https://github.com/acme/storefront-web",
+      "kubernetes_label_selector": "app.kubernetes.io/name=storefront-bff"
+    },
+    "relations": {
+      "system": "storefront",
+      "owned_by": "retail-tribe",
+      "subcomponent_of": "storefront-web",
+      "consumes_apis": ["catalog-graphql"]
+    }
+  },
+  {
+    "blueprint": "service",
+    "identifier": "catalog-service",
+    "title": "Catalog Service",
+    "team": "retail-tribe",
+    "properties": {
+      "type": "service",
+      "lifecycle": "production",
+      "languages": ["java"],
+      "frameworks": ["spring-boot"],
+      "exposure": "internal",
+      "hosting_model": "public-cloud",
+      "technology_status": "white-list",
+      "repository": "https://github.com/acme/catalog-service",
+      "ci_pipeline": "https://ci.example.com/acme/catalog-service",
+      "dashboard": "https://grafana.example.com/d/catalog-service",
+      "kubernetes_label_selector": "app=catalog-service"
+    },
+    "relations": {
+      "system": "storefront",
+      "owned_by": "retail-tribe",
+      "provides_apis": ["catalog-graphql"],
+      "uses": ["catalog-db"],
+      "uses_libraries": ["acme-commons"]
+    }
+  },
+  {
+    "blueprint": "service",
+    "identifier": "checkout-service",
+    "title": "Checkout Service",
+    "properties": {
+      "type": "service",
+      "lifecycle": "production",
+      "languages": ["java"],
+      "frameworks": ["quarkus"],
+      "exposure": "internal",
+      "hosting_model": "public-cloud",
+      "technology_status": "white-list",
+      "repository": "https://github.com/acme/checkout-service",
+      "ci_pipeline": "https://ci.example.com/acme/checkout-service",
+      "dashboard": "https://grafana.example.com/d/checkout-service",
+      "logs": "https://logs.example.com/app/checkout-service",
+      "runbook": "https://runbooks.example.com/checkout-service"
+    },
+    "relations": {
+      "system": "storefront",
+      "owned_by": "retail-tribe",
+      "depends_on": ["catalog-service"],
+      "provides_apis": ["checkout-rest", "order-events"],
+      "consumes_apis": ["payments-grpc"],
+      "uses": ["orders-db", "order-bus"],
+      "uses_libraries": ["payments-sdk", "acme-commons"]
+    }
+  },
+  {
+    "blueprint": "service",
+    "identifier": "live-cart-gateway",
+    "title": "Live Cart Gateway",
+    "properties": {
+      "type": "service",
+      "lifecycle": "experimental",
+      "languages": ["typescript"],
+      "exposure": "public",
+      "hosting_model": "public-cloud",
+      "repository": "https://github.com/acme/live-cart-gateway"
+    },
+    "relations": {
+      "system": "storefront",
+      "owned_by": "retail-tribe",
+      "depends_on": ["checkout-service"],
+      "provides_apis": ["live-cart"],
+      "uses": ["session-cache"]
+    }
+  },
+  {
+    "blueprint": "service",
+    "identifier": "payments-gateway",
+    "title": "Payments Gateway",
+    "team": ["platform-tribe", "payments-squad"],
+    "properties": {
+      "type": "service",
+      "lifecycle": "production",
+      "languages": ["java"],
+      "frameworks": ["spring-boot"],
+      "exposure": "partner",
+      "hosting_model": "on-premise",
+      "technology_status": "white-list",
+      "repository": "https://github.com/acme/payments-gateway",
+      "docs": "https://docs.example.com/services/payments-gateway",
+      "ci_pipeline": "https://ci.example.com/acme/payments-gateway",
+      "dashboard": "https://grafana.example.com/d/payments-gateway",
+      "logs": "https://logs.example.com/app/payments-gateway",
+      "runbook": "https://runbooks.example.com/payments-gateway",
+      "kubernetes_id": "payments-gateway"
+    },
+    "relations": {
+      "system": "payments",
+      "owned_by": "payments-squad",
+      "provides_apis": ["payments-grpc"],
+      "consumes_apis": ["acquirer-rest"],
+      "uses": ["payments-db"],
+      "uses_libraries": ["payments-sdk"]
+    }
+  },
+  {
+    "blueprint": "service",
+    "identifier": "ledger-worker",
+    "title": "Ledger Worker",
+    "properties": {
+      "type": "job",
+      "lifecycle": "production",
+      "languages": ["java"],
+      "frameworks": ["micronaut"],
+      "exposure": "internal",
+      "hosting_model": "on-premise",
+      "technology_status": "white-list",
+      "repository": "https://github.com/acme/ledger-worker",
+      "schedule": "*/5 * * * *",
+      "logs": "https://logs.example.com/app/ledger-worker"
+    },
+    "relations": {
+      "system": "payments",
+      "owned_by": "payments-squad",
+      "uses": ["payments-db", "ledger-log"],
+      "consumes_apis": ["order-events"]
+    }
+  },
+  {
+    "blueprint": "service",
+    "identifier": "settlement-pipeline",
+    "title": "Settlement Pipeline",
+    "properties": {
+      "type": "data-pipeline",
+      "lifecycle": "sunsetting",
+      "languages": ["python"],
+      "exposure": "internal",
+      "hosting_model": "on-premise",
+      "technology_status": "grey-zone",
+      "repository": "https://github.com/acme/settlement-pipeline",
+      "schedule": "0 2 * * *"
+    },
+    "relations": {
+      "system": "payments",
+      "owned_by": "payments-squad",
+      "uses": ["payments-db", "settlement-warehouse"]
+    }
+  },
+  {
+    "blueprint": "service",
+    "identifier": "legacy-invoicing",
+    "title": "Legacy Invoicing",
+    "properties": {
+      "type": "service",
+      "lifecycle": "deprecated",
+      "languages": ["php"],
+      "frameworks": ["symphony"],
+      "exposure": "internal",
+      "hosting_model": "on-premise",
+      "technology_status": "black-list",
+      "repository": "https://git.example.com/legacy/invoicing"
+    },
+    "relations": {
+      "system": "invoicing",
+      "owned_by": "payments-squad",
+      "uses": ["orders-db"]
+    }
+  },
+  {
+    "blueprint": "service",
+    "identifier": "toadie",
+    "title": "Toadie",
+    "properties": {
+      "type": "website",
+      "lifecycle": "experimental",
+      "languages": ["java", "typescript"],
+      "frameworks": ["react"],
+      "exposure": "internal",
+      "hosting_model": "on-premise",
+      "technology_status": "white-list",
+      "repository": "https://github.com/liveweird/toadie",
+      "docs": "https://github.com/liveweird/toadie/blob/master/README.md",
+      "ci_pipeline": "https://github.com/liveweird/toadie/actions",
+      "kubernetes_id": "toadie"
+    },
+    "relations": {
+      "system": "developer-portal",
+      "owned_by": "platform-tribe",
+      "uses": ["portal-db"]
+    }
+  }
+]

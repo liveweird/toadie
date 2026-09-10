@@ -1,0 +1,63 @@
+[
+  {
+    "blueprint": "cluster",
+    "identifier": "prod-k8s",
+    "title": "Production cluster (dc-1)",
+    "icon": "Cluster",
+    "properties": {
+      "distribution": "openshift",
+      "version": "1.31",
+      "hosting_model": "on-premise",
+      "virtualization": "vmware",
+      "datacenter": "dc-1",
+      "node_count": 24,
+      "dashboard": "https://grafana.example.com/d/prod-k8s",
+      "links": [
+        { "title": "OpenShift console", "url": "https://console.prod-k8s.example.com" }
+      ]
+    },
+    "relations": { "environment": "production", "owned_by": "platform-tribe" }
+  },
+  {
+    "blueprint": "cluster",
+    "identifier": "prod-cloud-k8s",
+    "title": "Production cluster (cloud)",
+    "properties": {
+      "distribution": "vanilla",
+      "version": "1.32",
+      "hosting_model": "public-cloud",
+      "virtualization": "kvm",
+      "node_count": 12,
+      "dashboard": "https://grafana.example.com/d/prod-cloud-k8s"
+    },
+    "relations": { "environment": "production", "owned_by": "platform-tribe" }
+  },
+  {
+    "blueprint": "cluster",
+    "identifier": "staging-k8s",
+    "title": "Staging cluster",
+    "properties": {
+      "distribution": "rancher",
+      "version": "1.31",
+      "hosting_model": "on-premise",
+      "virtualization": "vmware",
+      "datacenter": "dc-1",
+      "node_count": 6
+    },
+    "relations": { "environment": "staging", "owned_by": "platform-tribe" }
+  },
+  {
+    "blueprint": "cluster",
+    "identifier": "test-k8s",
+    "title": "Test cluster",
+    "properties": {
+      "distribution": "k3s",
+      "version": "1.30",
+      "hosting_model": "on-premise",
+      "virtualization": "proxmox",
+      "datacenter": "dc-2",
+      "node_count": 3
+    },
+    "relations": { "environment": "test" }
+  }
+]

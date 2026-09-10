@@ -128,41 +128,38 @@ registries.
 
 ## Blueprints (Port)
 
-`blueprints/` is a second, independent sample set for the **Blueprints** feature (v1.23.0 —
-Toadie's first step toward Port.io's data model, `.claude/docs/port-data-model.md`): eight
-Port-native blueprint JSON documents, one `POST /api/v1/blueprints` body each, numbered in
-**dependency order** — a relation or aggregation `target` must already exist (or be the
-blueprint itself), so `service.depends_on` can self-reference but `workload.service` needs
-`service` to have loaded first. There is no import UI for blueprints (unlike the catalog
-above), so this ships its own loader.
+`blueprints/` is the second sample set, for the **Blueprints** feature — and, since v1.25.3, it
+IS the **baseline ontology**: the eleven-blueprint model the platform catalog is built on,
+designed in `.claude/docs/ontology.md` (v1.25.2). Backstage-convertible (every blueprint maps to
+one of the seven kinds or is a documented Port-only extra), speaking the V22-seeded vocabulary
+verbatim (the per-kind types, lifecycles, label value lists and tag categories ARE its enums),
+and shaped for an on-premise, virtualised Kubernetes platform: Java services, sync APIs and
+Kafka topics, SPAs and server-rendered UIs, jobs and pipelines, PostgreSQL/ClickHouse/Redis, a
+few environments, team ownership, links to CI/observability/docs/specs. Eleven Port-native
+blueprint JSON documents, one `POST /api/v1/blueprints` body each, numbered in **dependency
+order** — a relation `target` must already exist, so `workload` (→ service, environment,
+cluster) loads last. There is no import UI for blueprints (unlike the catalog above), so this
+ships its own loader.
 
-| # | identifier | What it showcases |
-|---|---|---|
-| 01 | `team` | the stand-in for Port's `_team`: url/user/email string formats, an array of user with `uniqueItems`/`minItems`, an enum with colours, an object with `properties`/`additionalProperties` |
-| 02 | `domain` | a relation to `team`; `pattern`+`minLength`/`maxLength`; markdown; Direct ownership with a title |
-| 03 | `environment` | Port's default: yaml, ipv4/ipv6, a boolean default, three more enum colours (the last three land on `service.language`), `date_format: 24-hour` |
-| 04 | `service` | the showcase: all three `spec` values (`open-api`/`async-api`/`embedded-url` with `specAuthentication`), `labeled-url`, proto/timer/idn-email, every number bound, a `default` of every type, relations single/many/required/self (`depends_on` → itself), mirror properties including `domain.$title`, colorized string + boolean calculation properties, Direct ownership |
-| 05 | `workload` | Port's default: two required relations, `patternProperties`, a nested mirror path `service.domain.$title`, Inherited ownership |
-| 06 | `deployment` | `exclusiveMinimum`, a self-target `entities/count` aggregation (`sibling_deploys`) |
-| 07 | `incident` | the `team` string format, severity/status enums with colours, Inherited ownership |
-| 08 | `organization` | Port's default, the aggregation showcase: nine aggregations spanning `entities`/`property` calculation, every `func` (count/average/sum/min/max/median), a `query`, and a `pathFilter` |
+| # | identifier | Backstage kind | Parent in the hierarchy |
+|---|---|---|---|
+| 01 | `team` | Group (`team`/`org-unit`/`org-division`) | `parent` → team |
+| 02 | `user` | User | — (`member_of` is many) |
+| 03 | `domain` | Domain | `parent_domain` → domain |
+| 04 | `system` | System | `domain` |
+| 05 | `environment` | — (Port default) | — |
+| 06 | `cluster` | — (Port-only) | `environment` |
+| 07 | `resource` | Resource | `system` |
+| 08 | `library` | Component (`library`) | `system` |
+| 09 | `api` | API (`asyncapi` = a Kafka topic) | `system` |
+| 10 | `service` | Component (`service`/`website`/`job`/`data-pipeline`) | `system` |
+| 11 | `workload` | — (Port's running service) | `service` |
 
-Across the set: all 5 property types, all 12 string formats, `labeled-url`, all 3 `spec`s, all
-14 enum colours, every validation field (`pattern`/min·max length/items/numeric bounds),
-every `date_format` variant, every relation shape, both ownership modes, and every
-aggregation `func` — pinned by `SampleBlueprintsTest` (`.claude/docs/testing.md`).
-
-Five blueprints also carry a top-level `hierarchyRelation` (v1.25.1), naming one of their own
-`many: false` relations as the parent edge the Entity hierarchy page climbs: `domain` →
-`owned_by` (team), `service` → `domain`, `workload` → `service`, `deployment` → `workload`, and
-`incident` → `service` — so teams, domains, services, workloads, and deployments form one tree,
-with incidents nested under the services they affect. `team`, `environment`, and `organization`
-carry none, so they root their own entities rather than climbing further. Because `load.sh` only
-creates (a `409` on an existing identifier is skipped, not updated), an installation that already
-loaded an earlier set picks up these relations by `PUT`-ing each affected blueprint by hand, or —
-since a blueprint targeted by an entity or by another blueprint cannot be deleted — by deleting
-every sample entity, then the sample blueprints via `load.sh --delete`, then reloading with a
-fresh `load.sh`.
+Pinned by `SampleBlueprintsTest` (`.claude/docs/testing.md`): the round trip, the
+registry-verbatim enums (read back through the API), the hierarchy map and the required
+`owned_by` wherever Backstage requires `spec.owner`. The earlier feature-showcase set (every
+property type/format/colour, v1.23.1–v1.25.2) was retired with v1.25.3 — the validator rule
+tables (`BlueprintValidationTest`, `EntityValidationTest`) carry that coverage.
 
 **Loading it** — `sample-data/blueprints/load.sh` (bash, needs `curl` + `jq`): logs in as the
 seed admin (override with `TOADIE_URL`/`TOADIE_EMAIL`/`TOADIE_PASSWORD`) and `POST`s each file
@@ -175,9 +172,9 @@ sample-data/blueprints/load.sh
 ```
 
 **Clearing it** — `sample-data/blueprints/load.sh --delete` removes the set in REVERSE
-dependency order (so a target is never deleted while an earlier blueprint still relates or
-aggregates to it); a `409` means something outside the sample set still targets it, and is
-reported rather than forced.
+dependency order (so a target is never deleted while an earlier blueprint still relates to
+it); a `409` means something outside the sample set still targets it — an entity, typically —
+and is reported rather than forced.
 
 ```bash
 sample-data/blueprints/load.sh --delete
@@ -188,33 +185,40 @@ migration inserts a blueprint, so a fresh environment's `/blueprints` page start
 
 ## Entities (Port)
 
-`entities/` is a third sample set, for the **Entities** feature (v1.24.0 — Port migration
-phase 2, `.claude/docs/port-data-model.md`'s "Entities" section): eight numbered JSON files,
-one per sample blueprint, each a JSON ARRAY of `POST /api/v1/entities` bodies — 32 entities in
-all. Numbered in the same **dependency order** as the blueprints above (`01-team` →
-`02-domain` → `03-environment` → `04-service` → `05-workload` → `06-deployment` →
-`07-incident` → `08-organization`), because a relation value must already exist: `service`'s
-self-relation `depends_on` needs earlier services in its own file, `workload.service` needs
-`04-service.json` to have loaded first, and so on. **Load the blueprint set first** — an
-entity names its blueprint, and the registry must already hold it.
+`entities/` is the third sample set, for the **Entities** feature (Port migration phase 2,
+`.claude/docs/port-data-model.md`'s "Entities" section): eleven numbered JSON files, one per
+blueprint, each a JSON ARRAY of `POST /api/v1/entities` bodies — **59 entities** in all. It is
+the SAME landscape as `catalog-info.yaml` above, re-told in the baseline ontology (the two
+samples tell one story, which is what the Backstage round trip in `.claude/docs/ontology.md` is
+about), plus what the catalog could not say: a fifth domain (`back-office`, the one `auxiliary`
+Domain type), two more systems (`invoicing`, `developer-portal` — the `non-critical` tier and
+the remaining support modes), a shared library, four environments, four clusters, and nine
+production/staging/test workloads. Numbered in the blueprints' **dependency order**, because a
+relation value must already exist: `payments-sdk.depends_on` needs `acme-commons` earlier in
+its own file, `checkout-service.uses_libraries` needs `08-library.json` loaded first, and so
+on. **Load the blueprint set first** — an entity names its blueprint, and the registry must
+already hold it.
 
-| # | blueprint | Entities | What it showcases |
-|---|---|---|---|
-| 01 | `team` | `platform`, `payments`, `search`, `growth` | every `team` property, all 4 `timezone` colours |
-| 02 | `domain` | `commerce`, `payments`, `platform-ops`, `growth` | all 4 `criticality` values, a relation sent as explicit JSON `null` (`growth.owned_by`), the entity-level `team` field as both a string (`commerce`) and an array (`payments`) |
-| 03 | `environment` | `prod`, `staging`, `dev` | all 3 `type`/`region` values, ipv4/ipv6 literals, yaml text |
-| 04 | `service` | `catalog-service`, `pricing-service`, `checkout-service`, `search-service`, `notification-service` | every property (all 5 `language` values, all 4 `tier` values, every string format incl. `labeled-url`/`proto`/`timer`/`idn-email`), a self-relation many-array (`checkout-service.depends_on`) |
-| 05 | `workload` | 6 workloads across the 5 services and 3 environments | all 3 `health` values |
-| 06 | `deployment` | 5 deployments | all 4 `status` values |
-| 07 | `incident` | 4 incidents | all 4 `severity` and all 3 `status` values |
-| 08 | `organization` | `toadie-sample` | many relations to every domain and every team |
+| # | blueprint | Entities |
+|---|---|---|
+| 01 | `team` | `platform-tribe` (org-division), `retail-tribe` (org-unit), `payments-squad`, `storefront-squad` (teams, under their tribes) |
+| 02 | `user` | `anna.kowalska` (two teams — a multi-element relation), `marek.nowak` |
+| 03 | `domain` | `commerce`, `payments` (sub-domain of commerce), `platform`, `shared-services`, `back-office` (`parent_domain` sent as an explicit `null`) |
+| 04 | `system` | `storefront`, `payments`, `acquirer` (external, no domain — a hierarchy root), `invoicing`, `developer-portal` |
+| 05 | `environment` | `production` (locked), `staging`, `test`, `development` |
+| 06 | `cluster` | `prod-k8s` (OpenShift on VMware), `prod-cloud-k8s`, `staging-k8s` (Rancher), `test-k8s` (k3s on Proxmox) |
+| 07 | `resource` | `catalog-db`, `orders-db`, `payments-db`, `order-bus` (Kafka, on `prod-k8s`), `ledger-log`, `settlement-warehouse` (ClickHouse), `session-cache` (Redis), `portal-db` |
+| 08 | `library` | `acme-commons` (no system — a root), `payments-sdk` (depends on it) |
+| 09 | `api` | `catalog-graphql`, `checkout-rest` (inline OpenAPI), `live-cart` (web-sockets), `order-events` (inline AsyncAPI — the Kafka topic), `payments-grpc`, `acquirer-rest` (external) |
+| 10 | `service` | `storefront-web`, `storefront-bff` (a subcomponent), `catalog-service`, `checkout-service`, `live-cart-gateway`, `payments-gateway`, `ledger-worker` (job, cron), `settlement-pipeline` (data-pipeline, sunsetting), `legacy-invoicing` (deprecated, black-listed), `toadie` |
+| 11 | `workload` | the production workloads of six services, `checkout-service` on staging (degraded), `live-cart-gateway` on test (unhealthy), `settlement-pipeline` off-cluster |
 
-Across the set: every property of every sample blueprint is set at least once with a value
-valid for its type/format, every enum value of every enum property is used at least once, the
-entity-level `team` field appears both as a string and as an array (and absent elsewhere),
-and at least one relation is a multi-element array. Pinned by `SampleEntitiesTest`
-(`.claude/docs/testing.md`), which also loads the blueprint set and asserts the file
-numbering is itself dependency-safe.
+Across the set: every blueprint has entities, every property AND every relation of every
+blueprint is used at least once, every value of every `type` dictionary and of the shared
+`lifecycle` dictionary is used at least once (so the Type/Lifecycle pickers are all
+checkable), the entity-level `team` field appears both as a string and as an array, and every
+entity saves with ZERO findings. Pinned by `SampleEntitiesTest` (`.claude/docs/testing.md`),
+which also loads the blueprint set and asserts the file numbering is itself dependency-safe.
 
 **Loading it** — `sample-data/entities/load.sh` (needs `curl` + `jq`, same login idiom as the
 blueprints loader): logs in and `POST`s each entity in file order, printing
@@ -236,42 +240,3 @@ sample-data/entities/load.sh --delete
 ```
 
 Like the blueprint registry, entities are deliberately **NOT seeded**.
-
-## Baseline ontology (Port)
-
-`ontology/` is the fourth set, and a different kind of thing: not a feature showcase but the
-**eleven-blueprint model the platform catalog is built on** (v1.25.2), designed in
-`.claude/docs/ontology.md` — Backstage-convertible (every blueprint maps to one of the seven kinds
-or is a documented Port-only extra), speaking the V22-seeded vocabulary verbatim (the per-kind
-types, lifecycles, label value lists and tag categories ARE its enums), and shaped for an
-on-premise, virtualised Kubernetes platform: Java services, sync APIs and Kafka topics, SPAs and
-server-rendered UIs, jobs and pipelines, PostgreSQL/ClickHouse/Redis, a few environments, team
-ownership, links to CI/observability/docs/specs.
-
-| # | identifier | Backstage kind | Parent in the hierarchy |
-|---|---|---|---|
-| 01 | `team` | Group (`team`/`org-unit`/`org-division`) | `parent` → team |
-| 02 | `user` | User | — (`member_of` is many) |
-| 03 | `domain` | Domain | `parent_domain` → domain |
-| 04 | `system` | System | `domain` |
-| 05 | `environment` | — (Port default) | — |
-| 06 | `cluster` | — (Port-only) | `environment` |
-| 07 | `resource` | Resource | `system` |
-| 08 | `library` | Component (`library`) | `system` |
-| 09 | `api` | API (`asyncapi` = a Kafka topic) | `system` |
-| 10 | `service` | Component (`service`/`website`/`job`/`data-pipeline`) | `system` |
-| 11 | `workload` | — (Port's running service) | `service` |
-
-**It is an ALTERNATIVE to `blueprints/`, not an addition**: the two sets share the identifiers
-`team`, `domain`, `service`, `environment` and `workload`, so loading one on top of the other
-skips those five as `exists` and leaves a mixed registry. Load it into an empty blueprint
-registry (a fresh stack, or after `sample-data/entities/load.sh --delete` and
-`sample-data/blueprints/load.sh --delete`). There is no entity set for it yet — the entities are
-the real catalog, entered by hand or by a future feed. Pinned by `SampleOntologyTest`
-(`.claude/docs/testing.md`): the round trip, the registry-verbatim enums, the hierarchy map and
-the required `owned_by` wherever Backstage requires `spec.owner`.
-
-```bash
-sample-data/ontology/load.sh            # eleven blueprints, dependency order
-sample-data/ontology/load.sh --delete   # reverse order; a 409 means something still targets it
-```

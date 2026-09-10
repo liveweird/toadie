@@ -387,6 +387,18 @@ class EntityValidationTest {
     }
 
     @Test
+    fun `array of objects accepts objects and rejects primitives`() {
+        // Port's `links`-style arrays: items.type object. The element check is the shared
+        // jsonMatchesType, so an object element passes and a primitive one is TYPE_MISMATCH —
+        // the enum/format rules only ever apply to primitive items.
+        val def = definition(properties = mapOf("p" to PropertyDefinition(type = "array", items = ArrayItems(type = "object"))))
+        val ok = doc(buildJsonObject { putJsonArray("p") { add(buildJsonObject { put("title", "Docs"); put("url", "https://a.test") }) } })
+        assertTrue(entityFindings(ok, def, neverExists).isEmpty())
+        val badItem = doc(buildJsonObject { putJsonArray("p") { add("https://a.test") } })
+        assertEquals(listOf("TYPE_MISMATCH"), entityFindings(badItem, def, neverExists).map { it.code })
+    }
+
+    @Test
     fun `object labeled-url shape`() {
         val def = definition(properties = mapOf("p" to PropertyDefinition(type = "object", format = "labeled-url")))
         val ok = doc(buildJsonObject { put("p", buildJsonObject { put("url", "https://a.test"); put("displayText", "A") }) })

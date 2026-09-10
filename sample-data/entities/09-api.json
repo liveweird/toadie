@@ -1,0 +1,87 @@
+[
+  {
+    "blueprint": "api",
+    "identifier": "catalog-graphql",
+    "title": "Catalog GraphQL API",
+    "icon": "Link",
+    "properties": {
+      "type": "graphql",
+      "lifecycle": "production",
+      "definition_url": "https://github.com/acme/catalog-service/blob/main/schema.graphql",
+      "exposure": "internal",
+      "hosting_model": "public-cloud",
+      "docs": "https://docs.example.com/apis/catalog-graphql"
+    },
+    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+  },
+  {
+    "blueprint": "api",
+    "identifier": "checkout-rest",
+    "title": "Checkout REST API",
+    "properties": {
+      "type": "openapi",
+      "lifecycle": "production",
+      "definition": "openapi: 3.0.3\ninfo:\n  title: Checkout REST API\n  version: 2.0.0\npaths:\n  /carts/{cartId}/checkout:\n    post:\n      summary: Convert a cart into an order\n      responses:\n        \"201\":\n          description: Order created\n        \"409\":\n          description: Cart already checked out\n",
+      "exposure": "public",
+      "hosting_model": "public-cloud",
+      "external": false,
+      "links": [
+        { "title": "API portal", "url": "https://api.example.com/docs/checkout" }
+      ]
+    },
+    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+  },
+  {
+    "blueprint": "api",
+    "identifier": "live-cart",
+    "title": "Live Cart socket",
+    "properties": {
+      "type": "web-sockets",
+      "lifecycle": "experimental",
+      "definition_url": "https://github.com/acme/live-cart-gateway/blob/main/PROTOCOL.md",
+      "exposure": "public",
+      "hosting_model": "public-cloud"
+    },
+    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+  },
+  {
+    "blueprint": "api",
+    "identifier": "order-events",
+    "title": "Order events stream",
+    "properties": {
+      "type": "asyncapi",
+      "lifecycle": "experimental",
+      "definition": "asyncapi: 2.6.0\ninfo:\n  title: Order events\n  version: 0.4.0\nchannels:\n  order.placed:\n    subscribe:\n      message:\n        payload:\n          type: object\n          properties:\n            orderId: { type: string }\n            totalMinor: { type: integer }\n",
+      "exposure": "internal",
+      "hosting_model": "on-premise"
+    },
+    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+  },
+  {
+    "blueprint": "api",
+    "identifier": "payments-grpc",
+    "title": "Payments gRPC API",
+    "properties": {
+      "type": "grpc",
+      "lifecycle": "production",
+      "definition_url": "https://github.com/acme/payments-gateway/blob/main/proto/payments/v1/payments.proto",
+      "exposure": "partner",
+      "hosting_model": "on-premise",
+      "docs": "https://docs.example.com/apis/payments-grpc"
+    },
+    "relations": { "system": "payments", "owned_by": "payments-squad" }
+  },
+  {
+    "blueprint": "api",
+    "identifier": "acquirer-rest",
+    "title": "Acquirer REST API (third party)",
+    "properties": {
+      "type": "openapi",
+      "lifecycle": "production",
+      "definition_url": "https://developer.acquirer.example.com/openapi.yaml",
+      "exposure": "partner",
+      "external": true
+    },
+    "relations": { "system": "acquirer", "owned_by": "payments-squad" }
+  }
+]

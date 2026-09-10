@@ -163,18 +163,21 @@ feature-local `explicitNulls = false` serializer is what keeps the wire Port-nat
 unknown-key 400, the cascade rename observed on the dependent's GET, and the delete 409 naming
 the referrers; `BlueprintConcurrencyTest` is the tag-category held-lock proof for a relation
 create racing its target's delete (one wins, never a dangling target). `SampleBlueprintsTest`
-(v1.23.1) is executable documentation for `sample-data/blueprints/`: it POSTs the eight
-numbered sample files in dependency order, pins their `blueprintJson` round trip, and asserts
-the showcase union (every property type/format/spec, all 14 enum colours, both ownership
-modes, a self-relation, and both aggregation `calculationBy` modes) so the set can never
-silently lose a feature it claims to demonstrate.
-`SampleOntologyTest` (v1.25.2) is the same for `sample-data/ontology/` — the baseline model in
-`.claude/docs/ontology.md`: it POSTs the eleven files in dependency order, pins the round trip,
-and asserts the three contracts the set makes — every registry-mirroring enum (per-kind types,
-lifecycles, label value lists, tag categories) equals the seeded registry read back through the
-API, the `hierarchyRelation` map forms exactly the org and architecture trees, and `owned_by →
-team` is required and single wherever Backstage requires `spec.owner`. The two sets share
-identifiers, so each test removes its own in `finally`, as before.
+is executable documentation for `sample-data/blueprints/` — since v1.25.3 the baseline
+ontology in `.claude/docs/ontology.md`: it POSTs the eleven files in dependency order, pins the
+round trip, and asserts the three contracts the set makes — every registry-mirroring enum
+(per-kind types, lifecycles, label value lists, tag categories) equals the seeded registry read
+back through the API, the `hierarchyRelation` map forms exactly the org and architecture trees,
+and `owned_by → team` is required and single wherever Backstage requires `spec.owner`. (The
+v1.23.1–v1.25.2 feature-showcase set and its union assertions were retired with it; the pure
+rule tables carry that coverage.) `SampleEntitiesTest` is the same for `sample-data/entities/`
+(59 entities, the catalog landscape re-told in the baseline ontology): it loads the blueprint
+set, POSTs every entity in dependency order asserting `201` with ZERO findings on create and
+re-GET, pins the `properties`/`relations` round trip, and asserts the coverage the README
+promises — every property and relation of every blueprint used, every `type`/`lifecycle`
+dictionary value used (a dictionary being one `(property, enum)` pair, so `lifecycle` counts
+across service/library/api), both `team` shapes, a multi-element relation array, an explicit
+`null` relation, and dependency-safe file numbering.
 
 **Entities (V28).** `EntityValidationTest` is the pure rule table (one case per row in
 `.claude/docs/port-data-model.md` "Entities", no database); `EntityReferencesTest` pins the
