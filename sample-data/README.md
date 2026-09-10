@@ -236,3 +236,42 @@ sample-data/entities/load.sh --delete
 ```
 
 Like the blueprint registry, entities are deliberately **NOT seeded**.
+
+## Baseline ontology (Port)
+
+`ontology/` is the fourth set, and a different kind of thing: not a feature showcase but the
+**eleven-blueprint model the platform catalog is built on** (v1.25.2), designed in
+`.claude/docs/ontology.md` — Backstage-convertible (every blueprint maps to one of the seven kinds
+or is a documented Port-only extra), speaking the V22-seeded vocabulary verbatim (the per-kind
+types, lifecycles, label value lists and tag categories ARE its enums), and shaped for an
+on-premise, virtualised Kubernetes platform: Java services, sync APIs and Kafka topics, SPAs and
+server-rendered UIs, jobs and pipelines, PostgreSQL/ClickHouse/Redis, a few environments, team
+ownership, links to CI/observability/docs/specs.
+
+| # | identifier | Backstage kind | Parent in the hierarchy |
+|---|---|---|---|
+| 01 | `team` | Group (`team`/`org-unit`/`org-division`) | `parent` → team |
+| 02 | `user` | User | — (`member_of` is many) |
+| 03 | `domain` | Domain | `parent_domain` → domain |
+| 04 | `system` | System | `domain` |
+| 05 | `environment` | — (Port default) | — |
+| 06 | `cluster` | — (Port-only) | `environment` |
+| 07 | `resource` | Resource | `system` |
+| 08 | `library` | Component (`library`) | `system` |
+| 09 | `api` | API (`asyncapi` = a Kafka topic) | `system` |
+| 10 | `service` | Component (`service`/`website`/`job`/`data-pipeline`) | `system` |
+| 11 | `workload` | — (Port's running service) | `service` |
+
+**It is an ALTERNATIVE to `blueprints/`, not an addition**: the two sets share the identifiers
+`team`, `domain`, `service`, `environment` and `workload`, so loading one on top of the other
+skips those five as `exists` and leaves a mixed registry. Load it into an empty blueprint
+registry (a fresh stack, or after `sample-data/entities/load.sh --delete` and
+`sample-data/blueprints/load.sh --delete`). There is no entity set for it yet — the entities are
+the real catalog, entered by hand or by a future feed. Pinned by `SampleOntologyTest`
+(`.claude/docs/testing.md`): the round trip, the registry-verbatim enums, the hierarchy map and
+the required `owned_by` wherever Backstage requires `spec.owner`.
+
+```bash
+sample-data/ontology/load.sh            # eleven blueprints, dependency order
+sample-data/ontology/load.sh --delete   # reverse order; a 409 means something still targets it
+```

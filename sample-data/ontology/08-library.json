@@ -1,0 +1,95 @@
+{
+  "identifier": "library",
+  "title": "Library",
+  "description": "Shared code that is built and published but never deployed on its own — an SDK, a starter, a shared module. Backstage kind: Component of type library (system → spec.system, owned_by → spec.owner, depends_on → spec.dependsOn, languages/frameworks → tags, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref).",
+  "icon": "Package",
+  "hierarchyRelation": "system",
+  "schema": {
+    "properties": {
+      "lifecycle": {
+        "type": "string",
+        "title": "Lifecycle",
+        "description": "The lifecycles dictionary.",
+        "enum": ["experimental", "production", "sunsetting", "deprecated"],
+        "enumColors": { "experimental": "paleBlue", "production": "green", "sunsetting": "orange", "deprecated": "red" }
+      },
+      "languages": {
+        "type": "array",
+        "title": "Languages",
+        "description": "The Languages tag category.",
+        "items": {
+          "type": "string",
+          "enum": ["java", "python", "php", "javascript", "typescript"],
+          "enumColors": { "java": "gold", "python": "blue", "php": "purple", "javascript": "yellow", "typescript": "paleBlue" }
+        },
+        "uniqueItems": true
+      },
+      "frameworks": {
+        "type": "array",
+        "title": "Frameworks",
+        "description": "The Framework tag category.",
+        "items": {
+          "type": "string",
+          "enum": ["spring-boot", "quarkus", "micronaut", "symphony", "react", "vue"],
+          "enumColors": { "spring-boot": "green", "quarkus": "blue", "micronaut": "turquoise", "symphony": "purple", "react": "paleBlue", "vue": "gold" }
+        },
+        "uniqueItems": true
+      },
+      "artifact": {
+        "type": "string",
+        "title": "Artifact",
+        "description": "How consumers pull it in: Maven coordinates, an npm package name."
+      },
+      "technology_status": {
+        "type": "string",
+        "title": "Technology status",
+        "description": "Label technology-status.",
+        "enum": ["white-list", "black-list", "grey-zone"],
+        "enumColors": { "white-list": "green", "black-list": "red", "grey-zone": "yellow" }
+      },
+      "repository": {
+        "type": "string",
+        "title": "Repository",
+        "description": "backstage.io/source-location.",
+        "format": "url"
+      },
+      "docs": {
+        "type": "string",
+        "title": "Documentation",
+        "description": "backstage.io/techdocs-ref.",
+        "format": "url"
+      },
+      "ci_pipeline": {
+        "type": "string",
+        "title": "CI pipeline",
+        "format": "url"
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "items": { "type": "object" }
+      }
+    },
+    "required": ["lifecycle", "repository"]
+  },
+  "relations": {
+    "system": {
+      "title": "System",
+      "target": "system",
+      "required": false,
+      "many": false
+    },
+    "owned_by": {
+      "title": "Owned by",
+      "target": "team",
+      "required": true,
+      "many": false
+    },
+    "depends_on": {
+      "title": "Depends on",
+      "target": "library",
+      "required": false,
+      "many": true
+    }
+  }
+}

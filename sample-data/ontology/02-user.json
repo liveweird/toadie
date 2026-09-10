@@ -1,0 +1,36 @@
+{
+  "identifier": "user",
+  "title": "User",
+  "description": "A person. Kept minimal on purpose: teams own things, people belong to teams. Backstage kind: User (member_of → spec.memberOf, email → spec.profile.email).",
+  "icon": "User",
+  "schema": {
+    "properties": {
+      "email": {
+        "type": "string",
+        "title": "Email",
+        "format": "email"
+      },
+      "picture": {
+        "type": "string",
+        "title": "Picture",
+        "description": "Avatar URL (Backstage spec.profile.picture).",
+        "format": "url"
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "description": "Further links ({title, url}) — Backstage metadata.links.",
+        "items": { "type": "object" }
+      }
+    },
+    "required": ["email"]
+  },
+  "relations": {
+    "member_of": {
+      "title": "Member of",
+      "target": "team",
+      "required": false,
+      "many": true
+    }
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "identifier": "resource",
+  "title": "Resource",
+  "description": "A logical piece of infrastructure a service depends on — a database, a cache, a broker, a transaction log. One entity across environments (orders-db, not orders-db-staging). Backstage kind: Resource (type → spec.type, engine → a tag, system → spec.system, owned_by → spec.owner, depends_on → spec.dependsOn, hosted_on Port-only — dropped with the cluster it points at; data_classification/gdpr/pci_dss/hosting_model/exposure/technology_status → the labels of the same name).",
+  "icon": "Database",
+  "hierarchyRelation": "system",
+  "schema": {
+    "properties": {
+      "type": {
+        "type": "string",
+        "title": "Type",
+        "description": "The Resource type dictionary.",
+        "enum": ["database", "cache", "message-broker", "analytical-database", "transaction-log"],
+        "enumColors": { "database": "blue", "cache": "red", "message-broker": "orange", "analytical-database": "yellow", "transaction-log": "darkGray" }
+      },
+      "engine": {
+        "type": "string",
+        "title": "Engine",
+        "description": "The product behind it (the Database and Events tag categories).",
+        "enum": ["postgresql", "redis", "clickhouse", "kafka", "rabbitmq", "activemq"],
+        "enumColors": { "postgresql": "blue", "redis": "red", "clickhouse": "yellow", "kafka": "darkGray", "rabbitmq": "orange", "activemq": "lightGray" }
+      },
+      "data_classification": {
+        "type": "string",
+        "title": "Data classification",
+        "description": "Label data-classification.",
+        "enum": ["public", "internal", "confidential", "restricted"],
+        "enumColors": { "public": "green", "internal": "blue", "confidential": "orange", "restricted": "red" }
+      },
+      "gdpr": {
+        "type": "boolean",
+        "title": "Holds personal data (GDPR)",
+        "description": "Label gdpr (yes/no)."
+      },
+      "pci_dss": {
+        "type": "boolean",
+        "title": "In PCI DSS scope",
+        "description": "Label pci-dss (yes/no)."
+      },
+      "hosting_model": {
+        "type": "string",
+        "title": "Hosting model",
+        "description": "Label hosting-model.",
+        "enum": ["public-cloud", "on-premise"],
+        "enumColors": { "public-cloud": "blue", "on-premise": "bronze" }
+      },
+      "exposure": {
+        "type": "string",
+        "title": "Exposure",
+        "description": "Label exposure.",
+        "enum": ["public", "partner", "internal"],
+        "enumColors": { "public": "red", "partner": "orange", "internal": "green" }
+      },
+      "technology_status": {
+        "type": "string",
+        "title": "Technology status",
+        "description": "Label technology-status: the technology radar verdict.",
+        "enum": ["white-list", "black-list", "grey-zone"],
+        "enumColors": { "white-list": "green", "black-list": "red", "grey-zone": "yellow" }
+      },
+      "kubernetes_id": {
+        "type": "string",
+        "title": "Kubernetes id",
+        "description": "backstage.io/kubernetes-id, for cluster-hosted resources."
+      },
+      "kubernetes_label_selector": {
+        "type": "string",
+        "title": "Kubernetes label selector",
+        "description": "backstage.io/kubernetes-label-selector."
+      },
+      "dashboard": {
+        "type": "string",
+        "title": "Dashboard",
+        "format": "url"
+      },
+      "runbook": {
+        "type": "string",
+        "title": "Runbook",
+        "format": "url"
+      },
+      "docs": {
+        "type": "string",
+        "title": "Documentation",
+        "description": "Backstage backstage.io/techdocs-ref.",
+        "format": "url"
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "items": { "type": "object" }
+      }
+    },
+    "required": ["type"]
+  },
+  "relations": {
+    "system": {
+      "title": "System",
+      "target": "system",
+      "required": false,
+      "many": false
+    },
+    "owned_by": {
+      "title": "Owned by",
+      "target": "team",
+      "required": true,
+      "many": false
+    },
+    "depends_on": {
+      "title": "Depends on",
+      "description": "Other resources this one needs (a replica's primary, a log's broker).",
+      "target": "resource",
+      "required": false,
+      "many": true
+    },
+    "hosted_on": {
+      "title": "Hosted on",
+      "description": "The cluster it is scheduled on — cluster-hosted resources only.",
+      "target": "cluster",
+      "required": false,
+      "many": false
+    }
+  }
+}

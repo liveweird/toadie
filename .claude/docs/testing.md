@@ -168,6 +168,13 @@ numbered sample files in dependency order, pins their `blueprintJson` round trip
 the showcase union (every property type/format/spec, all 14 enum colours, both ownership
 modes, a self-relation, and both aggregation `calculationBy` modes) so the set can never
 silently lose a feature it claims to demonstrate.
+`SampleOntologyTest` (v1.25.2) is the same for `sample-data/ontology/` — the baseline model in
+`.claude/docs/ontology.md`: it POSTs the eleven files in dependency order, pins the round trip,
+and asserts the three contracts the set makes — every registry-mirroring enum (per-kind types,
+lifecycles, label value lists, tag categories) equals the seeded registry read back through the
+API, the `hierarchyRelation` map forms exactly the org and architecture trees, and `owned_by →
+team` is required and single wherever Backstage requires `spec.owner`. The two sets share
+identifiers, so each test removes its own in `finally`, as before.
 
 **Entities (V28).** `EntityValidationTest` is the pure rule table (one case per row in
 `.claude/docs/port-data-model.md` "Entities", no database); `EntityReferencesTest` pins the

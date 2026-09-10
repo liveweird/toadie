@@ -1,0 +1,75 @@
+{
+  "identifier": "workload",
+  "title": "Workload",
+  "description": "One service running in one environment — what actually carries a version and a replica count. Port's default \"running service\"; Backstage has no counterpart, so an export drops it. Ownership is inherited from the service. Best fed by CI/CD or a cluster exporter; by hand, record the production workloads of the services that matter.",
+  "icon": "Deployment",
+  "hierarchyRelation": "service",
+  "schema": {
+    "properties": {
+      "version": {
+        "type": "string",
+        "title": "Version",
+        "description": "The deployed version or image tag."
+      },
+      "replicas": {
+        "type": "number",
+        "title": "Replicas",
+        "minimum": 0
+      },
+      "kubernetes_namespace": {
+        "type": "string",
+        "title": "Kubernetes namespace"
+      },
+      "health": {
+        "type": "string",
+        "title": "Health",
+        "enum": ["healthy", "degraded", "unhealthy"],
+        "enumColors": { "healthy": "green", "degraded": "yellow", "unhealthy": "red" }
+      },
+      "last_deployed": {
+        "type": "string",
+        "title": "Last deployed",
+        "format": "date-time"
+      },
+      "dashboard": {
+        "type": "string",
+        "title": "Dashboard",
+        "format": "url"
+      },
+      "logs": {
+        "type": "string",
+        "title": "Logs",
+        "format": "url"
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "items": { "type": "object" }
+      }
+    }
+  },
+  "relations": {
+    "service": {
+      "title": "Runs service",
+      "target": "service",
+      "required": true,
+      "many": false
+    },
+    "environment": {
+      "title": "Runs in",
+      "target": "environment",
+      "required": true,
+      "many": false
+    },
+    "cluster": {
+      "title": "Runs on",
+      "target": "cluster",
+      "required": false,
+      "many": false
+    }
+  },
+  "ownership": {
+    "type": "Inherited",
+    "path": "service"
+  }
+}

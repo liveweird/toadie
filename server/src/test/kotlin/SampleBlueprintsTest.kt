@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.SampleData.asRequest
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.ENUM_COLORS
@@ -40,30 +41,12 @@ import kotlin.test.assertTrue
  * Test cwd is `server/` (the Gradle test task's default working directory), so the fixture
  * files are read via `../sample-data/blueprints`. The set's identifiers (`team`, `domain`, …)
  * are plain, but the shared Testcontainers database is fine: this test removes every one of
- * them in `finally`, and no other test mints those exact identifiers.
+ * them in `finally`; [SampleOntologyTest] mints five of the same identifiers but runs in the
+ * same single-fork sequence and cleans up the same way.
  */
 class SampleBlueprintsTest {
 
     private fun blueprintFiles(): List<File> = SampleData.numberedFiles("blueprints")
-
-    /** [text] decoded as a request and re-encoded via [blueprintJson] — the canonical, defaults-expanded form. */
-    private fun canonicalForm(text: String): kotlinx.serialization.json.JsonElement =
-        Json.parseToJsonElement(blueprintJson.encodeToString(blueprintJson.decodeFromString<BlueprintRequest>(text)))
-
-    /** The definitional fields of a stored [BlueprintResponse], reshaped back into a [BlueprintRequest]. */
-    private fun BlueprintResponse.asRequest() = BlueprintRequest(
-        identifier = identifier,
-        title = title,
-        description = description,
-        icon = icon,
-        schema = schema,
-        relations = relations,
-        mirrorProperties = mirrorProperties,
-        calculationProperties = calculationProperties,
-        aggregationProperties = aggregationProperties,
-        ownership = ownership,
-        hierarchyRelation = hierarchyRelation,
-    )
 
     private suspend fun HttpClient.postRaw(text: String): HttpResponse =
         post("/api/v1/blueprints") {
@@ -97,7 +80,7 @@ class SampleBlueprintsTest {
                 val reread = get.body<BlueprintResponse>()
 
                 assertEquals(
-                    canonicalForm(text),
+                    SampleData.canonicalBlueprint(text),
                     Json.parseToJsonElement(blueprintJson.encodeToString(reread.asRequest())),
                     "${file.name} did not round-trip byte-for-structure through blueprintJson",
                 )

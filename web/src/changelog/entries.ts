@@ -17,6 +17,16 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.25.2",
+    date: "2026-09-10",
+    en: `**Baseline ontology.**
+
+- A baseline set of eleven Port blueprints — team, user, domain, system, service, library, API, resource, environment, cluster, workload — designed as the model the catalog is built on: Backstage-convertible, speaking the seeded labels/tags/types/lifecycles, covering an on-premise Kubernetes platform. Loaded by hand with \`sample-data/ontology/load.sh\`.`,
+    pl: `**Bazowa ontologia.**
+
+- Bazowy zestaw jedenastu blueprintów Port — zespół, użytkownik, domena, system, serwis, biblioteka, API, zasób, środowisko, klaster, workload — zaprojektowany jako model, na którym budowany jest katalog: konwertowalny do Backstage, używający wgranych etykiet/tagów/typów/cykli życia, obejmujący platformę Kubernetes on-premise. Wczytywany ręcznie za pomocą \`sample-data/ontology/load.sh\`.`,
+  },
+  {
     version: "1.25.1",
     date: "2026-09-10",
     en: `**Sample blueprints carry hierarchy relations, so the sample entities form a tree on the Entity hierarchy page.**`,

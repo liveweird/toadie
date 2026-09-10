@@ -1,0 +1,83 @@
+{
+  "identifier": "system",
+  "title": "System",
+  "description": "A set of services, APIs and resources that together deliver one product or capability — the unit whose criticality and support mode are agreed with the business. Backstage kind: System (domain → spec.domain, owned_by → spec.owner; criticality/support_mode/exposure/hosting_model → the labels of the same name).",
+  "icon": "Box",
+  "hierarchyRelation": "domain",
+  "schema": {
+    "properties": {
+      "type": {
+        "type": "string",
+        "title": "Type",
+        "description": "The System type dictionary.",
+        "enum": ["product", "capability"],
+        "enumColors": { "product": "blue", "capability": "turquoise" }
+      },
+      "criticality": {
+        "type": "string",
+        "title": "Criticality",
+        "description": "Label criticality-tier.",
+        "enum": ["critical", "non-critical"],
+        "enumColors": { "critical": "red", "non-critical": "lightGray" }
+      },
+      "support_mode": {
+        "type": "string",
+        "title": "Support mode",
+        "description": "Label support-mode: when someone answers when it breaks.",
+        "enum": ["business-hours", "business-days", "best-effort", "24-7"],
+        "enumColors": { "business-hours": "lightGray", "business-days": "darkGray", "best-effort": "yellow", "24-7": "green" }
+      },
+      "exposure": {
+        "type": "string",
+        "title": "Exposure",
+        "description": "Label exposure: who can reach it.",
+        "enum": ["public", "partner", "internal"],
+        "enumColors": { "public": "red", "partner": "orange", "internal": "green" }
+      },
+      "hosting_model": {
+        "type": "string",
+        "title": "Hosting model",
+        "description": "Label hosting-model.",
+        "enum": ["public-cloud", "on-premise"],
+        "enumColors": { "public-cloud": "blue", "on-premise": "bronze" }
+      },
+      "external": {
+        "type": "boolean",
+        "title": "External",
+        "description": "A third party's system we depend on but do not run (Backstage namespace external).",
+        "default": false
+      },
+      "docs": {
+        "type": "string",
+        "title": "Documentation",
+        "description": "Backstage backstage.io/techdocs-ref.",
+        "format": "url"
+      },
+      "kubernetes_id": {
+        "type": "string",
+        "title": "Kubernetes id",
+        "description": "The value of the backstage.io/kubernetes-id label the system's workloads carry."
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "description": "Further links ({title, url}) — Backstage metadata.links.",
+        "items": { "type": "object" }
+      }
+    }
+  },
+  "relations": {
+    "domain": {
+      "title": "Domain",
+      "target": "domain",
+      "required": false,
+      "many": false
+    },
+    "owned_by": {
+      "title": "Owned by",
+      "target": "team",
+      "required": true,
+      "many": false
+    }
+  }
+}
