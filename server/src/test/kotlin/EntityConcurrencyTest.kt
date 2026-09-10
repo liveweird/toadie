@@ -4,9 +4,12 @@ import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.RelationDefinition
+import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
+import ch.nokillswit.entities.EntityInvalidProblem
 import ch.nokillswit.entities.EntityPageResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
+import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserRole
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -24,9 +27,12 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -50,6 +56,9 @@ class EntityConcurrencyTest {
 
     private fun entityRequest(blueprint: String, identifier: String) =
         EntityRequest(blueprint = blueprint, identifier = identifier, title = "T")
+
+    private fun teamEntity(identifier: String) =
+        EntityRequest(blueprint = SYSTEM_TEAM_BLUEPRINT, identifier = identifier, title = identifier)
 
     /**
      * A granted SHARE lock on `entities` lets ordinary reads pass but holds a writer's SHARE
@@ -252,6 +261,52 @@ class EntityConcurrencyTest {
         } finally {
             TestEntities.remove(targetEntId, referrerEntId)
             TestBlueprints.remove(targetBp, referrerBp)
+        }
+    }
+
+    @Test
+    fun `a _team delete racing a create naming that team never leaves a dangling team reference`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("ent-concurrent-team", UserRole.ADMIN)
+        val bpId = unique("bpc-owner")
+        val teamId = unique("teamc-target")
+        val entId = unique("entc-owner")
+        admin.postJson("/api/v1/blueprints", simpleBlueprint(bpId))
+        val team = admin.postJson("/api/v1/entities", teamEntity(teamId)).body<EntityResponse>()
+        try {
+            val ownerBody = entityRequest(bpId, entId).copy(team = JsonPrimitive(teamId))
+            val responses = raceBehindEntityBarrier(
+                { admin.postJson("/api/v1/entities", ownerBody) },
+                { admin.delete("/api/v1/entities/${team.id}") },
+            )
+            val createResponse = responses[0]
+            val deleteResponse = responses[1]
+            val createSucceeded = createResponse.status == HttpStatusCode.Created
+            val deleteSucceeded = deleteResponse.status == HttpStatusCode.NoContent
+            assertTrue(
+                createSucceeded != deleteSucceeded,
+                "exactly one contender must win: ${listOf(createResponse.status, deleteResponse.status)}",
+            )
+
+            if (createSucceeded) {
+                assertEquals(HttpStatusCode.Conflict, deleteResponse.status)
+                val problem = deleteResponse.body<ProblemDetail>()
+                assertTrue(problem.detail!!.contains("$bpId/$entId"))
+
+                // The create's winning row must never dangle: its own findings stay empty and its
+                // team still names an active `_team` entity.
+                val created = createResponse.body<EntityResponse>()
+                val reread = admin.get("/api/v1/entities/${created.id}").body<EntityResponse>()
+                assertTrue(reread.findings.isEmpty())
+                assertEquals(teamId, reread.team?.jsonPrimitive?.content)
+            } else {
+                assertEquals(HttpStatusCode.BadRequest, createResponse.status)
+                val problem = createResponse.body<EntityInvalidProblem>()
+                assertEquals(listOf("TEAM_TARGET_MISSING"), problem.findings.map { it.code })
+            }
+        } finally {
+            TestEntities.remove(entId, teamId)
+            TestBlueprints.remove(bpId)
         }
     }
 

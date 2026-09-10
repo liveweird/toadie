@@ -24,9 +24,10 @@ Where Port's documentation states no explicit rule, the assumption Toadie made i
   `many: false` relations, naming the entity hierarchy's parent link (phase 3, v1.25.0 — not a
   Port concept; see "Toadie extensions" below).
 - **Meta-properties** — attributes every entity carries automatically, `$`-prefixed:
-  `$identifier`, `$title`, `$team`, `$icon`, `$blueprint`, `$createdAt`, `$updatedAt`,
-  `$createdBy`, `$updatedBy`. The `$` prefix is reserved: no user-defined property or relation
-  identifier may start with it; a mirror-property path may END in one.
+  `$identifier`, `$title`, `$team` (the entity's computed or direct ownership, real since
+  v1.26.0), `$icon`, `$blueprint`, `$createdAt`, `$updatedAt`, `$createdBy`, `$updatedBy`. The
+  `$` prefix is reserved: no user-defined property or relation identifier may start with it; a
+  mirror-property path may END in one.
 
 ## The blueprint JSON
 
@@ -199,10 +200,14 @@ as text (1–10 000 chars, not parsed); `colors` values are the 14 colours.
 
 ## Ownership
 
-`{ "ownership": { "type": "Direct", "title": "Owning team" } }` — entities own a hidden relation
-to Port's `Team` blueprint (`$team`). `{ "type": "Inherited", "path": "service.owningTeam" }` —
-ownership comes from a related blueprint with Direct ownership; `path` is a dot-chain of
-relation identifiers (first must be this blueprint's). Absent = no ownership.
+`{ "ownership": { "type": "Direct", "title": "Owning team" } }` — entities MUST carry a `team`
+value (string or array) naming one or more ACTIVE entities of the `_team` system blueprint
+(v1.26.0, phase 4 — see "System blueprints" below). `{ "type": "Inherited", "path": "service.owningTeam" }` —
+ownership is computed at read time by walking the `path` over single-valued relations to a
+blueprint with Direct ownership; `path` is a dot-chain of relation identifiers (first must be
+this blueprint's), and the final `team` is never stored (the column stays NULL). Absent = no
+ownership constraint. **Ownership is informational only — it never gates permissions.** Any
+authenticated user may read/modify any entity regardless of its ownership.
 
 ## Entities (phase 2, v1.24.0)
 
@@ -230,7 +235,7 @@ Unset optionals are ABSENT, never `null` — the `blueprintJson` convention, reu
 | `identifier` | yes | Port pattern `^(?!\.{1,2}$)[\p{L}0-9@_.+:\\/='-]+$` — unicode letters plus `+`, `'`, `\`, WIDER than the blueprint charset; Port caps it at 1000, Toadie at **200 (assumption)**. Unique PER BLUEPRINT, case-insensitively (the partial-index convention); the same identifier may be reused across different blueprints. |
 | `title` | yes | ≤ 200 chars **(assumption)**; must not be blank. |
 | `icon` | no | ≤ 100 chars — a Port icon NAME, free string (the blueprint convention). |
-| `team` | no | `string \| string[]` (≤ 50 entries, each ≤ 100 chars **(assumption)**), stored and returned EXACTLY as sent, unvalidated — teams arrive with the users/teams phase. Absent when unset. |
+| `team` | no | `string \| string[]` (≤ 50 entries, each ≤ 100 chars **(assumption)**), stored and returned EXACTLY as sent. See "Ownership" above: the rule depends on the blueprint's `ownership` (Direct/absent → validated against `_team` entities; Inherited → server-computed at read time, never stored, supplied value rejected; see `entityFindings` table below). Absent when unset. |
 | `properties` | no | `{ <propertyId>: JSON value }`, keyed by the blueprint's declared property ids; defaults to empty. |
 | `relations` | no | `{ <relationId>: string \| string[] \| null }` — single vs many follows the blueprint relation's `many`; `null` means unset (never an error by itself). Defaults to empty. |
 
@@ -259,6 +264,9 @@ response carries (see "Lifecycle rules" below). `EntityFinding{code, field, mess
 | relation shape | `many: false` → string or null; `many: true` → array of distinct strings or null; else rejected | `RELATION_SHAPE` |
 | `required: true` relation | non-null and (arrays) non-empty, else rejected | `RELATION_REQUIRED` |
 | each relation target | `targetExists(targetBlueprint, targetIdentifier)` over ACTIVE entities of the relation's target blueprint, byte-exact (self allowed — Port allows self-relations) | `RELATION_TARGET_MISSING` |
+| `team` field | Direct/absent ownership: each value (if supplied) must name an ACTIVE `_team` entity, case-insensitive; Inherited ownership: stored value (`null`) is absent and server-computed at read time; a supplied write value is rejected | `TEAM_TARGET_MISSING` / `TEAM_NOT_ALLOWED` |
+| `properties.<id>` with `format: team` | each string/array-item value must name an ACTIVE `_team` entity, case-insensitive | `TEAM_TARGET_MISSING` |
+| `properties.<id>` with `format: user` | each string/array-item value must name an ACTIVE `_user` entity, case-insensitive (email or identifier) | `USER_TARGET_MISSING` |
 
 ### Not modeled in phase 2
 
@@ -287,7 +295,14 @@ response carries (see "Lifecycle rules" below). `EntityFinding{code, field, mess
   referrers as `blueprint/identifier` — the phase-1 blueprint-target idiom, one level down).
 - **Identifier rename cascades**: a PUT that changes `identifier` rewrites every OTHER active
   entity's `relations` naming the old identifier, in the same locked transaction (audited
-  `cascaded`/`renamedFrom`, the phase-1 shape).
+  `cascaded`/`renamedFrom`, the phase-1 shape). Additionally, renaming a `_team` or `_user`
+  entity cascades into the `team` column of every entity carrying a Direct/absent ownership,
+  and into every property value with `format: team|user` across all entities.
+- **Ownership targets cannot be deleted**: deleting a `_team` entity that is named by ANY
+  active entity's `team` field or `format: team` property, or deleting a `_user` entity named
+  by any `format: user` property, is `409` naming the referrers (the phase-1 blueprint-target
+  idiom, expressed as `blueprint/identifier` — the referrer's location — from all three
+  sources: `team` field, `format: team` properties, and `format: user` properties).
 
 ## Toadie extensions (not Port)
 
@@ -321,13 +336,29 @@ Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's ow
   node. Each node carries `findings` as a plain COUNT (not the detailed list `GET`/list return)
   of the same `entityFindings` computation — the stale marker, condensed for a graph face.
 
-## Default and system blueprints (not seeded by Toadie)
+  **Ownership edges** (v1.26.0, phase 4): when an entity carries a `team` value and that node
+  is shown in the graph, one edge is emitted per team value to the corresponding `_team|<id>`
+  node (if also shown). The edge carries `ownership: true, hierarchy: false`. A `_team` node
+  also matches a `team` filter (single value, case-insensitive), so a team-filtered graph
+  retains the team nodes to close ownership relations — **Inherited entities carry no stored
+  `team` and never match the team filter** (documented limitation; a renamed or deleted `_team`
+  affects inherited entities' stale findings, not their graph presence).
 
-Port ships `service`, `environment`, `workload`, `deployment`, `organization` as editable
-defaults and protects `_user`, `_team` (relations may be added), `_scorecard`, `_rule`,
-`_rule_result`, `_ai_agent`, `_ai_invocations`, `_ai_conversation`, `_mcp_server`, `_workflow`
-(neither deletable nor extendable). Toadie's registry starts EMPTY; system blueprints arrive
-with the phase that models users/teams.
+## System blueprints (V31)
+
+Toadie seeds exactly two system blueprints — `_team` and `_user` — flagged `system: true` on the
+wire and protected against deletion and base-shape removal (v1.26.0, phase 4 of the Port
+data-model move, see `.claude/docs/persistence.md` "V31"). **Base shapes**: `_team` has a single
+optional self-relation `parent` (the entity hierarchy's parent link) and no properties; `_user`
+has a required `email` string property (format: email) and a many-valued optional relation
+`team → _team`. ADMIN may extend both with extra properties/relations, set or change
+`hierarchyRelation`, or add `ownership`; identifier rename, removal of a base property/relation,
+or dropping a base `required` is rejected `400` (`validateSystemExtension`). Identifiers starting
+with `_` are reserved: `POST` creating any `_*` blueprint is `400`. DELETE on a system blueprint
+is `409` ("a property of the row"). The other Port system blueprints (`_scorecard`, `_rule`,
+`_rule_result`, `_ai_*`, `_mcp_server`, `_workflow`) are still NOT modeled. Snapshot date
+2026-09-11 — re-check <https://docs.port.io/context-lake/data-model/setup-blueprint/default-blueprints/>
+when adding another system blueprint.
 
 ## Upstream pages snapshotted (2026-09-08)
 

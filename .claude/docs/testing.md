@@ -139,7 +139,7 @@ Backend tests live flat in `server/src/test/kotlin/` (kotlin.test + `io.ktor.ser
 - `TestLabels` — the label registry is SHARED suite state too: `ensure(key, values, kinds)` (create-if-missing, update-in-place otherwise) → id, `remove(vararg keys)` (soft-deletes), `rawRows()` (soft-deleted rows included). Tests only ever mint UNIQUE keys — `uniqueLabel(prefix, values, kinds)` in `CatalogFixtures.kt` is the one-line mint used by catalog tests applying labels to files.
 - `TestTagCategories` — the tag-category registry is SHARED suite state too, same shape as `TestLabels`: `ensure(name, tags, kinds)` → id, `remove(vararg names)`, `rawRows()`. Catalog tests applying tags mint through `uniqueTagCategory(prefix, tags, kinds)` + `uniqueTag(prefix)` in `CatalogFixtures.kt`.
 - The younger registry fixtures follow the same shapes: `TestLifecycles` (`ensure`/`remove` — the LIFECYCLE-dictionary sibling of `TestNamespaces`, append-only), `TestAnnotationKeys` (`ensure(key, kinds)`/`remove`/`rawRows` + `uniqueAnnotationKey(prefix, kinds)` in `CatalogFixtures.kt`), and `TestEntityTypes` (`rawRows`/`current` + `withKindTypes(kind, types) { }` — the type dictionaries are seeded SINGLETONS, so tests mutate a kind's list only inside that restore-in-finally wrapper). `TestLenses` (`rawRows` only — the soft-delete-over-removal asserts; lens tests mint unique names per test), and `TestRefTargets.ensure()` (no-arg, JVM-once) seeds the standard resolvable reference targets, while `TestCatalogFiles.overwriteContent(...)` plants legacy-invalid content past the write-time validators.
-- `TestBlueprints` (`service`/`rawRows`/`remove(vararg identifiers)`) — the blueprint registry is SHARED suite state like the labels: every test mints unique `bp-<uuid8>` identifiers and removes what it creates; there is no seed to protect. `remove` first removes the blueprint's own active ENTITIES (via `TestEntities`) before soft-deleting the blueprint itself — the V28 delete-with-entities `409` would otherwise fail teardown.
+- `TestBlueprints` (`service`/`rawRows`/`remove(vararg identifiers)`) — the blueprint registry is SHARED suite state like the labels: every test mints unique `bp-<uuid8>` identifiers and removes what it creates; there is no seed to protect. `remove` skips `_`-prefixed identifiers (the V31 system rows are never deleted) and the new `restoreSystemBlueprints()` PUTs `_team`/`_user` back to their seeded shape (`hierarchyRelation: "parent"` on `_team`, none on `_user`) — used in `finally` by any test that extends them. `remove` first removes the blueprint's own active ENTITIES (via `TestEntities`) before soft-deleting the blueprint itself — the V28 delete-with-entities `409` would otherwise fail teardown.
 - `TestEntities` (`service`/`rawRows`/`remove(vararg ids)`) — the entity registry is SHARED suite state too, the `TestBlueprints` shape one level down: every test mints unique identifiers within its own throwaway blueprint(s) and removes what it creates; there is no seed to protect.
 - `TestSeedState.restoreSeedAccounts()` — bootstrap/production-mode tests rotate the seed admin's password in the SHARED container; call this afterwards so later tests (and re-runs) see the pristine V3 state. Production-mode boots must also override `"mail.transport" to "disabled"` — the dev-default `log` transport is refused in production (`MailTransportTest`).
 
@@ -179,23 +179,38 @@ dictionary value used (a dictionary being one `(property, enum)` pair, so `lifec
 across service/library/api), both `team` shapes, a multi-element relation array, an explicit
 `null` relation, and dependency-safe file numbering.
 
+`SystemBlueprintTest` pins the V31 rows — present with `system: true` on a fresh database,
+seeded definitions equal `SYSTEM_BLUEPRINT_BASES`, DELETE 409, PUT rename 400, PUT removing/retyping
+`email` or removing/reshaping `_user.team` 400, PUT extending with a property + relation +
+`hierarchyRelation` 204 and read back, POST `_foo` 400, and `blueprint.updated` carrying
+`system: true`.
+
 **Entities (V28).** `EntityValidationTest` is the pure rule table (one case per row in
 `.claude/docs/port-data-model.md` "Entities", no database); `EntityReferencesTest` pins the
 pure target/rename helpers; `EntityWireNamesTest` pins the wire field names (the Port shape,
-not Kotlin defaults); `EntityTest` drives the routes end to end — a USER (no admin needed)
-creates/reads/updates/deletes, list filter/`q`/sort/paging including an unknown `blueprint`
-answering an empty page, unknown-property/required-missing/relation-target-missing `400`s,
+not Kotlin defaults); `EntityOwnershipTest` (v1.26.0, phase 4 — 18 cases) is the pure ownership
+and format validation: Direct and Inherited team rules on write and read, string/array shapes,
+`_team` rename cascade observed on GET (including `format: team` properties), delete `409` then
+`204`, `format: user` validation, Inherited computation (following paths, absent on `many: true`,
+beyond `MAX_OWNERSHIP_HOPS`), the stale `TEAM_NOT_ALLOWED` after switching blueprints, and the
+`400` response body's `findings` array; `EntityTest` drives the routes end to end — a USER (no
+admin needed) creates/reads/updates/deletes, list filter/`q`/sort/paging including an unknown
+`blueprint` answering an empty page, **team filter** matching stored values and `_team`
+identifiers (only Direct/absent entities, Inherited carry no stored team), unknown-property/
+required-missing/relation-target-missing/`TEAM_TARGET_MISSING`/`USER_TARGET_MISSING` `400`s,
 the per-blueprint identifier `409` (case-insensitive, but the same identifier is reusable
 across different blueprints), PUT changing `blueprint` `400`, delete-with-referrer `409`
-naming the referrer, rename cascade observed on the referrer's own GET, blueprint delete with
-active entities `409` naming the count, and pins that a response carries NO `null` members
-(the `blueprintJson` posture, assert on the raw body) — plus the STALE case: PUT the owning
-blueprint to add a required property, then confirm the entity's GET/list `findings` go
+naming the referrer from all three sources (relations, `team`, format-properties), rename
+cascade observed on the referrer's own GET (covering team and format rewrites), blueprint
+delete with active entities `409` naming the count, and pins that a response carries NO `null`
+members (the `blueprintJson` posture, assert on the raw body) — plus the STALE case: PUT the
+owning blueprint to add a required property, then confirm the entity's GET/list `findings` go
 non-empty and its own next PUT is refused `400` until the missing property is supplied.
-`EntityConcurrencyTest` is the two-table held-lock proof from `.claude/docs/persistence.md`
-"Entity targets under concurrency (V28)": a relation create racing its target's delete (one
-wins, never a dangling target), and a blueprint delete racing an entity create against it (no
-orphaned entity survives a blueprint that vanished underneath it).
+`SqlHelpersTest` covers `jsonStringOrArrayContainsFolded` rendering. `EntityConcurrencyTest`
+is the two-table held-lock proof from `.claude/docs/persistence.md` "Entity targets under
+concurrency (V28)": a relation create racing its target's delete (one wins, never a dangling
+target), a blueprint delete racing an entity create against it (no orphaned entity survives),
+and a `_team` delete racing an entity create against it (same rule applied to ownership).
 
 **Entity graph (V29/V30).** `EntityGraphTest` is the pure builder (`entities/EntityGraph.kt`,
 no database): the both-ends rule including a hidden or stale relation target dropped rather
