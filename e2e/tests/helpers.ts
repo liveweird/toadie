@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 export { expect, test };
 
@@ -113,6 +113,57 @@ export async function revealCreatedPassword(page: Page): Promise<string> {
 /** Collision-free text so specs never depend on absolute counts or clean state. */
 export function uniqueText(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+}
+
+type PropertyDefinition = { type?: string; format?: string; enum?: unknown[] };
+type BlueprintSchema = { properties: Record<string, PropertyDefinition>; required: string[] };
+
+/**
+ * Create a throwaway `_team` entity satisfying whatever `_team`'s CURRENT schema requires.
+ * The seeded base shape (`V31__system_blueprints.sql`) has no required properties, but an
+ * environment carrying the sample ontology extension — or any future one — may add some
+ * (Phase 4 ownership, v1.26.0 — see `.claude/docs/port-data-model.md`); every ownership-aware
+ * spec must go through this helper instead of posting `properties: {}` directly, or it 400s
+ * wherever `_team` has been extended. Reads the blueprint's live `schema` via
+ * `GET /api/v1/blueprints` and fills each required property with a type-appropriate value
+ * (enum -> its first value; string -> "e2e", format email -> an email, format url -> a URL;
+ * number -> 0; boolean -> false; array -> []; object -> {}).
+ */
+export async function createTeamEntity(
+  request: APIRequestContext,
+  token: string,
+  identifier: string,
+  title: string,
+): Promise<number> {
+  const headers = { Authorization: `Bearer ${token}` };
+  const blueprintsResp = await request.get("/api/v1/blueprints", { headers });
+  expect(blueprintsResp.status(), "GET /api/v1/blueprints must succeed to seed a _team entity").toBe(200);
+  const blueprints = ((await blueprintsResp.json()).items ?? []) as { identifier: string; schema: BlueprintSchema }[];
+  const team = blueprints.find((b) => b.identifier === "_team");
+  if (!team) throw new Error("the seeded _team blueprint was not found in the registry");
+
+  const properties: Record<string, unknown> = {};
+  for (const propId of team.schema.required) {
+    const def = team.schema.properties[propId];
+    if (def?.enum && def.enum.length > 0) properties[propId] = def.enum[0];
+    else if (def?.type === "number") properties[propId] = 0;
+    else if (def?.type === "boolean") properties[propId] = false;
+    else if (def?.type === "array") properties[propId] = [];
+    else if (def?.type === "object") properties[propId] = {};
+    else if (def?.format === "email") properties[propId] = "e2e@example.com";
+    else if (def?.format === "url") properties[propId] = "https://example.com";
+    else properties[propId] = "e2e";
+  }
+
+  const resp = await request.post("/api/v1/entities", {
+    headers,
+    data: { blueprint: "_team", identifier, title, properties, relations: {} },
+  });
+  const body = await resp.json().catch(() => ({}));
+  expect(resp.status(), `create _team entity "${identifier}" failed: ${body.detail ?? JSON.stringify(body)}`).toBe(
+    201,
+  );
+  return body.id;
 }
 
 /**

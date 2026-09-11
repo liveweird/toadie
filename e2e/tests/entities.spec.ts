@@ -1,17 +1,20 @@
-import { expect, login, readyDialog, test, uniqueText } from "./helpers";
+import { createTeamEntity, expect, login, readyDialog, test, uniqueText } from "./helpers";
 
 // Instances of a blueprint (Port migration phase 2): two throwaway blueprints are seeded via
-// the API (a target carrying typed properties, a dependent carrying a required relation to
-// it) -> the Entities list's blueprint picker (?blueprint=) and New-entity validation -> an
-// entity is created with an enum/number/boolean property, watching the JSON preview -> a
-// second entity relates to it -> deleting the referenced entity is blocked, naming the
-// referrer -> editing the target blueprint to add a required property turns the first entity
-// STALE (the list's findings badge) -> the editor's stale alert names the missing field,
-// fixed and saved, clears it -> cleanup (entities, then blueprints). The feature has no admin
-// gate, so the whole journey runs as the seed admin (no throwaway user needed). The blueprint
-// registry is shared run-state and THIS SPEC IS ONE OF ITS TWO IN-RUN WRITERS (alongside
-// blueprints.spec.ts) — it only ever creates and deletes its own unique `e2e-ent-bp-*`
-// blueprints and their `e2e-ent-*` entities.
+// the API (a target carrying typed properties AND Direct ownership, a dependent carrying a
+// required relation to it) -> the Entities list's blueprint picker (?blueprint=) and
+// New-entity validation -> an entity is created with an enum/number/boolean property and a
+// team picked in the "Owned by" MultiSelect (Phase 4 ownership, v1.26.0), watching the JSON
+// preview -> the row's Team chip, the toolbar Team filter (?team=), the owned team's blocked
+// (409) then unblocked (204, after unlinking in the editor) delete -> a second entity relates
+// to the first -> deleting the referenced entity is blocked, naming the referrer -> editing
+// the target blueprint to add a required property turns the first entity STALE (the list's
+// findings badge) -> the editor's stale alert names the missing field, fixed and saved, clears
+// it -> cleanup (entities, then blueprints). The feature has no admin gate, so the whole
+// journey runs as the seed admin (no throwaway user needed). The blueprint registry is shared
+// run-state and THIS SPEC IS ONE OF ITS TWO IN-RUN WRITERS (alongside blueprints.spec.ts) — it
+// only ever creates and deletes its own unique `e2e-ent-bp-*` blueprints, `e2e-ent-*` entities,
+// and one throwaway `e2e-ent-team-*` `_team` entity (never a foreign `_team`/`_user` row).
 test("an entity is created from a blueprint, a relation blocks its deletion, and a blueprint change makes it stale until fixed", async ({
   page,
 }) => {
@@ -28,6 +31,10 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
   const entityBIdentifier = uniqueText("e2e-ent-b");
   const entityATitle = "E2E Entity A";
   const entityBTitle = "E2E Entity B";
+  // A throwaway _team entity (Phase 4 ownership) — the target blueprint's `ownership` below
+  // makes its entities Direct-owned, so entity A can name this team.
+  const teamIdentifier = uniqueText("e2e-ent-team");
+  const teamTitle = "E2E Entity Team";
 
   const targetProperties = {
     tier: { type: "string", title: "Tier", enum: ["gold", "silver"] },
@@ -39,6 +46,7 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
   let depBlueprintId: number | undefined;
   let entityAId: number | undefined;
   let entityBId: number | undefined;
+  let teamEntityId: number | undefined;
 
   try {
     // 0. Seed the two throwaway blueprints via the API (not the editor — this spec's subject
@@ -49,6 +57,9 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
         identifier: targetIdentifier,
         title: "E2E Entity Target",
         schema: { properties: targetProperties, required: ["replicas"] },
+        // Direct/absent ownership (the default) lets its entities carry a `team` — the
+        // MultiSelect's label follows this title instead of the generic "Team" fallback.
+        ownership: { type: "Direct", title: "Owned by" },
       },
     });
     expect(targetBlueprintResp.status()).toBe(201);
@@ -67,6 +78,12 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     });
     expect(depBlueprintResp.status()).toBe(201);
     depBlueprintId = (await depBlueprintResp.json()).id;
+
+    // A throwaway _team entity, seeded via the API like blueprints.spec.ts seeds its own
+    // fixtures — this spec's subject is entity ownership, not team curation. `createTeamEntity`
+    // satisfies whatever `_team`'s current schema requires (an environment carrying the sample
+    // ontology extension may add required properties beyond the seeded base shape).
+    teamEntityId = await createTeamEntity(page.request, adminToken!, teamIdentifier, teamTitle);
 
     // 1. Open Entities from the nav's Port Ontology section and pick the target blueprint in
     // the toolbar Select — the URL gets ?blueprint=.
@@ -105,6 +122,14 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     await publicSelect.click();
     await page.getByRole("option", { name: "True", exact: true }).click();
 
+    // Phase 4 ownership: the target blueprint's `ownership.title` labels the team MultiSelect
+    // "Owned by"; options read "identifier — title".
+    const ownedBySelect = page.getByRole("combobox", { name: "Owned by" });
+    await ownedBySelect.click();
+    await ownedBySelect.fill(teamIdentifier);
+    await page.getByRole("option", { name: `${teamIdentifier} — ${teamTitle}`, exact: true }).click();
+    await page.keyboard.press("Escape");
+
     const preview = page.getByLabel("JSON preview");
     await expect(preview).toContainText('"replicas": 3');
 
@@ -123,6 +148,44 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     await expect(entityARow.getByText("3", { exact: true })).toBeVisible();
     await expect(entityARow.getByText("True")).toBeVisible();
     await expect(entityARow.getByText(/\d+ findings?/)).toHaveCount(0);
+    await expect(entityARow.getByText(teamIdentifier, { exact: true })).toBeVisible();
+
+    // 3b. The toolbar Team filter narrows the list to `?team=` and the owned entity still
+    // shows; deleting the team it owns is refused (409) naming the referrer; unlinking it in
+    // the editor and saving lets the delete through.
+    const teamFilterSelect = page.getByRole("combobox", { name: "Team", exact: true });
+    await teamFilterSelect.click();
+    await teamFilterSelect.fill(teamIdentifier);
+    await page.getByRole("option", { name: `${teamIdentifier} — ${teamTitle}`, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`team=${teamIdentifier}`));
+    await expect(entityARow).toBeVisible();
+
+    const blockedTeamDelete = await page.request.delete(`/api/v1/entities/${teamEntityId}`, {
+      headers: authHeaders,
+    });
+    expect(blockedTeamDelete.status()).toBe(409);
+    const blockedTeamBody = await blockedTeamDelete.json();
+    expect(blockedTeamBody.detail).toContain(`${targetIdentifier}/${entityAIdentifier}`);
+
+    await page.getByRole("button", { name: `Edit ${entityAIdentifier}` }).click();
+    const ownedByEditSelect = page.getByRole("combobox", { name: "Owned by" });
+    await ownedByEditSelect.click();
+    await ownedByEditSelect.fill(teamIdentifier);
+    await page.getByRole("option", { name: `${teamIdentifier} — ${teamTitle}`, exact: true }).click();
+    await page.keyboard.press("Escape");
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().endsWith(`/api/v1/entities/${entityAId}`) && r.request().method() === "PUT" && r.ok(),
+      ),
+      page.getByRole("button", { name: "Save" }).click(),
+    ]);
+    await expect(page).toHaveURL(/\/entities\?blueprint=.+$/);
+
+    const unblockedTeamDelete = await page.request.delete(`/api/v1/entities/${teamEntityId}`, {
+      headers: authHeaders,
+    });
+    expect(unblockedTeamDelete.status()).toBe(204);
+    teamEntityId = undefined;
 
     // 4. Pick the dependent blueprint and create a second entity whose relation targets the
     // first — the Select shows "identifier — title".
@@ -214,6 +277,10 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     if (entityAId) {
       const deletedA = await page.request.delete(`/api/v1/entities/${entityAId}`, { headers: authHeaders });
       expect(deletedA.status()).toBe(204);
+    }
+    if (teamEntityId) {
+      const deletedTeam = await page.request.delete(`/api/v1/entities/${teamEntityId}`, { headers: authHeaders });
+      expect(deletedTeam.status()).toBe(204);
     }
     if (depBlueprintId) {
       const deletedDep = await page.request.delete(`/api/v1/blueprints/${depBlueprintId}`, {

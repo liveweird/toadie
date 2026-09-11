@@ -6,16 +6,22 @@
 - **Owns** (exclusive server-side state): its two throwaway blueprints (`e2e-bp-*`, unique per
   attempt — one target, one dependent carrying a relation to it) and its throwaway user — all
   removed at the end. The blueprint registry is SHARED state and **this spec is its only in-run
-  writer**: it never edits or deletes blueprints it did not create.
+  writer** for ordinary blueprints: it never edits or deletes blueprints it did not create, and
+  never mutates the seeded `_team`/`_user` system rows (Phase 4, v1.26.0) — it only reads them.
 
 ## Scenario: admin curates the blueprint registry; a rename cascades; a regular user reads it
 
 1. The admin signs in and opens **Blueprints** from the nav's Port Ontology section.
    - *Expected*: the registry page renders with the **New blueprint** action (ADMIN-only).
-2. They open the editor and submit it empty.
+2. The seeded `_team` system row shows a "System" badge and a disabled Delete control; they
+   open its editor and go back without saving.
+   - *Expected*: the identifier field is read-only and shows `_team`; the seeded `parent`
+     relation row carries a "Seeded" badge and its Remove control is disabled (move stays
+     allowed); no request reaches the server.
+3. They open the editor and submit it empty.
    - *Expected*: the identifier and title field errors render inline; no request reaches the
      server.
-3. They fill the unique `e2e-bp-…` identifier and a title, add a string property with two enum
+4. They fill the unique `e2e-bp-…` identifier and a title, add a string property with two enum
    values (one coloured), and a number property flagged required.
    - *Expected*: the newly added second row opens on its own, carrying the Required badge.
      Collapsing and re-expanding the first row remounts its fields with the typed values
@@ -25,21 +31,22 @@
    - *Expected*: the JSON preview beside the form shows the property under `"properties"` and
      the number property under `"required"` before saving; the POST succeeds; the list shows
      the row with its property count.
-4. They create a second blueprint (`e2e-bp-…-dep`) whose relation targets the first (picked
+5. They create a second blueprint (`e2e-bp-…-dep`) whose relation targets the first (picked
    from the target Select) and save.
    - *Expected*: the POST succeeds; the list shows both rows.
-5. They try to delete the first blueprint from the list.
+6. They try to delete the first blueprint from the list.
    - *Expected*: the confirm modal's request is refused with the "referenced by other
      blueprints" message; the row stays.
-6. They edit the first blueprint, change its identifier, and save; then open the second.
+7. They edit the first blueprint, change its identifier, and save; then open the second.
    - *Expected*: the PUT succeeds; the second blueprint's one stored relation — its family's
      first and only row — starts expanded; its target shows the NEW identifier (the rename
      cascaded server-side).
-7. A throwaway regular user (created via the one-time reveal flow) signs in, opens
+8. A throwaway regular user (created via the one-time reveal flow) signs in, opens
    **Blueprints**, and then navigates to `/blueprints/new` directly.
-   - *Expected*: the same list read-only — both blueprints visible, no **New blueprint**, edit,
-     or delete affordances; the editor route bounces them back to the list.
-8. Cleanup: back as the admin, the dependent blueprint is deleted first, then the target (both
+   - *Expected*: the same list read-only — both blueprints visible, the `_team` row's "System"
+     badge still shown, no **New blueprint**, edit, or delete affordances; the editor route
+     bounces them back to the list.
+9. Cleanup: back as the admin, the dependent blueprint is deleted first, then the target (both
    through their confirm modals), and the throwaway user through the Users list.
 
 ## Not covered here (and why)
@@ -59,3 +66,8 @@
   jump Select's focus behaviour, the collapsed error dot, the first-row/reveal/revealErrors
   rules) — pinned by `EditorRowList.test.tsx`, `useBlueprintRowExpansion.test.tsx`, and
   `blueprintRowSummary.test.ts`; the journey proves the same behaviour once, end to end.
+- **The system-blueprint protection rules** (rename/identifier 400, base-property/relation
+  removal or retyping 400, the `_`-prefixed-identifier 400 on create, `_user`'s locked `email`
+  property and `team` relation) — pinned by `SystemBlueprintTest`; the journey proves the
+  read-only identifier and one locked relation row end to end without attempting any of the
+  blocked mutations (an editor page renders no way to attempt them).
