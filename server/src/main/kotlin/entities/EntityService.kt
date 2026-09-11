@@ -500,6 +500,25 @@ class EntityService(private val database: R2dbcDatabase) {
         return toResponse(materialized.payload, materialized.context)
     }
 
+    /**
+     * The read seam bulk import needs (`entities/EntityImport.kt`): active blueprint
+     * definitions plus every active entity's identity, in ONE plain transaction (no write
+     * lock — a snapshot read, the same posture as [graph]). [EntityImportSnapshot] resolves
+     * relation/team/format targets BYTE-EXACT (the `targetExists` convention every other
+     * snapshot in this file follows) and existing-row lookups case-insensitively (the
+     * partial-unique-index convention).
+     */
+    suspend fun importSnapshot(): EntityImportSnapshot = suspendTransaction(database) {
+        val activeBlueprints = loadActiveBlueprints()
+        val blueprints = activeBlueprints.map { EntityImportBlueprint(it.id, it.identifier, it.definition) }
+        val rows = Entities.selectAll().where { active() }
+            .map { Triple(it[Entities.blueprintId].value, it[Entities.identifier], it[Entities.id].value) }
+            .toList()
+        val identifiersByBlueprint = rows.groupBy({ it.first }, { it.second to it.third })
+        val countsByBlueprint = rows.groupingBy { it.first }.eachCount().mapValues { it.value.toLong() }
+        EntityImportSnapshot(blueprints, identifiersByBlueprint, rows.size.toLong(), countsByBlueprint)
+    }
+
     suspend fun create(request: EntityRequest, callerId: UInt): EntityResponse {
         validateEntityRequest(request) // re-checked service-side so direct callers stay guarded
         val now = System.currentTimeMillis()

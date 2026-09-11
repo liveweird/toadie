@@ -68,6 +68,16 @@ kover {
                     "ch.nokillswit.entities.EntityDocument", "ch.nokillswit.entities.EntityDocument$*",
                     "ch.nokillswit.entities.EntityFinding", "ch.nokillswit.entities.EntityFinding$*",
                     "ch.nokillswit.entities.EntityResponse", "ch.nokillswit.entities.EntityResponse$*",
+                    // Phase 6 (v1.28.0, ontology import — blueprints/BlueprintImport.kt +
+                    // entities/EntityImport.kt): the six request/row/response DTOs, the SAME
+                    // logic-free family — every rule lives in the pure planBlueprintImport/
+                    // planEntityImport functions and their tests, never in these classes.
+                    "ch.nokillswit.blueprints.BlueprintImportRequest", "ch.nokillswit.blueprints.BlueprintImportRequest$*",
+                    "ch.nokillswit.blueprints.BlueprintImportRow", "ch.nokillswit.blueprints.BlueprintImportRow$*",
+                    "ch.nokillswit.blueprints.BlueprintImportResponse", "ch.nokillswit.blueprints.BlueprintImportResponse$*",
+                    "ch.nokillswit.entities.EntityImportRequest", "ch.nokillswit.entities.EntityImportRequest$*",
+                    "ch.nokillswit.entities.EntityImportRow", "ch.nokillswit.entities.EntityImportRow$*",
+                    "ch.nokillswit.entities.EntityImportResponse", "ch.nokillswit.entities.EntityImportResponse$*",
                 )
             }
         }

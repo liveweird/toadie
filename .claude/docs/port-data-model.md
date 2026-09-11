@@ -473,6 +473,91 @@ is `409` ("a property of the row"). The other Port system blueprints (`_scorecar
 2026-09-11 — re-check <https://docs.port.io/context-lake/data-model/setup-blueprint/default-blueprints/>
 when adding another system blueprint.
 
+## Import and export (phase 6, v1.28.0)
+
+Bulk import lands server-side for both registries: `POST /api/v1/blueprints/import` +
+`/import/check` (ADMIN, `blueprints/BlueprintImport.kt`) and `POST /api/v1/entities/import` +
+`/import/check` (any authenticated user, `entities/EntityImport.kt`) — the
+`catalog/CatalogFileImport.kt` report-and-skip precedent, one level up. A request carries
+`documents: List<JsonObject>` (up to 200) plus `replaceExisting: Boolean` (default `false`);
+each document is decoded and classified INDEPENDENTLY — the strict `blueprintJson` decode
+(`explicitNulls = false`, `ignoreUnknownKeys = false`) — so one malformed document is that row's
+`INVALID` with a fixed message (`Document does not match the expected schema`, never the raw
+kotlinx exception text), never a whole-request `400`; only a non-`JsonObject` array element (a
+string, a number, `null`) fails to decode into `JsonObject` at all and IS a request-level `400`,
+thrown by ContentNegotiation before either planner runs. `POST …/import/check` runs the
+IDENTICAL classification against the current registry, storing nothing — the same
+`{real run, dry-run} share one classification` promise `catalog/CatalogFileImport.kt` makes for
+catalog files.
+
+**Per-row statuses** (`OntologyImportStatus`, shared by both endpoints): `CREATED` (stored as a
+new row), `UPDATED` (an existing row replaced in place — only reachable with
+`replaceExisting: true`; the only way an import PUTs `_team`/`_user`, `validateSystemExtension`
+still applies), `EXISTS` (an existing row found with the flag off — nothing stored, `id` names
+it; renders gray in the SPA, not red — nothing failed), `INVALID` (shape/registry/reference
+validation failure, an unresolvable target, a registry cap, or a cycle through a MANDATORY
+reference — see below), `CONFLICT` (an in-batch duplicate identifier, case-insensitive; the
+later document loses), `ERROR` (an unexpected storage failure, or a pass-2 residual — see
+below). The response is `200` even when every document failed.
+
+**Ordering and deferral, one mechanism for forward references and cycles.** Both planners
+topologically order the batch (Kahn's algorithm, ties broken by the document's 0-based batch
+index) over the sibling references each document's OWN definition names: for a blueprint,
+`relations`/`aggregationProperties` targets; for an entity, relation targets
+(`entities/EntityReferences.kt#entityTargets`), `team` values (always against `_team`), and
+`format: team|user` property values (`formatTargets`) — the same three sources
+"Lifecycle rules" below enumerates for the rename cascade. Only edges to a sibling that is
+ITSELF a batch CREATE matter — a target already active in the registry, or one being replaced
+in place, needs no ordering, since it already resolves. A plain forward reference (a document
+naming a sibling declared LATER in the same batch) is resolved by REORDERING alone: Kahn places
+the target before its referrer, so the first write already carries the reference — nothing is
+ever deferred for an acyclic batch. A genuine CYCLE stalls Kahn; at a stall the LOWEST-index
+remaining document is emitted anyway, with every one of its references to a sibling not yet
+placed DEFERRED — stripped from its first write (`pass1`), restored by a second full write
+(`update`) once every sibling exists. For a blueprint, stripping a relation also strips any
+mirror property whose path starts with it, an Inherited `ownership.path` starting with it, and
+a `hierarchyRelation` naming it (`BlueprintValidation.kt`'s own dependency rules, applied in
+reverse). For an entity, a dropped SCALAR reference (a `many: false` relation, `team` string, or
+scalar `format` property) removes the key entirely (the `null`-means-absent convention already
+in place); a dropped ARRAY reference removes only the unresolved element(s), keeping the rest.
+
+**The required-reference exception (entities only).** A blueprint has no field that is mandatory
+at create time — every schema field, relation, and Toadie's own `hierarchyRelation` are optional
+on a bare `BlueprintRequest` — so a blueprint cycle is ALWAYS storable in two writes. An entity's
+`schema.required` and a relation's `required: true` are not: a cycle running through a
+`required: true` relation, or a `format: team|user` property named in `schema.required`, cannot
+be deferred (dropping it would immediately violate the very rule that made it mandatory) and is
+`INVALID` instead — "Circular required reference '<field>' within the batch". Rejecting that
+document can itself change what OTHER documents resolve against (their own reference to the
+now-gone document goes missing), so the entity planner re-runs its findings/cap fixpoint after
+every such rejection until a full pass changes nothing.
+
+**The pre-flight fixpoint.** Before ordering, both planners iterate their remaining candidates
+to a fixpoint: a blueprint's unresolved relation/aggregation target (checked against
+`registry ∪ will-store identifiers`, `blueprintTargets`) or an entity's `entityFindings` against
+`registry ∪ will-store keys` rejects the document; the registry cap (`MAX_BLUEPRINTS`,
+`MAX_ENTITIES_TOTAL`/`MAX_ENTITIES_PER_BLUEPRINT`, counted over CREATE rows only, in submission
+order) rejects any create past the limit. Removing a document for one reason can free a cap slot
+or resolve an unknown-target rejection for another (an earlier document's own removal shrinks the
+create count another document is measured against), so the iteration repeats until a full pass
+rejects nothing further — this is what makes the dry-run's prediction match the real run's
+eventual pass-2 outcome: both compute their verdicts against the SAME "what the batch will look
+like once it all resolves" snapshot, never against submission order alone.
+
+**The pass-2 residual.** A pass-2 write can still fail — only from a CONCURRENT change during
+the batch (a sibling deleted or edited by another caller between the pre-flight fixpoint and the
+second write), since the fixpoint already proved the full document resolves against the batch as
+planned. That failure reports `ERROR` WITH the row's `id` (and, for an entity, its `findings`)
+and a message naming what happened ("Stored without its deferred targets/references: …") —
+never silently left `CREATED`/`UPDATED`, so a caller always knows the row is missing its deferred
+parts and needs re-import or a manual fix.
+
+**Reads are plain, uncoordinated snapshots.** `BlueprintService.list()` (already used by the
+registry GET) and the new `EntityService.importSnapshot()` (active blueprint definitions plus
+every active entity's `(blueprintId, identifier) → id`, one committed transaction, no lock) are
+the ONLY reads either planner needs; see `.claude/docs/persistence.md` "Ontology import" for why
+every actual write still goes through the ordinary V27/V28 lock per row regardless.
+
 ## Upstream pages snapshotted (2026-09-08)
 
 - <https://docs.port.io/context-lake/data-model/configure-data-model/>
