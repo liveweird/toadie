@@ -15,7 +15,7 @@ const BLUEPRINTS = [
     title: "Service",
     schema: { properties: { language: { type: "string", title: "Language" } }, required: [] },
     relations: { owner: { title: "Owner", target: "team", required: false, many: false } },
-    mirrorProperties: {},
+    mirrorProperties: { domain_title: { title: "Domain title", path: "owner.$title" } },
     calculationProperties: {},
     aggregationProperties: {},
   },
@@ -73,6 +73,38 @@ describe("EditEntity page", () => {
 
     expect(await screen.findByText("This entity is out of date with its blueprint")).toBeInTheDocument();
     expect(screen.getByText("properties.language: Required")).toBeInTheDocument();
+  });
+
+  test("the Computed section shows the entity's evaluated mirror/calculation/aggregation values", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (url === "/api/v1/entities/5") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            id: 5,
+            blueprint: "service",
+            blueprintId: 1,
+            identifier: "checkout",
+            title: "Checkout",
+            properties: { language: "kotlin", domain_title: "Commerce" },
+            relations: {},
+            findings: [],
+            createdBy: 1,
+            creatorName: "Alice",
+            creatorDeleted: false,
+            createdAt: 0,
+            updatedAt: 0,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+
+    renderEdit();
+
+    expect(await screen.findByRole("group", { name: "Computed" })).toBeInTheDocument();
+    expect(screen.getByText("Domain title")).toBeInTheDocument();
+    expect(screen.getByText("Commerce")).toBeInTheDocument();
   });
 
   test("an entity whose blueprint no longer exists shows the blueprint-missing message", async () => {

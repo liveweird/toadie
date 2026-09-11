@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import Entities from "./Entities";
 import { jsonResponse } from "../test/http";
@@ -52,6 +52,53 @@ const ENTITY_NO_PREVIEW_VALUES = {
   team: undefined,
   properties: {},
   findings: [],
+};
+
+// v1.27.0 — computed (mirror/calculation/aggregation) preview columns: two schema scalar
+// columns plus three computed ones, so the combined list (5) exceeds MAX_COLUMN_PROPERTIES
+// (4) and the cap must drop the LAST one (aggregation), preserving schema-then-computed order.
+const BLUEPRINT_COMPUTED = {
+  id: 2,
+  identifier: "workload",
+  title: "Workload",
+  schema: {
+    properties: {
+      env: { type: "string", title: "Env" },
+      replicas: { type: "number", title: "Replicas" },
+    },
+    required: [],
+  },
+  relations: {},
+  mirrorProperties: {
+    langs: { title: "Langs", path: "service.languages" },
+  },
+  calculationProperties: {
+    risk: { title: "Risk", type: "string", calculation: ".properties.tier", colorized: true, colors: { high: "red" } },
+  },
+  aggregationProperties: {
+    dependents: {
+      title: "Dependents",
+      target: "workload",
+      calculationSpec: { calculationBy: "entities", func: "count" },
+    },
+  },
+};
+
+const ENTITY_COMPUTED = {
+  id: 7,
+  blueprint: "workload",
+  blueprintId: 2,
+  identifier: "checkout-staging",
+  title: "Checkout staging",
+  team: undefined,
+  properties: { env: "staging", replicas: 2, langs: ["java", "kotlin"], risk: "high", dependents: 5 },
+  relations: {},
+  findings: [],
+  createdBy: 1,
+  creatorName: "Alice",
+  creatorDeleted: false,
+  createdAt: 0,
+  updatedAt: 0,
 };
 
 function mockRoutes(mockFetch: FetchMock) {
@@ -222,5 +269,33 @@ describe("Entities page", () => {
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledWith("/api/v1/entities/5", expect.objectContaining({ method: "DELETE" })));
+  });
+
+  test("preview columns are schema-then-computed, capped at 4, with array and colorized computed cells", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: [BLUEPRINT_COMPUTED] }));
+      if (url.startsWith("/api/v1/entities?")) {
+        return Promise.resolve(jsonResponse(200, { items: [ENTITY_COMPUTED], page: 1, pageSize: 20, total: 1 }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=workload" });
+
+    await screen.findByRole("link", { name: "Edit checkout-staging" });
+
+    // Cap + ordering: the two schema columns come first, then computed columns in mirror ->
+    // calculation -> aggregation order, cut at MAX_COLUMN_PROPERTIES (4) — "Dependents" (the
+    // aggregation, 5th column) never appears.
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers).toEqual(expect.arrayContaining(["Env", "Replicas", "Langs", "Risk"]));
+    expect(headers).not.toEqual(expect.arrayContaining(["Dependents"]));
+
+    const row = screen.getByRole("link", { name: "Edit checkout-staging" }).closest("tr")!;
+    // The mirror column ("Langs") renders its array value as pills.
+    expect(within(row).getByText("java")).toBeInTheDocument();
+    expect(within(row).getByText("kotlin")).toBeInTheDocument();
+    // The colorized calculation column ("Risk") renders its value as a badge.
+    const riskBadge = within(row).getByText("high");
+    expect(riskBadge.closest(".mantine-Badge-root")).not.toBeNull();
   });
 });

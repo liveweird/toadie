@@ -39,7 +39,16 @@
   "section": {
     "identity": "Tożsamość",
     "properties": "Właściwości",
-    "relations": "Relacje"
+    "relations": "Relacje",
+    "computed": "Obliczone"
+  },
+  "computed": {
+    "kind": {
+      "mirror": "Lustro",
+      "calculation": "Obliczenie",
+      "aggregation": "Agregacja"
+    },
+    "absent": "Niedostępne"
   },
   "editor": {
     "blueprintLabel": "Blueprint: {{identifier}}",
@@ -48,7 +57,8 @@
   },
   "hint": {
     "team": "Każda wartość musi wskazywać aktywny zespół (encję „_team”).",
-    "teamInherited": "Obliczane automatycznie na podstawie łańcucha relacji „{{path}}” — nie do edycji tutaj."
+    "teamInherited": "Obliczane automatycznie na podstawie łańcucha relacji „{{path}}” — nie do edycji tutaj.",
+    "computed": "Obliczane automatycznie po stronie serwera — nie do edycji tutaj."
   },
   "finding": {
     "teamTargetMissing": "Ten zespół już nie istnieje."

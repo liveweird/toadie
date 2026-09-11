@@ -2,6 +2,7 @@ import type { TFunction } from "i18next";
 import type { Blueprint } from "../api/blueprints";
 import type { Entity, EntityBody } from "../api/entities";
 import { safeJsonParse } from "./blueprintForm";
+import { computedPropertyIds } from "./computedProperties";
 import { saveErrorMessage } from "./saveError";
 
 // Wire shapes, derived structurally from the generated contract (the blueprintForm.ts idiom)
@@ -141,11 +142,17 @@ export function teamValuesOf(team: TeamWire): string[] {
  *  property/relation seeded from the STORED value (blank when unset — never the schema
  *  default, which only applies to a brand-new entity), plus one extra JSON draft per stored
  *  property key the blueprint no longer declares (`unknown: true`) so the server's 400 can
- *  still name it. */
+ *  still name it. A mirror/calculation/aggregation id (v1.27.0) is excluded from that extra
+ *  set — its value lives in the response's `properties` alongside the stored ones (the wire
+ *  shape's collision rule), but it is never a form draft: there is nothing to edit or resave,
+ *  and the server 400s (`COMPUTED_PROPERTY`) a request that tries to send one back. */
 export function fromEntityResponse(entity: Entity, blueprint: Blueprint): EntityFormValues {
   const schemaIds = Object.keys(blueprint.schema.properties);
+  const computedIds = computedPropertyIds(blueprint);
   const storedProperties = (entity.properties ?? {}) as Record<string, unknown>;
-  const extraPropertyIds = Object.keys(storedProperties).filter((id) => !schemaIds.includes(id));
+  const extraPropertyIds = Object.keys(storedProperties).filter(
+    (id) => !schemaIds.includes(id) && !computedIds.has(id),
+  );
   const properties = [
     ...schemaIds.map((id) => valueToDraft(id, blueprint.schema.properties[id], storedProperties[id])),
     ...extraPropertyIds.map((id) => unknownPropertyDraft(id, storedProperties[id])),
@@ -223,12 +230,17 @@ function teamToWire(team: string[]): TeamWire {
  *  Phase 4 ownership: an Inherited-ownership blueprint computes `team` from a related
  *  blueprint's Direct ownership at READ time (`entities/EntityOwnership.kt`) and rejects a
  *  supplied one (`TEAM_NOT_ALLOWED`) — `team` is therefore always OMITTED here, never sent as
- *  an explicit empty value, regardless of what the (non-editable) form field happens to hold. */
+ *  an explicit empty value, regardless of what the (non-editable) form field happens to hold.
+ *
+ *  A computed-id draft (v1.27.0) is skipped defensively — `fromEntityResponse` already never
+ *  creates one, so this only guards a future caller that hands this function a draft list of
+ *  its own; the server's own `COMPUTED_PROPERTY` 400 is the real gate either way. */
 export function toEntityRequest(values: EntityFormValues, blueprint: Blueprint): EntityBody {
+  const computedIds = computedPropertyIds(blueprint);
   const properties: Record<string, unknown> = {};
   for (const draft of values.properties) {
     const id = draft.id.trim();
-    if (!id) continue;
+    if (!id || computedIds.has(id)) continue;
     const value = propertyValueToWire(draft, blueprint.schema.properties[id]);
     if (value !== undefined) properties[id] = value;
   }

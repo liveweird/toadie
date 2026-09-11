@@ -1,12 +1,15 @@
 import { Alert, Anchor, Badge, Button, Group, Select, Stack, Table, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { IconBox, IconPlus } from "@tabler/icons-react";
+import type { Blueprint } from "../api/blueprints";
 import { deleteEntity, type Entity } from "../api/entities";
 import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
+import EntityComputedValue from "../components/EntityComputedValue";
 import EntityFindingsBadge from "../components/EntityFindingsBadge";
 import PageHeader from "../components/PageHeader";
 import PaginationBar from "../components/PaginationBar";
@@ -20,6 +23,7 @@ import { useEntities } from "../hooks/useEntities";
 import { useEntityOptions } from "../hooks/useEntityOptions";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { isString, useStoredState } from "../hooks/useStoredState";
+import { previewComputedColumns, type ComputedDefinition } from "../utils/computedProperties";
 import { entityDeleteErrorMessage, teamValuesOf } from "../utils/entityForm";
 import { editEntityPath, newEntityPath } from "../utils/entityLinks";
 import { formatDateTime, relativeTimeAgo } from "../utils/relativeTime";
@@ -31,6 +35,52 @@ type SortField = (typeof SORT_FIELDS)[number];
 
 const SETTINGS_KEY = "entities";
 const MAX_COLUMN_PROPERTIES = 4;
+
+// One preview column is either a plain schema property (string/number/boolean, rendered
+// inline below) or a computed one (v1.27.0 — rendered through the shared `EntityComputedValue`,
+// since its output shape isn't limited to the three schema scalar types).
+type PreviewColumn =
+  | { kind: "schema"; id: string; label: string; type: "string" | "number" | "boolean" }
+  | { kind: "computed"; definition: ComputedDefinition };
+
+function previewColumnKey(column: PreviewColumn): string {
+  return column.kind === "schema" ? `schema-${column.id}` : `computed-${column.definition.id}`;
+}
+
+function previewColumnLabel(column: PreviewColumn): string {
+  return column.kind === "schema" ? column.label : column.definition.title;
+}
+
+/** A schema-property preview cell's value — booleans as a Badge, everything else as truncated
+ *  text, a dash when unset (the pre-v1.27.0 behavior, unchanged). Computed columns render
+ *  through `EntityComputedValue` directly at the call site instead, since "Not available" reads
+ *  differently from "never set". */
+function schemaPreviewCell(value: unknown, type: "string" | "number" | "boolean", t: TFunction) {
+  if (value === undefined || value === null) return <Text c="dimmed">—</Text>;
+  if (type === "boolean") {
+    return (
+      <Badge variant="light" color={value ? "green" : "gray"}>
+        {value ? t("entities.field.true") : t("entities.field.false")}
+      </Badge>
+    );
+  }
+  return (
+    <Text size="sm" truncate="end" maw={220} title={String(value)}>
+      {String(value)}
+    </Text>
+  );
+}
+
+function schemaPreviewColumns(blueprint: Blueprint): PreviewColumn[] {
+  return Object.entries(blueprint.schema.properties)
+    .filter(([, def]) => def.type === "string" || def.type === "number" || def.type === "boolean")
+    .map(([id, def]) => ({
+      kind: "schema" as const,
+      id,
+      label: def.title ?? id,
+      type: def.type as "string" | "number" | "boolean",
+    }));
+}
 
 /**
  * The per-blueprint entities list under Port Ontology (`/entities`): pick a blueprint
@@ -73,14 +123,15 @@ export default function Entities() {
     successMessage: t("entities.toast.deleted"),
   });
 
-  const previewProperties = selectedBlueprint
-    ? Object.entries(selectedBlueprint.schema.properties)
-        .filter(([, def]) => def.type === "string" || def.type === "number" || def.type === "boolean")
-        .slice(0, MAX_COLUMN_PROPERTIES)
+  const previewColumns: PreviewColumn[] = selectedBlueprint
+    ? [
+        ...schemaPreviewColumns(selectedBlueprint),
+        ...previewComputedColumns(selectedBlueprint).map((definition) => ({ kind: "computed" as const, definition })),
+      ].slice(0, MAX_COLUMN_PROPERTIES)
     : [];
 
   const total = data?.total ?? 0;
-  const columnCount = 4 + previewProperties.length + 2;
+  const columnCount = 4 + previewColumns.length + 2;
 
   const knownTeams = new Set(teamOptions.map((e) => e.identifier));
   const teamSelectData = [
@@ -144,8 +195,8 @@ export default function Entities() {
               <SortHeader field="identifier" label={t("entities.field.identifier")} activeField={sortField} activeDir={sortDir} onToggle={toggleSort} />
               <SortHeader field="title" label={t("entities.field.title")} activeField={sortField} activeDir={sortDir} onToggle={toggleSort} />
               <Table.Th>{t("entities.column.team")}</Table.Th>
-              {previewProperties.map(([id, def]) => (
-                <Table.Th key={id}>{def.title ?? id}</Table.Th>
+              {previewColumns.map((column) => (
+                <Table.Th key={previewColumnKey(column)}>{previewColumnLabel(column)}</Table.Th>
               ))}
               <Table.Th>{t("entities.column.findings")}</Table.Th>
               <SortHeader field="updatedAt" label={t("entities.field.updated")} activeField={sortField} activeDir={sortDir} onToggle={toggleSort} width={150} />
@@ -189,24 +240,15 @@ export default function Entities() {
                       <Text c="dimmed">—</Text>
                     )}
                   </Table.Td>
-                  {previewProperties.map(([id, def]) => {
-                    const value = entity.properties[id];
-                    return (
-                      <Table.Td key={id}>
-                        {value === undefined || value === null ? (
-                          <Text c="dimmed">—</Text>
-                        ) : def.type === "boolean" ? (
-                          <Badge variant="light" color={value ? "green" : "gray"}>
-                            {value ? t("entities.field.true") : t("entities.field.false")}
-                          </Badge>
-                        ) : (
-                          <Text size="sm" truncate="end" maw={220} title={String(value)}>
-                            {String(value)}
-                          </Text>
-                        )}
-                      </Table.Td>
-                    );
-                  })}
+                  {previewColumns.map((column) => (
+                    <Table.Td key={previewColumnKey(column)}>
+                      {column.kind === "schema" ? (
+                        schemaPreviewCell(entity.properties[column.id], column.type, t)
+                      ) : (
+                        <EntityComputedValue value={entity.properties[column.definition.id]} definition={column.definition} />
+                      )}
+                    </Table.Td>
+                  ))}
                   <Table.Td>
                     <EntityFindingsBadge findings={entity.findings} />
                   </Table.Td>

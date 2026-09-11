@@ -206,6 +206,38 @@ describe("toEntityRequest / fromEntityResponse round trip", () => {
     // It survives being saved again, unmodified.
     expect(toEntityRequest(restored, BLUEPRINT).properties.gone).toEqual({ still: "here" });
   });
+
+  test("a computed (mirror) id present in the response never becomes an unknown draft", () => {
+    const blueprintWithComputed = {
+      ...BLUEPRINT,
+      mirrorProperties: { domain_title: { title: "Domain title", path: "system.domain.$title" } },
+    } as unknown as Blueprint;
+    const entity = {
+      blueprint: "service",
+      identifier: "checkout",
+      title: "Checkout",
+      properties: { name: "Checkout", domain_title: "Commerce" },
+      relations: {},
+    } as unknown as Entity;
+
+    const restored = fromEntityResponse(entity, blueprintWithComputed);
+    expect(restored.properties.find((p) => p.id === "domain_title")).toBeUndefined();
+  });
+
+  test("toEntityRequest defensively skips a computed-id draft even if one exists", () => {
+    const blueprintWithComputed = {
+      ...BLUEPRINT,
+      mirrorProperties: { domain_title: { title: "Domain title", path: "system.domain.$title" } },
+    } as unknown as Blueprint;
+    const form = values({
+      properties: [
+        { id: "name", text: "Checkout", bool: "", list: [], json: "", unknown: false },
+        { id: "domain_title", text: "should-not-be-sent", bool: "", list: [], json: "", unknown: false },
+      ],
+    });
+
+    expect(toEntityRequest(form, blueprintWithComputed).properties).toEqual({ name: "Checkout" });
+  });
 });
 
 describe("entityFormValidation", () => {

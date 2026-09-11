@@ -39,7 +39,16 @@
   "section": {
     "identity": "Identity",
     "properties": "Properties",
-    "relations": "Relations"
+    "relations": "Relations",
+    "computed": "Computed"
+  },
+  "computed": {
+    "kind": {
+      "mirror": "Mirror",
+      "calculation": "Calculation",
+      "aggregation": "Aggregation"
+    },
+    "absent": "Not available"
   },
   "editor": {
     "blueprintLabel": "Blueprint: {{identifier}}",
@@ -48,7 +57,8 @@
   },
   "hint": {
     "team": "Every value must resolve to an active team (a \"_team\" entity).",
-    "teamInherited": "Computed automatically from the \"{{path}}\" relation chain — not editable here."
+    "teamInherited": "Computed automatically from the \"{{path}}\" relation chain — not editable here.",
+    "computed": "Computed automatically on the server — not editable here."
   },
   "finding": {
     "teamTargetMissing": "This team no longer exists."
