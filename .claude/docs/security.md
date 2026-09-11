@@ -158,6 +158,51 @@ CSRF install is gated behind `security.csrf.enabled` (default **`false`** in `ap
 
 **Outbound email** (`infra/mail/`, ported from Lettuce): `configureMail` (registered at the top of the infrastructure group, before Flyway) publishes `MailerKey` holding a `Mailer` or null. `mail.transport` (`$MAIL_TRANSPORT`) selects `log` (dev default — the full message, **including reset links and MFA codes**, goes to the `ch.nokillswit.mail` logger; **production mode refuses to start on it**), `smtp` (Jakarta/Angus Mail over `mail.smtp.*` / `$SMTP_HOST` etc.; a blank host refuses startup in any mode), or `disabled` (the Docker image default via `ENV MAIL_TRANSPORT=disabled` — email features answer 503 through `respondMailUnavailable`). The compose demo wires `smtp` → the bundled Mailpit (`http://localhost:8026` — 8025 is Lettuce's); k8s ships `disabled` with `SMTP_USER`/`SMTP_PASSWORD` read (optional) from `toadie-secrets`. Consumers: self-service password reset and email MFA. `LocalizedText` lives beside the transports; feature-owned `PasswordResetEmail` and `MfaEmail` compose recipient-language content. Tests: `MailTransportTest` (the transport matrix + both refusals + LogMailer delivery via the `ch.nokillswit.mail` LogCapture); production-mode boot tests must override `mail.transport` with `"disabled"`, since the dev-default `log` transport is refused in production.
 
+### Computed-property evaluation (jq)
+
+Admin-authored `calculationProperties` expressions (`.claude/docs/port-data-model.md` "Computed
+properties", phase 5, v1.27.0) run server-side, IN PROCESS, on EVERY entity read — every
+`GET`/list/create for every authenticated reader (the entities shared-workspace rule: any
+authenticated user evaluates whatever ANY admin wrote onto ANY blueprint). `net.thisptr:
+jackson-jq` 1.3.0 (jq 1.6 semantics) is **not a sandbox**: it enforces no sub-tree isolation, no
+module loading, and no timeout. Admin-trusted BY DECISION, not by construction — an expression
+that never emits (`def f: f; f`) blocks its calling worker until the JVM stack overflows, and
+jackson-jq cannot be interrupted mid-evaluation. Two mitigations ship today: evaluation runs
+OUTSIDE the entity's database transaction (`list`/`read`/`create` materialize rows and the
+snapshot inside `suspendTransaction`/`writeTransaction`, then evaluate AFTER it closes —
+`.claude/docs/persistence.md`), so a pathological expression pins a request-handling coroutine,
+never a pooled R2DBC connection or the entity write lock; and the FIRST jq output wins,
+aborting the instant it is emitted (`range(1e9)` yields `0` instead of iterating a billion
+times) — a `StackOverflowError` from unbounded recursion is caught, not left to crash the
+worker. **Named follow-up, not shipped here**: a bounded executor with a per-expression
+deadline — the `UrlFetch` worker-pool idiom above ("Native DNS limitation and bounded
+containment") — would cap the blast radius of a hostile or merely buggy expression instead of
+relying on admin trust alone.
+
+`env/0` is a jackson-jq BUILTIN (`EnvFunction`, backed by `System.getenv`) that would otherwise
+let an admin-authored calculation read `JWT_SECRET`, the database password, or any other
+process environment variable and leak it into `properties` for every authenticated reader.
+`entities/JqCalculation.kt`'s root `Scope` loads the jq 1.6 builtins via
+`BuiltinFunctionLoader` FIRST, then immediately shadows `env` (a zero-arg function that emits
+nothing) and `$ENV` (an empty object) — pinned by `JqCalculationTest`'s "env and ENV are
+shadowed even though the process environment is non-empty" case, which checks
+`System.getenv("PATH")` is non-null while both jq forms yield nothing. No `Scope.setModuleLoader`
+is ever installed, so `import`/`include` fail rather than reading the filesystem (also pinned).
+Every evaluation runs in its own `Scope.newChildScope` of that read-only root, so a
+mid-expression `def`/`as` binding never leaks across entities or requests.
+
+Output is bounded two ways: the first-emission abort above, and a **64 KiB**
+(`MAX_CALCULATION_OUTPUT_CHARS`) cap on the serialized winning result — an oversized result is
+absent, never truncated. jq's regex builtins (`test`/`match`/`capture`/`scan`/`sub`/`gsub`) run
+on `joni` (the same engine backing JRuby); an admin-authored catastrophic-backtracking pattern
+is the same ReDoS class as any regex engine and is not specially guarded against here — treat
+`calculationProperties` regexes with the same care as any other admin-authored regex
+(`.claude/docs/port-data-model.md`'s string `pattern` property already carries the same
+caveat). Evaluation failures — compile errors, runtime errors, type mismatches, recursion
+overflow — are logged at DEBUG on `ch.nokillswit.entities.computed` with the property id,
+blueprint identifier, and `Throwable.toString()` ONLY; the INPUT document (the entity's
+`properties`/`relations`, which may carry sensitive business data) is NEVER logged.
+
 ### Not yet ported from Lettuce
 
 Each of these is a fully worked-out Lettuce subsystem (implementation + tests + docs); port it rather than redesigning, and restore its section of Lettuce's security doc alongside:

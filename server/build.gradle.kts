@@ -128,6 +128,7 @@ dependencies {
     implementation(libs.exposed.r2dbc)
     implementation(libs.flyway.core)
     implementation(libs.flyway.database.postgresql)
+    implementation(libs.jackson.jq)
     implementation(libs.logback.classic)
     implementation(libs.okhttp)
     implementation(libs.opentelemetry.logbackAppender)
