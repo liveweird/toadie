@@ -488,7 +488,11 @@ string, a number, `null`) fails to decode into `JsonObject` at all and IS a requ
 thrown by ContentNegotiation before either planner runs. `POST …/import/check` runs the
 IDENTICAL classification against the current registry, storing nothing — the same
 `{real run, dry-run} share one classification` promise `catalog/CatalogFileImport.kt` makes for
-catalog files.
+catalog files. One consequence for a MIXED batch: the two endpoints are separate requests, so an
+entity dry-run resolves `blueprint` against the STORED registry only — an entity whose blueprint
+is itself still pending in the same paste checks as `INVALID` "Unknown blueprint" and lands as
+`CREATED` only on the real Import, after the blueprint half has stored (documented limitation;
+the page sends blueprints first for exactly this reason).
 
 **Per-row statuses** (`OntologyImportStatus`, shared by both endpoints): `CREATED` (stored as a
 new row), `UPDATED` (an existing row replaced in place — only reachable with

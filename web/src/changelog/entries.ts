@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.28.0",
+    date: "2026-09-12",
+    en: `**Ontology import and export.**
+
+- A new Import page under Port Ontology loads blueprints and entities from pasted or uploaded JSON, Port API exports included: read-only keys are stripped, documents are ordered by their references, forward references land in a second pass, and every document gets its own result row.
+- Check previews the outcome without storing anything; the Replace existing definitions switch turns existing rows into updates, otherwise they are reported as already existing and left untouched.
+- Export JSON on the Blueprints and Entities pages downloads a file the import accepts unchanged, so an ontology can be moved between workspaces.`,
+    pl: `**Import i eksport ontologii.**
+
+- Nowa strona Import w sekcji Ontologia Port wczytuje blueprinty i encje z wklejonego lub wgranego JSON-a, w tym eksporty z API Port: klucze tylko do odczytu są pomijane, dokumenty są porządkowane według odwołań, odwołania w przód trafiają w drugim przebiegu, a każdy dokument dostaje własny wiersz wyniku.
+- Sprawdź pokazuje wynik bez zapisywania czegokolwiek; przełącznik Zastąp istniejące definicje zamienia istniejące wiersze w aktualizacje, w przeciwnym razie są zgłaszane jako już istniejące i pozostają nietknięte.
+- Eksportuj JSON na stronach Blueprinty i Encje pobiera plik, który import przyjmuje bez zmian, dzięki czemu ontologię można przenieść między obszarami roboczymi.`,
+  },
+  {
     version: "1.27.0",
     date: "2026-09-11",
     en: `**Computed properties.**
