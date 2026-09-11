@@ -57,13 +57,10 @@
       "target": "environment",
       "required": true,
       "many": false
-    },
-    "owned_by": {
-      "title": "Operated by",
-      "description": "The platform team running the cluster.",
-      "target": "team",
-      "required": false,
-      "many": false
     }
+  },
+  "ownership": {
+    "type": "Direct",
+    "title": "Operated by"
   }
 }

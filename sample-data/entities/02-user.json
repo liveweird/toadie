@@ -1,6 +1,6 @@
 [
   {
-    "blueprint": "user",
+    "blueprint": "_user",
     "identifier": "anna.kowalska",
     "title": "Anna Kowalska",
     "properties": {
@@ -10,15 +10,15 @@
         { "title": "GitHub", "url": "https://github.com/anna-kowalska" }
       ]
     },
-    "relations": { "member_of": ["platform-tribe", "payments-squad"] }
+    "relations": { "team": ["platform-tribe", "payments-squad"] }
   },
   {
-    "blueprint": "user",
+    "blueprint": "_user",
     "identifier": "marek.nowak",
     "title": "Marek Nowak",
     "properties": {
       "email": "marek.nowak@toadie.local"
     },
-    "relations": { "member_of": ["retail-tribe"] }
+    "relations": { "team": ["retail-tribe"] }
   }
 ]

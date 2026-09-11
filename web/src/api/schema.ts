@@ -1258,6 +1258,8 @@ export interface paths {
          *     Backstage's fixed System Model to Port.io's data model
          *     (see `.claude/docs/port-data-model.md`): blueprints are user-definable entity-kind
          *     definitions, stored and validated structurally; nothing yet attaches entities to them.
+         *     The registry always holds the two Port system blueprints `_team`/`_user`, seeded by
+         *     migration (Phase 4, v1.26.0) and flagged `system: true`.
          */
         get: operations["listBlueprints"];
         put?: never;
@@ -1271,7 +1273,9 @@ export interface paths {
          *     already held by an active blueprint (case-insensitively) is a `409`. Optionally
          *     carries `hierarchyRelation`, a Toadie-only extension (not part of Port's document)
          *     naming one of this blueprint's `many: false` relations — the entity hierarchy's
-         *     parent link; naming an unknown or many-valued relation is `400`.
+         *     parent link; naming an unknown or many-valued relation is `400`. Identifiers starting
+         *     with `_` are reserved for Port's own system blueprints (`_team`/`_user`) and are
+         *     rejected with `400`.
          */
         post: operations["createBlueprint"];
         delete?: never;
@@ -1300,7 +1304,11 @@ export interface paths {
          *     CASCADES: every other active blueprint's relation/aggregation targets naming the old
          *     identifier are rewritten to the new one, in the same locked transaction. Same
          *     validation and `409` rules as create, including `hierarchyRelation`'s
-         *     must-be-a-current-single-relation rule; a self-relation survives a rename.
+         *     must-be-a-current-single-relation rule; a self-relation survives a rename. A system
+         *     blueprint (`_team`/`_user`, `system: true`) additionally rejects an identifier rename
+         *     and any removal or retyping of its base properties/relations with `400`; everything
+         *     else about it (titles, extra properties/relations, `hierarchyRelation`, `ownership`)
+         *     remains an ordinary admin edit.
          */
         put: operations["replaceBlueprint"];
         post?: never;
@@ -1309,7 +1317,9 @@ export interface paths {
          * @description ADMIN only — soft delete; the identifier becomes reusable by a NEW blueprint. A
          *     blueprint that is the TARGET of another active blueprint's relation or aggregation is
          *     `409` (a self-relation on the blueprint being deleted never blocks its own deletion).
-         *     A blueprint with active ENTITIES is refused too — `409` naming the count.
+         *     A blueprint with active ENTITIES is refused too — `409` naming the count. A system
+         *     blueprint (`_team`/`_user`, `system: true`) can never be deleted — `409` — checked
+         *     before the entity-count and referrer checks.
          */
         delete: operations["deleteBlueprint"];
         options?: never;
@@ -1338,7 +1348,10 @@ export interface paths {
          *     - Filters (optional): `blueprint` — exact (case-insensitive) match against the
          *       blueprint identifier (an unknown identifier answers an empty page, not `404`);
          *       `q` — case- and accent-insensitive substring match against `identifier` OR
-         *       `title`.
+         *       `title`; `team` — case-insensitive membership against the entity's EFFECTIVE
+         *       team (Phase 4 ownership: a scalar or array `team` value, or the row itself being
+         *       the named `_team` entity); an Inherited entity whose stored `team` is absent never
+         *       matches (documented limitation).
          *
          *     Each returned item carries `findings` — the same validation a strict save would
          *     enforce, re-evaluated against the blueprint's CURRENT definition, so an entity left
@@ -1353,9 +1366,14 @@ export interface paths {
          *     STRICTLY against the blueprint's CURRENT `schema`/`relations` (every
          *     `properties`/`relations` key must be declared by the blueprint; mirror/calculation/
          *     aggregation property ids are COMPUTED and rejected as input; the type/format/range/
-         *     pattern/enum rules in `.claude/docs/port-data-model.md` apply) — any violation is
-         *     `400` with the full `findings` list, one entry per violated rule. Every relation
-         *     target must resolve to an ACTIVE entity of the relation's target blueprint
+         *     pattern/enum rules in `.claude/docs/port-data-model.md` apply, including Phase 4
+         *     ownership: a Direct/absent-ownership blueprint's `team` values must each resolve to
+         *     an active `_team` entity (`TEAM_TARGET_MISSING`), an Inherited blueprint rejects a
+         *     supplied `team` outright (`TEAM_NOT_ALLOWED`), and a `format: team`/`format: user`
+         *     property value must resolve to an active `_team`/`_user` entity
+         *     (`TEAM_TARGET_MISSING`/`USER_TARGET_MISSING`)) — any violation is `400` with the
+         *     full `findings` list, one entry per violated rule (`EntityInvalidProblem`). Every
+         *     relation target must resolve to an ACTIVE entity of the relation's target blueprint
          *     (self-relations allowed); an unresolved target is `400`. `blueprint` must name an
          *     active, registered blueprint, else `400`. `identifier` is unique PER BLUEPRINT,
          *     case-insensitively — a clash is `409` (the same identifier may be reused across
@@ -1385,15 +1403,20 @@ export interface paths {
          *     The optional filters select which entities are SHOWN: `blueprint` is an any-of (IN)
          *     match over blueprint identifiers (case-insensitive; unknown identifiers ignored, and
          *     if every supplied identifier is unknown the graph is empty), `q` is a case- and
-         *     accent-insensitive substring match against `identifier` OR `title`. An edge is
-         *     emitted only when BOTH of its ends are among the returned nodes — there are no
-         *     virtual/MISSING nodes here (unlike the catalog graph): a relation value naming an
-         *     entity the filter excluded, or one that no longer resolves, simply contributes no
-         *     edge.
+         *     accent-insensitive substring match against `identifier` OR `title`, `team` is a
+         *     case-insensitive match against the entity's EFFECTIVE team (Phase 4 ownership) OR
+         *     the row itself being the named `_team` entity — so filtering by a team keeps that
+         *     team's own node in the graph alongside its owned entities. An edge is emitted only
+         *     when BOTH of its ends are among the returned nodes — there are no virtual/MISSING
+         *     nodes here (unlike the catalog graph): a relation value naming an entity the filter
+         *     excluded, or one that no longer resolves, simply contributes no edge; the same rule
+         *     applies to ownership edges (below).
          *
          *     Each node's id follows the grammar `"<blueprint>|<identifier>"` (`|` never appears in
          *     either charset, so the split is unambiguous). An edge's `hierarchy` flag is `true`
          *     exactly when `relation` is the SOURCE entity's blueprint's `hierarchyRelation`.
+         *     Phase 4 adds ownership edges: one per effective team value, `relation: "$team"` and
+         *     `ownership: true` (never `hierarchy`), from the owning entity to its `_team` node.
          *
          *     Unpaged by design — a report-style computation over the workspace.
          */
@@ -1425,9 +1448,13 @@ export interface paths {
          * @description Any authenticated user — whole-entity replacement, identifier rename included. The
          *     `blueprint` field must equal the entity's STORED blueprint; naming a different
          *     blueprint is `400` (moving an entity between blueprints is not supported). Same
-         *     shape/findings/target/`409` rules as create. Renaming the identifier CASCADES:
-         *     every other active entity's `relations` naming the old identifier are rewritten to
-         *     the new one, in the same locked transaction.
+         *     shape/findings/target/`409` rules as create (`400` bodies carry `findings`,
+         *     `EntityInvalidProblem`). Renaming the identifier CASCADES: every other active
+         *     entity's `relations` naming the old identifier are rewritten to the new one, in the
+         *     same locked transaction — and, when the renamed entity's OWN blueprint is `_team` or
+         *     `_user` (Phase 4 system blueprints), every OTHER active entity's `team` column and
+         *     `format: team`/`format: user` property values naming the old identifier are rewritten
+         *     too, in the same transaction (audited `cascaded`).
          */
         put: operations["replaceEntity"];
         post?: never;
@@ -1436,7 +1463,9 @@ export interface paths {
          * @description Any authenticated user — soft delete; the identifier becomes reusable within the
          *     same blueprint. An entity that is the TARGET of another active entity's relation is
          *     `409`, naming the referrers as `blueprint/identifier` (a self-relation on the entity
-         *     being deleted never blocks its own deletion).
+         *     being deleted never blocks its own deletion) — for a `_team`/`_user` entity (Phase 4
+         *     system blueprints) this also includes every other active entity naming it in its
+         *     `team` column or a `format: team`/`format: user` property.
          */
         delete: operations["deleteEntity"];
         options?: never;
@@ -2303,6 +2332,8 @@ export interface components {
              * @description Epoch millis.
              */
             updatedAt: number;
+            /** @description True for Port's own system blueprints (`_team`/`_user`, seeded by migration — Phase 4, v1.26.0). A system blueprint can never be deleted or renamed, and its base properties/relations can never be removed or retyped; everything else about it is an ordinary admin edit. Response-only — a request carrying this field is rejected by strict decoding. */
+            system: boolean;
         };
         BlueprintList: {
             /** @description Active blueprints, identifier-ordered case-insensitively. */
@@ -2346,7 +2377,7 @@ export interface components {
             title: string;
             /** @description Port icon NAME — a free string. Absent when unset. */
             icon?: string;
-            /** @description A team name, or an array of team names, stored exactly as sent — unvalidated (teams arrive with a later phase). Absent when unset. */
+            /** @description Phase 4 ownership (`.claude/docs/port-data-model.md` "Ownership"): for a Direct/absent-ownership blueprint, a team name or array of team names, each resolving to an active `_team` entity (`TEAM_TARGET_MISSING` otherwise) — the STORED value. For an Inherited-ownership blueprint, `team` must be ABSENT (supplying one is `TEAM_NOT_ALLOWED`); the effective team is computed from a related blueprint's Direct ownership instead. Absent when unset. */
             team?: string | string[];
             /**
              * @description `<propertyId>: JSON value`, keyed by the blueprint's declared property ids. Defaults to empty when omitted.
@@ -2361,16 +2392,33 @@ export interface components {
             };
         };
         /**
-         * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint).
+         * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint). Phase 4 ownership (field `team`, or `properties.<id>` for a `format: team|user` property): TEAM_TARGET_MISSING (a `team` value, or a `format: team` property value, does not resolve to an active `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property value does not resolve to an active `_user` entity).
          * @enum {string}
          */
-        EntityFindingCode: "UNKNOWN_PROPERTY" | "COMPUTED_PROPERTY" | "REQUIRED_MISSING" | "TYPE_MISMATCH" | "ENUM_MISMATCH" | "FORMAT_INVALID" | "LENGTH_OUT_OF_RANGE" | "PATTERN_MISMATCH" | "RANGE_OUT_OF_BOUNDS" | "ARRAY_SIZE" | "ARRAY_NOT_UNIQUE" | "OBJECT_SHAPE" | "UNKNOWN_RELATION" | "RELATION_SHAPE" | "RELATION_REQUIRED" | "RELATION_TARGET_MISSING";
+        EntityFindingCode: "UNKNOWN_PROPERTY" | "COMPUTED_PROPERTY" | "REQUIRED_MISSING" | "TYPE_MISMATCH" | "ENUM_MISMATCH" | "FORMAT_INVALID" | "LENGTH_OUT_OF_RANGE" | "PATTERN_MISMATCH" | "RANGE_OUT_OF_BOUNDS" | "ARRAY_SIZE" | "ARRAY_NOT_UNIQUE" | "OBJECT_SHAPE" | "UNKNOWN_RELATION" | "RELATION_SHAPE" | "RELATION_REQUIRED" | "RELATION_TARGET_MISSING" | "TEAM_TARGET_MISSING" | "TEAM_NOT_ALLOWED" | "USER_TARGET_MISSING";
         /** @description One violation of the owning blueprint's current schema/relations — the same rule a strict save enforces. A non-empty `findings` list on a GET/list response means the entity is STALE (its blueprint changed since its last save) and its next save is refused until fixed. */
         EntityFinding: {
             code: components["schemas"]["EntityFindingCode"];
-            /** @description `properties.<id>` or `relations.<id>` naming the offending key. */
+            /** @description `properties.<id>` or `relations.<id>` naming the offending key, or `team` (Phase 4 ownership). */
             field: string;
             message: string;
+        };
+        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list — the entity create/replace `400` body only (`EntityInvalid` response). Other `400`s on those operations omit `findings`. */
+        EntityInvalidProblem: {
+            /**
+             * @description A URI reference identifying the problem type.
+             * @default about:blank
+             */
+            type: string;
+            /** @description Short, human-readable summary of the problem type. */
+            title: string;
+            /** @description HTTP status code. */
+            status: number;
+            /** @description Human-readable explanation specific to this occurrence. */
+            detail?: string;
+            /** @description URI reference of the specific occurrence (the request path). */
+            instance?: string;
+            findings?: components["schemas"]["EntityFinding"][];
         };
         /** @description An entity — an instance of a blueprint (Phase 2 of the Port data-model move — see `.claude/docs/port-data-model.md`). Every optional field is simply ABSENT when unset (never `null`). */
         Entity: {
@@ -2387,7 +2435,7 @@ export interface components {
             title: string;
             /** @description Port icon NAME — a free string. Absent when unset. */
             icon?: string;
-            /** @description A team name, or an array of team names, stored exactly as sent. Absent when unset. */
+            /** @description Phase 4 ownership: for a Direct/absent-ownership blueprint, the STORED team name or array of team names, exactly as sent. For an Inherited-ownership blueprint, the EFFECTIVE team COMPUTED at read time from a related blueprint's Direct ownership (never stored) — absent when the chain does not resolve (an unknown/ many/missing hop, or an exhausted budget). Absent when unowned. */
             team?: string | string[];
             /** @description `<propertyId>: JSON value`, keyed by the blueprint's declared property ids. */
             properties: {
@@ -2446,10 +2494,12 @@ export interface components {
         EntityGraphEdge: {
             sourceId: string;
             targetId: string;
-            /** @description The relation identifier the edge came from. */
+            /** @description The relation identifier the edge came from, or `"$team"` for a Phase 4 ownership edge (never a declared blueprint relation). */
             relation: string;
-            /** @description True when `relation` is the source entity's blueprint's `hierarchyRelation` — the entity hierarchy's parent link. */
+            /** @description True when `relation` is the source entity's blueprint's `hierarchyRelation` — the entity hierarchy's parent link. Always false for an ownership edge. */
             hierarchy: boolean;
+            /** @description True for a Phase 4 ownership edge (the source entity's effective team, `relation: "$team"`); false for a declared relation edge. */
+            ownership: boolean;
         };
         EntityGraph: {
             nodes: components["schemas"]["EntityGraphNode"][];
@@ -2554,6 +2604,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["ProblemDetail"];
             };
         };
+        /** @description The entity payload violates its blueprint's current `schema`/`relations` (including Phase 4 ownership: `team`/`format: team|user` target rules) — the full `findings` list is the SAME validation a strict save enforces, one entry per violated rule. Other `400`s on the same operations (an unknown blueprint, a malformed body) carry no `findings` member. */
+        EntityInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["EntityInvalidProblem"];
+            };
+        };
     };
     parameters: {
         ResourceId: number;
@@ -2598,6 +2657,8 @@ export interface components {
         CatalogLabelValueFilter: string[];
         /** @description Any-of (IN) match over blueprint identifiers, case-insensitive — repetition is the documented IN idiom on this parameter (alongside `kind` and `labelValue`). Unknown identifiers are ignored; if every supplied identifier is unknown the graph is empty. */
         EntityBlueprintFilter: string[];
+        /** @description Case-insensitive match against the entity's EFFECTIVE team (Phase 4 ownership: a scalar or array `team` value) OR the row itself being the `_team` entity named by this value — so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose stored `team` is absent never matches (documented limitation). */
+        EntityTeamFilter: string;
     };
     requestBodies: never;
     headers: never;
@@ -4480,6 +4541,8 @@ export interface operations {
                 blueprint?: string;
                 /** @description Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the matched fields are declared per endpoint. */
                 q?: components["parameters"]["Q"];
+                /** @description Case-insensitive match against the entity's EFFECTIVE team (Phase 4 ownership: a scalar or array `team` value) OR the row itself being the `_team` entity named by this value — so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose stored `team` is absent never matches (documented limitation). */
+                team?: components["parameters"]["EntityTeamFilter"];
             };
             header?: never;
             path?: never;
@@ -4525,7 +4588,7 @@ export interface operations {
                     "application/json": components["schemas"]["Entity"];
                 };
             };
-            400: components["responses"]["BadRequest"];
+            400: components["responses"]["EntityInvalid"];
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
@@ -4538,6 +4601,8 @@ export interface operations {
                 blueprint?: components["parameters"]["EntityBlueprintFilter"];
                 /** @description Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the matched fields are declared per endpoint. */
                 q?: components["parameters"]["Q"];
+                /** @description Case-insensitive match against the entity's EFFECTIVE team (Phase 4 ownership: a scalar or array `team` value) OR the row itself being the `_team` entity named by this value — so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose stored `team` is absent never matches (documented limitation). */
+                team?: components["parameters"]["EntityTeamFilter"];
             };
             header?: never;
             path?: never;
@@ -4606,7 +4671,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            400: components["responses"]["BadRequest"];
+            400: components["responses"]["EntityInvalid"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];

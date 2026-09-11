@@ -49,9 +49,33 @@ data class EntityRequest(
 @Serializable
 data class EntityDocument(val properties: JsonObject, val relations: JsonObject)
 
-/** One rule-table violation; `field` is `properties.<id>` or `relations.<id>`. */
+/** One rule-table violation; `field` is `properties.<id>`, `relations.<id>`, or `team`. */
 @Serializable
 data class EntityFinding(val code: String, val field: String, val message: String)
+
+/**
+ * Thrown by [EntityService.create]/[EntityService.update] when [entityFindings] is non-empty —
+ * the aggregated strict-save `400`. Carries the FULL list so `plugins/ErrorHandling.kt` can
+ * surface it as an [EntityInvalidProblem] extension member on the RFC 7807 body (never on any
+ * OTHER 400 — shape-rule rejections stay a plain [ch.nokillswit.plugins.ProblemDetail]).
+ */
+class EntityInvalidException(val findings: List<EntityFinding>) :
+    RuntimeException(findings.joinToString("; ") { "${it.field}: ${it.message}" })
+
+/**
+ * [ch.nokillswit.plugins.ProblemDetail] plus the full [EntityFinding] list — the entity create/
+ * replace `400` body only (`EntityInvalidProblem` in the OpenAPI contract), so the SPA can paint
+ * per-field errors after a rejected save without re-parsing `detail`.
+ */
+@Serializable
+data class EntityInvalidProblem(
+    val type: String = "about:blank",
+    val title: String,
+    val status: Int,
+    val detail: String? = null,
+    val instance: String? = null,
+    val findings: List<EntityFinding>,
+)
 
 @Serializable
 data class EntityResponse(

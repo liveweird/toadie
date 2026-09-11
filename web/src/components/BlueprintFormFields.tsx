@@ -31,6 +31,7 @@ import {
   type RowFamily,
   type BlueprintFormValues,
 } from "../utils/blueprintForm";
+import { lockedRowIds } from "../utils/systemBlueprints";
 
 type Form = UseFormReturnType<BlueprintFormValues>;
 
@@ -44,7 +45,7 @@ function addRow(form: Form, expansion: BlueprintRowExpansion, family: RowFamily,
   expansion.reveal(rowDomId(family, draft.key));
 }
 
-function IdentityFields({ form }: { form: Form }) {
+function IdentityFields({ form, system }: { form: Form; system: boolean }) {
   const { t } = useTranslation();
   return (
     <Stack gap="sm">
@@ -53,9 +54,14 @@ function IdentityFields({ form }: { form: Form }) {
         autoFocus
         required
         maxLength={MAX_IDENTIFIER_LENGTH}
-        description={charCountDescription(form.values.identifier.length, MAX_IDENTIFIER_LENGTH)}
+        description={
+          system
+            ? t("blueprints.hint.systemIdentifier")
+            : charCountDescription(form.values.identifier.length, MAX_IDENTIFIER_LENGTH)
+        }
         inputWrapperOrder={[...BELOW_INPUT]}
         {...form.getInputProps("identifier")}
+        readOnly={system}
       />
       <TextInput
         label={t("blueprints.field.title")}
@@ -98,7 +104,14 @@ function PropertiesFieldset({ form, expansion }: { form: Form; expansion: Bluepr
         newRowLabel={t("blueprints.rows.new.properties")}
         badge={propertyBadge}
         isRequired={(row) => row.required}
-        renderBody={(_row, index) => <BlueprintPropertyRow form={form} index={index} />}
+        isLocked={(row) => lockedRowIds(form.values.identifier, "properties").has(row.id)}
+        renderBody={(row, index) => (
+          <BlueprintPropertyRow
+            form={form}
+            index={index}
+            locked={lockedRowIds(form.values.identifier, "properties").has(row.id)}
+          />
+        )}
         onAdd={() => addRow(form, expansion, "properties", emptyPropertyDraft())}
         addLabel={t("blueprints.addProperty")}
         onMove={(from, to) => form.reorderListItem("properties", { from, to })}
@@ -127,7 +140,14 @@ function RelationsFieldset({ form, expansion }: { form: Form; expansion: Bluepri
         newRowLabel={t("blueprints.rows.new.relations")}
         badge={relationBadge}
         isRequired={(row) => row.required}
-        renderBody={(_row, index) => <BlueprintRelationRow form={form} index={index} />}
+        isLocked={(row) => lockedRowIds(form.values.identifier, "relations").has(row.id)}
+        renderBody={(row, index) => (
+          <BlueprintRelationRow
+            form={form}
+            index={index}
+            locked={lockedRowIds(form.values.identifier, "relations").has(row.id)}
+          />
+        )}
         onAdd={() => addRow(form, expansion, "relations", emptyRelationDraft())}
         addLabel={t("blueprints.addRelation")}
         onMove={(from, to) => form.reorderListItem("relations", { from, to })}
@@ -296,10 +316,20 @@ function HierarchyFieldset({ form }: { form: Form }) {
  * threaded through every family so a blocked submit can reveal errors across all five lists.
  * The Hierarchy fieldset follows Ownership, last, since it depends on the Relations rows above.
  */
-export default function BlueprintFormFields({ form, expansion }: { form: Form; expansion: BlueprintRowExpansion }) {
+export default function BlueprintFormFields({
+  form,
+  expansion,
+  system = false,
+}: {
+  form: Form;
+  expansion: BlueprintRowExpansion;
+  /** A system blueprint (`_team`/`_user`, Phase 4 v1.26.0): the identifier is read-only and
+   *  its base properties/relations are locked (see `utils/systemBlueprints.ts`). */
+  system?: boolean;
+}) {
   return (
     <Stack gap="md">
-      <IdentityFields form={form} />
+      <IdentityFields form={form} system={system} />
       <PropertiesFieldset form={form} expansion={expansion} />
       <RelationsFieldset form={form} expansion={expansion} />
       <MirrorFieldset form={form} expansion={expansion} />

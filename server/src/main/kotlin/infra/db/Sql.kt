@@ -131,6 +131,32 @@ fun Expression<String>.jsonObjectValueIn(path: List<String>, key: String, values
     }
 }
 
+/**
+ * Case-folded membership test against a TEXT column holding EITHER a JSON string OR a JSON
+ * string ARRAY — no nested path, unlike [jsonArrayContains]/[jsonTextEqualsFolded]: this is the
+ * `entities.team` shape, exactly what the client sent. Renders `EXISTS (SELECT 1 FROM
+ * jsonb_array_elements_text(CASE WHEN jsonb_typeof(CAST(col AS jsonb)) = 'array' THEN
+ * CAST(col AS jsonb) ELSE jsonb_build_array(CAST(col AS jsonb)) END) elem WHERE LOWER(elem) = ?)`
+ * — wrapping a scalar in `jsonb_build_array` lets ONE predicate serve both stored shapes, and
+ * `jsonb_array_elements_text` (rather than `jsonb_exists`, which cannot fold case) lets every
+ * element be compared case-insensitively. A NULL column folds to `jsonb_build_array(NULL)` =
+ * `[null]`, whose one element extracts to SQL NULL, so NULL never matches — exactly what a
+ * membership filter over an optional column should do. [value] is bound lowercased.
+ */
+fun Expression<String?>.jsonStringOrArrayContainsFolded(value: String): Op<Boolean> = object : Op<Boolean>() {
+    override fun toQueryBuilder(queryBuilder: QueryBuilder) {
+        queryBuilder.append("EXISTS (SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(CAST(")
+        queryBuilder.append(this@jsonStringOrArrayContainsFolded)
+        queryBuilder.append(" AS jsonb)) = 'array' THEN CAST(")
+        queryBuilder.append(this@jsonStringOrArrayContainsFolded)
+        queryBuilder.append(" AS jsonb) ELSE jsonb_build_array(CAST(")
+        queryBuilder.append(this@jsonStringOrArrayContainsFolded)
+        queryBuilder.append(" AS jsonb)) END) elem WHERE LOWER(elem) = ")
+        queryBuilder.append(stringParam(value.lowercase()))
+        queryBuilder.append(")")
+    }
+}
+
 private fun requireSimplePath(path: List<String>) {
     require(path.isNotEmpty() && path.all { it.matches(Regex("[A-Za-z0-9_]+")) }) {
         "JSON path segments must be simple identifiers"

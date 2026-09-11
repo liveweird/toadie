@@ -371,7 +371,16 @@ function AdvancedFields({ form, index }: { form: Form; index: number }) {
  * fieldset — rather than a second, redundant remove control here. The row's own testid lives
  * on that list's wrapper (`properties-row-N`), not here.
  */
-export default function BlueprintPropertyRow({ form, index }: { form: Form; index: number }) {
+export default function BlueprintPropertyRow({
+  form,
+  index,
+  locked = false,
+}: {
+  form: Form;
+  index: number;
+  /** A system-seeded base property (Phase 4, v1.26.0): the id cannot be renamed. */
+  locked?: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <Stack gap="sm">
@@ -381,6 +390,7 @@ export default function BlueprintPropertyRow({ form, index }: { form: Form; inde
           label={t("blueprints.field.propertyId")}
           required
           {...form.getInputProps(`properties.${index}.id`)}
+          readOnly={locked}
         />
         <Select
           style={{ minWidth: 140 }}

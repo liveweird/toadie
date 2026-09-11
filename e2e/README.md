@@ -74,13 +74,14 @@ from Lettuce, that any new or edited spec must satisfy:
   `namespaces` owns its throwaway dictionary entries and user;
   `lenses` owns its throwaway lenses, files, and users (see its own bullet below);
   `blueprints` owns its two throwaway `e2e-bp-*` blueprints and its user;
-  `entities` owns its two throwaway `e2e-ent-bp-*` blueprints and their `e2e-ent-*` entities
-  (together with `blueprints`, one of the blueprint registry's four in-run writers — see the
-  dedicated bullet below);
-  `entity-graph` owns its two throwaway `e2e-eg-*` blueprints and entities plus its throwaway
-  user's `entity-graph-layout` document (see its own bullet below, alongside
-  `graph-persistence`/`render`); `entity-hierarchy` owns its two throwaway `e2e-eh-*`
-  blueprints and entities (run as the seed admin — entities carry no admin gate);
+  `entities` owns its two throwaway `e2e-ent-bp-*` blueprints, their `e2e-ent-*` entities, and
+  one throwaway `e2e-ent-team-*` `_team` entity (together with `blueprints`, one of the
+  blueprint registry's four in-run writers — see the dedicated bullet below);
+  `entity-graph` owns its two throwaway `e2e-eg-*` blueprints and entities, one throwaway
+  `e2e-eg-*`-marked `_team` entity, plus its throwaway user's `entity-graph-layout` document
+  (see its own bullet below, alongside `graph-persistence`/`render`); `entity-hierarchy` owns
+  its two throwaway `e2e-eh-*` blueprints and entities plus one throwaway `e2e-eh-*`-marked
+  `_team` entity (run as the seed admin — entities carry no admin gate);
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
@@ -126,6 +127,18 @@ from Lettuce, that any new or edited spec must satisfy:
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*` today) and
   is removed by that same spec before it returns, so a future entity-creating spec can join
   safely as long as it never touches another spec's rows.
+- **`_team`/`_user` (Phase 4, v1.26.0) are SEEDED, PROTECTED system blueprints — no spec ever
+  edits or deletes either row** (the server itself refuses both: rename/base-shape changes are
+  `400`, delete is `409`). A spec needing ownership fixtures creates only its OWN uniquely
+  named `_team`/`_user` ENTITIES (today: `entities.spec.ts` mints `e2e-ent-team-*`,
+  `entity-graph.spec.ts` mints `e2e-eg-*`-marked ones, `entity-hierarchy.spec.ts` mints
+  `e2e-eh-*`-marked ones) and removes them in `finally`, the same per-spec-ownership rule as
+  every other entity above. Because `_team` is workspace-wide state every ownership-aware spec
+  may add rows to, **never assert node/row counts over an unfiltered `_team` view** — narrow
+  the blueprint/hierarchy filter with the spec's own run marker via the `q` search filter
+  first (`entity-graph.spec.ts`/`entity-hierarchy.spec.ts` both do this), the same isolation
+  idiom the labels/tags/annotation-key registries' single writers rely on, applied here to a
+  registry every ownership-aware spec may append to rather than one writer alone.
 - **The lens store is per-run unique-name state.** Lenses are per-user content (private by
   default) and names are only unique per owner, so parallel specs cannot clash as long as
   every lens a spec saves carries a run-unique `e2e-lens-*` name and is deleted by its own
@@ -162,10 +175,11 @@ from Lettuce, that any new or edited spec must satisfy:
   user through the normal API, and never reads or writes the seed admin's layout or catalog data.
 - `entity-graph.spec.ts` creates one throwaway user and exclusively owns that user's SEPARATE
   `entity-graph-layout` document (its own table/endpoint, independent of `graph-layout` above) —
-  never the seed admin's. It seeds its throwaway blueprints/entities as the admin first (the
-  registry writer role above), then signs in as the throwaway user for the filter/fold/drag
-  journey, and deletes everything (entities, blueprints, the user) via the retained admin
-  authorization in `finally`.
+  never the seed admin's. It seeds its throwaway blueprints/entities, PLUS one throwaway
+  `_team` entity carrying the run's own marker, as the admin first (the registry writer role
+  above), then signs in as the throwaway user for the filter/fold/drag journey, and deletes
+  everything (entities, the team, blueprints, the user) via the retained admin authorization in
+  `finally`.
 - E2e-created entities carry a sweepable marker — every e2e-created file's name/namespace and
   every e2e-created user's email contains `e2e`, and nothing that must SURVIVE runs is ever
   named that way. Each spec deletes its own state, so the rule is currently satisfied by
@@ -207,31 +221,44 @@ the same commit** — this list is the coverage map, the scenario file is the de
   row menu, is addressed by `?file=`, survives a reload, scans clean, and hands over to the
   editor (owns one throwaway System in the `render` run namespace).
 - [`blueprints.spec.ts`](scenarios/blueprints.md) — the blueprint registry (Port
-  compatibility, phase 1): editor validation → create a blueprint with an enum string property
+  compatibility, phase 1; + Phase 4 system-blueprint protections, v1.26.0): the seeded `_team`
+  system row's System badge/disabled Delete and its editor's read-only identifier + locked
+  seeded relation → editor validation → create a blueprint with an enum string property
   and a required number property, watching the JSON preview → a second blueprint relating to
   it → the blocked delete of a targeted blueprint → a rename that cascades into the dependent's
-  relation target → the regular user's read-only view and the editor-route bounce → cleanup;
-  one of the registry's two in-run writers, alongside `entities.spec.ts`.
+  relation target → the regular user's read-only view (System badge included) and the
+  editor-route bounce → cleanup; one of the registry's two in-run writers, alongside
+  `entities.spec.ts`.
 - [`entities.spec.ts`](scenarios/entities.md) — instances of a blueprint (Port compatibility,
-  phase 2): two throwaway blueprints seeded via the API (a target with typed properties, a
-  dependent with a required relation to it) → the Entities list's blueprint picker and New
-  entity's validation → create an entity with an enum/number/boolean property, watching the
-  JSON preview → a second entity relating to the first → the blocked delete of the targeted
-  entity naming the referrer → editing the target blueprint to add a required property turns
-  the entity stale (the list's findings badge) → the editor's stale alert names the missing
-  field, fixed and saved, clears it → cleanup (entities, then blueprints); the blueprint
-  registry's other in-run writer, alongside `blueprints.spec.ts`.
+  phase 2; + Phase 4 ownership, v1.26.0): two throwaway blueprints seeded via the API (a target
+  with typed properties and Direct ownership, a dependent with a required relation to it) and
+  one throwaway `_team` entity → the Entities list's blueprint picker and New entity's
+  validation → create an entity with an enum/number/boolean property and a team picked in the
+  "Owned by" MultiSelect, watching the JSON preview → the row's Team chip, the toolbar Team
+  filter (`?team=`), the owned team's blocked (`409`, naming the referrer) then unblocked
+  (`204`, after unlinking in the editor) delete → a second entity relating to the first → the
+  blocked delete of the targeted entity naming the referrer → editing the target blueprint to
+  add a required property turns the entity stale (the list's findings badge) → the editor's
+  stale alert names the missing field, fixed and saved, clears it → cleanup (entities, then
+  blueprints); the blueprint registry's other in-run writer, alongside `blueprints.spec.ts`.
 - [`entity-graph.spec.ts`](scenarios/entity-graph.md) — the Entity graph (Port migration phase
-  3): two throwaway blueprints (a parent with a `peer` many self-relation, a child whose single
-  `parent` relation is flagged as its `hierarchyRelation`) and four entities seeded via the API
-  → a throwaway user filters the graph to the two blueprints, toggles the `peer` relation chip
-  to prune and restore an edge, folds/unfolds the hierarchy-relation parent, and drags it in
-  Manual mode, whose PUT is awaited by exact node id and confirmed after a reload → cleanup.
+  3; + Phase 4 ownership edges, v1.26.0): two throwaway blueprints (a parent with a `peer` many
+  self-relation, a child whose single `parent` relation is flagged as its `hierarchyRelation`),
+  four entities, and one throwaway `_team` entity owning one of the parents — all seeded via
+  the API under one shared run marker → a throwaway user filters the graph to the two
+  blueprints plus `_team` (narrowed by the run's own search marker), toggles the `peer` AND
+  `$team` relation chips to prune and restore an edge each, narrows further with the toolbar's
+  Team filter, folds/unfolds the hierarchy-relation parent (the owning team unaffected — it
+  never nests), and drags it in Manual mode, whose PUT is awaited by exact node id and
+  confirmed after a reload → cleanup.
 - [`entity-hierarchy.spec.ts`](scenarios/entity-hierarchy.md) — the Entity hierarchy (Port
-  migration phase 3): the same throwaway blueprint pair with one parent, two children, and one
-  orphan child → the tree nests the children under the parent via the hierarchy relation while
-  the orphan stays a root, Pin narrows the tree to the parent's subtree, and deleting the
-  parent is refused (`409`) naming the referring children → cleanup.
+  migration phase 3; + Phase 4 ownership, v1.26.0): the same throwaway blueprint pair with one
+  parent, two children, one orphan child Direct-owned by a throwaway `_team` entity, all under
+  one shared run marker → filtered to the two blueprints plus `_team` (narrowed by `q`), the
+  tree nests the children under the parent via the hierarchy relation while the orphan AND the
+  owning team both stay roots beside it (ownership never nests), Pin narrows the tree to the
+  parent's subtree, and deleting the parent is refused (`409`) naming the referring children →
+  cleanup.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).

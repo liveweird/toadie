@@ -1,11 +1,19 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.ArrayItems
 import ch.nokillswit.blueprints.BlueprintDefinition
+import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.entities.EntityDocument
 import ch.nokillswit.entities.entityTargets
+import ch.nokillswit.entities.formatTargets
 import ch.nokillswit.entities.withEntityTargetRenamed
+import ch.nokillswit.entities.withFormatTargetRenamed
+import ch.nokillswit.entities.withTeamRenamed
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -104,5 +112,98 @@ class EntityReferencesTest {
         val document = EntityDocument(properties = buildJsonObject { }, relations = buildJsonObject { put("owner", JsonNull) })
         val renamed = withEntityTargetRenamed(document, definition, targetBlueprint = "team", old = "payments", new = "billing")
         assertEquals(JsonNull, renamed.relations.getValue("owner"))
+    }
+
+    // -------------------------------------------------------------------------------------
+    // withTeamRenamed - the `team` column's own rename shape (Phase 4)
+    // -------------------------------------------------------------------------------------
+
+    @Test
+    fun `withTeamRenamed rewrites a matching scalar string`() {
+        assertEquals(JsonPrimitive("billing"), withTeamRenamed(JsonPrimitive("payments"), "payments", "billing"))
+        assertEquals(JsonPrimitive("other"), withTeamRenamed(JsonPrimitive("other"), "payments", "billing"))
+    }
+
+    @Test
+    fun `withTeamRenamed rewrites only matching entries inside an array`() {
+        val team = JsonArray(listOf(JsonPrimitive("payments"), JsonPrimitive("other"), JsonPrimitive("payments")))
+        val renamed = withTeamRenamed(team, "payments", "billing")
+        assertEquals(JsonArray(listOf(JsonPrimitive("billing"), JsonPrimitive("other"), JsonPrimitive("billing"))), renamed)
+    }
+
+    @Test
+    fun `withTeamRenamed passes null and a non-string element through unchanged`() {
+        assertEquals(null, withTeamRenamed(null, "payments", "billing"))
+        val team = JsonArray(listOf(JsonPrimitive(1)))
+        assertEquals(team, withTeamRenamed(team, "payments", "billing"))
+    }
+
+    // -------------------------------------------------------------------------------------
+    // formatTargets / withFormatTargetRenamed - format: team|user PROPERTY values (Phase 4)
+    // -------------------------------------------------------------------------------------
+
+    private fun definitionWithFormat(scalarFormat: String? = null, arrayItemsFormat: String? = null) = BlueprintDefinition(
+        schema = BlueprintSchema(
+            properties = buildMap {
+                scalarFormat?.let { put("owner", PropertyDefinition(type = "string", format = it)) }
+                arrayItemsFormat?.let {
+                    put("owners", PropertyDefinition(type = "array", items = ArrayItems(type = "string", format = it)))
+                }
+            },
+        ),
+    )
+
+    @Test
+    fun `formatTargets collects a scalar format-team property value`() {
+        val definition = definitionWithFormat(scalarFormat = "team")
+        val document = EntityDocument(properties = buildJsonObject { put("owner", "platform") }, relations = buildJsonObject { })
+        assertEquals(setOf("platform"), formatTargets(document, definition, "team"))
+    }
+
+    @Test
+    fun `formatTargets collects every array item of a matching format`() {
+        val definition = definitionWithFormat(arrayItemsFormat = "user")
+        val document = EntityDocument(
+            properties = buildJsonObject { putJsonArray("owners") { add("alice"); add("bob") } },
+            relations = buildJsonObject { },
+        )
+        assertEquals(setOf("alice", "bob"), formatTargets(document, definition, "user"))
+    }
+
+    @Test
+    fun `formatTargets ignores properties of a different format and undeclared keys`() {
+        val definition = definitionWithFormat(scalarFormat = "user")
+        val document = EntityDocument(
+            properties = buildJsonObject { put("owner", "alice"); put("unknown", "x") },
+            relations = buildJsonObject { },
+        )
+        assertEquals(emptySet(), formatTargets(document, definition, "team"))
+    }
+
+    @Test
+    fun `withFormatTargetRenamed rewrites a matching scalar format-team value`() {
+        val definition = definitionWithFormat(scalarFormat = "team")
+        val document = EntityDocument(properties = buildJsonObject { put("owner", "platform") }, relations = buildJsonObject { })
+        val renamed = withFormatTargetRenamed(document, definition, "team", "platform", "core")
+        assertEquals(JsonPrimitive("core"), renamed.properties.getValue("owner"))
+    }
+
+    @Test
+    fun `withFormatTargetRenamed rewrites only matching array items`() {
+        val definition = definitionWithFormat(arrayItemsFormat = "user")
+        val document = EntityDocument(
+            properties = buildJsonObject { putJsonArray("owners") { add("alice"); add("bob") } },
+            relations = buildJsonObject { },
+        )
+        val renamed = withFormatTargetRenamed(document, definition, "user", "alice", "alicia")
+        assertEquals(JsonArray(listOf(JsonPrimitive("alicia"), JsonPrimitive("bob"))), renamed.properties.getValue("owners"))
+    }
+
+    @Test
+    fun `withFormatTargetRenamed is a no-op for an unrelated format or value`() {
+        val definition = definitionWithFormat(scalarFormat = "team")
+        val document = EntityDocument(properties = buildJsonObject { put("owner", "platform") }, relations = buildJsonObject { })
+        assertEquals(document, withFormatTargetRenamed(document, definition, "user", "platform", "core"))
+        assertEquals(document, withFormatTargetRenamed(document, definition, "team", "other", "core"))
     }
 }

@@ -23,8 +23,11 @@
 `.claude/docs/port-data-model.md` "Entities") is the second endpoint built on this package
 after the catalog files list: sortable-field whitelist `identifier`, `title`, `updatedAt`
 (default `identifier` ascending, `id` tiebreaker appended), the `blueprint` equality filter
-(exact, case-insensitive match against the blueprint identifier), and `q` — the free-text
-filter over `identifier` OR `title` via `containsNormalized`.
+(exact, case-insensitive match against the blueprint identifier), the `team` equality filter
+(v1.26.0 — exact, case-insensitive match of the scalar search term against a stored JSON
+string OR array column, e.g. via `jsonStringOrArrayContainsFolded`; only Direct/absent
+ownership entities match; Inherited entities carry no stored team — documented limitation),
+and `q` — the free-text filter over `identifier` OR `title` via `containsNormalized`.
 
 **Sub-collections.** A record's own collection is paged like any other when it is unbounded: the catalog file's change history (`GET /api/v1/files/{id}/events`) rides the shared machinery through `EventLog.listFor` with its own `-timestamp,-id` default sort and a `{timestamp, id}` whitelist. This is a deliberate deviation from Lettuce, whose seven `*_events` endpoints answer an unpaged `{items}`: their per-record counts are intrinsically tiny, while a synced catalog file mints an event per sync run. Reserve the plain `{items}` wrapper for genuinely bounded sets (the registries, at most a few dozen rows).
 

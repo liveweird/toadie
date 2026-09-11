@@ -31,6 +31,7 @@ function CreateEntityForm({ blueprint }: { blueprint: Blueprint }) {
       onSubmit={save.onSubmit}
       error={save.error}
       submitting={save.submitting}
+      saveFindings={save.findings}
     />
   );
 }

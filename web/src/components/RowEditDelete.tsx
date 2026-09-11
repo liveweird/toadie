@@ -13,10 +13,16 @@ export default function RowEditDelete({
   name,
   onEdit,
   onDelete,
+  deleteDisabled = false,
+  deleteTooltip,
 }: {
   name: string;
   onEdit: () => void;
   onDelete: () => void;
+  /** A row that can never be deleted (Blueprints' system rows, Phase 4 v1.26.0). */
+  deleteDisabled?: boolean;
+  /** Shown instead of the ordinary "Delete" tooltip while `deleteDisabled` — required together. */
+  deleteTooltip?: string;
 }) {
   const { t } = useTranslation();
   return (
@@ -26,10 +32,21 @@ export default function RowEditDelete({
           <IconPencil size={16} />
         </ActionIcon>
       </Tooltip>
-      <Tooltip label={t("common.action.delete")}>
-        <ActionIcon size="sm" color="red" aria-label={t("common.action.deleteAria", { name })} onClick={onDelete}>
-          <IconTrash size={16} />
-        </ActionIcon>
+      <Tooltip label={deleteDisabled && deleteTooltip ? deleteTooltip : t("common.action.delete")}>
+        {/* Mantine disables pointer events on a disabled ActionIcon, which would also block
+            the Tooltip's own hover trigger — the span keeps hover reachable (Mantine's
+            documented disabled-button-in-Tooltip pattern). */}
+        <span>
+          <ActionIcon
+            size="sm"
+            color="red"
+            aria-label={t("common.action.deleteAria", { name })}
+            onClick={onDelete}
+            disabled={deleteDisabled}
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </span>
       </Tooltip>
     </Group>
   );

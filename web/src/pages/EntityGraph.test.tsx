@@ -41,9 +41,19 @@ function mockGraph(
         ? Promise.resolve(new Response(null, { status: 204 }))
         : Promise.resolve(jsonResponse(200, layout));
     }
-    return url.startsWith("/api/v1/entities/graph")
-      ? Promise.resolve(jsonResponse(status, body))
-      : Promise.resolve(jsonResponse(404, {}));
+    if (url.startsWith("/api/v1/entities/graph"))
+      return Promise.resolve(jsonResponse(status, body));
+    // The Team filter's own options pool (`useEntityOptions(TEAM_BLUEPRINT)`).
+    if (url.startsWith("/api/v1/entities?"))
+      return Promise.resolve(
+        jsonResponse(200, {
+          items: [{ id: 1, identifier: "platform", title: "Platform", findings: [] }],
+          page: 1,
+          pageSize: 100,
+          total: 1,
+        }),
+      );
+    return Promise.resolve(jsonResponse(404, {}));
   });
 }
 
@@ -215,6 +225,49 @@ describe("EntityGraph page", () => {
     await waitFor(() => {
       const called = mockFetch.mock.calls.some(
         ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities/graph"),
+      );
+      expect(called).toBe(true);
+    });
+  });
+
+  test("a $team ownership edge draws dashed gray and shows in the legend", async () => {
+    const graph = {
+      nodes: [
+        { id: "team|platform", entityId: 1, blueprint: "team", blueprintTitle: "Team", identifier: "platform", title: "Platform", findings: 0 },
+        { id: "service|checkout", entityId: 2, blueprint: "service", blueprintTitle: "Service", identifier: "checkout", title: "Checkout", findings: 0 },
+      ],
+      edges: [
+        { sourceId: "service|checkout", targetId: "team|platform", relation: "$team", hierarchy: false, ownership: true },
+      ],
+    };
+    mockGraph(mockFetch, graph);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/checkout \[service\]/);
+    expect(screen.getByTestId("edge:service|checkout->team|platform:$team")).toHaveAttribute(
+      "data-dash",
+      "2 3",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Legend" }));
+    expect(await screen.findByText("Ownership edge")).toBeInTheDocument();
+  });
+
+  test("picking the Team filter refetches the graph with a team= param", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/platform \[team\]/);
+    fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
+    await user.click(await screen.findByLabelText("Team", { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: /platform/ }));
+
+    await waitFor(() => {
+      const called = mockFetch.mock.calls.some(
+        ([url]) =>
+          typeof url === "string" && url.startsWith("/api/v1/entities/graph") && url.includes("team=platform"),
       );
       expect(called).toBe(true);
     });

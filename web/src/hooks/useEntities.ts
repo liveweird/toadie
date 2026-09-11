@@ -6,6 +6,8 @@ export type UseEntitiesParams = {
    *  noKinds idiom: the page shows its own "pick a blueprint" empty state instead of fetching
    *  an unfiltered, meaningless page). */
   blueprint?: string;
+  /** Phase 4 ownership: the Team filter Select's picked `_team` identifier. */
+  team?: string;
   q?: string;
   page: number;
   pageSize: number;
@@ -13,12 +15,12 @@ export type UseEntitiesParams = {
 };
 
 /** The paged entities list behind `pages/Entities.tsx` — one cached query per
- *  blueprint/q/page/pageSize/sort combination, `keepPreviousData` so paging/sorting doesn't
- *  flash a spinner. */
+ *  blueprint/team/q/page/pageSize/sort combination, `keepPreviousData` so paging/sorting
+ *  doesn't flash a spinner. */
 export function useEntities(params: UseEntitiesParams) {
   const blueprint = params.blueprint?.trim();
   return useQuery<EntityPage>({
-    queryKey: ["entities", blueprint, params.q, params.page, params.pageSize, params.sort],
+    queryKey: ["entities", blueprint, params.team, params.q, params.page, params.pageSize, params.sort],
     queryFn: () => listEntities({ ...params, blueprint }),
     placeholderData: keepPreviousData,
     enabled: Boolean(blueprint),

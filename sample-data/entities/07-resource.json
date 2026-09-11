@@ -4,6 +4,7 @@
     "identifier": "catalog-db",
     "title": "Catalog database",
     "icon": "Database",
+    "team": "retail-tribe",
     "properties": {
       "type": "database",
       "engine": "postgresql",
@@ -15,12 +16,13 @@
       "technology_status": "white-list",
       "docs": "https://docs.example.com/resources/catalog-db"
     },
-    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+    "relations": { "system": "storefront" }
   },
   {
     "blueprint": "resource",
     "identifier": "orders-db",
     "title": "Orders database",
+    "team": "retail-tribe",
     "properties": {
       "type": "database",
       "engine": "postgresql",
@@ -31,12 +33,13 @@
       "technology_status": "white-list",
       "runbook": "https://runbooks.example.com/orders-db"
     },
-    "relations": { "system": "storefront", "owned_by": "retail-tribe" }
+    "relations": { "system": "storefront" }
   },
   {
     "blueprint": "resource",
     "identifier": "payments-db",
     "title": "Payments database",
+    "team": "payments-squad",
     "properties": {
       "type": "database",
       "engine": "postgresql",
@@ -49,12 +52,13 @@
       "dashboard": "https://grafana.example.com/d/payments-db",
       "runbook": "https://runbooks.example.com/payments-db"
     },
-    "relations": { "system": "payments", "owned_by": "payments-squad" }
+    "relations": { "system": "payments" }
   },
   {
     "blueprint": "resource",
     "identifier": "order-bus",
     "title": "Order event bus",
+    "team": "platform-tribe",
     "properties": {
       "type": "message-broker",
       "engine": "kafka",
@@ -69,12 +73,13 @@
         { "title": "Topic catalogue", "url": "https://wiki.example.com/order-bus/topics" }
       ]
     },
-    "relations": { "system": "storefront", "owned_by": "platform-tribe", "hosted_on": "prod-k8s" }
+    "relations": { "system": "storefront", "hosted_on": "prod-k8s" }
   },
   {
     "blueprint": "resource",
     "identifier": "ledger-log",
     "title": "Ledger append-only log",
+    "team": "payments-squad",
     "properties": {
       "type": "transaction-log",
       "data_classification": "restricted",
@@ -82,12 +87,16 @@
       "hosting_model": "on-premise",
       "technology_status": "grey-zone"
     },
-    "relations": { "system": "payments", "owned_by": "payments-squad", "depends_on": ["payments-db"] }
+    "relations": {
+      "system": "payments",
+      "depends_on": ["payments-db"]
+    }
   },
   {
     "blueprint": "resource",
     "identifier": "settlement-warehouse",
     "title": "Settlement warehouse",
+    "team": "payments-squad",
     "properties": {
       "type": "analytical-database",
       "engine": "clickhouse",
@@ -96,12 +105,16 @@
       "hosting_model": "on-premise",
       "technology_status": "white-list"
     },
-    "relations": { "system": "payments", "owned_by": "payments-squad", "depends_on": ["payments-db", "ledger-log"] }
+    "relations": {
+      "system": "payments",
+      "depends_on": ["payments-db", "ledger-log"]
+    }
   },
   {
     "blueprint": "resource",
     "identifier": "session-cache",
     "title": "Session cache",
+    "team": "platform-tribe",
     "properties": {
       "type": "cache",
       "engine": "redis",
@@ -112,12 +125,13 @@
       "kubernetes_id": "session-cache",
       "kubernetes_label_selector": "app.kubernetes.io/name=session-cache"
     },
-    "relations": { "system": "storefront", "owned_by": "platform-tribe", "hosted_on": "prod-cloud-k8s" }
+    "relations": { "system": "storefront", "hosted_on": "prod-cloud-k8s" }
   },
   {
     "blueprint": "resource",
     "identifier": "portal-db",
     "title": "Developer portal database",
+    "team": "platform-tribe",
     "properties": {
       "type": "database",
       "engine": "postgresql",
@@ -127,6 +141,6 @@
       "hosting_model": "on-premise",
       "technology_status": "white-list"
     },
-    "relations": { "system": "developer-portal", "owned_by": "platform-tribe", "hosted_on": "prod-k8s" }
+    "relations": { "system": "developer-portal", "hosted_on": "prod-k8s" }
   }
 ]

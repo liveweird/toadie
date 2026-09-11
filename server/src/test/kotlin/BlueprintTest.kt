@@ -122,6 +122,7 @@ class BlueprintTest {
             assertEquals("Microservice", created.title)
             assertEquals(listOf("language"), created.schema.required)
             assertEquals(setOf("language", "repository"), created.schema.properties.keys)
+            assertFalse(created.system, "a user-created blueprint must not be flagged system")
             assertNotNull(create.headers["Location"])
 
             val listed = admin.readBlueprints().items.single { it.identifier == id }

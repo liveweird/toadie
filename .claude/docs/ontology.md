@@ -23,8 +23,8 @@ default shape (service / environment / workload / `_team` / `_user`) with the us
 
 | Layer | Blueprint | Backstage kind | `hierarchyRelation` (parent) |
 |---|---|---|---|
-| A organisation | `team` | Group (type `team`/`org-unit`/`org-division`) | `parent` → team |
-| | `user` | User | none (`member_of` is many) |
+| A organisation | `_team` | Group (type `team`/`org-unit`/`org-division`), Port system blueprint | `parent` → team |
+| | `_user` | User, Port system blueprint | none (team relation, many) |
 | | `domain` | Domain | `parent_domain` → domain |
 | | `system` | System | `domain` → domain |
 | B software | `service` | Component (type `service`/`website`/`job`/`data-pipeline`) | `system` → system |
@@ -35,7 +35,7 @@ default shape (service / environment / workload / `_team` / `_user`) with the us
 | | `cluster` | — Port-only (Resource `kubernetes-cluster` if ever exported) | `environment` → environment |
 | | `workload` | — Port's "running service", dropped on export | `service` → service |
 
-Load order = file order (a relation target must exist): team, user, domain, system, environment,
+Load order = file order (a relation target must exist): _team, _user, domain, system, environment,
 cluster, resource, library, api, service, workload. There is deliberately NO `api.provided_by`:
 it would make `api` ↔ `service` a cycle no load order satisfies, and Backstage's own direction is
 `providesApis` on the component. The Entity hierarchy page shows two trees — the org tree (teams)
@@ -44,18 +44,21 @@ cluster → environment beside it); an orphan (a service without a system) surfa
 which is the intended nudge rather than an error — `system` is optional everywhere Backstage
 makes `spec.system` optional.
 
-**Conventions.** Property names `snake_case`. Ownership is the explicit relation `owned_by →
-team` (`many: false`), `required` exactly where Backstage requires `spec.owner` (Domain, System,
-Component, API, Resource — so `domain`, `system`, `service`, `library`, `api`, `resource`);
-`workload` uses `ownership: {type: Inherited, path: service}`; Port's hidden `$team` arrives with
-the phase that models `_team`. Required relations are always single (Port forbids `required` +
-`many`). Every blueprint carries `links` (`array` of `object`, ↔ `metadata.links`) plus named
-link properties where the link has one meaning (`repository`, `docs`, `ci_pipeline`, `dashboard`,
-`logs`, `runbook`). `external: boolean` on `system`/`api` preserves the `external` namespace
-(third parties). No mirror/calculation/aggregation properties — Toadie stores but never evaluates
-them (candidates: `workload.languages ← service.languages`, `workload.env_type ←
-environment.type`, `system.service_count`, `team.services_owned`, `domain.critical_systems`).
-No secrets, connection strings or hostnames as properties, ever.
+**Conventions.** Property names `snake_case`. Ownership is Port's `$team` (arrived with Phase 4,
+v1.26.0, V31): each blueprint declares `ownership: {type: Direct}` (domain, system, service,
+library, api, resource, cluster) or `ownership: {type: Inherited, path: service}` (workload). On entities, the top-level `team`
+field IS the ownership — for Direct blueprints it must name an active `_team` entity (string or
+array; validated on write, `TEAM_TARGET_MISSING` finding on read; renaming a `_team` cascades,
+deleting a referenced one is `409`), for Inherited blueprints it is read-only and computed from
+the `ownership.path`. `_user.team` (many, optional) is membership, a relation to `_team` entities.
+Required relations are always single (Port forbids `required` + `many`). Every blueprint carries
+`links` (`array` of `object`, ↔ `metadata.links`) plus named link properties where the link has
+one meaning (`repository`, `docs`, `ci_pipeline`, `dashboard`, `logs`, `runbook`). `external:
+boolean` on `system`/`api` preserves the `external` namespace (third parties). No mirror/
+calculation/aggregation properties — Toadie stores but never evaluates them (candidates:
+`workload.languages ← service.languages`, `workload.env_type ← environment.type`,
+`system.service_count`, `_team.services_owned`, `domain.critical_systems`). No secrets,
+connection strings or hostnames as properties, ever.
 
 **Backstage export mapping (the round-trip contract).**
 
@@ -67,9 +70,11 @@ No secrets, connection strings or hostnames as properties, ever.
 - Tags ← `languages` ∪ `frameworks` (Component), `engine` (Resource: Database ∪ Events).
 - Annotations ← `repository` (`backstage.io/source-location`), `docs` (`techdocs-ref`),
   `kubernetes_id`, `kubernetes_label_selector`.
-- Relations: `owned_by` → `spec.owner`; `system`/`domain`/`parent`/`parent_domain`/
-  `subcomponent_of` → their fields; `depends_on` ∪ `uses` ∪ `uses_libraries` → `dependsOn`;
-  `provides_apis` → `providesApis`, `consumes_apis` → `consumesApis`; `member_of` → `memberOf`; Group `children`/`members`
+- Ownership: entity `team` field (string for single, array for multiple) → `spec.owner`; read-only
+  on Inherited blueprints, computed from the ownership path.
+- Relations: `system`/`domain`/`parent`/`parent_domain`/`subcomponent_of` → their fields;
+  `depends_on` ∪ `uses` ∪ `uses_libraries` → `dependsOn`; `provides_apis` → `providesApis`,
+  `consumes_apis` → `consumesApis`; `_user.team` → `memberOf`; Group `children`/`members`
   and API providers are derived from the reverse side; `api.definition_url` → `definition:
   {$text: <url>}`, `api.definition` → the inline text.
 - Lossy (Port-only): `environment`, `cluster`, `workload`, `service.schedule`, `library.artifact`,

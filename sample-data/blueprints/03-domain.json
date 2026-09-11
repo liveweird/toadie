@@ -1,7 +1,7 @@
 {
   "identifier": "domain",
   "title": "Domain",
-  "description": "A business area that groups systems — Payments, Storefront, Platform. The top of the architecture tree. Backstage kind: Domain (parent_domain → spec.subdomainOf, owned_by → spec.owner).",
+  "description": "A business area that groups systems — Payments, Storefront, Platform. The top of the architecture tree. Backstage kind: Domain (parent_domain → spec.subdomainOf, the team field → spec.owner).",
   "icon": "Folder",
   "hierarchyRelation": "parent_domain",
   "schema": {
@@ -34,13 +34,10 @@
       "target": "domain",
       "required": false,
       "many": false
-    },
-    "owned_by": {
-      "title": "Owned by",
-      "description": "The team accountable for the domain.",
-      "target": "team",
-      "required": true,
-      "many": false
     }
+  },
+  "ownership": {
+    "type": "Direct",
+    "title": "Owned by"
   }
 }

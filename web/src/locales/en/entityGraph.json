@@ -5,14 +5,18 @@
   "filter": {
     "blueprints": "Blueprints",
     "q": "Search",
-    "clearQ": "Clear search filter"
+    "clearQ": "Clear search filter",
+    "team": "Team",
+    "anyTeam": "Any team",
+    "clearTeam": "Clear team filter"
   },
   "legend": {
     "title": "Legend",
     "entity": "Entity",
     "collapsed": "Collapsed — its contents are hidden inside",
     "hierarchyEdge": "Hierarchy edge",
-    "folded": "Relation of a hidden entity"
+    "folded": "Relation of a hidden entity",
+    "ownershipEdge": "Ownership edge"
   },
   "layoutMode": {
     "label": "Layout",

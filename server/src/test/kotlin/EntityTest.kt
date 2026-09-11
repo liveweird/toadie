@@ -5,7 +5,9 @@ import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
+import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.entities.EntityGraph
+import ch.nokillswit.entities.EntityInvalidProblem
 import ch.nokillswit.entities.EntityPageResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
@@ -21,6 +23,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import java.util.UUID
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -66,6 +70,9 @@ class EntityTest {
         properties: kotlinx.serialization.json.JsonObject = buildJsonObject { },
     ) =
         EntityRequest(blueprint = blueprint, identifier = identifier, title = "Title $identifier", properties = properties)
+
+    private fun teamEntity(identifier: String) =
+        EntityRequest(blueprint = SYSTEM_TEAM_BLUEPRINT, identifier = identifier, title = identifier)
 
     @Test
     fun `unauthenticated requests are 401`() = testApplication {
@@ -135,7 +142,7 @@ class EntityTest {
                 entityRequest(bpId, unique("ent"), buildJsonObject { put("nope", "x") }),
             )
             assertEquals(HttpStatusCode.BadRequest, response.status)
-            assertTrue(response.body<ProblemDetail>().detail!!.contains("properties.nope"))
+            assertTrue(response.body<EntityInvalidProblem>().detail!!.contains("properties.nope"))
         } finally {
             TestBlueprints.remove(bpId)
         }
@@ -150,7 +157,7 @@ class EntityTest {
             client.createBlueprint(microserviceBlueprint(bpId))
             val response = client.postJson("/api/v1/entities", entityRequest(bpId, unique("ent")))
             assertEquals(HttpStatusCode.BadRequest, response.status)
-            assertTrue(response.body<ProblemDetail>().detail!!.contains("properties.language"))
+            assertTrue(response.body<EntityInvalidProblem>().detail!!.contains("properties.language"))
         } finally {
             TestBlueprints.remove(bpId)
         }
@@ -174,7 +181,7 @@ class EntityTest {
                 .copy(relations = buildJsonObject { put("owner", "does-not-exist") })
             val response = client.postJson("/api/v1/entities", request)
             assertEquals(HttpStatusCode.BadRequest, response.status)
-            assertTrue(response.body<ProblemDetail>().detail!!.contains("relations.owner"))
+            assertTrue(response.body<EntityInvalidProblem>().detail!!.contains("relations.owner"))
         } finally {
             TestBlueprints.remove(bpId)
         }
@@ -452,6 +459,54 @@ class EntityTest {
     }
 
     @Test
+    fun `list filters by team`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-list-team", UserRole.ADMIN)
+        val bpId = unique("bp-team")
+        val t1 = unique("team1")
+        val t2 = unique("team2")
+        val e1 = unique("ent-team-e1")
+        val e2 = unique("ent-team-e2")
+        val e3 = unique("ent-team-e3")
+        try {
+            client.createBlueprint(simpleBlueprint(bpId))
+            client.postJson("/api/v1/entities", teamEntity(t1))
+            client.postJson("/api/v1/entities", teamEntity(t2))
+            client.postJson(
+                "/api/v1/entities",
+                EntityRequest(blueprint = bpId, identifier = e1, title = "T", team = JsonPrimitive(t1)),
+            )
+            client.postJson(
+                "/api/v1/entities",
+                EntityRequest(
+                    blueprint = bpId, identifier = e2, title = "T",
+                    team = JsonArray(listOf(JsonPrimitive(t2), JsonPrimitive(t1))),
+                ),
+            )
+            client.postJson("/api/v1/entities", entityRequest(bpId, e3))
+
+            // Case-folded: an uppercased team value still matches the lowercase-stored one.
+            val byT1 = client.get("/api/v1/entities?blueprint=$bpId&team=${t1.uppercase()}").body<EntityPageResponse>()
+            assertEquals(setOf(e1, e2), byT1.items.map { it.identifier }.toSet())
+            assertEquals(byT1.items.size.toLong(), byT1.total)
+
+            val byT2 = client.get("/api/v1/entities?blueprint=$bpId&team=$t2").body<EntityPageResponse>()
+            assertEquals(listOf(e2), byT2.items.map { it.identifier })
+            assertEquals(byT2.items.size.toLong(), byT2.total)
+
+            val none = client.get("/api/v1/entities?blueprint=$bpId&team=${unique("nope")}").body<EntityPageResponse>()
+            assertTrue(none.items.isEmpty())
+            assertEquals(0, none.total)
+
+            val repeated = client.get("/api/v1/entities?team=$t1&team=$t2")
+            assertEquals(HttpStatusCode.BadRequest, repeated.status)
+        } finally {
+            TestEntities.remove(e1, e2, e3, t1, t2)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
     fun `a response body carries no explicit null members`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("ent-no-null", UserRole.ADMIN)
@@ -651,6 +706,51 @@ class EntityTest {
         } finally {
             TestEntities.remove(parentEnt, childEnt)
             TestBlueprints.remove(parentBp, childBp)
+        }
+    }
+
+    @Test
+    fun `graph keeps the _team node under a team filter`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-graph-team", UserRole.ADMIN)
+        val bpId = unique("bp-graph-team-f")
+        val t1 = unique("team-g1")
+        val t2 = unique("team-g2")
+        val e1 = unique("ent-graph-team-e1")
+        val e2 = unique("ent-graph-team-e2")
+        val e3 = unique("ent-graph-team-e3")
+        try {
+            client.createBlueprint(simpleBlueprint(bpId))
+            client.postJson("/api/v1/entities", teamEntity(t1))
+            client.postJson("/api/v1/entities", teamEntity(t2))
+            client.postJson(
+                "/api/v1/entities",
+                EntityRequest(blueprint = bpId, identifier = e1, title = "T", team = JsonPrimitive(t1)),
+            )
+            client.postJson(
+                "/api/v1/entities",
+                EntityRequest(
+                    blueprint = bpId, identifier = e2, title = "T",
+                    team = JsonArray(listOf(JsonPrimitive(t2), JsonPrimitive(t1))),
+                ),
+            )
+            client.postJson("/api/v1/entities", entityRequest(bpId, e3))
+
+            val graph = client.get("/api/v1/entities/graph?blueprint=$bpId&blueprint=$SYSTEM_TEAM_BLUEPRINT&team=$t1")
+                .body<EntityGraph>()
+
+            assertEquals(setOf("$bpId|$e1", "$bpId|$e2", "$SYSTEM_TEAM_BLUEPRINT|$t1"), graph.nodes.map { it.id }.toSet())
+
+            val ownershipEdges = graph.edges.filter { it.ownership }
+            assertEquals(
+                setOf("$bpId|$e1" to "$SYSTEM_TEAM_BLUEPRINT|$t1", "$bpId|$e2" to "$SYSTEM_TEAM_BLUEPRINT|$t1"),
+                ownershipEdges.map { it.sourceId to it.targetId }.toSet(),
+            )
+            // t2 is not shown (excluded by the team filter), so e2 -> t2 must not appear.
+            assertTrue(ownershipEdges.none { it.targetId == "$SYSTEM_TEAM_BLUEPRINT|$t2" })
+        } finally {
+            TestEntities.remove(e1, e2, e3, t1, t2)
+            TestBlueprints.remove(bpId)
         }
     }
 }

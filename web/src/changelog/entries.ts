@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.26.0",
+    date: "2026-09-11",
+    en: `**Users and teams — the fourth step toward Port compatibility.**
+
+- Two **system blueprints**, \`_team\` and \`_user\`, now exist in every workspace: protected (cannot be deleted, identifier fixed, seeded fields kept) but extendable by an admin. Teams and people are ordinary entities of them, editable by any signed-in user.
+- An entity's **team** is real ownership: on a blueprint with Direct ownership the editor offers the workspace's teams to pick from and a team that no longer exists is flagged; on an Inherited blueprint the team is computed from the related entity and shown read-only. Properties in the user/team format pick from people and teams too.
+- The Entities list shows a Team column and a Team filter; the Entity graph draws dotted **ownership edges** to the team nodes, filters by team, and explains them in its legend.
+- The sample data speaks the new model: the two system blueprints are extended, every sample entity carries its team, and workloads inherit theirs from the service.`,
+    pl: `**Użytkownicy/użytkowniczki i zespoły — czwarty krok w stronę zgodności z Port.**
+
+- W każdym obszarze roboczym istnieją teraz dwa **blueprinty systemowe**, \`_team\` i \`_user\`: chronione (nie da się ich usunąć, identyfikator jest stały, wbudowane pola zostają), ale rozszerzalne przez administratora/administratorkę. Zespoły i osoby to zwykłe encje tych blueprintów, edytowalne przez każdą zalogowaną osobę.
+- **Zespół** encji jest prawdziwą własnością: dla blueprintu z własnością bezpośrednią edytor podpowiada zespoły obszaru roboczego, a zespół, który już nie istnieje, jest oznaczany; dla blueprintu z własnością dziedziczoną zespół jest wyliczany z powiązanej encji i pokazywany tylko do odczytu. Właściwości w formacie użytkownik/zespół również wybierają spośród osób i zespołów.
+- Lista encji ma kolumnę i filtr Zespół; graf encji rysuje kropkowane **relacje własności** do węzłów zespołów, filtruje po zespole i objaśnia je w legendzie.
+- Dane przykładowe mówią nowym modelem: dwa blueprinty systemowe są rozszerzone, każda przykładowa encja ma swój zespół, a workloady dziedziczą go z serwisu.`,
+  },
+  {
     version: "1.25.3",
     date: "2026-09-10",
     en: `**The baseline ontology is now the sample data.**

@@ -9,13 +9,17 @@ import {
   uniqueText,
 } from "./helpers";
 
-// The blueprint registry journey (Port compatibility, phase 1): editor validation -> create a
+// The blueprint registry journey (Port compatibility, phase 1; + Phase 4 system-blueprint
+// protections, v1.26.0): the seeded `_team` system row's System badge/disabled Delete and its
+// editor's read-only identifier + locked seeded relation -> editor validation -> create a
 // blueprint with a string property carrying an enum + colour and a required number property,
 // watching the JSON preview -> a second blueprint relating to it -> the blocked delete of a
 // targeted blueprint -> a rename that cascades into the dependent's relation target -> the
-// regular user's read-only view and the editor-route bounce -> cleanup. The registry is shared
-// run-state and THIS SPEC IS ITS ONLY IN-RUN WRITER — it only ever creates and deletes its own
-// unique `e2e-bp-*` blueprints (the registry has no seed to protect).
+// regular user's read-only view (including the `_team` row's System badge) and the
+// editor-route bounce -> cleanup. The registry is shared run-state and THIS SPEC IS ITS ONLY
+// IN-RUN WRITER for ordinary blueprints — it only ever creates and deletes its own unique
+// `e2e-bp-*` blueprints (the registry has no seed to protect) and never edits or deletes the
+// seeded `_team`/`_user` system rows.
 test("admin curates the blueprint registry; a rename cascades; a regular user reads it", async ({
   page,
 }) => {
@@ -31,6 +35,22 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   await page.getByRole("link", { name: "Blueprints" }).click();
   await expect(page.getByRole("heading", { name: "Blueprints" })).toBeVisible();
   await expect(page.getByRole("link", { name: "New blueprint" })).toBeVisible();
+
+  // 1a. The seeded `_team` system blueprint (Phase 4, v1.26.0) shows the System badge and a
+  // disabled Delete; its editor opens with the identifier read-only and the seeded "parent"
+  // relation locked ("Seeded" badge, disabled Remove) — never edited or deleted by this spec.
+  const teamRow = page.getByRole("row").filter({ hasText: "_team" });
+  await expect(teamRow.getByText("System", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete _team" })).toBeDisabled();
+  await page.getByRole("button", { name: "Edit _team" }).click();
+  const systemIdentifierInput = page.getByRole("textbox", { name: "Identifier" });
+  await expect(systemIdentifierInput).toHaveValue("_team");
+  await expect(systemIdentifierInput).not.toBeEditable();
+  const systemParentRow = page.getByTestId("relations-row-0");
+  await expect(systemParentRow.getByText("Seeded", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove relation 1" })).toBeDisabled();
+  await page.getByRole("link", { name: "Back to blueprints" }).click();
+  await expect(page.getByRole("heading", { name: "Blueprints" })).toBeVisible();
 
   // 2. Open the editor and submit it empty: the identifier/title errors render inline and
   // nothing navigates away.
@@ -208,6 +228,10 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   await expect(page.getByRole("heading", { name: "Blueprints" })).toBeVisible();
   await expect(page.getByText(renamedIdentifier)).toBeVisible();
   await expect(page.getByText(depIdentifier)).toBeVisible();
+  // The `_team` system row's System badge stays visible read-only (no admin controls render
+  // for this role at all — see the Edit/Delete absence assertions below).
+  const teamRowReadOnly = page.getByRole("row").filter({ hasText: "_team" });
+  await expect(teamRowReadOnly.getByText("System", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "New blueprint" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: `Edit ${depIdentifier}` })).toHaveCount(0);
   await expect(page.getByRole("button", { name: `Delete ${depIdentifier}` })).toHaveCount(0);

@@ -11,6 +11,8 @@
   "preview": "JSON preview",
   "notFound": "Blueprint not found.",
   "advanced": "Advanced",
+  "systemBadge": "System",
+  "systemDeleteTooltip": "System blueprints cannot be deleted",
   "rows": {
     "jump": "Jump to…",
     "jumpAria": "Jump to a row in {{section}}",
@@ -18,6 +20,7 @@
     "collapseAll": "Collapse all in {{section}}",
     "toggleAria": "Toggle {{name}}",
     "hasErrors": "This row has errors",
+    "locked": "Seeded",
     "new": {
       "properties": "New property",
       "relations": "New relation",
@@ -104,7 +107,8 @@
     "calculation": "A jq expression over the entity — stored as text, never evaluated here.",
     "colors": "A JSON object mapping calculated values to one of Port's 14 colours.",
     "query": "Port's search-rule syntax ({ combinator, rules }) — stored and shape-checked only.",
-    "hierarchyRelation": "A Toadie-only extension, not a Port field: pick one of this blueprint's own single relations (not \"many\") to mark it as the containment parent for the Entity graph and hierarchy pages. Leave unset for a blueprint with no natural parent."
+    "hierarchyRelation": "A Toadie-only extension, not a Port field: pick one of this blueprint's own single relations (not \"many\") to mark it as the containment parent for the Entity graph and hierarchy pages. Leave unset for a blueprint with no natural parent.",
+    "systemIdentifier": "A system blueprint's identifier cannot be changed."
   },
   "validation": {
     "identifier": "Must be 1–100 characters of letters, digits, and [@_.:/=-], and not start with $",

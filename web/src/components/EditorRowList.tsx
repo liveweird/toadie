@@ -70,6 +70,7 @@ export default function EditorRowList<T extends EditorRowListRow>({
   newRowLabel,
   badge,
   isRequired,
+  isLocked,
   renderBody,
   onAdd,
   addLabel,
@@ -89,6 +90,9 @@ export default function EditorRowList<T extends EditorRowListRow>({
   /** A neutral one-line summary for the header's gray badge; "" renders no badge. */
   badge: (row: T) => string;
   isRequired?: (row: T) => boolean;
+  /** A system-seeded row (Phase 4, v1.26.0): shows the "Seeded" badge and disables Remove;
+   *  move stays allowed. Absent for families with no locking concept. */
+  isLocked?: (row: T) => boolean;
   renderBody: (row: T, index: number) => ReactNode;
   onAdd: () => void;
   addLabel: string;
@@ -162,6 +166,7 @@ export default function EditorRowList<T extends EditorRowListRow>({
           const displayName = row.id.trim() || newRowLabel;
           const badgeText = badge(row);
           const required = isRequired?.(row) ?? false;
+          const locked = isLocked?.(row) ?? false;
           const bodyId = `${rowId}-body`;
           const showErrorDot = !expanded && hasRowErrors(errors, family, index);
           return (
@@ -192,6 +197,11 @@ export default function EditorRowList<T extends EditorRowListRow>({
                       {t("blueprints.field.required")}
                     </Badge>
                   )}
+                  {locked && (
+                    <Badge variant="outline" color="gray" size="sm" tt="none" style={{ flexShrink: 0 }}>
+                      {t("blueprints.rows.locked")}
+                    </Badge>
+                  )}
                   {row.title.trim() && (
                     <Text size="sm" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }}>
                       {row.title}
@@ -212,6 +222,7 @@ export default function EditorRowList<T extends EditorRowListRow>({
                   moveUpLabel={t(controlLabels.moveUp, { position: index + 1 })}
                   moveDownLabel={t(controlLabels.moveDown, { position: index + 1 })}
                   removeLabel={t(controlLabels.remove, { position: index + 1 })}
+                  removeDisabled={locked}
                 />
               </Group>
               {expanded && (

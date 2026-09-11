@@ -19,6 +19,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.io.File
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
@@ -27,39 +28,40 @@ import kotlin.test.assertTrue
 
 /**
  * Loads the numbered JSON files under `sample-data/entities` — the sample landscape for the
- * baseline ontology (v1.25.3): the e-commerce/payments catalog `sample-data/catalog-info.yaml`
- * describes, re-told as Port entities of the eleven `sample-data/blueprints/` — through the real
- * API, in dependency order, on top of the blueprint set ([SampleBlueprintsTest]'s files, loaded
- * here too since entities cannot exist without their blueprint). Proves every file is a valid
- * `POST /api/v1/entities` body under the EXACT validators
+ * baseline ontology (v1.25.3; adopting the v1.26.0 system blueprints and real `team` ownership
+ * since v1.26.0): the e-commerce/payments catalog `sample-data/catalog-info.yaml` describes,
+ * re-told as Port entities of the eleven `sample-data/blueprints/` — through the real API, in
+ * dependency order, on top of the blueprint set ([SampleBlueprintsTest]'s files, loaded here too
+ * via [SampleData.loadBlueprint] since entities cannot exist without their blueprint —
+ * `_team`/`_user` are `PUT` extensions of the V31-seeded rows, every other blueprint a fresh
+ * `POST`). Proves every file is a valid `POST /api/v1/entities` body under the EXACT validators
  * ([ch.nokillswit.entities.validateEntityRequest] + [ch.nokillswit.entities.entityFindings]) —
  * every created row and its re-GET carry NO findings — and that the stored document round trips
  * (`properties`/`relations` equal the request's, after [toDocument]'s null-drop). A second pass
  * pins the coverage the set promises (`sample-data/README.md`): every blueprint has entities,
- * every property AND every relation of every blueprint is used at least once, every value of the
- * registry-mirroring `type` and `lifecycle` enums is used at least once (the dictionary pickers
- * are all checkable), the `team` field is used both as a string and as an array, at least one
- * relation value is a multi-element array, and at least one relation was sent as an explicit
- * JSON `null`. A third pass proves the file numbering is itself dependency-safe: every relation
- * target's blueprint file index is `<=` the referring entity's file index.
+ * every property AND every relation of every blueprint is used at least once (the `_user.team`
+ * and `_team.parent` relations included), every value of the registry-mirroring `type` and
+ * `lifecycle` enums is used at least once (the dictionary pickers are all checkable), the `team`
+ * field is used both as a string and as an array, at least one relation value is a multi-element
+ * array, and at least one relation was sent as an explicit JSON `null`. A third pass proves the
+ * file numbering is itself dependency-safe: every relation target's blueprint file index is `<=`
+ * the referring entity's file index. A fourth pass pins `team` ownership itself: every entity of
+ * a Direct-ownership blueprint carries a `team` naming one or more `_team` identifiers from
+ * `01-team.json`, and every workload (the one Inherited blueprint) sends no `team` of its own and
+ * reads back the exact `team` of the `service` entity its `service` relation names.
  *
  * Test cwd is `server/` (the Gradle test task's default working directory), so fixtures are read
- * via `../sample-data/{blueprints,entities}`. The blueprint identifiers (`team`, `domain`, …) and
- * entity identifiers (`storefront`, `commerce`, …) are plain, but the shared Testcontainers
- * database is fine: this test removes every one of them in `finally` (entities first, then
- * blueprints — the plan's order); [SampleBlueprintsTest] loads the same blueprint set but runs in
- * the same single-fork sequence and cleans up the same way.
+ * via `../sample-data/{blueprints,entities}`. The blueprint identifiers (`_team`, `domain`, …)
+ * and entity identifiers (`storefront`, `commerce`, …) are plain, but the shared Testcontainers
+ * database is fine: this test removes every entity it created, restores the system blueprints'
+ * base shape, then removes every non-system blueprint identifier in `finally` (the plan's order);
+ * [SampleBlueprintsTest] loads the same blueprint set but runs in the same single-fork sequence
+ * and cleans up the same way.
  */
 class SampleEntitiesTest {
 
     private fun blueprintFiles(): List<File> = SampleData.numberedFiles("blueprints")
     private fun entityFiles(): List<File> = SampleData.numberedFiles("entities")
-
-    private suspend fun HttpClient.createBlueprintRaw(text: String): HttpResponse =
-        post("/api/v1/blueprints") {
-            contentType(ContentType.Application.Json)
-            setBody(text)
-        }
 
     private suspend fun HttpClient.createEntity(request: EntityRequest): HttpResponse =
         post("/api/v1/entities") {
@@ -81,6 +83,7 @@ class SampleEntitiesTest {
         val entityIdentifiers = mutableListOf<String>()
         val blueprintRequestsByIdentifier = mutableMapOf<String, BlueprintRequest>()
         val blueprintFileIndex = mutableMapOf<String, Int>()
+        val responseByKey = mutableMapOf<String, EntityResponse>()
 
         try {
             bpFiles.forEachIndexed { index, file ->
@@ -90,8 +93,7 @@ class SampleEntitiesTest {
                 blueprintRequestsByIdentifier[request.identifier] = request
                 blueprintFileIndex[request.identifier] = index
 
-                val create = admin.createBlueprintRaw(text)
-                assertEquals(HttpStatusCode.Created, create.status, "POST blueprints/${file.name}: ${create.bodyAsText()}")
+                SampleData.loadBlueprint(admin, text)
             }
 
             val requestsByFile = mutableListOf<List<EntityRequest>>()
@@ -124,14 +126,77 @@ class SampleEntitiesTest {
                     val expected = request.toDocument()
                     assertEquals(expected.properties, reread.properties, "${file.name} ${request.identifier} properties did not round-trip")
                     assertEquals(expected.relations, reread.relations, "${file.name} ${request.identifier} relations did not round-trip")
+
+                    responseByKey["${request.blueprint}/${request.identifier}"] = reread
                 }
             }
 
             assertShowcaseCoverage(requestsByFile, blueprintRequestsByIdentifier)
+            assertTeamOwnership(requestsByFile, blueprintRequestsByIdentifier, responseByKey)
         } finally {
             TestEntities.remove(*entityIdentifiers.toTypedArray())
+            TestBlueprints.restoreSystemBlueprints()
             TestBlueprints.remove(*blueprintIdentifiers.toTypedArray())
         }
+    }
+
+    /**
+     * v1.26.0: `team` is real ownership. Every entity of a Direct-ownership blueprint must carry
+     * a non-null `team` naming one or more `_team` identifiers loaded from `01-team.json`; a
+     * workload (the one Inherited blueprint, via `service`) must send NO `team` of its own and
+     * its re-`GET` must compute the exact `team` of the `service` entity its `service` relation
+     * names (looked up from `10-service.json`'s requests). Blueprints with no `ownership` at all
+     * (`_team`, `_user`, `environment`) are untouched by this check.
+     */
+    private fun assertTeamOwnership(
+        requestsByFile: List<List<EntityRequest>>,
+        blueprintRequestsByIdentifier: Map<String, BlueprintRequest>,
+        responseByKey: Map<String, EntityResponse>,
+    ) {
+        val allRequests = requestsByFile.flatten()
+        val teamIdentifiers = allRequests.filter { it.blueprint == "_team" }.map { it.identifier }.toSet()
+        val teamByServiceIdentifier = allRequests.filter { it.blueprint == "service" }.associate { it.identifier to it.team }
+
+        allRequests.forEach { request ->
+            val ownership = blueprintRequestsByIdentifier.getValue(request.blueprint).ownership
+            when (ownership?.type) {
+                "Direct" -> {
+                    val values = teamValuesOf(request.team)
+                    assertTrue(
+                        values.isNotEmpty(),
+                        "${request.blueprint}/${request.identifier} must carry a team (Direct ownership)",
+                    )
+                    values.forEach { value ->
+                        assertTrue(
+                            value in teamIdentifiers,
+                            "${request.blueprint}/${request.identifier}.team '$value' is not a _team identifier in 01-team.json",
+                        )
+                    }
+                }
+                "Inherited" -> {
+                    val path = ownership.path ?: error("${request.blueprint}'s Inherited ownership must declare a path")
+                    assertEquals(null, request.team, "${request.blueprint}/${request.identifier} must not send its own team (Inherited)")
+                    val serviceIdentifier = (request.relations[path] as? JsonPrimitive)?.content
+                        ?: error("${request.blueprint}/${request.identifier}.$path must name the owning service")
+                    val expectedTeam = teamByServiceIdentifier[serviceIdentifier]
+                    val actualTeam = responseByKey.getValue("${request.blueprint}/${request.identifier}").team
+                    assertEquals(
+                        expectedTeam,
+                        actualTeam,
+                        "${request.blueprint}/${request.identifier}'s computed team must equal '$serviceIdentifier's",
+                    )
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    /** [team] as a flat list of `_team`/entity identifiers, whether sent as a bare string or an array. */
+    private fun teamValuesOf(team: JsonElement?): List<String> = when (team) {
+        null, JsonNull -> emptyList()
+        is JsonArray -> team.map { (it as JsonPrimitive).content }
+        is JsonPrimitive -> listOf(team.content)
+        else -> error("team must be a string or an array of strings, got $team")
     }
 
     /** Every relation target's blueprint must already be loaded — its file index `<=` [fileIndex] (self-relations included). */

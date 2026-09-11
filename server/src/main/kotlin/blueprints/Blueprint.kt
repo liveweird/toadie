@@ -226,6 +226,9 @@ data class BlueprintResponse(
     val creatorDeleted: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
+    // Phase 4 (v1.26.0): `_team`/`_user`, seeded by V31 — response-only (no default, so a
+    // request echoing it is a strict-decode 400); see blueprints/SystemBlueprints.kt.
+    val system: Boolean,
 )
 
 @Serializable

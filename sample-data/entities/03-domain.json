@@ -12,7 +12,7 @@
         { "title": "Roadmap", "url": "https://wiki.example.com/commerce/roadmap" }
       ]
     },
-    "relations": { "owned_by": "retail-tribe" }
+    "relations": {}
   },
   {
     "blueprint": "domain",
@@ -20,37 +20,31 @@
     "title": "Payments",
     "icon": "Folder",
     "team": ["platform-tribe", "payments-squad"],
-    "properties": {
-      "type": "core-value",
-      "docs": "https://docs.example.com/domains/payments"
-    },
-    "relations": { "parent_domain": "commerce", "owned_by": "payments-squad" }
+    "properties": { "type": "core-value", "docs": "https://docs.example.com/domains/payments" },
+    "relations": { "parent_domain": "commerce" }
   },
   {
     "blueprint": "domain",
     "identifier": "platform",
     "title": "Platform",
-    "properties": {
-      "type": "tech-foundations"
-    },
-    "relations": { "owned_by": "platform-tribe" }
+    "team": "platform-tribe",
+    "properties": { "type": "tech-foundations" },
+    "relations": {}
   },
   {
     "blueprint": "domain",
     "identifier": "shared-services",
     "title": "Shared Services",
-    "properties": {
-      "type": "generic"
-    },
-    "relations": { "owned_by": "platform-tribe" }
+    "team": "platform-tribe",
+    "properties": { "type": "generic" },
+    "relations": {}
   },
   {
     "blueprint": "domain",
     "identifier": "back-office",
     "title": "Back Office",
-    "properties": {
-      "type": "auxiliary"
-    },
-    "relations": { "parent_domain": null, "owned_by": "payments-squad" }
+    "team": "payments-squad",
+    "properties": { "type": "auxiliary" },
+    "relations": { "parent_domain": null }
   }
 ]

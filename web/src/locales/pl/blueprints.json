@@ -11,6 +11,8 @@
   "preview": "Podgląd JSON",
   "notFound": "Nie znaleziono blueprintu.",
   "advanced": "Zaawansowane",
+  "systemBadge": "Systemowy",
+  "systemDeleteTooltip": "Blueprintów systemowych nie można usuwać",
   "rows": {
     "jump": "Przejdź do…",
     "jumpAria": "Przejdź do wiersza w sekcji {{section}}",
@@ -18,6 +20,7 @@
     "collapseAll": "Zwiń wszystko w sekcji {{section}}",
     "toggleAria": "Przełącz {{name}}",
     "hasErrors": "Ten wiersz zawiera błędy",
+    "locked": "Wbudowany",
     "new": {
       "properties": "Nowa właściwość",
       "relations": "Nowa relacja",
@@ -104,7 +107,8 @@
     "calculation": "Wyrażenie jq nad encją — przechowywane jako tekst, nigdy tu nie obliczane.",
     "colors": "Obiekt JSON mapujący obliczone wartości na jeden z 14 kolorów Port.",
     "query": "Składnia reguł wyszukiwania Port ({ combinator, rules }) — tylko przechowywana i sprawdzana strukturalnie.",
-    "hierarchyRelation": "Rozszerzenie właściwe tylko Toadie, nie pole Port: wybierz jedną z własnych relacji jednowartościowych tego blueprintu (nie „wiele”), aby oznaczyć ją jako rodzica w hierarchii dla grafu i drzewa encji. Pozostaw nieustawione, jeśli blueprint nie ma naturalnego rodzica."
+    "hierarchyRelation": "Rozszerzenie właściwe tylko Toadie, nie pole Port: wybierz jedną z własnych relacji jednowartościowych tego blueprintu (nie „wiele”), aby oznaczyć ją jako rodzica w hierarchii dla grafu i drzewa encji. Pozostaw nieustawione, jeśli blueprint nie ma naturalnego rodzica.",
+    "systemIdentifier": "Identyfikatora blueprintu systemowego nie można zmienić."
   },
   "validation": {
     "identifier": "Musi mieć 1–100 znaków liter, cyfr i [@_.:/=-] oraz nie zaczynać się od $",

@@ -1,7 +1,7 @@
 {
   "identifier": "service",
   "title": "Service",
-  "description": "Every deployable runtime unit a team builds and runs: a backend service, a web front-end (SPA or server-rendered), a scheduled job, a data pipeline. The most-touched blueprint. Backstage kind: Component (type → spec.type, lifecycle → spec.lifecycle, system → spec.system, owned_by → spec.owner, subcomponent_of → spec.subcomponentOf, depends_on + uses + uses_libraries → spec.dependsOn, provides_apis/consumes_apis → the same, languages/frameworks → tags, exposure/hosting_model/technology_status → labels, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref, kubernetes_* → the two kubernetes annotations).",
+  "description": "Every deployable runtime unit a team builds and runs: a backend service, a web front-end (SPA or server-rendered), a scheduled job, a data pipeline. The most-touched blueprint. Backstage kind: Component (type → spec.type, lifecycle → spec.lifecycle, system → spec.system, the team field → spec.owner, subcomponent_of → spec.subcomponentOf, depends_on + uses + uses_libraries → spec.dependsOn, provides_apis/consumes_apis → the same, languages/frameworks → tags, exposure/hosting_model/technology_status → labels, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref, kubernetes_* → the two kubernetes annotations).",
   "icon": "Microservice",
   "hierarchyRelation": "system",
   "schema": {
@@ -127,12 +127,6 @@
       "required": false,
       "many": false
     },
-    "owned_by": {
-      "title": "Owned by",
-      "target": "team",
-      "required": true,
-      "many": false
-    },
     "subcomponent_of": {
       "title": "Subcomponent of",
       "description": "The service this one is a part of (a plugin, a sidecar).",
@@ -174,5 +168,9 @@
       "required": false,
       "many": true
     }
+  },
+  "ownership": {
+    "type": "Direct",
+    "title": "Owned by"
   }
 }

@@ -1,15 +1,27 @@
-import { Fieldset, Stack, TagsInput, TextInput } from "@mantine/core";
+import { Fieldset, Stack, TextInput } from "@mantine/core";
 import type { UseFormReturnType } from "@mantine/form";
 import { useTranslation } from "react-i18next";
 import type { Blueprint } from "../api/blueprints";
 import EntityPropertyField from "./EntityPropertyField";
 import EntityRelationField from "./EntityRelationField";
+import EntityTeamField from "./EntityTeamField";
 import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
+import { NO_ENTITY_FINDINGS, type EntityFieldFindings } from "../utils/entityFieldFindings";
 import { MAX_ICON_LENGTH, MAX_IDENTIFIER_LENGTH, MAX_TITLE_LENGTH, type EntityFormValues } from "../utils/entityForm";
 
 type Form = UseFormReturnType<EntityFormValues>;
 
-function IdentityFieldset({ form }: { form: Form }) {
+function IdentityFieldset({
+  form,
+  blueprint,
+  computedTeam,
+  findings,
+}: {
+  form: Form;
+  blueprint: Blueprint;
+  computedTeam: readonly string[];
+  findings: EntityFieldFindings;
+}) {
   const { t } = useTranslation();
   return (
     <Fieldset legend={t("entities.section.identity")}>
@@ -32,13 +44,21 @@ function IdentityFieldset({ form }: { form: Form }) {
           {...form.getInputProps("title")}
         />
         <TextInput label={t("entities.field.icon")} maxLength={MAX_ICON_LENGTH} {...form.getInputProps("icon")} />
-        <TagsInput label={t("entities.field.team")} description={t("entities.hint.team")} {...form.getInputProps("team")} />
+        <EntityTeamField form={form} blueprint={blueprint} computedTeam={computedTeam} findings={findings} />
       </Stack>
     </Fieldset>
   );
 }
 
-function PropertiesFieldset({ form, blueprint }: { form: Form; blueprint: Blueprint }) {
+function PropertiesFieldset({
+  form,
+  blueprint,
+  findings,
+}: {
+  form: Form;
+  blueprint: Blueprint;
+  findings: EntityFieldFindings;
+}) {
   const { t } = useTranslation();
   if (form.values.properties.length === 0) return null;
   const required = new Set(blueprint.schema.required);
@@ -52,6 +72,7 @@ function PropertiesFieldset({ form, blueprint }: { form: Form; blueprint: Bluepr
             index={index}
             definition={blueprint.schema.properties[draft.id]}
             required={required.has(draft.id)}
+            findings={findings.forField(`properties.${draft.id}`)}
           />
         ))}
       </Stack>
@@ -87,13 +108,26 @@ function RelationsFieldset({ form, blueprint }: { form: Form; blueprint: Bluepri
  * The field block for the Entity editor: Identity (identifier/title/icon/team) then one
  * fixed-size row per blueprint schema property and relation — unlike the Blueprint editor's
  * foldable EditorRowLists, an entity cannot invent new property/relation ids, so there is
- * nothing to add, move, or remove here.
+ * nothing to add, move, or remove here. `findings` (Phase 4 ownership + the general stale-entity
+ * surface) is indexed once by `EntityEditor` and threaded down so `team`/`properties.<id>`
+ * controls paint their own soft finding; `computedTeam` is the entity's own EFFECTIVE `team`
+ * (empty on create) — `EntityTeamField`'s Inherited-ownership pills.
  */
-export default function EntityFormFields({ form, blueprint }: { form: Form; blueprint: Blueprint }) {
+export default function EntityFormFields({
+  form,
+  blueprint,
+  computedTeam = [],
+  findings = NO_ENTITY_FINDINGS,
+}: {
+  form: Form;
+  blueprint: Blueprint;
+  computedTeam?: readonly string[];
+  findings?: EntityFieldFindings;
+}) {
   return (
     <Stack gap="md">
-      <IdentityFieldset form={form} />
-      <PropertiesFieldset form={form} blueprint={blueprint} />
+      <IdentityFieldset form={form} blueprint={blueprint} computedTeam={computedTeam} findings={findings} />
+      <PropertiesFieldset form={form} blueprint={blueprint} findings={findings} />
       <RelationsFieldset form={form} blueprint={blueprint} />
     </Stack>
   );

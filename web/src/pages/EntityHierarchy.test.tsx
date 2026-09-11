@@ -159,6 +159,23 @@ describe("EntityHierarchy page", () => {
     await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/entities/3/edit"));
   });
 
+  test("an owned entity with a $team ownership edge still renders as a root beside its team", async () => {
+    mockGraph(mockFetch, {
+      nodes: [
+        { id: "team|platform", entityId: 1, blueprint: "team", blueprintTitle: "Team", identifier: "platform", title: "Platform", findings: 0 },
+        { id: "service|orphan", entityId: 2, blueprint: "service", blueprintTitle: "Service", identifier: "orphan", title: "Orphan", findings: 0 },
+      ],
+      edges: [
+        { sourceId: "service|orphan", targetId: "team|platform", relation: "$team", hierarchy: false, ownership: true },
+      ],
+    });
+    renderPage();
+
+    await screen.findByText("Platform");
+    // Ownership never nests — the owned entity is a SIBLING root, not Platform's child.
+    expect(screen.getByText("Orphan")).toBeInTheDocument();
+  });
+
   test("delete confirms and removes the entity", async () => {
     mockGraph(mockFetch);
     const user = userEvent.setup();

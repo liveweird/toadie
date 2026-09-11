@@ -28,6 +28,7 @@ function Harness({ saveRequest }: { saveRequest: (body: unknown) => Promise<unkn
       <button onClick={() => void save.onSubmit(emptyEntityForm(BLUEPRINT))}>submit</button>
       {save.submitting && <span data-testid="submitting" />}
       {save.error && <span data-testid="error">{save.error}</span>}
+      <span data-testid="findings">{JSON.stringify(save.findings)}</span>
     </div>
   );
 }
@@ -73,5 +74,25 @@ describe("useEntitySave", () => {
       "An entity with this identifier already exists in this blueprint.",
     );
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
+    expect(screen.getByTestId("findings")).toHaveTextContent("[]");
+  });
+
+  test("a 400 with findings exposes them, cleared again on the next submit", async () => {
+    const findings = [{ code: "TEAM_TARGET_MISSING", field: "team", message: "gone" }];
+    // The second call never resolves, so the component stays mounted (no navigation) and we
+    // can observe `findings` reset to empty at the START of the new submit.
+    const saveRequest = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(400, { title: "Invalid", status: 400, findings }))
+      .mockImplementationOnce(() => new Promise(() => {}));
+    const user = userEvent.setup();
+    renderHarness(saveRequest);
+
+    await user.click(screen.getByRole("button", { name: "submit" }));
+    expect(await screen.findByTestId("error")).toBeInTheDocument();
+    expect(screen.getByTestId("findings")).toHaveTextContent(JSON.stringify(findings));
+
+    await user.click(screen.getByRole("button", { name: "submit" }));
+    await waitFor(() => expect(screen.getByTestId("findings")).toHaveTextContent("[]"));
   });
 });

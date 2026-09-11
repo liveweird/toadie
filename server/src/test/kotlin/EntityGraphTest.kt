@@ -47,6 +47,7 @@ class EntityGraphTest {
         title: String = identifier,
         icon: String? = null,
         relations: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
+        team: List<String> = emptyList(),
     ) = EntityGraphSource(
         id = id,
         blueprintId = blueprintId,
@@ -57,6 +58,7 @@ class EntityGraphTest {
             properties = buildJsonObject { },
             relations = buildJsonObject { relations.forEach { (k, v) -> put(k, v) } },
         ),
+        team = team,
     )
 
     private val noFindings: (EntityGraphSource) -> Int = { 0 }
@@ -85,8 +87,8 @@ class EntityGraphTest {
         val graph = buildEntityGraph(listOf(team, p1, p2), mapOf(1u to teamDef, 2u to personDef), noFindings)
 
         val expected = setOf(
-            EntityGraphEdge(entityNodeId("team", "t1"), entityNodeId("person", "p1"), "members", hierarchy = false),
-            EntityGraphEdge(entityNodeId("team", "t1"), entityNodeId("person", "p2"), "members", hierarchy = false),
+            EntityGraphEdge(entityNodeId("team", "t1"), entityNodeId("person", "p1"), "members", hierarchy = false, ownership = false),
+            EntityGraphEdge(entityNodeId("team", "t1"), entityNodeId("person", "p2"), "members", hierarchy = false, ownership = false),
         )
         assertEquals(expected, graph.edges.toSet())
         assertEquals(2, graph.edges.size, "the repeated p1 value must not double the edge")
@@ -125,6 +127,46 @@ class EntityGraphTest {
 
         assertEquals(listOf("bp-a|z-entity", "bp-b|a-entity"), graph.nodes.map { it.id })
         assertEquals("bp-a|z-entity", entityNodeId("bp-a", "z-entity"))
+    }
+
+    @Test
+    fun `an ownership edge is drawn only when the team node is among the shown rows`() {
+        val (_, svcDef) = bp("service")
+        val (_, teamDef) = bp("_team")
+        val ownedShown = source(1u, 1u, "svc-shown", team = listOf("platform"))
+        val team = source(2u, 2u, "platform")
+        val ownedHidden = source(3u, 1u, "svc-hidden", team = listOf("ghost"))
+
+        val graph = buildEntityGraph(listOf(ownedShown, team, ownedHidden), mapOf(1u to svcDef, 2u to teamDef), noFindings)
+
+        val ownershipEdges = graph.edges.filter { it.ownership }
+        assertEquals(1, ownershipEdges.size, "a team not among the shown rows must not be drawn, never MISSING")
+        val edge = ownershipEdges.single()
+        assertEquals(entityNodeId("service", "svc-shown"), edge.sourceId)
+        assertEquals(entityNodeId("_team", "platform"), edge.targetId)
+        assertEquals("\$team", edge.relation)
+        assertTrue(!edge.hierarchy, "an ownership edge is never a hierarchy edge")
+    }
+
+    @Test
+    fun `an ownership edge is drawn per team value, and relation edges carry ownership=false`() {
+        val (_, svcDef) = bp("service", relations = mapOf("dependsOn" to relation("service")))
+        val (_, teamDef) = bp("_team")
+        val other = source(4u, 1u, "other")
+        val owned = source(
+            1u, 1u, "svc",
+            relations = mapOf("dependsOn" to JsonPrimitive("other")),
+            team = listOf("platform", "payments"),
+        )
+        val platform = source(2u, 2u, "platform")
+        val payments = source(3u, 2u, "payments")
+
+        val graph = buildEntityGraph(listOf(owned, platform, payments, other), mapOf(1u to svcDef, 2u to teamDef), noFindings)
+
+        val ownershipTargets = graph.edges.filter { it.ownership }.map { it.targetId }.toSet()
+        assertEquals(setOf(entityNodeId("_team", "platform"), entityNodeId("_team", "payments")), ownershipTargets)
+        val relationEdge = graph.edges.single { it.relation == "dependsOn" }
+        assertTrue(!relationEdge.ownership, "a declared relation edge must carry ownership=false")
     }
 
     @Test

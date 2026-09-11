@@ -1,13 +1,23 @@
+import type { CSSProperties } from "react";
 import type { EntityGraph, EntityGraphNode } from "../api/entities";
 import type { HierarchyNode } from "./hierarchy";
 
 /**
- * Pure shaping for the Entity graph/hierarchy pages (Port migration phase 3, v1.25.0) — the
- * entity-graph counterparts of `utils/graphLayout.ts`'s `filterGraph` and `utils/hierarchy.ts`'s
- * `buildHierarchy`. The wire graph (`GET /api/v1/entities/graph`) already carries only shown
- * nodes and edges whose both ends are shown (the catalog graph's rule, enforced server-side —
- * there is no MISSING-node concept for entities), so nothing here prunes nodes.
+ * Pure shaping for the Entity graph/hierarchy pages (Port migration phase 3, v1.25.0; Phase 4
+ * ownership edges, v1.26.0) — the entity-graph counterparts of `utils/graphLayout.ts`'s
+ * `filterGraph` and `utils/hierarchy.ts`'s `buildHierarchy`. The wire graph
+ * (`GET /api/v1/entities/graph`) already carries only shown nodes and edges whose both ends
+ * are shown (the catalog graph's rule, enforced server-side — there is no MISSING-node concept
+ * for entities), so nothing here prunes nodes.
  */
+
+/** The Phase 4 ownership edge's dotted-gray style (drawn by `pages/EntityGraph.tsx` for the
+ *  `$team` field) — never a `hierarchy` edge (the server never flags one both ways) and folds
+ *  like any other relation (`toFoldable` below carries `ownership` edges through unchanged). */
+export const OWNERSHIP_EDGE_STYLE: CSSProperties = {
+  strokeDasharray: "2 3",
+  stroke: "var(--mantine-color-gray-6)",
+};
 
 /** Drops edges of relation ids the caller disabled (a relation CHIP off) — nodes stay: the
  *  server already sent exactly the entities the blueprint/search filters select, and a
@@ -54,6 +64,9 @@ export function buildEntityHierarchy(graph: EntityGraph): HierarchyNode<EntityGr
 
   const parentOf = new Map<string, string>();
   for (const edge of graph.edges) {
+    // An ownership edge is never a parent link, even if it were somehow also flagged
+    // `hierarchy` (the server never sends both) — ownership never nests.
+    if (edge.ownership) continue;
     if (!edge.hierarchy) continue;
     if (edge.sourceId === edge.targetId) continue;
     if (parentOf.has(edge.sourceId)) continue;

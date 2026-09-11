@@ -67,6 +67,7 @@ fun Application.configureEntityRoutes() {
                 val filter = EntityFilter(
                     blueprint = call.request.queryParameters.optionalString("blueprint"),
                     q = call.request.queryParameters.optionalString("q"),
+                    team = call.request.queryParameters.optionalString("team"),
                 )
                 val result = entityService.list(filter, paging)
                 call.respondEntity(HttpStatusCode.OK, paging.toPage(result.items, result.total))
@@ -81,6 +82,7 @@ fun Application.configureEntityRoutes() {
                 val filter = EntityGraphFilter(
                     blueprints = call.request.queryParameters.repeatedValues("blueprint"),
                     q = call.request.queryParameters.optionalString("q"),
+                    team = call.request.queryParameters.optionalString("team"),
                 )
                 call.respondEntity(HttpStatusCode.OK, entityService.graph(filter))
             }

@@ -1,4 +1,4 @@
-import { createUserViaUi, expect, login, openFilters, test, uniqueText } from "./helpers";
+import { createTeamEntity, createUserViaUi, expect, login, openFilters, test, uniqueText } from "./helpers";
 
 type EntityLayoutDocument = {
   mode: "auto" | "manual";
@@ -6,12 +6,17 @@ type EntityLayoutDocument = {
   collapsed: string[];
 };
 
-// The Entity graph (Port migration phase 3): two throwaway blueprints seeded via the API — a
-// parent blueprint carrying a `peer` MANY self-relation, and a child blueprint carrying a
-// single `parent` relation to it flagged as the `hierarchyRelation` — plus two parent and two
-// child entities (p1.peer -> [p2]; c1/c2.parent -> p1). A throwaway user owns the page's
-// per-user layout document (`/users/{id}/entity-graph-layout`), never the seed admin's. Owns
-// only its own `e2e-eg-*` blueprints/entities and that one throwaway user.
+// The Entity graph (Port migration phase 3, + Phase 4 ownership edges v1.26.0): two throwaway
+// blueprints seeded via the API — a parent blueprint carrying a `peer` MANY self-relation, and
+// a child blueprint carrying a single `parent` relation to it flagged as the
+// `hierarchyRelation` — plus two parent and two child entities (p1.peer -> [p2]; c1/c2.parent
+// -> p1) and one throwaway `_team` entity p1 is Direct-owned by (p1.team -> [team]). Every
+// identifier shares ONE run marker so the graph can be narrowed to this run's own rows with
+// `q` even once `_team` (a workspace-wide blueprint other specs also write to) joins the
+// blueprint filter. A throwaway user owns the page's per-user layout document
+// (`/users/{id}/entity-graph-layout`), never the seed admin's. Owns only its own `e2e-eg-*`
+// blueprints/entities, one `e2e-eg-*`-marked `_team` entity (never a foreign one), and that one
+// throwaway user.
 test("the entity graph filters by blueprint, folds hierarchy, and persists a manual layout", async ({
   page,
 }) => {
@@ -20,24 +25,28 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
   expect(adminToken !== null, "the admin login must provide setup/cleanup authorization").toBe(true);
   const authHeaders = { Authorization: `Bearer ${adminToken}` };
 
-  const parentBp = uniqueText("e2e-eg-bp-parent");
-  const childBp = uniqueText("e2e-eg-bp-child");
+  const run = uniqueText("e2e-eg");
+  const parentBp = `${run}-bp-parent`;
+  const childBp = `${run}-bp-child`;
   const parentTitle = "E2E EG Parent Blueprint";
   const childTitle = "E2E EG Child Blueprint";
-  const p1Id = uniqueText("e2e-eg-p1");
-  const p2Id = uniqueText("e2e-eg-p2");
-  const c1Id = uniqueText("e2e-eg-c1");
-  const c2Id = uniqueText("e2e-eg-c2");
+  const p1Id = `${run}-p1`;
+  const p2Id = `${run}-p2`;
+  const c1Id = `${run}-c1`;
+  const c2Id = `${run}-c2`;
+  const teamId = `${run}-team`;
   const p1Title = "E2E EG Parent One";
   const p2Title = "E2E EG Parent Two";
   const c1Title = "E2E EG Child One";
   const c2Title = "E2E EG Child Two";
+  const teamTitle = "E2E EG Team";
 
   let user: Awaited<ReturnType<typeof createUserViaUi>> | undefined;
   let p1EntityId: number | undefined;
   let p2EntityId: number | undefined;
   let c1EntityId: number | undefined;
   let c2EntityId: number | undefined;
+  let teamEntityId: number | undefined;
   let childBpId: number | undefined;
   let parentBpId: number | undefined;
 
@@ -73,8 +82,13 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     expect(childBpResp.status()).toBe(201);
     childBpId = (await childBpResp.json()).id;
 
-    // 1. Seed the entities: p2 first (p1's peer target must already exist), then p1, then the
-    // two children pointing their `parent` relation at p1.
+    // 1. Seed the entities: the throwaway team (p1's ownership target — `createTeamEntity`
+    // satisfies whatever `_team`'s current schema requires, since an environment carrying the
+    // sample ontology extension may add required properties beyond the seeded base shape),
+    // p2 (p1's peer target), then p1 (owned by the team), then the two children pointing their
+    // `parent` relation at p1.
+    teamEntityId = await createTeamEntity(page.request, adminToken!, teamId, teamTitle);
+
     const p2Resp = await page.request.post("/api/v1/entities", {
       headers: authHeaders,
       data: { blueprint: parentBp, identifier: p2Id, title: p2Title },
@@ -84,7 +98,13 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
 
     const p1Resp = await page.request.post("/api/v1/entities", {
       headers: authHeaders,
-      data: { blueprint: parentBp, identifier: p1Id, title: p1Title, relations: { peer: [p2Id] } },
+      data: {
+        blueprint: parentBp,
+        identifier: p1Id,
+        title: p1Title,
+        relations: { peer: [p2Id] },
+        team: [teamId],
+      },
     });
     expect(p1Resp.status()).toBe(201);
     p1EntityId = (await p1Resp.json()).id;
@@ -111,8 +131,9 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     await page.goto("/entity-graph");
     await expect(page.getByRole("heading", { name: "Entity graph" })).toBeVisible();
 
-    // 3. Filter to the two throwaway blueprints — the workspace may also carry other specs'
-    // blueprints/entities (running in parallel), so the unfiltered graph is not isolated.
+    // 3. Filter to the two throwaway blueprints PLUS `_team` (p1's ownership target) and the
+    // run's own search marker — `_team` is a workspace-wide blueprint other specs also write
+    // to, so without `q` the graph would not be isolated to this run's own team.
     await openFilters(page);
     const blueprintFilter = page.getByRole("combobox", { name: "Blueprints" });
     await blueprintFilter.click();
@@ -120,47 +141,75 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     await page.getByRole("option", { name: parentBp, exact: true }).click();
     await blueprintFilter.fill(childBp);
     await page.getByRole("option", { name: childBp, exact: true }).click();
+    await blueprintFilter.fill("_team");
+    await page.getByRole("option", { name: "_team", exact: true }).click();
     // The MultiSelect stays open for further picks; its dropdown overlaps the canvas below and
     // would otherwise intercept the chip/toggle/drag interactions that follow (the
-    // annotations.spec.ts idiom: Escape closes it without touching the two selections just made).
+    // annotations.spec.ts idiom: Escape closes it without touching the selections just made).
     await page.keyboard.press("Escape");
+    await page.getByRole("textbox", { name: "Search" }).fill(run);
 
-    // 4. Four nodes, two blueprint frames (labelled by blueprint TITLE).
+    // 4. Five nodes, three blueprint frames (labelled by blueprint TITLE) — the throwaway team
+    // joins the run's own parent/child entities, narrowed to just this run by `q`.
     await expect(page.getByText(p1Id, { exact: true })).toBeVisible();
     await expect(page.getByText(p2Id, { exact: true })).toBeVisible();
     await expect(page.getByText(c1Id, { exact: true })).toBeVisible();
     await expect(page.getByText(c2Id, { exact: true })).toBeVisible();
+    await expect(page.getByText(teamId, { exact: true })).toBeVisible();
     const frames = page.locator(".react-flow__viewport-portal");
     await expect(frames.getByText(parentTitle, { exact: true })).toBeVisible();
     await expect(frames.getByText(childTitle, { exact: true })).toBeVisible();
+    await expect(frames.getByText("Team", { exact: true })).toBeVisible();
 
-    // 5. Three edges total: p1--peer-->p2, c1--parent-->p1, c2--parent-->p1. Toggling the
-    // "peer" relation chip off drops the p1->p2 edge; toggling it back restores it. The relation
-    // identifier "peer" also labels the p1->p2 edge on the canvas, so scope the click to the
-    // "Relations" chip group (a strict-mode ambiguity otherwise) — and click the visible label,
-    // not the Chip's underlying checkbox input, which is visually hidden and not clickable.
-    await expect(page.locator(".react-flow__edge")).toHaveCount(3);
+    // 5. Four edges total: p1--peer-->p2, c1--parent-->p1, c2--parent-->p1, and the Phase 4
+    // ownership edge p1--$team-->team. Toggling the "peer" relation chip off drops the p1->p2
+    // edge; toggling it back restores it. The relation identifier "peer" also labels the
+    // p1->p2 edge on the canvas, so scope the click to the "Relations" chip group (a
+    // strict-mode ambiguity otherwise) — and click the visible label, not the Chip's
+    // underlying checkbox input, which is visually hidden and not clickable.
+    await expect(page.locator(".react-flow__edge")).toHaveCount(4);
     const relationsGroup = page.getByRole("group", { name: "Relations" });
     const peerChip = relationsGroup.getByText("peer", { exact: true });
     await peerChip.click();
-    await expect(page.locator(".react-flow__edge")).toHaveCount(2);
-    await peerChip.click();
     await expect(page.locator(".react-flow__edge")).toHaveCount(3);
+    await peerChip.click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(4);
+
+    // 5b. The ownership edge rides its own "$team" relation chip — toggling it off drops the
+    // p1->team edge; toggling it back on restores it; the four nodes are unaffected either way.
+    const teamChip = relationsGroup.getByText("$team", { exact: true });
+    await teamChip.click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(3);
+    await teamChip.click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(4);
+
+    // 5c. Setting the toolbar's Team filter to the throwaway team narrows the graph further —
+    // p1 (owned by it) and the team node itself (the server's self-match rule) both stay.
+    const teamFilter = page.getByRole("combobox", { name: "Team", exact: true });
+    await teamFilter.click();
+    await teamFilter.fill(teamId);
+    await page.getByRole("option", { name: `${teamId} — ${teamTitle}`, exact: true }).click();
+    await expect(page.getByText(p1Id, { exact: true })).toBeVisible();
+    await expect(page.getByText(teamId, { exact: true })).toBeVisible();
+    // Mantine renders a Select's clear button aria-hidden (mouse-only affordance), so a role
+    // query never sees it — target its aria-label attribute directly.
+    await page.locator('button[aria-label="Clear team filter"]').click();
 
     // 6. Collapse p1 via its fold toggle: c1/c2 (its hierarchy-relation descendants) hide, and
-    // the pill names the hidden count.
-    await expect(page.locator(".react-flow__node")).toHaveCount(4);
+    // the pill names the hidden count. The team node is unaffected — ownership never nests.
+    await expect(page.locator(".react-flow__node")).toHaveCount(5);
     await page.getByRole("button", { name: `Collapse ${p1Title}` }).click();
     await expect(page.getByText(c1Id, { exact: true })).toHaveCount(0);
     await expect(page.getByText(c2Id, { exact: true })).toHaveCount(0);
-    await expect(page.locator(".react-flow__node")).toHaveCount(2);
+    await expect(page.getByText(teamId, { exact: true })).toBeVisible();
+    await expect(page.locator(".react-flow__node")).toHaveCount(3);
     await expect(page.getByRole("button", { name: `Expand ${p1Title} (2 hidden)` })).toBeVisible();
 
     // Expand again — p1's descendants come back.
     await page.getByRole("button", { name: `Expand ${p1Title} (2 hidden)` }).click();
     await expect(page.getByText(c1Id, { exact: true })).toBeVisible();
     await expect(page.getByText(c2Id, { exact: true })).toBeVisible();
-    await expect(page.locator(".react-flow__node")).toHaveCount(4);
+    await expect(page.locator(".react-flow__node")).toHaveCount(5);
 
     // 7. Switch to Manual (the SegmentedControl input is visually hidden — click its label)
     // and drag p1; wait for the exact PUT carrying p1's node id, asserting 204 OUTSIDE the
@@ -218,9 +267,9 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     expect(storedLayout.status()).toBe(200);
     expect(((await storedLayout.json()) as EntityLayoutDocument).positions[p1NodeId]).toBeDefined();
   } finally {
-    // Cleanup: the children first (they reference p1), then p1 (it references p2), then p2,
-    // then the child blueprint (it targets the parent), then the parent blueprint, then the
-    // throwaway user.
+    // Cleanup: the children first (they reference p1), then p1 (it references p2 AND the
+    // team), then p2, then the team (now unreferenced), then the child blueprint (it targets
+    // the parent), then the parent blueprint, then the throwaway user.
     if (c1EntityId) {
       const deleted = await page.request.delete(`/api/v1/entities/${c1EntityId}`, { headers: authHeaders });
       expect(deleted.status()).toBe(204);
@@ -236,6 +285,10 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     if (p2EntityId) {
       const deleted = await page.request.delete(`/api/v1/entities/${p2EntityId}`, { headers: authHeaders });
       expect(deleted.status()).toBe(204);
+    }
+    if (teamEntityId) {
+      const deleted = await page.request.delete(`/api/v1/entities/${teamEntityId}`, { headers: authHeaders });
+      expect(deleted.status(), "cleanup: delete the team only after its owned entity is gone").toBe(204);
     }
     if (childBpId) {
       const deleted = await page.request.delete(`/api/v1/blueprints/${childBpId}`, { headers: authHeaders });

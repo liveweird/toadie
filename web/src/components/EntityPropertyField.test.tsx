@@ -1,10 +1,14 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { screen } from "@testing-library/react";
 import { useForm } from "@mantine/form";
 import EntityPropertyField from "./EntityPropertyField";
+import type { EntityFinding } from "../api/entities";
 import type { EntityFormValues, PropertyDefinitionWire, PropertyValueDraft } from "../utils/entityForm";
+import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+
+type FetchMock = ReturnType<typeof vi.fn>;
 
 function draft(overrides: Partial<PropertyValueDraft> = {}): PropertyValueDraft {
   return { id: "prop", text: "", bool: "", list: [], json: "", unknown: false, ...overrides };
@@ -15,6 +19,7 @@ function Harness({
   definition,
   required = false,
   validate,
+  findings,
 }: {
   initial: PropertyValueDraft;
   definition?: PropertyDefinitionWire;
@@ -22,6 +27,7 @@ function Harness({
   /** Mantine's nested-rules shape for the `properties` list — opt-in, so the ordinary
    *  rendering tests below stay validate-free. */
   validate?: { text?: (value: string) => string | null };
+  findings?: EntityFinding[];
 }) {
   const form = useForm<EntityFormValues>({
     initialValues: { blueprint: "bp", identifier: "", title: "", icon: "", team: [], properties: [initial], relations: [] },
@@ -30,13 +36,29 @@ function Harness({
   });
   return (
     <div>
-      <EntityPropertyField form={form} index={0} definition={definition} required={required} />
+      <EntityPropertyField form={form} index={0} definition={definition} required={required} findings={findings} />
       <div data-testid="value">{JSON.stringify(form.values.properties[0])}</div>
     </div>
   );
 }
 
 describe("EntityPropertyField", () => {
+  let mockFetch: FetchMock;
+
+  beforeEach(() => {
+    mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
+    localStorage.setItem("toadie.auth.token", "fake-token");
+    mockFetch.mockResolvedValue(
+      jsonResponse(200, { items: [{ id: 1, identifier: "platform", title: "Platform" }], page: 1, pageSize: 100, total: 1 }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
   test("string -> TextInput, typing updates the text slot", async () => {
     const user = userEvent.setup();
     renderWithProviders(

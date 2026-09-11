@@ -187,11 +187,15 @@ export function layoutGraph<N extends { id: string } = GraphNode>(
     };
   });
   // Ids stay `source->target:field` — unique, since the fold merges on exactly that key.
+  // `field` also rides `data` (never parsed back out of the id — blueprint identifiers may
+  // contain `:`), so a caller (the Entity graph page's ownership styling) can tell edges apart
+  // by their own field rather than re-deriving it from the composite id string.
   const edges: Edge[] = graph.edges.map((e) => ({
     id: `${e.sourceId}->${e.targetId}:${e.field}`,
     source: e.sourceId,
     target: e.targetId,
     label: edgeLabel(e),
+    data: { field: e.field },
     ...((e.folded ?? 0) > 0 ? { style: FOLDED_EDGE_STYLE } : {}),
   }));
   return { nodes, edges };

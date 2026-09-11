@@ -44,10 +44,17 @@ import {
   type LaidOutNode,
 } from "../utils/graphLayout";
 import { foldGraph } from "../utils/graphFold";
-import { buildEntityHierarchy, filterEntityGraph, relationsOf, toFoldable } from "../utils/entityGraph";
+import {
+  buildEntityHierarchy,
+  filterEntityGraph,
+  OWNERSHIP_EDGE_STYLE,
+  relationsOf,
+  toFoldable,
+} from "../utils/entityGraph";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 import { editEntityPath } from "../utils/entityLinks";
+import { OWNERSHIP_RELATION } from "../utils/systemBlueprints";
 import LoadingBlock from "../components/LoadingBlock";
 import PageHeader from "../components/PageHeader";
 import classes from "../theme.module.css";
@@ -132,11 +139,19 @@ export default function EntityGraph() {
     const laidOut = layoutGraph(folded, ENTITY_CLUSTER);
     // Hierarchy edges draw solid and thicker, labelled by relation id — folding can still dash
     // one that stands in for a hidden relation, so the fold's own style wins when both apply.
-    const edges = laidOut.edges.map((e) =>
-      hierarchyRelations.has(e.label as string) && !e.style
-        ? { ...e, style: { strokeWidth: 2 } }
-        : e,
-    );
+    const edges = laidOut.edges
+      .map((e) =>
+        hierarchyRelations.has(e.label as string) && !e.style
+          ? { ...e, style: { strokeWidth: 2 } }
+          : e,
+      )
+      // Ownership ($team) edges draw dotted gray — the fold's own dash still wins when an
+      // ownership edge is ALSO a stand-in for a hidden relation (e.style spread last).
+      .map((e) =>
+        (e.data as { field?: string } | undefined)?.field === OWNERSHIP_RELATION
+          ? { ...e, style: { ...OWNERSHIP_EDGE_STYLE, ...(e.style ?? {}) } }
+          : e,
+      );
     const nodes = laidOut.nodes.map((n) => {
       const info = folded.info.get(n.id);
       return info ? {
@@ -288,6 +303,12 @@ export default function EntityGraph() {
                         <line x1={0} y1={4} x2={14} y2={4} stroke="currentColor" strokeWidth={1.5} style={FOLDED_EDGE_STYLE} />
                       </svg>
                       <Text size="xs">{t("entityGraph.legend.folded")}</Text>
+                    </Group>
+                    <Group gap={8} wrap="nowrap">
+                      <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
+                        <line x1={0} y1={4} x2={14} y2={4} strokeWidth={1.5} style={OWNERSHIP_EDGE_STYLE} />
+                      </svg>
+                      <Text size="xs">{t("entityGraph.legend.ownershipEdge")}</Text>
                     </Group>
                   </Stack>
                 </Popover.Dropdown>

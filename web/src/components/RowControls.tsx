@@ -16,6 +16,7 @@ export default function RowControls({
   moveUpLabel,
   moveDownLabel,
   removeLabel,
+  removeDisabled = false,
 }: {
   index: number;
   count: number;
@@ -25,6 +26,8 @@ export default function RowControls({
   moveUpLabel: string;
   moveDownLabel: string;
   removeLabel: string;
+  /** A locked (system-seeded) row's remove control is disabled — move stays allowed. */
+  removeDisabled?: boolean;
 }) {
   return (
     <Group gap={4} wrap="nowrap">
@@ -46,7 +49,13 @@ export default function RowControls({
       >
         <IconArrowDown size={16} />
       </ActionIcon>
-      <ActionIcon variant="subtle" color="red" onClick={onRemove} aria-label={removeLabel}>
+      <ActionIcon
+        variant="subtle"
+        color="red"
+        disabled={removeDisabled}
+        onClick={onRemove}
+        aria-label={removeLabel}
+      >
         <IconTrash size={16} />
       </ActionIcon>
     </Group>
