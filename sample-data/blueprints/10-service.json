@@ -169,6 +169,26 @@
       "many": true
     }
   },
+  "mirrorProperties": {
+    "domain_title": {
+      "title": "Domain title",
+      "path": "system.domain.$title"
+    }
+  },
+  "calculationProperties": {
+    "stack": {
+      "title": "Stack",
+      "type": "string",
+      "calculation": "((.properties.languages // []) + (.properties.frameworks // [])) | join(\", \")"
+    },
+    "risk": {
+      "title": "Risk",
+      "type": "string",
+      "calculation": "if (.properties.technology_status == \"black-list\") or (.properties.lifecycle == \"deprecated\") then \"high\" elif (.properties.technology_status == \"grey-zone\") or (.properties.lifecycle == \"sunsetting\") then \"medium\" else \"low\" end",
+      "colorized": true,
+      "colors": { "high": "red", "medium": "yellow", "low": "green" }
+    }
+  },
   "ownership": {
     "type": "Direct",
     "title": "Owned by"

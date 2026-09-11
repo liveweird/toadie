@@ -41,5 +41,12 @@
       "required": false,
       "many": false
     }
+  },
+  "aggregationProperties": {
+    "member_count": {
+      "title": "Member count",
+      "target": "_user",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" }
+    }
   }
 }
