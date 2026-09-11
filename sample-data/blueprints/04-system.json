@@ -74,6 +74,29 @@
       "many": false
     }
   },
+  "aggregationProperties": {
+    "service_count": {
+      "title": "Service count",
+      "target": "service",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" }
+    },
+    "workload_replicas": {
+      "title": "Workload replicas",
+      "target": "workload",
+      "calculationSpec": { "calculationBy": "property", "func": "sum", "property": "replicas" },
+      "pathFilter": [
+        { "fromBlueprint": "workload", "path": ["service", "system"] }
+      ]
+    },
+    "deploys_per_week": {
+      "title": "Deploys per week",
+      "target": "workload",
+      "calculationSpec": { "calculationBy": "entities", "func": "average", "averageOf": "week", "measureTimeBy": "last_deployed" },
+      "pathFilter": [
+        { "fromBlueprint": "workload", "path": ["service", "system"] }
+      ]
+    }
+  },
   "ownership": {
     "type": "Direct",
     "title": "Owned by"

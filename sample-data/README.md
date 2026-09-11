@@ -177,9 +177,11 @@ problem detail. The token is never printed.
 sample-data/blueprints/load.sh
 ```
 
-**Clearing it** — `sample-data/blueprints/load.sh --delete` removes the set in REVERSE
-dependency order (so a target is never deleted while an earlier blueprint still relates to
-it), keeping the system blueprints (`system, kept: _team`, `system, kept: _user`); a `409` means
+**Clearing it** — `sample-data/blueprints/load.sh --delete` first drops every non-system
+file's `aggregationProperties` (`aggregations dropped domain`, `… system` — their targets load
+LATER than their owners, so a plain reverse delete would find each target still aggregated over),
+then removes the set in REVERSE dependency order (so a target is never deleted while an earlier
+blueprint still relates to it), keeping the system blueprints (`system, kept: _team`, `system, kept: _user`); a `409` means
 something outside the sample set still targets it — an entity, typically — and is reported rather
 than forced.
 
@@ -231,6 +233,34 @@ The entity list and graph accept a `team` filter, and the graph draws dashed own
 (relation id `$team`, `ownership: true`) to the `_team` node when it is among the shown
 blueprints. Pinned by `SampleEntitiesTest` (`.claude/docs/testing.md`), which also loads the
 blueprint set and asserts the file numbering is itself dependency-safe.
+
+### Computed properties (phase 5, v1.27.0)
+
+Five blueprints declare mirror/calculation/aggregation properties, evaluated by the server at
+entity read time and merged into `properties` on every GET/list/create response (never
+accepted as write input — `COMPUTED_PROPERTY` is a `400`). Values below are what the loaded
+59-entity set yields; `SampleEntitiesTest` derives every one of them from the sample files.
+
+| Blueprint | id | kind | value on this sample set |
+|---|---|---|---|
+| `_team` | `member_count` | aggregation | `platform-tribe` 1, `retail-tribe` 1, `payments-squad` 1, `storefront-squad` 0 |
+| `domain` | `critical_systems` | aggregation | `commerce` 1, `payments` 1, `back-office`/`platform`/`shared-services` 0 |
+| `system` | `service_count` | aggregation | `storefront` 5, `payments` 3, `invoicing` 1, `developer-portal` 1, `acquirer` 0 |
+| `system` | `workload_replicas` | aggregation | `storefront` 16, `payments` 4, `developer-portal` 1 |
+| `system` | `deploys_per_week` | aggregation | positive, ≤ the system's workload count (time-dependent) |
+| `service` | `domain_title` | mirror | e.g. `checkout-service` → `Commerce`, `toadie` → `Platform` |
+| `service` | `stack` | calculation | e.g. `checkout-service` → `"java, quarkus"` |
+| `service` | `risk` | calculation, colorized | `legacy-invoicing` high (red), `settlement-pipeline` medium (yellow), `checkout-service` low (green) |
+| `workload` | `service_lifecycle`, `env_type`, `languages` | mirror | `checkout-service-staging` → `production` / `staging` / `["java"]` |
+
+`_team`'s `member_count` is added by `01-team.json`'s PUT extension (aggregation properties are
+a free extension of a system blueprint). Because an aggregation's `target` must already be an
+active blueprint, `domain.critical_systems` and `system`'s three aggregations name a blueprint
+that loads later in the numbered set, so `load.sh` applies the whole set in TWO PASSES: every
+file first with `aggregationProperties` stripped, then a second pass PUTs the full file back
+onto every blueprint that declares one. Pinned by `SampleBlueprintsTest` (the declared id set
+per blueprint) and `SampleEntitiesTest` (every value above, plus the presence-on-≥1-entity
+check) — see `.claude/docs/ontology.md` and `.claude/docs/port-data-model.md`.
 
 **Loading it** — `sample-data/entities/load.sh` (needs `curl` + `jq`, same login idiom as the
 blueprints loader): logs in and `POST`s each entity in file order, printing

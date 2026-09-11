@@ -68,6 +68,20 @@
       "many": false
     }
   },
+  "mirrorProperties": {
+    "service_lifecycle": {
+      "title": "Service lifecycle",
+      "path": "service.lifecycle"
+    },
+    "env_type": {
+      "title": "Environment type",
+      "path": "environment.type"
+    },
+    "languages": {
+      "title": "Languages",
+      "path": "service.languages"
+    }
+  },
   "ownership": {
     "type": "Inherited",
     "path": "service"

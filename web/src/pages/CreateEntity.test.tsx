@@ -15,7 +15,7 @@ const BLUEPRINTS = [
     title: "Service",
     schema: { properties: {}, required: [] },
     relations: {},
-    mirrorProperties: {},
+    mirrorProperties: { domain_title: { title: "Domain title", path: "system.$title" } },
     calculationProperties: {},
     aggregationProperties: {},
   },
@@ -62,6 +62,12 @@ describe("CreateEntity page", () => {
     renderCreate("/entities/new?blueprint=service");
     expect(await screen.findByRole("heading", { name: "New entity" })).toBeInTheDocument();
     expect(screen.getByLabelText(/^Identifier/)).toBeInTheDocument();
+  });
+
+  test("no Computed section renders on create, even for a blueprint declaring computed properties", async () => {
+    renderCreate("/entities/new?blueprint=service");
+    await screen.findByLabelText(/^Identifier/);
+    expect(screen.queryByRole("group", { name: "Computed" })).not.toBeInTheDocument();
   });
 
   test("submitting a valid form POSTs the entity and navigates to the blueprint-scoped list", async () => {

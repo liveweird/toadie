@@ -2232,7 +2232,7 @@ export interface components {
         };
         MirrorPropertyDefinition: {
             title: string;
-            /** @description "rel[.rel…].prop" or "rel[.rel…].$meta" — 1-10 dot-separated segments; the first must name a relation of this blueprint, and only the last segment may be a meta-property ($identifier, $title, $team, $icon, $createdAt, $updatedAt, $createdBy, $updatedBy, $blueprint). */
+            /** @description "rel[.rel…].prop" or "rel[.rel…].$meta" — 1-10 dot-separated segments; the first must name a relation of this blueprint, and only the last segment may be a meta-property ($identifier, $title, $team, $icon, $createdAt, $updatedAt, $createdBy, $updatedBy, $blueprint). Evaluated at entity read time (v1.27.0): every hop but the last resolves the named relation's value(s), landing on the related entit(y/ies); `many` fans out into a deduped JSON array, otherwise the single landed value; an unresolved hop/target/meta-property yields an ABSENT value, never an error — see `.claude/docs/port-data-model.md` "Computed properties". */
             path: string;
         };
         CalculationPropertyDefinition: {
@@ -2246,7 +2246,7 @@ export interface components {
              * @enum {string}
              */
             spec?: "open-api" | "async-api" | "embedded-url";
-            /** @description A jq expression — stored and shape-checked (length only); never evaluated. */
+            /** @description A real jq 1.6 expression, evaluated at entity read time (v1.27.0) over `{identifier, title, blueprint, icon?, team?, properties, relations}` (the STORED properties/relations, the EFFECTIVE team). The FIRST emitted value is coerced STRICTLY against `type`; a compile/runtime error, no output, `null`, an oversized result, or a type mismatch all yield an ABSENT value, never an error — see `.claude/docs/security.md` "Computed-property evaluation (jq)" and `.claude/docs/port-data-model.md` "Computed properties". */
             calculation: string;
             colorized?: boolean;
             colors?: {
@@ -2270,7 +2270,7 @@ export interface components {
         AggregationQuery: {
             /** @enum {string} */
             combinator: "and" | "or";
-            /** @description Open JSON-Schema-shaped rule entries — stored and shape-checked only. */
+            /** @description Open JSON-Schema-shaped rule entries — stored and shape-checked only. Evaluated at entity read time (v1.27.0) over each aggregation candidate: `and`/`or` combine nested `{combinator, rules}` or leaf `{property, operator, value}` entries; an unrecognized shape/operator/property never errors, it simply does not match — see `.claude/docs/port-data-model.md` "Computed properties". */
             rules?: Record<string, never>[];
         };
         AggregationPropertyDefinition: {
@@ -2279,7 +2279,7 @@ export interface components {
             target: string;
             calculationSpec: components["schemas"]["AggregationCalculationSpec"];
             query?: components["schemas"]["AggregationQuery"];
-            /** @description Open JSON-Schema-shaped filter entries — stored and shape-checked only. */
+            /** @description Open JSON-Schema-shaped filter entries — stored and shape-checked only. Each `{fromBlueprint, path}` entry steers the multi-hop traversal at entity read time (v1.27.0): `fromBlueprint` equal to this blueprint walks FORWARD from the entity along `path`'s relations (the last must target `target`); equal to `target` statically resolves `target`'s own `path` chain back to this blueprint, then walks BACKWARD from the entity through inbound relations; any other `fromBlueprint`, or a malformed entry, contributes no candidates — see `.claude/docs/port-data-model.md` "Computed properties". */
             pathFilter?: Record<string, never>[];
         };
         OwnershipDefinition: {
@@ -2380,7 +2380,7 @@ export interface components {
             /** @description Phase 4 ownership (`.claude/docs/port-data-model.md` "Ownership"): for a Direct/absent-ownership blueprint, a team name or array of team names, each resolving to an active `_team` entity (`TEAM_TARGET_MISSING` otherwise) — the STORED value. For an Inherited-ownership blueprint, `team` must be ABSENT (supplying one is `TEAM_NOT_ALLOWED`); the effective team is computed from a related blueprint's Direct ownership instead. Absent when unset. */
             team?: string | string[];
             /**
-             * @description `<propertyId>: JSON value`, keyed by the blueprint's declared property ids. Defaults to empty when omitted.
+             * @description `<propertyId>: JSON value`, keyed by the blueprint's declared property ids. Defaults to empty when omitted. A mirror/calculation/aggregation id is never accepted here (`COMPUTED_PROPERTY`, `400`) — see the `Entity.properties` response field and `.claude/docs/port-data-model.md` "Computed properties".
              * @default {}
              */
             properties: {
@@ -2437,7 +2437,7 @@ export interface components {
             icon?: string;
             /** @description Phase 4 ownership: for a Direct/absent-ownership blueprint, the STORED team name or array of team names, exactly as sent. For an Inherited-ownership blueprint, the EFFECTIVE team COMPUTED at read time from a related blueprint's Direct ownership (never stored) — absent when the chain does not resolve (an unknown/ many/missing hop, or an exhausted budget). Absent when unowned. */
             team?: string | string[];
-            /** @description `<propertyId>: JSON value`, keyed by the blueprint's declared property ids. */
+            /** @description `<propertyId>: JSON value`, keyed by the blueprint's declared property ids, PLUS (since v1.27.0) the blueprint's mirror/calculation/aggregation property ids, evaluated at read time — see `.claude/docs/port-data-model.md` "Computed properties". An unresolvable computed value is simply ABSENT; a stale stored key sharing a computed id is overridden by the computed value here (`findings` still reports the stored document). */
             properties: {
                 [key: string]: unknown;
             };
@@ -4577,7 +4577,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Created */
+            /** @description Created. The body's `properties` carries the STORED values plus every mirror/calculation/aggregation value the owning blueprint declares, evaluated fresh right after the write (`.claude/docs/port-data-model.md` "Computed properties") — an unresolvable computed value is simply absent, never `null`. */
             201: {
                 headers: {
                     /** @description URL of the new entity resource */

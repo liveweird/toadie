@@ -63,17 +63,17 @@ class SampleBlueprintsTest {
         val decoded = files.map { it to blueprintJson.decodeFromString<BlueprintRequest>(it.readText()) }
         assertEquals(EXPECTED_ORDER, decoded.map { it.second.identifier })
 
-        val identifiers = mutableListOf<String>()
-        val requests = mutableMapOf<String, BlueprintRequest>()
+        val identifiers = decoded.map { it.second.identifier }
+        val requests = decoded.associate { it.second.identifier to it.second }
         try {
+            // Two passes (phase 5, v1.27.0): a forward-referencing aggregation target (domain ->
+            // system, system -> service/workload) only exists once the FULL set has loaded, so
+            // the round-trip check below runs against the post-pass-2 response, not per file.
+            val responsesByIdentifier = SampleData.loadBlueprints(admin, files)
             decoded.forEach { (file, request) ->
-                val text = file.readText()
-                requests[request.identifier] = request
-                identifiers += request.identifier
-
-                val reread = SampleData.loadBlueprint(admin, text)
+                val reread = responsesByIdentifier.getValue(request.identifier)
                 assertEquals(
-                    SampleData.canonicalBlueprint(text),
+                    SampleData.canonicalBlueprint(file.readText()),
                     Json.parseToJsonElement(blueprintJson.encodeToString(reread.asRequest())),
                     "${file.name} did not round-trip byte-for-structure through blueprintJson",
                 )
@@ -81,9 +81,14 @@ class SampleBlueprintsTest {
 
             assertHierarchy(requests)
             assertOwnership(requests)
+            assertComputedProperties(requests)
             assertVocabulary(admin, requests)
         } finally {
             TestBlueprints.restoreSystemBlueprints()
+            // domain <-> system form a reference cycle (domain's aggregation targets system,
+            // system's own relation targets domain back) that the plain retry-based remove()
+            // below cannot resolve on its own — see SampleData.stripAggregationsForCleanup's KDoc.
+            SampleData.stripAggregationsForCleanup(requests)
             TestBlueprints.remove(*identifiers.toTypedArray())
         }
     }
@@ -115,6 +120,21 @@ class SampleBlueprintsTest {
         assertEquals("service", requests.getValue("workload").ownership?.path)
         listOf("_team", "_user", "environment").forEach {
             assertNull(requests.getValue(it).ownership, "$it must declare no ownership")
+        }
+    }
+
+    /**
+     * Phase 5 (v1.27.0): [COMPUTED_PROPERTIES] pins the exact mirror/calculation/aggregation id
+     * set per blueprint — every other blueprint declares none.
+     */
+    private fun assertComputedProperties(requests: Map<String, BlueprintRequest>) {
+        requests.forEach { (blueprint, request) ->
+            val actual = request.mirrorProperties.keys + request.calculationProperties.keys + request.aggregationProperties.keys
+            assertEquals(
+                COMPUTED_PROPERTIES[blueprint].orEmpty(),
+                actual,
+                "$blueprint's mirror/calculation/aggregation property ids",
+            )
         }
     }
 
@@ -204,6 +224,18 @@ class SampleBlueprintsTest {
          * `owned_by` relation — every plain owning blueprint, `workload` excepted (Inherited).
          */
         val DIRECT_OWNERSHIP = listOf("domain", "system", "service", "library", "api", "resource", "cluster")
+
+        /**
+         * blueprint → its declared mirror/calculation/aggregation property ids (phase 5,
+         * v1.27.0, `.claude/docs/ontology.md`) — every blueprint not listed here declares none.
+         */
+        val COMPUTED_PROPERTIES = mapOf(
+            "_team" to setOf("member_count"),
+            "domain" to setOf("critical_systems"),
+            "system" to setOf("service_count", "workload_replicas", "deploys_per_week"),
+            "service" to setOf("domain_title", "stack", "risk"),
+            "workload" to setOf("service_lifecycle", "env_type", "languages"),
+        )
 
         /** label key → the (blueprint, property) enums that mirror its closed value list. */
         val LABEL_PROPERTIES = mapOf(

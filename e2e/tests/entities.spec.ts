@@ -10,8 +10,16 @@ import { createTeamEntity, expect, login, readyDialog, test, uniqueText } from "
 // to the first -> deleting the referenced entity is blocked, naming the referrer -> editing
 // the target blueprint to add a required property turns the first entity STALE (the list's
 // findings badge) -> the editor's stale alert names the missing field, fixed and saved, clears
-// it -> cleanup (entities, then blueprints). The feature has no admin gate, so the whole
-// journey runs as the seed admin (no throwaway user needed). The blueprint registry is shared
+// it -> computed properties (phase 5, v1.27.0): the target blueprint gains a colorized
+// calculation mirroring its own tier property and an aggregation counting entities of the
+// dependent blueprint that relate to it, and the dependent blueprint gains a mirror reading the
+// target's tier through its existing relation -> the dependent's list preview column and its
+// editor's read-only Computed section show the mirrored value -> the target entity's editor
+// shows the calculation and the aggregation count, the JSON preview strips all three computed
+// ids, and the save still succeeds -> cleanup (entities, then blueprints, the target blueprint's
+// computed properties removed first to break the aggregation-created delete cycle). The feature
+// has no admin gate, so the whole journey runs as the seed admin (no throwaway user needed). The
+// blueprint registry is shared
 // run-state and THIS SPEC IS ONE OF ITS TWO IN-RUN WRITERS (alongside blueprints.spec.ts) — it
 // only ever creates and deletes its own unique `e2e-ent-bp-*` blueprints, `e2e-ent-*` entities,
 // and one throwaway `e2e-ent-team-*` `_team` entity (never a foreign `_team`/`_user` row).
@@ -47,6 +55,9 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
   let entityAId: number | undefined;
   let entityBId: number | undefined;
   let teamEntityId: number | undefined;
+  // Set once the computed-property PUTs below land, so `finally` knows to restore the target
+  // blueprint's pre-computed definition before the ordinary entity/blueprint cleanup.
+  let computedAdded = false;
 
   try {
     // 0. Seed the two throwaway blueprints via the API (not the editor — this spec's subject
@@ -267,7 +278,124 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     ]);
     await expect(page).toHaveURL(/\/entities\?blueprint=.+$/);
     await expect(entityARow.getByText(/\d+ findings?/)).toHaveCount(0);
+
+    // 9. Computed properties (phase 5, v1.27.0), via the API — this spec's subject is entity
+    // computed VALUES, not blueprint curation. The target blueprint (its step-6 schema, since
+    // PUT is a full replace) gains a colorized calculation reading its own `tier` property and
+    // an aggregation counting the dependent blueprint's entities that relate to it; the
+    // dependent blueprint (its original definition) gains a mirror reading the target's `tier`
+    // through the existing `parent` relation.
+    const targetSchemaWithOwner = {
+      properties: { ...targetProperties, owner: { type: "string" } },
+      required: ["replicas", "owner"],
+    };
+    const computedTargetResp = await page.request.put(`/api/v1/blueprints/${targetBlueprintId}`, {
+      headers: authHeaders,
+      data: {
+        identifier: targetIdentifier,
+        title: "E2E Entity Target",
+        schema: targetSchemaWithOwner,
+        calculationProperties: {
+          tier_badge: {
+            title: "Tier badge",
+            type: "string",
+            calculation: ".properties.tier",
+            colorized: true,
+            colors: { gold: "gold", silver: "silver" },
+          },
+        },
+        aggregationProperties: {
+          dependents: {
+            title: "Dependents",
+            target: depIdentifier,
+            calculationSpec: { calculationBy: "entities", func: "count" },
+          },
+        },
+      },
+    });
+    expect(computedTargetResp.status()).toBe(204);
+    computedAdded = true;
+
+    const computedDepResp = await page.request.put(`/api/v1/blueprints/${depBlueprintId}`, {
+      headers: authHeaders,
+      data: {
+        identifier: depIdentifier,
+        title: "E2E Entity Dependent",
+        schema: { properties: {}, required: [] },
+        relations: {
+          parent: { title: "Parent", target: targetIdentifier, required: true, many: false },
+        },
+        mirrorProperties: {
+          parent_tier: { title: "Parent tier", path: "parent.tier" },
+        },
+      },
+    });
+    expect(computedDepResp.status()).toBe(204);
+
+    // 10. The dependent blueprint has no schema properties of its own, so the mirrored tier is
+    // its first (and only) preview column on the list; its editor's read-only Computed section
+    // names the same value with the Mirror badge.
+    await page.goto(`/entities?blueprint=${encodeURIComponent(depIdentifier)}`);
+    await expect(page.getByRole("columnheader", { name: "Parent tier" })).toBeVisible();
+    const entityBRow = page.getByRole("row").filter({ hasText: entityBIdentifier });
+    await expect(entityBRow.getByText("gold")).toBeVisible();
+
+    await page.getByRole("button", { name: `Edit ${entityBIdentifier}` }).click();
+    const depComputedGroup = page.getByRole("group", { name: "Computed" });
+    await expect(depComputedGroup.getByText("Parent tier")).toBeVisible();
+    await expect(depComputedGroup.getByText("Mirror")).toBeVisible();
+    await expect(depComputedGroup.getByText("gold")).toBeVisible();
+
+    // 11. The target entity's own editor shows both new computed values (the colorized
+    // calculation and the aggregation counting the dependent entity created in step 4/7 above),
+    // the JSON preview carries none of the three computed ids, and saving still succeeds — a
+    // leaked computed key in the request would 400 instead.
+    await page.goto(`/entities?blueprint=${encodeURIComponent(targetIdentifier)}`);
+    await page.getByRole("button", { name: `Edit ${entityAIdentifier}` }).click();
+    const targetComputedGroup = page.getByRole("group", { name: "Computed" });
+    await expect(targetComputedGroup.getByText("Tier badge")).toBeVisible();
+    await expect(targetComputedGroup.getByText("Calculation")).toBeVisible();
+    await expect(targetComputedGroup.getByText("gold")).toBeVisible();
+    await expect(targetComputedGroup.getByText("Dependents")).toBeVisible();
+    await expect(targetComputedGroup.getByText("Aggregation")).toBeVisible();
+    await expect(targetComputedGroup.getByText("1", { exact: true })).toBeVisible();
+
+    const targetPreview = page.getByLabel("JSON preview");
+    await expect(targetPreview).not.toContainText("tier_badge");
+    await expect(targetPreview).not.toContainText("dependents");
+
+    const [savedA] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().endsWith(`/api/v1/entities/${entityAId}`) && r.request().method() === "PUT",
+      ),
+      page.getByRole("button", { name: "Save" }).click(),
+    ]);
+    expect(savedA.ok(), "a leaked computed key in the request would 400 instead of ok").toBe(true);
+    await expect(page).toHaveURL(/\/entities\?blueprint=.+$/);
   } finally {
+    // Computed properties added a NEW delete cycle: the target blueprint's aggregation now
+    // targets the dependent blueprint, and an aggregation target blocks deletion exactly like a
+    // relation target does — so the dependent could no longer be deleted first as cleanup
+    // expects. Restore the target blueprint's pre-computed (step-6) definition FIRST to break
+    // that cycle before the ordinary entity/blueprint cleanup order runs.
+    if (computedAdded && targetBlueprintId) {
+      const restoredTarget = await page.request.put(`/api/v1/blueprints/${targetBlueprintId}`, {
+        headers: authHeaders,
+        data: {
+          identifier: targetIdentifier,
+          title: "E2E Entity Target",
+          schema: {
+            properties: { ...targetProperties, owner: { type: "string" } },
+            required: ["replicas", "owner"],
+          },
+        },
+      });
+      expect(
+        restoredTarget.status(),
+        "cleanup: restore the target blueprint before deleting its aggregation target",
+      ).toBe(204);
+    }
+
     // Cleanup: entities first (the referring one before the referenced one), then blueprints
     // (the dependent before the target — the blueprints.spec.ts order).
     if (entityBId) {

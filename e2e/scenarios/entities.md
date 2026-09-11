@@ -1,4 +1,4 @@
-# Entities (Port compatibility, phase 2)
+# Entities (Port compatibility, phase 2; + Phase 5 computed properties, v1.27.0)
 
 - **Spec**: [tests/entities.spec.ts](../tests/entities.spec.ts)
 - **Actors**: the seed administrator (`admin@toadie.local`) only — entities carry no admin
@@ -8,8 +8,9 @@
   a required relation to it) created directly via the API, their `e2e-ent-*` entities created
   through the UI, and one throwaway `e2e-ent-team-*` `_team` entity created via the API — all
   removed at the end (entities first, then the team, then blueprints, dependent before
-  target). The `_team`/`_user` system blueprints themselves are seeded and protected — this
-  spec never edits or deletes them, only its own throwaway `_team` entity. The blueprint
+  target; the target blueprint's added computed properties are removed first — see step 16).
+  The `_team`/`_user` system blueprints themselves are seeded and protected — this spec never
+  edits or deletes them, only its own throwaway `_team` entity. The blueprint
   registry is SHARED state and **this spec is one of its two in-run writers**, alongside
   `blueprints.spec.ts` — it never edits or deletes rows it did not create.
 
@@ -54,9 +55,27 @@
       among the offending fields.
 12. They fill the new `owner` field and save.
     - *Expected*: the PUT succeeds; back on the list, the entity's findings badge is gone.
-13. Cleanup: the second (referring) entity is deleted first, then the first, then the
-    throwaway team (if not already removed), then the dependent blueprint, then the target
-    blueprint — all via the API.
+13. Via the API (computed properties, phase 5, v1.27.0), they PUT the target blueprint (its
+    current schema, unchanged) adding a colorized calculation (`tier_badge`, reading its own
+    `tier` property, colors gold/silver) and an aggregation (`dependents`, targeting the
+    dependent blueprint, counting entities) — then PUT the dependent blueprint (its original
+    definition, unchanged) adding a mirror (`parent_tier`, reading the target's `tier` through
+    the existing `parent` relation).
+    - *Expected*: both PUTs succeed (`204`).
+14. They open the dependent blueprint's entity list, then the second entity's editor.
+    - *Expected*: the mirrored tier is the list's first (and only) preview column, since the
+      dependent has no schema properties of its own; the editor's read-only "Computed" section
+      names it "Parent tier" with the Mirror badge and the mirrored value.
+15. They open the first (target) entity's editor.
+    - *Expected*: the "Computed" section shows "Tier badge" (Calculation badge, the entity's own
+      tier value) and "Dependents" (Aggregation badge, a count of 1 — the second entity relates
+      to it); the JSON preview contains neither computed id; saving succeeds (a
+      leaked computed key in the request would `400`).
+16. Cleanup: the target blueprint's computed properties are removed first (restoring its
+    step-9 definition — an aggregation target blocks deletion exactly like a relation target,
+    so the dependent blueprint could otherwise no longer be deleted), then the second
+    (referring) entity is deleted, then the first, then the throwaway team (if not already
+    removed), then the dependent blueprint, then the target blueprint — all via the API.
 
 ## Not covered here (and why)
 

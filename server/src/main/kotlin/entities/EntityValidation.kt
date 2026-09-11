@@ -125,7 +125,11 @@ fun entityFindings(
     relationFindings(document.relations, definition, targetExists) +
     teamFindings(definition, targetExists, team)
 
-private fun computedPropertyIds(definition: BlueprintDefinition): Set<String> =
+/**
+ * Every mirror/calculation/aggregation id of [definition] — shared with `EntityComputed.kt`'s
+ * mirror terminal check (a landed computed id is never recursed into).
+ */
+fun computedPropertyIds(definition: BlueprintDefinition): Set<String> =
     definition.mirrorProperties.keys + definition.calculationProperties.keys + definition.aggregationProperties.keys
 
 /**

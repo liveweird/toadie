@@ -1,8 +1,12 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.AggregationCalculationSpec
+import ch.nokillswit.blueprints.AggregationPropertyDefinition
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.CalculationPropertyDefinition
+import ch.nokillswit.blueprints.MirrorPropertyDefinition
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
@@ -751,6 +755,248 @@ class EntityTest {
         } finally {
             TestEntities.remove(e1, e2, e3, t1, t2)
             TestBlueprints.remove(bpId)
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Phase 5 (v1.27.0): computed properties (`.claude/docs/port-data-model.md`)
+    // -----------------------------------------------------------------------------------------
+
+    @Test
+    fun `computed properties appear on create-GET-list, follow a related-entity change, ignore q and sort`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-computed", UserRole.ADMIN)
+        val bpId = unique("bp-computed-b")
+        val tBp = unique("bp-computed-t")
+        val tRefId = unique("ent-computed-ref")
+        val subjId = unique("ent-computed-subj")
+        val child1 = unique("ent-computed-c1")
+        val child2 = unique("ent-computed-c2")
+        try {
+            client.createBlueprint(simpleBlueprint(bpId))
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = tBp,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("owner" to RelationDefinition(title = "Owner", target = bpId, required = false, many = false)),
+                ),
+            )
+            val bUpdated = BlueprintRequest(
+                identifier = bpId,
+                title = "T",
+                schema = BlueprintSchema(),
+                relations = mapOf("ref" to RelationDefinition(title = "Ref", target = tBp, required = false, many = false)),
+                mirrorProperties = mapOf("targetTitle" to MirrorPropertyDefinition(title = "Target title", path = "ref.\$title")),
+                calculationProperties = mapOf(
+                    "greeting" to CalculationPropertyDefinition(title = "Greeting", type = "string", calculation = ".title"),
+                ),
+                aggregationProperties = mapOf(
+                    "childCount" to AggregationPropertyDefinition(
+                        title = "Child count",
+                        target = tBp,
+                        calculationSpec = AggregationCalculationSpec(calculationBy = "entities", func = "count"),
+                    ),
+                ),
+            )
+            val blueprintList = client.get("/api/v1/blueprints").body<ch.nokillswit.blueprints.BlueprintList>()
+            val bResponse = blueprintList.items.single { it.identifier == bpId }
+            assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/blueprints/${bResponse.id}", bUpdated).status)
+
+            client.postJson("/api/v1/entities", entityRequest(tBp, tRefId).copy(title = "Target Title"))
+            val create = client.postJson(
+                "/api/v1/entities",
+                entityRequest(bpId, subjId).copy(title = "Subject Title", relations = buildJsonObject { put("ref", tRefId) }),
+            )
+            assertEquals(HttpStatusCode.Created, create.status)
+            val created = create.body<EntityResponse>()
+            assertFalse(create.bodyAsText().contains(":null"))
+            assertEquals(JsonPrimitive("Target Title"), created.properties["targetTitle"])
+            assertEquals(JsonPrimitive("Subject Title"), created.properties["greeting"])
+
+            client.postJson("/api/v1/entities", entityRequest(tBp, child1).copy(relations = buildJsonObject { put("owner", subjId) }))
+            client.postJson("/api/v1/entities", entityRequest(tBp, child2).copy(relations = buildJsonObject { put("owner", subjId) }))
+
+            val get = client.get("/api/v1/entities/${created.id}")
+            val entity = get.body<EntityResponse>()
+            assertFalse(get.bodyAsText().contains(":null"))
+            assertEquals(JsonPrimitive("Target Title"), entity.properties["targetTitle"])
+            assertEquals(JsonPrimitive("Subject Title"), entity.properties["greeting"])
+            // childCount = every T entity naming the subject via "owner" (child1, child2) UNION
+            // every T entity the subject's own "ref" relation names (tRefId) — 3 distinct rows.
+            assertEquals(JsonPrimitive(3L), entity.properties["childCount"])
+
+            val list = client.get("/api/v1/entities?blueprint=$bpId").body<EntityPageResponse>()
+            val listed = list.items.single { it.id == created.id }
+            assertEquals(JsonPrimitive(3L), listed.properties["childCount"])
+
+            // q matches identifier/title only — a computed value never becomes a match target.
+            val qMiss = client.get("/api/v1/entities?blueprint=$bpId&q=Target").body<EntityPageResponse>()
+            assertTrue(qMiss.items.none { it.id == created.id })
+            // Sorting by identifier still returns the entity with its computed values intact.
+            val sorted = client.get("/api/v1/entities?blueprint=$bpId&sort=identifier").body<EntityPageResponse>()
+            assertEquals(JsonPrimitive(3L), sorted.items.single { it.id == created.id }.properties["childCount"])
+
+            // Computed values follow a change to the related entity, not a cached snapshot.
+            val tRef = client.get("/api/v1/entities?blueprint=$tBp&q=$tRefId").body<EntityPageResponse>().items.single()
+            client.putJson("/api/v1/entities/${tRef.id}", entityRequest(tBp, tRefId).copy(title = "Renamed Target"))
+            val afterRename = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
+            assertEquals(JsonPrimitive("Renamed Target"), afterRename.properties["targetTitle"])
+        } finally {
+            TestEntities.remove(tRefId, subjId, child1, child2)
+            TestBlueprints.remove(bpId, tBp)
+        }
+    }
+
+    @Test
+    fun `a computed property id is still rejected as write input on POST and PUT`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-computed-reject", UserRole.ADMIN)
+        val bpId = unique("bp-computed-reject")
+        val entId = unique("ent-computed-reject")
+        try {
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = bpId,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    calculationProperties = mapOf(
+                        "risk" to CalculationPropertyDefinition(title = "Risk", type = "string", calculation = "\"low\""),
+                    ),
+                ),
+            )
+            val badCreate = client.postJson(
+                "/api/v1/entities",
+                entityRequest(bpId, entId, buildJsonObject { put("risk", "x") }),
+            )
+            assertEquals(HttpStatusCode.BadRequest, badCreate.status)
+            val createFindings = badCreate.body<EntityInvalidProblem>().findings
+            assertTrue(createFindings.any { it.code == "COMPUTED_PROPERTY" && it.field == "properties.risk" })
+
+            val created = client.postJson("/api/v1/entities", entityRequest(bpId, entId)).body<EntityResponse>()
+            val badUpdate = client.putJson(
+                "/api/v1/entities/${created.id}",
+                entityRequest(bpId, entId, buildJsonObject { put("risk", "x") }),
+            )
+            assertEquals(HttpStatusCode.BadRequest, badUpdate.status)
+            assertTrue(badUpdate.body<EntityInvalidProblem>().findings.any { it.code == "COMPUTED_PROPERTY" })
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `graph nodes never carry computed property values`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-computed-graph", UserRole.ADMIN)
+        val bpId = unique("bp-computed-graph")
+        val entId = unique("ent-computed-graph")
+        try {
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = bpId,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    calculationProperties = mapOf(
+                        "distinctiveComputedValue" to
+                            CalculationPropertyDefinition(title = "D", type = "string", calculation = "\"marker-value\""),
+                    ),
+                ),
+            )
+            client.postJson("/api/v1/entities", entityRequest(bpId, entId))
+            val graphBody = client.get("/api/v1/entities/graph?blueprint=$bpId").bodyAsText()
+            assertFalse(graphBody.contains("distinctiveComputedValue"))
+            assertFalse(graphBody.contains("marker-value"))
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `entity creation audits the STORED properties count, not the computed properties count`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("ent-computed-audit")
+        val userId = TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
+        val adminEmail = uniqueEmail("ent-computed-audit-admin")
+        TestUsers.seed(email = adminEmail, password = "pw", role = UserRole.ADMIN)
+        val bpId = unique("bp-computed-audit")
+        val entId = unique("ent-computed-audit")
+        try {
+            withAuditCapture { capture ->
+                val client = authedClient(email, "pw")
+                // Blueprints are ADMIN-only (phase 1); entities are not (phase 2) — the USER
+                // above only ever mutates the entity, so byUserId below is unambiguous.
+                authedClient(adminEmail, "pw").createBlueprint(
+                    BlueprintRequest(
+                        identifier = bpId,
+                        title = "T",
+                        schema = BlueprintSchema(properties = mapOf("real" to PropertyDefinition(type = "string"))),
+                        calculationProperties = mapOf(
+                            "a" to CalculationPropertyDefinition(title = "A", type = "string", calculation = "\"a\""),
+                            "b" to CalculationPropertyDefinition(title = "B", type = "string", calculation = "\"b\""),
+                        ),
+                    ),
+                )
+                val created = client.postJson(
+                    "/api/v1/entities",
+                    entityRequest(bpId, entId, buildJsonObject { put("real", "x") }),
+                ).body<EntityResponse>()
+                // The response carries 1 stored + 2 computed = 3 properties, but the audit trail
+                // records only what the REQUEST stored.
+                assertEquals(3, created.properties.size)
+                val event = capture.awaitEvent { it.message == "entity.created" && it.hasKeyValue("entityId", created.id.toLong()) }
+                assertNotNull(event)
+                assertTrue(event.hasKeyValue("byUserId", userId.toLong()))
+                assertTrue(event.hasKeyValue("properties", 1))
+            }
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `an aggregation counts correctly across roughly 200 target entities`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("ent-computed-scale")
+        val userId = TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
+        val adminEmail = uniqueEmail("ent-computed-scale-admin")
+        TestUsers.seed(email = adminEmail, password = "pw", role = UserRole.ADMIN)
+        val admin = authedClient(adminEmail, "pw")
+        val client = authedClient(email, "pw")
+        val childBp = unique("bp-computed-scale-c")
+        val subjBp = unique("bp-computed-scale-s")
+        val subjId = unique("ent-computed-scale-s")
+        val childIds = (0 until 200).map { unique("ent-computed-scale-c$it") }
+        try {
+            admin.createBlueprint(simpleBlueprint(childBp))
+            admin.createBlueprint(
+                BlueprintRequest(
+                    identifier = subjBp,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("kids" to RelationDefinition(title = "Kids", target = childBp, required = false, many = true)),
+                    aggregationProperties = mapOf(
+                        "total" to AggregationPropertyDefinition(
+                            title = "Total",
+                            target = childBp,
+                            calculationSpec = AggregationCalculationSpec(calculationBy = "entities", func = "count"),
+                        ),
+                    ),
+                ),
+            )
+            childIds.forEach { id -> TestEntities.service.create(EntityRequest(blueprint = childBp, identifier = id, title = id), userId) }
+            val kidsValue = JsonArray(childIds.map { JsonPrimitive(it) })
+            val subj = client.postJson(
+                "/api/v1/entities",
+                entityRequest(subjBp, subjId).copy(relations = buildJsonObject { put("kids", kidsValue) }),
+            ).body<EntityResponse>()
+            assertEquals(JsonPrimitive(childIds.size.toLong()), subj.properties["total"])
+        } finally {
+            TestEntities.remove(*(childIds + subjId).toTypedArray())
+            TestBlueprints.remove(childBp, subjBp)
         }
     }
 }

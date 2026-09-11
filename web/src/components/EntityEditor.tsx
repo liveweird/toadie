@@ -36,6 +36,7 @@ export default function EntityEditor({
   staleFindings = [],
   saveFindings = [],
   computedTeam = [],
+  computed,
 }: {
   title: string;
   submitLabel: string;
@@ -47,6 +48,9 @@ export default function EntityEditor({
   staleFindings?: readonly EntityFinding[];
   saveFindings?: readonly EntityFinding[];
   computedTeam?: readonly string[];
+  /** The entity's evaluated mirror/calculation/aggregation values (v1.27.0) — absent on
+   *  create, `utils/computedProperties.ts#computedValuesOf(entity, blueprint)` on edit. */
+  computed?: Record<string, unknown>;
 }) {
   const { t } = useTranslation();
   const preview = JSON.stringify(toEntityRequest(form.values, blueprint), null, 2);
@@ -85,7 +89,13 @@ export default function EntityEditor({
           <Paper withBorder p="lg" radius="md">
             <form onSubmit={form.onSubmit(onSubmit)} noValidate>
               <Stack>
-                <EntityFormFields form={form} blueprint={blueprint} computedTeam={computedTeam} findings={findingsIndex} />
+                <EntityFormFields
+                  form={form}
+                  blueprint={blueprint}
+                  computedTeam={computedTeam}
+                  findings={findingsIndex}
+                  computed={computed}
+                />
                 {error && (
                   <Alert color="red" variant="light">
                     {error}

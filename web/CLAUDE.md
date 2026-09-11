@@ -193,6 +193,50 @@ internal `useUrlParam` generalized to also export `useTeamParam` — the `?bluep
 `hooks/useEntities.ts` and `api/entities.ts#listEntities`/`getEntityGraph` thread `team` through
 to the server's own EFFECTIVE-team-or-self-`_team`-match filter.
 
+## Computed properties (v1.27.0)
+
+Phase 5 of the Port data-model move: the server now EVALUATES `mirrorProperties`,
+`calculationProperties` and `aggregationProperties` at entity read time, so a GET/list/create
+response's `properties` already carries their values alongside the stored ones — the SPA never
+computes anything itself. `utils/computedProperties.ts` is the client-side vocabulary:
+`computedDefinitions(blueprint)` flattens a blueprint's three definition maps into one list, in
+mirror → calculation → aggregation order (Port's own document order); `computedPropertyIds`
+is the id set (mirror/calculation/aggregation ids share ONE namespace with schema properties —
+`utils/blueprintForm.ts`'s `combinedPropertyIds` rule); `computedValuesOf(entity, blueprint)`
+reads `entity.properties[id]` for every declared id (present-or-`undefined`, never omitted —
+the fieldset renders one row per DEFINITION); `previewComputedColumns(blueprint)` is every
+mirror/aggregation property plus only the string/number/boolean-typed calculations (their
+output type is the one thing a definition states ahead of evaluation; array/object
+calculations need a wider cell than a fixed-width preview column offers).
+
+**Read-only, never form state.** `components/EntityComputedValue.tsx` renders one value —
+absent (the server's evaluation-failure outcome, never `null` or a thrown error) as the dimmed
+localized "Not available"; boolean as the list's True/False Badge; string/number as plain
+`Text`, or a `Badge` tinted via `utils/portColors.ts#portColor(colors[String(value)])` when the
+calculation is `colorized`; array as gray pills (an object item renders as inline JSON `Code`);
+object as a pretty-printed JSON `Code` block. `components/EntityComputedFieldset.tsx` wraps it
+in a `Fieldset legend="Computed"` (`role="group"` name "Computed" — e2e locates it that way),
+one row per definition: title, a kind Badge (Mirror/Calculation/Aggregation, localized), the
+value, and a fixed "not editable here" hint — the `EntityTeamField` Inherited-pills template
+one level up. `EntityFormFields`'s optional `computed?: Record<string, unknown>` prop renders
+the fieldset LAST, after Relations, only when a value map was supplied AND
+`computedDefinitions(blueprint)` is non-empty; `EntityEditor` threads it through unchanged.
+`EditEntity` passes `computedValuesOf(entity, blueprint)`; `CreateEntity` passes nothing (a
+brand-new entity has no evaluated values yet), so its editor never renders the section at all.
+
+**Strip on save.** `utils/entityForm.ts#fromEntityResponse` excludes computed ids from the
+"stored key the schema no longer declares" fallback (never fabricates an `unknown: true` raw
+JSON draft for one — there is nothing to re-edit), and `toEntityRequest` skips any computed-id
+draft defensively before building the wire body — belt-and-braces around the server's own
+`COMPUTED_PROPERTY` 400, which rejects a create/update that tries to send one back regardless.
+
+**List columns.** `pages/Entities.tsx`'s preview columns are the blueprint's schema
+string/number/boolean properties FIRST, then `previewComputedColumns(blueprint)`, the combined
+list capped at the existing `MAX_COLUMN_PROPERTIES` (4) — a computed column can therefore push
+a schema column out, or vice versa, depending on which comes first and how many of each a
+blueprint declares. Computed cells render through the same `EntityComputedValue` the editor
+uses; schema cells keep their pre-v1.27.0 inline rendering (`schemaPreviewCell`).
+
 ## Entity graph & hierarchy (`pages/EntityGraph.tsx`, `pages/EntityHierarchy.tsx`)
 
 Port migration phase 3 (v1.25.0): the entity counterparts of the Render/Hierarchy pages, over `GET /api/v1/entities/graph` (blueprint/search filtered, both-ends-shown edges — the catalog graph's rule, enforced server-side; there is no MISSING-node concept for entities) instead of `GET /files/graph`. Both pages share `hooks/useEntityGraphFilterState.ts` — the two-slot scale-down of `useCatalogFileFilterState`: a blueprint multi-select plus a 300ms-debounced `q`, persisted per view under `toadie.viewSettings.<viewKey>.filter.*` (**not** the URL, the catalog views' posture — unrelated to the Entities LIST page's own `?blueprint=` param) — rendered through `components/EntityGraphToolbar.tsx` (the `CatalogToolbar` shape scaled down) + `EntityGraphFilterControls`.

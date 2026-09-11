@@ -54,11 +54,34 @@ the `ownership.path`. `_user.team` (many, optional) is membership, a relation to
 Required relations are always single (Port forbids `required` + `many`). Every blueprint carries
 `links` (`array` of `object`, ↔ `metadata.links`) plus named link properties where the link has
 one meaning (`repository`, `docs`, `ci_pipeline`, `dashboard`, `logs`, `runbook`). `external:
-boolean` on `system`/`api` preserves the `external` namespace (third parties). No mirror/
-calculation/aggregation properties — Toadie stores but never evaluates them (candidates:
-`workload.languages ← service.languages`, `workload.env_type ← environment.type`,
-`system.service_count`, `_team.services_owned`, `domain.critical_systems`). No secrets,
+boolean` on `system`/`api` preserves the `external` namespace (third parties). No secrets,
 connection strings or hostnames as properties, ever.
+
+**Computed properties (phase 5, v1.27.0).** Nine mirror/calculation/aggregation properties
+across five blueprints, evaluated at entity read time (`.claude/docs/port-data-model.md`
+"Computed properties"); `SampleEntitiesTest` derives every expected value from the sample
+entity files rather than hardcoding them.
+
+| Blueprint | id | kind | definition |
+|---|---|---|---|
+| `_team` | `member_count` | aggregation | target `_user`, `entities/count` — direct, via `_user`'s own `team` relation |
+| `domain` | `critical_systems` | aggregation | target `system`, `entities/count`, query `criticality = critical` — direct, via `system.domain` |
+| `system` | `service_count` | aggregation | target `service`, `entities/count` — direct, via `service.system` |
+| `system` | `workload_replicas` | aggregation | target `workload`, `property/sum` of `replicas`, `pathFilter [{fromBlueprint: workload, path: [service, system]}]` (reverse: workload → service → system) |
+| `system` | `deploys_per_week` | aggregation | target `workload`, `entities/average` per `week`, `measureTimeBy: last_deployed`, the same reverse `pathFilter` — time-dependent (**assumption**, see `port-data-model.md`) |
+| `service` | `domain_title` | mirror | `system.domain.$title` |
+| `service` | `stack` | calculation | `((.properties.languages // []) + (.properties.frameworks // [])) \| join(", ")` |
+| `service` | `risk` | calculation, colorized | `technology_status`/`lifecycle` black-list/deprecated → `high` (red), grey-zone/sunsetting → `medium` (yellow), else `low` (green) |
+| `workload` | `service_lifecycle`, `env_type`, `languages` | mirror | `service.lifecycle`, `environment.type`, `service.languages` |
+
+An unresolvable value (a dangling relation, a jq failure, a type mismatch) is simply ABSENT —
+never a finding, never a save blocker; `01-team.json`'s `member_count` is the one SYSTEM
+blueprint extension (`_team` may add aggregation properties like any other field). Because an
+aggregation's `target` must already be an ACTIVE blueprint, `domain.critical_systems` and
+`system`'s three aggregations name a blueprint that loads LATER in the numbered set — the
+loader (`sample-data/blueprints/load.sh`, `SampleData.loadBlueprints`) applies these in TWO
+passes: every file first, with `aggregationProperties` stripped, then a second pass PUTs the
+full file back onto every blueprint that declares one, once every target exists.
 
 **Backstage export mapping (the round-trip contract).**
 

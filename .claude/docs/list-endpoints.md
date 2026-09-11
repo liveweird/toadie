@@ -27,7 +27,11 @@ after the catalog files list: sortable-field whitelist `identifier`, `title`, `u
 (v1.26.0 — exact, case-insensitive match of the scalar search term against a stored JSON
 string OR array column, e.g. via `jsonStringOrArrayContainsFolded`; only Direct/absent
 ownership entities match; Inherited entities carry no stored team — documented limitation),
-and `q` — the free-text filter over `identifier` OR `title` via `containsNormalized`.
+and `q` — the free-text filter over `identifier` OR `title` via `containsNormalized`. Computed
+properties (phase 5, v1.27.0 — `mirrorProperties`/`calculationProperties`/`aggregationProperties`)
+are evaluated only in the response body and are never stored, so `q`, sort, and every filter
+above see the entity's STORED fields only — a computed value can never be searched, sorted, or
+filtered on.
 
 **Sub-collections.** A record's own collection is paged like any other when it is unbounded: the catalog file's change history (`GET /api/v1/files/{id}/events`) rides the shared machinery through `EventLog.listFor` with its own `-timestamp,-id` default sort and a `{timestamp, id}` whitelist. This is a deliberate deviation from Lettuce, whose seven `*_events` endpoints answer an unpaged `{items}`: their per-record counts are intrinsically tiny, while a synced catalog file mints an event per sync run. Reserve the plain `{items}` wrapper for genuinely bounded sets (the registries, at most a few dozen rows).
 

@@ -76,7 +76,10 @@ from Lettuce, that any new or edited spec must satisfy:
   `blueprints` owns its two throwaway `e2e-bp-*` blueprints and its user;
   `entities` owns its two throwaway `e2e-ent-bp-*` blueprints, their `e2e-ent-*` entities, and
   one throwaway `e2e-ent-team-*` `_team` entity (together with `blueprints`, one of the
-  blueprint registry's four in-run writers — see the dedicated bullet below);
+  blueprint registry's four in-run writers — see the dedicated bullet below); its Phase 5
+  (v1.27.0) computed-property PUTs mutate only its own two throwaway blueprints; `finally`
+  strips the target blueprint's calculation/aggregation properties first (an aggregation target
+  blocks deletion like a relation target), and the dependent's mirror goes with the dependent;
   `entity-graph` owns its two throwaway `e2e-eg-*` blueprints and entities, one throwaway
   `e2e-eg-*`-marked `_team` entity, plus its throwaway user's `entity-graph-layout` document
   (see its own bullet below, alongside `graph-persistence`/`render`); `entity-hierarchy` owns
@@ -230,17 +233,25 @@ the same commit** — this list is the coverage map, the scenario file is the de
   editor-route bounce → cleanup; one of the registry's two in-run writers, alongside
   `entities.spec.ts`.
 - [`entities.spec.ts`](scenarios/entities.md) — instances of a blueprint (Port compatibility,
-  phase 2; + Phase 4 ownership, v1.26.0): two throwaway blueprints seeded via the API (a target
-  with typed properties and Direct ownership, a dependent with a required relation to it) and
-  one throwaway `_team` entity → the Entities list's blueprint picker and New entity's
-  validation → create an entity with an enum/number/boolean property and a team picked in the
-  "Owned by" MultiSelect, watching the JSON preview → the row's Team chip, the toolbar Team
-  filter (`?team=`), the owned team's blocked (`409`, naming the referrer) then unblocked
-  (`204`, after unlinking in the editor) delete → a second entity relating to the first → the
-  blocked delete of the targeted entity naming the referrer → editing the target blueprint to
-  add a required property turns the entity stale (the list's findings badge) → the editor's
-  stale alert names the missing field, fixed and saved, clears it → cleanup (entities, then
-  blueprints); the blueprint registry's other in-run writer, alongside `blueprints.spec.ts`.
+  phase 2; + Phase 4 ownership, v1.26.0; + Phase 5 computed properties, v1.27.0): two throwaway
+  blueprints seeded via the API (a target with typed properties and Direct ownership, a
+  dependent with a required relation to it) and one throwaway `_team` entity → the Entities
+  list's blueprint picker and New entity's validation → create an entity with an
+  enum/number/boolean property and a team picked in the "Owned by" MultiSelect, watching the
+  JSON preview → the row's Team chip, the toolbar Team filter (`?team=`), the owned team's
+  blocked (`409`, naming the referrer) then unblocked (`204`, after unlinking in the editor)
+  delete → a second entity relating to the first → the blocked delete of the targeted entity
+  naming the referrer → editing the target blueprint to add a required property turns the
+  entity stale (the list's findings badge) → the editor's stale alert names the missing field,
+  fixed and saved, clears it → via the API, the target blueprint gains a colorized calculation
+  mirroring its own tier property and an aggregation counting the dependent's entities, and the
+  dependent blueprint gains a mirror reading the target's tier through its existing relation →
+  the dependent's list preview column and its editor's read-only "Computed" section show the
+  mirrored value with the Mirror badge → the target entity's editor shows the calculation and
+  aggregation count, its JSON preview strips all three computed ids, and its save still
+  succeeds → cleanup (the target blueprint's computed properties removed first to break the
+  aggregation-created delete cycle, then entities, then blueprints); the blueprint registry's
+  other in-run writer, alongside `blueprints.spec.ts`.
 - [`entity-graph.spec.ts`](scenarios/entity-graph.md) — the Entity graph (Port migration phase
   3; + Phase 4 ownership edges, v1.26.0): two throwaway blueprints (a parent with a `peer` many
   self-relation, a child whose single `parent` relation is flagged as its `hierarchyRelation`),

@@ -2,10 +2,12 @@ import { Fieldset, Stack, TextInput } from "@mantine/core";
 import type { UseFormReturnType } from "@mantine/form";
 import { useTranslation } from "react-i18next";
 import type { Blueprint } from "../api/blueprints";
+import EntityComputedFieldset from "./EntityComputedFieldset";
 import EntityPropertyField from "./EntityPropertyField";
 import EntityRelationField from "./EntityRelationField";
 import EntityTeamField from "./EntityTeamField";
 import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
+import { computedDefinitions } from "../utils/computedProperties";
 import { NO_ENTITY_FINDINGS, type EntityFieldFindings } from "../utils/entityFieldFindings";
 import { MAX_ICON_LENGTH, MAX_IDENTIFIER_LENGTH, MAX_TITLE_LENGTH, type EntityFormValues } from "../utils/entityForm";
 
@@ -112,23 +114,36 @@ function RelationsFieldset({ form, blueprint }: { form: Form; blueprint: Bluepri
  * surface) is indexed once by `EntityEditor` and threaded down so `team`/`properties.<id>`
  * controls paint their own soft finding; `computedTeam` is the entity's own EFFECTIVE `team`
  * (empty on create) — `EntityTeamField`'s Inherited-ownership pills.
+ *
+ * `computed` (v1.27.0, phase 5) is the entity's evaluated mirror/calculation/aggregation
+ * values (`utils/computedProperties.ts#computedValuesOf`) — `undefined` on create, where
+ * nothing has been saved yet for the server to compute against. The read-only
+ * `EntityComputedFieldset` renders LAST, after Relations, and only when a value map was
+ * supplied AND the blueprint actually declares at least one computed property (a blueprint
+ * with none renders nothing, same as an entity with no relations).
  */
 export default function EntityFormFields({
   form,
   blueprint,
   computedTeam = [],
   findings = NO_ENTITY_FINDINGS,
+  computed,
 }: {
   form: Form;
   blueprint: Blueprint;
   computedTeam?: readonly string[];
   findings?: EntityFieldFindings;
+  computed?: Record<string, unknown>;
 }) {
+  const definitions = computedDefinitions(blueprint);
   return (
     <Stack gap="md">
       <IdentityFieldset form={form} blueprint={blueprint} computedTeam={computedTeam} findings={findings} />
       <PropertiesFieldset form={form} blueprint={blueprint} findings={findings} />
       <RelationsFieldset form={form} blueprint={blueprint} />
+      {computed !== undefined && definitions.length > 0 && (
+        <EntityComputedFieldset definitions={definitions} values={computed} />
+      )}
     </Stack>
   );
 }

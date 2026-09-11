@@ -97,7 +97,10 @@ fun Application.configureEntityRoutes() {
                     "entityId" to created.id.toLong(),
                     "blueprint" to created.blueprint,
                     "identifier" to created.identifier,
-                    "properties" to created.properties.size,
+                    // The STORED count (created.properties also carries computed values since
+                    // v1.27.0 — mirror/calculation/aggregation ids the request could never have
+                    // sent), matching entity.updated's own audit field.
+                    "properties" to request.properties.size,
                     "relations" to created.relations.size,
                 )
                 call.response.header(HttpHeaders.Location, call.application.href(EntitiesRoute.Id(id = created.id)))

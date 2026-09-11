@@ -36,6 +36,19 @@
       "many": false
     }
   },
+  "aggregationProperties": {
+    "critical_systems": {
+      "title": "Critical systems",
+      "target": "system",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "query": {
+        "combinator": "and",
+        "rules": [
+          { "property": "criticality", "operator": "=", "value": "critical" }
+        ]
+      }
+    }
+  },
   "ownership": {
     "type": "Direct",
     "title": "Owned by"

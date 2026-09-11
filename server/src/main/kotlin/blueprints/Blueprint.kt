@@ -24,8 +24,10 @@ import kotlinx.serialization.json.JsonPrimitive
  * Out of scope (see the plan): Port's `teamInheritance`/`changelogDestination` (platform
  * features — carrying them is a strict 400, since the strict `DefaultJson` used for request
  * decoding already rejects unknown keys), Port's default/system blueprints (no seed), icon
- * pictures (`icon` is Port's icon NAME, a free string), entities, and evaluation of
- * mirror/calculation/aggregation properties.
+ * pictures (`icon` is Port's icon NAME, a free string), and entities. Mirror/calculation/
+ * aggregation properties are stored and shape-checked here only; their VALUES are evaluated per
+ * entity at read time by `entities/EntityComputed.kt` (phase 5, v1.27.0) — this file never
+ * evaluates jq or JSON-Schema semantics itself.
  */
 const val MAX_BLUEPRINTS = 200
 const val MAX_BLUEPRINT_IDENTIFIER_LENGTH = 100
@@ -135,7 +137,8 @@ data class CalculationPropertyDefinition(
     val type: String,
     val format: String? = null,
     val spec: String? = null,
-    // A jq expression — stored and shape-checked (length only) only; never parsed/evaluated.
+    // A jq expression — stored and shape-checked (length only) here; evaluated per entity at
+    // read time by `entities/JqCalculation.kt`/`entities/EntityComputed.kt` (phase 5, v1.27.0).
     val calculation: String,
     val colorized: Boolean? = null,
     val colors: Map<String, String>? = null,

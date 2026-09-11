@@ -2,8 +2,10 @@ package ch.nokillswit
 
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.blueprints.toDefinition
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
+import ch.nokillswit.entities.computedPropertyIds
 import ch.nokillswit.entities.toDocument
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
@@ -21,9 +23,13 @@ import java.io.File
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -87,14 +93,15 @@ class SampleEntitiesTest {
 
         try {
             bpFiles.forEachIndexed { index, file ->
-                val text = file.readText()
-                val request = blueprintJson.decodeFromString<BlueprintRequest>(text)
+                val request = blueprintJson.decodeFromString<BlueprintRequest>(file.readText())
                 blueprintIdentifiers += request.identifier
                 blueprintRequestsByIdentifier[request.identifier] = request
                 blueprintFileIndex[request.identifier] = index
-
-                SampleData.loadBlueprint(admin, text)
             }
+            // Two passes (phase 5, v1.27.0): a forward-referencing aggregation target (domain ->
+            // system, system -> service/workload) only exists once the full set has loaded —
+            // see `sample-data/blueprints/load.sh` and `SampleData.loadBlueprints`'s KDoc.
+            SampleData.loadBlueprints(admin, bpFiles)
 
             val requestsByFile = mutableListOf<List<EntityRequest>>()
 
@@ -124,18 +131,38 @@ class SampleEntitiesTest {
                     assertTrue(reread.findings.isEmpty(), "${file.name} ${request.identifier} reads back with findings: ${reread.findings}")
 
                     val expected = request.toDocument()
-                    assertEquals(expected.properties, reread.properties, "${file.name} ${request.identifier} properties did not round-trip")
+                    // Phase 5 (v1.27.0): the response's `properties` is stored ∪ computed
+                    // (`.claude/docs/port-data-model.md` "Computed properties") — strip the
+                    // computed ids before comparing against the request's STORED shape.
+                    val computedIds = computedPropertyIds(blueprintRequestsByIdentifier.getValue(request.blueprint).toDefinition())
+                    val storedProperties = JsonObject(reread.properties.filterKeys { it !in computedIds })
+                    assertEquals(expected.properties, storedProperties, "${file.name} ${request.identifier} properties did not round-trip")
                     assertEquals(expected.relations, reread.relations, "${file.name} ${request.identifier} relations did not round-trip")
 
                     responseByKey["${request.blueprint}/${request.identifier}"] = reread
                 }
             }
 
+            // Phase 5 (v1.27.0): an aggregation property (e.g. system.service_count) can name a
+            // TARGET blueprint that loads LATER in dependency order (service/workload load after
+            // system), so the response captured right after an entity's own creation predates
+            // its dependents. Refresh every response now that the full set is loaded, before
+            // deriving/asserting any computed value.
+            responseByKey.keys.toList().forEach { key ->
+                val id = responseByKey.getValue(key).id
+                responseByKey[key] = admin.get("/api/v1/entities/$id").body<EntityResponse>()
+            }
+
             assertShowcaseCoverage(requestsByFile, blueprintRequestsByIdentifier)
             assertTeamOwnership(requestsByFile, blueprintRequestsByIdentifier, responseByKey)
+            assertComputedProperties(requestsByFile, responseByKey)
         } finally {
             TestEntities.remove(*entityIdentifiers.toTypedArray())
             TestBlueprints.restoreSystemBlueprints()
+            // domain <-> system form a reference cycle (domain's aggregation targets system,
+            // system's own relation targets domain back) that the plain retry-based remove()
+            // below cannot resolve on its own — see SampleData.stripAggregationsForCleanup's KDoc.
+            SampleData.stripAggregationsForCleanup(blueprintRequestsByIdentifier)
             TestBlueprints.remove(*blueprintIdentifiers.toTypedArray())
         }
     }
@@ -197,6 +224,167 @@ class SampleEntitiesTest {
         is JsonArray -> team.map { (it as JsonPrimitive).content }
         is JsonPrimitive -> listOf(team.content)
         else -> error("team must be a string or an array of strings, got $team")
+    }
+
+    /**
+     * Phase 5 (v1.27.0): derives every computed value straight from the sample entity files
+     * (never a hardcoded number) and checks it against the value the API actually returned —
+     * `.claude/docs/ontology.md`'s "Computed properties" table. `deploys_per_week` is
+     * time-dependent (`now` keeps moving), so it is only range-asserted: positive, and no
+     * larger than the count of workloads it averaged over.
+     */
+    private fun assertComputedProperties(
+        requestsByFile: List<List<EntityRequest>>,
+        responseByKey: Map<String, EntityResponse>,
+    ) {
+        val allRequests = requestsByFile.flatten()
+        fun byBlueprint(blueprint: String) = allRequests.filter { it.blueprint == blueprint }
+        fun propertiesOf(blueprint: String, identifier: String) = responseByKey.getValue("$blueprint/$identifier").properties
+
+        val teams = byBlueprint("_team")
+        val users = byBlueprint("_user")
+        val domains = byBlueprint("domain")
+        val systems = byBlueprint("system")
+        val services = byBlueprint("service")
+        val workloads = byBlueprint("workload")
+        val environments = byBlueprint("environment")
+
+        // _team.member_count: direct aggregation over _user's own "team" relation.
+        teams.forEach { team ->
+            val expected = users.count { user -> team.identifier in teamValuesOf(user.relations["team"]) }
+            assertEquals(
+                JsonPrimitive(expected.toLong()),
+                propertiesOf("_team", team.identifier)["member_count"],
+                "_team/${team.identifier}.member_count",
+            )
+        }
+
+        // domain.critical_systems: direct aggregation over system.domain, filtered to criticality = critical.
+        domains.forEach { domain ->
+            val expected = systems.count { system ->
+                domain.identifier in teamValuesOf(system.relations["domain"]) &&
+                    (system.properties["criticality"] as? JsonPrimitive)?.content == "critical"
+            }
+            assertEquals(
+                JsonPrimitive(expected.toLong()),
+                propertiesOf("domain", domain.identifier)["critical_systems"],
+                "domain/${domain.identifier}.critical_systems",
+            )
+        }
+
+        // system.service_count: direct aggregation over service.system.
+        systems.forEach { system ->
+            val expected = services.count { service -> system.identifier in teamValuesOf(service.relations["system"]) }
+            assertEquals(
+                JsonPrimitive(expected.toLong()),
+                propertiesOf("system", system.identifier)["service_count"],
+                "system/${system.identifier}.service_count",
+            )
+        }
+
+        // system.workload_replicas / deploys_per_week: reverse pathFilter workload -> service -> system.
+        val systemOfWorkload = workloads.associate { workload ->
+            val serviceIdentifier = (workload.relations.getValue("service") as JsonPrimitive).content
+            val service = services.first { it.identifier == serviceIdentifier }
+            workload.identifier to (service.relations["system"] as? JsonPrimitive)?.content
+        }
+        var replicasSeen = false
+        var deploysSeen = false
+        systems.forEach { system ->
+            val matching = workloads.filter { systemOfWorkload[it.identifier] == system.identifier }
+            val replicasActual = propertiesOf("system", system.identifier)["workload_replicas"]
+            val replicaValues = matching.mapNotNull { (it.properties["replicas"] as? JsonPrimitive)?.doubleOrNull }
+            if (replicaValues.isEmpty()) {
+                assertNull(replicasActual, "system/${system.identifier}.workload_replicas should be absent")
+            } else {
+                replicasSeen = true
+                val sum = replicaValues.sum()
+                val expectedReplicas = if (sum == Math.floor(sum)) JsonPrimitive(sum.toLong()) else JsonPrimitive(sum)
+                assertEquals(expectedReplicas, replicasActual, "system/${system.identifier}.workload_replicas")
+            }
+
+            val deploysActual = propertiesOf("system", system.identifier)["deploys_per_week"]
+            if (matching.isEmpty()) {
+                assertNull(deploysActual, "system/${system.identifier}.deploys_per_week should be absent")
+            } else {
+                deploysSeen = true
+                val primitive = assertNotNull(deploysActual as? JsonPrimitive, "system/${system.identifier}.deploys_per_week")
+                val value = assertNotNull(primitive.doubleOrNull, "system/${system.identifier}.deploys_per_week must be numeric")
+                assertTrue(value > 0, "system/${system.identifier}.deploys_per_week must be positive, was $value")
+                assertTrue(
+                    value <= matching.size,
+                    "system/${system.identifier}.deploys_per_week ($value) must be at most its workload count (${matching.size})",
+                )
+            }
+        }
+        assertTrue(replicasSeen, "workload_replicas must be present on at least one system")
+        assertTrue(deploysSeen, "deploys_per_week must be present on at least one system")
+
+        // service.domain_title: mirror system.domain.$title.
+        services.forEach { service ->
+            val systemIdentifier = (service.relations["system"] as? JsonPrimitive)?.content
+            val system = systems.firstOrNull { it.identifier == systemIdentifier }
+            val domainIdentifier = (system?.relations?.get("domain") as? JsonPrimitive)?.content
+            val domain = domains.firstOrNull { it.identifier == domainIdentifier }
+            val actual = propertiesOf("service", service.identifier)["domain_title"]
+            if (domain == null) {
+                assertNull(actual, "service/${service.identifier}.domain_title should be absent")
+            } else {
+                assertEquals(JsonPrimitive(domain.title), actual, "service/${service.identifier}.domain_title")
+            }
+        }
+
+        // service.stack: languages ∪ frameworks, joined.
+        services.forEach { service ->
+            val languages = teamValuesOf(service.properties["languages"])
+            val frameworks = teamValuesOf(service.properties["frameworks"])
+            val expected = (languages + frameworks).joinToString(", ")
+            assertEquals(
+                JsonPrimitive(expected),
+                propertiesOf("service", service.identifier)["stack"],
+                "service/${service.identifier}.stack",
+            )
+        }
+
+        // service.risk: black-list/deprecated -> high, grey-zone/sunsetting -> medium, else low.
+        services.forEach { service ->
+            val techStatus = (service.properties["technology_status"] as? JsonPrimitive)?.content
+            val lifecycle = (service.properties["lifecycle"] as? JsonPrimitive)?.content
+            val expected = when {
+                techStatus == "black-list" || lifecycle == "deprecated" -> "high"
+                techStatus == "grey-zone" || lifecycle == "sunsetting" -> "medium"
+                else -> "low"
+            }
+            assertEquals(
+                JsonPrimitive(expected),
+                propertiesOf("service", service.identifier)["risk"],
+                "service/${service.identifier}.risk",
+            )
+        }
+
+        // workload.service_lifecycle / env_type / languages: single-hop mirrors.
+        workloads.forEach { workload ->
+            val serviceIdentifier = (workload.relations.getValue("service") as JsonPrimitive).content
+            val service = services.first { it.identifier == serviceIdentifier }
+            val environmentIdentifier = (workload.relations["environment"] as? JsonPrimitive)?.content
+            val environment = environments.firstOrNull { it.identifier == environmentIdentifier }
+
+            assertEquals(
+                service.properties["lifecycle"],
+                propertiesOf("workload", workload.identifier)["service_lifecycle"],
+                "workload/${workload.identifier}.service_lifecycle",
+            )
+            assertEquals(
+                environment?.properties?.get("type"),
+                propertiesOf("workload", workload.identifier)["env_type"],
+                "workload/${workload.identifier}.env_type",
+            )
+            assertEquals(
+                service.properties["languages"],
+                propertiesOf("workload", workload.identifier)["languages"],
+                "workload/${workload.identifier}.languages",
+            )
+        }
     }
 
     /** Every relation target's blueprint must already be loaded — its file index `<=` [fileIndex] (self-relations included). */
