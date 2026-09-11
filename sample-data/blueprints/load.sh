@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Loads (or, with --delete, removes) the sample blueprint set at sample-data/blueprints/*.json —
 # the eleven-blueprint baseline ontology (.claude/docs/ontology.md) — against a running toadie
-# instance, using the blueprint API: there is no import UI for blueprints. Re-runnable: an
-# already-loaded file is reported "exists, skipped", not an error. The `_team`/`_user` system
+# instance, using the blueprint API: a scriptable, re-runnable alternative to the Import page
+# (/ontology/import, v1.28.0 — see sample-data/README.md "Through the Import page") for CI and
+# local setup outside a browser session. An already-loaded file is reported "exists, skipped",
+# not an error. The `_team`/`_user` system
 # blueprints (V31) are never created or deleted here — they are seeded by migration, and a
 # `_`-prefixed file is instead looked up by identifier and PUT to extend it with the sample
 # ontology's shape ("extended <identifier>"); `--delete` always keeps them ("system, kept: <id>").

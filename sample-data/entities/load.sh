@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Loads (or, with --delete, removes) the sample entity set at sample-data/entities/*.json
-# against a running toadie instance, using the entity API — there is no import UI for entities
-# (the blueprints/load.sh precedent). Run sample-data/blueprints/load.sh FIRST: every entity
-# names a blueprint, and the blueprint registry must already hold it.
+# against a running toadie instance, using the entity API — the blueprints/load.sh precedent, a
+# scriptable, re-runnable alternative to the Import page (/ontology/import, v1.28.0 — see
+# sample-data/README.md "Through the Import page"). Run sample-data/blueprints/load.sh FIRST:
+# every entity names a blueprint, and the blueprint registry must already hold it.
 #
 # Env:
 #   TOADIE_URL       default http://localhost:8081

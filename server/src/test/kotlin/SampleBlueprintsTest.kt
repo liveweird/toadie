@@ -1,10 +1,15 @@
 package ch.nokillswit
 
 import ch.nokillswit.SampleData.asRequest
+import ch.nokillswit.blueprints.BlueprintImportRequest
+import ch.nokillswit.blueprints.BlueprintImportResponse
 import ch.nokillswit.blueprints.BlueprintRequest
+import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.blueprints.isSystemIdentifier
 import ch.nokillswit.dictionaries.DictionaryEntryList
+import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.labels.LabelList
 import ch.nokillswit.tags.TagCategoryList
 import ch.nokillswit.types.EntityTypesList
@@ -14,6 +19,7 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -89,6 +95,56 @@ class SampleBlueprintsTest {
             // system's own relation targets domain back) that the plain retry-based remove()
             // below cannot resolve on its own — see SampleData.stripAggregationsForCleanup's KDoc.
             SampleData.stripAggregationsForCleanup(requests)
+            TestBlueprints.remove(*identifiers.toTypedArray())
+        }
+    }
+
+    /**
+     * Phase 6 (v1.28.0): the same eleven files are also a valid `POST /api/v1/blueprints/import`
+     * BATCH, not just a sequential POST/PUT script — `_team`/`_user` already exist (seeded by
+     * V31), so with `replaceExisting = true` they answer `UPDATED` and the other nine `CREATED`;
+     * the planner's own ordering + two-pass deferral (`.claude/docs/port-data-model.md` "Import
+     * and export") must resolve the exact same forward-referencing aggregations
+     * (`loadBlueprints`'s pass 2, above) without any file-order hint from the caller — the
+     * documents are submitted in their on-disk (dependency) order, but nothing about the import
+     * endpoint requires that; the planner computes its own order from the definitions.
+     */
+    @Test
+    fun `the sample set also imports as one batch, matching the two-pass load`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("bpimport", UserRole.ADMIN)
+        val files = SampleData.numberedFiles("blueprints")
+        val decoded = files.map { it to blueprintJson.decodeFromString<BlueprintRequest>(it.readText()) }
+        val identifiers = decoded.map { it.second.identifier }
+        val documents = files.map { Json.parseToJsonElement(it.readText()).jsonObject }
+
+        try {
+            val response = admin.postJson(
+                "/api/v1/blueprints/import",
+                BlueprintImportRequest(documents = documents, replaceExisting = true),
+            ).body<BlueprintImportResponse>()
+
+            assertEquals(files.size, response.results.size)
+            decoded.forEachIndexed { index, (_, request) ->
+                val row = response.results[index]
+                assertEquals(request.identifier, row.identifier, "row $index identifier")
+                val expected = if (isSystemIdentifier(request.identifier)) OntologyImportStatus.UPDATED else OntologyImportStatus.CREATED
+                assertEquals(expected, row.status, "${request.identifier} import status")
+                assertNotNull(row.id, "${request.identifier} must carry a stored id")
+            }
+
+            decoded.forEach { (file, request) ->
+                val row = response.results.first { it.identifier == request.identifier }
+                val reread = admin.get("/api/v1/blueprints/${row.id}").body<BlueprintResponse>()
+                assertEquals(
+                    SampleData.canonicalBlueprint(file.readText()),
+                    Json.parseToJsonElement(blueprintJson.encodeToString(reread.asRequest())),
+                    "${file.name} did not round-trip through the import batch",
+                )
+            }
+        } finally {
+            TestBlueprints.restoreSystemBlueprints()
+            SampleData.stripAggregationsForCleanup(decoded.associate { it.second.identifier to it.second })
             TestBlueprints.remove(*identifiers.toTypedArray())
         }
     }

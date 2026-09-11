@@ -264,6 +264,32 @@ versa. On the frontend, `web/src/test/reactFlowStub.tsx` is the shared React Flo
 tests and the new `EntityGraph`/`EntityHierarchy` page tests drive, so the canvas contract is
 pinned once rather than duplicated per page.
 
+**Ontology import (v1.28.0).** `BlueprintImportPlanTest` and `EntityImportPlanTest` are the pure
+planners (`blueprints/BlueprintImport.kt`/`entities/EntityImport.kt`, no database): one case per
+rule in `.claude/docs/port-data-model.md` "Import and export" — decode/validate failures, the
+reserved-identifier and unknown-blueprint rules, in-batch duplicates (`CONFLICT`), `EXISTS` vs
+`UPDATED` (including a system-blueprint extension accepted/rejected), unknown relation/
+aggregation targets, the registry/entity caps (including a cap slot freed by an unrelated
+rejection), Kahn ordering with ties, cycle deferral into a two-pass write (a 2-cycle
+relation/aggregation for blueprints; an optional back-edge across all three entity reference
+sources — relations, `team`, `format: team|user` properties — for entities), and a MANDATORY
+entity reference cycle rejected outright (`INVALID` "Circular required reference '<field>'
+within the batch") rather than deferred. `BlueprintImportTest`/`EntityImportTest` drive the
+routes end to end: the ADMIN guard-before-receive on blueprints versus the any-authenticated
+entities gate, anonymous `401`, the 200-document cap and a non-object batch element both `400`,
+a mixed batch landing a forward aggregation/relation cycle via pass 2 (observed on GET), a
+PUT-shaped blueprint change on an entity staying `INVALID`, and — the load-bearing pin — **dry-run
+parity**: `/import/check` returns the identical row set the real run would produce (an `id` only
+on `EXISTS`/`UPDATED` rows), storing and auditing nothing, while the real run's `CREATED`/
+`UPDATED` rows carry `import: true` on their `blueprint.*`/`entity.*` audit events.
+`SampleBlueprintsTest` and `SampleEntitiesTest` each gain one case proving the baseline ontology
+sample sets are valid import BATCHES, not just the sequential POST/PUT scripts the earlier cases
+pin: the eleven blueprint files POSTed as ONE `/blueprints/import` batch with
+`replaceExisting = true` answer `_team`/`_user` → `UPDATED` and the other nine → `CREATED`, with
+every re-GET definition matching the two-pass `SampleData.loadBlueprints` shape; the 59 entity
+files POSTed as ONE `/entities/import` batch answer all rows `CREATED` with empty `findings` on
+re-GET, and an identical second run answers every row `EXISTS`.
+
 **Dependency locking.** The Gradle build resolves against the committed lockfiles (`core/` + `server/gradle.lockfile`, the root `settings-` and `buildscript-gradle.lockfile`; enabled in the root `build.gradle.kts`, DEFAULT lock mode): a transitive version outside the lock state fails resolution. After a dependency change run `./gradlew build --write-locks` and commit the lockfiles; the Dockerfile copies them into the build stage, so a forgotten lockfile also fails the image build.
 
 **Schemathesis (optional manual fuzz pass, not in CI).** Property-based fuzzing of the running stack from the spec: `docker compose up --build` (compose ships dev mode, so `/openapi` is exposed), grab a token — `TOKEN=$(curl -s -X POST localhost:8081/api/v1/login -H 'Content-Type: application/json' -d '{"email":"admin@toadie.local","password":"changeme"}' | jq -r .token)` — then `uvx schemathesis run -c all -H "Authorization: Bearer $TOKEN" --exclude-path /api/v1/logout http://localhost:8081/openapi/documentation.yaml --url http://localhost:8081`. The `/logout` exclusion is load-bearing: fuzzing it **revokes the bearer token** (everything after 401s). Login fuzzing also trips the per-account lockout for `admin@toadie.local` (the spec's example email) — in-memory, so `docker compose restart app` clears it. Expect residual noise from stateful invariants the spec cannot express (rate-limit 429s, TRACE probes); a **`Server error` count above zero is the real signal**. It complements, not replaces, the suite-piggybacked conformance layer above; fuzz junk lives only in the compose volume (`docker compose down -v` resets). Needs `uv` (or `pipx`); no Python dependency lives in the repo.
