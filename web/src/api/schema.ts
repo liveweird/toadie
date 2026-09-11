@@ -1327,6 +1327,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blueprints/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk-import blueprints (report & skip)
+         * @description ADMIN only. Phase 6 of Toadie's move from Backstage's fixed System Model to Port.io's
+         *     data model (see `.claude/docs/port-data-model.md` "Import and export") — accepts up to
+         *     200 blueprint documents (a Port export, verbatim or with its usual
+         *     `createdAt`/`organization`/… keys still present — an unknown top-level key is that
+         *     row's `INVALID`, never a whole-request `400`) and imports each independently, decoded
+         *     PER DOCUMENT so one malformed entry never fails its siblings.
+         *
+         *     Statuses: `CREATED` (stored clean, `id` set), `UPDATED` (an existing blueprint was
+         *     replaced in place — only when `replaceExisting: true`; a system blueprint
+         *     `_team`/`_user` is only ever reachable this way, through `validateSystemExtension`),
+         *     `EXISTS` (an active blueprint already holds this identifier and `replaceExisting` is
+         *     off — nothing stored, `id` names the existing row), `INVALID` (schema/validation
+         *     failure, an unresolvable relation/aggregation target, the 200-blueprint cap, or a
+         *     cycle through a mandatory reference), `CONFLICT` (an in-batch duplicate identifier,
+         *     case-insensitive — the later document loses), `ERROR` (an unexpected storage failure,
+         *     or a pass-2 residual — see below). The response is `200` even when every document
+         *     failed; a `400` covers only the batch itself (an undecodable body, a non-object
+         *     element, or more than 200 documents).
+         *
+         *     The batch is topologically ordered over its own relation/aggregation targets (a
+         *     document referencing a sibling declared later in the batch is simply written after
+         *     it); a genuine CYCLE within the batch defers the lowest-index document's unresolved
+         *     references on its first write (dropped from `pass1`) and restores them with a second
+         *     full write once every sibling exists — the `sample-data/blueprints/load.sh` two-pass
+         *     trick, generalized and automatic. A reference through a REQUIRED path
+         *     (`hierarchyRelation`/`schema.required` have no bearing here — every blueprint field is
+         *     optional at create) never needs this; only a genuine cycle does. A pass-2 failure
+         *     (only possible from a concurrent change during the batch) reports `ERROR` WITH the
+         *     row's `id` and "Stored without its deferred targets: …" — never silently `CREATED`.
+         *
+         *     Every stored row audits `blueprint.created`/`blueprint.updated` with `import: true`
+         *     (plus `system: true` on an updated system row) — the same events an ordinary
+         *     create/replace emits, reduced to the identifying fields.
+         */
+        post: operations["importBlueprints"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blueprints/import/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dry-run a blueprint import batch (nothing is stored)
+         * @description ADMIN only. The IDENTICAL classification `importBlueprints` runs — decode, validation,
+         *     target resolution, the registry cap, ordering and deferral — reported as predictions
+         *     and storing nothing: `CREATED`/`UPDATED` read "would be created/replaced"; `id` is set
+         *     only for `UPDATED` and `EXISTS` (the row it would replace, or already IS). A pure
+         *     computation: no audit events. The report is a snapshot — a concurrent write between
+         *     the check and the real import can change the actual outcome. The same `400` covers
+         *     only the batch itself (an undecodable body, a non-object element, or more than 200
+         *     documents).
+         */
+        post: operations["checkBlueprintImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/entities": {
         parameters: {
             query?: never;
@@ -1423,6 +1502,87 @@ export interface paths {
         get: operations["getEntityGraph"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entities/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk-import entities (report & skip)
+         * @description Any authenticated user — entities are a shared workspace, no admin gate (Phase 6 of
+         *     Toadie's move from Backstage's fixed System Model to Port.io's data model, see
+         *     `.claude/docs/port-data-model.md` "Import and export"). Accepts up to 200 entity
+         *     documents (a Port export, verbatim) and imports each independently, decoded PER
+         *     DOCUMENT so one malformed entry never fails its siblings.
+         *
+         *     Statuses: `CREATED` (stored clean, `id` set), `UPDATED` (an existing entity was
+         *     replaced in place — only when `replaceExisting: true`; changing `blueprint` on an
+         *     existing entity is still `INVALID`, entities never move blueprints), `EXISTS` (an
+         *     active entity already holds this identifier within its blueprint and
+         *     `replaceExisting` is off — nothing stored, `id` names the existing row), `INVALID`
+         *     (schema/validation failure, an unknown blueprint, a relation/`team`/`format: team|user`
+         *     target that does not resolve against the workspace PLUS the batch, one of the two
+         *     10 000/2000 caps, or a cycle through a MANDATORY reference — a `required: true`
+         *     relation or a `format: team|user` property named in `schema.required` — carrying the
+         *     full `findings` array when the rejection came from the blueprint's own rule table),
+         *     `CONFLICT` (an in-batch duplicate identifier within the same blueprint,
+         *     case-insensitive), `ERROR` (an unexpected storage failure, or a pass-2 residual — see
+         *     below). The response is `200` even when every document failed; a `400` covers only
+         *     the batch itself (an undecodable body, a non-object element, or more than 200
+         *     documents).
+         *
+         *     The batch is topologically ordered over every sibling reference a document's
+         *     `relations`, `team`, and `format: team|user` properties name (the same three sources
+         *     `.claude/docs/port-data-model.md` "Lifecycle rules" enumerates for the rename cascade):
+         *     a document referencing a sibling declared later in the batch is simply written after
+         *     it; a genuine CYCLE defers the lowest-index document's unresolved OPTIONAL references
+         *     on its first write and restores them with a second full write once every sibling
+         *     exists. A cycle running through a MANDATORY reference cannot be deferred and is
+         *     `INVALID` instead. A pass-2 failure (only possible from a concurrent change during the
+         *     batch) reports `ERROR` WITH the row's `id`, its `findings`, and "Stored without its
+         *     deferred references: …" — never silently `CREATED`.
+         *
+         *     Every stored row audits `entity.created`/`entity.updated` with `import: true` — the
+         *     same events an ordinary create/replace emits, reduced to the identifying fields.
+         */
+        post: operations["importEntities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entities/import/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dry-run an entity import batch (nothing is stored)
+         * @description Any authenticated user. The IDENTICAL classification `importEntities` runs — decode,
+         *     validation, blueprint lookup, target resolution against the workspace plus the batch,
+         *     the caps, ordering and deferral — reported as predictions and storing nothing:
+         *     `CREATED`/`UPDATED` read "would be created/replaced"; `id` is set only for `UPDATED`
+         *     and `EXISTS`. A pure computation: no audit events. The report is a snapshot — a
+         *     concurrent write between the check and the real import can change the actual outcome.
+         *     The same `400` covers only the batch itself (an undecodable body, a non-object
+         *     element, or more than 200 documents).
+         */
+        post: operations["checkEntityImport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2339,6 +2499,40 @@ export interface components {
             /** @description Active blueprints, identifier-ordered case-insensitively. */
             items: components["schemas"]["Blueprint"][];
         };
+        /**
+         * @description Shared by the blueprint and entity bulk-import reports (phase 6, v1.28.0). CREATED — stored as a new row. UPDATED — an existing row was replaced (`replaceExisting: true`). EXISTS — an existing row was found but `replaceExisting` is off; nothing was stored (renders gray, not red — by design, not a failure). INVALID — failed shape/registry/ reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts, a concurrent-change residual).
+         * @enum {string}
+         */
+        OntologyImportStatus: "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR";
+        BlueprintImportRequest: {
+            /** @description The blueprint documents to import (Port's native shape, one per entry — a Port export's usual read-only keys are ignored, not rejected). Each is decoded and classified INDEPENDENTLY, so one malformed document never fails the batch. */
+            documents: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * @description Off (default): a document whose identifier already exists reports `EXISTS` and is left untouched. On: it is replaced in place (a full PUT), reported `UPDATED` — the only way to reach `_team`/`_user` (`validateSystemExtension` still applies).
+             * @default false
+             */
+            replaceExisting: boolean;
+        };
+        BlueprintImportRow: {
+            /** @description The document's 0-based position in the submitted batch. */
+            index: number;
+            /** @description The document's identifier, when it could be determined (absent when the document failed to decode and carried no string `identifier` member either). */
+            identifier?: string;
+            status: components["schemas"]["OntologyImportStatus"];
+            /**
+             * Format: int32
+             * @description The blueprint's id — present for a stored row, for `EXISTS` (the row that already holds this identifier), and for a dry-run's `UPDATED` prediction. Absent (never `null`) for `CREATED`'s prediction and every rejection.
+             */
+            id?: number;
+            /** @description Present on every status except a clean `CREATED`/`UPDATED`. */
+            message?: string;
+        };
+        BlueprintImportResponse: {
+            /** @description One result per submitted document, in submission order. */
+            results: components["schemas"]["BlueprintImportRow"][];
+        };
         BlueprintRequest: {
             /** @description Trimmed; charset [A-Za-z0-9@_.:/=-]. */
             identifier: string;
@@ -2474,6 +2668,39 @@ export interface components {
              * @description Row count after filters, before pagination.
              */
             total: number;
+        };
+        EntityImportRequest: {
+            /** @description The entity documents to import (Port's native shape, one per entry — a Port export's usual read-only keys are ignored, not rejected). Each is decoded and classified INDEPENDENTLY, so one malformed document never fails the batch. */
+            documents: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * @description Off (default): a document whose (blueprint, identifier) already exists reports `EXISTS` and is left untouched. On: it is replaced in place (a full PUT), reported `UPDATED` — a PUT changing `blueprint` still stays `INVALID`.
+             * @default false
+             */
+            replaceExisting: boolean;
+        };
+        EntityImportRow: {
+            /** @description The document's 0-based position in the submitted batch. */
+            index: number;
+            /** @description The document's `blueprint`, when it could be determined (absent when the document failed to decode and carried no string `blueprint` member either). */
+            blueprint?: string;
+            /** @description The document's identifier, under the same absent-when-undeterminable rule as `blueprint`. */
+            identifier?: string;
+            status: components["schemas"]["OntologyImportStatus"];
+            /**
+             * Format: int32
+             * @description The entity's id — present for a stored row, for `EXISTS` (the row that already holds this identity), and for a dry-run's `UPDATED` prediction. Absent (never `null`) for `CREATED`'s prediction and every rejection.
+             */
+            id?: number;
+            /** @description Present on every status except a clean `CREATED`/`UPDATED`. */
+            message?: string;
+            /** @description Present on an `INVALID`/`ERROR` row whose rejection came from the owning blueprint's own rule table (the same list a strict save's `400` would carry). Absent otherwise. */
+            findings?: components["schemas"]["EntityFinding"][];
+        };
+        EntityImportResponse: {
+            /** @description One result per submitted document, in submission order. */
+            results: components["schemas"]["EntityImportRow"][];
         };
         EntityGraphNode: {
             /** @description Canonical node id `"<blueprint>|<identifier>"` (the dedupe key; `|` appears in neither charset, so the split is unambiguous). */
@@ -4523,6 +4750,63 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    importBlueprints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlueprintImportRequest"];
+            };
+        };
+        responses: {
+            /** @description One result per submitted document, in submission order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlueprintImportResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    checkBlueprintImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlueprintImportRequest"];
+            };
+        };
+        responses: {
+            /** @description One predicted result per submitted document, in submission order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlueprintImportResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     listEntities: {
         parameters: {
             query?: {
@@ -4617,6 +4901,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EntityGraph"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    importEntities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityImportRequest"];
+            };
+        };
+        responses: {
+            /** @description One result per submitted document, in submission order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityImportResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    checkEntityImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityImportRequest"];
+            };
+        };
+        responses: {
+            /** @description One predicted result per submitted document, in submission order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityImportResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
