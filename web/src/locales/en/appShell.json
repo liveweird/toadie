@@ -10,6 +10,7 @@
     "entities": "Entities",
     "entityGraph": "Entity graph",
     "entityHierarchy": "Entity hierarchy",
+    "ontologyImport": "Import",
     "namespaces": "Namespaces",
     "labels": "Labels",
     "tags": "Tags",

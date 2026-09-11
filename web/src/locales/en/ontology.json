@@ -1,0 +1,67 @@
+{
+  "import": {
+    "title": "Import ontology",
+    "intro": "Paste Port-style blueprint and entity JSON — including Port API exports — or pick files. Blueprints import first; references between documents are ordered automatically and, where needed, deferred and restored in a second pass.",
+    "textareaLabel": "JSON content",
+    "placeholder": "{ \"blueprints\": [...], \"entities\": [...] }",
+    "pickFiles": "Choose files…",
+    "removeFileAria": "Remove {{name}}",
+    "pastedSource": "Pasted text",
+    "summaryReady": "{{blueprints}} blueprints, {{entities}} entities ready",
+    "summaryErrors_one": "{{count}} document has problems",
+    "summaryErrors_other": "{{count}} documents have problems",
+    "parseErrorsTitle": "Fix these documents before importing",
+    "replaceExisting": "Replace existing definitions",
+    "replaceExistingHint": "Overwrites blueprints and entities that already exist, including extending system blueprints (_team, _user).",
+    "strippedTitle": "Read-only keys ignored",
+    "strippedKeys": "Ignored read-only keys in {{count}} documents: {{keys}}",
+    "strippedComputed": "Computed property values removed from {{count}} entities: {{keys}}",
+    "notAdminTitle": "Blueprints require an administrator",
+    "notAdminBody": "Only administrators can import blueprints — the {{count}} blueprint documents will be skipped.",
+    "checkButton": "Check",
+    "importButton": "Import",
+    "progress": "Sending chunk {{current}} of {{total}}…",
+    "resultSummary": "Imported {{stored}} of {{total}} — {{created}} created, {{updated}} updated, {{unchanged}} unchanged",
+    "checkResultSummary": "Would import {{stored}} of {{total}} — {{created}} created, {{updated}} updated, {{unchanged}} unchanged",
+    "column": {
+      "kind": "Kind",
+      "identifier": "Identifier",
+      "source": "Source",
+      "result": "Result",
+      "detail": "Detail"
+    },
+    "kind": {
+      "blueprint": "Blueprint",
+      "entity": "Entity"
+    },
+    "status": {
+      "CREATED": "Created",
+      "UPDATED": "Updated",
+      "EXISTS": "Already exists",
+      "INVALID": "Invalid",
+      "CONFLICT": "Duplicate in batch",
+      "ERROR": "Failed",
+      "FORBIDDEN": "Forbidden"
+    },
+    "checkStatus": {
+      "CREATED": "Would be created",
+      "UPDATED": "Would be updated",
+      "EXISTS": "Already exists",
+      "INVALID": "Invalid",
+      "CONFLICT": "Duplicate in batch",
+      "ERROR": "Failed",
+      "FORBIDDEN": "Forbidden"
+    },
+    "showFindings_one": "Show {{count}} finding",
+    "showFindings_other": "Show {{count}} findings",
+    "hideFindings": "Hide findings",
+    "failedTitle": "Import failed",
+    "failedStatus": "Import failed ({{status}})",
+    "failedNetwork": "Import failed. Check your connection and try again."
+  },
+  "export": {
+    "button": "Export JSON",
+    "failed": "Couldn't export entities. Check your connection and try again."
+  },
+  "importLink": "Import"
+}

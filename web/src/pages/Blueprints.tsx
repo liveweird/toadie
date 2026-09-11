@@ -2,7 +2,7 @@ import { Alert, Anchor, Badge, Box, Button, Group, Stack, Table, Text } from "@m
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { IconPlus, IconSchema } from "@tabler/icons-react";
+import { IconDownload, IconFileImport, IconPlus, IconSchema } from "@tabler/icons-react";
 import { isAdmin } from "../api/session";
 import { deleteBlueprint, type Blueprint } from "../api/blueprints";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
@@ -16,6 +16,8 @@ import { blueprintDeleteErrorMessage } from "../utils/blueprintForm";
 import { editBlueprintPath, newBlueprintPath } from "../utils/blueprintLinks";
 import { entitiesPath } from "../utils/entityLinks";
 import { CONTENT_MAX_WIDTH } from "../utils/layout";
+import { blueprintsExportJson, downloadJson } from "../utils/ontologyExport";
+import { ontologyImportPath } from "../utils/ontologyLinks";
 import { loadErrorMessage } from "../utils/saveError";
 
 /**
@@ -42,11 +44,24 @@ export default function Blueprints() {
         title={t("blueprints.title")}
         description={t("blueprints.intro")}
         actions={
-          isAdmin() && (
-            <Button component={RouterLink} to={newBlueprintPath} leftSection={<IconPlus size={16} />}>
-              {t("blueprints.newBlueprint")}
+          <Group gap="sm">
+            <Button component={RouterLink} to={ontologyImportPath} variant="default" leftSection={<IconFileImport size={16} />}>
+              {t("ontology.importLink")}
             </Button>
-          )
+            <Button
+              variant="default"
+              leftSection={<IconDownload size={16} />}
+              disabled={loading || blueprints.length === 0}
+              onClick={() => downloadJson(blueprintsExportJson(blueprints), "toadie-blueprints.json")}
+            >
+              {t("ontology.export.button")}
+            </Button>
+            {isAdmin() && (
+              <Button component={RouterLink} to={newBlueprintPath} leftSection={<IconPlus size={16} />}>
+                {t("blueprints.newBlueprint")}
+              </Button>
+            )}
+          </Group>
         }
       />
       <Box maw={CONTENT_MAX_WIDTH}>

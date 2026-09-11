@@ -1,5 +1,6 @@
 import { stringify } from "yaml";
 import type { CatalogFileRequest } from "../api/catalogFiles";
+import { downloadTextFile } from "./download";
 
 /**
  * Renders the canonical catalog-info.yaml for one stored document: fixed key order
@@ -80,13 +81,5 @@ export function catalogInfoYaml(file: CatalogFileRequest): string {
 
 /** Hands the YAML to the browser as a file download (Backstage's canonical filename). */
 export function downloadYaml(text: string, filename = "catalog-info.yaml") {
-  const blob = new Blob([text], { type: "application/yaml" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  downloadTextFile(text, filename, "application/yaml");
 }

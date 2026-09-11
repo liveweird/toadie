@@ -3,6 +3,7 @@ import {
   IconBox,
   IconCategory,
   IconFileDescription,
+  IconFileImport,
   IconFolders,
   IconHash,
   IconHistory,
@@ -21,6 +22,7 @@ import {
 import { blueprintsPath } from "./blueprintLinks";
 import { catalogFilesPath } from "./catalogFileLinks";
 import { entitiesBasePath, entityGraphPath, entityHierarchyPath } from "./entityLinks";
+import { ontologyImportPath } from "./ontologyLinks";
 
 export type NavLeaf = {
   to: string;
@@ -61,6 +63,7 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
       { to: entitiesBasePath, label: "appShell.nav.entities", icon: IconBox },
       { to: entityGraphPath, label: "appShell.nav.entityGraph", icon: IconTopologyStar3 },
       { to: entityHierarchyPath, label: "appShell.nav.entityHierarchy", icon: IconSitemap },
+      { to: ontologyImportPath, label: "appShell.nav.ontologyImport", icon: IconFileImport },
     ],
   },
   {
