@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.27.0",
+    date: "2026-09-11",
+    en: `**Computed properties.**
+
+- Mirror, calculation and aggregation properties defined on a blueprint are now evaluated whenever entities are read: the values appear in a read-only **Computed** section of the entity editor and as preview columns on the Entities list.
+- Calculations run real jq expressions; aggregations count or sum related entities, optionally along a path filter and a query.
+- Computed values are never stored and cannot be edited, searched or filtered.`,
+    pl: `**Właściwości obliczane.**
+
+- Właściwości lustrzane, obliczane i agregujące zdefiniowane w blueprincie są teraz wyliczane przy każdym odczycie encji: wartości pojawiają się w sekcji „Obliczone" (tylko do odczytu) w edytorze encji oraz jako kolumny podglądu na liście encji.
+- Obliczenia wykonują prawdziwe wyrażenia jq; agregacje zliczają lub sumują powiązane encje, opcjonalnie wzdłuż filtra ścieżki i zapytania.
+- Wartości obliczone nie są zapisywane i nie można ich edytować, wyszukiwać ani filtrować.`,
+  },
+  {
     version: "1.26.0",
     date: "2026-09-11",
     en: `**Users and teams — the fourth step toward Port compatibility.**
