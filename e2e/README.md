@@ -118,18 +118,24 @@ from Lettuce, that any new or edited spec must satisfy:
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
   first moving label registration into global-setup (the run-namespace pattern). V22 seeds
   eight curated keys — no spec may edit or delete those either.
-- **The blueprint registry is single-writer state the same way, now with FOUR writers.**
+- **The blueprint registry is single-writer state the same way, now with FIVE writers.**
   Blueprint identifiers are unique and relation targets name other blueprints, so a
   concurrently deleted or renamed blueprint breaks a parallel spec's saves — **each spec
   owns its own uniquely named blueprints and entities and never edits or deletes a foreign
   row**: `blueprints.spec.ts` (`e2e-bp-*`), `entities.spec.ts` (`e2e-ent-bp-*`),
-  `entity-graph.spec.ts` (`e2e-eg-*`), and `entity-hierarchy.spec.ts` (`e2e-eh-*`); the
+  `entity-graph.spec.ts` (`e2e-eg-*`), `entity-hierarchy.spec.ts` (`e2e-eh-*`), and
+  `ontology-import.spec.ts` (`e2e-oi-bp-*`, `e2e-oi-ent-*` — Phase 6, v1.28.0); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
   what makes their concurrent creates safe — the same rule the other registries' single
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
-  a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*` today) and
-  is removed by that same spec before it returns, so a future entity-creating spec can join
-  safely as long as it never touches another spec's rows.
+  a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
+  `e2e-oi-ent-*` today) and is removed by that same spec before it returns, so a future
+  entity-creating spec can join safely as long as it never touches another spec's rows.
+  `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
+  registry (the Blueprints page's only export mode) and re-imports it as part of its round-trip
+  check — safe under concurrent writers because it always sends `replaceExisting: false` there,
+  so every foreign row it did not create reports Already Exists, untouched, and its own
+  assertions only ever check its own two identifiers.
 - **`_team`/`_user` (Phase 4, v1.26.0) are SEEDED, PROTECTED system blueprints — no spec ever
   edits or deletes either row** (the server itself refuses both: rename/base-shape changes are
   `400`, delete is `409`). A spec needing ownership fixtures creates only its OWN uniquely
@@ -316,6 +322,14 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`namespaces.spec.ts`](scenarios/namespaces.md) — the namespaces dictionary: inline grammar
   validation → append two entries → reorder → the regular user's read-only view → removal;
   append-only against the shared document.
+- [`ontology-import.spec.ts`](scenarios/ontology-import.md) — bulk ontology import (Phase 6,
+  v1.28.0): a mixed batch with a genuine two-blueprint relation/aggregation/mirror cycle (a
+  forward aggregation and a forward relation, resolved by the two-pass deferral trick) and two
+  out-of-order entities, plus a document naming an unknown blueprint → Check (dry run,
+  nothing stored) → Import (real, the cycle lands) → re-import reports Already exists → an
+  edit with Replace-existing on reports Updated → Export JSON from both the Blueprints and
+  Entities pages → pasting one export and picking the other round-trips as Already exists;
+  the blueprint registry's fifth in-run writer.
 - [`password-reset.spec.ts`](scenarios/password-reset.md) — the forgot-password flow:
   neutral confirmation + per-email throttle for unknown addresses; the full email roundtrip
   through Mailpit (old credentials survive request/GET; confirmation revokes sessions, enables

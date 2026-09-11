@@ -23,6 +23,7 @@ import enLabels from "./locales/en/labels.json";
 import enLenses from "./locales/en/lenses.json";
 import enLifecycles from "./locales/en/lifecycles.json";
 import enNamespaces from "./locales/en/namespaces.json";
+import enOntology from "./locales/en/ontology.json";
 import enTags from "./locales/en/tags.json";
 import enTypes from "./locales/en/types.json";
 import enRender from "./locales/en/render.json";
@@ -79,6 +80,7 @@ export const en = {
   lenses: enLenses,
   lifecycles: enLifecycles,
   namespaces: enNamespaces,
+  ontology: enOntology,
   tags: enTags,
   types: enTypes,
   render: enRender,

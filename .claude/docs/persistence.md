@@ -99,6 +99,23 @@ pins a request-handling coroutine, never a pooled R2DBC connection or a database
 bearing). `update` and `graph` never evaluate computed properties at all, so this ordering
 concern does not apply to them.
 
+**Ontology import (phase 6, v1.28.0).** `blueprints/BlueprintImport.kt`'s and
+`entities/EntityImport.kt`'s effectful `import`/`importCheck` extensions add NO new locking
+protocol: each row's pass-1 and pass-2 write is an ordinary call into
+`BlueprintService.create`/`update` or `EntityService.create`/`update`, so it runs under that
+service's own V27 (`blueprints`) or V28 (`blueprints` then `entities`) table lock exactly as a
+single-document API call would — a 200-document batch takes the lock up to 400 times (pass 1 +
+pass 2 per deferred row), never once for the whole batch. The registry snapshot each planner
+reads before writing (`BlueprintService.list()`, the new `EntityService.importSnapshot()` — one
+plain, lock-free transaction reading active blueprint definitions plus every active entity's
+`(blueprintId, identifier) → id`) is a single committed read, the same posture as the catalog
+import's `batchIdentities`/`withImportSnapshot` and the entity graph's plain read: it can go
+stale the instant a concurrent writer commits, which is exactly why a pass-2 failure is possible
+and is reported `ERROR` naming the row's `id` rather than silently left `CREATED`/`UPDATED` — a
+concurrent-change residual, not a bug in the ordering. `planBlueprintImport`/`planEntityImport`
+themselves touch no table at all: pure functions over the snapshot and the batch, so the two
+planner test files run without Docker.
+
 Current migrations are `V1`–`V31` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.

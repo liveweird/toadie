@@ -26,6 +26,7 @@ const CreateEntity = lazy(() => import("./pages/CreateEntity"));
 const EditEntity = lazy(() => import("./pages/EditEntity"));
 const EntityGraph = lazy(() => import("./pages/EntityGraph"));
 const EntityHierarchy = lazy(() => import("./pages/EntityHierarchy"));
+const ImportOntology = lazy(() => import("./pages/ImportOntology"));
 const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
 const ImportCatalogFiles = lazy(() => import("./pages/ImportCatalogFiles"));
@@ -171,6 +172,7 @@ export default function App() {
             <Route path="entities/:id/edit" element={<EditEntity />} />
             <Route path="entity-graph" element={<EntityGraph />} />
             <Route path="entity-hierarchy" element={<EntityHierarchy />} />
+            <Route path="ontology/import" element={<ImportOntology />} />
             <Route path="errors" element={<ErrorsPage />} />
             <Route path="graph" element={<RenderGraph />} />
             <Route path="namespaces" element={<Namespaces />} />

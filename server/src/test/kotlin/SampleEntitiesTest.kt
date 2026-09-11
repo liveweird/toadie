@@ -3,10 +3,13 @@ package ch.nokillswit
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.blueprints.toDefinition
+import ch.nokillswit.entities.EntityImportRequest
+import ch.nokillswit.entities.EntityImportResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
 import ch.nokillswit.entities.computedPropertyIds
 import ch.nokillswit.entities.toDocument
+import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -20,12 +23,15 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.io.File
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -164,6 +170,59 @@ class SampleEntitiesTest {
             // below cannot resolve on its own — see SampleData.stripAggregationsForCleanup's KDoc.
             SampleData.stripAggregationsForCleanup(blueprintRequestsByIdentifier)
             TestBlueprints.remove(*blueprintIdentifiers.toTypedArray())
+        }
+    }
+
+    /**
+     * Phase 6 (v1.28.0): the 59 entity files also load as ONE `POST /api/v1/entities/import`
+     * batch on top of the already-loaded blueprint set (the same [SampleData.loadBlueprints] as
+     * above) — the planner's own ordering resolves every relation/`team`/format-property sibling
+     * reference across all eleven files without any per-file sequencing from the caller, every
+     * row lands `CREATED` and every re-GET carries NO findings, exactly like the sequential-POST
+     * path in the main test (both go through the same [ch.nokillswit.entities.EntityService]
+     * writes). A second identical run — `replaceExisting` left at its default `false` — reports
+     * every row `EXISTS`, storing nothing.
+     */
+    @Test
+    fun `the sample entity set also imports as one batch, twice`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("entimport", UserRole.ADMIN)
+
+        val bpFiles = blueprintFiles()
+        val bpRequestsByIdentifier = bpFiles.associate {
+            val request = blueprintJson.decodeFromString<BlueprintRequest>(it.readText())
+            request.identifier to request
+        }
+        val entFiles = entityFiles()
+        val documents = entFiles.flatMap { file -> Json.parseToJsonElement(file.readText()).jsonArray.map { it.jsonObject } }
+
+        val entityIdentifiers = mutableListOf<String>()
+        try {
+            SampleData.loadBlueprints(admin, bpFiles)
+
+            val response = admin.postJson("/api/v1/entities/import", EntityImportRequest(documents = documents))
+                .body<EntityImportResponse>()
+            assertEquals(59, response.results.size, "expected the 59 sample entities")
+            assertTrue(
+                response.results.all { it.status == OntologyImportStatus.CREATED },
+                "every row must be CREATED: ${response.results}",
+            )
+            response.results.forEach { row ->
+                entityIdentifiers += row.identifier ?: error("import row ${row.index} carries no identifier")
+                val reread = admin.get("/api/v1/entities/${row.id}").body<EntityResponse>()
+                assertTrue(reread.findings.isEmpty(), "${row.blueprint}/${row.identifier} reads back with findings: ${reread.findings}")
+            }
+
+            val second = admin.postJson("/api/v1/entities/import", EntityImportRequest(documents = documents)).body<EntityImportResponse>()
+            assertTrue(
+                second.results.all { it.status == OntologyImportStatus.EXISTS },
+                "a re-import must report EXISTS: ${second.results}",
+            )
+        } finally {
+            TestEntities.remove(*entityIdentifiers.toTypedArray())
+            TestBlueprints.restoreSystemBlueprints()
+            SampleData.stripAggregationsForCleanup(bpRequestsByIdentifier)
+            TestBlueprints.remove(*bpRequestsByIdentifier.keys.toTypedArray())
         }
     }
 

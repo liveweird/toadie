@@ -1,0 +1,71 @@
+{
+  "import": {
+    "title": "Import ontologii",
+    "intro": "Wklej JSON blueprintów i encji w formacie Port — w tym eksporty z API Port — albo wybierz pliki. Blueprinty importują się jako pierwsze; odwołania między dokumentami są porządkowane automatycznie, a tam, gdzie to potrzebne, odraczane i uzupełniane w drugim przebiegu.",
+    "textareaLabel": "Zawartość JSON",
+    "placeholder": "{ \"blueprints\": [...], \"entities\": [...] }",
+    "pickFiles": "Wybierz pliki…",
+    "removeFileAria": "Usuń {{name}}",
+    "pastedSource": "Wklejony tekst",
+    "summaryReady": "{{blueprints}} blueprintów, {{entities}} encji gotowych",
+    "summaryErrors_one": "{{count}} dokument ma problemy",
+    "summaryErrors_few": "{{count}} dokumenty mają problemy",
+    "summaryErrors_many": "{{count}} dokumentów ma problemy",
+    "summaryErrors_other": "{{count}} dokumentów ma problemy",
+    "parseErrorsTitle": "Popraw te dokumenty przed importem",
+    "replaceExisting": "Zastąp istniejące definicje",
+    "replaceExistingHint": "Nadpisuje istniejące blueprinty i encje, w tym rozszerzenia blueprintów systemowych (_team, _user).",
+    "strippedTitle": "Pominięto klucze tylko do odczytu",
+    "strippedKeys": "Pominięto klucze tylko do odczytu w {{count}} dokumentach: {{keys}}",
+    "strippedComputed": "Usunięto wartości właściwości obliczanych z {{count}} encji: {{keys}}",
+    "notAdminTitle": "Blueprinty wymagają administratora/administratorki",
+    "notAdminBody": "Tylko administratorzy/administratorki mogą importować blueprinty — {{count}} dokumentów blueprintów zostanie pominiętych.",
+    "checkButton": "Sprawdź",
+    "importButton": "Importuj",
+    "progress": "Wysyłanie partii {{current}} z {{total}}…",
+    "resultSummary": "Zaimportowano {{stored}} z {{total}} — {{created}} utworzonych, {{updated}} zaktualizowanych, {{unchanged}} bez zmian",
+    "checkResultSummary": "Zaimportowałoby {{stored}} z {{total}} — {{created}} utworzonych, {{updated}} zaktualizowanych, {{unchanged}} bez zmian",
+    "column": {
+      "kind": "Rodzaj",
+      "identifier": "Identyfikator",
+      "source": "Źródło",
+      "result": "Wynik",
+      "detail": "Szczegóły"
+    },
+    "kind": {
+      "blueprint": "Blueprint",
+      "entity": "Encja"
+    },
+    "status": {
+      "CREATED": "Utworzono",
+      "UPDATED": "Zaktualizowano",
+      "EXISTS": "Już istnieje",
+      "INVALID": "Nieprawidłowy",
+      "CONFLICT": "Duplikat w partii",
+      "ERROR": "Błąd",
+      "FORBIDDEN": "Zabronione"
+    },
+    "checkStatus": {
+      "CREATED": "Zostałby utworzony",
+      "UPDATED": "Zostałby zaktualizowany",
+      "EXISTS": "Już istnieje",
+      "INVALID": "Nieprawidłowy",
+      "CONFLICT": "Duplikat w partii",
+      "ERROR": "Błąd",
+      "FORBIDDEN": "Zabronione"
+    },
+    "showFindings_one": "Pokaż {{count}} ustalenie",
+    "showFindings_few": "Pokaż {{count}} ustalenia",
+    "showFindings_many": "Pokaż {{count}} ustaleń",
+    "showFindings_other": "Pokaż {{count}} ustaleń",
+    "hideFindings": "Ukryj ustalenia",
+    "failedTitle": "Import nie powiódł się",
+    "failedStatus": "Import nie powiódł się ({{status}})",
+    "failedNetwork": "Import nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
+  },
+  "export": {
+    "button": "Eksportuj JSON",
+    "failed": "Nie udało się wyeksportować encji. Sprawdź połączenie i spróbuj ponownie."
+  },
+  "importLink": "Import"
+}

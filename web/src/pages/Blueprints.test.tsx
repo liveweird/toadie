@@ -135,6 +135,53 @@ describe("Blueprints page", () => {
     expect(row).toHaveTextContent("1"); // one property
   });
 
+  test("the Import link points to the ontology import page, for everyone", async () => {
+    localStorage.setItem(ROLES_KEY, "[]");
+    serveBlueprints(mockFetch);
+    renderBlueprints();
+
+    await screen.findByText("microservice");
+    expect(screen.getByRole("link", { name: "Import" })).toHaveAttribute("href", "/ontology/import");
+  });
+
+  test("Export JSON downloads the blueprint set as a Blob", async () => {
+    const createObjectURL = vi.fn().mockReturnValue("blob:fake");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL }));
+    let downloadedName: string | undefined;
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        downloadedName = this.download;
+      });
+    serveBlueprints(mockFetch);
+    const user = userEvent.setup();
+    renderBlueprints();
+
+    await screen.findByText("microservice");
+    await user.click(screen.getByRole("button", { name: "Export JSON" }));
+
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    const parsed = JSON.parse(await blob.text()) as { blueprints: { identifier: string }[] };
+    expect(parsed.blueprints.map((b) => b.identifier)).toEqual(["microservice", "team", "_team"]);
+    expect(downloadedName).toBe("toadie-blueprints.json");
+    click.mockRestore();
+  });
+
+  test("Export JSON is disabled while the registry is empty", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url === "/api/v1/blueprints") {
+        return Promise.resolve(jsonResponse(200, { items: [] }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderBlueprints();
+
+    await screen.findByText(/no blueprints defined yet/i);
+    expect(screen.getByRole("button", { name: "Export JSON" })).toBeDisabled();
+  });
+
   test("Edit navigates to the editor route for that blueprint", async () => {
     serveBlueprints(mockFetch);
     const user = userEvent.setup();

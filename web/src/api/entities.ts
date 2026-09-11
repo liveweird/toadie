@@ -39,6 +39,33 @@ export async function listEntities(q: ListEntitiesQuery): Promise<EntityPage> {
   return jsonRequest<EntityPage>(`/api/v1/entities?${params}`);
 }
 
+const ALL_ENTITIES_PAGE_SIZE = 100;
+/** No relation-target picker or export needs more than this many rows — the server's
+ *  MAX_ENTITIES_PER_BLUEPRINT cap (see `.claude/docs/persistence.md`); pooling stops early
+ *  regardless of a larger stored total. */
+const ALL_ENTITIES_MAX = 2000;
+
+export type ListAllEntitiesQuery = { blueprint: string; team?: string; q?: string };
+
+/**
+ * Every active entity of one blueprint (optionally team/q-filtered), paging until the server
+ * total is reached (the `listAllCatalogFiles`/`useEntityOptions` pool-loop idiom — there is no
+ * dedicated options endpoint). Shared by the relation-target picker (`useEntityOptions`) and
+ * the Entities page's JSON export (`utils/ontologyExport.ts`).
+ */
+export async function listAllEntities(query: ListAllEntitiesQuery): Promise<Entity[]> {
+  const items: Entity[] = [];
+  let page = 1;
+  for (;;) {
+    const result = await listEntities({ ...query, page, pageSize: ALL_ENTITIES_PAGE_SIZE, sort: "identifier" });
+    items.push(...result.items);
+    if (items.length >= result.total || result.items.length === 0 || items.length >= ALL_ENTITIES_MAX) {
+      return items.slice(0, ALL_ENTITIES_MAX);
+    }
+    page += 1;
+  }
+}
+
 /**
  * A create/replace `400`'s `findings` list (`EntityInvalidProblem`), read DEFENSIVELY off the
  * problem body via `ApiError`'s own public `body` field — the sanctioned access `ApiError`
@@ -93,4 +120,38 @@ export type GetEntityGraphQuery = {
 export async function getEntityGraph(query: GetEntityGraphQuery = {}): Promise<EntityGraph> {
   const params = buildQuery({ blueprint: query.blueprints, team: query.team, q: query.q });
   return jsonRequest<EntityGraph>(`/api/v1/entities/graph${params ? `?${params}` : ""}`);
+}
+
+// -- Bulk import (Phase 6, v1.28.0 — .claude/docs/port-data-model.md "Import and export") ---
+// POST /api/v1/entities/import(/check): per-row report-and-skip over a batch of Port-shaped
+// entity documents, any-authenticated (no admin gate — the shared-workspace rule). The dry-run
+// shares the row shape.
+
+export type EntityImportResponse =
+  paths["/api/v1/entities/import"]["post"]["responses"]["200"]["content"]["application/json"];
+
+async function postEntityImport(
+  path: "import" | "import/check",
+  documents: Record<string, unknown>[],
+  replaceExisting: boolean,
+): Promise<EntityImportResponse> {
+  return jsonRequest<EntityImportResponse>(`/api/v1/entities/${path}`, {
+    method: "POST",
+    body: JSON.stringify({ documents, replaceExisting }),
+  });
+}
+
+export async function importEntities(
+  documents: Record<string, unknown>[],
+  replaceExisting: boolean,
+): Promise<EntityImportResponse> {
+  return postEntityImport("import", documents, replaceExisting);
+}
+
+/** The dry-run: identical row shape, nothing stored or audited. */
+export async function checkEntityImport(
+  documents: Record<string, unknown>[],
+  replaceExisting: boolean,
+): Promise<EntityImportResponse> {
+  return postEntityImport("import/check", documents, replaceExisting);
 }

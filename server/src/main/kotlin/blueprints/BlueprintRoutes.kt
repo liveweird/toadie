@@ -4,6 +4,8 @@ import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
+import ch.nokillswit.infra.importing.OntologyImportStatus
+import ch.nokillswit.infra.importing.requireBatchSize
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -29,6 +31,15 @@ class BlueprintsRoute {
     @Serializable
     @Resource("{id}")
     class Id(val parent: BlueprintsRoute = BlueprintsRoute(), val id: UInt)
+
+    // A literal segment beats {id} in Ktor's route resolution (the CatalogFiles.Import idiom).
+    @Serializable
+    @Resource("import")
+    class Import(val parent: BlueprintsRoute = BlueprintsRoute()) {
+        @Serializable
+        @Resource("check")
+        class Check(val parent: Import = Import())
+    }
 }
 
 /**
@@ -111,6 +122,53 @@ fun Application.configureBlueprintRoutes() {
                 )
                 call.respond(HttpStatusCode.NoContent)
             }
+            // Bulk import (phase 6, v1.28.0): ADMIN only, guarded BEFORE receive (a non-admin
+            // probe never even decodes the body). The dry-run and the real run share ONE
+            // classification (BlueprintImport.kt); only the real run writes and audits.
+            post<BlueprintsRoute.Import.Check> {
+                val caller = call.caller()
+                requireAdmin(caller)
+                val request = call.receive<BlueprintImportRequest>()
+                requireBatchSize(request.documents.size)
+                val rows = blueprintService.importCheck(request.documents, request.replaceExisting)
+                call.respondBlueprint(HttpStatusCode.OK, BlueprintImportResponse(rows))
+            }
+            post<BlueprintsRoute.Import> {
+                val caller = call.caller()
+                requireAdmin(caller)
+                val request = call.receive<BlueprintImportRequest>()
+                requireBatchSize(request.documents.size)
+                val rows = blueprintService.import(request.documents, caller.userId, request.replaceExisting)
+                rows.forEach { row -> auditImportedBlueprintRow(caller.userId, row) }
+                call.respondBlueprint(HttpStatusCode.OK, BlueprintImportResponse(rows))
+            }
         }
+    }
+}
+
+/**
+ * `blueprint.created`/`blueprint.updated`, `import: true`, `system: true` on an updated system
+ * row — the plain create/update audit shape, reduced.
+ */
+private fun auditImportedBlueprintRow(callerId: UInt, row: BlueprintImportRow) {
+    val id = row.id ?: return
+    val identifier = row.identifier
+    when (row.status) {
+        OntologyImportStatus.CREATED -> audit(
+            "blueprint.created",
+            "byUserId" to callerId.toLong(),
+            "blueprintId" to id.toLong(),
+            "identifier" to identifier,
+            "import" to true,
+        )
+        OntologyImportStatus.UPDATED -> audit(
+            "blueprint.updated",
+            "byUserId" to callerId.toLong(),
+            "blueprintId" to id.toLong(),
+            "identifier" to identifier,
+            "import" to true,
+            "system" to (identifier?.let { isSystemIdentifier(it) } == true),
+        )
+        else -> Unit
     }
 }

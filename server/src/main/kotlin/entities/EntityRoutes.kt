@@ -4,6 +4,8 @@ import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.infra.importing.OntologyImportStatus
+import ch.nokillswit.infra.importing.requireBatchSize
 import ch.nokillswit.infra.paging.SortField
 import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
@@ -39,6 +41,14 @@ class EntitiesRoute {
     @Serializable
     @Resource("graph")
     class Graph(val parent: EntitiesRoute = EntitiesRoute())
+
+    @Serializable
+    @Resource("import")
+    class Import(val parent: EntitiesRoute = EntitiesRoute()) {
+        @Serializable
+        @Resource("check")
+        class Check(val parent: Import = Import())
+    }
 }
 
 /**
@@ -141,6 +151,48 @@ fun Application.configureEntityRoutes() {
                 )
                 call.respond(HttpStatusCode.NoContent)
             }
+            // Bulk import (phase 6, v1.28.0): the same shared-workspace posture as the rest of
+            // this feature — no admin gate. The dry-run and the real run share ONE
+            // classification (EntityImport.kt); only the real run writes and audits.
+            post<EntitiesRoute.Import.Check> {
+                call.caller()
+                val request = call.receive<EntityImportRequest>()
+                requireBatchSize(request.documents.size)
+                val rows = entityService.importCheck(request.documents, request.replaceExisting)
+                call.respondEntity(HttpStatusCode.OK, EntityImportResponse(rows))
+            }
+            post<EntitiesRoute.Import> {
+                val caller = call.caller()
+                val request = call.receive<EntityImportRequest>()
+                requireBatchSize(request.documents.size)
+                val rows = entityService.import(request.documents, caller.userId, request.replaceExisting)
+                rows.forEach { row -> auditImportedEntityRow(caller.userId, row) }
+                call.respondEntity(HttpStatusCode.OK, EntityImportResponse(rows))
+            }
         }
+    }
+}
+
+/** `entity.created`/`entity.updated`, `import: true` — the plain create/update audit shape, reduced. */
+private fun auditImportedEntityRow(callerId: UInt, row: EntityImportRow) {
+    val id = row.id ?: return
+    when (row.status) {
+        OntologyImportStatus.CREATED -> audit(
+            "entity.created",
+            "byUserId" to callerId.toLong(),
+            "entityId" to id.toLong(),
+            "blueprint" to row.blueprint,
+            "identifier" to row.identifier,
+            "import" to true,
+        )
+        OntologyImportStatus.UPDATED -> audit(
+            "entity.updated",
+            "byUserId" to callerId.toLong(),
+            "entityId" to id.toLong(),
+            "blueprint" to row.blueprint,
+            "identifier" to row.identifier,
+            "import" to true,
+        )
+        else -> Unit
     }
 }

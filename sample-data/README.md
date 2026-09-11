@@ -139,8 +139,9 @@ few environments, team ownership, links to CI/observability/docs/specs. The firs
 **extend** the two Port system blueprints seeded by migration V31 (`_team` and `_user`); the rest
 are created fresh. Eleven Port-native blueprint JSON documents, one action per file, numbered in
 **dependency order** — a relation `target` must already exist, so `workload` (→ service,
-environment, cluster) loads last. There is no import UI for blueprints (unlike the catalog above),
-so this ships its own loader.
+environment, cluster) loads last. Since v1.28.0 the same Import page the catalog above uses
+also accepts this set (see "Through the Import page" below); `load.sh` remains the scriptable,
+re-runnable option for CI and local setup outside a browser session.
 
 | # | identifier | Backstage kind | Parent in the hierarchy |
 |---|---|---|---|
@@ -188,6 +189,16 @@ than forced.
 ```bash
 sample-data/blueprints/load.sh --delete
 ```
+
+**Through the Import page** (v1.28.0) — sign in and open **Import** under Port Ontology
+(`/ontology/import`). Click **Choose files…** and multi-select all eleven
+`sample-data/blueprints/*.json` files (any order — the server's own planner topologically
+orders the batch over its relation/aggregation targets, not the picker). **Turn "Replace
+existing definitions" ON** — `01-team.json`/`02-user.json` are EXTENSIONS of the seeded
+`_team`/`_user` system blueprints, and with the switch left off they report `EXISTS` and
+nothing is applied, which then makes every `_team`/`_user` sample entity fail
+`UNKNOWN_PROPERTY` once the entity set is loaded next. **Check** first to preview the batch,
+then **Import** — `_team`/`_user` come back `UPDATED`, the other nine `CREATED`.
 
 The blueprint registry is deliberately **NOT seeded** — no migration inserts a blueprint except
 the two V31 system blueprints, which the sample only extends — so a fresh environment's
@@ -280,5 +291,12 @@ something outside the sample set still relates to it, and is reported rather tha
 ```bash
 sample-data/entities/load.sh --delete
 ```
+
+**Through the Import page** (v1.28.0) — with the blueprint set already loaded (above), open
+**Import** again, click **Choose files…** and multi-select all eleven
+`sample-data/entities/*.json` files (a document with a string `blueprint` member is classified
+as an entity, so it is the same Import page and works whether the batch is entities-only or
+mixed with blueprints) → **Import** reports all 59 rows `CREATED` with zero findings.
+Re-running Import unchanged reports every row `EXISTS` (gray — nothing stored, by design).
 
 Like the blueprint registry, entities are deliberately **NOT seeded**.

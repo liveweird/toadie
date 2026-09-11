@@ -35,4 +35,10 @@ filtered on.
 
 **Sub-collections.** A record's own collection is paged like any other when it is unbounded: the catalog file's change history (`GET /api/v1/files/{id}/events`) rides the shared machinery through `EventLog.listFor` with its own `-timestamp,-id` default sort and a `{timestamp, id}` whitelist. This is a deliberate deviation from Lettuce, whose seven `*_events` endpoints answer an unpaged `{items}`: their per-record counts are intrinsically tiny, while a synced catalog file mints an event per sync run. Reserve the plain `{items}` wrapper for genuinely bounded sets (the registries, at most a few dozen rows).
 
+**Ontology import responses are not list endpoints.** `POST /api/v1/blueprints/import` and
+`POST /api/v1/entities/import` (plus their `/import/check` dry-runs, v1.28.0) answer an unpaged
+`{results: [...]}` per-row report, one row per submitted document, bounded by the
+200-document `MAX_IMPORT_DOCUMENTS` cap rather than by paging — the `catalog/CatalogFileImport.kt`
+report-and-skip shape, one level up.
+
 **Substring filters:** every per-column substring filter must be case- AND accent-insensitive — use `containsNormalized` (`infra/db/Sql.kt`, rendering `LOWER(public.unaccent(col)) LIKE LOWER(public.unaccent(?))`, extension enabled in V4); never hand-roll `lowerCase() like containsPattern(...)`, and keep unaccent-before-LOWER (the reverse breaks uppercase-diacritic input under a C-locale database). The SPA mirrors the rule client-side via the theme-level `foldedOptionsFilter` (`web/src/utils/text.ts`, wired as the Select/MultiSelect/TagsInput default filter in `theme.ts`).

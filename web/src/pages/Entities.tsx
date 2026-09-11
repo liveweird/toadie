@@ -1,11 +1,12 @@
+import { useState } from "react";
 import { Alert, Anchor, Badge, Button, Group, Select, Stack, Table, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { IconBox, IconPlus } from "@tabler/icons-react";
+import { IconBox, IconDownload, IconFileImport, IconPlus } from "@tabler/icons-react";
 import type { Blueprint } from "../api/blueprints";
-import { deleteEntity, type Entity } from "../api/entities";
+import { deleteEntity, listAllEntities, type Entity } from "../api/entities";
 import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
@@ -26,6 +27,8 @@ import { isString, useStoredState } from "../hooks/useStoredState";
 import { previewComputedColumns, type ComputedDefinition } from "../utils/computedProperties";
 import { entityDeleteErrorMessage, teamValuesOf } from "../utils/entityForm";
 import { editEntityPath, newEntityPath } from "../utils/entityLinks";
+import { entitiesExportJson, downloadJson } from "../utils/ontologyExport";
+import { ontologyImportPath } from "../utils/ontologyLinks";
 import { formatDateTime, relativeTimeAgo } from "../utils/relativeTime";
 import { loadErrorMessage } from "../utils/saveError";
 import { TEAM_BLUEPRINT } from "../utils/systemBlueprints";
@@ -100,6 +103,8 @@ export default function Entities() {
   const { options: teamOptions } = useEntityOptions(TEAM_BLUEPRINT);
   const selectedBlueprint = blueprint ? blueprints.find((b) => b.identifier === blueprint) : undefined;
   const [q, setQ] = useStoredState<string>(`${SETTINGS_KEY}.filter.q`, "", isString);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const { page, setPage, pageSize, setPageSize, sortField, sortDir, sortParam, toggleSort } =
     usePagedSort<SortField>("identifier", [blueprint, team, q], {
@@ -123,6 +128,20 @@ export default function Entities() {
     successMessage: t("entities.toast.deleted"),
   });
 
+  async function handleExport() {
+    if (!blueprint || !selectedBlueprint) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const rows = await listAllEntities({ blueprint, team: team ?? undefined, q: q || undefined });
+      downloadJson(entitiesExportJson(rows, selectedBlueprint), `toadie-entities-${blueprint}.json`);
+    } catch {
+      setExportError(t("ontology.export.failed"));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const previewColumns: PreviewColumn[] = selectedBlueprint
     ? [
         ...schemaPreviewColumns(selectedBlueprint),
@@ -145,14 +164,28 @@ export default function Entities() {
         title={t("entities.title")}
         description={t("entities.intro")}
         actions={
-          <Button
-            component={RouterLink}
-            to={blueprint ? newEntityPath(blueprint) : "#"}
-            leftSection={<IconPlus size={16} />}
-            disabled={!blueprint}
-          >
-            {t("entities.newEntity")}
-          </Button>
+          <Group gap="sm">
+            <Button component={RouterLink} to={ontologyImportPath} variant="default" leftSection={<IconFileImport size={16} />}>
+              {t("ontology.importLink")}
+            </Button>
+            <Button
+              variant="default"
+              leftSection={<IconDownload size={16} />}
+              disabled={!blueprint}
+              loading={exporting}
+              onClick={() => void handleExport()}
+            >
+              {t("ontology.export.button")}
+            </Button>
+            <Button
+              component={RouterLink}
+              to={blueprint ? newEntityPath(blueprint) : "#"}
+              leftSection={<IconPlus size={16} />}
+              disabled={!blueprint}
+            >
+              {t("entities.newEntity")}
+            </Button>
+          </Group>
         }
         toolbar={
           <Stack gap="sm">
@@ -185,6 +218,12 @@ export default function Entities() {
       {isError && (
         <Alert color="red" variant="light" title={t("entities.loadFailed")}>
           {loadErrorMessage(error, t)}
+        </Alert>
+      )}
+
+      {exportError && (
+        <Alert color="red" variant="light">
+          {exportError}
         </Alert>
       )}
 

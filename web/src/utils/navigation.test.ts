@@ -12,13 +12,14 @@ describe("visibleSections", () => {
     expect(sections.flatMap((s) => s.items.map((l) => l.to))).not.toContain("/users");
   });
 
-  test("the Port Ontology section holds the Blueprints, Entities, Entity graph and Entity hierarchy leaves, visible to everyone", () => {
+  test("the Port Ontology section holds the Blueprints, Entities, Entity graph, Entity hierarchy and Import leaves (Import last), visible to everyone", () => {
     const dataModel = visibleSections(false).find((s) => s.label === "appShell.section.dataModel");
     expect(dataModel?.items.map((l) => l.to)).toEqual([
       "/blueprints",
       "/entities",
       "/entity-graph",
       "/entity-hierarchy",
+      "/ontology/import",
     ]);
   });
 
