@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.LowerCase
@@ -139,15 +140,49 @@ class EntityService(private val database: R2dbcDatabase) {
             }
             .toList()
 
-    private data class SnapshotRow(val blueprintId: UInt, val identifier: String, val teamRaw: String?, val documentRaw: String)
+    private data class SnapshotRow(
+        val blueprintId: UInt,
+        val blueprint: String,
+        val identifier: String,
+        val title: String,
+        val icon: String?,
+        val teamRaw: String?,
+        val documentRaw: String,
+        val createdAt: Long,
+        val updatedAt: Long,
+    ) {
+        // Decoded ONCE per row regardless of how many computed properties/findings ask for it
+        // (today's rowLookup re-decoded per call) — entities/EntityComputed.kt's IndexedRow.
+        val decoded: IndexedRow by lazy {
+            IndexedRow(
+                blueprint = blueprint,
+                identifier = identifier,
+                title = title,
+                icon = icon,
+                createdAt = createdAt,
+                updatedAt = updatedAt,
+                document = blueprintJson.decodeFromString(documentRaw),
+                team = teamRaw?.let { blueprintJson.decodeFromString<JsonElement>(it) },
+            )
+        }
+    }
 
     /**
-     * One snapshot of active rows for every blueprint [targetExists]/[rowLookup] might be asked
-     * about: relation targets, `_team`/`_user` (format-team/user property checks and the team
-     * finding), and every blueprint an Inherited `ownership.path` might walk through — loaded
-     * ONCE per call (`.claude/docs/persistence.md`), documents/team decoded lazily per lookup.
+     * One snapshot of active rows for every blueprint [targetExists]/[rowLookup]/computed-property
+     * evaluation might be asked about: relation targets, `_team`/`_user` (format-team/user
+     * property checks and the team finding), every blueprint an Inherited `ownership.path` might
+     * walk through, and — when [computed] widens it — every blueprint a mirror/aggregation
+     * property might touch ([computedPathBlueprints]) — loaded ONCE per call
+     * (`.claude/docs/persistence.md`), rows decoded lazily and once each ([SnapshotRow.decoded]).
+     * Implements [EntityIndex] so `EntityComputed.kt`/`EntityAggregation.kt` never query the
+     * database mid-evaluation; [inbound] is itself `by lazy` so `update`/`graph` (which never ask
+     * for it) never pay for building it.
      */
-    private class EntitySnapshot(rows: List<SnapshotRow>, blueprintsByIdentifier: Map<String, ActiveBlueprint>) {
+    private class EntitySnapshot(
+        rows: List<SnapshotRow>,
+        blueprintsByIdentifier: Map<String, ActiveBlueprint>,
+        private val blueprintsById: Map<UInt, ActiveBlueprint>,
+    ) : EntityIndex {
         private data class Key(val blueprintId: UInt, val identifier: String)
 
         private val rowsByKey: Map<Key, SnapshotRow> = rows.associateBy { Key(it.blueprintId, it.identifier) }
@@ -158,71 +193,161 @@ class EntityService(private val database: R2dbcDatabase) {
             id != null && Key(id, entityId) in rowsByKey
         }
 
-        val rowLookup: RowLookup = { blueprint, identifier ->
-            val id = idByIdentifier[blueprint]
-            val row = if (id == null) null else rowsByKey[Key(id, identifier)]
-            row?.let {
-                OwnedRow(
-                    blueprint = blueprint,
-                    identifier = identifier,
-                    document = blueprintJson.decodeFromString(it.documentRaw),
-                    team = it.teamRaw?.let { raw -> blueprintJson.decodeFromString<JsonElement>(raw) },
-                )
+        override val rowLookup: RowLookup = { blueprint, identifier -> row(blueprint, identifier)?.asOwned() }
+
+        override fun row(blueprint: String, identifier: String): IndexedRow? {
+            val id = idByIdentifier[blueprint] ?: return null
+            return rowsByKey[Key(id, identifier)]?.decoded
+        }
+
+        private val inboundIndex: Map<Key, List<Inbound>> by lazy {
+            val index = mutableMapOf<Key, MutableList<Inbound>>()
+            rowsByKey.values.forEach { sourceRow ->
+                val sourceBlueprint = blueprintsById[sourceRow.blueprintId] ?: return@forEach
+                sourceBlueprint.definition.relations.forEach { (relationId, relationDef) ->
+                    val targetId = idByIdentifier[relationDef.target] ?: return@forEach
+                    val values = hopTargetIdentifiers(sourceRow.decoded.document.relations[relationId], relationDef.many)
+                    values.forEach { value ->
+                        index.getOrPut(Key(targetId, value)) { mutableListOf() } += Inbound(sourceRow.decoded, relationId)
+                    }
+                }
             }
+            index
+        }
+
+        override fun inbound(blueprint: String, identifier: String): List<Inbound> {
+            val id = idByIdentifier[blueprint] ?: return emptyList()
+            return inboundIndex[Key(id, identifier)].orEmpty()
         }
     }
 
-    /** Everything a row's [ResultRow.toResponse] needs beyond its own columns — built once per call. */
+    /** Everything [toResponse] needs beyond one row's own columns — built once per call. */
     private data class EntityContext(
         val blueprintsById: Map<UInt, ActiveBlueprint>,
         val definitionsByIdentifier: Map<String, BlueprintDefinition>,
         val snapshot: EntitySnapshot,
+        val jq: JqEvaluator,
+        val now: Long,
     )
 
+    /**
+     * [computed]: whether the snapshot must ALSO cover every blueprint a mirror/aggregation
+     * property might touch ([computedPathBlueprints]) — true for `list`/`read`/`create` (their
+     * responses evaluate computed properties), false for `update` (204, no body) and `graph`
+     * (nodes carry no `properties` at all).
+     */
     private suspend fun loadSnapshot(
         definitions: Collection<BlueprintDefinition>,
         blueprintsByIdentifier: Map<String, ActiveBlueprint>,
+        computed: Boolean,
     ): EntitySnapshot {
         val definitionsByIdentifier = blueprintsByIdentifier.mapValues { it.value.definition }
         val relationTargets = definitions.flatMap { it.relations.values.map { relation -> relation.target } }.toSet()
         val ownershipTargets = definitions.flatMap { ownershipPathBlueprints(it, definitionsByIdentifier) }.toSet()
-        val targetIdentifiers = relationTargets + ownershipTargets + SYSTEM_TEAM_BLUEPRINT + SYSTEM_USER_BLUEPRINT
+        val computedTargets =
+            if (computed) definitions.flatMap { computedPathBlueprints(it, definitionsByIdentifier) }.toSet() else emptySet()
+        val targetIdentifiers = relationTargets + ownershipTargets + computedTargets + SYSTEM_TEAM_BLUEPRINT + SYSTEM_USER_BLUEPRINT
         val targetIds = targetIdentifiers.mapNotNull { blueprintsByIdentifier[it]?.id }.distinct()
+        val blueprintsById = blueprintsByIdentifier.values.associateBy { it.id }
         val rows = if (targetIds.isEmpty()) {
             emptyList()
         } else {
             Entities.selectAll().where { (Entities.blueprintId inList targetIds) and active() }
-                .map { SnapshotRow(it[Entities.blueprintId].value, it[Entities.identifier], it[Entities.team], it[Entities.document]) }
+                .map {
+                    val blueprint = blueprintsById.getValue(it[Entities.blueprintId].value)
+                    SnapshotRow(
+                        blueprintId = blueprint.id,
+                        blueprint = blueprint.identifier,
+                        identifier = it[Entities.identifier],
+                        title = it[Entities.title],
+                        icon = it[Entities.icon],
+                        teamRaw = it[Entities.team],
+                        documentRaw = it[Entities.document],
+                        createdAt = it[Entities.createdAt],
+                        updatedAt = it[Entities.updatedAt],
+                    )
+                }
                 .toList()
         }
-        return EntitySnapshot(rows, blueprintsByIdentifier)
+        return EntitySnapshot(rows, blueprintsByIdentifier, blueprintsById)
     }
 
-    private fun ResultRow.toResponse(context: EntityContext): EntityResponse {
-        val document = blueprintJson.decodeFromString<EntityDocument>(this[Entities.document])
-        val blueprintId = this[Entities.blueprintId].value
-        val entityId = this[Entities.id].value
+    /** One entity row as [toResponse] needs it — decoded ONCE, before computed-property evaluation runs OUTSIDE the transaction. */
+    private data class RawEntity(
+        val id: UInt,
+        val blueprintId: UInt,
+        val identifier: String,
+        val title: String,
+        val icon: String?,
+        val document: EntityDocument,
+        val storedTeam: JsonElement?,
+        val createdBy: UInt,
+        val creatorName: String,
+        val creatorDeleted: Boolean,
+        val createdAt: Long,
+        val updatedAt: Long,
+    )
+
+    private fun ResultRow.toRawEntity(): RawEntity = RawEntity(
+        id = this[Entities.id].value,
+        blueprintId = this[Entities.blueprintId].value,
+        identifier = this[Entities.identifier],
+        title = this[Entities.title],
+        icon = this[Entities.icon],
+        document = blueprintJson.decodeFromString(this[Entities.document]),
+        storedTeam = this[Entities.team]?.let { blueprintJson.decodeFromString<JsonElement>(it) },
+        createdBy = this[Entities.createdBy].value,
+        creatorName = this[UserService.Users.name],
+        creatorDeleted = this[UserService.Users.markedAsDeleted],
+        createdAt = this[Entities.createdAt],
+        updatedAt = this[Entities.updatedAt],
+    )
+
+    /**
+     * A plain function over an in-memory [RawEntity] (choice 1, `.claude/docs/persistence.md`):
+     * `list`/`read`/`create` materialize [RawEntity] rows plus the [EntityContext] snapshot INSIDE
+     * their transaction, then map them through this function AFTER it closes, so a pathological
+     * jq expression or a large aggregation fan-out never pins a pooled R2DBC connection or the
+     * entity write lock. The effective team is computed FIRST — it feeds the response `team`
+     * field, the jq calculation input, and every `$team` mirror/aggregation terminal alike.
+     * `findings` is unchanged: computed against the STORED document, never the computed values.
+     */
+    private fun toResponse(raw: RawEntity, context: EntityContext): EntityResponse {
         // A blueprint can only be deleted once its active entity count is 0 (BlueprintService.
         // delete), so any active entity's blueprint is guaranteed active here.
-        val blueprint = context.blueprintsById[blueprintId]
-            ?: error("entity $entityId references blueprint $blueprintId, which is not active")
-        val storedTeam = this[Entities.team]?.let { blueprintJson.decodeFromString<JsonElement>(it) }
-        return EntityResponse(
-            id = entityId,
+        val blueprint = context.blueprintsById[raw.blueprintId]
+            ?: error("entity ${raw.id} references blueprint ${raw.blueprintId}, which is not active")
+        val effectiveTeamValue =
+            effectiveTeam(raw.storedTeam, raw.document, blueprint.definition, context.definitionsByIdentifier, context.snapshot.rowLookup)
+        val subject = ComputedSubject(
             blueprint = blueprint.identifier,
-            blueprintId = blueprintId,
-            identifier = this[Entities.identifier],
-            title = this[Entities.title],
-            icon = this[Entities.icon],
-            team = effectiveTeam(storedTeam, document, blueprint.definition, context.definitionsByIdentifier, context.snapshot.rowLookup),
-            properties = document.properties,
-            relations = document.relations,
-            findings = entityFindings(document, blueprint.definition, context.snapshot.targetExists, storedTeam),
-            createdBy = this[Entities.createdBy].value,
-            creatorName = this[UserService.Users.name],
-            creatorDeleted = this[UserService.Users.markedAsDeleted],
-            createdAt = this[Entities.createdAt],
-            updatedAt = this[Entities.updatedAt],
+            identifier = raw.identifier,
+            title = raw.title,
+            icon = raw.icon,
+            team = effectiveTeamValue,
+            document = raw.document,
+            createdAt = raw.createdAt,
+            updatedAt = raw.updatedAt,
+        )
+        val computed = computedProperties(
+            subject, blueprint.definition, context.definitionsByIdentifier, context.snapshot, context.jq, context.now,
+        )
+        return EntityResponse(
+            id = raw.id,
+            blueprint = blueprint.identifier,
+            blueprintId = raw.blueprintId,
+            identifier = raw.identifier,
+            title = raw.title,
+            icon = raw.icon,
+            team = effectiveTeamValue,
+            properties = JsonObject(raw.document.properties + computed),
+            relations = raw.document.relations,
+            findings = entityFindings(raw.document, blueprint.definition, context.snapshot.targetExists, raw.storedTeam),
+            createdBy = raw.createdBy,
+            creatorName = raw.creatorName,
+            creatorDeleted = raw.creatorDeleted,
+            createdAt = raw.createdAt,
+            updatedAt = raw.updatedAt,
         )
     }
 
@@ -241,31 +366,47 @@ class EntityService(private val database: R2dbcDatabase) {
         return if (selfMatch == null) membership else membership or selfMatch
     }
 
-    /** `q` substring-matches identifier OR title; an unknown `blueprint` identifier is empty (never a 404/400). */
-    suspend fun list(filter: EntityFilter, paging: PageRequest): EntityListResult = suspendTransaction(database) {
-        val activeBlueprints = loadActiveBlueprints()
-        val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
-        val blueprintsById = activeBlueprints.associateBy { it.id }
-        val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
-        // The list filter is the ONE case-insensitive lookup (blueprint identifiers are unique
-        // case-insensitively); every other identifier-keyed map here (targetExists) stays
-        // byte-exact.
-        val blueprintsByIdentifierFolded = activeBlueprints.associateBy { it.identifier.lowercase() }
-        val filterBlueprint = filter.blueprint?.let { blueprintsByIdentifierFolded[it.lowercase()] }
-        if (filter.blueprint != null && filterBlueprint == null) {
-            return@suspendTransaction EntityListResult(emptyList(), 0)
-        }
-        var predicate: Op<Boolean> = active()
-        filterBlueprint?.let { predicate = predicate and (Entities.blueprintId eq it.id) }
-        filter.q?.let { q -> predicate = predicate and (Entities.identifier.containsNormalized(q) or Entities.title.containsNormalized(q)) }
-        filter.team?.let { team -> predicate = predicate and teamPredicate(team, blueprintsByIdentifierFolded) }
+    private data class Materialized<T>(val payload: T, val context: EntityContext)
 
-        val total = joined().selectAll().where { predicate }.count()
-        val rows = joined().selectAll().where { predicate }.applyPaging(paging, SORTABLE_COLUMNS).toList()
-        val definitions = rows.mapNotNull { blueprintsById[it[Entities.blueprintId].value]?.definition }
-        val snapshot = loadSnapshot(definitions, blueprintsByIdentifier)
-        val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot)
-        EntityListResult(rows.map { it.toResponse(context) }, total)
+    /**
+     * `q` substring-matches identifier OR title; an unknown `blueprint` identifier is empty
+     * (never a 404/400). Rows and the snapshot materialize inside ONE transaction; computed
+     * properties evaluate over them AFTER it closes (choice 1, `.claude/docs/persistence.md`).
+     */
+    suspend fun list(filter: EntityFilter, paging: PageRequest): EntityListResult {
+        val now = System.currentTimeMillis()
+        val materialized = suspendTransaction(database) {
+            val activeBlueprints = loadActiveBlueprints()
+            val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
+            val blueprintsById = activeBlueprints.associateBy { it.id }
+            val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
+            // The list filter is the ONE case-insensitive lookup (blueprint identifiers are
+            // unique case-insensitively); every other identifier-keyed map here (targetExists)
+            // stays byte-exact.
+            val blueprintsByIdentifierFolded = activeBlueprints.associateBy { it.identifier.lowercase() }
+            val filterBlueprint = filter.blueprint?.let { blueprintsByIdentifierFolded[it.lowercase()] }
+            val unknownBlueprint = filter.blueprint != null && filterBlueprint == null
+
+            var predicate: Op<Boolean> = active()
+            filterBlueprint?.let { predicate = predicate and (Entities.blueprintId eq it.id) }
+            filter.q?.let { q ->
+                predicate = predicate and (Entities.identifier.containsNormalized(q) or Entities.title.containsNormalized(q))
+            }
+            filter.team?.let { team -> predicate = predicate and teamPredicate(team, blueprintsByIdentifierFolded) }
+
+            val total = if (unknownBlueprint) 0L else joined().selectAll().where { predicate }.count()
+            val rows = if (unknownBlueprint) {
+                emptyList()
+            } else {
+                joined().selectAll().where { predicate }.applyPaging(paging, SORTABLE_COLUMNS).map { it.toRawEntity() }.toList()
+            }
+            val definitions = rows.mapNotNull { blueprintsById[it.blueprintId]?.definition }
+            val snapshot = loadSnapshot(definitions, blueprintsByIdentifier, computed = true)
+            val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot, JqEvaluator(), now)
+            Materialized(rows to total, context)
+        }
+        val (rows, total) = materialized.payload
+        return EntityListResult(rows.map { toResponse(it, materialized.context) }, total)
     }
 
     /**
@@ -318,7 +459,7 @@ class EntityService(private val database: R2dbcDatabase) {
         }.toList()
 
         val shownDefinitions = rawSources.mapNotNull { blueprintsById[it.blueprintId]?.definition }
-        val snapshot = loadSnapshot(shownDefinitions, blueprintsByIdentifier)
+        val snapshot = loadSnapshot(shownDefinitions, blueprintsByIdentifier, computed = false)
         val storedTeamById = rawSources.associate { it.id to it.storedTeam }
 
         val sources = rawSources.map { raw ->
@@ -343,37 +484,44 @@ class EntityService(private val database: R2dbcDatabase) {
         }
     }
 
-    suspend fun read(id: UInt): EntityResponse? = suspendTransaction(database) {
-        val row = joined().selectAll().where { (Entities.id eq id) and active() }.singleOrNull() ?: return@suspendTransaction null
-        val activeBlueprints = loadActiveBlueprints()
-        val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
-        val blueprintsById = activeBlueprints.associateBy { it.id }
-        val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
-        val definition = blueprintsById[row[Entities.blueprintId].value]?.definition
-        val snapshot = loadSnapshot(listOfNotNull(definition), blueprintsByIdentifier)
-        row.toResponse(EntityContext(blueprintsById, definitionsByIdentifier, snapshot))
+    suspend fun read(id: UInt): EntityResponse? {
+        val now = System.currentTimeMillis()
+        val materialized = suspendTransaction(database) {
+            val row = joined().selectAll().where { (Entities.id eq id) and active() }.singleOrNull() ?: return@suspendTransaction null
+            val activeBlueprints = loadActiveBlueprints()
+            val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
+            val blueprintsById = activeBlueprints.associateBy { it.id }
+            val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
+            val definition = blueprintsById[row[Entities.blueprintId].value]?.definition
+            val snapshot = loadSnapshot(listOfNotNull(definition), blueprintsByIdentifier, computed = true)
+            val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot, JqEvaluator(), now)
+            Materialized(row.toRawEntity(), context)
+        } ?: return null
+        return toResponse(materialized.payload, materialized.context)
     }
 
     suspend fun create(request: EntityRequest, callerId: UInt): EntityResponse {
         validateEntityRequest(request) // re-checked service-side so direct callers stay guarded
-        return writeTransaction {
+        val now = System.currentTimeMillis()
+        val materialized = writeTransaction {
             val activeBlueprints = loadActiveBlueprints()
             val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
             val blueprint = blueprintsByIdentifier[request.blueprint] ?: throw BadRequestException("Unknown blueprint")
             checkCaps(blueprint.id)
             val document = request.toDocument()
-            val snapshot = loadSnapshot(listOf(blueprint.definition), blueprintsByIdentifier)
+            val snapshot = loadSnapshot(listOf(blueprint.definition), blueprintsByIdentifier, computed = true)
             val findings = entityFindings(document, blueprint.definition, snapshot.targetExists, request.team)
             requireNoFindings(findings)
-            val now = System.currentTimeMillis()
             val id = insertRow(request, blueprint.id, document, callerId, now)
             val row = joined().selectAll().where { Entities.id eq id }.singleOrNull()
                 ?: error("entity $id vanished between insert and read-back")
             val blueprintsById = activeBlueprints.associateBy { it.id } + (blueprint.id to blueprint)
             val definitionsByIdentifier =
                 activeBlueprints.associate { it.identifier to it.definition } + (blueprint.identifier to blueprint.definition)
-            row.toResponse(EntityContext(blueprintsById, definitionsByIdentifier, snapshot))
+            val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot, JqEvaluator(), now)
+            Materialized(row.toRawEntity(), context)
         }
+        return toResponse(materialized.payload, materialized.context)
     }
 
     private suspend fun checkCaps(blueprintId: UInt) {
@@ -426,7 +574,7 @@ class EntityService(private val database: R2dbcDatabase) {
             throw BadRequestException("blueprint must be '${currentBlueprint.identifier}' and cannot be changed")
         }
         val document = request.toDocument()
-        val baseSnapshot = loadSnapshot(listOf(currentBlueprint.definition), blueprintsByIdentifier)
+        val baseSnapshot = loadSnapshot(listOf(currentBlueprint.definition), blueprintsByIdentifier, computed = false)
         // The SELECT backing baseSnapshot runs before THIS row's identifier rename is written,
         // so a self-blueprint relation naming the row's own NEW identifier would be wrongly
         // rejected; treat it as a synthetic self-match.

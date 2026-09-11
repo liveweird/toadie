@@ -166,7 +166,12 @@ The single-vs-list choice (`string` vs `array`) is permanent in Port once entiti
 `path` chains relation identifiers and ends in a property of the final blueprint or a
 meta-property (`$title`, `$identifier`, `$team`, `$createdAt`, `$updatedAt`). Toadie checks the
 first segment is a relation of THIS blueprint and caps the chain at 10 segments **(assumption)**;
-deeper segments are other blueprints' relations and are not resolved.
+deeper segments are other blueprints' relations and are not resolved at WRITE time — Toadie
+never validates a `path`'s later segments when the blueprint is saved. They ARE resolved at READ
+time (phase 5, v1.27.0): each hop but the last is followed as a relation of the CURRENT
+blueprint (single value, or every value of a `many` relation), landing on the target rows; the
+final segment is read off every landed row. See "Computed properties" below for the full walk,
+fan-out cap, and absent/shape rules.
 
 ## Calculation properties
 
@@ -178,7 +183,12 @@ deeper segments are other blueprints' relations and are not resolved.
 
 `type` ∈ the five property types; `format`/`spec` as for properties; `calculation` is a **jq**
 expression over the entity (`.properties.x`, `.identifier`, `.relations.r`) — Toadie stores it
-as text (1–10 000 chars, not parsed); `colors` values are the 14 colours.
+as text (1–10 000 chars, not parsed); `colors` values are the 14 colours. Evaluated at READ time
+(phase 5, v1.27.0) with real jq 1.6 semantics (`net.thisptr:jackson-jq` 1.3.0): the first value
+the expression emits wins, then is checked STRICTLY against the declared `type` — a mismatch,
+or any evaluation failure, is simply ABSENT. See "Computed properties" below for the jq input
+shape and `.claude/docs/security.md` "Computed-property evaluation (jq)" for the sandboxing
+posture.
 
 ## Aggregation properties
 
@@ -197,6 +207,11 @@ as text (1–10 000 chars, not parsed); `colors` values are the 14 colours.
   max | median`.
 - `query` is Port's search-rule syntax (`combinator` + `rules`); `pathFilter` steers multi-hop
   traversal. Toadie stores both verbatim, checking only that rules/filters are objects.
+
+Evaluated at READ time (phase 5, v1.27.0): the TARGET blueprint's active rows related to the
+subject are found via direct relations or a `pathFilter` chain (in either direction), filtered
+by `query`, then reduced by `calculationSpec`. See "Computed properties" below for the full
+candidate-resolution, query-operator, and calculation rules.
 
 ## Ownership
 
@@ -276,9 +291,107 @@ response carries (see "Lifecycle rules" below). `EntityFinding{code, field, mess
   identifier) and `delete_dependents` (cascading deletes) — a relation target is always a
   byte-exact identifier, and DELETE never cascades past the referrer check below. An unknown
   top-level key on the request is `400` via the strict `DefaultJson` (the blueprint precedent).
-- Evaluation of mirror/calculation/aggregation properties — they stay definitions on the
-  blueprint; entity `properties` carrying one of their ids is `COMPUTED_PROPERTY`, `400`, never
-  accepted as input, and Toadie never computes their values.
+
+### Computed properties (phase 5, v1.27.0)
+
+`mirrorProperties`, `calculationProperties` and `aggregationProperties` are evaluated at READ
+time by `entities/EntityComputed.kt` (orchestrator + mirror walk), `entities/EntityAggregation.kt`
+(aggregation candidates + `calculationSpec`) and `entities/AggregationQuery.kt` (the `query`
+rule engine) — pure, DB-free code running over the `EntityIndex` snapshot `EntityService`
+already loaded for validation (`.claude/docs/persistence.md`). This reverses the phase-2
+statement above: Toadie now computes their values on every `GET`/list/create.
+
+**Wire shape.** Computed values live INSIDE the ordinary `properties` object of every
+GET/list/create response — Port's own shape, never a sibling field: response
+`properties = document.properties` (stored) merged with the computed values ON TOP, so a
+computed id COLLIDES with and WINS OVER a stale stored key of the same name. `findings` is
+unchanged: computed only over the STORED document, never the merged response — a stale stored
+key keeps surfacing as a `COMPUTED_PROPERTY` finding (see the table above) until the entity's
+next save strips it (the SPA does this before submitting). An unresolvable computed value is
+simply ABSENT from `properties` — never `null`, never a finding of its own; only `entityFindings`
+(write-time) can fail a save. `POST`/`PUT` sending a computed property id is UNCHANGED: still
+`400` `COMPUTED_PROPERTY` — Toadie never accepts a computed value as input, only ever produces
+one.
+
+**Mirror walk.** `mirrorValue` walks every segment but the last of `path` as a relation of the
+CURRENT blueprint, starting at the subject's own row: a `many: false` hop follows the single
+target identifier, a `many: true` hop fans out over every value (capped at
+`MAX_MIRROR_FANOUT = 1000` landed rows per hop) — up to `MAX_COMPUTED_HOPS = 10` hops (the same
+budget `EntityOwnership.kt`'s Inherited walk uses one layer up). An unknown relation, an unknown
+target blueprint, or a chain over the hop budget makes the WHOLE value absent; an individual
+unresolved relation VALUE along the way is simply skipped, never a give-up. The terminal segment
+is then read off every row the walk landed on: a `$`-prefixed terminal resolves one of
+`$identifier`, `$title`, `$icon`, `$blueprint`, `$team` (the landed row's EFFECTIVE team,
+resolved the same way as the entity's own), `$createdAt`, `$updatedAt` (epoch millis —
+**assumption**) — any other meta-property, including `$createdBy`/`$updatedBy`, is absent;
+otherwise the terminal must name a key of the landed blueprint's OWN `schema.properties`, read
+from its STORED document — a terminal naming a COMPUTED id of the landed blueprint is absent
+(never recursed into, so a mirror chain cannot chain into another mirror/calculation/
+aggregation). Shape: no `many` hop anywhere in the chain → the single landed value (or absent if
+nothing landed); any `many` hop → a `JsonArray` of every landed value, one level flattened when
+a landed value is itself an array, structurally deduped in walk order (`[]` is a valid result
+when the chain resolved but nothing landed — distinct from absent).
+
+**Calculation.** `calculationValue` runs `calculation` as a real jq 1.6 expression (via
+`net.thisptr:jackson-jq` 1.3.0, `gradle/libs.versions.toml`) over a JSON object shaped
+`{identifier, title, blueprint, icon?, team?, properties, relations}` — the entity's STORED
+`properties`/`relations` and its EFFECTIVE `team` (**assumption**: no `id` or timestamps in the
+jq input, matching Port's own `.identifier`/`.properties.x`/`.relations.r` calculation
+examples). The FIRST value the expression emits wins (`1, 2` yields `1`; `range(1e9)` yields
+`0` instead of iterating); a JSON `null` output, no output at all, a compile/runtime error, or a
+runaway recursion (`StackOverflowError`, e.g. `def f: f; f`) all mean absent, never a thrown
+error. The winning output is then checked STRICTLY against the declared `type` (the same
+structural check [`jsonMatchesType`] `entityFindings` itself uses): a shape mismatch is absent,
+never coerced — `tostring`/`tonumber` are the admin's own tools to fix a mismatched expression.
+See `.claude/docs/security.md` "Computed-property evaluation (jq)" for the sandboxing posture,
+`env`/`$ENV` shadowing, and the output-size cap.
+
+**Aggregation.** `relatedEntities` finds every ACTIVE row of `target` related to the subject:
+with NO `pathFilter`, DIRECT relations in EITHER direction — every entity of `target` naming the
+subject (via `EntityIndex.inbound`) UNION every entity the subject's OWN relations name that
+happens to be of blueprint `target` (a self-targeting aggregation counts both sides, documented);
+each `pathFilter` entry `{fromBlueprint, path}` narrows to ONE direction instead:
+`fromBlueprint == <subject's own blueprint>` walks FORWARD from the subject (fanning out on
+`many`, ≤ `MAX_COMPUTED_HOPS` hops, the LAST relation must target `target`); `fromBlueprint ==
+target` statically resolves `target --r1--> … --rn--> <subject's blueprint>` and then walks
+BACKWARDS from the subject through `EntityIndex.inbound`, one hop at a time, matching each
+step's expected source blueprint and relation id — the REVERSE direction, needed when the
+relation is declared on `target` rather than the subject (e.g. a `system`'s `workload_replicas`
+reading `workload → service → system`); any other `fromBlueprint`, or a malformed entry,
+contributes nothing (**assumption**). Candidates are deduped by identifier, then filtered by
+`query` (Port's `combinator`+`rules` search syntax, `entities/AggregationQuery.kt`): `null`
+matches everything; `and` requires every rule (empty → true), `or` requires at least one
+(empty → false), any other combinator → false; a nested rule (`combinator`+`rules`, no
+`property`) recurses up to `MAX_QUERY_DEPTH = 10`; a leaf rule looks up `$identifier`/`$title`/
+`$blueprint`/`$icon`/`$createdAt`/`$updatedAt`, `$team` (always an ARRAY — **assumption**), or a
+STORED property, and evaluates one operator:
+
+| Operator | Rule |
+| --- | --- |
+| `=` / `!=` | structural equality; an absent actual is never `=` anything (including an explicit `null` rule value), so `!=` against an absent actual is `true` |
+| `>` `<` `>=` `<=` | numeric when both sides are JSON numbers, else lexicographic when both are strings, else `false` |
+| `contains` / `doesNotContain` | array element match or string substring |
+| `in` / `notIn` | `expected` must be an array; membership by structural equality |
+| `isEmpty` / `isNotEmpty` | absent, `null`, `""`, `[]`, `{}` count as empty |
+| `containsAny` | scalars treated as singleton lists, any shared element (**interpretation** — Port's docs do not spell out the multi-value shape) |
+| anything else | `false` |
+
+Matching candidates are reduced by `calculationSpec` (`applyCalculationSpec`):
+`calculationBy: "entities"` → `func: "count"` is the row count (`0` is a value, not absent);
+`func: "average"` (choice 3, **assumption**) = matched count ÷
+`max(1, ceil((now − earliest measured timestamp) / period))`, where `period` is
+`averageOf: hour|day|week|month` = `3600 s | 86 400 s | 7 × 86 400 s | 30 × 86 400 s`, and
+`averageOf: total` is a plain count; `measureTimeBy` is `$createdAt`, `$updatedAt`, or an ISO
+8601 date-time property (unparseable/missing timestamps are skipped; nothing measurable is
+absent). `calculationBy: "property"` → `func: sum|min|max|average|median` over the JSON-number
+values of `property` (non-numeric values skipped; none → absent). An integral result is emitted
+as a JSON integer (`16`, never `16.0`).
+
+**Scope.** Computed values are NOT stored (`.claude/docs/persistence.md`), so they are never
+filterable, sortable, or matched by `q` on the entity list (`.claude/docs/list-endpoints.md`),
+and they never appear on Entity graph nodes (`GET …/entities/graph` — a graph node carries only
+`findings` as a count, never `properties`; the snapshot behind `update`/`graph` never widens for
+or evaluates computed properties at all, see `.claude/docs/persistence.md`).
 
 ### Lifecycle rules
 

@@ -212,6 +212,39 @@ concurrency (V28)": a relation create racing its target's delete (one wins, neve
 target), a blueprint delete racing an entity create against it (no orphaned entity survives),
 and a `_team` delete racing an entity create against it (same rule applied to ownership).
 
+**Computed properties (phase 5, v1.27.0).** `JqCalculationTest` is the pure jq-bridge suite
+(`entities/JqCalculation.kt`, no database): a plain value, string interpolation, a JSON `null`
+result → absent, `empty` → absent, the first-of-`.a, .b` win, `range(1e9)` aborting promptly
+instead of iterating, a compile error / `error("x")` / a type error (`.a.b` on a number) →
+absent, `def f: f; f` → absent, `env`/`$ENV` shadowed even though the real process environment
+is non-empty (`System.getenv("PATH")` proving it), `include "x"; .` failing closed with no
+module loader ever installed, one compile per distinct expression text regardless of how many
+times it is evaluated, and an oversized result → absent, never truncated. `EntityComputedTest`
+is the pure mirror-walk/orchestration suite (`entities/EntityComputed.kt`): single-hop,
+two-hop, and `many`-hop mirrors, one-level flattening, structural dedupe, an empty-but-resolved
+`[]`, every broken-hop give-up case, the hop budget, a computed terminal of the landed
+blueprint answering absent (never recursed into), each `$meta` terminal including the landed
+row's own EFFECTIVE `$team`, the fan-out cap, one coercion case per declared `type`,
+`computedPathBlueprints`' snapshot widening (including Inherited target ownership paths),
+evaluation order (mirror → calculation → aggregation, each in its own declaration order), and
+the stale-stored-key collision (computed wins). `EntityAggregationTest`
+(`entities/EntityAggregation.kt`) covers inbound/outbound/self-targeting DIRECT candidates,
+forward AND reverse `pathFilter` walks (including the `workload → service → system` reverse
+shape), a foreign `fromBlueprint`, a malformed `pathFilter` entry, `count` answering `0` as a
+value, `average` per period with an injected `now`, and each `property/<func>` including the
+Long-vs-Double integral-result rule. `AggregationQueryTest` (`entities/AggregationQuery.kt`)
+covers one hit/miss/absent case per operator, both combinators, nested rules, the depth cap,
+and the always-array `$team` lookup.
+
+`EntityTest` gains the route-level phase 5 cases: computed values appear identically on
+create/GET/list, follow a related entity's later change, and are ignored by `q` and by sort; a
+computed property id sent on POST or PUT is still `400 COMPUTED_PROPERTY` (unchanged since
+phase 2); the `201` create response already carries computed values; Entity graph nodes never
+carry any (the `computed = false` snapshot); `entity.created`'s audited `properties` count is
+the STORED count, matching `entity.updated`, never the larger computed-inclusive response
+count; and a dedicated case aggregates across roughly 200 target entities to prove correctness
+at that scale, without asserting on timing.
+
 **Entity graph (V29/V30).** `EntityGraphTest` is the pure builder (`entities/EntityGraph.kt`,
 no database): the both-ends rule including a hidden or stale relation target dropped rather
 than surfaced as a MISSING node, relation array-value expansion and edge dedupe, the

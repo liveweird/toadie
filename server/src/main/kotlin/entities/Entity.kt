@@ -11,9 +11,11 @@ import kotlinx.serialization.json.JsonObject
  * Port migration phase 2 (`.claude/docs/port-data-model.md`): **entities** — instances of a
  * [ch.nokillswit.blueprints.BlueprintDefinition]. Every entity belongs to one blueprint (by ID,
  * so a blueprint rename never touches it), carries `properties` typed by that blueprint's
- * `schema`, and `relations` naming other entities of the target blueprints. Nothing evaluates
- * mirror/calculation/aggregation properties (Port computes those); they are never accepted as
- * input keys ([EntityFinding] code `COMPUTED_PROPERTY`).
+ * `schema`, and `relations` naming other entities of the target blueprints. Since phase 5
+ * (v1.27.0, `entities/EntityComputed.kt`), a mirror/calculation/aggregation property id is never
+ * accepted as WRITE input ([EntityFinding] code `COMPUTED_PROPERTY`) but IS evaluated at read
+ * time and merged into every GET/list/create response's `properties` — an unresolvable value is
+ * simply ABSENT there, never a finding.
  *
  * Wire shape mirrors `blueprints/Blueprint.kt`: a typed skeleton for identity fields, raw
  * [JsonObject]/[JsonElement] for the genuinely open `properties`/`relations`/`team` trees.

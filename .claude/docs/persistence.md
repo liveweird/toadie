@@ -71,6 +71,34 @@ the blueprint has `ownership: { type: Inherited }` (the computed `team` is never
 MUST carry a value when Direct/absent (the stored `team` field). The rule is enforced during
 entity write validation.
 
+**Computed-property evaluation and the widened snapshot (phase 5, v1.27.0).**
+`EntityService.loadSnapshot(definitions, blueprintsByIdentifier, computed)` widens the same
+per-call snapshot read above with every blueprint a mirror path, an aggregation `target`, or a
+`pathFilter` chain (in either direction) might touch, plus the Inherited ownership path
+blueprints of each of THOSE — `entities/EntityComputed.kt`'s `computedPathBlueprints`, the
+static twin of `ownershipPathBlueprints` — so mirror/aggregation evaluation never issues a fresh
+query mid-walk. The widening runs only when `computed = true`: `list`, `read`, and `create`
+request it (their responses evaluate computed properties); `update` (a `204`, no body) and
+`graph` (nodes carry no `properties` at all) pass `computed = false` and never pay for it — the
+`SnapshotRow.decoded`/`EntitySnapshot.inbound` machinery below is built or not per call, not
+per feature. Each snapshot row decodes its document/team JSON ONCE regardless of how many
+computed properties or findings ask for it (`SnapshotRow.decoded`, `by lazy` — before phase 5
+`rowLookup` re-decoded on every call), and the reverse-lookup index aggregation candidates need
+(`EntitySnapshot.inbound`, `EntityIndex.inbound`, keyed by `(target blueprint, relation value)`
+over every snapshot row's relations) is itself `by lazy` — built only the first time a computed
+property actually asks "who points at this entity", so an `update`/`graph` snapshot never
+constructs it at all.
+
+Evaluation itself runs OUTSIDE the transaction that built the snapshot: `list`/`read`/`create`
+materialize their rows (as an in-memory `RawEntity`) plus the `EntitySnapshot` INSIDE
+`suspendTransaction`/`writeTransaction` exactly as before, then map them through
+`EntityService.toResponse` — a plain function over that in-memory data, no query inside it —
+AFTER the transaction closes. A pathological jq expression or a wide aggregation fan-out then
+pins a request-handling coroutine, never a pooled R2DBC connection or a database lock (see
+`.claude/docs/security.md` "Computed-property evaluation (jq)" for why that boundary is load-
+bearing). `update` and `graph` never evaluate computed properties at all, so this ordering
+concern does not apply to them.
+
 Current migrations are `V1`–`V31` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
