@@ -71,7 +71,7 @@ private fun systemFormatFor(blueprintIdentifier: String): String? = when (bluepr
     else -> null
 }
 
-class EntityService(private val database: R2dbcDatabase) {
+class EntityService(private val database: R2dbcDatabase, private val jq: JqEvaluator = JqEvaluator()) {
     object Entities : UIntIdTable("entities") {
         // Case-folded identifier uniqueness PER BLUEPRINT is enforced by the partial unique
         // index uq_entities_blueprint_identifier_active (active rows only; V28) — a
@@ -311,8 +311,10 @@ class EntityService(private val database: R2dbcDatabase) {
      * entity write lock. The effective team is computed FIRST — it feeds the response `team`
      * field, the jq calculation input, and every `$team` mirror/aggregation terminal alike.
      * `findings` is unchanged: computed against the STORED document, never the computed values.
+     * `suspend` since v1.28.1: computed-property evaluation now runs on [JqEvaluator]'s bounded
+     * pool ([JqEvaluator.evaluateBounded]) rather than blocking this coroutine's own thread.
      */
-    private fun toResponse(raw: RawEntity, context: EntityContext): EntityResponse {
+    private suspend fun toResponse(raw: RawEntity, context: EntityContext): EntityResponse {
         // A blueprint can only be deleted once its active entity count is 0 (BlueprintService.
         // delete), so any active entity's blueprint is guaranteed active here.
         val blueprint = context.blueprintsById[raw.blueprintId]
@@ -402,7 +404,7 @@ class EntityService(private val database: R2dbcDatabase) {
             }
             val definitions = rows.mapNotNull { blueprintsById[it.blueprintId]?.definition }
             val snapshot = loadSnapshot(definitions, blueprintsByIdentifier, computed = true)
-            val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot, JqEvaluator(), now)
+            val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot, jq, now)
             Materialized(rows to total, context)
         }
         val (rows, total) = materialized.payload
@@ -494,7 +496,7 @@ class EntityService(private val database: R2dbcDatabase) {
             val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
             val definition = blueprintsById[row[Entities.blueprintId].value]?.definition
             val snapshot = loadSnapshot(listOfNotNull(definition), blueprintsByIdentifier, computed = true)
-            val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot, JqEvaluator(), now)
+            val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot, jq, now)
             Materialized(row.toRawEntity(), context)
         } ?: return null
         return toResponse(materialized.payload, materialized.context)
@@ -537,7 +539,7 @@ class EntityService(private val database: R2dbcDatabase) {
             val blueprintsById = activeBlueprints.associateBy { it.id } + (blueprint.id to blueprint)
             val definitionsByIdentifier =
                 activeBlueprints.associate { it.identifier to it.definition } + (blueprint.identifier to blueprint.definition)
-            val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot, JqEvaluator(), now)
+            val context = EntityContext(blueprintsById, definitionsByIdentifier, snapshot, jq, now)
             Materialized(row.toRawEntity(), context)
         }
         return toResponse(materialized.payload, materialized.context)

@@ -121,9 +121,11 @@ fun effectiveTeamOf(
 /**
  * Every computed value for [subject] under its OWN [definition] — mirror, then calculation, then
  * aggregation, each family in its OWN declaration order (a stale stored key never fails HERE:
- * that is [entityFindings]'s job, run over the STORED document). Never throws.
+ * that is [entityFindings]'s job, run over the STORED document). Never throws its OWN failures
+ * (jq's are absorbed by [JqEvaluator.evaluateBounded]) — the one exception is the caller's own
+ * cancellation, which propagates unchanged.
  */
-fun computedProperties(
+suspend fun computedProperties(
     subject: ComputedSubject,
     definition: BlueprintDefinition,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
@@ -232,9 +234,10 @@ private fun metaTerminalValue(
  * timestamps, matching Port's own `.identifier`/`.properties.x`/`.relations.r` calculation
  * examples) — then coerces the first output STRICTLY against [def]'s declared `type`
  * ([jsonMatchesType], the same structural check [entityFindings] itself uses): a mismatched
- * shape is absent, never coerced (`tostring`/`tonumber` are the admin's own tools).
+ * shape is absent, never coerced (`tostring`/`tonumber` are the admin's own tools). Runs on
+ * [JqEvaluator]'s bounded pool under its per-expression deadline ([JqEvaluator.evaluateBounded]).
  */
-fun calculationValue(id: String, def: CalculationPropertyDefinition, subject: ComputedSubject, jq: JqEvaluator): JsonElement? {
+suspend fun calculationValue(id: String, def: CalculationPropertyDefinition, subject: ComputedSubject, jq: JqEvaluator): JsonElement? {
     val input = buildJsonObject {
         put("identifier", subject.identifier)
         put("title", subject.title)
@@ -244,7 +247,7 @@ fun calculationValue(id: String, def: CalculationPropertyDefinition, subject: Co
         put("properties", subject.document.properties)
         put("relations", subject.document.relations)
     }
-    val result = jq.evaluate(def.calculation, input, "${subject.blueprint}.$id") ?: return null
+    val result = jq.evaluateBounded(def.calculation, input, "${subject.blueprint}.$id") ?: return null
     return result.takeIf { jsonMatchesType(def.type, it) }
 }
 

@@ -23,6 +23,7 @@ import ch.nokillswit.entities.calculationValue
 import ch.nokillswit.entities.computedPathBlueprints
 import ch.nokillswit.entities.computedProperties
 import ch.nokillswit.entities.mirrorValue
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -247,7 +248,7 @@ class EntityComputedTest {
     // ---------------------------------------------------------------------------------------
 
     @Test
-    fun `calculation - output is coerced strictly against the declared type`() {
+    fun `calculation - output is coerced strictly against the declared type`() = runBlocking {
         val jq = JqEvaluator()
         val subj = subject("bp", document = doc(properties = buildJsonObject { put("x", 5) }))
         fun calc(type: String, expr: String) = CalculationPropertyDefinition(title = "C", type = type, calculation = expr)
@@ -269,7 +270,7 @@ class EntityComputedTest {
     }
 
     @Test
-    fun `calculation - a failing jq expression is absent`() {
+    fun `calculation - a failing jq expression is absent`() = runBlocking {
         val jq = JqEvaluator()
         val subj = subject("bp")
         val def = CalculationPropertyDefinition(title = "C", type = "string", calculation = ".a.b")
@@ -281,7 +282,7 @@ class EntityComputedTest {
     // ---------------------------------------------------------------------------------------
 
     @Test
-    fun `computedProperties evaluates mirror then calculation then aggregation, in that order`() {
+    fun `computedProperties evaluates mirror then calculation then aggregation, in that order`() = runBlocking {
         val bBp = "component"
         val cBp = "child"
         val index = FakeIndex(rows = mapOf(cBp to "c1" to row(cBp, "c1", title = "Child Title")))
@@ -319,7 +320,7 @@ class EntityComputedTest {
     }
 
     @Test
-    fun `computedProperties never throws and omits every absent value`() {
+    fun `computedProperties never throws and omits every absent value`() = runBlocking {
         val bBp = "component"
         val definition = BlueprintDefinition(
             mirrorProperties = mapOf("m" to MirrorPropertyDefinition(title = "M", path = "nope.\$title")),

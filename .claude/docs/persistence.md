@@ -97,7 +97,10 @@ AFTER the transaction closes. A pathological jq expression or a wide aggregation
 pins a request-handling coroutine, never a pooled R2DBC connection or a database lock (see
 `.claude/docs/security.md` "Computed-property evaluation (jq)" for why that boundary is load-
 bearing). `update` and `graph` never evaluate computed properties at all, so this ordering
-concern does not apply to them.
+concern does not apply to them. Since v1.29.0 `EntityService.toResponse` is itself a `suspend`
+function: each calculation is submitted to the bounded `entity-jq` worker pool
+(`.claude/docs/security.md`) and awaited on the request-handling coroutine, still entirely
+after the transaction above has closed — the transaction boundary itself is unchanged.
 
 **Ontology import (phase 6, v1.28.0).** `blueprints/BlueprintImport.kt`'s and
 `entities/EntityImport.kt`'s effectful `import`/`importCheck` extensions add NO new locking

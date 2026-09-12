@@ -26,6 +26,13 @@
 - `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail).
 
+**Not audit events.** The bounded jq executor's (v1.29.0) two WARN events on
+`ch.nokillswit.entities.computed` — one per calculation quarantine, one per pool-saturation
+episode (see `.claude/docs/security.md` "Computed-property evaluation (jq)") — ride the same
+Logback→OTel pipeline as everything above but are deliberately NOT `audit(...)` events: neither
+is a mutation or a denial, they are operational signals about a runaway or overloaded
+expression. The INPUT document is never logged, on either logger.
+
 **Two trails, on purpose.** The `audit(...)` events above are the SECURITY log: structured, field-poor, shipped to a collector/SIEM, covering denials and every mutation. The catalog file's **change history** (`catalog_file_events`, V23 — see `.claude/docs/persistence.md`) is the PRODUCT feature: user-facing, per document, field-level, read back through `GET /api/v1/files/{id}/events` and rendered in the viewer's language. Product history is inserted in the catalog mutation transaction; the route emits its security audit only after the service returns successfully. Neither replaces the other — a catalog mutation extends BOTH, and a new history-bearing feature should say so here.
 
 Field-naming convention: the acting caller is `byUserId` everywhere except the auth lifecycle events (`login.*`, `logout`, `refresh.rejected`), where `userId` identifies the account being authenticated.
