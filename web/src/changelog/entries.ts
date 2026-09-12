@@ -17,6 +17,16 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.30.0",
+    date: "2026-09-12",
+    en: `**The Team filter now follows inherited ownership.**
+
+- The Team filter on the Entities list and the Entity graph now matches entities whose team is inherited along the ownership path — the same team the Team chip shows — not only entities with a directly assigned team.`,
+    pl: `**Filtr Zespół uwzględnia teraz dziedziczoną własność.**
+
+- Filtr Zespół na liście encji i w grafie encji dopasowuje teraz także encje, których zespół jest dziedziczony wzdłuż ścieżki własności — ten sam zespół, który pokazuje etykieta Zespół — a nie tylko encje z bezpośrednio przypisanym zespołem.`,
+  },
+  {
     version: "1.29.0",
     date: "2026-09-12",
     en: `**Bounded jq worker pool for calculation properties.**
