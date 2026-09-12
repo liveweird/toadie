@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import OverwriteWithYamlModal, { type OverwriteTarget } from "./OverwriteWithYamlModal";
 import type { CatalogFileRequest } from "../api/catalogFiles";
 import { jsonResponse } from "../test/http";
 import { catalogFileResponse } from "../test/fixtures";
-import { renderWithProviders } from "../test/render";
+import { renderWithProviders, settleButtonTransition } from "../test/render";
 import { catalogInfoYaml } from "../utils/catalogYaml";
 
 const TOKEN_KEY = "toadie.auth.token";
@@ -80,17 +80,7 @@ describe("OverwriteWithYamlModal", () => {
     await user.paste(text);
   };
 
-  // The confirm button's `loading` prop drives Mantine's internal loader Transition
-  // (Button.mjs, `duration: 150`, hardcoded — not exposed as a prop). `env="test"` on the
-  // MantineProvider only skips the STYLES that Transition would render; `useTransition`
-  // (use-transition.mjs) schedules its real rAF→rAF→setTimeout(150) chain regardless. Every
-  // test that toggles `saving` true→false (a confirmed overwrite, success or failure) leaves
-  // that chain pending; if it fires after RTL's afterEach `cleanup()` — a real race, not a
-  // logic error — it dispatches a state update into this file's already-torn-down happy-dom
-  // window ("window is not defined", CI PR #26). Draining it here, before the test returns,
-  // guarantees the update lands on the still-mounted component instead.
-  const settleButtonTransition = () =>
-    act(() => new Promise((resolve) => setTimeout(resolve, 300)));
+  // Drained via the shared settleButtonTransition (src/test/render.tsx) — see its KDoc.
 
   test("stays closed without a file", () => {
     render(null);
