@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { theme } from "../theme";
 
 /** The app theme with reduced motion respected — paired with setup.ts's `useReducedMotion` mock, every Transition completes synchronously. */
-export const TEST_THEME = { ...theme, respectReducedMotion: true };
+const TEST_THEME = { ...theme, respectReducedMotion: true };
 
 interface Options extends Omit<RenderOptions, "wrapper"> {
   route?: string;
