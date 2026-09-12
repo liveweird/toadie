@@ -1,4 +1,14 @@
-import { expect, login, openFilters, pickNamespace, rowOperation, runNamespace, test, uniqueText } from "./helpers";
+import {
+  expect,
+  login,
+  openFilters,
+  pickNamespace,
+  rowOperation,
+  runNamespace,
+  test,
+  uniqueText,
+  waitForApi,
+} from "./helpers";
 
 // The ⌘K / Ctrl K command palette (v1.19.0): page navigation plus a server-side catalog file
 // search by name. Owns exactly one throwaway System in the render run namespace.
@@ -13,10 +23,11 @@ test("the command palette jumps to pages and opens a file by name", async ({ pag
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
   await pickNamespace(page, ns);
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
-  await Promise.all([
-    page.waitForResponse((r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok()),
+  const [created] = await Promise.all([
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   await expect(page).toHaveURL(/\/files$/);
 
   // The shortcut opens the palette; a page name narrows to that page and Enter goes there.

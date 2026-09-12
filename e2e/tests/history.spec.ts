@@ -7,6 +7,7 @@ import {
   rowOperation,
   test,
   uniqueText,
+  waitForApi,
 } from "./helpers";
 
 // The per-file change history on the editor, on a throwaway unique-named component so
@@ -25,11 +26,10 @@ test("a file's history records its creation and each later edit, field by field"
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
 
   const [created] = await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   const fileId: number = (await created.json()).id;
 
   // A fresh file's history holds exactly the creation.

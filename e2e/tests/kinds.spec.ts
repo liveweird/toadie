@@ -1,4 +1,16 @@
-import { expect, login, openFilters, pickLifecycle, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
+import {
+  expect,
+  login,
+  openFilters,
+  pickLifecycle,
+  pickNamespace,
+  pickType,
+  rowOperation,
+  runNamespace,
+  test,
+  uniqueText,
+  waitForApi,
+} from "./helpers";
 
 async function fillIdentity(page: import("@playwright/test").Page, name: string, ns: string) {
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
@@ -25,12 +37,11 @@ test("a group, an API, and a component owned by the group are created and resolv
   await fillIdentity(page, team, ns);
   await pickType(page, "team");
   await expect(page.getByLabel("YAML preview")).toContainText("children: []");
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+  const [groupCreated] = await Promise.all([
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(groupCreated.status()).toBe(201);
 
   // An API with its pasted definition.
   await page.goto("/files/new");
@@ -41,12 +52,11 @@ test("a group, an API, and a component owned by the group are created and resolv
   await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill(team);
   await page.getByRole("textbox", { name: "Definition" }).fill("openapi: 3.0.0");
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+  const [apiCreated] = await Promise.all([
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(apiCreated.status()).toBe(201);
 
   // A Component owned by the group and providing the API — the live panel stays clean
   // (every reference resolves against the two files just stored).
@@ -63,12 +73,11 @@ test("a group, an API, and a component owned by the group are created and resolv
   await page.getByRole("combobox", { name: "Provides APIs" }).fill(api);
   await page.keyboard.press("Enter");
   await expect(page.getByText("No findings — the document passes every check.")).toBeVisible();
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+  const [compCreated] = await Promise.all([
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(compCreated.status()).toBe(201);
 
   // The list shows the three kind badges for the namespace. Row-scoped asserts (the Kind
   // filter's hidden options also contain kind words, so a page-wide getByText would clash).

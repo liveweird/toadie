@@ -135,13 +135,19 @@ class LogCapture(loggerName: String) {
 
     suspend fun awaitEvent(
         predicate: (ch.qos.logback.classic.spi.ILoggingEvent) -> Boolean,
-    ): ch.qos.logback.classic.spi.ILoggingEvent? {
-        repeat(100) {
-            events.firstOrNull(predicate)?.let { return it }
-            kotlinx.coroutines.delay(50)
+    ): ch.qos.logback.classic.spi.ILoggingEvent? =
+        // A bounded outer bound around an observed event (.claude/docs/testing.md), not a
+        // sleep: the same 5-second default budget as the former repeat(100) { delay(50) },
+        // polling every 50ms until the event lands or the deadline passes — null either way
+        // a caller already treats a miss (assertNotNull's own message names the missing event).
+        kotlinx.coroutines.withTimeoutOrNull(5_000) {
+            var found: ch.qos.logback.classic.spi.ILoggingEvent? = null
+            while (found == null) {
+                found = events.firstOrNull(predicate)
+                if (found == null) kotlinx.coroutines.delay(50)
+            }
+            found
         }
-        return null
-    }
 }
 
 /**

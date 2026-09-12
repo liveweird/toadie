@@ -1,4 +1,14 @@
-import { expect, login, openFilters, pickLifecycle, pickType, rowOperation, test, uniqueText } from "./helpers";
+import {
+  expect,
+  login,
+  openFilters,
+  pickLifecycle,
+  pickType,
+  rowOperation,
+  test,
+  uniqueText,
+  waitForApi,
+} from "./helpers";
 
 // Catalog-file CRUD through the real UI, on a throwaway unique-named component so parallel
 // files and re-runs never collide (the list asserts are always name-filter-anchored).
@@ -24,11 +34,10 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await expect(preview).toContainText(`name: ${name}`);
 
   const [created] = await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   const fileId: number = (await created.json()).id;
 
   // The filtered list shows the new file.

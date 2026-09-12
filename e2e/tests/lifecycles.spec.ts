@@ -11,6 +11,7 @@ import {
   signOut,
   test,
   uniqueText,
+  waitForApi,
 } from "./helpers";
 
 /**
@@ -96,11 +97,10 @@ test("admin curates the global lifecycles list; a regular user reads it; the edi
   await pickLifecycle(page, extra);
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   const [created] = await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   const fileId: number = (await created.json()).id;
 
   // Cleanup: the file, the appended lifecycle, and the throwaway user.

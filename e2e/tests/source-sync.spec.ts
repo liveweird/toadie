@@ -1,4 +1,14 @@
-import { expect, login, openFilters, pickLifecycle, pickType, rowOperation, test, uniqueText } from "./helpers";
+import {
+  expect,
+  login,
+  openFilters,
+  pickLifecycle,
+  pickType,
+  rowOperation,
+  test,
+  uniqueText,
+  waitForApi,
+} from "./helpers";
 
 // The source-reference journey on one throwaway unique-named component: created source-less
 // (the Errors report flags it), the reference set after the fact in the editor (the flag
@@ -19,11 +29,10 @@ test("a source reference set after creation clears the report flag and enables t
   await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   const [created] = await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   const fileId: number = (await created.json()).id;
 
   // The Errors report flags the missing reference. Row-anchored: until the debounced name
