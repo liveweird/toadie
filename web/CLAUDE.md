@@ -191,7 +191,10 @@ findings index threaded into `EntityFormFields`. `hooks/useEntitySave.ts` expose
 `useEntityOptions(TEAM_BLUEPRINT)` bound to the URL's `?team=` (`hooks/useBlueprintParam.ts`'s
 internal `useUrlParam` generalized to also export `useTeamParam` — the `?blueprint=` sibling);
 `hooks/useEntities.ts` and `api/entities.ts#listEntities`/`getEntityGraph` thread `team` through
-to the server's own EFFECTIVE-team-or-self-`_team`-match filter.
+to the server's own EFFECTIVE-team-or-self-`_team`-match filter. Since v1.30.0 that server-side
+match already covers Inherited ownership (the team computed along `ownership.path`, the same
+value the Team chip shows), so neither this filter nor the Entity graph's own Team filter below
+carries a caveat about Inherited rows going missing from a team-filtered list or graph.
 
 ## Computed properties (v1.27.0)
 

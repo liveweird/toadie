@@ -1,13 +1,16 @@
-import { createTeamEntity, expect, login, readyDialog, test, uniqueText } from "./helpers";
+import { createTeamEntity, expect, login, openFilters, readyDialog, test, uniqueText } from "./helpers";
 
 // Instances of a blueprint (Port migration phase 2): two throwaway blueprints are seeded via
 // the API (a target carrying typed properties AND Direct ownership, a dependent carrying a
 // required relation to it) -> the Entities list's blueprint picker (?blueprint=) and
 // New-entity validation -> an entity is created with an enum/number/boolean property and a
 // team picked in the "Owned by" MultiSelect (Phase 4 ownership, v1.26.0), watching the JSON
-// preview -> the row's Team chip, the toolbar Team filter (?team=), the owned team's blocked
-// (409) then unblocked (204, after unlinking in the editor) delete -> a second entity relates
-// to the first -> deleting the referenced entity is blocked, naming the referrer -> editing
+// preview -> the row's Team chip, the toolbar Team filter (?team=) -> a throwaway
+// INHERITED-ownership blueprint/entity relating to the first entity (v1.30.0): the Team filter
+// AND the Entity graph's own Team filter both match its COMPUTED team, the same one its row's
+// chip shows, never a stored one -> the owned team's blocked (409) then unblocked (204, after
+// unlinking in the editor) delete -> a second entity relates to the first -> deleting the
+// referenced entity is blocked, naming the referrer -> editing
 // the target blueprint to add a required property turns the first entity STALE (the list's
 // findings badge) -> the editor's stale alert names the missing field, fixed and saved, clears
 // it -> computed properties (phase 5, v1.27.0): the target blueprint gains a colorized
@@ -21,8 +24,9 @@ import { createTeamEntity, expect, login, readyDialog, test, uniqueText } from "
 // has no admin gate, so the whole journey runs as the seed admin (no throwaway user needed). The
 // blueprint registry is shared
 // run-state and THIS SPEC IS ONE OF ITS TWO IN-RUN WRITERS (alongside blueprints.spec.ts) — it
-// only ever creates and deletes its own unique `e2e-ent-bp-*` blueprints, `e2e-ent-*` entities,
-// and one throwaway `e2e-ent-team-*` `_team` entity (never a foreign `_team`/`_user` row).
+// only ever creates and deletes its own unique `e2e-ent-bp-*`/`e2e-ent-inh-*` blueprints,
+// `e2e-ent-*` entities, and one throwaway `e2e-ent-team-*` `_team` entity (never a foreign
+// `_team`/`_user` row).
 test("an entity is created from a blueprint, a relation blocks its deletion, and a blueprint change makes it stale until fixed", async ({
   page,
 }) => {
@@ -43,6 +47,11 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
   // makes its entities Direct-owned, so entity A can name this team.
   const teamIdentifier = uniqueText("e2e-ent-team");
   const teamTitle = "E2E Entity Team";
+  // A throwaway INHERITED-ownership blueprint (v1.30.0): a `parent` relation to the target
+  // blueprint above plus `ownership: { type: "Inherited", path: "parent" }`, and one entity of
+  // it relating to entity A — its team is computed by walking that relation, never stored.
+  const inhIdentifier = uniqueText("e2e-ent-inh");
+  const inhEntityIdentifier = `${inhIdentifier}-1`;
 
   const targetProperties = {
     tier: { type: "string", title: "Tier", enum: ["gold", "silver"] },
@@ -55,6 +64,8 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
   let entityAId: number | undefined;
   let entityBId: number | undefined;
   let teamEntityId: number | undefined;
+  let inhBlueprintId: number | undefined;
+  let inhEntityId: number | undefined;
   // Set once the computed-property PUTs below land, so `finally` knows to restore the target
   // blueprint's pre-computed definition before the ordinary entity/blueprint cleanup.
   let computedAdded = false;
@@ -169,6 +180,81 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     await teamFilterSelect.fill(teamIdentifier);
     await page.getByRole("option", { name: `${teamIdentifier} — ${teamTitle}`, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`team=${teamIdentifier}`));
+    await expect(entityARow).toBeVisible();
+
+    // 3c. Ownership can also be INHERITED (v1.30.0): seed the throwaway blueprint above (a
+    // relation to the target blueprint, `ownership.path` naming it) and one entity of it
+    // relating to entity A — no `team` in the request, since an Inherited entity never stores
+    // one.
+    const inhBlueprintResp = await page.request.post("/api/v1/blueprints", {
+      headers: authHeaders,
+      data: {
+        identifier: inhIdentifier,
+        title: "E2E Entity Inherited",
+        schema: { properties: {}, required: [] },
+        relations: {
+          parent: { title: "Parent", target: targetIdentifier, required: false, many: false },
+        },
+        ownership: { type: "Inherited", path: "parent" },
+      },
+    });
+    expect(inhBlueprintResp.status()).toBe(201);
+    inhBlueprintId = (await inhBlueprintResp.json()).id;
+
+    const inhEntityResp = await page.request.post("/api/v1/entities", {
+      headers: authHeaders,
+      data: {
+        blueprint: inhIdentifier,
+        identifier: inhEntityIdentifier,
+        title: "E2E Entity Inherited One",
+        relations: { parent: entityAIdentifier },
+      },
+    });
+    expect(inhEntityResp.status()).toBe(201);
+    inhEntityId = (await inhEntityResp.json()).id;
+
+    // 3d. The toolbar Team filter must ALSO match the inherited entity — the same computed
+    // team its row's Team chip shows, not only a directly stored one. Switching the blueprint
+    // Select preserves the `?team=` param already set above (independent URL slots); the
+    // Inherited entity lives under a DIFFERENT blueprint than entity A, so this list — which
+    // always shows one blueprint at a time — proves both rows separately rather than side by
+    // side. The blueprint was created through the API AFTER this page loaded its blueprint
+    // list, so reload first: the Select's options come from that cached query.
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Entities" })).toBeVisible();
+    await blueprintSelect.click();
+    await blueprintSelect.fill(inhIdentifier);
+    await page.getByRole("option", { name: inhIdentifier, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`blueprint=${inhIdentifier}`));
+    await expect(page).toHaveURL(new RegExp(`team=${teamIdentifier}`));
+    const inhEntityRow = page.getByRole("row").filter({ hasText: inhEntityIdentifier });
+    await expect(inhEntityRow).toBeVisible();
+    await expect(inhEntityRow.getByText(teamIdentifier, { exact: true })).toBeVisible();
+
+    // Clearing the filter doesn't gate the row on it — it stays visible either way. Mantine
+    // renders the Select's clear button aria-hidden (mouse-only), so target the attribute
+    // directly (the entity-graph.spec.ts idiom).
+    await page.locator('button[aria-label="Clear team filter"]').click();
+    await expect(inhEntityRow).toBeVisible();
+
+    // 3e. The Entity graph's OWN Team filter must match the same inherited team, alongside the
+    // Direct-owned entity and the team node itself.
+    await page.goto("/entity-graph");
+    await expect(page.getByRole("heading", { name: "Entity graph" })).toBeVisible();
+    await openFilters(page);
+    const entityGraphTeamFilter = page.getByRole("combobox", { name: "Team", exact: true });
+    await entityGraphTeamFilter.click();
+    await entityGraphTeamFilter.fill(teamIdentifier);
+    await page.getByRole("option", { name: `${teamIdentifier} — ${teamTitle}`, exact: true }).click();
+    await expect(page.getByText(entityAIdentifier, { exact: true })).toBeVisible();
+    await expect(page.getByText(inhEntityIdentifier, { exact: true })).toBeVisible();
+    await expect(page.getByText(teamIdentifier, { exact: true })).toBeVisible();
+
+    // Back to the Entities page, target blueprint + team filter — where the rest of this
+    // journey continues (the blocked/unblocked team delete just below).
+    await page.goto(
+      `/entities?blueprint=${encodeURIComponent(targetIdentifier)}&team=${encodeURIComponent(teamIdentifier)}`,
+    );
     await expect(entityARow).toBeVisible();
 
     const blockedTeamDelete = await page.request.delete(`/api/v1/entities/${teamEntityId}`, {
@@ -394,6 +480,22 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
         restoredTarget.status(),
         "cleanup: restore the target blueprint before deleting its aggregation target",
       ).toBe(204);
+    }
+
+    // The Inherited-ownership entity also relates to entity A — remove it (and its blueprint,
+    // which also targets the target blueprint) BEFORE the ordinary cleanup below, or entity
+    // A's delete would be blocked by this referrer too.
+    if (inhEntityId) {
+      const deletedInh = await page.request.delete(`/api/v1/entities/${inhEntityId}`, { headers: authHeaders });
+      expect(deletedInh.status(), "cleanup: delete the inherited-ownership entity before its parent target").toBe(
+        204,
+      );
+    }
+    if (inhBlueprintId) {
+      const deletedInhBp = await page.request.delete(`/api/v1/blueprints/${inhBlueprintId}`, {
+        headers: authHeaders,
+      });
+      expect(deletedInhBp.status(), "cleanup: delete the inherited-ownership blueprint before its target").toBe(204);
     }
 
     // Cleanup: entities first (the referring one before the referenced one), then blueprints

@@ -362,10 +362,59 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
             (Entities.blueprintId eq teamBlueprint.id) and (LowerCase(Entities.identifier) eq stringParam(value.lowercase()))
         }
 
-    private fun teamPredicate(team: String, blueprintsByIdentifierFolded: Map<String, ActiveBlueprint>): Op<Boolean> {
+    /**
+     * ONE SQL predicate covering all three ways a row matches `team`: the STORED
+     * `Entities.team` column (Direct/absent ownership), the `_team` self-match, and —
+     * v1.30.0 — an explicit `id IN (…)` disjunct for Inherited rows whose EFFECTIVE team was
+     * resolved in memory by [inheritedTeamMatches] over the same committed read. The `IN`
+     * disjunct is added only when [inheritedIds] is non-empty, so an entirely Direct/absent
+     * scope never renders `id IN ()`. `count()`/paging/sort stay pure SQL either way.
+     */
+    private fun teamPredicate(
+        team: String,
+        blueprintsByIdentifierFolded: Map<String, ActiveBlueprint>,
+        inheritedIds: List<UInt>,
+    ): Op<Boolean> {
         val membership = Entities.team.jsonStringOrArrayContainsFolded(team)
         val selfMatch = teamSelfMatch(team, blueprintsByIdentifierFolded)
-        return if (selfMatch == null) membership else membership or selfMatch
+        var predicate = if (selfMatch == null) membership else membership or selfMatch
+        if (inheritedIds.isNotEmpty()) {
+            predicate = predicate or (Entities.id inList inheritedIds)
+        }
+        return predicate
+    }
+
+    /**
+     * Resolves which of [candidates]' active entities have an EFFECTIVE team ([effectiveTeam])
+     * matching [team] — the read-side counterpart of the Inherited ownership rule
+     * (`entities/EntityOwnership.kt`): Inherited blueprints store no `team` column at all, so
+     * the SQL predicate above can never see them. Runs INSIDE the caller's existing plain read
+     * transaction (no extra lock), over the SAME [loadSnapshot] every other read builds, so a
+     * multi-hop Inherited chain resolves without querying the database mid-walk. Returns
+     * `emptyList()` — with NO query issued — when no candidate blueprint is Inherited, so an
+     * all-Direct/absent scope pays nothing extra.
+     */
+    private suspend fun inheritedTeamMatches(
+        team: String,
+        candidates: List<ActiveBlueprint>,
+        blueprintsByIdentifier: Map<String, ActiveBlueprint>,
+    ): List<UInt> {
+        val inherited = candidates.filter { isInherited(it.definition) }
+        if (inherited.isEmpty()) return emptyList()
+        val inheritedById = inherited.associateBy { it.id }
+        val definitionsByIdentifier = blueprintsByIdentifier.mapValues { it.value.definition }
+        val snapshot = loadSnapshot(inherited.map { it.definition }, blueprintsByIdentifier, computed = false)
+        return Entities.selectAll().where { (Entities.blueprintId inList inherited.map { it.id }) and active() }
+            .map { row ->
+                val definition = inheritedById.getValue(row[Entities.blueprintId].value).definition
+                val document = blueprintJson.decodeFromString<EntityDocument>(row[Entities.document])
+                val storedTeam = row[Entities.team]?.let { blueprintJson.decodeFromString<JsonElement>(it) }
+                val effective = effectiveTeam(storedTeam, document, definition, definitionsByIdentifier, snapshot.rowLookup)
+                row[Entities.id].value to effective
+            }
+            .toList()
+            .filter { (_, effective) -> teamValueMatches(effective, team) }
+            .map { it.first }
     }
 
     private data class Materialized<T>(val payload: T, val context: EntityContext)
@@ -374,6 +423,10 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
      * `q` substring-matches identifier OR title; an unknown `blueprint` identifier is empty
      * (never a 404/400). Rows and the snapshot materialize inside ONE transaction; computed
      * properties evaluate over them AFTER it closes (choice 1, `.claude/docs/persistence.md`).
+     * `team` matches the EFFECTIVE team (v1.30.0): [inheritedTeamMatches] resolves the matching
+     * Inherited entity ids from the SAME committed read first, then folds them into the ONE
+     * SQL [predicate] via [teamPredicate] — `count()` and the page rows stay one shared
+     * predicate, so `total`/paging never disagree with the Inherited half of the match.
      */
     suspend fun list(filter: EntityFilter, paging: PageRequest): EntityListResult {
         val now = System.currentTimeMillis()
@@ -394,7 +447,11 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
             filter.q?.let { q ->
                 predicate = predicate and (Entities.identifier.containsNormalized(q) or Entities.title.containsNormalized(q))
             }
-            filter.team?.let { team -> predicate = predicate and teamPredicate(team, blueprintsByIdentifierFolded) }
+            if (filter.team != null && !unknownBlueprint) {
+                val candidates = filterBlueprint?.let { listOf(it) } ?: activeBlueprints
+                val inheritedIds = inheritedTeamMatches(filter.team, candidates, blueprintsByIdentifier)
+                predicate = predicate and teamPredicate(filter.team, blueprintsByIdentifierFolded, inheritedIds)
+            }
 
             val total = if (unknownBlueprint) 0L else joined().selectAll().where { predicate }.count()
             val rows = if (unknownBlueprint) {
@@ -420,7 +477,10 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
      * the rows the filter shows — an edge needs both ends shown, so a hidden row can never
      * contribute a node or an edge (`catalog/Graph.kt`'s rule, one level down) — with no
      * users join (the graph never needs creator display fields). Ownership edges follow the
-     * SAME both-ends rule via [EntityGraphSource.team], the EFFECTIVE team.
+     * SAME both-ends rule via [EntityGraphSource.team], the EFFECTIVE team. `team` matches that
+     * SAME effective value (v1.30.0) — [inheritedTeamMatches] resolves the Inherited half over
+     * the candidate blueprints the `blueprints` filter already narrowed to, folded into the ONE
+     * SQL predicate the same way [list] does.
      */
     suspend fun graph(filter: EntityGraphFilter): EntityGraph = suspendTransaction(database) {
         val activeBlueprints = loadActiveBlueprints()
@@ -430,13 +490,20 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
         val blueprintsByIdentifierFolded = activeBlueprints.associateBy { it.identifier.lowercase() }
 
         var predicate: Op<Boolean> = active()
+        val candidates: List<ActiveBlueprint>
         if (filter.blueprints.isNotEmpty()) {
-            val ids = filter.blueprints.mapNotNull { blueprintsByIdentifierFolded[it.lowercase()]?.id }.distinct()
-            if (ids.isEmpty()) return@suspendTransaction EntityGraph(emptyList(), emptyList())
-            predicate = predicate and (Entities.blueprintId inList ids)
+            val resolved = filter.blueprints.mapNotNull { blueprintsByIdentifierFolded[it.lowercase()] }.distinct()
+            if (resolved.isEmpty()) return@suspendTransaction EntityGraph(emptyList(), emptyList())
+            predicate = predicate and (Entities.blueprintId inList resolved.map { it.id })
+            candidates = resolved
+        } else {
+            candidates = activeBlueprints
         }
         filter.q?.let { q -> predicate = predicate and (Entities.identifier.containsNormalized(q) or Entities.title.containsNormalized(q)) }
-        filter.team?.let { team -> predicate = predicate and teamPredicate(team, blueprintsByIdentifierFolded) }
+        filter.team?.let { team ->
+            val inheritedIds = inheritedTeamMatches(team, candidates, blueprintsByIdentifier)
+            predicate = predicate and teamPredicate(team, blueprintsByIdentifierFolded, inheritedIds)
+        }
 
         data class RawSource(
             val id: UInt,

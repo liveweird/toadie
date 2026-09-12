@@ -19,6 +19,7 @@ import ch.nokillswit.entities.effectiveTeam
 import ch.nokillswit.entities.inheritedTeam
 import ch.nokillswit.entities.isInherited
 import ch.nokillswit.entities.ownershipPathBlueprints
+import ch.nokillswit.entities.teamValueMatches
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -231,6 +232,17 @@ class EntityOwnershipTest {
             ownership = OwnershipDefinition(type = "Inherited", path = "service"),
         )
         assertEquals(emptySet(), ownershipPathBlueprints(manyHopDef, emptyMap()))
+    }
+
+    @Test
+    fun `teamValueMatches is the in-memory twin of the SQL team predicate`() {
+        assertTrue(teamValueMatches(JsonPrimitive("t-a"), "t-a"))
+        assertTrue(teamValueMatches(JsonPrimitive("T-A"), "t-a"))
+        assertTrue(teamValueMatches(JsonArray(listOf(JsonPrimitive("t-b"), JsonPrimitive("t-a"))), "t-a"))
+        assertFalse(teamValueMatches(JsonArray(listOf(JsonPrimitive("t-b"), JsonPrimitive("t-c"))), "t-a"))
+        assertFalse(teamValueMatches(null, "t-a"))
+        assertFalse(teamValueMatches(JsonPrimitive(1), "t-a"))
+        assertFalse(teamValueMatches(buildJsonObject { put("k", "v") }, "t-a"))
     }
 
     // -------------------------------------------------------------------------------------

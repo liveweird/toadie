@@ -69,7 +69,10 @@ The lock-mode compatibility and transaction lifetime follow the
 **Ownership storage rule (v1.26.0, phase 4).** An entity's `entities.team` column is NULL when
 the blueprint has `ownership: { type: Inherited }` (the computed `team` is never stored) and
 MUST carry a value when Direct/absent (the stored `team` field). The rule is enforced during
-entity write validation.
+entity write validation. This storage rule is unchanged by the v1.30.0 read-side `team` filter:
+`EntityService.inheritedTeamMatches` resolves Inherited teams in memory over the SAME snapshot
+`loadSnapshot` builds, costing one extra bounded query per team-filtered request over the
+in-scope Inherited blueprints' entities, and none at all when no Inherited blueprint is in scope.
 
 **Computed-property evaluation and the widened snapshot (phase 5, v1.27.0).**
 `EntityService.loadSnapshot(definitions, blueprintsByIdentifier, computed)` widens the same

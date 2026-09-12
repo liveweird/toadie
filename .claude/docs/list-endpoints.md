@@ -24,10 +24,12 @@
 after the catalog files list: sortable-field whitelist `identifier`, `title`, `updatedAt`
 (default `identifier` ascending, `id` tiebreaker appended), the `blueprint` equality filter
 (exact, case-insensitive match against the blueprint identifier), the `team` equality filter
-(v1.26.0 — exact, case-insensitive match of the scalar search term against a stored JSON
-string OR array column, e.g. via `jsonStringOrArrayContainsFolded`; only Direct/absent
-ownership entities match; Inherited entities carry no stored team — documented limitation),
-and `q` — the free-text filter over `identifier` OR `title` via `containsNormalized`. Computed
+(v1.26.0 — exact, case-insensitive match against the entity's EFFECTIVE team: the stored value
+for Direct/absent ownership via `jsonStringOrArrayContainsFolded`, or — v1.30.0 —
+`EntityService.inheritedTeamMatches` resolves the matching ids for Inherited ownership from the
+same committed read and folds them into the ONE SQL predicate as `id IN (…)`, so `total`/paging
+stay in SQL; no extra query runs when no Inherited blueprint is in scope), and `q` — the
+free-text filter over `identifier` OR `title` via `containsNormalized`. Computed
 properties (phase 5, v1.27.0 — `mirrorProperties`/`calculationProperties`/`aggregationProperties`)
 are evaluated only in the response body and are never stored, so `q`, sort, and every filter
 above see the entity's STORED fields only — a computed value can never be searched, sorted, or

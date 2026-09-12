@@ -222,7 +222,9 @@ ownership is computed at read time by walking the `path` over single-valued rela
 blueprint with Direct ownership; `path` is a dot-chain of relation identifiers (first must be
 this blueprint's), and the final `team` is never stored (the column stays NULL). Absent = no
 ownership constraint. **Ownership is informational only — it never gates permissions.** Any
-authenticated user may read/modify any entity regardless of its ownership.
+authenticated user may read/modify any entity regardless of its ownership. The entity list/graph
+`team` filter (v1.30.0) follows this SAME `path` walk to match against the effective team it
+displays — an Inherited entity whose path does not resolve has no team and never matches.
 
 ## Entities (phase 2, v1.24.0)
 
@@ -451,13 +453,15 @@ Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's ow
   node. Each node carries `findings` as a plain COUNT (not the detailed list `GET`/list return)
   of the same `entityFindings` computation — the stale marker, condensed for a graph face.
 
-  **Ownership edges** (v1.26.0, phase 4): when an entity carries a `team` value and that node
-  is shown in the graph, one edge is emitted per team value to the corresponding `_team|<id>`
-  node (if also shown). The edge carries `ownership: true, hierarchy: false`. A `_team` node
-  also matches a `team` filter (single value, case-insensitive), so a team-filtered graph
-  retains the team nodes to close ownership relations — **Inherited entities carry no stored
-  `team` and never match the team filter** (documented limitation; a renamed or deleted `_team`
-  affects inherited entities' stale findings, not their graph presence).
+  **Ownership edges** (v1.26.0, phase 4): when an entity carries an EFFECTIVE team value and
+  that node is shown in the graph, one edge is emitted per team value to the corresponding
+  `_team|<id>` node (if also shown). The edge carries `ownership: true, hierarchy: false`. A
+  `_team` node also matches a `team` filter (single value, case-insensitive), so a
+  team-filtered graph retains the team nodes to close ownership relations — since v1.30.0 the
+  `team` filter matches an Inherited entity's EFFECTIVE team too (the same `ownership.path`
+  walk the list uses), so it can appear in a team-filtered graph; a renamed or deleted `_team`
+  affects inherited entities' stale findings AND their graph presence (an unresolvable path
+  has no team and is dropped from a team-filtered graph).
 
 ## System blueprints (V31)
 

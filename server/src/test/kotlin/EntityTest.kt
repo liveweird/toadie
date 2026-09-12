@@ -7,6 +7,7 @@ import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.CalculationPropertyDefinition
 import ch.nokillswit.blueprints.MirrorPropertyDefinition
+import ch.nokillswit.blueprints.OwnershipDefinition
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
@@ -755,6 +756,126 @@ class EntityTest {
         } finally {
             TestEntities.remove(e1, e2, e3, t1, t2)
             TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `list and graph filter by the effective team of Inherited entities`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-inh-team", UserRole.ADMIN)
+        val pBp = unique("bp-inh2-p")
+        val cBp = unique("bp-inh2-c")
+        val gBp = unique("bp-inh2-g")
+        val teamA = unique("team-inh2-a")
+        val teamB = unique("team-inh2-b")
+        val p1 = unique("ent-inh2-p1")
+        val p2 = unique("ent-inh2-p2")
+        val c1 = unique("ent-inh2-c1")
+        val c2 = unique("ent-inh2-c2")
+        val c3 = unique("ent-inh2-c3")
+        val g1 = unique("ent-inh2-g1")
+        try {
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = pBp, title = "T", schema = BlueprintSchema(),
+                    ownership = OwnershipDefinition(type = "Direct"),
+                ),
+            )
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = cBp,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("parent" to RelationDefinition(title = "Parent", target = pBp, required = false, many = false)),
+                    ownership = OwnershipDefinition(type = "Inherited", path = "parent"),
+                ),
+            )
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = gBp,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("owner" to RelationDefinition(title = "Owner", target = cBp, required = false, many = false)),
+                    ownership = OwnershipDefinition(type = "Inherited", path = "owner.parent"),
+                ),
+            )
+            client.postJson("/api/v1/entities", teamEntity(teamA))
+            client.postJson("/api/v1/entities", teamEntity(teamB))
+            client.postJson(
+                "/api/v1/entities",
+                EntityRequest(blueprint = pBp, identifier = p1, title = "T", team = JsonPrimitive(teamA)),
+            )
+            client.postJson(
+                "/api/v1/entities",
+                EntityRequest(blueprint = pBp, identifier = p2, title = "T", team = JsonPrimitive(teamB)),
+            )
+            client.postJson(
+                "/api/v1/entities",
+                EntityRequest(blueprint = cBp, identifier = c1, title = "T", relations = buildJsonObject { put("parent", p1) }),
+            )
+            client.postJson(
+                "/api/v1/entities",
+                EntityRequest(blueprint = cBp, identifier = c2, title = "T", relations = buildJsonObject { put("parent", p2) }),
+            )
+            client.postJson("/api/v1/entities", EntityRequest(blueprint = cBp, identifier = c3, title = "T"))
+            client.postJson(
+                "/api/v1/entities",
+                EntityRequest(blueprint = gBp, identifier = g1, title = "T", relations = buildJsonObject { put("owner", c1) }),
+            )
+
+            val expected = setOf(teamA, p1, c1, g1)
+
+            val byTeamA = client.get("/api/v1/entities?team=$teamA").body<EntityPageResponse>()
+            assertEquals(expected, byTeamA.items.map { it.identifier }.toSet())
+            assertEquals(4L, byTeamA.total)
+
+            // Case-folded.
+            val byTeamAUpper = client.get("/api/v1/entities?team=${teamA.uppercase()}").body<EntityPageResponse>()
+            assertEquals(expected, byTeamAUpper.items.map { it.identifier }.toSet())
+
+            // Every returned Inherited row's team field equals the filter value.
+            listOf(c1, g1).forEach { id ->
+                val item = byTeamA.items.single { it.identifier == id }
+                assertEquals(teamA, item.team?.jsonPrimitive?.content)
+            }
+
+            val byTeamAndC = client.get("/api/v1/entities?team=$teamA&blueprint=$cBp").body<EntityPageResponse>()
+            assertEquals(listOf(c1), byTeamAndC.items.map { it.identifier })
+
+            val byTeamAndP = client.get("/api/v1/entities?team=$teamA&blueprint=$pBp").body<EntityPageResponse>()
+            assertEquals(listOf(p1), byTeamAndP.items.map { it.identifier })
+
+            assertTrue(byTeamA.items.none { it.identifier == c2 || it.identifier == c3 })
+
+            val page1 = client.get("/api/v1/entities?team=$teamA&pageSize=2&page=1").body<EntityPageResponse>()
+            val page2 = client.get("/api/v1/entities?team=$teamA&pageSize=2&page=2").body<EntityPageResponse>()
+            assertEquals(4L, page1.total)
+            assertEquals(4L, page2.total)
+            assertEquals(expected, (page1.items + page2.items).map { it.identifier }.toSet())
+
+            val graph = client.get("/api/v1/entities/graph?team=$teamA").body<EntityGraph>()
+            assertEquals(
+                setOf("$pBp|$p1", "$cBp|$c1", "$gBp|$g1", "$SYSTEM_TEAM_BLUEPRINT|$teamA"),
+                graph.nodes.map { it.id }.toSet(),
+            )
+            assertTrue(graph.edges.any { it.sourceId == "$cBp|$c1" && it.targetId == "$pBp|$p1" && !it.ownership })
+            assertTrue(graph.edges.any { it.sourceId == "$gBp|$g1" && it.targetId == "$cBp|$c1" && !it.ownership })
+            assertTrue(
+                graph.edges.any {
+                    it.sourceId == "$cBp|$c1" && it.targetId == "$SYSTEM_TEAM_BLUEPRINT|$teamA" && it.ownership
+                },
+            )
+
+            // The filter follows the walk: once p1's team changes, c1/g1 no longer match teamA.
+            client.putJson(
+                "/api/v1/entities/${byTeamA.items.single { it.identifier == p1 }.id}",
+                EntityRequest(blueprint = pBp, identifier = p1, title = "T", team = JsonPrimitive(teamB)),
+            )
+            val afterChange = client.get("/api/v1/entities?team=$teamA").body<EntityPageResponse>()
+            assertTrue(afterChange.items.none { it.identifier == c1 || it.identifier == g1 })
+        } finally {
+            TestEntities.remove(g1, c1, c2, c3, p1, p2, teamA, teamB)
+            TestBlueprints.remove(gBp, cBp, pBp)
         }
     }
 
