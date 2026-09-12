@@ -1,6 +1,7 @@
 package ch.nokillswit.catalog
 
 import ch.nokillswit.authz.BadGatewayException
+import ch.nokillswit.infra.concurrency.awaitBounded
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
 import java.io.ByteArrayOutputStream
@@ -15,9 +16,7 @@ import java.net.URISyntaxException
 import java.net.UnknownHostException
 import java.time.Duration
 import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executor
-import java.util.concurrent.FutureTask
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
@@ -25,10 +24,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.net.SocketFactory
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import okhttp3.Authenticator
@@ -215,38 +211,15 @@ class CatalogUrlFetcher internal constructor(
         }
     }
 
-    private suspend fun executeBounded(rawUrl: String): FetchedContent = suspendCancellableCoroutine { continuation ->
+    /** The cancellation/rejection bridge itself lives in [ch.nokillswit.infra.concurrency.awaitBounded]. */
+    private suspend fun executeBounded(rawUrl: String): FetchedContent {
         val operation = FetchOperation(rawUrl, targetResolver, timeout, customizeClient)
-        val task = object : FutureTask<FetchedContent>(operation::execute) {
-            override fun done() {
-                if (!continuation.isActive) return
-                try {
-                    continuation.resume(get())
-                } catch (_: java.util.concurrent.CancellationException) {
-                    // The coroutine cancellation handler owns this outcome.
-                } catch (cause: ExecutionException) {
-                    continuation.resumeWithException(cause.cause ?: cause)
-                } catch (cause: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    continuation.resumeWithException(FetchUnavailableException())
-                }
-            }
-        }
-        continuation.invokeOnCancellation {
-            operation.cancel()
-            task.cancel(true)
-            (fetchExecutor as? ThreadPoolExecutor)?.remove(task)
-        }
-        try {
-            if (continuation.isActive) {
-                fetchExecutor.execute(task)
-                // Cancellation can win between the pre-submit check and queue insertion.
-                if (task.isCancelled) (fetchExecutor as? ThreadPoolExecutor)?.remove(task)
-            }
+        return try {
+            fetchExecutor.awaitBounded(onCancel = operation::cancel) { operation.execute() }
         } catch (_: RejectedExecutionException) {
-            operation.cancel()
-            task.cancel(true)
-            if (continuation.isActive) continuation.resumeWithException(FetchUnavailableException())
+            throw FetchUnavailableException()
+        } catch (_: InterruptedException) {
+            throw FetchUnavailableException()
         }
     }
 }
