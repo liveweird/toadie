@@ -5,7 +5,7 @@ import OverwriteWithYamlModal, { type OverwriteTarget } from "./OverwriteWithYam
 import type { CatalogFileRequest } from "../api/catalogFiles";
 import { jsonResponse } from "../test/http";
 import { catalogFileResponse } from "../test/fixtures";
-import { renderWithProviders, settleButtonTransition } from "../test/render";
+import { renderWithProviders } from "../test/render";
 import { catalogInfoYaml } from "../utils/catalogYaml";
 
 const TOKEN_KEY = "toadie.auth.token";
@@ -80,7 +80,6 @@ describe("OverwriteWithYamlModal", () => {
     await user.paste(text);
   };
 
-  // Drained via the shared settleButtonTransition (src/test/render.tsx) — see its KDoc.
 
   test("stays closed without a file", () => {
     render(null);
@@ -132,7 +131,6 @@ describe("OverwriteWithYamlModal", () => {
     // The reference must survive: PUT is a full replace, so an omitted sourceUrl would
     // silently unlink the file from its repo and reset the sync state.
     expect(body.sourceUrl).toBe("https://example.com/catalog-info.yaml");
-    await settleButtonTransition();
   });
 
   test("unparsable YAML is refused and the confirm stays disabled", async () => {
@@ -176,7 +174,6 @@ describe("OverwriteWithYamlModal", () => {
     await user.click(await screen.findByRole("button", { name: "Overwrite stored copy" }));
     expect(await screen.findByText("Overwrite failed")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
-    await settleButtonTransition();
   });
 
   test("picking a file loads its text into the editor", async () => {
@@ -253,7 +250,6 @@ describe("OverwriteWithYamlModal", () => {
     };
     expect(body.spec.definition).toBe(replacement.spec.definition);
     expect(body.sourceUrl).toBe(STORED.sourceUrl);
-    await settleButtonTransition();
   });
 
   test("Esc cannot dismiss the modal mid-overwrite; it closes once the PUT settles", async () => {
@@ -281,6 +277,5 @@ describe("OverwriteWithYamlModal", () => {
 
     releasePut(new Response(null, { status: 204 }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    await settleButtonTransition();
   });
 });

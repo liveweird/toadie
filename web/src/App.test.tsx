@@ -14,7 +14,7 @@ function renderApp(route: string) {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <MantineProvider env="test">
+    <MantineProvider env="test" theme={{ respectReducedMotion: true }}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[route]}>
           <App />
