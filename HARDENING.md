@@ -522,6 +522,21 @@ the historical PR failure remains recorded above pending hosted verification of 
 Controller installation/cutover is a cluster-level action: inventory existing workloads first
 (Lettuce may share the controller), and do not remove a controller another app still needs.
 
+### Container posture
+
+The runtime image drops root: `Dockerfile`'s `runtime` stage creates a dedicated `app` user
+(uid 10001) after copying the server distribution and SPA assets, then switches to it with
+`USER app` before `ENTRYPOINT` — the process never runs, and never needs to run, as root
+(port 8081 is unprivileged and the app writes nowhere outside `/app`). Both the build-stage
+JDK and the runtime-stage JRE are pinned to the exact `mise.toml` Temurin patch
+(`eclipse-temurin:21.0.11_10-jdk`/`-jre`, not the floating `21-jdk`/`21-jre` tags), so the two
+stages are provably the same Java build rather than whatever "21" resolves to on a given pull;
+`web/src/test/infrastructure.test.js` pins both the non-root `USER` line and tag parity with
+`mise.toml`. `docker-compose.yaml`'s `app` service gained a `healthcheck` against `/readyz`
+(the same k8s readiness endpoint, `curl --fail`, 10s interval/12 retries/30s start period),
+so `docker compose up` surfaces a slow or crash-looping app as an unhealthy container instead
+of a silently-accepting-connections one.
+
 ## Stage 5 — selective refactoring
 
 - [x] Extract graph persistence into a dedicated hook as part of Stage 3.

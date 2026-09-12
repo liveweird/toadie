@@ -1,4 +1,14 @@
-import { expect, login, openFilters, pickLifecycle, pickType, rowOperation, test, uniqueText } from "./helpers";
+import {
+  expect,
+  login,
+  openFilters,
+  pickLifecycle,
+  pickType,
+  rowOperation,
+  test,
+  uniqueText,
+  waitForApi,
+} from "./helpers";
 
 // The Errors-report journey on two throwaway unique-named files. Saves are strict by DEFAULT
 // but waivable: a soft rejection opens the Save-anyway modal, and a waived save lands the
@@ -20,12 +30,11 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
   await pickType(page, "service");
   await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+  const [targetCreated] = await Promise.all([
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(targetCreated.status()).toBe(201);
 
   // The source: first a SELF-reference — flagged live, and the strict save opens the
   // Save-anyway modal (an entity may never reference itself, saved or not). Cancel keeps
@@ -116,12 +125,11 @@ test("an unresolved reference asks for confirmation; saving anyway lands it on t
   await pickType(page, "service");
   await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+  const [recreated] = await Promise.all([
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(recreated.status()).toBe(201);
 
   await page.goto("/errors");
   // The summary renders once the report has loaded; the unique ref must now be absent.

@@ -5,6 +5,7 @@ import SyncCatalogFileModal from "./SyncCatalogFileModal";
 import { pickRepoDocument } from "../utils/catalogImport";
 import type { CatalogFileListItem, CatalogFileRequest } from "../api/catalogFiles";
 import { jsonResponse } from "../test/http";
+import { catalogFileListItem, catalogFileResponse } from "../test/fixtures";
 import { renderWithProviders } from "../test/render";
 import { catalogInfoYaml } from "../utils/catalogYaml";
 
@@ -14,38 +15,29 @@ type FetchMock = ReturnType<typeof vi.fn>;
 
 const SOURCE_URL = "https://raw.githubusercontent.com/acme/svc/main/catalog-info.yaml";
 
-const FILE: CatalogFileListItem = {
+const FILE: CatalogFileListItem = catalogFileListItem({
   id: 1,
-  kind: "Component",
   name: "svc",
-  namespace: "default",
   title: "Old title",
-  type: "service",
-  lifecycle: "production",
   owner: "group:default/platform",
-  tags: [],
   creatorName: "Alice",
-  creatorDeleted: false,
   updatedAt: 2000,
   sourceUrl: SOURCE_URL,
   lastSyncedAt: 1000,
-};
+});
 
 const SPEC = { type: "service", lifecycle: "production", owner: "group:default/platform" };
 
-const DETAIL = {
+const DETAIL = catalogFileResponse({
   id: 1,
-  kind: "Component",
   metadata: { name: "svc", namespace: "default", title: "Old title" },
   spec: SPEC,
-  createdBy: 1,
   creatorName: "Alice",
-  creatorDeleted: false,
   createdAt: 500,
   updatedAt: 2000,
   sourceUrl: SOURCE_URL,
   lastSyncedAt: 1000,
-};
+});
 
 const SYNC_STATE = {
   sourceUrl: SOURCE_URL,

@@ -4,15 +4,15 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import EditCatalogFile from "./EditCatalogFile";
 import { jsonResponse } from "../test/http";
+import { catalogFileResponse } from "../test/fixtures";
 import { renderWithProviders } from "../test/render";
 
 const TOKEN_KEY = "toadie.auth.token";
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
-const STORED_FILE = {
+const STORED_FILE = catalogFileResponse({
   id: 7,
-  kind: "Component",
   metadata: {
     name: "stored-svc",
     namespace: "team-a",
@@ -34,14 +34,10 @@ const STORED_FILE = {
     dependsOn: [],
     dependencyOf: [],
   },
-  createdBy: 1,
   creatorName: "Alice",
-  creatorDeleted: false,
   createdAt: 1000,
   updatedAt: 2000,
-  sourceUrl: null,
-  lastSyncedAt: 0,
-};
+});
 
 function PathProbe() {
   const location = useLocation();

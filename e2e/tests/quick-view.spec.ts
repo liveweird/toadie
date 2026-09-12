@@ -1,5 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, login, openFilters, pickNamespace, rowOperation, runNamespace, test, uniqueText } from "./helpers";
+import {
+  expect,
+  login,
+  openFilters,
+  pickNamespace,
+  rowOperation,
+  runNamespace,
+  test,
+  uniqueText,
+  waitForApi,
+} from "./helpers";
 
 // The quick-view drawer (v1.21.0): a file's summary/findings/YAML beside the Files list,
 // addressed by ?file=<id>. Owns exactly one throwaway System in the render run namespace.
@@ -14,10 +24,11 @@ test("the quick-view drawer opens from a row, survives a reload, and hands over 
   await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
   await pickNamespace(page, ns);
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
-  await Promise.all([
-    page.waitForResponse((r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok()),
+  const [created] = await Promise.all([
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   await expect(page).toHaveURL(/\/files$/);
 
   await openFilters(page);

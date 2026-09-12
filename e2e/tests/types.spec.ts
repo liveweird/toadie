@@ -9,6 +9,7 @@ import {
   signOut,
   test,
   uniqueText,
+  waitForApi,
 } from "./helpers";
 
 // The type-dictionary journey. The dictionaries are per-kind SINGLETONS seeded by V15 and
@@ -73,11 +74,10 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   await pickType(page, extraType);
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
   const [created] = await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   const fileId: number = (await created.json()).id;
 
   // Cleanup: the file, the appended type (Backspace removes the last TagsInput value —

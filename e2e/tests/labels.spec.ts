@@ -10,6 +10,7 @@ import {
   signOut,
   test,
   uniqueText,
+  waitForApi,
 } from "./helpers";
 
 // The label-registry journey on a throwaway key (unique per attempt, so retries never
@@ -93,11 +94,10 @@ test("admin curates the label registry; a regular user reads it; the editor enfo
   await page.getByRole("option", { name: "backend", exact: true }).click();
   await expect(page.getByLabel("YAML preview")).toContainText(`${key}: backend`);
   const [created] = await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   const fileId: number = (await created.json()).id;
 
   // The list's label filters find the file: the key alone keeps it, a non-matching value

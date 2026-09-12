@@ -53,7 +53,7 @@
   "changeFailedStatus": "Change failed ({{status}})",
   "changeFailedNetwork": "Change failed. Check your connection and try again.",
   "toast": {
-    "updated": "User updated",
+    "saved": "User updated",
     "deleted": "User deleted",
     "passwordChangedSignIn": "Password changed. Sign in again on each device.",
     "featuresSaved": "Feature flags saved"

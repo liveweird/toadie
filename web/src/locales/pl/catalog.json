@@ -3,8 +3,8 @@
   "createFile": "Nowy plik katalogu",
   "editFile": "Edytuj plik katalogu",
   "noFiles": "Brak plików katalogu",
-  "deleteModalTitle": "Usunąć plik katalogu?",
-  "deleteTitle": "Usunąć plik katalogu \"{{name}}\" (przestrzeń nazw {{namespace}})?",
+  "deleteTitle": "Usunąć plik katalogu?",
+  "deleteBody": "Usunąć plik katalogu \"{{name}}\" (przestrzeń nazw {{namespace}})?",
   "deleteUndone": "Tej operacji nie można cofnąć.",
   "loadFailed": "Nie udało się wczytać plików katalogu",
   "deleteFailed": "Nie udało się usunąć pliku katalogu",
@@ -115,7 +115,7 @@
   "conflictError": "Aktywny plik o tej przestrzeni nazw i nazwie już istnieje.",
   "toast": {
     "created": "Utworzono plik katalogu",
-    "updated": "Zaktualizowano plik katalogu",
+    "saved": "Zaktualizowano plik katalogu",
     "deleted": "Usunięto plik katalogu",
     "synced": "Plik zsynchronizowany z repozytorium",
     "overwritten": "Plik nadpisany"

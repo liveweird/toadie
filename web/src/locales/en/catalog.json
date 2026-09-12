@@ -3,8 +3,8 @@
   "createFile": "New catalog file",
   "editFile": "Edit catalog file",
   "noFiles": "No catalog files",
-  "deleteModalTitle": "Delete catalog file?",
-  "deleteTitle": "Delete catalog file \"{{name}}\" (namespace {{namespace}})?",
+  "deleteTitle": "Delete catalog file?",
+  "deleteBody": "Delete catalog file \"{{name}}\" (namespace {{namespace}})?",
   "deleteUndone": "This cannot be undone.",
   "loadFailed": "Failed to load catalog files",
   "deleteFailed": "Failed to delete catalog file",
@@ -115,7 +115,7 @@
   "conflictError": "An active file with this namespace and name already exists.",
   "toast": {
     "created": "Catalog file created",
-    "updated": "Catalog file updated",
+    "saved": "Catalog file updated",
     "deleted": "Catalog file deleted",
     "synced": "File synced from repo",
     "overwritten": "File overwritten"

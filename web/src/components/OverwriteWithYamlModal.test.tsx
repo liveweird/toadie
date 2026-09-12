@@ -4,6 +4,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import OverwriteWithYamlModal, { type OverwriteTarget } from "./OverwriteWithYamlModal";
 import type { CatalogFileRequest } from "../api/catalogFiles";
 import { jsonResponse } from "../test/http";
+import { catalogFileResponse } from "../test/fixtures";
 import { renderWithProviders } from "../test/render";
 import { catalogInfoYaml } from "../utils/catalogYaml";
 
@@ -13,19 +14,16 @@ type FetchMock = ReturnType<typeof vi.fn>;
 
 const TARGET: OverwriteTarget = { id: 1, kind: "Component", name: "svc", namespace: "default" };
 
-const STORED = {
+const STORED = catalogFileResponse({
   id: 1,
-  kind: "Component",
   metadata: { name: "svc", namespace: "default", title: "Old title" },
   spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
-  createdBy: 1,
   creatorName: "Alice",
-  creatorDeleted: false,
   createdAt: 500,
   updatedAt: 2000,
   sourceUrl: "https://example.com/catalog-info.yaml",
   lastSyncedAt: 1000,
-};
+});
 
 const yaml = (title: string, name = "svc") =>
   [

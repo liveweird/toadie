@@ -318,7 +318,7 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     await page.goto(`/entities?blueprint=${encodeURIComponent(targetIdentifier)}`);
     await expect(entityARow).toBeVisible();
     await page.getByRole("button", { name: `Delete ${entityAIdentifier}` }).click();
-    await readyDialog(page, "Delete entity");
+    await readyDialog(page, "Delete entity?");
     const [blockedDelete] = await Promise.all([
       page.waitForResponse(
         (r) => r.url().endsWith(`/api/v1/entities/${entityAId}`) && r.request().method() === "DELETE",

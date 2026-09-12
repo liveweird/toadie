@@ -1,4 +1,17 @@
-import { createUserViaUi, expect, login, openFilters, pickLifecycle, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
+import {
+  createUserViaUi,
+  expect,
+  login,
+  openFilters,
+  pickLifecycle,
+  pickNamespace,
+  pickType,
+  rowOperation,
+  runNamespace,
+  test,
+  uniqueText,
+  waitForApi,
+} from "./helpers";
 
 type LayoutDocument = {
   mode: "auto" | "manual";
@@ -35,10 +48,7 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
   const fileIds: Record<string, string> = {};
   try {
     await login(page, user.email, user.password);
-    const created = () =>
-      page.waitForResponse(
-        (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-      );
+    const created = () => waitForApi(page, { method: "POST", path: "/api/v1/files" });
 
     // The System first (type is optional for Systems — left blank): A will belong to it, which
     // is what makes it collapsible on the canvas.
@@ -49,6 +59,7 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     await pickNamespace(page, ns);
     await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
     const [sysCreated] = await Promise.all([created(), page.getByRole("button", { name: "Create" }).click()]);
+    expect(sysCreated.status()).toBe(201);
     fileIds[sys] = (await sysCreated.json()).id;
 
     // Then the targets (B in the OTHER namespace, the doomed ghost here), then A — in the
@@ -71,6 +82,7 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
         await page.keyboard.press("Enter");
       }
       const [fileCreated] = await Promise.all([created(), page.getByRole("button", { name: "Create" }).click()]);
+      expect(fileCreated.status()).toBe(201);
       fileIds[name] = (await fileCreated.json()).id;
     }
 

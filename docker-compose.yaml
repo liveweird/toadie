@@ -67,6 +67,15 @@ services:
     # Ceiling for the tuned JVM (SerialGC + -Xmx256m + C1, baked into bin/server): ~270 MiB RSS
     # under light load, so 512 MiB leaves comfortable headroom and bounds the container.
     mem_limit: 512m
+    healthcheck:
+      # eclipse-temurin's -jre base ships curl (verified: `docker run --rm eclipse-temurin:...-jre
+      # which curl`), so probe the same /readyz the k8s Deployment uses (see k8s/app-deployment.yaml)
+      # rather than reaching for a JVM-based check that would need its own JWT/DB wiring.
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "2", "http://localhost:8081/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
 
 volumes:
   postgres-data:

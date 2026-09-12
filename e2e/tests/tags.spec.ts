@@ -10,6 +10,7 @@ import {
   signOut,
   test,
   uniqueText,
+  waitForApi,
 } from "./helpers";
 
 // The tag-category journey on a throwaway category (unique name and tags per attempt, so
@@ -93,11 +94,10 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   await page.getByRole("option", { name: tagA, exact: true }).click();
   await expect(page.getByLabel("YAML preview")).toContainText(`- ${tagA}`);
   const [created] = await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   const fileId: number = (await created.json()).id;
 
   // Cleanup: the file, the category, and the throwaway user.

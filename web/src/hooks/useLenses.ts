@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { getLenses, type Lens } from "../api/lenses";
+import { useRegistryQuery } from "./useRegistryQuery";
 
 /**
  * One cached query for the lenses visible to the caller (their own + everyone's public
@@ -10,11 +10,8 @@ export function useLenses(): {
   lenses: Lens[];
   loading: boolean;
   error: boolean;
+  /** The load failure itself (for loadErrorMessage); null while healthy. */
+  loadError: unknown;
 } {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["lenses"],
-    queryFn: getLenses,
-    staleTime: 5 * 60 * 1000,
-  });
-  return { lenses: data ?? [], loading: isLoading, error: isError };
+  return useRegistryQuery(["lenses"], getLenses, "lenses");
 }

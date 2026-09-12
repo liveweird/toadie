@@ -78,7 +78,7 @@
     "count_many": "{{count}} ustaleń",
     "count_other": "{{count}} ustalenia"
   },
-  "deleteTitle": "Usuń encję",
+  "deleteTitle": "Usunąć encję?",
   "deleteBody": "Usunąć encję „{{identifier}}”? Tej operacji nie można cofnąć.",
   "deleteFailed": "Usuwanie nie powiodło się",
   "deleteConflict": "Ta encja jest nadal celem relacji innej encji.",

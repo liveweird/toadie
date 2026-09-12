@@ -327,11 +327,11 @@ export default function Hierarchy() {
 
       <ConfirmDeleteModal
         confirm={deleteConfirm}
-        title={t("catalog.deleteModalTitle")}
+        title={t("catalog.deleteTitle")}
         errorTitle={t("catalog.deleteFailed")}
         body={(target) => (
           <>
-            {t("catalog.deleteTitle", { name: target.name, namespace: target.namespace })}{" "}
+            {t("catalog.deleteBody", { name: target.name, namespace: target.namespace })}{" "}
             {t("catalog.deleteUndone")}
           </>
         )}

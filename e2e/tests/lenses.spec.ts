@@ -1,4 +1,15 @@
-import { expect, login, openFilters, pickLifecycle, pickType, readyDialog, rowOperation, test, uniqueText } from "./helpers";
+import {
+  expect,
+  login,
+  openFilters,
+  pickLifecycle,
+  pickType,
+  readyDialog,
+  rowOperation,
+  test,
+  uniqueText,
+  waitForApi,
+} from "./helpers";
 
 // The Lenses journey on two throwaway unique-named files: save the current filters as a
 // named lens on Files, apply it on Hierarchy, Graph, and Errors (lenses are shared between
@@ -21,9 +32,7 @@ test("a saved lens applies the same filters on Hierarchy, Files, Graph, and Erro
     await pickLifecycle(page, "production");
     await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
     const [created] = await Promise.all([
-      page.waitForResponse(
-        (r) => new URL(r.url()).pathname === "/api/v1/files" && r.request().method() === "POST",
-      ),
+      waitForApi(page, { method: "POST", path: "/api/v1/files" }),
       page.getByRole("button", { name: "Create" }).click(),
     ]);
     expect(created.status()).toBe(201);

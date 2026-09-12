@@ -17,6 +17,24 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.30.3",
+    date: "2026-09-12",
+    en: `**Checkup refactors.**
+
+- Saving a user's feature flags twice at once (the bulk Feature flags screen does this) can no longer collide and fail; the last save wins cleanly.
+- Label keys, annotation keys and type values reject control characters with the same message every other field uses.
+- The entity delete confirmation is now phrased as a question like its siblings.
+- The app container runs as a non-root user, pins its Java base image to the exact toolchain version, and reports its own health to Compose.
+- Under the hood: shared lock, validation and query helpers replace copy-pasted ones on the server and in the SPA; stricter static-analysis rules; browser-journey response waits go through one helper.`,
+    pl: `**Refaktoryzacje po przeglądzie.**
+
+- Dwukrotny równoczesny zapis flag funkcji użytkownika/użytkowniczki (robi to zbiorczy ekran Flagi funkcji) nie może już kolidować i kończyć się błędem; ostatni zapis wygrywa.
+- Klucze etykiet, klucze adnotacji i wartości typów odrzucają znaki sterujące tym samym komunikatem, co każde inne pole.
+- Potwierdzenie usunięcia encji jest teraz pytaniem, tak jak u sąsiednich ekranów.
+- Kontener aplikacji działa jako użytkownik nie-root, przypina obraz bazowy Javy do dokładnej wersji narzędzi i raportuje własny stan zdrowia do Compose.
+- Pod maską: wspólne pomocniki blokad, walidacji i zapytań zastępują skopiowane fragmenty na serwerze i w SPA; ostrzejsze reguły analizy statycznej; oczekiwanie na odpowiedzi w scenariuszach przeglądarkowych idzie przez jeden pomocnik.`,
+  },
+  {
     version: "1.30.2",
     date: "2026-09-12",
     en: `**Checkup fixes.**

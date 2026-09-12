@@ -160,7 +160,7 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
     // 6. Deleting p1 from its row menu is refused (409): it is still targeted by c1/c2's
     // `parent` relation, and the confirm dialog names that.
     await rowOperation(page, p1Title, "Delete");
-    await readyDialog(page, "Delete entity");
+    await readyDialog(page, "Delete entity?");
     const [blockedDelete] = await Promise.all([
       page.waitForResponse(
         (r) => r.url().endsWith(`/api/v1/entities/${p1EntityId}`) && r.request().method() === "DELETE",

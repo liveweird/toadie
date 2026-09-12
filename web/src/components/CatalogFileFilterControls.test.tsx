@@ -3,61 +3,58 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import CatalogFileFilterControls from "./CatalogFileFilterControls";
 import CatalogKindPills from "./CatalogKindPills";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
-import { jsonResponse } from "../test/http";
+import { mockFetch } from "../test/http";
+import { catalogFileListItem, pageOf } from "../test/fixtures";
 import { renderWithProviders } from "../test/render";
-
-type FetchMock = ReturnType<typeof vi.fn>;
 
 const VIEW_KEY = "filterControlsTest";
 const STORE_PREFIX = `toadie.viewSettings.${VIEW_KEY}.filter`;
 
 // The option sources the controls load: registries, dictionaries, and the identity pool.
-const RESPONSES: [string, unknown][] = [
-  ["/api/v1/dictionaries/namespaces", { items: [{ id: 1, value: "default", isDefault: true }] }],
-  ["/api/v1/dictionaries/lifecycles", { items: [{ id: 1, value: "production", isDefault: false }] }],
-  [
-    "/api/v1/entity-types",
-    {
-      items: [
-        { id: 1, kind: "Component", types: ["service", "library"] },
-        { id: 2, kind: "API", types: ["openapi", "service"] },
-      ],
+const ROUTES = [
+  { match: /^\/api\/v1\/dictionaries\/namespaces/, respond: { status: 200, body: { items: [{ id: 1, value: "default", isDefault: true }] } } },
+  { match: /^\/api\/v1\/dictionaries\/lifecycles/, respond: { status: 200, body: { items: [{ id: 1, value: "production", isDefault: false }] } } },
+  {
+    match: /^\/api\/v1\/entity-types/,
+    respond: {
+      status: 200,
+      body: {
+        items: [
+          { id: 1, kind: "Component", types: ["service", "library"] },
+          { id: 2, kind: "API", types: ["openapi", "service"] },
+        ],
+      },
     },
-  ],
-  ["/api/v1/labels", { items: [{ id: 1, key: "example.com/tier", values: ["backend", "edge"], kinds: ["Component"] }] }],
-  ["/api/v1/tag-categories", { items: [{ id: 1, name: "Tech", tags: ["java"], kinds: ["Component"] }] }],
-  [
-    "/api/v1/files",
-    {
-      items: [
-        {
-          id: 7,
-          kind: "Group",
-          name: "platform",
-          namespace: "default",
-          title: null,
-          type: "team",
-          lifecycle: null,
-          owner: null,
-          tags: [],
-          creatorName: "A",
-          creatorDeleted: false,
-          updatedAt: 1,
-        },
-      ],
-      page: 1,
-      pageSize: 100,
-      total: 1,
+  },
+  {
+    match: /^\/api\/v1\/labels/,
+    respond: { status: 200, body: { items: [{ id: 1, key: "example.com/tier", values: ["backend", "edge"], kinds: ["Component"] }] } },
+  },
+  {
+    match: /^\/api\/v1\/tag-categories/,
+    respond: { status: 200, body: { items: [{ id: 1, name: "Tech", tags: ["java"], kinds: ["Component"] }] } },
+  },
+  {
+    match: /^\/api\/v1\/files/,
+    respond: {
+      status: 200,
+      body: pageOf(
+        [
+          catalogFileListItem({
+            id: 7,
+            kind: "Group",
+            name: "platform",
+            type: "team",
+            lifecycle: null,
+            creatorName: "A",
+            updatedAt: 1,
+          }),
+        ],
+        { pageSize: 100 },
+      ),
     },
-  ],
+  },
 ];
-
-function stubFetch(mockFetch: FetchMock) {
-  mockFetch.mockImplementation((url: string) => {
-    const hit = RESPONSES.find(([prefix]) => url.startsWith(prefix));
-    return Promise.resolve(hit ? jsonResponse(200, hit[1]) : jsonResponse(404, {}));
-  });
-}
 
 /** The full filter surface (pills + controls) over the real hook, derived outputs probed. */
 function Harness() {
@@ -81,13 +78,9 @@ async function pickOption(label: string, option: string) {
 }
 
 describe("CatalogFileFilterControls + useCatalogFileFilterState", () => {
-  let mockFetch: FetchMock;
-
   beforeEach(() => {
-    mockFetch = vi.fn();
-    vi.stubGlobal("fetch", mockFetch);
+    vi.stubGlobal("fetch", mockFetch(ROUTES));
     localStorage.setItem("toadie.auth.token", "fake-token");
-    stubFetch(mockFetch);
   });
 
   afterEach(() => {

@@ -787,8 +787,8 @@ function jsonFieldRule(value: string, t: TFunction): string | null {
   return safeJsonParse(value) === undefined ? t("blueprints.validation.jsonInvalid") : null;
 }
 
-/** Validation rules for the create/edit page (mirrors the server's checks). */
-export function blueprintFormValidation(t: TFunction) {
+/** The blueprint's own identity fields: identifier/title/description/icon. */
+function identityRules(t: TFunction) {
   return {
     identifier: (value: string) => (isValidBlueprintIdentifier(value.trim()) ? null : t("blueprints.validation.identifier")),
     title: (value: string) => {
@@ -798,81 +798,95 @@ export function blueprintFormValidation(t: TFunction) {
     description: (value: string) =>
       value.length <= MAX_DESCRIPTION_LENGTH ? null : t("blueprints.validation.descriptionLength"),
     icon: (value: string) => (value.length <= MAX_ICON_LENGTH ? null : t("blueprints.validation.iconLength")),
-    properties: {
-      id: (value: string, values: BlueprintFormValues, path: string) => {
-        const v = value.trim();
-        if (!isValidBlueprintIdentifier(v)) return t("blueprints.validation.propertyId");
-        return isDuplicatePropertyId(values, "properties", rowIndex(path), v)
-          ? t("blueprints.validation.propertyIdDuplicate")
-          : null;
-      },
-      title: (value: string) => (value.trim() ? null : t("blueprints.validation.required")),
-      pattern: (value: string, values: BlueprintFormValues, path: string) => {
-        const draft = values.properties[rowIndex(path)];
-        if (!draft || draft.type !== "string" || !value.trim()) return null;
-        if (value.length > MAX_PATTERN_LENGTH) return t("blueprints.validation.patternLength");
-        try {
-          new RegExp(value);
-          return null;
-        } catch {
-          return t("blueprints.validation.patternInvalid");
-        }
-      },
-      minLength: (value: string, values: BlueprintFormValues, path: string) =>
-        minMaxRule(values.properties[rowIndex(path)], value, values.properties[rowIndex(path)]?.maxLength ?? "", t),
-      minimum: (value: string, values: BlueprintFormValues, path: string) =>
-        minMaxRule(values.properties[rowIndex(path)], value, values.properties[rowIndex(path)]?.maximum ?? "", t),
-      minItems: (value: string, values: BlueprintFormValues, path: string) =>
-        minMaxRule(values.properties[rowIndex(path)], value, values.properties[rowIndex(path)]?.maxItems ?? "", t),
-      exclusiveMinimum: (value: string, values: BlueprintFormValues, path: string) => {
-        const draft = values.properties[rowIndex(path)];
-        if (!draft || draft.type !== "number") return null;
-        if (draft.minimum.trim() && value.trim()) return t("blueprints.validation.exclusiveConflict");
-        return minMaxRule(draft, value, draft.exclusiveMaximum, t);
-      },
-      exclusiveMaximum: (value: string, values: BlueprintFormValues, path: string) => {
-        const draft = values.properties[rowIndex(path)];
-        if (!draft || draft.type !== "number") return null;
-        return draft.maximum.trim() && value.trim() ? t("blueprints.validation.exclusiveConflict") : null;
-      },
-      enumValues: (value: string[], values: BlueprintFormValues, path: string) => {
-        const draft = values.properties[rowIndex(path)];
-        if (!draft || (draft.type !== "string" && draft.type !== "number") || value.length === 0) return null;
-        if (value.length > MAX_ENUM_VALUES) return t("blueprints.validation.enumCount");
-        if (draft.type === "number" && value.some((v) => Number.isNaN(Number(v.trim())))) {
-          return t("blueprints.validation.enumNumber");
-        }
-        const folded = value.map((v) => v.trim());
-        return folded.length === new Set(folded).size ? null : t("blueprints.validation.enumDuplicate");
-      },
-      defaultText: (value: string, values: BlueprintFormValues, path: string) => {
-        const draft = values.properties[rowIndex(path)];
-        if (!draft || !value.trim()) return null;
-        if (draft.type === "number" && Number.isNaN(Number(value.trim()))) return t("blueprints.validation.defaultNumber");
-        if (draft.type === "object") return jsonFieldRule(value, t);
-        if (draft.enumValues.length > 0 && !draft.enumValues.includes(value.trim())) {
-          return t("blueprints.validation.defaultNotInEnum");
-        }
+  };
+}
+
+/** The `schema.properties` rows: id/title/pattern/min-max pairs/enum/default/object schema. */
+function propertyRules(t: TFunction) {
+  return {
+    id: (value: string, values: BlueprintFormValues, path: string) => {
+      const v = value.trim();
+      if (!isValidBlueprintIdentifier(v)) return t("blueprints.validation.propertyId");
+      return isDuplicatePropertyId(values, "properties", rowIndex(path), v)
+        ? t("blueprints.validation.propertyIdDuplicate")
+        : null;
+    },
+    title: (value: string) => (value.trim() ? null : t("blueprints.validation.required")),
+    pattern: (value: string, values: BlueprintFormValues, path: string) => {
+      const draft = values.properties[rowIndex(path)];
+      if (!draft || draft.type !== "string" || !value.trim()) return null;
+      if (value.length > MAX_PATTERN_LENGTH) return t("blueprints.validation.patternLength");
+      try {
+        new RegExp(value);
         return null;
-      },
-      objectSchemaJson: (value: string, values: BlueprintFormValues, path: string) => {
-        const draft = values.properties[rowIndex(path)];
-        return draft?.type === "object" ? jsonFieldRule(value, t) : null;
-      },
+      } catch {
+        return t("blueprints.validation.patternInvalid");
+      }
     },
-    relations: {
-      id: (value: string, values: BlueprintFormValues, path: string) => {
-        const v = value.trim();
-        if (!isValidBlueprintIdentifier(v)) return t("blueprints.validation.relationId");
-        return isDuplicateRelationId(values, rowIndex(path), v) ? t("blueprints.validation.relationIdDuplicate") : null;
-      },
-      title: (value: string) => (value.trim() ? null : t("blueprints.validation.required")),
-      target: (value: string) => (value.trim() ? null : t("blueprints.validation.targetRequired")),
-      many: (value: boolean, values: BlueprintFormValues, path: string) => {
-        const draft = values.relations[rowIndex(path)];
-        return draft?.required && value ? t("blueprints.validation.relationRequiredMany") : null;
-      },
+    minLength: (value: string, values: BlueprintFormValues, path: string) =>
+      minMaxRule(values.properties[rowIndex(path)], value, values.properties[rowIndex(path)]?.maxLength ?? "", t),
+    minimum: (value: string, values: BlueprintFormValues, path: string) =>
+      minMaxRule(values.properties[rowIndex(path)], value, values.properties[rowIndex(path)]?.maximum ?? "", t),
+    minItems: (value: string, values: BlueprintFormValues, path: string) =>
+      minMaxRule(values.properties[rowIndex(path)], value, values.properties[rowIndex(path)]?.maxItems ?? "", t),
+    exclusiveMinimum: (value: string, values: BlueprintFormValues, path: string) => {
+      const draft = values.properties[rowIndex(path)];
+      if (!draft || draft.type !== "number") return null;
+      if (draft.minimum.trim() && value.trim()) return t("blueprints.validation.exclusiveConflict");
+      return minMaxRule(draft, value, draft.exclusiveMaximum, t);
     },
+    exclusiveMaximum: (value: string, values: BlueprintFormValues, path: string) => {
+      const draft = values.properties[rowIndex(path)];
+      if (!draft || draft.type !== "number") return null;
+      return draft.maximum.trim() && value.trim() ? t("blueprints.validation.exclusiveConflict") : null;
+    },
+    enumValues: (value: string[], values: BlueprintFormValues, path: string) => {
+      const draft = values.properties[rowIndex(path)];
+      if (!draft || (draft.type !== "string" && draft.type !== "number") || value.length === 0) return null;
+      if (value.length > MAX_ENUM_VALUES) return t("blueprints.validation.enumCount");
+      if (draft.type === "number" && value.some((v) => Number.isNaN(Number(v.trim())))) {
+        return t("blueprints.validation.enumNumber");
+      }
+      const folded = value.map((v) => v.trim());
+      return folded.length === new Set(folded).size ? null : t("blueprints.validation.enumDuplicate");
+    },
+    defaultText: (value: string, values: BlueprintFormValues, path: string) => {
+      const draft = values.properties[rowIndex(path)];
+      if (!draft || !value.trim()) return null;
+      if (draft.type === "number" && Number.isNaN(Number(value.trim()))) return t("blueprints.validation.defaultNumber");
+      if (draft.type === "object") return jsonFieldRule(value, t);
+      if (draft.enumValues.length > 0 && !draft.enumValues.includes(value.trim())) {
+        return t("blueprints.validation.defaultNotInEnum");
+      }
+      return null;
+    },
+    objectSchemaJson: (value: string, values: BlueprintFormValues, path: string) => {
+      const draft = values.properties[rowIndex(path)];
+      return draft?.type === "object" ? jsonFieldRule(value, t) : null;
+    },
+  };
+}
+
+/** The `relations` rows: id/title/target/the required+many conflict. */
+function relationRules(t: TFunction) {
+  return {
+    id: (value: string, values: BlueprintFormValues, path: string) => {
+      const v = value.trim();
+      if (!isValidBlueprintIdentifier(v)) return t("blueprints.validation.relationId");
+      return isDuplicateRelationId(values, rowIndex(path), v) ? t("blueprints.validation.relationIdDuplicate") : null;
+    },
+    title: (value: string) => (value.trim() ? null : t("blueprints.validation.required")),
+    target: (value: string) => (value.trim() ? null : t("blueprints.validation.targetRequired")),
+    many: (value: boolean, values: BlueprintFormValues, path: string) => {
+      const draft = values.relations[rowIndex(path)];
+      return draft?.required && value ? t("blueprints.validation.relationRequiredMany") : null;
+    },
+  };
+}
+
+/** The three computed-property families (mirror/calculation/aggregation, phase 5's vocabulary). */
+function computedRules(t: TFunction) {
+  return {
     mirrorProperties: {
       id: (value: string, values: BlueprintFormValues, path: string) => {
         const v = value.trim();
@@ -928,10 +942,28 @@ export function blueprintFormValidation(t: TFunction) {
       queryJson: (value: string) => jsonFieldRule(value, t),
       pathFilterJson: (value: string) => jsonFieldRule(value, t),
     },
+  };
+}
+
+/** The `ownershipPath` field: only required/checked while `ownershipType === "Inherited"`. */
+function ownershipRules(t: TFunction) {
+  return {
     ownershipPath: (value: string, values: BlueprintFormValues) =>
       values.ownershipType === "Inherited"
         ? pathRule(value, new Set(values.relations.map((r) => r.id.trim())), t)
         : null,
+  };
+}
+
+/** Validation rules for the create/edit page (mirrors the server's checks), composed from the
+ *  per-family rule sets above. */
+export function blueprintFormValidation(t: TFunction) {
+  return {
+    ...identityRules(t),
+    properties: propertyRules(t),
+    relations: relationRules(t),
+    ...computedRules(t),
+    ...ownershipRules(t),
   };
 }
 

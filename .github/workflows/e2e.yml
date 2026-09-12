@@ -28,6 +28,9 @@ jobs:
 
       - name: Install e2e deps
         working-directory: e2e
+        # No --legacy-peer-deps here: that flag is a web/-only workaround (openapi-typescript's
+        # TS ^5 peer range vs. the SPA's TS 6, see CLAUDE.md); e2e/package.json has no such
+        # conflict, so a plain install is the documented command for this workspace.
         run: npm ci
 
       - name: Check TypeScript and scenario parity

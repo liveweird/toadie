@@ -10,6 +10,7 @@ const composeSource = readFileSync(resolve(repoRoot, "docker-compose.yaml"), "ut
 const ciSource = readFileSync(resolve(repoRoot, ".github/workflows/ci.yml"), "utf8");
 const e2eSource = readFileSync(resolve(repoRoot, ".github/workflows/e2e.yml"), "utf8");
 const toolchainSource = readFileSync(resolve(repoRoot, "mise.toml"), "utf8");
+const dockerfileSource = readFileSync(resolve(repoRoot, "Dockerfile"), "utf8");
 
 describe("deployment and verification safety defaults", () => {
   it("uses the full Temurin version from the local toolchain in CI", () => {
@@ -60,5 +61,29 @@ describe("deployment and verification safety defaults", () => {
     expect(cleanup?.if).toBe("${{ always() }}");
     expect(cleanup?.run).toBe("docker compose -p toadie-ci down --volumes --remove-orphans");
     expect(steps.some((step) => step.run?.includes("npm run typecheck && npm run check:scenarios"))).toBe(true);
+  });
+
+  it("runs the container as a non-root user", () => {
+    const runtimeStage = dockerfileSource.slice(dockerfileSource.indexOf("AS runtime"));
+    const userLine = runtimeStage.match(/^USER\s+(\S+)$/m)?.[1];
+    expect(userLine).toBeTruthy();
+    expect(userLine).not.toBe("root");
+  });
+
+  it("pins both Temurin build and runtime tags to the local toolchain's exact patch", () => {
+    const localVersion = toolchainSource.match(/^java = "temurin-([^"]+)"$/m)?.[1];
+    expect(localVersion).toBeTruthy();
+    // mise.toml spells "21.0.11+10.0.LTS"; Docker Hub's eclipse-temurin tags spell the same
+    // build as "21.0.11_10" (underscore, LTS suffix dropped) — reduce both to that form.
+    const dockerTag = localVersion.replace("+", "_").replace(/\.\d+\.LTS$/, "");
+    const buildTags = [...dockerfileSource.matchAll(/eclipse-temurin:(\S+)-(?:jdk|jre)/g)].map((m) => m[1]);
+    expect(buildTags).toHaveLength(2); // the server build stage and the runtime stage
+    for (const tag of buildTags) expect(tag).toBe(dockerTag);
+  });
+
+  it("gives the compose app service a container healthcheck", () => {
+    const compose = parse(composeSource);
+    expect(compose.services.app.healthcheck).toBeTruthy();
+    expect(compose.services.app.healthcheck.test).toBeTruthy();
   });
 });

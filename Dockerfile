@@ -19,7 +19,10 @@ RUN GIT_SHA=$(git rev-parse --short HEAD) \
     npm run build
 
 # ── Stage 2: build the server distribution ────────────────────────────────────
-FROM eclipse-temurin:21-jdk AS server
+# Pinned to the mise.toml patch (temurin-21.0.11+10.0.LTS → the Docker Hub tag's underscore
+# separator) so the build-stage JDK and the runtime-stage JRE below are provably the same
+# Java build, not just "21-jdk"/"21-jre" floating tags that can drift apart between pulls.
+FROM eclipse-temurin:21.0.11_10-jdk AS server
 WORKDIR /src
 # Copy build scripts + wrapper first so the Gradle distribution download caches.
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
@@ -38,11 +41,18 @@ COPY server/src/ server/src/
 RUN ./gradlew :server:installDist --no-daemon
 
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
-# The same JDK line as the build stage, mise.toml and jvmToolchain(21): one Java everywhere.
-FROM eclipse-temurin:21-jre AS runtime
+# The same pinned JDK/JRE build as the build stage (mise.toml and jvmToolchain(21)): one Java
+# version everywhere, tag-pinned rather than trusting "21-jre" to keep meaning the same bytes.
+FROM eclipse-temurin:21.0.11_10-jre AS runtime
+# Non-root runtime user: the base image's default user is root, and the application never
+# needs to bind a privileged port (8081) or write outside its own install directory. Created
+# BEFORE the COPYs so `--chown` sets ownership in the copy layers themselves — a trailing
+# `chown -R` would duplicate the whole install into one more layer under overlay2.
+RUN useradd --uid 10001 --user-group --home-dir /app --no-create-home --shell /usr/sbin/nologin app
 WORKDIR /app
-COPY --from=server /src/server/build/install/server/ ./
-COPY --from=web /web/dist web
+COPY --chown=app:app --from=server /src/server/build/install/server/ ./
+COPY --chown=app:app --from=web /web/dist web
+USER app
 ENV WEB_STATIC_DIR=/app/web
 # The shipped image runs in production mode: the JWT-secret and seed-password fail-closed
 # checks are active, and HSTS + HTTPS redirect are on. Local demos (docker-compose.yaml)

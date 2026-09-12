@@ -53,6 +53,9 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: web/package-lock.json
+      # --legacy-peer-deps is required here: openapi-typescript declares TS ^5 as a peer while
+      # web/ uses TS 6 (see CLAUDE.md's web/ install command); e2e/'s plain `npm ci` has no such
+      # conflict, so that workflow deliberately omits the flag.
       - run: npm ci --legacy-peer-deps
         working-directory: web
       - name: Check API contract and generated types

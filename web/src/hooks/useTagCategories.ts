@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { getTagCategories, type TagCategory } from "../api/tagCategories";
+import { useRegistryQuery } from "./useRegistryQuery";
 
 /**
  * One cached query for the tag categories (the ["tagCategories"] key is shared with
@@ -12,10 +12,5 @@ export function useTagCategories(): {
   /** The load failure itself (for loadErrorMessage); null while healthy. */
   loadError: unknown;
 } {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["tagCategories"],
-    queryFn: getTagCategories,
-    staleTime: 5 * 60 * 1000,
-  });
-  return { categories: data ?? [], loading: isLoading, error: isError, loadError: error };
+  return useRegistryQuery(["tagCategories"], getTagCategories, "categories");
 }

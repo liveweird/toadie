@@ -1,6 +1,20 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type Response } from "@playwright/test";
 
 export { expect, test };
+
+/**
+ * Wait for one API response by exact path and method. Deliberately does NOT bake a status
+ * check into the predicate (`.claude/docs/testing.md`: "assert status OUTSIDE the predicate so
+ * a failed response fails directly instead of timing out") — a `waitForResponse` predicate that
+ * requires `r.ok()` keeps waiting past an error response with the same path/method, so a real
+ * failure surfaces only as a confusing timeout instead of a clear status mismatch. Matches the
+ * response's URL by exact `pathname` (never a substring/suffix check, which can also match an
+ * unrelated longer path) and returns the raw `Response`; callers assert
+ * `expect(response.status()).toBe(...)` (or `.ok()`) immediately after resolving.
+ */
+export function waitForApi(page: Page, { method, path }: { method: string; path: string }): Promise<Response> {
+  return page.waitForResponse((r) => new URL(r.url()).pathname === path && r.request().method() === method);
+}
 
 /**
  * Visibility alone does not mean a Mantine dialog finished entering: opacity zero still

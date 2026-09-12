@@ -71,7 +71,7 @@ export default function EditUser() {
       }
       await queryClient.invalidateQueries({ queryKey: ["users"] });
       await queryClient.invalidateQueries({ queryKey: ["user", id] });
-      showSuccessToast(t("users.toast.updated"));
+      showSuccessToast(t("users.toast.saved"));
       navigate("/users", { replace: true });
     } catch (err) {
       setError(

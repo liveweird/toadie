@@ -10,6 +10,7 @@ import {
   signOut,
   test,
   uniqueText,
+  waitForApi,
 } from "./helpers";
 
 // The annotation-key-registry journey on a throwaway key (unique per attempt, so retries
@@ -91,11 +92,10 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
   await page.getByLabel("Annotations Value 1").fill("any free text: works/here too");
   await expect(page.getByLabel("YAML preview")).toContainText(key);
   const [created] = await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-    ),
+    waitForApi(page, { method: "POST", path: "/api/v1/files" }),
     page.getByRole("button", { name: "Create" }).click(),
   ]);
+  expect(created.status()).toBe(201);
   const fileId: number = (await created.json()).id;
 
   // Cleanup: the file, the key, and the throwaway user.

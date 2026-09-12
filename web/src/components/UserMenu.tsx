@@ -68,7 +68,11 @@ export default function UserMenu() {
   function pickLanguage(lng: string) {
     void i18n.changeLanguage(lng);
     if (userId !== null) {
-      setUserLanguage(userId, lng).catch((e: unknown) => console.error("Language sync failed", e));
+      // Best-effort: the switch already applied locally (i18n.changeLanguage above); a failed
+      // server sync just means the choice doesn't persist across devices/sessions this time,
+      // not a user-facing error worth a toast (there is no error-toast surface — errors stay
+      // inline elsewhere, and this fire-and-forget save has no inline surface of its own).
+      void setUserLanguage(userId, lng).catch(() => undefined);
     }
   }
 

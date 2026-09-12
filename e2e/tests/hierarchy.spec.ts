@@ -1,4 +1,16 @@
-import { expect, login, openFilters, pickLifecycle, pickNamespace, pickType, rowOperation, runNamespace, test, uniqueText } from "./helpers";
+import {
+  expect,
+  login,
+  openFilters,
+  pickLifecycle,
+  pickNamespace,
+  pickType,
+  rowOperation,
+  runNamespace,
+  test,
+  uniqueText,
+  waitForApi,
+} from "./helpers";
 
 // The Hierarchy journey in this run's throwaway namespace (parallel-safe): seed a
 // System ⊃ Component ⊃ subcomponent chain through the editor, verify the nesting and
@@ -13,13 +25,13 @@ test("the hierarchy nests the containment chain and carries the file operations"
   const core = uniqueText("e2e-hier-core");
   const worker = uniqueText("e2e-hier-worker");
 
-  const create = async () =>
-    Promise.all([
-      page.waitForResponse(
-        (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
-      ),
+  const create = async () => {
+    const [created] = await Promise.all([
+      waitForApi(page, { method: "POST", path: "/api/v1/files" }),
       page.getByRole("button", { name: "Create" }).click(),
     ]);
+    expect(created.status()).toBe(201);
+  };
 
   // The System (type is optional for Systems — left blank).
   await page.goto("/files/new");
