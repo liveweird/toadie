@@ -139,13 +139,20 @@ class JqCalculationTest {
     @Test
     fun `a deadline miss is absent and quarantines the expression`() = runBlocking {
         val releaseWorker = CountDownLatch(1)
-        val evaluator = JqEvaluator(deadline = Duration.ofMillis(50), beforeEvaluate = { awaitIgnoringInterrupts(releaseWorker) })
+        // A private pool, so the held worker is never one of the production `entity-jq` four.
+        val executor = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(4))
+        val evaluator = JqEvaluator(
+            deadline = Duration.ofMillis(50),
+            executor = executor,
+            beforeEvaluate = { awaitIgnoringInterrupts(releaseWorker) },
+        )
         try {
             val result = evaluator.evaluateBounded(".a", buildJsonObject { put("a", 1) }, "ctx")
             assertNull(result)
             assertEquals(1, evaluator.quarantinedCount)
         } finally {
             releaseWorker.countDown()
+            executor.shutdownNow()
         }
     }
 
@@ -184,8 +191,11 @@ class JqCalculationTest {
         val releaseWorker = CountDownLatch(1)
         val holdNext = AtomicBoolean(true)
         val starts = AtomicInteger(0)
+        // Two private workers: ".a"'s held task strands one, ".b" must still find a free one.
+        val executor = ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(4))
         val evaluator = JqEvaluator(
             deadline = Duration.ofMillis(50),
+            executor = executor,
             beforeEvaluate = {
                 starts.incrementAndGet()
                 if (holdNext.get()) awaitIgnoringInterrupts(releaseWorker)
@@ -212,7 +222,12 @@ class JqCalculationTest {
     @Test
     fun `the quarantine warning is logged once with the context and never the input`() = runBlocking {
         val releaseWorker = CountDownLatch(1)
-        val evaluator = JqEvaluator(deadline = Duration.ofMillis(50), beforeEvaluate = { awaitIgnoringInterrupts(releaseWorker) })
+        val executor = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(4))
+        val evaluator = JqEvaluator(
+            deadline = Duration.ofMillis(50),
+            executor = executor,
+            beforeEvaluate = { awaitIgnoringInterrupts(releaseWorker) },
+        )
         val capture = LogCapture("ch.nokillswit.entities.computed")
         try {
             val input = buildJsonObject { put("secret", "SECRET-VALUE-7") }
@@ -227,6 +242,7 @@ class JqCalculationTest {
         } finally {
             capture.detach()
             releaseWorker.countDown()
+            executor.shutdownNow()
         }
     }
 
@@ -284,15 +300,24 @@ class JqCalculationTest {
 
     @Test
     fun `concurrent evaluations share one compiled expression per text`() = runBlocking {
-        val evaluator = JqEvaluator()
-        val expressions = (0 until 8).map { ".a + $it" }
-        val results = (0 until 200).map { i ->
-            async(Dispatchers.Default) {
-                evaluator.evaluateBounded(expressions[i % expressions.size], buildJsonObject { put("a", 1) })
-            }
-        }.awaitAll()
-        results.forEachIndexed { i, result -> assertEquals(JsonPrimitive(1 + (i % expressions.size)), result) }
-        assertEquals(8, evaluator.cacheSize)
+        // A private pool sized for the burst: 200 coroutines are in flight at once, so the
+        // production pool's 4 + 64 capacity would REJECT some by design (absent), and a cold CI
+        // JVM's first compiles could exceed a 500 ms deadline while queued. Neither is what this
+        // case pins — only that one compiled expression per text serves every worker correctly.
+        val executor = ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(256))
+        val evaluator = JqEvaluator(deadline = Duration.ofSeconds(30), executor = executor)
+        try {
+            val expressions = (0 until 8).map { ".a + $it" }
+            val results = (0 until 200).map { i ->
+                async(Dispatchers.Default) {
+                    evaluator.evaluateBounded(expressions[i % expressions.size], buildJsonObject { put("a", 1) })
+                }
+            }.awaitAll()
+            results.forEachIndexed { i, result -> assertEquals(JsonPrimitive(1 + (i % expressions.size)), result) }
+            assertEquals(8, evaluator.cacheSize)
+        } finally {
+            executor.shutdownNow()
+        }
     }
 
     @Test
