@@ -95,8 +95,11 @@
     "query": "Zapytanie (JSON)",
     "pathFilter": "Filtr ścieżki (JSON)",
     "ownershipType": "Własność",
-    "ownershipNone": "Brak",
-    "hierarchyRelation": "Relacja hierarchii"
+    "ownershipNone": "Brak"
+  },
+  "hierarchies": {
+    "empty": "Nie zdefiniowano jeszcze żadnych hierarchii — dodaj je na stronie Hierarchie.",
+    "clearAria": "Wyczyść {{hierarchy}}"
   },
   "hint": {
     "icon": "NAZWA ikony Port (np. Microservice) — wolny tekst, nie obraz.",
@@ -107,7 +110,8 @@
     "calculation": "Wyrażenie jq nad encją — przechowywane jako tekst, nigdy tu nie obliczane.",
     "colors": "Obiekt JSON mapujący obliczone wartości na jeden z 14 kolorów Port.",
     "query": "Składnia reguł wyszukiwania Port ({ combinator, rules }) — tylko przechowywana i sprawdzana strukturalnie.",
-    "hierarchyRelation": "Rozszerzenie właściwe tylko Toadie, nie pole Port: wybierz jedną z własnych relacji jednowartościowych tego blueprintu (nie „wiele”), aby oznaczyć ją jako rodzica w hierarchii dla grafu i drzewa encji. Pozostaw nieustawione, jeśli blueprint nie ma naturalnego rodzica.",
+    "hierarchyRelations": "Rozszerzenie właściwe tylko Toadie, nie pole Port: wybierz jedną z własnych relacji jednowartościowych tego blueprintu (nie „wiele”), aby oznaczyć ją jako rodzica dla tej hierarchii w grafie i drzewie encji. Pozostaw nieustawione, jeśli blueprint nie ma tu naturalnego rodzica — przechowywane obok dokumentu Port, nigdy w jego wnętrzu.",
+    "hierarchyUnknown": "Ta hierarchia nie istnieje już w słowniku Hierarchie — wyczyść pole lub dodaj ją ponownie.",
     "systemIdentifier": "Identyfikatora blueprintu systemowego nie można zmienić."
   },
   "validation": {

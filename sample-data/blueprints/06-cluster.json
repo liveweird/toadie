@@ -3,7 +3,7 @@
   "title": "Cluster",
   "description": "One Kubernetes cluster inside one environment — the thing workloads and cluster-hosted resources are scheduled on. Port-only; if ever exported to Backstage it becomes a Resource of type kubernetes-cluster. The VMs and hypervisors underneath are deliberately not modelled: virtualization, hosting_model and datacenter say what the map needs.",
   "icon": "Cluster",
-  "hierarchyRelation": "environment",
+  "hierarchyRelations": {"composition": "environment", "deployment": "environment"},
   "schema": {
     "properties": {
       "distribution": {

@@ -32,6 +32,7 @@ import ClusterFrames from "../components/ClusterFrames";
 import EntityGraphNode from "../components/EntityGraphNode";
 import EntityGraphToolbar from "../components/EntityGraphToolbar";
 import EmptyState from "../components/EmptyState";
+import HierarchyPicker from "../components/HierarchyPicker";
 import {
   applyManualPositions,
   clusterFrames,
@@ -46,12 +47,15 @@ import {
 import { foldGraph } from "../utils/graphFold";
 import {
   buildEntityHierarchy,
+  effectiveHierarchyId,
   filterEntityGraph,
   OWNERSHIP_EDGE_STYLE,
   relationsOf,
   toFoldable,
 } from "../utils/entityGraph";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
+import { useHierarchies } from "../hooks/useHierarchies";
+import { useStoredState, isString } from "../hooks/useStoredState";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 import { editEntityPath } from "../utils/entityLinks";
 import { OWNERSHIP_RELATION } from "../utils/systemBlueprints";
@@ -86,17 +90,25 @@ function toggleCollapsed(current: { collapsed: string[] }, id: string) {
 }
 
 /**
- * The Entity graph (Port migration phase 3, v1.25.0) — the Render page's shell over
- * `GET /api/v1/entities/graph`: blueprint/search filters select which entities are shown (an
- * edge is drawn only when both ends are shown, the catalog rule), relation chips fold edges
- * client-side, containment comes from the admin-picked `hierarchyRelation` per blueprint
- * (`buildEntityHierarchy`), and blueprint frames cluster nodes the way namespace frames do.
+ * The Entity graph (Port migration phase 3, v1.25.0; parallel hierarchies) — the Render page's
+ * shell over `GET /api/v1/entities/graph`: blueprint/search filters select which entities are
+ * shown (an edge is drawn only when both ends are shown, the catalog rule), relation chips fold
+ * edges client-side, containment/thick-edge styling follow ONE admin-curated hierarchy at a
+ * time (`HierarchyPicker` + `buildEntityHierarchy`, persisted per view under
+ * `entityGraph.hierarchy`) — an edge belonging to a DIFFERENT hierarchy still draws, just as an
+ * ordinary relation edge — and blueprint frames cluster nodes the way namespace frames do.
+ * The per-user persisted `collapsed` list is ONE list shared across every hierarchy: a node
+ * folded while viewing one hierarchy stays folded when the picker switches to another it also
+ * has descendants in (there is no per-hierarchy collapsed set).
  */
 export default function EntityGraph() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const colorScheme = useComputedColorScheme("light");
   const filters = useEntityGraphFilterState("entityGraph");
+  const { hierarchies } = useHierarchies();
+  const [storedHierarchyId, setStoredHierarchyId] = useStoredState("entityGraph.hierarchy", "", isString);
+  const hierarchyId = effectiveHierarchyId(storedHierarchyId, hierarchies.map((h) => h.value));
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["entities", "graph", filters.values],
@@ -125,8 +137,9 @@ export default function EntityGraph() {
   }, [updateLayout]);
 
   // Containment for the fold comes from the FULL payload (never the relation-chip-filtered
-  // one), so an entity stays collapsible with any chip off — the Render page's rule.
-  const forest = useMemo(() => (data ? buildEntityHierarchy(data) : []), [data]);
+  // one), so an entity stays collapsible with any chip off — the Render page's rule — along
+  // the SELECTED hierarchy only; other hierarchies' edges draw as ordinary relations.
+  const forest = useMemo(() => (data ? buildEntityHierarchy(data, hierarchyId) : []), [data, hierarchyId]);
   const titleByBlueprint = useMemo(
     () => new Map((data?.nodes ?? []).map((n) => [n.blueprint, n.blueprintTitle])),
     [data],
@@ -134,7 +147,9 @@ export default function EntityGraph() {
   const baseLayout = useMemo(() => {
     if (!data) return { nodes: [] as LaidOutNode<EntityGraphNodeApi>[], edges: [] as Edge[], anyCollapsed: false };
     const filtered = filterEntityGraph(data, disabled);
-    const hierarchyRelations = new Set(data.edges.filter((e) => e.hierarchy).map((e) => e.relation));
+    const hierarchyRelations = new Set(
+      data.edges.filter((e) => e.hierarchies.includes(hierarchyId)).map((e) => e.relation),
+    );
     const folded = foldGraph(toFoldable(filtered), forest, new Set(collapsed));
     const laidOut = layoutGraph(folded, ENTITY_CLUSTER);
     // Hierarchy edges draw solid and thicker, labelled by relation id — folding can still dash
@@ -164,7 +179,7 @@ export default function EntityGraph() {
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges, anyCollapsed };
-  }, [data, disabled, forest, collapsed, layoutReady]);
+  }, [data, disabled, forest, collapsed, layoutReady, hierarchyId]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode<EntityGraphNodeApi>>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
@@ -231,6 +246,7 @@ export default function EntityGraph() {
         title={t("entityGraph.title")}
         toolbar={
           <EntityGraphToolbar viewKey="entityGraph" filters={filters}>
+            <HierarchyPicker value={hierarchyId} onChange={setStoredHierarchyId} />
             <Chip.Group
               multiple
               value={relations.filter((r) => !disabled.has(r))}

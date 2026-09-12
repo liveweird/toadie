@@ -323,35 +323,65 @@ describe("toBlueprintRequest", () => {
   });
 });
 
-describe("hierarchyRelation — derive, don't clear (v1.25.0)", () => {
-  function withRelation(hierarchyRelation: string, many = false) {
+describe("hierarchyRelations — derive, don't clear, per entry (v1.25.0, multi-hierarchy v1.32.0)", () => {
+  function withRelation(relationId: string, many = false) {
     return values({
       relations: [{ ...emptyRelationDraft(), id: "owningTeam", title: "Owned by", target: "team", many }],
-      hierarchyRelation,
+      hierarchyRelations: { composition: relationId },
     });
   }
 
-  test("emits the field while it names a current single relation", () => {
+  test("emits an entry while its value names a current single relation", () => {
     const r = toBlueprintRequest(withRelation("owningTeam"));
-    expect(r.hierarchyRelation).toBe("owningTeam");
+    expect(r.hierarchyRelations).toEqual({ composition: "owningTeam" });
   });
 
-  test("omits the field once the named relation is removed — no effect needed", () => {
-    const r = toBlueprintRequest(values({ relations: [], hierarchyRelation: "owningTeam" }));
-    expect(r.hierarchyRelation).toBeUndefined();
+  test("omits the whole field once the named relation is removed — no effect needed", () => {
+    const r = toBlueprintRequest(values({ relations: [], hierarchyRelations: { composition: "owningTeam" } }));
+    expect(r.hierarchyRelations).toBeUndefined();
   });
 
-  test("omits the field once the named relation flips to many — a single-value rule became stale", () => {
+  test("omits the entry once its relation flips to many — a single-value rule became stale", () => {
     const r = toBlueprintRequest(withRelation("owningTeam", true));
-    expect(r.hierarchyRelation).toBeUndefined();
+    expect(r.hierarchyRelations).toBeUndefined();
   });
 
-  test("a blank hierarchyRelation omits the field", () => {
+  test("a blank entry value omits the field", () => {
     const r = toBlueprintRequest(withRelation(""));
-    expect(r.hierarchyRelation).toBeUndefined();
+    expect(r.hierarchyRelations).toBeUndefined();
   });
 
-  test("fromBlueprintResponse round-trips a set hierarchyRelation", () => {
+  test("prunes only the stale entry, keeping a sibling hierarchy's still-valid one", () => {
+    const r = toBlueprintRequest(
+      values({
+        relations: [
+          { ...emptyRelationDraft(), id: "owningTeam", title: "Owned by", target: "team", many: false },
+          { ...emptyRelationDraft(), id: "peers", title: "Peers", target: "team", many: true },
+        ],
+        hierarchyRelations: { composition: "owningTeam", org: "peers" },
+      }),
+    );
+    expect(r.hierarchyRelations).toEqual({ composition: "owningTeam" });
+  });
+
+  test("one relation may serve several hierarchies", () => {
+    const r = toBlueprintRequest(
+      values({
+        relations: [{ ...emptyRelationDraft(), id: "owningTeam", title: "Owned by", target: "team", many: false }],
+        hierarchyRelations: { composition: "owningTeam", org: "owningTeam" },
+      }),
+    );
+    expect(r.hierarchyRelations).toEqual({ composition: "owningTeam", org: "owningTeam" });
+  });
+
+  test("an entry whose KEY left the hierarchies dictionary is still emitted (the server 400s it)", () => {
+    // toBlueprintRequest has no visibility into the dictionary — the client never silently
+    // drops evidence of a stale key, it just names one that is still a valid single relation.
+    const r = toBlueprintRequest(withRelation("owningTeam"));
+    expect(r.hierarchyRelations).toEqual({ composition: "owningTeam" });
+  });
+
+  test("fromBlueprintResponse round-trips a set hierarchyRelations map", () => {
     const response = {
       id: 1,
       createdBy: 1,
@@ -366,15 +396,15 @@ describe("hierarchyRelation — derive, don't clear (v1.25.0)", () => {
       mirrorProperties: {},
       calculationProperties: {},
       aggregationProperties: {},
-      hierarchyRelation: "owningTeam",
+      hierarchyRelations: { composition: "owningTeam" },
     } as unknown as Blueprint;
 
     const form = fromBlueprintResponse(response);
-    expect(form.hierarchyRelation).toBe("owningTeam");
-    expect(toBlueprintRequest(form).hierarchyRelation).toBe("owningTeam");
+    expect(form.hierarchyRelations).toEqual({ composition: "owningTeam" });
+    expect(toBlueprintRequest(form).hierarchyRelations).toEqual({ composition: "owningTeam" });
   });
 
-  test("fromBlueprintResponse leaves it blank when the wire response carries none", () => {
+  test("fromBlueprintResponse leaves it empty when the wire response carries none", () => {
     const response = {
       id: 1,
       createdBy: 1,
@@ -391,7 +421,7 @@ describe("hierarchyRelation — derive, don't clear (v1.25.0)", () => {
       aggregationProperties: {},
     } as unknown as Blueprint;
 
-    expect(fromBlueprintResponse(response).hierarchyRelation).toBe("");
+    expect(fromBlueprintResponse(response).hierarchyRelations).toEqual({});
   });
 });
 

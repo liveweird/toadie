@@ -5,7 +5,8 @@
   and user; one throwaway regular user owns every layout interaction
 - **Owns** (exclusive server-side state): two throwaway blueprints (`e2e-eg-*-bp-parent`, a
   `peer` MANY self-relation; `e2e-eg-*-bp-child`, a single `parent` relation to the first
-  flagged as its `hierarchyRelation`) created via the API, their four `e2e-eg-*` entities
+  flagged as the `composition` entry of its `hierarchyRelations`) created via the API, their
+  four `e2e-eg-*` entities
   (two parents, two children, one parent Direct-owned by the throwaway team below), one
   throwaway `e2e-eg-*`-marked `_team` entity (never a foreign `_team`/`_user` row — that
   system blueprint is shared workspace-wide state this spec only ever adds its own row to),
@@ -19,7 +20,7 @@
 
 1. The admin signs in and seeds two throwaway blueprints via the API: a parent blueprint with
    a `peer` many self-relation, and a child blueprint with a single `parent` relation to the
-   parent blueprint flagged as its `hierarchyRelation`.
+   parent blueprint flagged as the `composition` entry of its `hierarchyRelations`.
    - *Expected*: both creations succeed (`201`).
 2. The admin seeds five entities via the API: a throwaway `_team` entity, two parents (p1, p2,
    with p1's `peer` relation naming p2 and its `team` naming the throwaway team), and two

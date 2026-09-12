@@ -95,8 +95,11 @@
     "query": "Query (JSON)",
     "pathFilter": "Path filter (JSON)",
     "ownershipType": "Ownership",
-    "ownershipNone": "None",
-    "hierarchyRelation": "Hierarchy relation"
+    "ownershipNone": "None"
+  },
+  "hierarchies": {
+    "empty": "No hierarchies defined yet — add them on the Hierarchies page.",
+    "clearAria": "Clear {{hierarchy}}"
   },
   "hint": {
     "icon": "The NAME of a Port icon (e.g. Microservice) — a free string, not a picture.",
@@ -107,7 +110,8 @@
     "calculation": "A jq expression over the entity — stored as text, never evaluated here.",
     "colors": "A JSON object mapping calculated values to one of Port's 14 colours.",
     "query": "Port's search-rule syntax ({ combinator, rules }) — stored and shape-checked only.",
-    "hierarchyRelation": "A Toadie-only extension, not a Port field: pick one of this blueprint's own single relations (not \"many\") to mark it as the containment parent for the Entity graph and hierarchy pages. Leave unset for a blueprint with no natural parent.",
+    "hierarchyRelations": "A Toadie-only extension, not a Port field: pick one of this blueprint's own single relations (not \"many\") to mark it as the containment parent for this hierarchy on the Entity graph and hierarchy pages. Leave unset for a blueprint with no natural parent here — stored beside the Port document, never inside it.",
+    "hierarchyUnknown": "This hierarchy no longer exists in the Hierarchies dictionary — clear it or re-add the value.",
     "systemIdentifier": "A system blueprint's identifier cannot be changed."
   },
   "validation": {

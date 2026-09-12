@@ -73,6 +73,9 @@ object SampleData {
      * target exists. Returns the FINAL (post-pass-2) response per identifier.
      */
     suspend fun loadBlueprints(client: HttpClient, files: List<File>): Map<String, BlueprintResponse> {
+        // `composition` is seeded by V33; `deployment` (v1.32.0, the second parallel hierarchy
+        // `11-workload.json`/`06-cluster.json` name) is shared suite state minted on demand.
+        TestHierarchies.ensure("deployment")
         val decoded = files.map { it to blueprintJson.decodeFromString<BlueprintRequest>(it.readText()) }
 
         decoded.forEach { (_, request) ->
@@ -135,6 +138,6 @@ object SampleData {
         calculationProperties = calculationProperties,
         aggregationProperties = aggregationProperties,
         ownership = ownership,
-        hierarchyRelation = hierarchyRelation,
+        hierarchyRelations = hierarchyRelations,
     )
 }

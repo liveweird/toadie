@@ -21,7 +21,9 @@ export function blueprintExportDocument(bp: Blueprint): Record<string, unknown> 
   out.calculationProperties = bp.calculationProperties;
   out.aggregationProperties = bp.aggregationProperties;
   if (bp.ownership !== undefined) out.ownership = bp.ownership;
-  if (bp.hierarchyRelation !== undefined) out.hierarchyRelation = bp.hierarchyRelation;
+  if (bp.hierarchyRelations && Object.keys(bp.hierarchyRelations).length > 0) {
+    out.hierarchyRelations = bp.hierarchyRelations;
+  }
   return out;
 }
 

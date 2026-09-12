@@ -144,7 +144,7 @@ Backend tests live flat in `server/src/test/kotlin/` (kotlin.test + `io.ktor.ser
 - `TestLabels` — the label registry is SHARED suite state too: `ensure(key, values, kinds)` (create-if-missing, update-in-place otherwise) → id, `remove(vararg keys)` (soft-deletes), `rawRows()` (soft-deleted rows included). Tests only ever mint UNIQUE keys — `uniqueLabel(prefix, values, kinds)` in `CatalogFixtures.kt` is the one-line mint used by catalog tests applying labels to files.
 - `TestTagCategories` — the tag-category registry is SHARED suite state too, same shape as `TestLabels`: `ensure(name, tags, kinds)` → id, `remove(vararg names)`, `rawRows()`. Catalog tests applying tags mint through `uniqueTagCategory(prefix, tags, kinds)` + `uniqueTag(prefix)` in `CatalogFixtures.kt`.
 - The younger registry fixtures follow the same shapes: `TestLifecycles` (`ensure`/`remove` — the LIFECYCLE-dictionary sibling of `TestNamespaces`, append-only), `TestAnnotationKeys` (`ensure(key, kinds)`/`remove`/`rawRows` + `uniqueAnnotationKey(prefix, kinds)` in `CatalogFixtures.kt`), and `TestEntityTypes` (`rawRows`/`current` + `withKindTypes(kind, types) { }` — the type dictionaries are seeded SINGLETONS, so tests mutate a kind's list only inside that restore-in-finally wrapper). `TestLenses` (`rawRows` only — the soft-delete-over-removal asserts; lens tests mint unique names per test), and `TestRefTargets.ensure()` (no-arg, JVM-once) seeds the standard resolvable reference targets, while `TestCatalogFiles.overwriteContent(...)` plants legacy-invalid content past the write-time validators.
-- `TestBlueprints` (`service`/`rawRows`/`remove(vararg identifiers)`) — the blueprint registry is SHARED suite state like the labels: every test mints unique `bp-<uuid8>` identifiers and removes what it creates; there is no seed to protect. `remove` skips `_`-prefixed identifiers (the V31 system rows are never deleted) and the new `restoreSystemBlueprints()` PUTs `_team`/`_user` back to their seeded shape (`hierarchyRelation: "parent"` on `_team`, none on `_user`) — used in `finally` by any test that extends them. `remove` first removes the blueprint's own active ENTITIES (via `TestEntities`) before soft-deleting the blueprint itself — the V28 delete-with-entities `409` would otherwise fail teardown.
+- `TestBlueprints` (`service`/`rawRows`/`remove(vararg identifiers)`) — the blueprint registry is SHARED suite state like the labels: every test mints unique `bp-<uuid8>` identifiers and removes what it creates; there is no seed to protect. `remove` skips `_`-prefixed identifiers (the V31 system rows are never deleted) and the new `restoreSystemBlueprints()` PUTs `_team`/`_user` back to their seeded shape (`hierarchyRelations: {"composition": "parent"}` on `_team`, none on `_user`) — used in `finally` by any test that extends them. `remove` first removes the blueprint's own active ENTITIES (via `TestEntities`) before soft-deleting the blueprint itself — the V28 delete-with-entities `409` would otherwise fail teardown.
 - `TestEntities` (`service`/`rawRows`/`remove(vararg ids)`) — the entity registry is SHARED suite state too, the `TestBlueprints` shape one level down: every test mints unique identifiers within its own throwaway blueprint(s) and removes what it creates; there is no seed to protect.
 - `TestSeedState.restoreSeedAccounts()` — bootstrap/production-mode tests rotate the seed admin's password in the SHARED container; call this afterwards so later tests (and re-runs) see the pristine V3 state. Production-mode boots must also override `"mail.transport" to "disabled"` — the dev-default `log` transport is refused in production (`MailTransportTest`).
 
@@ -172,7 +172,7 @@ is executable documentation for `sample-data/blueprints/` — since v1.25.3 the 
 ontology in `.claude/docs/ontology.md`: it POSTs the eleven files in dependency order, pins the
 round trip, and asserts the three contracts the set makes — every registry-mirroring enum
 (per-kind types, lifecycles, label value lists, tag categories) equals the seeded registry read
-back through the API, the `hierarchyRelation` map forms exactly the org and architecture trees,
+back through the API, the `hierarchyRelations` map forms exactly the org and architecture trees,
 and `owned_by → team` is required and single wherever Backstage requires `spec.owner`. (The
 v1.23.1–v1.25.2 feature-showcase set and its union assertions were retired with it; the pure
 rule tables carry that coverage.) `SampleEntitiesTest` is the same for `sample-data/entities/`
@@ -187,7 +187,7 @@ across service/library/api), both `team` shapes, a multi-element relation array,
 `SystemBlueprintTest` pins the V31 rows — present with `system: true` on a fresh database,
 seeded definitions equal `SYSTEM_BLUEPRINT_BASES`, DELETE 409, PUT rename 400, PUT removing/retyping
 `email` or removing/reshaping `_user.team` 400, PUT extending with a property + relation +
-`hierarchyRelation` 204 and read back, POST `_foo` 400, and `blueprint.updated` carrying
+`hierarchyRelations` 204 and read back, POST `_foo` 400, and `blueprint.updated` carrying
 `system: true`.
 
 **Entities (V28).** `EntityValidationTest` is the pure rule table (one case per row in
@@ -279,14 +279,15 @@ at that scale, without asserting on timing.
 **Entity graph (V29/V30).** `EntityGraphTest` is the pure builder (`entities/EntityGraph.kt`,
 no database): the both-ends rule including a hidden or stale relation target dropped rather
 than surfaced as a MISSING node, relation array-value expansion and edge dedupe, the
-`hierarchy` flag set only for the edge whose `relation` equals the SOURCE entity's blueprint's
-`hierarchyRelation`, the `"<blueprint>|<identifier>"` node-id grammar, and pass-through of
+`hierarchies` list carrying exactly the ids whose entry in the SOURCE entity's blueprint's
+`hierarchyRelations` equals the edge's `relation` (two ids when two hierarchies share the relation,
+empty otherwise and on ownership edges), the `"<blueprint>|<identifier>"` node-id grammar, and pass-through of
 every other field. `EntityTest` carries the route-level graph cases: no filter, `blueprint` as
 an IN with two values, an all-unknown `blueprint` list answering an empty graph rather than
-`400`, `q` folding (`"Żółw"`/`"zolw"`), `401` for an anonymous caller, and `hierarchy: true`
-observed end to end after PUTting a blueprint's `hierarchyRelation` — plus pins that the
+`400`, `q` folding (`"Żółw"`/`"zolw"`), `401` for an anonymous caller, and the edge's `hierarchies`
+list observed end to end after PUTting a blueprint's `hierarchyRelations` — plus pins that the
 response carries NO `null` members. Three cases join `BlueprintValidationTest`'s rule table for
-`hierarchyRelation` itself: unset stays absent, naming an unknown relation is `400`, and naming
+`hierarchyRelations` itself: unset stays absent; each value must name a relation is `400`, and naming
 a `many: true` relation is `400`. `EntityGraphLayoutTest` is the `GraphLayoutTest` twin over the
 V30 table PLUS one dedicated case proving the two layout documents are independent — a save
 through `/entity-graph-layout` never appears on `/graph-layout` for the same user, and vice

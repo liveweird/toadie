@@ -46,7 +46,7 @@ class SystemBlueprintTest {
         calculationProperties = calculationProperties,
         aggregationProperties = aggregationProperties,
         ownership = ownership,
-        hierarchyRelation = hierarchyRelation,
+        hierarchyRelations = hierarchyRelations,
     )
 
     @Test
@@ -85,6 +85,17 @@ class SystemBlueprintTest {
             )
             assertEquals(base, definition, "the seeded row for '$identifier' must equal its Kotlin base shape")
         }
+    }
+
+    @Test
+    fun `the seeded _team row's hierarchyRelations backfilled to composition by V34`() = testApplication {
+        usePostgresTestcontainer()
+        TestBlueprints.restoreSystemBlueprints()
+        val admin = seededClient("sysbphier", UserRole.ADMIN)
+        val team = admin.readBlueprints().items.single { it.identifier == SYSTEM_TEAM_BLUEPRINT }
+        val user = admin.readBlueprints().items.single { it.identifier == SYSTEM_USER_BLUEPRINT }
+        assertEquals(mapOf("composition" to "parent"), team.hierarchyRelations)
+        assertEquals(null, user.hierarchyRelations)
     }
 
     @Test
@@ -167,7 +178,7 @@ class SystemBlueprintTest {
     }
 
     @Test
-    fun `PUT extending a system blueprint with an extra property, relation and hierarchyRelation succeeds`() = testApplication {
+    fun `PUT extending a system blueprint with an extra property, relation and hierarchyRelations succeeds`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("sysbpext", UserRole.ADMIN)
         try {
@@ -184,7 +195,7 @@ class SystemBlueprintTest {
                         many = false,
                     )
                 ),
-                hierarchyRelation = "manager",
+                hierarchyRelations = mapOf("composition" to "manager"),
             )
             val response = admin.putJson("/api/v1/blueprints/${user.id}", extended)
             assertEquals(HttpStatusCode.NoContent, response.status)
@@ -193,7 +204,7 @@ class SystemBlueprintTest {
             assertTrue(reread.system)
             assertTrue(reread.schema.properties.containsKey("nickname"))
             assertTrue(reread.relations.containsKey("manager"))
-            assertEquals("manager", reread.hierarchyRelation)
+            assertEquals(mapOf("composition" to "manager"), reread.hierarchyRelations)
             // The base shape survives the extension.
             assertEquals("string", reread.schema.properties.getValue("email").type)
             assertEquals(SYSTEM_TEAM_BLUEPRINT, reread.relations.getValue("team").target)

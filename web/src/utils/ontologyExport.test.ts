@@ -59,14 +59,24 @@ describe("blueprintExportDocument", () => {
     expect(doc).not.toHaveProperty("system");
     expect(doc).not.toHaveProperty("createdBy");
     expect(doc).not.toHaveProperty("ownership");
-    expect(doc).not.toHaveProperty("hierarchyRelation");
+    expect(doc).not.toHaveProperty("hierarchyRelations");
   });
 
-  test("carries ownership and hierarchyRelation when set", () => {
-    const withOwnership: Blueprint = { ...BLUEPRINT, ownership: { type: "Direct" }, hierarchyRelation: "owningTeam" };
+  test("carries ownership and hierarchyRelations when set", () => {
+    const withOwnership: Blueprint = {
+      ...BLUEPRINT,
+      ownership: { type: "Direct" },
+      hierarchyRelations: { composition: "owningTeam" },
+    };
     const doc = blueprintExportDocument(withOwnership);
     expect(doc.ownership).toEqual({ type: "Direct" });
-    expect(doc.hierarchyRelation).toBe("owningTeam");
+    expect(doc.hierarchyRelations).toEqual({ composition: "owningTeam" });
+  });
+
+  test("omits hierarchyRelations when the map is present but empty", () => {
+    const withEmptyMap: Blueprint = { ...BLUEPRINT, hierarchyRelations: {} };
+    const doc = blueprintExportDocument(withEmptyMap);
+    expect(doc).not.toHaveProperty("hierarchyRelations");
   });
 });
 

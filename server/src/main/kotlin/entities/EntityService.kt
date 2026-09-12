@@ -117,7 +117,8 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
         val identifier: String,
         val title: String,
         val definition: BlueprintDefinition,
-        val hierarchyRelation: String?,
+        /** Hierarchy identifier -> relation key (V34) — decoded from `blueprints.hierarchy_relations`. */
+        val hierarchyRelations: Map<String, String>,
     )
 
     private suspend fun loadActiveBlueprints(): List<ActiveBlueprint> =
@@ -128,7 +129,7 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
                     it[BlueprintService.Blueprints.identifier],
                     it[BlueprintService.Blueprints.title],
                     blueprintJson.decodeFromString<BlueprintDefinition>(it[BlueprintService.Blueprints.definition]),
-                    it[BlueprintService.Blueprints.hierarchyRelation],
+                    blueprintJson.decodeFromString<Map<String, String>>(it[BlueprintService.Blueprints.hierarchyRelations]),
                 )
             }
             .toList()
@@ -487,7 +488,7 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
         }
 
         val graphBlueprintsById = blueprintsById.mapValues {
-            GraphBlueprint(it.value.identifier, it.value.title, it.value.definition, it.value.hierarchyRelation)
+            GraphBlueprint(it.value.identifier, it.value.title, it.value.definition, it.value.hierarchyRelations)
         }
         buildEntityGraph(sources, graphBlueprintsById) { source ->
             val blueprint = blueprintsById.getValue(source.blueprintId)

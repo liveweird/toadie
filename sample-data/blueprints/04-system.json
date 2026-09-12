@@ -3,7 +3,7 @@
   "title": "System",
   "description": "A set of services, APIs and resources that together deliver one product or capability — the unit whose criticality and support mode are agreed with the business. Backstage kind: System (domain → spec.domain, the team field → spec.owner; criticality/support_mode/exposure/hosting_model → the labels of the same name).",
   "icon": "Box",
-  "hierarchyRelation": "domain",
+  "hierarchyRelations": {"composition": "domain"},
   "schema": {
     "properties": {
       "type": {

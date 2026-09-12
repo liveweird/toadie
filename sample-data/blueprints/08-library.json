@@ -3,7 +3,7 @@
   "title": "Library",
   "description": "Shared code that is built and published but never deployed on its own — an SDK, a starter, a shared module. Backstage kind: Component of type library (system → spec.system, the team field → spec.owner, depends_on → spec.dependsOn, languages/frameworks → tags, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref).",
   "icon": "Package",
-  "hierarchyRelation": "system",
+  "hierarchyRelations": {"composition": "system"},
   "schema": {
     "properties": {
       "lifecycle": {

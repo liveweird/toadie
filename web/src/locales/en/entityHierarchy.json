@@ -1,6 +1,10 @@
 {
   "title": "Entity hierarchy",
   "loadFailed": "Could not load the entity hierarchy",
+  "hierarchyPicker": {
+    "label": "Hierarchy",
+    "empty": "No hierarchies defined — add them on the Hierarchies page"
+  },
   "empty": "Nothing to show — no entities match.",
   "expandAll": "Expand all",
   "collapseAll": "Collapse all",

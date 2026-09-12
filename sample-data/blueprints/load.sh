@@ -72,6 +72,35 @@ login() {
 
 sample_files() { printf '%s\n' "$SCRIPT_DIR"/[0-9][0-9]-*.json | sort; }
 
+ensure_hierarchies_dictionary() {
+  # Blueprints' hierarchyRelations keys must be active dictionary values. Get the current
+  # hierarchies dictionary and add composition/deployment if missing.
+  local status list items
+  status=$(request "$TOADIE_URL/api/v1/dictionaries/hierarchies" -H @"$HEADERS")
+  if [ "$status" != "200" ]; then
+    echo "FAILED to get hierarchies dictionary ($status): $(problem)" >&2
+    exit 1
+  fi
+  items=$(jq -c '.items' "$BODY")
+  # Check if composition and deployment exist
+  if ! jq -e '.[] | select(.value == "composition")' <<<"$items" >/dev/null 2>&1; then
+    items=$(jq '. += [{"value": "composition", "isDefault": false}]' <<<"$items")
+  fi
+  if ! jq -e '.[] | select(.value == "deployment")' <<<"$items" >/dev/null 2>&1; then
+    items=$(jq '. += [{"value": "deployment", "isDefault": false}]' <<<"$items")
+  fi
+  # Only update if something changed
+  if [ "$(jq -c '.items' "$BODY")" != "$(jq -c . <<<"$items")" ]; then
+    status=$(request -X PUT "$TOADIE_URL/api/v1/dictionaries/hierarchies" -H @"$HEADERS" \
+      -H 'Content-Type: application/json' --data-binary @<(jq -n --argjson items "$items" '{items: $items}'))
+    if [ "$status" != "204" ]; then
+      echo "FAILED to update hierarchies dictionary ($status): $(problem)" >&2
+      exit 1
+    fi
+    echo "hierarchies dictionary updated"
+  fi
+}
+
 load() {
   local failed=0 file identifier status id list stripped
   stripped="$WORK/stripped.json"
@@ -189,6 +218,7 @@ delete_set() {
 
 main() {
   login
+  ensure_hierarchies_dictionary
   if [ "${1:-}" = "--delete" ]; then delete_set; else load; fi
 }
 

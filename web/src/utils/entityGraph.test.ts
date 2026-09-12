@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { EntityGraph, EntityGraphEdge, EntityGraphNode } from "../api/entities";
 import { foldGraph } from "./graphFold";
-import { buildEntityHierarchy, filterEntityGraph, relationsOf, toFoldable } from "./entityGraph";
+import { buildEntityHierarchy, effectiveHierarchyId, filterEntityGraph, relationsOf, toFoldable } from "./entityGraph";
 
 let nextEntityId = 1;
 function node(blueprint: string, identifier: string, title = identifier, findings = 0): EntityGraphNode {
@@ -16,8 +16,8 @@ function node(blueprint: string, identifier: string, title = identifier, finding
   } as EntityGraphNode;
 }
 
-function edge(sourceId: string, targetId: string, relation: string, hierarchy = false, ownership = false): EntityGraphEdge {
-  return { sourceId, targetId, relation, hierarchy, ownership };
+function edge(sourceId: string, targetId: string, relation: string, hierarchies: string[] = [], ownership = false): EntityGraphEdge {
+  return { sourceId, targetId, relation, hierarchies, ownership };
 }
 
 describe("filterEntityGraph", () => {
@@ -58,7 +58,7 @@ describe("toFoldable", () => {
   test("maps relation onto field, keeping nodes untouched", () => {
     const graph: EntityGraph = {
       nodes: [node("team", "a")],
-      edges: [edge("team|a", "team|b", "parent", true)],
+      edges: [edge("team|a", "team|b", "parent", ["composition"])],
     };
     const out = toFoldable(graph);
     expect(out.nodes).toBe(graph.nodes);
@@ -66,18 +66,18 @@ describe("toFoldable", () => {
   });
 });
 
-describe("buildEntityHierarchy", () => {
+describe.each(["composition", "cost-center"])("buildEntityHierarchy (hierarchy=%s)", (hierarchyId) => {
   test("a hierarchy edge places the child under its target; a non-hierarchy edge is ignored", () => {
     const parent = node("service", "checkout");
     const child = node("workload", "checkout-api");
     const graph: EntityGraph = {
       nodes: [parent, child],
       edges: [
-        edge(child.id, parent.id, "service", true),
-        edge(child.id, parent.id, "peer", false),
+        edge(child.id, parent.id, "service", [hierarchyId]),
+        edge(child.id, parent.id, "peer", []),
       ],
     };
-    const roots = buildEntityHierarchy(graph);
+    const roots = buildEntityHierarchy(graph, hierarchyId);
     expect(roots.map((r) => r.node.id)).toEqual([parent.id]);
     expect(roots[0].children.map((c) => c.node.id)).toEqual([child.id]);
   });
@@ -87,13 +87,13 @@ describe("buildEntityHierarchy", () => {
     const b = node("a-kind", "z");
     const c = node("a-kind", "a");
     const graph: EntityGraph = { nodes: [a, b, c], edges: [] };
-    expect(buildEntityHierarchy(graph).map((r) => r.node.id)).toEqual([c.id, b.id, a.id]);
+    expect(buildEntityHierarchy(graph, hierarchyId).map((r) => r.node.id)).toEqual([c.id, b.id, a.id]);
   });
 
   test("a self hierarchy edge is ignored — the node still roots", () => {
     const self = node("team", "solo");
-    const graph: EntityGraph = { nodes: [self], edges: [edge(self.id, self.id, "parent", true)] };
-    const roots = buildEntityHierarchy(graph);
+    const graph: EntityGraph = { nodes: [self], edges: [edge(self.id, self.id, "parent", [hierarchyId])] };
+    const roots = buildEntityHierarchy(graph, hierarchyId);
     expect(roots).toHaveLength(1);
     expect(roots[0].children).toHaveLength(0);
   });
@@ -105,11 +105,11 @@ describe("buildEntityHierarchy", () => {
     const graph: EntityGraph = {
       nodes: [child, first, second],
       edges: [
-        edge(child.id, first.id, "service", true),
-        edge(child.id, second.id, "service", true),
+        edge(child.id, first.id, "service", [hierarchyId]),
+        edge(child.id, second.id, "service", [hierarchyId]),
       ],
     };
-    const roots = buildEntityHierarchy(graph);
+    const roots = buildEntityHierarchy(graph, hierarchyId);
     const firstRoot = roots.find((r) => r.node.id === first.id)!;
     expect(firstRoot.children.map((c) => c.node.id)).toEqual([child.id]);
     const secondRoot = roots.find((r) => r.node.id === second.id)!;
@@ -120,21 +120,21 @@ describe("buildEntityHierarchy", () => {
     const child = node("workload", "svc");
     const graph: EntityGraph = {
       nodes: [child],
-      edges: [edge(child.id, "service|gone", "service", true)],
+      edges: [edge(child.id, "service|gone", "service", [hierarchyId])],
     };
-    expect(buildEntityHierarchy(graph).map((r) => r.node.id)).toEqual([child.id]);
+    expect(buildEntityHierarchy(graph, hierarchyId).map((r) => r.node.id)).toEqual([child.id]);
   });
 
-  test("an ownership edge is never a parent link, even if flagged hierarchy", () => {
+  test("an ownership edge is never a parent link, even if it carries a hierarchy id", () => {
     const child = node("workload", "svc");
     const team = node("team", "platform");
     const graph: EntityGraph = {
       nodes: [child, team],
-      // The server never actually sends `hierarchy: true` on an ownership edge, but
-      // ownership must never nest even in that case.
-      edges: [edge(child.id, team.id, "$team", true, true)],
+      // The server never actually sends a hierarchy id on an ownership edge, but ownership
+      // must never nest even in that case.
+      edges: [edge(child.id, team.id, "$team", [hierarchyId], true)],
     };
-    const roots = buildEntityHierarchy(graph);
+    const roots = buildEntityHierarchy(graph, hierarchyId);
     expect(roots.map((r) => r.node.id).sort()).toEqual([child.id, team.id].sort());
     expect(roots.flatMap((r) => r.children)).toHaveLength(0);
   });
@@ -144,12 +144,58 @@ describe("buildEntityHierarchy", () => {
     const b = node("team", "b");
     const graph: EntityGraph = {
       nodes: [a, b],
-      edges: [edge(a.id, b.id, "parent", true), edge(b.id, a.id, "parent", true)],
+      edges: [edge(a.id, b.id, "parent", [hierarchyId]), edge(b.id, a.id, "parent", [hierarchyId])],
     };
-    const roots = buildEntityHierarchy(graph);
+    const roots = buildEntityHierarchy(graph, hierarchyId);
     // Every node renders exactly once; the sorted-first (a) is promoted to root.
     expect(roots.map((r) => r.node.id)).toEqual([a.id]);
     expect(roots[0].children.map((c) => c.node.id)).toEqual([b.id]);
+  });
+});
+
+describe("buildEntityHierarchy — multi-hierarchy edges", () => {
+  test("an edge listing two hierarchy ids is a parent link in BOTH", () => {
+    const parent = node("service", "checkout");
+    const child = node("workload", "checkout-api");
+    const graph: EntityGraph = {
+      nodes: [parent, child],
+      edges: [edge(child.id, parent.id, "service", ["composition", "cost-center"])],
+    };
+    for (const hierarchyId of ["composition", "cost-center"]) {
+      const roots = buildEntityHierarchy(graph, hierarchyId);
+      expect(roots.map((r) => r.node.id)).toEqual([parent.id]);
+      expect(roots[0].children.map((c) => c.node.id)).toEqual([child.id]);
+    }
+  });
+
+  test("a hierarchy id no edge carries yields all roots", () => {
+    const parent = node("service", "checkout");
+    const child = node("workload", "checkout-api");
+    const graph: EntityGraph = {
+      nodes: [parent, child],
+      edges: [edge(child.id, parent.id, "service", ["composition"])],
+    };
+    const roots = buildEntityHierarchy(graph, "unknown-hierarchy");
+    expect(roots.map((r) => r.node.id).sort()).toEqual([child.id, parent.id].sort());
+    expect(roots.flatMap((r) => r.children)).toHaveLength(0);
+  });
+});
+
+describe("effectiveHierarchyId", () => {
+  test("keeps the stored id when it is still a dictionary value", () => {
+    expect(effectiveHierarchyId("cost-center", ["composition", "cost-center"])).toBe("cost-center");
+  });
+
+  test("falls back to the first dictionary value when the stored id is stale", () => {
+    expect(effectiveHierarchyId("gone", ["composition", "cost-center"])).toBe("composition");
+  });
+
+  test("falls back to the first dictionary value when nothing was stored yet", () => {
+    expect(effectiveHierarchyId("", ["composition", "cost-center"])).toBe("composition");
+  });
+
+  test("an empty dictionary resolves to the empty string", () => {
+    expect(effectiveHierarchyId("composition", [])).toBe("");
   });
 });
 
@@ -161,11 +207,11 @@ describe("ownership edges fold like other relations", () => {
     const graph: EntityGraph = {
       nodes: [parent, child, team],
       edges: [
-        edge(child.id, parent.id, "service", true),
-        edge(child.id, team.id, "$team", false, true),
+        edge(child.id, parent.id, "service", ["composition"]),
+        edge(child.id, team.id, "$team", [], true),
       ],
     };
-    const forest = buildEntityHierarchy(graph);
+    const forest = buildEntityHierarchy(graph, "composition");
     const folded = foldGraph(toFoldable(graph), forest, new Set([parent.id]));
     // child is hidden under the collapsed parent; its ownership edge stands in as one FROM
     // the parent — never dropped just because it carries `ownership` rather than a plain

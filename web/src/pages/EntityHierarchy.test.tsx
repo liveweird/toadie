@@ -10,7 +10,8 @@ const TOKEN_KEY = "toadie.auth.token";
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
-// team ⊃ service (via the "team" hierarchy relation), plus an unrelated peer entity.
+// team ⊃ service (via the "team" relation, the "composition" hierarchy), plus an unrelated
+// peer entity.
 const GRAPH = {
   nodes: [
     { id: "team|platform", entityId: 1, blueprint: "team", blueprintTitle: "Team", identifier: "platform", title: "Platform", findings: 0 },
@@ -18,14 +19,20 @@ const GRAPH = {
     { id: "service|solo", entityId: 3, blueprint: "service", blueprintTitle: "Service", identifier: "solo", title: "Solo", findings: 0 },
   ],
   edges: [
-    { sourceId: "service|checkout", targetId: "team|platform", relation: "team", hierarchy: true },
-    { sourceId: "service|checkout", targetId: "service|solo", relation: "peer", hierarchy: false },
+    { sourceId: "service|checkout", targetId: "team|platform", relation: "team", hierarchies: ["composition"] },
+    { sourceId: "service|checkout", targetId: "service|solo", relation: "peer", hierarchies: [] },
   ],
 };
 
-function mockGraph(mockFetch: FetchMock, body: unknown = GRAPH, status = 200) {
+const HIERARCHIES = [
+  { id: 1, value: "composition", isDefault: false },
+  { id: 2, value: "cost-center", isDefault: false },
+];
+
+function mockGraph(mockFetch: FetchMock, body: unknown = GRAPH, status = 200, hierarchies: unknown = HIERARCHIES) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: [] }));
+    if (url.startsWith("/api/v1/dictionaries/hierarchies")) return Promise.resolve(jsonResponse(200, { items: hierarchies }));
     if ((init?.method ?? "GET") === "DELETE" && url.startsWith("/api/v1/entities/"))
       return Promise.resolve(new Response(null, { status: 204 }));
     return url.startsWith("/api/v1/entities/graph")
@@ -166,7 +173,7 @@ describe("EntityHierarchy page", () => {
         { id: "service|orphan", entityId: 2, blueprint: "service", blueprintTitle: "Service", identifier: "orphan", title: "Orphan", findings: 0 },
       ],
       edges: [
-        { sourceId: "service|orphan", targetId: "team|platform", relation: "$team", hierarchy: false, ownership: true },
+        { sourceId: "service|orphan", targetId: "team|platform", relation: "$team", hierarchies: [], ownership: true },
       ],
     });
     renderPage();
@@ -189,5 +196,58 @@ describe("EntityHierarchy page", () => {
     await waitFor(() =>
       expect(mockFetch.mock.calls.some(([url, init]) => url === "/api/v1/entities/3" && init?.method === "DELETE")).toBe(true),
     );
+  });
+
+  test("the hierarchy picker renders the dictionary values in order and defaults to the first", async () => {
+    mockGraph(mockFetch);
+    renderPage();
+
+    await screen.findByText("Platform");
+    const picker = screen.getByLabelText("Hierarchy", { selector: "input" }) as HTMLInputElement;
+    expect(picker.value).toBe("composition");
+  });
+
+  test("switching the hierarchy re-roots the tree and persists the choice", async () => {
+    mockGraph(mockFetch, {
+      nodes: [
+        { id: "team|platform", entityId: 1, blueprint: "team", blueprintTitle: "Team", identifier: "platform", title: "Platform", findings: 0 },
+        { id: "service|checkout", entityId: 2, blueprint: "service", blueprintTitle: "Service", identifier: "checkout", title: "Checkout", findings: 0 },
+      ],
+      edges: [
+        { sourceId: "service|checkout", targetId: "team|platform", relation: "team", hierarchies: ["cost-center"] },
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Platform");
+    // Under "composition" (the default), no edge names it — both nodes are roots, so Checkout
+    // is not nested under a collapsible Platform.
+    expect(screen.queryByRole("button", { name: "Toggle children of Platform" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Hierarchy", { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "cost-center" }));
+
+    expect(await screen.findByRole("button", { name: "Toggle children of Platform" })).toBeInTheDocument();
+    expect(localStorage.getItem("toadie.viewSettings.entityHierarchy.hierarchy")).toBe('"cost-center"');
+  });
+
+  test("a stale stored hierarchy id falls back to the first dictionary value", async () => {
+    mockGraph(mockFetch);
+    localStorage.setItem("toadie.viewSettings.entityHierarchy.hierarchy", '"gone"');
+    renderPage();
+
+    await screen.findByText("Platform");
+    const picker = screen.getByLabelText("Hierarchy", { selector: "input" }) as HTMLInputElement;
+    expect(picker.value).toBe("composition");
+  });
+
+  test("an empty hierarchies dictionary disables the picker with a hint", async () => {
+    mockGraph(mockFetch, GRAPH, 200, []);
+    renderPage();
+
+    await screen.findByText("Platform");
+    expect(screen.getByLabelText("Hierarchy", { selector: "input" })).toBeDisabled();
+    expect(screen.getByText("No hierarchies defined — add them on the Hierarchies page")).toBeInTheDocument();
   });
 });

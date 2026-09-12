@@ -21,28 +21,35 @@ Kubernetes, Java services, sync APIs and Kafka, SPAs and server-rendered UIs, jo
 PostgreSQL/ClickHouse/Redis, few environments, team ownership, external links. (4) It is Port's own
 default shape (service / environment / workload / `_team` / `_user`) with the usual layering.
 
-| Layer | Blueprint | Backstage kind | `hierarchyRelation` (parent) |
+| Layer | Blueprint | Backstage kind | `hierarchyRelations` (parent) |
 |---|---|---|---|
-| A organisation | `_team` | Group (type `team`/`org-unit`/`org-division`), Port system blueprint | `parent` → team |
+| A organisation | `_team` | Group (type `team`/`org-unit`/`org-division`), Port system blueprint | composition: `parent` → team |
 | | `_user` | User, Port system blueprint | none (team relation, many) |
-| | `domain` | Domain | `parent_domain` → domain |
-| | `system` | System | `domain` → domain |
-| B software | `service` | Component (type `service`/`website`/`job`/`data-pipeline`) | `system` → system |
-| | `library` | Component (type `library`) | `system` → system |
-| | `api` | API (type incl. `asyncapi` = a Kafka topic) | `system` → system |
-| | `resource` | Resource | `system` → system |
+| | `domain` | Domain | composition: `parent_domain` → domain |
+| | `system` | System | composition: `domain` → domain |
+| B software | `service` | Component (type `service`/`website`/`job`/`data-pipeline`) | composition: `system` → system |
+| | `library` | Component (type `library`) | composition: `system` → system |
+| | `api` | API (type incl. `asyncapi` = a Kafka topic) | composition: `system` → system |
+| | `resource` | Resource | composition: `system` → system |
 | C runtime | `environment` | — Port default, dropped on export | none |
-| | `cluster` | — Port-only (Resource `kubernetes-cluster` if ever exported) | `environment` → environment |
-| | `workload` | — Port's "running service", dropped on export | `service` → service |
+| | `cluster` | — Port-only (Resource `kubernetes-cluster` if ever exported) | composition: `environment` → environment; deployment: `environment` → environment |
+| | `workload` | — Port's "running service", dropped on export | composition: `service` → service; deployment: `cluster` → cluster |
 
 Load order = file order (a relation target must exist): _team, _user, domain, system, environment,
 cluster, resource, library, api, service, workload. There is deliberately NO `api.provided_by`:
 it would make `api` ↔ `service` a cycle no load order satisfies, and Backstage's own direction is
-`providesApis` on the component. The Entity hierarchy page shows two trees — the org tree (teams)
-and the architecture tree (domain → system → service/library/api/resource → workload, with
-cluster → environment beside it); an orphan (a service without a system) surfaces as a root,
-which is the intended nudge rather than an error — `system` is optional everywhere Backstage
-makes `spec.system` optional.
+`providesApis` on the component. Under the `composition` hierarchy (v1.32.0: the `hierarchies`
+dictionary's seeded value, the one the pre-1.32 single `hierarchyRelation` always described) the
+Entity hierarchy page shows two trees — the org tree (teams) and the architecture tree (domain →
+system → service/library/api/resource → workload, with cluster → environment beside it); an orphan
+(a service without a system) surfaces as a root, which is the intended nudge rather than an error —
+`system` is optional everywhere Backstage makes `spec.system` optional. A second, PARALLEL
+hierarchy, `deployment`, runs workload → cluster → environment over the same existing relations
+(`workload.cluster`, `cluster.environment` — the latter serving BOTH hierarchies, the
+one-relation-several-hierarchies case), so the picker on the Entity hierarchy/graph pages
+demonstrates what parallel hierarchies are for; `load.sh` appends `deployment` to the dictionary
+before loading. Ownership is deliberately NOT a hierarchy here: Port models it as the entity's
+`$team` field, not a relation, and a hierarchy link is always a relation key.
 
 **Conventions.** Property names `snake_case`. Ownership is Port's `$team` (arrived with Phase 4,
 v1.26.0, V31): each blueprint declares `ownership: {type: Direct}` (domain, system, service,

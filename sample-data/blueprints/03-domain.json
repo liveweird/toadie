@@ -3,7 +3,7 @@
   "title": "Domain",
   "description": "A business area that groups systems — Payments, Storefront, Platform. The top of the architecture tree. Backstage kind: Domain (parent_domain → spec.subdomainOf, the team field → spec.owner).",
   "icon": "Folder",
-  "hierarchyRelation": "parent_domain",
+  "hierarchyRelations": {"composition": "parent_domain"},
   "schema": {
     "properties": {
       "type": {

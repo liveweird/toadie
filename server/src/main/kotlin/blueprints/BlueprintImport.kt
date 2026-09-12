@@ -74,6 +74,7 @@ private fun classifyDocuments(
     documents: List<JsonObject>,
     registry: List<RegistryBlueprint>,
     replaceExisting: Boolean,
+    knownHierarchies: Set<String>,
     verdicts: Array<BlueprintPlanVerdict?>,
 ): List<Candidate> {
     val registryByIdentifier = registry.associateBy { it.identifier.lowercase() }
@@ -88,7 +89,8 @@ private fun classifyDocuments(
             return@forEachIndexed
         }
         val sanitized = sanitizedBlueprintRequest(decoded)
-        val candidate = classifyOne(index, sanitized, registryByIdentifier, systemIdentifiers, seen, replaceExisting, verdicts)
+        val candidate =
+            classifyOne(index, sanitized, registryByIdentifier, systemIdentifiers, seen, replaceExisting, knownHierarchies, verdicts)
         candidate?.let { candidates += it }
     }
     return candidates
@@ -102,12 +104,19 @@ private fun classifyOne(
     systemIdentifiers: Set<String>,
     seen: MutableMap<String, Int>,
     replaceExisting: Boolean,
+    knownHierarchies: Set<String>,
     verdicts: Array<BlueprintPlanVerdict?>,
 ): Candidate? {
     try {
         validateBlueprintRequest(sanitized)
     } catch (e: BadRequestException) {
         verdicts[index] = rejected(index, sanitized.identifier, e.message)
+        return null
+    }
+    val unknownHierarchies = sanitized.hierarchyRelations?.keys?.filterNot { it in knownHierarchies }.orEmpty()
+    if (unknownHierarchies.isNotEmpty()) {
+        val message = "hierarchyRelations names an unknown hierarchy '${unknownHierarchies.first()}'"
+        verdicts[index] = rejected(index, sanitized.identifier, message)
         return null
     }
     val identifierLower = sanitized.identifier.lowercase()
@@ -238,25 +247,35 @@ private fun withDeferredStripped(request: BlueprintRequest, deferred: Set<String
     val ownership = request.ownership?.takeUnless {
         it.type == "Inherited" && firstSegment(it.path.orEmpty()) in droppedRelations
     }
-    val hierarchyRelation = request.hierarchyRelation?.takeUnless { it in droppedRelations }
+    // hierarchyRelations values are relation KEYS of this SAME row (never another blueprint's
+    // identity), so a deferred entry is any whose relation VALUE got dropped above.
+    val hierarchyRelations = request.hierarchyRelations?.filterValues { it !in droppedRelations }?.ifEmpty { null }
     return request.copy(
         relations = relations,
         aggregationProperties = aggregationProperties,
         mirrorProperties = mirrorProperties,
         ownership = ownership,
-        hierarchyRelation = hierarchyRelation,
+        hierarchyRelations = hierarchyRelations,
     )
 }
 
 /**
- * The batch classification: steps 1-4 (decode/validate/system/duplicate/registry-match), then
- * the step-5 fixpoint (unknown targets, the registry cap), then steps 6-7 (Kahn order +
- * deferral). Every document ends with exactly one verdict — a rejection, or a [BlueprintPlanVerdict.Store]
- * in [BlueprintImportPlan.order]'s write order.
+ * The batch classification: steps 1-4 (decode/validate/system/duplicate/registry-match — now
+ * also rejecting a `hierarchyRelations` key outside [knownHierarchies], the identical rule
+ * [BlueprintService.create]/[BlueprintService.update] enforce at write time, so the dry-run and
+ * the real run classify a document the same way), then the step-5 fixpoint (unknown targets,
+ * the registry cap), then steps 6-7 (Kahn order + deferral). Every document ends with exactly
+ * one verdict — a rejection, or a [BlueprintPlanVerdict.Store] in [BlueprintImportPlan.order]'s
+ * write order.
  */
-fun planBlueprintImport(documents: List<JsonObject>, registry: List<RegistryBlueprint>, replaceExisting: Boolean): BlueprintImportPlan {
+fun planBlueprintImport(
+    documents: List<JsonObject>,
+    registry: List<RegistryBlueprint>,
+    replaceExisting: Boolean,
+    knownHierarchies: Set<String> = emptySet(),
+): BlueprintImportPlan {
     val verdicts = arrayOfNulls<BlueprintPlanVerdict>(documents.size)
-    val candidates = classifyDocuments(documents, registry, replaceExisting, verdicts)
+    val candidates = classifyDocuments(documents, registry, replaceExisting, knownHierarchies, verdicts)
     val remaining = fixpointTargetsAndCap(candidates, registry, verdicts)
     val stored = orderCandidates(remaining)
     stored.order.forEachIndexed { position, idx -> verdicts[idx] = stored.verdicts[position] }
@@ -277,7 +296,7 @@ private const val BLUEPRINT_STORAGE_FAILED = "Storage failed"
  */
 suspend fun BlueprintService.import(documents: List<JsonObject>, callerId: UInt, replaceExisting: Boolean): List<BlueprintImportRow> {
     val registry = list().map { RegistryBlueprint(it.id, it.identifier, it.system) }
-    val plan = planBlueprintImport(documents, registry, replaceExisting)
+    val plan = planBlueprintImport(documents, registry, replaceExisting, knownHierarchies())
     val rows = arrayOfNulls<BlueprintImportRow>(documents.size)
     plan.verdicts.forEachIndexed { idx, verdict -> if (verdict is BlueprintPlanVerdict.Rejected) rows[idx] = verdict.row }
 
@@ -353,7 +372,7 @@ private suspend fun BlueprintService.pass2Blueprint(
 /** The dry-run: the identical classification, storing nothing — `Store` verdicts predict CREATED/UPDATED. */
 suspend fun BlueprintService.importCheck(documents: List<JsonObject>, replaceExisting: Boolean): List<BlueprintImportRow> {
     val registry = list().map { RegistryBlueprint(it.id, it.identifier, it.system) }
-    val plan = planBlueprintImport(documents, registry, replaceExisting)
+    val plan = planBlueprintImport(documents, registry, replaceExisting, knownHierarchies())
     return plan.verdicts.mapIndexed { idx, verdict ->
         when (verdict) {
             is BlueprintPlanVerdict.Rejected -> verdict.row

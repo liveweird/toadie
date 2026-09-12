@@ -208,6 +208,21 @@ export function runNamespace(key: "kinds" | "render" | "renderAlt" | "roundTrip"
 }
 
 /**
+ * The one throwaway `hierarchies`-dictionary value global-setup registers (and
+ * global-teardown removes) alongside the seeded `composition` entry — the `runNamespace()`
+ * shape, for the SAME reason: the dictionary is a whole-document-replace resource with its
+ * own single in-run writer (`hierarchies.spec.ts`), so a second value needed DURING the
+ * parallel run (rather than before/after it) is minted outside that window instead of
+ * risking a second concurrent writer. `entity-hierarchy.spec.ts`'s "a second hierarchy" step
+ * is its only consumer.
+ */
+export function runHierarchy(): string {
+  const value = process.env.E2E_HIER_ENTITY;
+  if (!value) throw new Error('global-setup did not register the run hierarchy value ("E2E_HIER_ENTITY")');
+  return value;
+}
+
+/**
  * Pick a spec.type in the catalog form's Type Select (free text is not accepted — the
  * field offers only the kind's admin-defined type dictionary, seeded by V15 and re-curated
  * by V22). Same shape as [pickNamespace].

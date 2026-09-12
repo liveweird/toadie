@@ -3,7 +3,13 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BASE_URL } from "./playwright.config";
-import { adminApiHeaders, NAMESPACES_FILE, STARTED_MARKER, type DictionaryItems } from "./global-setup";
+import {
+  adminApiHeaders,
+  HIERARCHIES_FILE,
+  NAMESPACES_FILE,
+  STARTED_MARKER,
+  type DictionaryItems,
+} from "./global-setup";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -38,8 +44,40 @@ async function removeRunNamespaces(): Promise<void> {
   }
 }
 
+/**
+ * Removes global-setup's run hierarchy value — mirrors `removeRunNamespaces()` above. Runs
+ * after every worker has finished, so `entity-hierarchy.spec.ts`'s own `finally` has already
+ * deleted the child blueprint that referenced this value: the server refuses to remove a
+ * hierarchy a blueprint still references, and by teardown time nothing does.
+ */
+async function removeRunHierarchy(): Promise<void> {
+  if (!existsSync(HIERARCHIES_FILE)) return;
+  const { ENTITY: value } = JSON.parse(readFileSync(HIERARCHIES_FILE, "utf8")) as Record<string, string>;
+  try {
+    const headers = await adminApiHeaders();
+    const current = (await (
+      await fetch(`${BASE_URL}/api/v1/dictionaries/hierarchies`, { headers })
+    ).json()) as DictionaryItems;
+    const kept = current.items.filter((item) => item.value !== value);
+    if (kept.length < current.items.length) {
+      await fetch(`${BASE_URL}/api/v1/dictionaries/hierarchies`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          items: kept.map(({ id, value: v, isDefault }) => ({ id, value: v, isDefault })),
+        }),
+      });
+    }
+    rmSync(HIERARCHIES_FILE, { force: true });
+    console.log("[e2e] Removed the run hierarchy.");
+  } catch {
+    console.log("[e2e] Stack unreachable — run-hierarchy cleanup skipped.");
+  }
+}
+
 export default async function globalTeardown(): Promise<void> {
   await removeRunNamespaces();
+  await removeRunHierarchy();
   // Only tear down what we started (a pre-existing/reused stack is left running). The
   // postgres volume is deliberately KEPT (no `-v`): the local database may hold the user's
   // own demo files, and specs clean up their throwaway state themselves. Wipe manually with

@@ -7,7 +7,7 @@ PostgreSQL is the only database. Connection settings come from the `postgres:` b
 
 The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flyway; runtime queries go through R2DBC.
 
-**Cross-feature table reads (the service-layer rule, inherited from Lettuce).** A feature service MAY query another feature's Exposed table objects directly when the read must run **inside its own transaction** (SQL joins, atomic snapshots) — calling the other feature's *service* would open a second transaction and break atomicity. Route handlers never touch tables (services only). The reads in place: `CatalogFileService.joined()`, `LensService.joined()`, and `EntityService.joined()` (catalog list/read, the lens list, and the entity list/read join `UserService.Users` for the creator's display fields), `EntityService.loadSnapshot()` — the per-call read of active rows from `BlueprintService.Blueprints`, the `_team`/`_user` system blueprints (if they exist), and the set of blueprints named by any Inherited `ownership.path` (each entry decoded once inside the transaction), used to validate relation targets and compute inherited teams. The definition each entity's `entityFindings` is checked against, and every map (`(blueprintId, identifier)` pairs for relations, `(blueprintId, teamId)` for ownership, and the blueprint-graph for path-following) are read inside the calling write/list/read transaction so an entity is never validated against definitions mid-change — see the V28 lock protocol below, `CatalogFileService.resolvedNamespace()` (every catalog write resolves its namespace against the active `NAMESPACE` dictionary entries inside the write's own transaction: blank → the ADMIN-flagged default entry, none flagged → 400; a concrete value must be an active entry — STRICT, no grandfathering: a stored file whose namespace was since removed cannot be saved until it is re-added or changed. The stored row AND content JSON always carry the resolved concrete value), and `CatalogFileService.loadRegistrySnapshot()` (one snapshot of the five soft-check registries — active labels with kinds+closed value lists, annotation keys with kinds, tag categories, per-kind `entity_types` dictionaries, and the GLOBAL `LIFECYCLE` dictionary entries — plus the active `NAMESPACE` dictionary values (feeding ONLY the Errors report's report-only namespace check, never the soft checks) — read inside the calling write/report transaction; the soft rules themselves are the PURE `registryFindings` in `catalog/Errors.kt`: label key registered + kind allowed + value in the closed list, annotation KEY registered + kind allowed with values staying free, tag registered in a category whose kinds allow the file's kind, non-blank `spec.type` in the kind's active dictionary — no dictionary allows no types — and non-blank `spec.lifecycle` an active entry, byte-exact against the lowercase-folded stored values; empty registries allow nothing). These are the write path's SOFT checks (`CatalogFileService.softFindings` adds reference resolution): strict by default with the same no-grandfathering rule — a stored file whose registry row was since removed cannot be strict-saved until fixed — but waivable per write via `allowInvalid=true` (see `.claude/docs/authorization.md`), and the same snapshot feeds the Errors report (`GET …/errors` — which adds the report-only `STRUCTURE_INVALID`/`NAMESPACE_NOT_ALLOWED` checks over stored content, rules that stay HARD on writes) and `POST …/check`.
+**Cross-feature table reads (the service-layer rule, inherited from Lettuce).** A feature service MAY query another feature's Exposed table objects directly when the read must run **inside its own transaction** (SQL joins, atomic snapshots) — calling the other feature's *service* would open a second transaction and break atomicity. Route handlers never touch tables (services only). The reads in place: `BlueprintService`'s read of the active `HIERARCHY` rows in `DictionaryService.Entries` (every `hierarchyRelations` key must be one, inside the V27 locked write) and `DictionaryService.replace`'s read of `BlueprintService.Blueprints` (the hierarchy referrer check, under the same lock — V34), `CatalogFileService.joined()`, `LensService.joined()`, and `EntityService.joined()` (catalog list/read, the lens list, and the entity list/read join `UserService.Users` for the creator's display fields), `EntityService.loadSnapshot()` — the per-call read of active rows from `BlueprintService.Blueprints`, the `_team`/`_user` system blueprints (if they exist), and the set of blueprints named by any Inherited `ownership.path` (each entry decoded once inside the transaction), used to validate relation targets and compute inherited teams. The definition each entity's `entityFindings` is checked against, and every map (`(blueprintId, identifier)` pairs for relations, `(blueprintId, teamId)` for ownership, and the blueprint-graph for path-following) are read inside the calling write/list/read transaction so an entity is never validated against definitions mid-change — see the V28 lock protocol below, `CatalogFileService.resolvedNamespace()` (every catalog write resolves its namespace against the active `NAMESPACE` dictionary entries inside the write's own transaction: blank → the ADMIN-flagged default entry, none flagged → 400; a concrete value must be an active entry — STRICT, no grandfathering: a stored file whose namespace was since removed cannot be saved until it is re-added or changed. The stored row AND content JSON always carry the resolved concrete value), and `CatalogFileService.loadRegistrySnapshot()` (one snapshot of the five soft-check registries — active labels with kinds+closed value lists, annotation keys with kinds, tag categories, per-kind `entity_types` dictionaries, and the GLOBAL `LIFECYCLE` dictionary entries — plus the active `NAMESPACE` dictionary values (feeding ONLY the Errors report's report-only namespace check, never the soft checks) — read inside the calling write/report transaction; the soft rules themselves are the PURE `registryFindings` in `catalog/Errors.kt`: label key registered + kind allowed + value in the closed list, annotation KEY registered + kind allowed with values staying free, tag registered in a category whose kinds allow the file's kind, non-blank `spec.type` in the kind's active dictionary — no dictionary allows no types — and non-blank `spec.lifecycle` an active entry, byte-exact against the lowercase-folded stored values; empty registries allow nothing). These are the write path's SOFT checks (`CatalogFileService.softFindings` adds reference resolution): strict by default with the same no-grandfathering rule — a stored file whose registry row was since removed cannot be strict-saved until fixed — but waivable per write via `allowInvalid=true` (see `.claude/docs/authorization.md`), and the same snapshot feeds the Errors report (`GET …/errors` — which adds the report-only `STRUCTURE_INVALID`/`NAMESPACE_NOT_ALLOWED` checks over stored content, rules that stay HARD on writes) and `POST …/check`.
 
 **Tag-category ownership under concurrency.** `TagCategoryService` takes a transaction-scoped
 PostgreSQL `SHARE ROW EXCLUSIVE` lock on `tag_categories` before the first registry read in
@@ -31,7 +31,7 @@ or promise immediate database-query cancellation.
 read transaction, not a write path: it loads ONLY the rows the `blueprint`/`q` filters show
 (the catalog graph's rule, one level down — an edge needs BOTH ends shown, so a row the filter
 hid contributes neither a node nor an edge, never a virtual/MISSING one), joins the active
-blueprint snapshot for titles/`hierarchyRelation`, and computes each returned row's `findings`
+blueprint snapshot for titles/`hierarchyRelations`, and computes each returned row's `findings`
 with the SAME `entityFindings` the list/read endpoints use, condensed to a count. No lock is
 taken — a plain committed read, like the entity list.
 
@@ -40,7 +40,13 @@ transaction-scoped `SHARE ROW EXCLUSIVE` lock on `blueprints` before the first r
 create/update/delete: every relation/aggregation `target` inside a definition is a byte-exact
 blueprint identifier held in JSON, not a foreign key, so the "target exists", "rename cascades
 into the referrers" and "a targeted blueprint cannot be deleted" rules are cooperating-writer
-rules over ≤200 rows loaded once under the lock. `infra/db/Locking.kt`'s `lockingTransaction`
+rules over ≤200 rows loaded once under the lock. Since V34 `DictionaryService.replace` takes the
+SAME `SHARE ROW EXCLUSIVE` lock on `blueprints` — for the `HIERARCHY` dictionary only — before its
+referrer check (a value being removed or renamed must not be named by any active blueprint's
+`hierarchy_relations`, else 409 naming the referrers), so a concurrent blueprint write waits and
+then validates its keys against the COMMITTED dictionary; blueprint writers read
+`DictionaryService.Entries` under their own lock for the same reason (`DictionaryConcurrencyTest`
+pins the race). `infra/db/Locking.kt`'s `lockingTransaction`
 is the shared helper behind this lock (and `TagCategoryService`'s and `EntityService`'s below) —
 one `LOCK TABLE …` per statement, in the order given, inside a READ COMMITTED transaction. The
 same caveats apply verbatim: direct SQL writers bypass it, readers never wait, cancellation may
@@ -128,7 +134,7 @@ concurrent-change residual, not a bug in the ordering. `planBlueprintImport`/`pl
 themselves touch no table at all: pure functions over the snapshot and the batch, so the two
 planner test files run without Docker.
 
-Current migrations are `V1`–`V33` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V34` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -224,7 +230,9 @@ same row's `relations` with `many == false`; no cascade on relation rename, sinc
 names a relation KEY of its OWN row, not another blueprint's identity. Read/written alongside
 `definition` in `BlueprintService.insertRow`/`update`/`toResponse`, under the same V27 table
 lock (a relation the value points at may be renamed/removed in the very definition being
-saved). Migration checksums, including V29, are pinned in `MigrationChecksumTest`.
+saved). **Replaced by V34 (v1.32.0, phase 3 enhancement)**: this single-string column is
+migrated to a JSON map supporting multiple hierarchies; see V34 below. Migration checksums,
+including V29, are pinned in `MigrationChecksumTest`.
 
 **V30 — the Entity graph's own layout.** `CREATE TABLE entity_graph_layouts`, a byte-copy of
 V19+V24's `graph_layouts` shape (`user_id PK/FK ON DELETE CASCADE`, `mode`, `positions TEXT`,
@@ -255,12 +263,12 @@ hard-delete, so it survives a renamed seed email (a subselect by email would ret
 the NOT NULL FK, refusing boot). `definition` is stored in `blueprintJson`'s canonical form
 (schema/relations/mirrorProperties/calculationProperties/aggregationProperties in that order;
 unset optionals ABSENT, never null) so a later service write is byte-identical — `_team`'s base
-is `{schema: {}, relations: {parent → _team, single, optional}, hierarchyRelation: "parent"}`
+is `{schema: {}, relations: {parent → _team, single, optional}, hierarchyRelations: {"composition": "parent"}}`
 and `_user`'s is `{schema: {email → string required}, relations: {team → _team, many, optional},
-no hierarchyRelation}`. Protections live in `BlueprintService` under the V27 lock: delete is `409`
+no hierarchyRelations}`. Protections live in `BlueprintService` under the V27 lock: delete is `409`
 ("a system blueprint"), identifier immutable and base shape not removable/reshapable (the
 `validateSystemExtension` function, `400`), identifiers starting with `_` reserved on create
-(`400`); ADMIN may extend (add properties/relations, set `hierarchyRelation`, add `ownership`).
+(`400`); ADMIN may extend (add properties/relations, set `hierarchyRelations`, add `ownership`).
 Migration checksums, including V31, are pinned in `MigrationChecksumTest`.
 
 **V32 — Languages gains kotlin.** A pure DATA adjustment to V22's seeded "Languages" tag
@@ -282,10 +290,28 @@ checksums, including V32, are pinned in `MigrationChecksumTest`.
   enum value) with the single value `composition` (position 0, the V8/V16 conflict idiom). NO
   default flag — `Dictionary.usesDefault` is false for HIERARCHY, and `validateDictionaryUpdate`
   rejects flagged items on it (the LIFECYCLE branch). `composition` is the one entity hierarchy
-  the pre-1.32 single blueprint `hierarchyRelation` always described; a later migration backfills
-  every existing `hierarchyRelation` pointer into this seeded entry once `hierarchyRelations`
-  (plural, next release) exists. Purely additive today — nothing yet validates a blueprint's
-  `hierarchyRelations` keys against this dictionary.
+  the pre-1.32 single blueprint `hierarchyRelation` always described; V34 (below) backfills every
+  existing pointer into this seeded map entry. Since V34 every blueprint write's `hierarchyRelations`
+  keys must be ACTIVE entries here, and `DictionaryService.replace` refuses (409, naming the
+  referrers) to remove or rename a value an active blueprint still names — see "Blueprint targets
+  under concurrency (V27)" for the lock it takes to make that check hold.
+
+**V34 — hierarchy relations map.** `ALTER TABLE blueprints ADD COLUMN hierarchy_relations TEXT NOT
+NULL DEFAULT '{}'` (v1.32.0 — parallel entity hierarchies, see `.claude/docs/port-data-model.md`
+"Toadie extensions"): ONE JSON object in TEXT (the `catalog_files.content`/`lenses.filters`
+precedent, replaced whole on every save) mapping a hierarchy identifier — an ACTIVE value of the V33
+`HIERARCHY` dictionary — to the relation key that is the entity's parent link in THAT hierarchy;
+`{}` = the blueprint takes part in no hierarchy (ABSENT on the wire). The migration then backfills
+`json_build_object('composition', hierarchy_relation)` into every row whose V29 pointer is set
+(soft-deleted rows included — harmless, the column is replaced whole on the next save) and DROPS
+`hierarchy_relation`. V31's INSERT still names the dropped column: it runs earlier on a fresh
+database, so it stays valid and `_team` lands as `{"composition":"parent"}` through the backfill —
+`SystemBlueprintTest` pins that. Still beside `definition`, never inside it, so the stored Port
+document stays byte-identical (a Port export drops the column). No index, no CHECK: the key/value
+rules live in `BlueprintValidation.kt` (value = a `many: false` relation KEY of the same row) and
+`BlueprintService` (key = an active dictionary value, read inside the V27 locked transaction —
+a sanctioned cross-feature table read of `DictionaryService.Entries`). One relation may serve
+several hierarchies. Migration checksums, including V34, are pinned in `MigrationChecksumTest`.
 
 ### Soft delete (convention)
 

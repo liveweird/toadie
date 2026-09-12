@@ -892,7 +892,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to), `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry), or `hierarchies` (the identifiers of the parallel entity hierarchies a blueprint's `hierarchyRelations` may name — no default entry; purely additive today, nothing consumes it yet). */
+                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to), `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry), or `hierarchies` (the identifiers of the parallel entity hierarchies a blueprint's `hierarchyRelations` names — no default entry; every blueprint write validates its map keys against the active entries, and a value an active blueprint still names cannot be removed or renamed — `409`, see the PUT). */
                 dictionary: "namespaces" | "lifecycles" | "hierarchies";
             };
             cookie?: never;
@@ -903,7 +903,7 @@ export interface paths {
          *     deliberately unpaged (a dictionary holds at most 200 entries by validation), NOT a
          *     standard list endpoint. Each dictionary is an allowlist every catalog-file write is
          *     validated against: `namespaces` for `metadata.namespace`, `lifecycles` for
-         *     `spec.lifecycle`. `hierarchies` is not yet consulted by any write.
+         *     `spec.lifecycle`; `hierarchies` is the allowlist every blueprint write's `hierarchyRelations` keys are validated against.
          */
         get: operations["getDictionary"];
         /**
@@ -919,6 +919,11 @@ export interface paths {
          *     default — any flagged item there is a `400`.
          *     Swapping two values in one save is a `409` (the value uniqueness index) — rename
          *     through a temporary value in two saves.
+         *     On the `hierarchies` dictionary ALONE, removing a value or renaming it onto a
+         *     different stored value is also a `409` when an active blueprint's
+         *     `hierarchyRelations` still names it — the response names the value and its
+         *     referring blueprint identifiers; a rename is therefore three saves (add the new
+         *     value, re-point the blueprints, remove the old one).
          */
         put: operations["replaceDictionary"];
         post?: never;
@@ -1275,11 +1280,13 @@ export interface paths {
          *     is a strict `400`). Relation and aggregation targets must name an existing blueprint
          *     (self allowed); the registry holds at most 200 active blueprints. An identifier
          *     already held by an active blueprint (case-insensitively) is a `409`. Optionally
-         *     carries `hierarchyRelation`, a Toadie-only extension (not part of Port's document)
-         *     naming one of this blueprint's `many: false` relations — the entity hierarchy's
-         *     parent link; naming an unknown or many-valued relation is `400`. Identifiers starting
-         *     with `_` are reserved for Port's own system blueprints (`_team`/`_user`) and are
-         *     rejected with `400`.
+         *     carries `hierarchyRelations`, a Toadie-only extension (not part of Port's document) —
+         *     a map of hierarchy identifier (an ACTIVE value of the `hierarchies` dictionary) to one
+         *     of this blueprint's `many: false` relations, so several PARALLEL entity hierarchies may
+         *     each root at a different relation (two hierarchy identifiers may legitimately share one
+         *     relation); naming an unknown hierarchy identifier or an unknown/many-valued relation is
+         *     `400`. Identifiers starting with `_` are reserved for Port's own system blueprints
+         *     (`_team`/`_user`) and are rejected with `400`.
          */
         post: operations["createBlueprint"];
         delete?: never;
@@ -1307,12 +1314,12 @@ export interface paths {
          * @description ADMIN only — whole-blueprint replacement, identifier rename included. Renaming
          *     CASCADES: every other active blueprint's relation/aggregation targets naming the old
          *     identifier are rewritten to the new one, in the same locked transaction. Same
-         *     validation and `409` rules as create, including `hierarchyRelation`'s
-         *     must-be-a-current-single-relation rule; a self-relation survives a rename. A system
-         *     blueprint (`_team`/`_user`, `system: true`) additionally rejects an identifier rename
-         *     and any removal or retyping of its base properties/relations with `400`; everything
-         *     else about it (titles, extra properties/relations, `hierarchyRelation`, `ownership`)
-         *     remains an ordinary admin edit.
+         *     validation and `409` rules as create, including `hierarchyRelations`'
+         *     must-name-a-current-single-relation-per-entry rule; a self-relation survives a rename. A
+         *     system blueprint (`_team`/`_user`, `system: true`) additionally rejects an identifier
+         *     rename and any removal or retyping of its base properties/relations with `400`;
+         *     everything else about it (titles, extra properties/relations, `hierarchyRelations`,
+         *     `ownership`) remains an ordinary admin edit.
          */
         put: operations["replaceBlueprint"];
         post?: never;
@@ -1367,7 +1374,7 @@ export interface paths {
          *     references on its first write (dropped from `pass1`) and restores them with a second
          *     full write once every sibling exists — the `sample-data/blueprints/load.sh` two-pass
          *     trick, generalized and automatic. A reference through a REQUIRED path
-         *     (`hierarchyRelation`/`schema.required` have no bearing here — every blueprint field is
+         *     (`hierarchyRelations`/`schema.required` have no bearing here — every blueprint field is
          *     optional at create) never needs this; only a genuine cycle does. A pass-2 failure
          *     (only possible from a concurrent change during the batch) reports `ERROR` WITH the
          *     row's `id` and "Stored without its deferred targets: …" — never silently `CREATED`.
@@ -1498,10 +1505,12 @@ export interface paths {
          *     applies to ownership edges (below).
          *
          *     Each node's id follows the grammar `"<blueprint>|<identifier>"` (`|` never appears in
-         *     either charset, so the split is unambiguous). An edge's `hierarchy` flag is `true`
-         *     exactly when `relation` is the SOURCE entity's blueprint's `hierarchyRelation`.
+         *     either charset, so the split is unambiguous). An edge's `hierarchies` array lists the
+         *     hierarchy identifiers (from the `hierarchies` dictionary) whose `hierarchyRelations`
+         *     entry (v1.32.0 — a blueprint may name several PARALLEL hierarchies) equals `relation`
+         *     on the SOURCE entity's blueprint — empty when this relation belongs to no hierarchy.
          *     Phase 4 adds ownership edges: one per effective team value, `relation: "$team"` and
-         *     `ownership: true` (never `hierarchy`), from the owning entity to its `_team` node.
+         *     `ownership: true` (`hierarchies` always empty), from the owning entity to its `_team` node.
          *
          *     Unpaged by design — a report-style computation over the workspace.
          */
@@ -2496,8 +2505,10 @@ export interface components {
                 [key: string]: components["schemas"]["AggregationPropertyDefinition"];
             };
             ownership?: components["schemas"]["OwnershipDefinition"];
-            /** @description Toadie-only extension (not part of Port's blueprint document): the identifier of ONE of this blueprint's single (many=false) relations whose target is the entity's PARENT in the entity hierarchy. Absent when unset; a request naming an unknown or many relation is 400. */
-            hierarchyRelation?: string;
+            /** @description Toadie-only extension (not part of Port's blueprint document): a map of hierarchy identifier (each key an ACTIVE value of the `hierarchies` dictionary) to one of this blueprint's single (many=false) relations naming the entity's PARENT in that hierarchy — several PARALLEL hierarchies may each root at a different relation (or share one). Absent when unset; a key naming an unknown hierarchy, or a value naming an unknown/many relation, is 400. */
+            hierarchyRelations?: {
+                [key: string]: string;
+            };
             /**
              * Format: int32
              * @description The creator's user id.
@@ -2581,8 +2592,10 @@ export interface components {
                 [key: string]: components["schemas"]["AggregationPropertyDefinition"];
             };
             ownership?: components["schemas"]["OwnershipDefinition"];
-            /** @description Toadie-only extension (not part of Port's blueprint document): the identifier of ONE of this blueprint's single (many=false) relations whose target is the entity's PARENT in the entity hierarchy. Absent when unset; a request naming an unknown or many relation is 400. */
-            hierarchyRelation?: string;
+            /** @description Toadie-only extension (not part of Port's blueprint document): a map of hierarchy identifier (each key an ACTIVE value of the `hierarchies` dictionary) to one of this blueprint's single (many=false) relations naming the entity's PARENT in that hierarchy — several PARALLEL hierarchies may each root at a different relation (or share one). Absent when unset; a key naming an unknown hierarchy, or a value naming an unknown/many relation, is 400. */
+            hierarchyRelations?: {
+                [key: string]: string;
+            };
         };
         /** @description Phase 2 of the Port data-model move (see `.claude/docs/port-data-model.md`): an entity is an instance of a registered blueprint. */
         EntityRequest: {
@@ -2746,8 +2759,8 @@ export interface components {
             targetId: string;
             /** @description The relation identifier the edge came from, or `"$team"` for a Phase 4 ownership edge (never a declared blueprint relation). */
             relation: string;
-            /** @description True when `relation` is the source entity's blueprint's `hierarchyRelation` — the entity hierarchy's parent link. Always false for an ownership edge. */
-            hierarchy: boolean;
+            /** @description The hierarchy identifiers (from the `hierarchies` dictionary) whose `hierarchyRelations` entry equals `relation` on the source entity's blueprint — empty when this relation belongs to no hierarchy, and always empty for an ownership edge. Two hierarchy identifiers may share one relation. */
+            hierarchies: string[];
             /** @description True for a Phase 4 ownership edge (the source entity's effective team, `relation: "$team"`); false for a declared relation edge. */
             ownership: boolean;
         };
@@ -4047,7 +4060,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to), `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry), or `hierarchies` (the identifiers of the parallel entity hierarchies a blueprint's `hierarchyRelations` may name — no default entry; purely additive today, nothing consumes it yet). */
+                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to), `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry), or `hierarchies` (the identifiers of the parallel entity hierarchies a blueprint's `hierarchyRelations` names — no default entry; every blueprint write validates its map keys against the active entries, and a value an active blueprint still names cannot be removed or renamed — `409`, see the PUT). */
                 dictionary: "namespaces" | "lifecycles" | "hierarchies";
             };
             cookie?: never;
@@ -4073,7 +4086,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to), `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry), or `hierarchies` (the identifiers of the parallel entity hierarchies a blueprint's `hierarchyRelations` may name — no default entry; purely additive today, nothing consumes it yet). */
+                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to), `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry), or `hierarchies` (the identifiers of the parallel entity hierarchies a blueprint's `hierarchyRelations` names — no default entry; every blueprint write validates its map keys against the active entries, and a value an active blueprint still names cannot be removed or renamed — `409`, see the PUT). */
                 dictionary: "namespaces" | "lifecycles" | "hierarchies";
             };
             cookie?: never;

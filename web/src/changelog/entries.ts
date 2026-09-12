@@ -17,6 +17,24 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.32.0",
+    date: "2026-09-12",
+    en: `**Parallel entity hierarchies.**
+
+- A workspace can now hold several hierarchies over the same entities — composition (what consists of what), deployment (what runs where), cost centres, whatever the organisation needs. Administrators name them on the new Hierarchies page (Registries); the order there is the order every picker offers them.
+- A blueprint marks, per hierarchy, which of its single relations points at the parent — one Select per hierarchy in the blueprint editor's Hierarchy section, and one relation may serve several hierarchies. A hierarchy still named by a blueprint cannot be removed or renamed from the dictionary until the blueprint stops using it.
+- The Entity hierarchy and Entity graph pages gain a Hierarchy picker: the containment tree, the fold controls and the emphasised edges follow the chosen hierarchy; the choice is remembered per view.
+- The sample ontology ships two hierarchies: \`composition\` (the org and architecture trees) and \`deployment\` (workload → cluster → environment).
+- **Breaking API change:** the blueprint field \`hierarchyRelation\` is replaced by the \`hierarchyRelations\` map (hierarchy → relation) and the entity graph edge's \`hierarchy\` flag by a \`hierarchies\` list; existing pointers are migrated under \`composition\`. Ontology exports taken before this release must have \`hierarchyRelation\` rewritten before they import.`,
+    pl: `**Równoległe hierarchie encji.**
+
+- Przestrzeń robocza może teraz mieć kilka hierarchii nad tymi samymi encjami — kompozycja (co składa się z czego), wdrożenie (co działa gdzie), centra kosztów, cokolwiek potrzebuje organizacja. Administratorzy/administratorki nazywają je na nowej stronie Hierarchie (Rejestry); kolejność tam to kolejność w każdym wyborze.
+- Schemat wskazuje, per hierarchia, która z jego pojedynczych relacji prowadzi do rodzica — jeden wybór na hierarchię w sekcji Hierarchia edytora schematu; jedna relacja może obsługiwać kilka hierarchii. Hierarchii wciąż wskazywanej przez schemat nie da się usunąć ani przemianować w słowniku, dopóki schemat z niej korzysta.
+- Strony Hierarchia encji i Graf encji zyskują wybór hierarchii: drzewo zawierania, zwijanie i wyróżnione krawędzie podążają za wybraną hierarchią; wybór jest pamiętany per widok.
+- Przykładowa ontologia niesie dwie hierarchie: \`composition\` (drzewa organizacji i architektury) oraz \`deployment\` (workload → cluster → environment).
+- **Zmiana łamiąca API:** pole schematu \`hierarchyRelation\` zastępuje mapa \`hierarchyRelations\` (hierarchia → relacja), a flagę \`hierarchy\` krawędzi grafu encji — lista \`hierarchies\`; istniejące wskazania są migrowane pod \`composition\`. Eksporty ontologii sprzed tego wydania wymagają przepisania \`hierarchyRelation\` przed importem.`,
+  },
+  {
     version: "1.31.1",
     date: "2026-09-12",
     en: `**Calculation properties no longer get quarantined by a cold start.**
