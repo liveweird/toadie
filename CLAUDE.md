@@ -316,7 +316,8 @@ ch.nokillswit
 │                       `.claude/docs/security.md` "Computed-property evaluation (jq)". Since
 │                       v1.29.0 a single shared, thread-safe `JqEvaluator` (owned by
 │                       `EntityService`) runs every evaluation on the bounded `entity-jq` worker
-│                       pool (4 workers, queue 64) under a per-expression deadline
+│                       pool (4 workers, queue 64) under a per-expression deadline on the
+│                       compiled expression (builtins loaded at boot, compile on the caller)
 │                       (`computed.jq.deadlineMillis`, default 500 ms); an expression that
 │                       misses it is quarantined until its text is edited),
 │                       EntityComputed.kt (Phase 5 — the computed-property orchestrator: the

@@ -239,7 +239,13 @@ propagates `CancellationException`, quarantines nothing, and removes the queued 
 miss while the task is still QUEUED (a 1-worker pool whose worker is latch-held) is absent but
 NOT quarantined and logs the saturation WARN once; 200
 concurrent coroutines over 8 expressions on the REAL pool yield correct values and
-`cacheSize == 8`; and the cache clear-on-overflow case. `UrlFetchTest` pins the shared
+`cacheSize == 8`; and the cache clear-on-overflow case. Two more cases pin the 2026-09-12 CI
+fix (compile-before-the-clock, builtins loaded at construction, `.claude/docs/security.md`
+"Bounded executor and per-expression deadline"): `JqEvaluator()`'s `builtinsLoaded` seam is
+already true immediately after construction, before this instance evaluates anything itself;
+and `evaluateBounded` of a malformed expression against an executor that fails the test if
+ever submitted to answers absent with `quarantinedCount == 0` — a compile error never reaches
+the executor or the quarantine set. `UrlFetchTest` pins the shared
 `infra/concurrency/BoundedExecution.kt` bridge (`Executor.awaitBounded`) unchanged now that it
 is extracted and reused by the jq evaluator. A boot pin: `computed.jq.deadlineMillis = 0` fails
 startup, the `security.passwordReset.tokenTtlSeconds` range-validation idiom.
