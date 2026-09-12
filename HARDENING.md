@@ -523,6 +523,11 @@ every upstream patch release; it is a separate, narrower concern from Stage 4's 
 below (an immutable reference for the app's OWN released image at deploy time). Every Dependabot
 PR still runs the ordinary quality gates before merge, and a Gradle bump PR must be checked for
 regenerated lockfiles (see CLAUDE.md's "Dependency locking" line) before it can merge.
+Major bumps of the two base images (`eclipse-temurin`, `node`) are ignored by the docker
+ecosystem block: they are the toolchain, decided in `mise.toml` (and mirrored by the Dockerfile,
+CI's `setup-java`/`setup-node`, and `jvmToolchain(21)`) — not something a dependency PR should
+move on its own. Dependabot's first run (2026-09-12) proposed Temurin 24 and Node 26 against
+the pinned 21/24; both were closed and the ignore rule added.
 
 ## Stage 4 — deployment
 

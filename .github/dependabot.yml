@@ -66,6 +66,11 @@ updates:
           - "minor"
           - "patch"
 
+  # Docker: the two base images ARE the toolchain — `eclipse-temurin` must equal mise.toml's Java
+  # (jvmToolchain(21), the CI setup-java version; `infrastructure.test.js` pins the parity) and
+  # `node` mise.toml's Node major. A major bump there is a toolchain decision taken in mise.toml
+  # first, never a dependency PR (the first run proposed Temurin 24 and Node 26 against the
+  # pinned 21/24), so majors are ignored here; patch/minor tag moves (21.0.12, 24.x-alpine) flow.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -78,3 +83,8 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
