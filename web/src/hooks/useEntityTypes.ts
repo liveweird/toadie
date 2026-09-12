@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { getEntityTypes, type EntityTypes } from "../api/entityTypes";
+import { useRegistryQuery } from "./useRegistryQuery";
 
 /**
  * One cached query for the per-kind type dictionaries (the ["entityTypes"] key is shared
@@ -13,10 +13,5 @@ export function useEntityTypes(): {
   /** The load failure itself (for loadErrorMessage); null while healthy. */
   loadError: unknown;
 } {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["entityTypes"],
-    queryFn: getEntityTypes,
-    staleTime: 5 * 60 * 1000,
-  });
-  return { dictionaries: data ?? [], loading: isLoading, error: isError, loadError: error };
+  return useRegistryQuery(["entityTypes"], getEntityTypes, "dictionaries");
 }

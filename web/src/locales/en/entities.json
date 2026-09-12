@@ -76,7 +76,7 @@
     "count_one": "{{count}} finding",
     "count_other": "{{count}} findings"
   },
-  "deleteTitle": "Delete entity",
+  "deleteTitle": "Delete entity?",
   "deleteBody": "Delete entity \"{{identifier}}\"? This cannot be undone.",
   "deleteFailed": "Delete failed",
   "deleteConflict": "This entity is still targeted by another entity's relation.",

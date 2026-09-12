@@ -53,7 +53,7 @@
   "changeFailedStatus": "Zmiana nie powiodła się ({{status}})",
   "changeFailedNetwork": "Zmiana nie powiodła się. Sprawdź połączenie i spróbuj ponownie.",
   "toast": {
-    "updated": "Zaktualizowano konto",
+    "saved": "Zaktualizowano konto",
     "deleted": "Usunięto konto",
     "passwordChangedSignIn": "Zmieniono hasło. Zaloguj się ponownie na każdym urządzeniu.",
     "featuresSaved": "Zapisano flagi funkcji"

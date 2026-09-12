@@ -44,7 +44,7 @@ export default function EditCatalogFile() {
   // The strict-save → Save-anyway flow shared with the create page.
   const save = useCatalogFileSave({
     saveRequest: (body, options) => updateCatalogFile(id, body, options),
-    toastKey: "catalog.toast.updated",
+    toastKey: "catalog.toast.saved",
     errorKeys: CATALOG_SAVE_ERROR_KEYS,
   });
 

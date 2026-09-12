@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { getLabels, type Label } from "../api/labels";
+import { useRegistryQuery } from "./useRegistryQuery";
 
 /**
  * One cached query for the label registry (the ["labels"] key is shared with
@@ -12,10 +12,5 @@ export function useLabels(): {
   /** The load failure itself (for loadErrorMessage); null while healthy. */
   loadError: unknown;
 } {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["labels"],
-    queryFn: getLabels,
-    staleTime: 5 * 60 * 1000,
-  });
-  return { labels: data ?? [], loading: isLoading, error: isError, loadError: error };
+  return useRegistryQuery(["labels"], getLabels, "labels");
 }

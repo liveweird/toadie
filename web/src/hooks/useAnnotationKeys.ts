@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { getAnnotationKeys, type AnnotationKey } from "../api/annotationKeys";
+import { useRegistryQuery } from "./useRegistryQuery";
 
 /**
  * One cached query for the annotation-key registry (the ["annotationKeys"] key is shared
@@ -13,10 +13,5 @@ export function useAnnotationKeys(): {
   /** The load failure itself (for loadErrorMessage); null while healthy. */
   loadError: unknown;
 } {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["annotationKeys"],
-    queryFn: getAnnotationKeys,
-    staleTime: 5 * 60 * 1000,
-  });
-  return { annotationKeys: data ?? [], loading: isLoading, error: isError, loadError: error };
+  return useRegistryQuery(["annotationKeys"], getAnnotationKeys, "annotationKeys");
 }
