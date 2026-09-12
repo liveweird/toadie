@@ -10,10 +10,10 @@ import io.ktor.util.AttributeKey
  * password-reset endpoint and email MFA) treat null as
  * "email features unavailable" and answer 503.
  */
-val MailerKey = AttributeKey<MailerHolder>("Mailer")
+internal val MailerKey = AttributeKey<MailerHolder>("Mailer")
 
 /** AttributeKey cannot hold a nullable type, so the optional mailer travels in a holder. */
-class MailerHolder(val mailer: Mailer?)
+internal class MailerHolder(val mailer: Mailer?)
 
 /** The configured mailer, or null when `mail.transport` is `disabled`. */
 fun Application.mailer(): Mailer? = attributes[MailerKey].mailer

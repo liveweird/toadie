@@ -13,10 +13,10 @@ const val TOKEN_TYPE_ACCESS = "access"
 const val TOKEN_TYPE_REFRESH = "refresh"
 
 /** A freshly minted JWT and its expiry as epoch millis. */
-data class IssuedToken(val token: String, val expiresAt: Long)
+internal data class IssuedToken(val token: String, val expiresAt: Long)
 
 /** Short-lived token carried as the API bearer. */
-fun JwtConfig.issueAccessToken(
+internal fun JwtConfig.issueAccessToken(
     userId: UInt,
     email: String,
     roles: Set<UserRole>,
@@ -26,7 +26,7 @@ fun JwtConfig.issueAccessToken(
     issueToken(userId, email, roles, disabledFeatures, sessionId, TOKEN_TYPE_ACCESS, accessExpiresInSeconds)
 
 /** Longer-lived token exchanged at POST /api/v1/refresh for a fresh pair. */
-fun JwtConfig.issueRefreshToken(
+internal fun JwtConfig.issueRefreshToken(
     userId: UInt,
     email: String,
     roles: Set<UserRole>,

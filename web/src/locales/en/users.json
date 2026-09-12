@@ -55,7 +55,6 @@
   "toast": {
     "updated": "User updated",
     "deleted": "User deleted",
-    "passwordChanged": "Password changed",
     "passwordChangedSignIn": "Password changed. Sign in again on each device.",
     "featuresSaved": "Feature flags saved"
   },

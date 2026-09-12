@@ -83,13 +83,15 @@ kover {
         }
         verify {
             rule {
-                // Line-coverage floor (actual 98.0% locally / 97.99% on the Linux CI runner, 2026-09-08
-                // blueprints re-measure — keep a full point of margin: the two environments differ).
+                // Line-coverage floor (actual 97.72% locally, 2026-09-12 checkup re-measure — the CI runner
+                // historically lands within ~0.05pp; keep the margin below a full point in mind).
                 minBound(97)
-                // Branch-coverage floor (actual ~79.3% locally, 2026-09-08 blueprints re-measure, with the blueprint
-                // DTO exclusion above — a point of margin for the CI runner; the remaining gap to 100% is dominated by kotlinx-serialization synthetic
-                // branches in the other @Serializable data classes). NOTE: `check` runs only koverVerify — run
-                // `:server:koverXmlReport` for fresh actuals.
+                // Branch-coverage floor (actual 78.28% locally, 2026-09-12 checkup re-measure, with the blueprint
+                // DTO exclusion above — the margin has eroded to ~0.3pp since the 2026-09-08 ~79.3%; the remaining
+                // gap to 100% is dominated by kotlinx-serialization synthetic branches in the other @Serializable
+                // data classes. A red branch gate with no code change means re-measure, then either add the
+                // missing rows or lower deliberately in its own commit). NOTE: `check` runs only koverVerify —
+                // run `:server:koverXmlReport` for fresh actuals.
                 minBound(78, coverageUnits = kotlinx.kover.gradle.plugin.dsl.CoverageUnit.BRANCH)
             }
         }
