@@ -188,15 +188,18 @@ seeded definitions equal `SYSTEM_BLUEPRINT_BASES`, DELETE 409, PUT rename 400, P
 **Entities (V28).** `EntityValidationTest` is the pure rule table (one case per row in
 `.claude/docs/port-data-model.md` "Entities", no database); `EntityReferencesTest` pins the
 pure target/rename helpers; `EntityWireNamesTest` pins the wire field names (the Port shape,
-not Kotlin defaults); `EntityOwnershipTest` (v1.26.0, phase 4 — 18 cases) is the pure ownership
+not Kotlin defaults); `EntityOwnershipTest` (v1.26.0, phase 4 — 19 cases) is the pure ownership
 and format validation: Direct and Inherited team rules on write and read, string/array shapes,
 `_team` rename cascade observed on GET (including `format: team` properties), delete `409` then
 `204`, `format: user` validation, Inherited computation (following paths, absent on `many: true`,
-beyond `MAX_OWNERSHIP_HOPS`), the stale `TEAM_NOT_ALLOWED` after switching blueprints, and the
-`400` response body's `findings` array; `EntityTest` drives the routes end to end — a USER (no
-admin needed) creates/reads/updates/deletes, list filter/`q`/sort/paging including an unknown
-`blueprint` answering an empty page, **team filter** matching stored values and `_team`
-identifiers (only Direct/absent entities, Inherited carry no stored team), unknown-property/
+beyond `MAX_OWNERSHIP_HOPS`), the stale `TEAM_NOT_ALLOWED` after switching blueprints, the `400`
+response body's `findings` array, and `teamValueMatches` (the in-memory twin of the SQL
+`jsonStringOrArrayContainsFolded` team predicate); `EntityTest` drives the routes end to end — a
+USER (no admin needed) creates/reads/updates/deletes, list filter/`q`/sort/paging including an
+unknown `blueprint` answering an empty page, **team filter** matching Direct stored values,
+`_team` identifiers, AND — v1.30.0 — the effective team of Inherited entities through a two-hop
+path, on list and graph, with `total`/paging agreeing and the match following a parent's team
+change, unknown-property/
 required-missing/relation-target-missing/`TEAM_TARGET_MISSING`/`USER_TARGET_MISSING` `400`s,
 the per-blueprint identifier `409` (case-insensitive, but the same identifier is reusable
 across different blueprints), PUT changing `blueprint` `400`, delete-with-referrer `409`

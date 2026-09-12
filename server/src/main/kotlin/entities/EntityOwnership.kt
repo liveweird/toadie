@@ -86,6 +86,16 @@ fun inheritedTeam(
     return null
 }
 
+/**
+ * The in-memory twin of `infra/db/Sql.kt`'s `jsonStringOrArrayContainsFolded`: case-insensitive
+ * equality of [filter] against a scalar string OR any element of a string array carried by
+ * [team] (`teamValues`' shape-agnostic unwrap); `null`/non-string/non-array `team` never
+ * matches. Kept beside that SQL twin so the two can never drift — this is what the `team`
+ * filter's Inherited half evaluates over an [effectiveTeam] result the database cannot see
+ * (Inherited ownership stores no `team` column at all).
+ */
+fun teamValueMatches(team: JsonElement?, filter: String): Boolean = teamValues(team).any { it.equals(filter, ignoreCase = true) }
+
 /** The team a caller should SHOW: the stored value for Direct/absent ownership, the computed one for Inherited. */
 fun effectiveTeam(
     storedTeam: JsonElement?,

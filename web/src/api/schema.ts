@@ -1429,8 +1429,10 @@ export interface paths {
          *       `q` — case- and accent-insensitive substring match against `identifier` OR
          *       `title`; `team` — case-insensitive membership against the entity's EFFECTIVE
          *       team (Phase 4 ownership: a scalar or array `team` value, or the row itself being
-         *       the named `_team` entity); an Inherited entity whose stored `team` is absent never
-         *       matches (documented limitation).
+         *       the named `_team` entity) — the stored value for Direct/absent ownership, or the
+         *       value computed along `ownership.path` for Inherited ownership, i.e. exactly what
+         *       the response's `team` field carries; an Inherited entity whose path does not
+         *       resolve has no team and never matches.
          *
          *     Each returned item carries `findings` — the same validation a strict save would
          *     enforce, re-evaluated against the blueprint's CURRENT definition, so an entity left
@@ -2884,7 +2886,7 @@ export interface components {
         CatalogLabelValueFilter: string[];
         /** @description Any-of (IN) match over blueprint identifiers, case-insensitive — repetition is the documented IN idiom on this parameter (alongside `kind` and `labelValue`). Unknown identifiers are ignored; if every supplied identifier is unknown the graph is empty. */
         EntityBlueprintFilter: string[];
-        /** @description Case-insensitive match against the entity's EFFECTIVE team (Phase 4 ownership: a scalar or array `team` value) OR the row itself being the `_team` entity named by this value — so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose stored `team` is absent never matches (documented limitation). */
+        /** @description Case-insensitive match against the entity's EFFECTIVE team — the stored value for Direct/absent ownership, the value computed along `ownership.path` for Inherited ownership, i.e. exactly what the response's `team` field carries — OR the row itself being the `_team` entity named by this value, so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose path does not resolve has no team and never matches. */
         EntityTeamFilter: string;
     };
     requestBodies: never;
@@ -4825,7 +4827,7 @@ export interface operations {
                 blueprint?: string;
                 /** @description Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the matched fields are declared per endpoint. */
                 q?: components["parameters"]["Q"];
-                /** @description Case-insensitive match against the entity's EFFECTIVE team (Phase 4 ownership: a scalar or array `team` value) OR the row itself being the `_team` entity named by this value — so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose stored `team` is absent never matches (documented limitation). */
+                /** @description Case-insensitive match against the entity's EFFECTIVE team — the stored value for Direct/absent ownership, the value computed along `ownership.path` for Inherited ownership, i.e. exactly what the response's `team` field carries — OR the row itself being the `_team` entity named by this value, so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose path does not resolve has no team and never matches. */
                 team?: components["parameters"]["EntityTeamFilter"];
             };
             header?: never;
@@ -4885,7 +4887,7 @@ export interface operations {
                 blueprint?: components["parameters"]["EntityBlueprintFilter"];
                 /** @description Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the matched fields are declared per endpoint. */
                 q?: components["parameters"]["Q"];
-                /** @description Case-insensitive match against the entity's EFFECTIVE team (Phase 4 ownership: a scalar or array `team` value) OR the row itself being the `_team` entity named by this value — so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose stored `team` is absent never matches (documented limitation). */
+                /** @description Case-insensitive match against the entity's EFFECTIVE team — the stored value for Direct/absent ownership, the value computed along `ownership.path` for Inherited ownership, i.e. exactly what the response's `team` field carries — OR the row itself being the `_team` entity named by this value, so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose path does not resolve has no team and never matches. */
                 team?: components["parameters"]["EntityTeamFilter"];
             };
             header?: never;
