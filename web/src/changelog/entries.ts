@@ -17,6 +17,16 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.31.1",
+    date: "2026-09-12",
+    en: `**Calculation properties no longer get quarantined by a cold start.**
+
+- The jq deadline now measures only the evaluation of an already-compiled expression: the jq built-ins load once when the server starts and each expression is compiled before the clock starts. Previously the very first calculation on a freshly started server could pay that warm-up inside its 500 ms budget and be quarantined until edited or restarted, so a perfectly good property showed as unavailable on every read.`,
+    pl: `**Właściwości obliczane nie trafiają już do kwarantanny przez zimny start.**
+
+- Limit czasu jq mierzy teraz wyłącznie wykonanie już skompilowanego wyrażenia: wbudowane funkcje jq ładują się raz przy starcie serwera, a każde wyrażenie jest kompilowane przed uruchomieniem zegara. Wcześniej pierwsze obliczenie na świeżo uruchomionym serwerze mogło zapłacić za to rozgrzewanie w ramach swojego budżetu 500 ms i trafić do kwarantanny aż do edycji lub restartu, przez co poprawna właściwość była niedostępna przy każdym odczycie.`,
+  },
+  {
     version: "1.31.0",
     date: "2026-09-12",
     en: `**Save-anyway without the round trip; entity list filters in the address bar.**

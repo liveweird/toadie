@@ -191,21 +191,31 @@ fetch; the coroutine bridge (`Executor.awaitBounded`, suspend-with-cancellation 
 `infra/concurrency/BoundedExecution.kt` and is now shared by both consumers. Each evaluation is
 also bounded by a **per-expression deadline** — `computed.jq.deadlineMillis`
 (`$JQ_DEADLINE_MILLIS`, default **500 ms**, valid range 1..60000; boot fails outside it, the
-`security.passwordReset.tokenTtlSeconds` idiom) covering compile plus evaluation of ONE
-expression, enforced via `withTimeoutOrNull` around the pool submission on the caller's
-coroutine. An expression TEXT that misses its deadline is **quarantined until edited**: recorded
-in a process-lifetime set, so every later evaluation of that exact text answers absent
-IMMEDIATELY without touching a worker — recovery is either an admin edit (new text = new cache
-key) or a server restart. This bounds the blast radius to at most ONE stranded worker per
-distinct bad expression, ever: jackson-jq does not observe `Thread.interrupt()`, so the
-cancelled task's worker stays busy until the expression finishes or overflows the stack — the
-same class of residual as native DNS ignoring interruption, below. Pool saturation (4 busy + 64
-queued) answers absent for that read without quarantining anything — a transient load spike,
+`security.passwordReset.tokenTtlSeconds` idiom) covering QUEUE WAIT plus EVALUATION of the
+ALREADY-COMPILED expression, enforced via `withTimeoutOrNull` around the pool submission on the
+caller's coroutine. Compiling the expression runs on the CALLER, before this clock starts (a
+compile failure answers absent immediately — already logged at DEBUG — and never touches the
+executor or the quarantine set), and the jq 1.6 builtins are loaded exactly ONCE per process, at
+`JqEvaluator` construction (`configureDatabase`, at boot, well before any request) rather than
+lazily on the first evaluation. On 2026-09-12 a cold CI JVM's first-ever calculation — a
+trivially cheap expression — was wrongly quarantined because loading the builtins alone (class
+loading plus parsing jq's own builtin definitions) exceeded the 500 ms default on a slow hosted
+runner: the deadline was meant to bound the EXPRESSION, not JVM warm-up, so `JqEvaluator`'s
+constructor now forces the builtin load and one throwaway compile+evaluation synchronously on
+the constructing thread. An expression TEXT that misses the deadline is **quarantined until
+edited**: recorded in a process-lifetime set, so every later evaluation of that exact text
+answers absent IMMEDIATELY without touching a worker — recovery is either an admin edit (new
+text = new cache key) or a server restart. This bounds the blast radius to at most ONE stranded
+worker per distinct bad expression, ever: jackson-jq does not observe `Thread.interrupt()`, so
+the cancelled task's worker stays busy until the expression finishes or overflows the stack —
+the same class of residual as native DNS ignoring interruption, below. Pool saturation (4 busy +
+64 queued) answers absent for that read without quarantining anything — a transient load spike,
 not a property of the expression. The same distinction governs the deadline itself: it covers
-queue wait + compile + evaluation, but only a miss AFTER the task began running quarantines the
-text — a miss while the task was still queued (the workers stranded by OTHER expressions) is
-treated as saturation, so four bad expressions can strand four workers but can never quarantine
-the good expressions waiting behind them.
+queue wait + evaluation of the compiled expression (never compiling or the one-time builtin
+load), but only a miss AFTER the task began running quarantines the text — a miss while the
+task was still queued (the workers stranded by OTHER expressions) is treated as saturation, so
+four bad expressions can strand four workers but can never quarantine the good expressions
+waiting behind them.
 
 `env/0` is a jackson-jq BUILTIN (`EnvFunction`, backed by `System.getenv`) that would otherwise
 let an admin-authored calculation read `JWT_SECRET`, the database password, or any other

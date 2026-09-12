@@ -26,6 +26,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * Phase 5 (`.claude/docs/port-data-model.md` "Computed properties"): pure coverage of
@@ -126,6 +127,17 @@ class JqCalculationTest {
         assertNull(JqEvaluator().evaluate("\"x\" * 70000", buildJsonObject { }))
     }
 
+    @Test
+    fun `the jq builtins are loaded at construction, not on the first evaluation`() {
+        // rootScope is a process-wide Lazy shared by every JqEvaluator instance, so this
+        // reflects the JVM's overall state — but it must be true immediately after
+        // construction, before this instance ever evaluates anything itself, which is the
+        // property that matters: `configureDatabase` forces it at boot, long before the
+        // first entity read could ever hand a fresh expression to evaluateBounded's deadline.
+        val evaluator = JqEvaluator()
+        assertTrue(evaluator.builtinsLoaded)
+    }
+
     // ---------------------------------------------------------------------------------------
     // evaluateBounded: the bounded pool, the per-expression deadline, and quarantine
     // ---------------------------------------------------------------------------------------
@@ -134,6 +146,15 @@ class JqCalculationTest {
     fun `evaluateBounded reads a plain value through the default pool`() = runBlocking {
         val result = JqEvaluator().evaluateBounded(".a", buildJsonObject { put("a", 1) })
         assertEquals(JsonPrimitive(1), result)
+    }
+
+    @Test
+    fun `a compile error never reaches the executor`() = runBlocking {
+        val executor = Executor { fail("a compile failure must never be submitted to the executor") }
+        val evaluator = JqEvaluator(executor = executor)
+        val result = evaluator.evaluateBounded("not valid jq ((", buildJsonObject { }, "ctx")
+        assertNull(result)
+        assertEquals(0, evaluator.quarantinedCount)
     }
 
     @Test
