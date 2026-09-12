@@ -66,6 +66,9 @@ import okhttp3.tls.HeldCertificate
  * test-only lenient validator (production wiring — the default constructor — keeps the full
  * guard chain, pinned by the route tests below).
  */
+/** How long a fixture handler keeps writing to observe the peer's disconnect — see [UrlFetchTest.writeUntilDisconnected]. */
+private const val DISCONNECT_OBSERVATION_MILLIS = 10_000L
+
 class UrlFetchTest {
 
     // ---- static guard rules -------------------------------------------------------------
@@ -190,12 +193,23 @@ class UrlFetchTest {
         assertTrue(withContext(Dispatchers.IO) { await(2, TimeUnit.SECONDS) })
     }
 
+    /**
+     * Keeps writing until the peer's disconnect surfaces as an [IOException] — or until
+     * [DISCONNECT_OBSERVATION_MILLIS] pass. A FIXED byte count is not enough: on a Linux runner
+     * the kernel's autotuned send/receive buffers can swallow a couple of megabytes before the
+     * cancelled client's RST is processed, so a finite loop may finish without ever throwing
+     * (the CI flake pinned by "caller cancellation propagates while waiting for headers and body";
+     * `.claude/docs/testing.md` names the same buffer effect for early status rejection). Writing
+     * until the deadline instead makes the observation depend on the disconnect, not on buffer
+     * sizes; the deadline only bounds a genuinely stuck fixture.
+     */
     private fun writeUntilDisconnected(
         output: java.io.OutputStream,
         disconnected: CompletableDeferred<Unit>,
     ) {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(DISCONNECT_OBSERVATION_MILLIS)
         try {
-            repeat(256) {
+            while (System.nanoTime() < deadline) {
                 output.write(ByteArray(8_192))
                 output.flush()
             }
@@ -762,7 +776,8 @@ class UrlFetchTest {
             val fetcher = fixtureFetcher(Duration.ofMillis(500))
             try {
                 runBlocking {
-                    withTimeout(5_000) {
+                    // Two disconnect observations ride writeUntilDisconnected's own deadline each.
+                    withTimeout(2 * DISCONNECT_OBSERVATION_MILLIS + 5_000) {
                         supervisorScope {
                             val headers = async { fetcher.fetch("$base/headers") }
                             headersStarted.await()
@@ -822,14 +837,16 @@ class UrlFetchTest {
                     headers.cancel()
                     assertFailsWith<CancellationException> { headers.await() }
                     releaseHeaders.countDown()
-                    withTimeout(2_000) { headersDisconnected.await() }
+                    // The disconnect is observed by the fixture's write loop (writeUntilDisconnected), so the
+                    // bound here is that loop's own deadline plus slack — generous by design, never a sleep.
+                    withTimeout(DISCONNECT_OBSERVATION_MILLIS + 2_000) { headersDisconnected.await() }
 
                     val body = async { fetcher.fetch("$base/held-body") }
                     withTimeout(2_000) { bodyStarted.await() }
                     body.cancel()
                     assertFailsWith<CancellationException> { body.await() }
                     releaseBody.countDown()
-                    withTimeout(2_000) { bodyDisconnected.await() }
+                    withTimeout(DISCONNECT_OBSERVATION_MILLIS + 2_000) { bodyDisconnected.await() }
                 }
             } finally {
                 releaseHeaders.countDown()

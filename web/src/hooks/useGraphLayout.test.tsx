@@ -130,6 +130,13 @@ describe("useGraphLayout", () => {
     setGraphLayout.mockReset();
     getEntityGraphLayout.mockReset();
     setEntityGraphLayout.mockReset();
+    // Every case gets a resolving PUT by default, overridable per case. Without this, a case
+    // that configures only the GET mocks can still trigger a debounced/queued save (the hook's
+    // pump() calls this.config.set(...).then(...)) after the assertions finish, and an
+    // unconfigured vi.fn() returns undefined — `.then` of undefined is an unhandled rejection
+    // whose timing (before or after teardown) decided whether the run flaked.
+    setGraphLayout.mockResolvedValue(undefined);
+    setEntityGraphLayout.mockResolvedValue(undefined);
   });
 
   afterEach(() => {

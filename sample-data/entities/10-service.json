@@ -224,7 +224,7 @@
     "properties": {
       "type": "website",
       "lifecycle": "experimental",
-      "languages": ["java", "typescript"],
+      "languages": ["kotlin", "typescript"],
       "frameworks": ["react"],
       "exposure": "internal",
       "hosting_model": "on-premise",

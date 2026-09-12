@@ -59,8 +59,9 @@
 10. They click **Reset layout**, then switch back to **Auto**.
     - *Expected*: B returns to a computed auto-layout spot; the Reset button disappears in
       Auto mode — the throwaway user's layout document is back to the pristine default.
-11. They delete the three remaining throwaway files from the filtered Files list.
-12. The retained admin session deletes the throwaway user.
+11. The admin session deletes the three remaining throwaway files (A, B, System) and then the
+    throwaway user, all via the API — this is a long journey (~200 actions), and the Files UI
+    delete flow is already exercised as behaviour by every other catalog-file spec.
 
 ## Not covered here (and why)
 

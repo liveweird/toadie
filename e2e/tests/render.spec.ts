@@ -14,20 +14,27 @@ type LayoutDocument = {
 // drawn. Saves enforce reference resolution, so the MISSING node is MADE by deleting a stored
 // target after its referrer saved.
 test("the graph renders stored and missing nodes for a namespace", async ({ page }) => {
+  // ~200 actions measured at 60.7s on the 2-vCPU CI runner vs 19.6s locally — a long journey,
+  // not a slow assertion; per-`expect` timeouts (10s, playwright.config.ts) stay untouched.
+  test.slow();
   await login(page);
   const adminToken = await page.evaluate(() => localStorage.getItem("toadie.auth.token"));
   expect(adminToken !== null, "the admin login must provide cleanup authorization").toBe(true);
   const user = await createUserViaUi(page, "E2E Render Graph");
   const layoutPath = `/api/v1/users/${user.id}/graph-layout`;
+  // Names computed up front (pure, no await) and ids captured at creation below, both kept
+  // reachable from `finally`: cleanup deletes A/B/System via the API instead of round-tripping
+  // the Files UI (see the cleanup block below).
+  const ns = runNamespace("render");
+  const nsAlt = runNamespace("renderAlt");
+  const stem = uniqueText("e2e-rnode");
+  const a = `${stem}-a`;
+  const b = `${stem}-b`;
+  const ghost = `${stem}-ghost`;
+  const sys = `${stem}-sys`;
+  const fileIds: Record<string, string> = {};
   try {
     await login(page, user.email, user.password);
-    const ns = runNamespace("render");
-    const nsAlt = runNamespace("renderAlt");
-    const stem = uniqueText("e2e-rnode");
-    const a = `${stem}-a`;
-    const b = `${stem}-b`;
-    const ghost = `${stem}-ghost`;
-    const sys = `${stem}-sys`;
     const created = () =>
       page.waitForResponse(
         (r) => r.url().endsWith("/api/v1/files") && r.request().method() === "POST" && r.ok(),
@@ -41,7 +48,8 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     await page.getByRole("textbox", { name: "Name", exact: true }).fill(sys);
     await pickNamespace(page, ns);
     await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
-    await Promise.all([created(), page.getByRole("button", { name: "Create" }).click()]);
+    const [sysCreated] = await Promise.all([created(), page.getByRole("button", { name: "Create" }).click()]);
+    fileIds[sys] = (await sysCreated.json()).id;
 
     // Then the targets (B in the OTHER namespace, the doomed ghost here), then A — in the
     // System, depending on both — a cross-namespace edge is what makes the canvas span two
@@ -62,7 +70,8 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
         await page.getByRole("combobox", { name: "Depends on" }).fill(ref);
         await page.keyboard.press("Enter");
       }
-      await Promise.all([created(), page.getByRole("button", { name: "Create" }).click()]);
+      const [fileCreated] = await Promise.all([created(), page.getByRole("button", { name: "Create" }).click()]);
+      fileIds[name] = (await fileCreated.json()).id;
     }
 
     // Deleting the ghost leaves A's reference dangling — the graph's MISSING node.
@@ -212,19 +221,19 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     ]);
     expect(autoSaved.status()).toBe(204);
     await expect(page.getByRole("button", { name: "Reset layout" })).toHaveCount(0);
-
-    // Cleanup: delete the three remaining throwaway files.
-    for (const name of [a, b, sys]) {
-      await page.goto("/files");
-      await openFilters(page);
-      await page.getByLabel("Name", { exact: true }).fill(name);
-      await rowOperation(page, name, "Delete");
-      await Promise.all([
-        page.waitForResponse((r) => r.request().method() === "DELETE" && r.ok()),
-        page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
-      ]);
-    }
   } finally {
+    // Cleanup via the API, not the Files UI round trip: this is a ~200-action journey
+    // (test.slow() above), and the UI-delete flow itself is already covered as BEHAVIOUR by
+    // every other catalog-file spec's `rowOperation(page, name, "Delete")` case. Deleting a
+    // referenced entity is allowed (references just go dangling), so order doesn't matter.
+    for (const name of [a, b, sys]) {
+      const id = fileIds[name];
+      if (id === undefined) continue;
+      const deletedFile = await page.request.delete(`/api/v1/files/${id}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      expect(deletedFile.status(), `cleanup: delete ${name}`).toBe(204);
+    }
     const deletedUser = await page.request.delete(`/api/v1/users/${user.id}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });

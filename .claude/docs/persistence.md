@@ -122,7 +122,7 @@ concurrent-change residual, not a bug in the ordering. `planBlueprintImport`/`pl
 themselves touch no table at all: pure functions over the snapshot and the batch, so the two
 planner test files run without Docker.
 
-Current migrations are `V1`–`V31` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V32` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -256,6 +256,21 @@ no hierarchyRelation}`. Protections live in `BlueprintService` under the V27 loc
 `validateSystemExtension` function, `400`), identifiers starting with `_` reserved on create
 (`400`); ADMIN may extend (add properties/relations, set `hierarchyRelation`, add `ownership`).
 Migration checksums, including V31, are pinned in `MigrationChecksumTest`.
+
+**V32 — Languages gains kotlin.** A pure DATA adjustment to V22's seeded "Languages" tag
+category (`tag_categories.tags`, one JSON array in TEXT — see V11 above): appends `"kotlin"`
+via `tags::jsonb || '["kotlin"]'::jsonb`, never a wholesale replace, so an admin's own
+additions/removals to that list otherwise survive. This is the conscious decision V22's own
+paragraph asked the next seed migration to make, taken in the OPPOSITE direction of V22's
+INSERT half: the predicate requires an ACTIVE `Languages` row (`NOT marked_as_deleted`), so an
+admin's soft-deletion of the category is **not** undone and the row is **not** re-created; and
+it skips entirely if any OTHER active category already holds `kotlin` (`NOT EXISTS … o.tags::jsonb
+? 'kotlin'`), respecting an admin who moved the tag elsewhere under the one-category-per-tag
+invariant (service-side only, no database backstop — the V11/V22 posture). Idempotent via the
+same `? 'kotlin'` containment check on `Languages` itself. `tags` is read back exclusively
+through `Json.decodeFromString` (`TagCategoryService.kt`) and never string-compared, so
+PostgreSQL's `jsonb` round-trip re-serializing the array with spaces is immaterial. Migration
+checksums, including V32, are pinned in `MigrationChecksumTest`.
 
 ### Soft delete (convention)
 

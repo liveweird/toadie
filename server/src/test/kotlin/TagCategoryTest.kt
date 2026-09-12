@@ -48,6 +48,7 @@ class TagCategoryTest {
             "V22 must seed all four categories: ${byName.keys}",
         )
         assertTrue("java" in byName.getValue("Languages").tags)
+        assertTrue("kotlin" in byName.getValue("Languages").tags)
         assertEquals(listOf("Resource"), byName.getValue("Events").kinds)
         // One tag belongs to exactly ONE category — a rule no index backs (the tags live
         // inside a JSON array), so the seed's own disjointness is worth pinning here.

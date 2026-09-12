@@ -52,7 +52,7 @@ class, so the Errors report and the editor's findings panel show real results:
 | `legacy-invoicing` → `spec.owner` | `group:default/billing-squad` | **MISSING** — no such Group |
 | `legacy-invoicing` → `spec.dependsOn` | `resource:default/invoice-archive` | **MISSING** — no such Resource |
 | `legacy-invoicing` → `spec.dependsOn` | `orders-db` | **KIND_REQUIRED** — no `kind:` prefix, which Backstage cannot ingest, even though the target does exist |
-| `catalog-service` → `spec.dependsOn` | `template:default/nodejs-service-template` | **WRONG_KIND** — `dependsOn` accepts only Component or Resource, and `Template` is outside the seven kinds toadie stores. In the **Graph** the same reference draws an `EXTERNAL` node, so one entry shows both views of it |
+| `catalog-service` → `spec.dependsOn` | `template:default/nodejs-service-template` | **WRONG_KIND** — `dependsOn` accepts only Component or Resource, and `Template` is outside the seven kinds toadie stores. The **Graph** never draws a node for it — a kind toadie doesn't store has no kind pill that could ever select it |
 
 One more shape worth looking at, which is *not* a finding because nothing is unresolved:
 `api:default/order-events` is provided by `checkout-service` and consumed by nobody, so the
@@ -64,7 +64,7 @@ report-only, raised for every file that carries no source reference, and importi
 YAML sets none. Filter it out with the error-class pills, or set a `sourceUrl` on one file in
 the editor's Source fieldset to watch it disappear (and to unlock the Sync-from-repo modal).
 
-The Graph comes out as **37 nodes** (34 stored + 1 external + 2 missing) and **85 edges**
+The Graph comes out as **36 nodes** (34 stored + 2 missing) and **84 edges**
 across twelve relation fields.
 
 ## Loading it
