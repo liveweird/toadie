@@ -190,17 +190,18 @@ describe("CreateCatalogFile page", () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
       if (method === "POST" && url === "/api/v1/files") {
-        return Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }));
-      }
-      if (method === "POST" && url === "/api/v1/files?allowInvalid=true") {
-        return Promise.resolve(jsonResponse(201, { id: 9 }));
-      }
-      if (method === "POST" && url === "/api/v1/files/check") {
+        // The strict-save 400's OWN body now carries the findings (CatalogFileInvalidProblem)
+        // — no /check round trip.
         return Promise.resolve(
-          jsonResponse(200, {
+          jsonResponse(400, {
+            title: "Bad Request",
+            status: 400,
             findings: [{ field: "spec.owner", reference: "ghost-team", status: "MISSING" }],
           }),
         );
+      }
+      if (method === "POST" && url === "/api/v1/files?allowInvalid=true") {
+        return Promise.resolve(jsonResponse(201, { id: 9 }));
       }
       return Promise.resolve(jsonResponse(404, {}));
     });
@@ -227,14 +228,12 @@ describe("CreateCatalogFile page", () => {
     expect(waived).toBeDefined();
   });
 
-  test("a 400 the check cannot explain falls back to the validation alert — no modal", async () => {
+  test("a 400 with no findings member falls back to the validation alert — no modal", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
       if (method === "POST" && url === "/api/v1/files") {
+        // A structural/namespace rejection carries no `findings` member.
         return Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }));
-      }
-      if (method === "POST" && url === "/api/v1/files/check") {
-        return Promise.resolve(jsonResponse(200, { findings: [] }));
       }
       return Promise.resolve(jsonResponse(404, {}));
     });

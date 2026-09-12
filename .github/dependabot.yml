@@ -1,0 +1,80 @@
+# Dependency update policy (D4): Dependabot, not Renovate. Weekly, grouped minor/patch PRs
+# per ecosystem so routine bumps land as one reviewable PR instead of a dozen; majors stay
+# separate since they can carry breaking changes worth reviewing on their own. See
+# HARDENING.md's "Dependency updates" paragraph for the reproducibility rationale (tags, not
+# digests, for the docker ecosystem below) and web/CLAUDE.md/CLAUDE.md for the gates every
+# bump must still pass (lint/knip/coverage, detekt, lockfile regeneration).
+#
+# `web/src/test/infrastructure.test.js` pins this file's existence and its five
+# (directory, ecosystem) pairs — update that test in the same commit as any pair added here.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "npm"
+    directory: "/e2e"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Gradle: Dependabot regenerates gradle.lockfile files as part of each bump PR. The FIRST
+  # Dependabot gradle PR must be checked by hand for updated lockfiles (`core/gradle.lockfile`,
+  # `server/gradle.lockfile`, the root `settings-gradle.lockfile` + `buildscript-gradle.lockfile`
+  # — see CLAUDE.md's "Dependency locking" line); if it cannot keep them current, drop this
+  # ecosystem block and keep `./gradlew build --write-locks` a manual step instead.
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"

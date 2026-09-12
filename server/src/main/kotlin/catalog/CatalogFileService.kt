@@ -340,7 +340,10 @@ class CatalogFileService(
     ): List<SoftFinding> {
         val findings = softFindings(stored, extraIdentities)
         if (findings.isNotEmpty() && !allowInvalid) {
-            throw BadRequestException(findings.joinToString("; ") { it.message })
+            throw CatalogFileInvalidException(
+                findings = findings.map { it.finding },
+                detail = findings.joinToString("; ") { it.message },
+            )
         }
         return findings
     }

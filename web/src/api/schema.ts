@@ -467,11 +467,13 @@ export interface paths {
          *     file's own namespace, matching is case-insensitive) and must NOT reference the
          *     entity itself — all strict by default, no grandfathering,
          *     else `400` (all soft-check violations aggregate into one detail).
+         *     A strict rejection's `400` body carries the full `findings` list (the same items
+         *     `POST …/check` would report for this document, one entry per violated rule) —
          *     `allowInvalid=true` WAIVES the soft checks (reference resolution and the five
          *     registry rules) and stores the document anyway — the Errors report tracks the
-         *     waived findings; the structural rules and namespace resolution stay hard `400`s.
-         *     Entity identity (kind + namespace + name, case-insensitive) must be unique among
-         *     active files; a clash is a `409`.
+         *     waived findings; the structural rules and namespace resolution stay hard `400`s
+         *     with no `findings` member. Entity identity (kind + namespace + name,
+         *     case-insensitive) must be unique among active files; a clash is a `409`.
          *
          *     The optional `sourceUrl` sets the file's source reference (the https URL of its
          *     repo copy — static guards only: absolute https, no credentials, at most 2048
@@ -768,9 +770,11 @@ export interface paths {
          *     registered-lifecycle, and resolved-reference rules included — strict by default: a
          *     file whose label, annotation key, tag, type, or lifecycle was removed from its
          *     registry, or whose referenced entity was deleted, cannot be saved until it is fixed;
-         *     a reference to the file's own identity is a `400`). `allowInvalid=true` waives those
-         *     soft checks exactly as on create (the namespace rule stays hard). Renaming into an
-         *     identity an active file already holds is a `409`.
+         *     a reference to the file's own identity is a `400` carrying the full `findings` list,
+         *     the same items `POST …/check` would report). `allowInvalid=true` waives those soft
+         *     checks exactly as on create (the namespace rule stays hard, with no `findings`
+         *     member on its `400`). Renaming into an identity an active file already holds is a
+         *     `409`.
          *
          *     `sourceUrl` follows full-replace semantics: an omitted/blank value CLEARS the stored
          *     source reference, and any change (set, clear, different URL) resets the sync state
@@ -2038,6 +2042,23 @@ export interface components {
         DocumentCheckReport: {
             findings: components["schemas"]["DocumentCheckFinding"][];
         };
+        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list — the catalog-file create/replace `400` body only (`CatalogFileInvalid` response). Other `400`s on those operations omit `findings`. */
+        CatalogFileInvalidProblem: {
+            /**
+             * @description A URI reference identifying the problem type.
+             * @default about:blank
+             */
+            type: string;
+            /** @description Short, human-readable summary of the problem type. */
+            title: string;
+            /** @description HTTP status code. */
+            status: number;
+            /** @description Human-readable explanation specific to this occurrence. */
+            detail?: string;
+            /** @description URI reference of the specific occurrence (the request path). */
+            instance?: string;
+            findings?: components["schemas"]["DocumentCheckFinding"][];
+        };
         /** @enum {string} */
         GraphNodeStatus: "STORED" | "MISSING";
         GraphNode: {
@@ -2842,6 +2863,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["EntityInvalidProblem"];
             };
         };
+        /** @description The document fails a strict soft-check save (unresolved/wrong-kind/self references, or a label/annotation/tag/type/lifecycle registry violation) — the full `findings` list is the same findings `POST …/check` reports for the rejected document, one entry per violated rule. Other `400`s on the same operations — a structural/namespace failure, a malformed body — carry no `findings` member. */
+        CatalogFileInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["CatalogFileInvalidProblem"];
+            };
+        };
     };
     parameters: {
         ResourceId: number;
@@ -3594,15 +3624,7 @@ export interface operations {
                     "application/json": components["schemas"]["CatalogFileResponse"];
                 };
             };
-            /** @description Payload violates the descriptor-format rules */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
+            400: components["responses"]["CatalogFileInvalid"];
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
@@ -3886,15 +3908,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Payload violates the descriptor-format rules */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
+            400: components["responses"]["CatalogFileInvalid"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];

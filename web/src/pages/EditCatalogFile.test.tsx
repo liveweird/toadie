@@ -173,14 +173,12 @@ describe("EditCatalogFile page", () => {
         return Promise.resolve(jsonResponse(200, STORED_FILE));
       }
       if (method === "PUT" && url === "/api/v1/files/7") {
-        return Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }));
-      }
-      if (method === "PUT" && url === "/api/v1/files/7?allowInvalid=true") {
-        return Promise.resolve(new Response(null, { status: 204 }));
-      }
-      if (method === "POST" && url === "/api/v1/files/check") {
+        // The strict-save 400's OWN body now carries the findings (CatalogFileInvalidProblem)
+        // — no /check round trip.
         return Promise.resolve(
-          jsonResponse(200, {
+          jsonResponse(400, {
+            title: "Bad Request",
+            status: 400,
             findings: [
               {
                 field: "spec.subcomponentOf",
@@ -190,6 +188,9 @@ describe("EditCatalogFile page", () => {
             ],
           }),
         );
+      }
+      if (method === "PUT" && url === "/api/v1/files/7?allowInvalid=true") {
+        return Promise.resolve(new Response(null, { status: 204 }));
       }
       return Promise.resolve(jsonResponse(404, {}));
     });
