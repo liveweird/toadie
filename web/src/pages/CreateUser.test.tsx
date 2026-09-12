@@ -4,7 +4,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import CreateUser from "./CreateUser";
 import { jsonResponse } from "../test/http";
-import { renderWithProviders, settleButtonTransition } from "../test/render";
+import { renderWithProviders } from "../test/render";
 
 const TOKEN_KEY = "toadie.auth.token";
 const ROLES_KEY = "toadie.auth.roles";
@@ -111,7 +111,6 @@ describe("CreateUser page", () => {
     // The onboarding mailto draft carries the password, CRLF-encoded.
     const mailto = within(dialog).getByRole("link", { name: /compose onboarding email/i });
     expect(mailto.getAttribute("href")).toContain(encodeURIComponent(password));
-    await settleButtonTransition();
   });
 
   test("closing the confirmation navigates away and the password is gone for good", async () => {
@@ -127,7 +126,6 @@ describe("CreateUser page", () => {
     await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/users"));
     expect(screen.queryByText(password)).not.toBeInTheDocument();
     expect(screen.queryByText("User created")).not.toBeInTheDocument();
-    await settleButtonTransition();
   });
 
   test("the Administrator checkbox posts the ADMIN role", async () => {
@@ -138,7 +136,6 @@ describe("CreateUser page", () => {
     await fillAndSubmit(user, true);
     await screen.findByText("User created");
     expect(postBodyOf(mockFetch).roles).toEqual(["ADMIN"]);
-    await settleButtonTransition();
   });
 
   test("a 409 surfaces the email-in-use error and stays on the form", async () => {
@@ -149,7 +146,6 @@ describe("CreateUser page", () => {
     await fillAndSubmit(user);
     expect(await screen.findByText(/already used by another account/i)).toBeInTheDocument();
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
-    await settleButtonTransition();
   });
 
   test("client-side validation blocks an empty submission", async () => {
