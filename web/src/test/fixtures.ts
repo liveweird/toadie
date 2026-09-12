@@ -4,8 +4,6 @@
 // defaults; pass `overrides` to change only what a test cares about.
 
 import type { CatalogFileListItem, CatalogFileResponse } from "../api/catalogFiles";
-import type { Blueprint } from "../api/blueprints";
-import type { Entity } from "../api/entities";
 
 const EPOCH = 1_700_000_000_000;
 
@@ -64,52 +62,6 @@ export function catalogFileResponse(
     updatedAt: EPOCH,
     sourceUrl: null,
     lastSyncedAt: 0,
-    ...rest,
-  };
-}
-
-/** A `Blueprint` — the Port-native registry shape (`GET/POST /blueprints`). */
-export function blueprintResponse(overrides: Partial<Blueprint> = {}): Blueprint {
-  const { schema, relations, mirrorProperties, calculationProperties, aggregationProperties, ...rest } =
-    overrides;
-  return {
-    id: 1,
-    identifier: "service",
-    title: "Service",
-    description: null,
-    icon: null,
-    schema: { properties: {}, required: [], ...schema },
-    relations: { ...relations },
-    mirrorProperties: { ...mirrorProperties },
-    calculationProperties: { ...calculationProperties },
-    aggregationProperties: { ...aggregationProperties },
-    createdBy: 1,
-    creatorName: "Alice Creator",
-    creatorDeleted: false,
-    createdAt: EPOCH,
-    updatedAt: EPOCH,
-    system: false,
-    ...rest,
-  };
-}
-
-/** An `Entity` — an instance of a blueprint (`GET/POST /entities`). */
-export function entityResponse(overrides: Partial<Entity> = {}): Entity {
-  const { properties, relations, ...rest } = overrides;
-  return {
-    id: 1,
-    blueprint: "service",
-    blueprintId: 1,
-    identifier: "payments-svc",
-    title: "Payments",
-    properties: { ...properties },
-    relations: { ...relations },
-    findings: [],
-    createdBy: 1,
-    creatorName: "Alice Creator",
-    creatorDeleted: false,
-    createdAt: EPOCH,
-    updatedAt: EPOCH,
     ...rest,
   };
 }
