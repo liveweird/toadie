@@ -17,13 +17,12 @@ import PaginationBar from "../components/PaginationBar";
 import RowEditDelete from "../components/RowEditDelete";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
-import { useBlueprintParam, useTeamParam } from "../hooks/useBlueprintParam";
+import { useBlueprintParam, useQParam, useTeamParam } from "../hooks/useBlueprintParam";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useEntities } from "../hooks/useEntities";
 import { useEntityOptions } from "../hooks/useEntityOptions";
 import { usePagedSort } from "../hooks/usePagedSort";
-import { isString, useStoredState } from "../hooks/useStoredState";
 import { previewComputedColumns, type ComputedDefinition } from "../utils/computedProperties";
 import { entityDeleteErrorMessage, teamValuesOf } from "../utils/entityForm";
 import { editEntityPath, newEntityPath } from "../utils/entityLinks";
@@ -102,7 +101,7 @@ export default function Entities() {
   const { blueprints } = useBlueprints();
   const { options: teamOptions } = useEntityOptions(TEAM_BLUEPRINT);
   const selectedBlueprint = blueprint ? blueprints.find((b) => b.identifier === blueprint) : undefined;
-  const [q, setQ] = useStoredState<string>(`${SETTINGS_KEY}.filter.q`, "", isString);
+  const { q, setQ } = useQParam();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 

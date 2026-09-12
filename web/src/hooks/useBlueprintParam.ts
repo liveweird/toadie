@@ -1,5 +1,6 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useDebouncedValue } from "@mantine/hooks";
 
 /**
  * One `?<param>=` URL slot (the `useQuickViewParam` idiom): blank or absent reads as "none
@@ -51,4 +52,35 @@ export function useTeamParam(): {
 } {
   const { value, setValue } = useUrlParam("team");
   return { team: value, setTeam: setValue };
+}
+
+/**
+ * The Entities list's `?q=` URL state (D2, deep-link parity with `?blueprint=`/`?team=`):
+ * unlike those two Selects, free text changes on every keystroke, so writing straight into the
+ * URL would throttle typing behind a router round-trip and turn every character into a
+ * `replace`d history entry. The INPUT is therefore controlled by local React state (`q`,
+ * immediate); only the DEBOUNCED value (300 ms, the `useDebouncedValue` util the rest of the
+ * app already debounces filter text with — `useCatalogFileFilterState`/`useEntityGraphFilterState`)
+ * is written back into the URL, still via `useUrlParam`'s `replace: true`. Blank/absent reads
+ * as `""`, matching every other text filter in the app.
+ */
+export function useQParam(): {
+  q: string;
+  setQ: (value: string) => void;
+} {
+  const { value, setValue } = useUrlParam("q");
+  const [q, setQ] = useState(() => value ?? "");
+  const [debouncedQ] = useDebouncedValue(q, 300);
+
+  // write-only sync into the URL: setValue's identity changes with the URLSearchParams object
+  // it closes over, so including it below would re-fire this effect on every unrelated param
+  // change (e.g. picking a blueprint) rather than only when the debounced text settles.
+  useEffect(() => {
+    // mounting with ?q=x already in the URL must not rewrite history with the same value
+    if (debouncedQ === (value ?? "")) return;
+    setValue(debouncedQ || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ]);
+
+  return { q, setQ };
 }

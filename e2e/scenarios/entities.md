@@ -61,35 +61,38 @@
 11. Back on the target blueprint's list, they try to delete the first entity.
     - *Expected*: the confirm modal's DELETE is refused (`409`) with the "still targeted by
       another entity's relation" message; the row stays.
-12. They edit the target blueprint via the API to add a required string property (`owner`) to
+12. They type the first entity's identifier into the toolbar's free-text Search filter.
+    - *Expected*: after the debounce, the URL carries `?q=`; the matching row stays visible —
+      the filter is a deep-link URL slot too (D2), like `?blueprint=`/`?team=` above.
+13. They edit the target blueprint via the API to add a required string property (`owner`) to
     its schema.
     - *Expected*: the PUT succeeds (`204`); nothing about the existing entity changes yet — it
       is simply no longer valid against the current schema.
-13. They reload the target blueprint's entity list.
+14. They reload the target blueprint's entity list.
     - *Expected*: the first entity's row now shows a findings badge reading "1 finding".
-14. They open the first entity's editor.
+15. They open the first entity's editor.
     - *Expected*: an orange alert states the entity is out of date and lists `properties.owner`
       among the offending fields.
-15. They fill the new `owner` field and save.
+16. They fill the new `owner` field and save.
     - *Expected*: the PUT succeeds; back on the list, the entity's findings badge is gone.
-16. Via the API (computed properties, phase 5, v1.27.0), they PUT the target blueprint (its
+17. Via the API (computed properties, phase 5, v1.27.0), they PUT the target blueprint (its
     current schema, unchanged) adding a colorized calculation (`tier_badge`, reading its own
     `tier` property, colors gold/silver) and an aggregation (`dependents`, targeting the
     dependent blueprint, counting entities) — then PUT the dependent blueprint (its original
     definition, unchanged) adding a mirror (`parent_tier`, reading the target's `tier` through
     the existing `parent` relation).
     - *Expected*: both PUTs succeed (`204`).
-17. They open the dependent blueprint's entity list, then the second entity's editor.
+18. They open the dependent blueprint's entity list, then the second entity's editor.
     - *Expected*: the mirrored tier is the list's first (and only) preview column, since the
       dependent has no schema properties of its own; the editor's read-only "Computed" section
       names it "Parent tier" with the Mirror badge and the mirrored value.
-18. They open the first (target) entity's editor.
+19. They open the first (target) entity's editor.
     - *Expected*: the "Computed" section shows "Tier badge" (Calculation badge, the entity's own
       tier value) and "Dependents" (Aggregation badge, a count of 1 — the second entity relates
       to it); the JSON preview contains neither computed id; saving succeeds (a
       leaked computed key in the request would `400`).
-19. Cleanup: the target blueprint's computed properties are removed first (restoring its
-    step-12 definition — an aggregation target blocks deletion exactly like a relation target,
+20. Cleanup: the target blueprint's computed properties are removed first (restoring its
+    step-13 definition — an aggregation target blocks deletion exactly like a relation target,
     so the dependent blueprint could otherwise no longer be deleted); then the
     Inherited-ownership entity (its relation targets entity A) and its blueprint (its relation
     targets the target blueprint) — ahead of the ordinary cleanup, since entity A's own delete

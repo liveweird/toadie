@@ -101,6 +101,18 @@ const ENTITY_COMPUTED = {
   updatedAt: 0,
 };
 
+// D2 — `?q=` is a URL-carried filter now, debounced-written; this sibling exposes the
+// current search string so a test can observe the write without a route/path probe.
+function EntitiesWithSearchProbe() {
+  const location = useLocation();
+  return (
+    <>
+      <Entities />
+      <div data-testid="search">{location.search}</div>
+    </>
+  );
+}
+
 function mockRoutes(mockFetch: FetchMock) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
@@ -237,6 +249,30 @@ describe("Entities page", () => {
         ),
       ).toBe(true),
     );
+  });
+
+  test("typing in the filter updates ?q= after the debounce", async () => {
+    mockRoutes(mockFetch);
+    const user = userEvent.setup();
+    renderWithProviders(<EntitiesWithSearchProbe />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    await user.type(screen.getByLabelText("Search", { selector: "input" }), "check");
+
+    await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("q=check"));
+  });
+
+  test("a mounted ?q=x prefills the input and the query", async () => {
+    mockRoutes(mockFetch);
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service&q=check" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    expect(screen.getByLabelText("Search", { selector: "input" })).toHaveValue("check");
+    expect(
+      mockFetch.mock.calls.some(
+        ([url]) => typeof url === "string" && url.includes("/api/v1/entities?") && url.includes("q=check"),
+      ),
+    ).toBe(true);
   });
 
   test("a row missing preview-column values shows a dash, and findings badge stays absent at zero", async () => {
