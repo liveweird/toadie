@@ -19,7 +19,7 @@ RUN GIT_SHA=$(git rev-parse --short HEAD) \
     npm run build
 
 # ── Stage 2: build the server distribution ────────────────────────────────────
-# Pinned to the mise.toml patch (temurin-21.0.11+10.0.LTS → the Docker Hub tag's underscore
+# Pinned to the mise.toml patch (temurin-21.0.12+8.0.LTS → the Docker Hub tag's underscore
 # separator) so the build-stage JDK and the runtime-stage JRE below are provably the same
 # Java build, not just "21-jdk"/"21-jre" floating tags that can drift apart between pulls.
 FROM eclipse-temurin:21.0.12_8-jdk AS server
