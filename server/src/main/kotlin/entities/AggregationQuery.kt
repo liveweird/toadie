@@ -54,10 +54,15 @@ private fun matchesRule(rule: JsonObject, candidate: QueryCandidate, depth: Int)
     }
     val operator = (rule["operator"] as? JsonPrimitive)?.takeIf { it.isString }?.content
     if (property == null || operator == null) return false
-    return evaluateOperator(operator, lookupValue(property, candidate), rule["value"])
+    return evaluateOperator(operator, candidateValue(property, candidate), rule["value"])
 }
 
-private fun lookupValue(property: String, candidate: QueryCandidate): JsonElement? = when (property) {
+/**
+ * Meta-property + stored-property resolution off one [QueryCandidate] — shared with
+ * `entityquery/QueryValues.kt`'s WHERE evaluator so the query language and aggregation rules
+ * agree on exactly one meta vocabulary (`QUERY_META_PROPERTIES`).
+ */
+internal fun candidateValue(property: String, candidate: QueryCandidate): JsonElement? = when (property) {
     "\$identifier" -> JsonPrimitive(candidate.identifier)
     "\$title" -> JsonPrimitive(candidate.title)
     "\$blueprint" -> JsonPrimitive(candidate.blueprint)
