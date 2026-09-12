@@ -1,15 +1,30 @@
-import { createTeamEntity, expect, login, openFilters, readyDialog, rowOperation, test, uniqueText } from "./helpers";
+import {
+  createTeamEntity,
+  expect,
+  login,
+  openFilters,
+  readyDialog,
+  rowOperation,
+  runHierarchy,
+  test,
+  uniqueText,
+} from "./helpers";
 
-// The Entity hierarchy (Port migration phase 3, + Phase 4 ownership v1.26.0): the same kind of
-// throwaway blueprint pair as entity-graph.spec.ts (a parent blueprint, a child blueprint whose
-// single `parent` relation is flagged as its `hierarchyRelation`), with one parent entity
-// carrying two children plus one ORPHAN child whose `parent` relation is left unset (a second
-// root) AND whose `team` names a throwaway `_team` entity (a THIRD root — ownership never
-// nests, even though `_team` also carries its own seeded `hierarchyRelation`). Every identifier
-// shares one run marker so the tree can be narrowed to this run's own rows with `q` once
-// `_team` (a workspace-wide blueprint other specs also write to) joins the blueprint filter.
-// Entities carry no admin gate, so the whole journey runs as the seed admin. Owns only its own
-// `e2e-eh-*` blueprints/entities and one `e2e-eh-*`-marked `_team` entity (never a foreign one).
+// The Entity hierarchy (Port migration phase 3, + Phase 4 ownership v1.26.0; parallel
+// hierarchies v1.32.0): the same kind of throwaway blueprint pair as entity-graph.spec.ts (a
+// parent blueprint, a child blueprint whose single `parent` relation is flagged on BOTH the
+// seeded `composition` entry and global-setup's own throwaway second hierarchy value, in its
+// `hierarchyRelations`), with one parent entity carrying two children plus one ORPHAN child
+// whose `parent` relation is left unset (a second root) AND whose `team` names a throwaway
+// `_team` entity (a THIRD root — ownership never nests, even though `_team` also carries its
+// own seeded `hierarchyRelations`). Every identifier shares one run marker so the tree can be
+// narrowed to this run's own rows with `q` once `_team` (a workspace-wide blueprint other
+// specs also write to) joins the blueprint filter. Entities carry no admin gate, so the whole
+// journey runs as the seed admin. Owns only its own `e2e-eh-*` blueprints/entities and one
+// `e2e-eh-*`-marked `_team` entity (never a foreign one); the second hierarchy value itself is
+// global-setup/teardown's — this spec only ever READS it (`runHierarchy()`), never writing the
+// shared `hierarchies` dictionary itself (that single-writer role stays with
+// `hierarchies.spec.ts`).
 test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and blocks a referenced delete", async ({
   page,
 }) => {
@@ -40,9 +55,14 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
   let childBpId: number | undefined;
   let parentBpId: number | undefined;
 
+  const secondHierarchy = runHierarchy();
+
   try {
     // 0. Seed the two throwaway blueprints via the API — the child's single `parent`
-    // relation is flagged as its `hierarchyRelation`.
+    // relation is flagged as BOTH the seeded `composition` entry and the run's own second
+    // hierarchy value (global-setup's, read via `runHierarchy()`) in `hierarchyRelations`:
+    // one relation may name several hierarchies at once, so both pickers show the identical
+    // parent/child nesting (step 7 below switches between them).
     const parentBpResp = await page.request.post("/api/v1/blueprints", {
       headers: authHeaders,
       data: { identifier: parentBp, title: "E2E EH Parent Blueprint", schema: { properties: {}, required: [] } },
@@ -59,14 +79,15 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
         relations: {
           parent: { title: "Parent", target: parentBp, required: false, many: false },
         },
-        hierarchyRelation: "parent",
+        hierarchyRelations: { composition: "parent", [secondHierarchy]: "parent" },
       },
     });
     expect(childBpResp.status()).toBe(201);
     childBpId = (await childBpResp.json()).id;
 
     // 1. Seed a throwaway `_team` entity — the orphan's ownership target, and a third root of
-    // its own (ownership never nests, even though `_team` carries its own `hierarchyRelation`).
+    // its own (ownership never nests, even though `_team` carries its own seeded
+    // `hierarchyRelations`).
     // `createTeamEntity` satisfies whatever `_team`'s current schema requires, since an
     // environment carrying the sample ontology extension may add required properties beyond
     // the seeded base shape.
@@ -134,7 +155,7 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
 
     // 4. Collapsing p1's branch hides only its hierarchy-relation children; the orphan c3 and
     // the throwaway team (both roots of their own — the team owns c3, but ownership never
-    // nests, even though `_team` carries its own seeded `hierarchyRelation`) are unaffected —
+    // nests, even though `_team` carries its own seeded `hierarchyRelations`) are unaffected —
     // proving c1/c2 nest under p1 and neither c3 nor the team does.
     await page.getByRole("button", { name: `Toggle children of ${p1Title}` }).click();
     await expect(page.getByText(c1Title, { exact: true })).toHaveCount(0);
@@ -173,6 +194,29 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
     ).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.getByText(p1Title, { exact: true })).toBeVisible();
+
+    // 7. A second parallel hierarchy (global-setup's throwaway value, flagged on the SAME
+    // `parent` relation as `composition` — see step 0) reproduces the identical p1/c1/c2
+    // nesting once the toolbar's Hierarchy picker switches to it: same relation, same tree.
+    // Switching back restores the default `composition` view.
+    const hierarchyPicker = page.getByRole("combobox", { name: "Hierarchy", exact: true });
+    await expect(hierarchyPicker).toHaveValue("composition");
+    await hierarchyPicker.click();
+    await page.getByRole("option", { name: secondHierarchy, exact: true }).click();
+    await expect(hierarchyPicker).toHaveValue(secondHierarchy);
+    await expect(page.getByText(p1Title, { exact: true })).toBeVisible();
+    await expect(page.getByText(c1Title, { exact: true })).toBeVisible();
+    await expect(page.getByText(c2Title, { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: `Toggle children of ${p1Title}` }).click();
+    await expect(page.getByText(c1Title, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(c2Title, { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: `Toggle children of ${p1Title}` }).click();
+    await expect(page.getByText(c1Title, { exact: true })).toBeVisible();
+    await expect(page.getByText(c2Title, { exact: true })).toBeVisible();
+
+    await hierarchyPicker.click();
+    await page.getByRole("option", { name: "composition", exact: true }).click();
+    await expect(hierarchyPicker).toHaveValue("composition");
   } finally {
     // Cleanup: the children first (c1/c2 reference p1, c3 references the team), then p1, then
     // the team (now unreferenced), then the child blueprint (it targets the parent), then the

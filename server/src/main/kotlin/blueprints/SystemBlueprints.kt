@@ -8,7 +8,9 @@ import io.ktor.server.plugins.BadRequestException
  * system blueprints, seeded by `V31__system_blueprints.sql` (the ONE documented exception to
  * "no migration seeds blueprints") and protected by [BlueprintService] — no delete, no
  * identifier rename, and no removal/retyping of their BASE shape. Everything else (extra
- * properties/relations, titles, `hierarchyRelation`, `ownership`) is an ordinary admin edit.
+ * properties/relations, titles, `hierarchyRelations`, `ownership`) is an ordinary admin edit —
+ * [validateSystemExtension] below never touches `hierarchyRelations`, so `_team`'s seeded
+ * `{"composition":"parent"}` entry (V31, backfilled by V34) is freely editable/removable.
  */
 const val SYSTEM_TEAM_BLUEPRINT = "_team"
 const val SYSTEM_USER_BLUEPRINT = "_user"
@@ -54,7 +56,7 @@ val SYSTEM_BLUEPRINT_BASES: Map<String, BlueprintDefinition> = mapOf(
  * base property must remain present with the same `type`/`format`, `schema.required` must
  * still cover the base's required properties, and every base relation must remain present with
  * the same `target`/`many`. Titles, descriptions, extra properties/relations/mirror/
- * calculation/aggregation fields, `ownership`, and `hierarchyRelation` are free to change.
+ * calculation/aggregation fields, `ownership`, and `hierarchyRelations` are free to change.
  */
 fun validateSystemExtension(identifier: String, request: BlueprintRequest) {
     val base = SYSTEM_BLUEPRINT_BASES[identifier] ?: return

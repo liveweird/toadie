@@ -1,4 +1,4 @@
-import { Fieldset, Select, Stack, Textarea, TextInput } from "@mantine/core";
+import { Alert, Fieldset, Select, Stack, Text, Textarea, TextInput } from "@mantine/core";
 import { type UseFormReturnType } from "@mantine/form";
 import { useTranslation } from "react-i18next";
 import BlueprintAggregationRow from "./BlueprintAggregationRow";
@@ -7,7 +7,9 @@ import BlueprintMirrorRow from "./BlueprintMirrorRow";
 import BlueprintPropertyRow from "./BlueprintPropertyRow";
 import BlueprintRelationRow from "./BlueprintRelationRow";
 import EditorRowList, { rowDomId } from "./EditorRowList";
+import LoadingBlock from "./LoadingBlock";
 import { type BlueprintRowExpansion } from "../hooks/useBlueprintRowExpansion";
+import { useHierarchies } from "../hooks/useHierarchies";
 import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
 import {
   aggregationBadge,
@@ -31,6 +33,7 @@ import {
   type RowFamily,
   type BlueprintFormValues,
 } from "../utils/blueprintForm";
+import { loadErrorMessage } from "../utils/saveError";
 import { lockedRowIds } from "../utils/systemBlueprints";
 
 type Form = UseFormReturnType<BlueprintFormValues>;
@@ -282,28 +285,92 @@ function OwnershipFieldset({ form }: { form: Form }) {
 }
 
 /**
- * The Hierarchy fieldset (v1.25.0, Port migration phase 3) — a Toadie-only extension, not a
- * Port field: an admin-marked relation naming this blueprint's containment parent, backing
- * the Entity graph/hierarchy pages. Options are the blueprint's own CURRENT single relations
- * (`many === false`), so the Select can never hold an invalid value; a relation flipped to
+ * One row of the Hierarchy fieldset below — a Select for ONE `hierarchies` dictionary entry
+ * (labelled with its own value, e.g. "composition"), or the same Select relabelled with the
+ * raw stored KEY plus a warning-coloured hint when that key has since left the dictionary
+ * (still rendered so the admin can clear a value whose next save would otherwise 400).
+ */
+function HierarchyRow({
+  form,
+  hierarchyId,
+  known,
+  options,
+}: {
+  form: Form;
+  hierarchyId: string;
+  known: boolean;
+  options: string[];
+}) {
+  const { t } = useTranslation();
+  const stored = form.values.hierarchyRelations[hierarchyId] ?? "";
+  const value = options.includes(stored) ? stored : "";
+  return (
+    <Select
+      label={hierarchyId}
+      description={
+        known ? (
+          t("blueprints.hint.hierarchyRelations")
+        ) : (
+          <Text component="span" size="xs" c="orange">
+            {t("blueprints.hint.hierarchyUnknown")}
+          </Text>
+        )
+      }
+      data={options}
+      value={value || null}
+      onChange={(v) => {
+        const next = { ...form.values.hierarchyRelations };
+        if (v) next[hierarchyId] = v;
+        else delete next[hierarchyId];
+        form.setFieldValue("hierarchyRelations", next);
+      }}
+      clearable
+      clearButtonProps={{ "aria-label": t("blueprints.hierarchies.clearAria", { hierarchy: hierarchyId }) }}
+      searchable
+    />
+  );
+}
+
+/**
+ * The Hierarchy fieldset (v1.25.0, Port migration phase 3; multi-hierarchy v1.32.0) — a
+ * Toadie-only extension, not a Port field: one admin-marked relation PER `hierarchies`
+ * dictionary entry, naming this blueprint's containment parent for that hierarchy, backing
+ * the Entity graph/hierarchy pages. One row per active dictionary entry (in the admin's
+ * payload order), plus one row per stored key that has fallen out of the dictionary (so it
+ * stays clearable). Every row's OPTIONS are the blueprint's own CURRENT single relations
+ * (`many === false`), so a Select can never newly hold an invalid VALUE; a relation flipped to
  * `many` or removed silently drops out of the option list, and `toBlueprintRequest`'s
  * derive-don't-clear guard (not an effect) keeps the submitted value in sync the same way.
  */
 function HierarchyFieldset({ form }: { form: Form }) {
   const { t } = useTranslation();
+  const { hierarchies, loading, error, loadError } = useHierarchies();
   const options = singleRelationIds(form.values.relations);
-  const value = options.includes(form.values.hierarchyRelation) ? form.values.hierarchyRelation : "";
+  const activeValues = hierarchies.map((h) => h.value);
+  const staleKeys = Object.keys(form.values.hierarchyRelations).filter((k) => !activeValues.includes(k));
+
   return (
     <Fieldset legend={t("blueprints.section.hierarchy")}>
-      <Select
-        label={t("blueprints.field.hierarchyRelation")}
-        description={t("blueprints.hint.hierarchyRelation")}
-        data={options}
-        value={value || null}
-        onChange={(v) => form.setFieldValue("hierarchyRelation", v ?? "")}
-        clearable
-        searchable
-      />
+      {loading ? (
+        <LoadingBlock />
+      ) : error ? (
+        <Alert color="red" variant="light" title={t("blueprints.loadFailed")}>
+          {loadErrorMessage(loadError, t)}
+        </Alert>
+      ) : hierarchies.length === 0 && staleKeys.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          {t("blueprints.hierarchies.empty")}
+        </Text>
+      ) : (
+        <Stack gap="sm">
+          {hierarchies.map((hierarchy) => (
+            <HierarchyRow key={hierarchy.id} form={form} hierarchyId={hierarchy.value} known options={options} />
+          ))}
+          {staleKeys.map((key) => (
+            <HierarchyRow key={key} form={form} hierarchyId={key} known={false} options={options} />
+          ))}
+        </Stack>
+      )}
     </Fieldset>
   );
 }

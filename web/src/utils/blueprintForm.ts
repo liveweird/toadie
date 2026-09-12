@@ -187,15 +187,22 @@ export type BlueprintFormValues = {
   ownershipTitle: string;
   ownershipPath: string;
   /**
-   * "" = no hierarchy relation (a Toadie-only extension, v1.25.0 — the entity graph/tree's
-   * containment source). DERIVE, DON'T CLEAR: the Select's own value is guarded the same way
-   * `toBlueprintRequest` guards emission below, so flipping a relation to `many` or removing
-   * it drops this from the preview/request WITHOUT an effect keeping the two in sync.
+   * Hierarchy identifier (an active `hierarchies` dictionary value) -> relation id (a Toadie-
+   * only extension, v1.25.0; multi-hierarchy since v1.32.0 — one blueprint may feed several
+   * entity hierarchies, one relation per hierarchy, and one relation MAY serve several
+   * hierarchies). DERIVE, DON'T CLEAR, PER ENTRY: each `HierarchyFieldset` Select guards its
+   * own displayed value the same way `toBlueprintRequest` guards emission below, so flipping a
+   * relation to `many` or removing it silently drops just THAT entry from the preview/request,
+   * with no effect needed to keep the two in sync. Whether a KEY still names an active
+   * `hierarchies` dictionary entry is a separate, UI-only concern (`HierarchyFieldset`'s
+   * warning row): an entry whose key left the dictionary is still EMITTED here so the
+   * server's `hierarchyRelations names an unknown hierarchy` 400 surfaces and the admin has
+   * to clear it explicitly, rather than the client silently dropping evidence of the problem.
    */
-  hierarchyRelation: string;
+  hierarchyRelations: Record<string, string>;
 };
 
-/** The relations a blueprint's hierarchyRelation may name — single (`many === false`) ones
+/** The relations a blueprint's `hierarchyRelations` entries may name — single (`many === false`) ones
  *  with a non-blank id (the server's rule, `BlueprintValidation.kt`). */
 export function singleRelationIds(relations: RelationDraft[]): string[] {
   return relations.filter((r) => r.id.trim() && !r.many).map((r) => r.id.trim());
@@ -335,7 +342,7 @@ export function emptyBlueprintForm(): BlueprintFormValues {
     ownershipType: "",
     ownershipTitle: "",
     ownershipPath: "",
-    hierarchyRelation: "",
+    hierarchyRelations: {},
   };
 }
 
@@ -545,12 +552,20 @@ export function toBlueprintRequest(values: BlueprintFormValues): BlueprintBody {
     const id = draft.id.trim();
     if (id) aggregationProperties[id] = aggregationDefinitionFor(draft);
   }
-  // Derive, don't clear: emitted only while it STILL names a current single relation, so
-  // flipping a relation to `many` or removing it drops the field from the request without
-  // any effect keeping the two in sync (the Select guards its own value the same way).
-  const hierarchyRelation = singleRelationIds(values.relations).includes(values.hierarchyRelation.trim())
-    ? values.hierarchyRelation.trim()
-    : undefined;
+  // Derive, don't clear, PER ENTRY: a hierarchy's value is emitted only while it STILL names a
+  // current single relation, so flipping that relation to `many` or removing it silently drops
+  // just this entry from the request without any effect keeping the two in sync (each Select
+  // in `HierarchyFieldset` guards its own displayed value the same way). Whether the KEY still
+  // names an active `hierarchies` dictionary entry is NOT checked here — an entry the admin
+  // hasn't cleared still reaches the wire so the server's own 400 surfaces the problem instead
+  // of the client silently making it disappear. The whole field is omitted (never an empty
+  // object) once no entry survives.
+  const singleRelations = new Set(singleRelationIds(values.relations));
+  const hierarchyRelationEntries = Object.entries(values.hierarchyRelations)
+    .map(([hierarchyId, relationId]) => [hierarchyId, relationId.trim()] as const)
+    .filter(([, relationId]) => singleRelations.has(relationId));
+  const hierarchyRelations =
+    hierarchyRelationEntries.length > 0 ? Object.fromEntries(hierarchyRelationEntries) : undefined;
   return {
     identifier: values.identifier.trim(),
     title: values.title.trim(),
@@ -562,7 +577,7 @@ export function toBlueprintRequest(values: BlueprintFormValues): BlueprintBody {
     calculationProperties,
     aggregationProperties,
     ownership: ownershipFor(values),
-    hierarchyRelation,
+    hierarchyRelations,
   } as BlueprintBody;
 }
 
@@ -714,7 +729,7 @@ export function fromBlueprintResponse(blueprint: Blueprint): BlueprintFormValues
     ownershipType: blueprint.ownership?.type ?? "",
     ownershipTitle: blueprint.ownership?.title ?? "",
     ownershipPath: blueprint.ownership?.path ?? "",
-    hierarchyRelation: blueprint.hierarchyRelation ?? "",
+    hierarchyRelations: { ...(blueprint.hierarchyRelations ?? {}) },
   };
 }
 

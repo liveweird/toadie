@@ -3,7 +3,7 @@
   "title": "API",
   "description": "A contract other software calls or subscribes to: a REST/GraphQL/gRPC/WebSocket interface, or a Kafka topic described by an AsyncAPI document. The service that implements it lists it under provides_apis; callers under consumes_apis. Backstage kind: API (type → spec.type, definition_url → spec.definition via $text, system → spec.system, the team field → spec.owner; exposure/hosting_model → labels).",
   "icon": "Link",
-  "hierarchyRelation": "system",
+  "hierarchyRelations": {"composition": "system"},
   "schema": {
     "properties": {
       "type": {

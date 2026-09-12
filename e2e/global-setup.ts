@@ -9,6 +9,9 @@ const repoRoot = resolve(here, "..");
 export const STARTED_MARKER = resolve(here, ".playwright", "stack-started");
 // The per-run namespaces registered below, persisted for global-teardown's removal.
 export const NAMESPACES_FILE = resolve(here, ".playwright", "run-namespaces.json");
+// The per-run "second hierarchy" value registered below, persisted for global-teardown's
+// removal — see registerRunHierarchy().
+export const HIERARCHIES_FILE = resolve(here, ".playwright", "run-hierarchies.json");
 
 async function responds(url: string): Promise<boolean> {
   try {
@@ -106,11 +109,52 @@ async function registerRunNamespaces(): Promise<void> {
   console.log(`[e2e] Registered run namespaces: ${Object.values(minted).join(", ")}`);
 }
 
+/**
+ * Registers this run's ONE throwaway `hierarchies`-dictionary value (a second parallel
+ * hierarchy alongside the seeded `composition`) and hands it to workers via
+ * `E2E_HIER_ENTITY` — the same "single-writer whole-document dictionary" reasoning as
+ * `registerRunNamespaces()` above: `hierarchies.spec.ts` is already the dictionary's ONE
+ * in-run writer (appending/removing its own unique value through the real editor), so a
+ * SECOND in-run writer racing it would drop whichever entry lands second. Minting this value
+ * here instead — strictly before any worker starts — avoids that race entirely.
+ * `entity-hierarchy.spec.ts`'s "a second hierarchy" step is its only in-run CONSUMER: it
+ * flags this value (alongside `composition`) on its own throwaway child blueprint's
+ * `hierarchyRelations` and never writes the dictionary itself. The minted value happens to
+ * share the `e2e-hier-` prefix `hierarchies.spec.ts` uses for its own unrelated throwaway
+ * value — harmless (`uniqueText`-style suffixes never collide), named this way because the
+ * value denotes "a hierarchy for the entity-hierarchy spec", same idiom as the other prefixes.
+ */
+async function registerRunHierarchy(): Promise<void> {
+  const headers = await adminApiHeaders();
+  const value = `e2e-hier-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+  const current = (await (
+    await fetch(`${BASE_URL}/api/v1/dictionaries/hierarchies`, { headers })
+  ).json()) as DictionaryItems;
+  const put = await fetch(`${BASE_URL}/api/v1/dictionaries/hierarchies`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({
+      items: [
+        // hierarchies has no default flag, but replay every existing id/value pair so a
+        // rename never happens as a side effect of this append.
+        ...current.items.map(({ id, value: v, isDefault }) => ({ id, value: v, isDefault })),
+        { value, isDefault: false },
+      ],
+    }),
+  });
+  if (put.status !== 204) throw new Error(`[e2e] hierarchy registration failed: ${put.status}`);
+  process.env.E2E_HIER_ENTITY = value;
+  mkdirSync(dirname(HIERARCHIES_FILE), { recursive: true });
+  writeFileSync(HIERARCHIES_FILE, JSON.stringify({ ENTITY: value }));
+  console.log(`[e2e] Registered run hierarchy: ${value}`);
+}
+
 export default async function globalSetup(): Promise<void> {
   // Reuse a stack that's already up (fast local iteration); don't tear it down afterward.
   if (await responds(BASE_URL)) {
     console.log(`[e2e] Reusing the app already running at ${BASE_URL}`);
     await registerRunNamespaces();
+    await registerRunHierarchy();
     return;
   }
 
@@ -124,4 +168,5 @@ export default async function globalSetup(): Promise<void> {
   writeFileSync(STARTED_MARKER, "started-by-e2e");
   console.log("[e2e] Stack is up.");
   await registerRunNamespaces();
+  await registerRunHierarchy();
 }

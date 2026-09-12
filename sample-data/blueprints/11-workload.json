@@ -3,7 +3,7 @@
   "title": "Workload",
   "description": "One service running in one environment — what actually carries a version and a replica count. Port's default \"running service\"; Backstage has no counterpart, so an export drops it. Ownership is inherited from the service. Best fed by CI/CD or a cluster exporter; by hand, record the production workloads of the services that matter.",
   "icon": "Deployment",
-  "hierarchyRelation": "service",
+  "hierarchyRelations": {"composition": "service", "deployment": "cluster"},
   "schema": {
     "properties": {
       "version": {

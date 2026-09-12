@@ -40,7 +40,7 @@ generated-password reveal, self-service password change):
   catalog files. Phase 3 renders them together: the `/entity-graph` relationship graph and the
   `/entity-hierarchy` containment tree, reusing the catalog's own dagre layout, folding, and
   per-user manual-layout persistence, with each blueprint able to name one of its own
-  single relations as its `hierarchyRelation` — the Toadie-only extension that decides an
+  single relations per hierarchy in its `hierarchyRelations` map — the Toadie-only extension that decides an
   entity's parent for the tree/fold,
 - **users and teams** (Port migration phase 4, v1.26.0): the seeded `_team`/`_user` system
   blueprints give every entity real `$team` ownership — Direct or computed Inherited along a

@@ -18,10 +18,11 @@ import kotlin.test.assertTrue
 
 /**
  * Pure tests of [buildEntityGraph] (Port migration phase 3): the both-ends-shown rule (never
- * a MISSING node, assumption A1), relation-value array expansion + edge dedupe, the hierarchy
- * flag (only the source blueprint's OWN `hierarchyRelation`), the node id grammar, and pure
- * pass-through of blueprintTitle/findings. No database, no service — mirrors
- * `catalog/Graph.kt`'s own pure-builder test shape one level down.
+ * a MISSING node, assumption A1), relation-value array expansion + edge dedupe, the `hierarchies`
+ * list (v1.32.0 — every hierarchy id whose `hierarchyRelations` entry equals this edge's
+ * relation, on the source blueprint), the node id grammar, and pure pass-through of
+ * blueprintTitle/findings. No database, no service — mirrors `catalog/Graph.kt`'s own
+ * pure-builder test shape one level down.
  */
 class EntityGraphTest {
 
@@ -32,12 +33,12 @@ class EntityGraphTest {
         identifier: String,
         title: String = identifier.uppercase(),
         relations: Map<String, RelationDefinition> = emptyMap(),
-        hierarchyRelation: String? = null,
+        hierarchyRelations: Map<String, String> = emptyMap(),
     ) = identifier to GraphBlueprint(
         identifier = identifier,
         title = title,
         definition = BlueprintDefinition(relations = relations),
-        hierarchyRelation = hierarchyRelation,
+        hierarchyRelations = hierarchyRelations,
     )
 
     private fun source(
@@ -87,19 +88,23 @@ class EntityGraphTest {
         val graph = buildEntityGraph(listOf(team, p1, p2), mapOf(1u to teamDef, 2u to personDef), noFindings)
 
         val expected = setOf(
-            EntityGraphEdge(entityNodeId("team", "t1"), entityNodeId("person", "p1"), "members", hierarchy = false, ownership = false),
-            EntityGraphEdge(entityNodeId("team", "t1"), entityNodeId("person", "p2"), "members", hierarchy = false, ownership = false),
+            EntityGraphEdge(
+                entityNodeId("team", "t1"), entityNodeId("person", "p1"), "members", hierarchies = emptyList(), ownership = false,
+            ),
+            EntityGraphEdge(
+                entityNodeId("team", "t1"), entityNodeId("person", "p2"), "members", hierarchies = emptyList(), ownership = false,
+            ),
         )
         assertEquals(expected, graph.edges.toSet())
         assertEquals(2, graph.edges.size, "the repeated p1 value must not double the edge")
     }
 
     @Test
-    fun `hierarchy is true only for the source blueprint's own hierarchyRelation`() {
+    fun `hierarchies lists only the ids whose hierarchyRelations entry equals this relation`() {
         val (_, childDef) = bp(
             "child",
             relations = mapOf("parent" to relation("parent"), "peer" to relation("child", many = true)),
-            hierarchyRelation = "parent",
+            hierarchyRelations = mapOf("composition" to "parent", "deployment" to "parent"),
         )
         val (_, parentDef) = bp("parent")
         val parent = source(1u, 2u, "root")
@@ -111,9 +116,9 @@ class EntityGraphTest {
         val graph = buildEntityGraph(listOf(parent, child), mapOf(1u to childDef, 2u to parentDef), noFindings)
 
         val hierarchyEdge = graph.edges.single { it.relation == "parent" }
-        assertTrue(hierarchyEdge.hierarchy)
+        assertEquals(listOf("composition", "deployment"), hierarchyEdge.hierarchies, "two hierarchies may share one relation")
         val peerEdge = graph.edges.single { it.relation == "peer" }
-        assertTrue(!peerEdge.hierarchy, "a self-referencing but non-hierarchy relation must not be flagged")
+        assertTrue(peerEdge.hierarchies.isEmpty(), "a self-referencing but non-hierarchy relation must carry no hierarchy ids")
     }
 
     @Test
@@ -145,7 +150,7 @@ class EntityGraphTest {
         assertEquals(entityNodeId("service", "svc-shown"), edge.sourceId)
         assertEquals(entityNodeId("_team", "platform"), edge.targetId)
         assertEquals("\$team", edge.relation)
-        assertTrue(!edge.hierarchy, "an ownership edge is never a hierarchy edge")
+        assertTrue(edge.hierarchies.isEmpty(), "an ownership edge is never a hierarchy edge")
     }
 
     @Test

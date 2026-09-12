@@ -23,19 +23,26 @@ const GRAPH = {
     { id: "service|solo", entityId: 3, blueprint: "service", blueprintTitle: "Service", identifier: "solo", title: "Solo", findings: 0 },
   ],
   edges: [
-    { sourceId: "service|checkout", targetId: "team|platform", relation: "team", hierarchy: true },
-    { sourceId: "service|checkout", targetId: "service|solo", relation: "peer", hierarchy: false },
+    { sourceId: "service|checkout", targetId: "team|platform", relation: "team", hierarchies: ["composition"] },
+    { sourceId: "service|checkout", targetId: "service|solo", relation: "peer", hierarchies: [] },
   ],
 };
+
+const HIERARCHIES = [
+  { id: 1, value: "composition", isDefault: false },
+  { id: 2, value: "cost-center", isDefault: false },
+];
 
 function mockGraph(
   mockFetch: FetchMock,
   body: unknown = GRAPH,
   status = 200,
   layout: unknown = { mode: "auto", positions: {} },
+  hierarchies: unknown = HIERARCHIES,
 ) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: [] }));
+    if (url.startsWith("/api/v1/dictionaries/hierarchies")) return Promise.resolve(jsonResponse(200, { items: hierarchies }));
     if (url === "/api/v1/users/9/entity-graph-layout") {
       return init?.method === "PUT"
         ? Promise.resolve(new Response(null, { status: 204 }))
@@ -237,7 +244,7 @@ describe("EntityGraph page", () => {
         { id: "service|checkout", entityId: 2, blueprint: "service", blueprintTitle: "Service", identifier: "checkout", title: "Checkout", findings: 0 },
       ],
       edges: [
-        { sourceId: "service|checkout", targetId: "team|platform", relation: "$team", hierarchy: false, ownership: true },
+        { sourceId: "service|checkout", targetId: "team|platform", relation: "$team", hierarchies: [], ownership: true },
       ],
     };
     mockGraph(mockFetch, graph);
@@ -271,5 +278,53 @@ describe("EntityGraph page", () => {
       );
       expect(called).toBe(true);
     });
+  });
+
+  test("the hierarchy picker renders the dictionary values in order and defaults to the first", async () => {
+    mockGraph(mockFetch);
+    renderPage();
+
+    await screen.findByText(/platform \[team\]/);
+    const picker = screen.getByLabelText("Hierarchy", { selector: "input" }) as HTMLInputElement;
+    expect(picker.value).toBe("composition");
+  });
+
+  test("switching the hierarchy restyles containment and persists the choice", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/checkout \[service\]/);
+    // Under "composition" (the default), the team edge nests checkout under platform — platform
+    // gets a fold toggle.
+    expect(screen.getByRole("button", { name: "Collapse platform" })).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Hierarchy", { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "cost-center" }));
+
+    // No edge carries "cost-center" — nothing nests, so platform loses its fold toggle.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Collapse platform" })).not.toBeInTheDocument(),
+    );
+    expect(localStorage.getItem("toadie.viewSettings.entityGraph.hierarchy")).toBe('"cost-center"');
+  });
+
+  test("a stale stored hierarchy id falls back to the first dictionary value", async () => {
+    mockGraph(mockFetch);
+    localStorage.setItem("toadie.viewSettings.entityGraph.hierarchy", '"gone"');
+    renderPage();
+
+    await screen.findByText(/platform \[team\]/);
+    const picker = screen.getByLabelText("Hierarchy", { selector: "input" }) as HTMLInputElement;
+    expect(picker.value).toBe("composition");
+  });
+
+  test("an empty hierarchies dictionary disables the picker with a hint", async () => {
+    mockGraph(mockFetch, GRAPH, 200, { mode: "auto", positions: {} }, []);
+    renderPage();
+
+    await screen.findByText(/platform \[team\]/);
+    expect(screen.getByLabelText("Hierarchy", { selector: "input" })).toBeDisabled();
+    expect(screen.getByText("No hierarchies defined — add them on the Hierarchies page")).toBeInTheDocument();
   });
 });

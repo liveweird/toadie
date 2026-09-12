@@ -41,9 +41,11 @@ import kotlin.test.assertTrue
  *    dictionaries, the lifecycles dictionary, the labels' closed value lists, the tag
  *    categories) carries EXACTLY the registry's values, read back from the running app — so a
  *    Backstage export is a copy and a registry edit that forgets the blueprint fails here.
- * 2. **Hierarchy**: the `hierarchyRelation` of each blueprint is the one the doc names, forming
- *    the org tree (`_team` → `_team`) and the architecture tree (domain → system → service/
- *    library/api/resource → workload, cluster → environment).
+ * 2. **Hierarchy**: `hierarchyRelations` (v1.32.0, a map — several PARALLEL hierarchies) names
+ *    TWO forests: `composition` — the org tree (`_team` → `_team`) and the architecture tree
+ *    (domain → system → service/library/api/resource → workload, cluster → environment) — and
+ *    `deployment` — workload → cluster → environment, sharing `cluster`'s own `environment`
+ *    relation with `composition`.
  * 3. **Ownership**: every blueprint but `_team`/`_user`/environment declares `ownership` — Direct
  *    on domain/system/service/library/api/resource/cluster (no `owned_by` relation: the team
  *    field IS the ownership, v1.26.0), Inherited via `service` on workload.
@@ -149,13 +151,30 @@ class SampleBlueprintsTest {
         }
     }
 
+    /**
+     * v1.32.0: `hierarchyRelations` is a MAP, so the baseline ontology now names TWO parallel
+     * hierarchies — `composition` (the pre-1.32 single pointer, unchanged: the org tree via
+     * `_team` and the architecture tree via domain/system/service/...) and `deployment` (new:
+     * workload -> cluster -> environment, `cluster`'s own `environment` relation serving BOTH).
+     */
     private fun assertHierarchy(requests: Map<String, BlueprintRequest>) {
-        assertEquals(EXPECTED_HIERARCHY, requests.mapValues { it.value.hierarchyRelation })
-        EXPECTED_HIERARCHY.forEach { (blueprint, relation) ->
+        assertEquals(EXPECTED_COMPOSITION, requests.mapValues { it.value.hierarchyRelations?.get("composition") })
+        assertEquals(EXPECTED_DEPLOYMENT, requests.mapValues { it.value.hierarchyRelations?.get("deployment") })
+        assertHierarchyForest(requests, EXPECTED_COMPOSITION, EXPECTED_PARENT, "composition")
+        assertHierarchyForest(requests, EXPECTED_DEPLOYMENT, EXPECTED_DEPLOYMENT_PARENT, "deployment")
+    }
+
+    private fun assertHierarchyForest(
+        requests: Map<String, BlueprintRequest>,
+        expectedRelation: Map<String, String?>,
+        expectedParent: Map<String, String>,
+        hierarchy: String,
+    ) {
+        expectedRelation.forEach { (blueprint, relation) ->
             if (relation == null) return@forEach
-            val definition = assertNotNull(requests.getValue(blueprint).relations[relation], "$blueprint.$relation")
-            assertTrue(!definition.many, "$blueprint's hierarchy relation must be single")
-            assertEquals(EXPECTED_PARENT.getValue(blueprint), definition.target, "$blueprint's parent blueprint")
+            val definition = assertNotNull(requests.getValue(blueprint).relations[relation], "$blueprint.$relation ($hierarchy)")
+            assertTrue(!definition.many, "$blueprint's $hierarchy hierarchy relation must be single")
+            assertEquals(expectedParent.getValue(blueprint), definition.target, "$blueprint's $hierarchy parent blueprint")
         }
     }
 
@@ -247,8 +266,8 @@ class SampleBlueprintsTest {
             "_team", "_user", "domain", "system", "environment", "cluster", "resource", "library", "api", "service", "workload",
         )
 
-        /** blueprint → its `hierarchyRelation` (null = roots its own entities). */
-        val EXPECTED_HIERARCHY = mapOf(
+        /** blueprint → its `composition` hierarchyRelations entry (null = roots its own entities). */
+        val EXPECTED_COMPOSITION = mapOf(
             "_team" to "parent",
             "_user" to null,
             "domain" to "parent_domain",
@@ -262,7 +281,7 @@ class SampleBlueprintsTest {
             "workload" to "service",
         )
 
-        /** blueprint → the blueprint its hierarchy relation targets. */
+        /** blueprint → the blueprint its `composition` hierarchy relation targets. */
         val EXPECTED_PARENT = mapOf(
             "_team" to "_team",
             "domain" to "domain",
@@ -273,6 +292,21 @@ class SampleBlueprintsTest {
             "api" to "system",
             "service" to "system",
             "workload" to "service",
+        )
+
+        /**
+         * blueprint → its `deployment` hierarchyRelations entry (v1.32.0, the second parallel
+         * hierarchy) — every blueprint but `workload`/`cluster` names none.
+         */
+        val EXPECTED_DEPLOYMENT: Map<String, String?> = EXPECTED_ORDER.associateWith { null } + mapOf(
+            "workload" to "cluster",
+            "cluster" to "environment",
+        )
+
+        /** blueprint → the blueprint its `deployment` hierarchy relation targets. */
+        val EXPECTED_DEPLOYMENT_PARENT = mapOf(
+            "workload" to "cluster",
+            "cluster" to "environment",
         )
 
         /**

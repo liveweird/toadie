@@ -12,8 +12,9 @@ import type { HierarchyNode } from "./hierarchy";
  */
 
 /** The Phase 4 ownership edge's dotted-gray style (drawn by `pages/EntityGraph.tsx` for the
- *  `$team` field) — never a `hierarchy` edge (the server never flags one both ways) and folds
- *  like any other relation (`toFoldable` below carries `ownership` edges through unchanged). */
+ *  `$team` field) — never carries a hierarchy id (the server never flags one both ways) and
+ *  folds like any other relation (`toFoldable` below carries `ownership` edges through
+ *  unchanged). */
 export const OWNERSHIP_EDGE_STYLE: CSSProperties = {
   strokeDasharray: "2 3",
   stroke: "var(--mantine-color-gray-6)",
@@ -42,6 +43,19 @@ export function toFoldable(graph: EntityGraph): { nodes: EntityGraphNode[]; edge
   };
 }
 
+/**
+ * Resolves the EFFECTIVE hierarchy id from a per-view stored choice against the current
+ * `hierarchies` dictionary values (in payload order): the stored id when it is still among
+ * them, else the FIRST dictionary value, else `""` (an empty dictionary — every entity is
+ * then a root of the returned "hierarchy", see `buildEntityHierarchy`). Shared by
+ * `pages/EntityHierarchy.tsx` and `pages/EntityGraph.tsx` so a removed/renamed hierarchy
+ * falls back identically on both.
+ */
+export function effectiveHierarchyId(stored: string, values: readonly string[]): string {
+  if (values.includes(stored)) return stored;
+  return values[0] ?? "";
+}
+
 function compareEntityNodes(a: EntityGraphNode, b: EntityGraphNode): number {
   return (
     a.blueprint.localeCompare(b.blueprint) ||
@@ -51,23 +65,27 @@ function compareEntityNodes(a: EntityGraphNode, b: EntityGraphNode): number {
 }
 
 /**
- * Builds the containment forest a blueprint's `hierarchyRelation` describes: an entity's
- * parent is the target of the FIRST shown `hierarchy` edge in payload order (a self-edge is
- * ignored, and assumption A2 — a stale array value on a now-single relation can still surface
- * several hierarchy edges — is resolved by taking that first one); an entity with no shown
- * hierarchy edge is a root. Cycles (storable, since the relation is just data) break exactly
- * like `utils/hierarchy.ts#buildHierarchy`: promote the sorted-first node of the unreached
- * island to a root. Sort order is blueprint → title → id, since entities carry no kind tier.
+ * Builds the containment forest of ONE named hierarchy (an id from the admin-curated
+ * `hierarchies` dictionary, `hooks/useHierarchies.ts`): an entity's parent is the target of
+ * the FIRST shown edge whose `hierarchies` array includes `hierarchyId`, in payload order (a
+ * self-edge is ignored, and assumption A2 — a stale array value on a now-single relation can
+ * still surface several parent-candidate edges for the same hierarchy — is resolved by taking
+ * that first one); one relation may carry several hierarchy ids at once (a shared containment
+ * link), and an entity with no shown edge naming `hierarchyId` is a root of THAT hierarchy —
+ * including every entity when `hierarchyId` names no edge at all. Cycles (storable, since the
+ * relation is just data) break exactly like `utils/hierarchy.ts#buildHierarchy`: promote the
+ * sorted-first node of the unreached island to a root. Sort order is blueprint → title → id,
+ * since entities carry no kind tier.
  */
-export function buildEntityHierarchy(graph: EntityGraph): HierarchyNode<EntityGraphNode>[] {
+export function buildEntityHierarchy(graph: EntityGraph, hierarchyId: string): HierarchyNode<EntityGraphNode>[] {
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
 
   const parentOf = new Map<string, string>();
   for (const edge of graph.edges) {
-    // An ownership edge is never a parent link, even if it were somehow also flagged
-    // `hierarchy` (the server never sends both) — ownership never nests.
+    // An ownership edge is never a parent link, even if it were somehow also flagged as a
+    // hierarchy parent link (the server never sends both) — ownership never nests.
     if (edge.ownership) continue;
-    if (!edge.hierarchy) continue;
+    if (!edge.hierarchies.includes(hierarchyId)) continue;
     if (edge.sourceId === edge.targetId) continue;
     if (parentOf.has(edge.sourceId)) continue;
     if (!nodesById.has(edge.targetId)) continue;

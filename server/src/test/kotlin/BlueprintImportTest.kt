@@ -167,4 +167,31 @@ class BlueprintImportTest {
         assertEquals(OntologyImportStatus.INVALID, response.results[0].status)
         assertNull(response.results[0].id)
     }
+
+    @Test
+    fun `an unknown hierarchyRelations key is INVALID in both the real run and the dry-run`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("bp-import-admin"), UserRole.ADMIN)
+        val id = identifier("bp-hier")
+        val selfRelation = RelationDefinition(title = "R", target = id, required = false, many = false)
+        val bad = doc(
+            BlueprintRequest(
+                identifier = id, title = "T", schema = BlueprintSchema(),
+                relations = mapOf("self" to selfRelation),
+                hierarchyRelations = mapOf("nope-hierarchy" to "self"),
+            ),
+        )
+        val request = BlueprintImportRequest(documents = listOf(bad))
+        try {
+            val checkResponse = admin.importCheck(request).body<BlueprintImportResponse>()
+            assertEquals(OntologyImportStatus.INVALID, checkResponse.results[0].status)
+            assertTrue(checkResponse.results[0].message!!.contains("names an unknown hierarchy"))
+
+            val importResponse = admin.import(request).body<BlueprintImportResponse>()
+            assertEquals(OntologyImportStatus.INVALID, importResponse.results[0].status)
+            assertNull(importResponse.results[0].id)
+        } finally {
+            TestBlueprints.remove(id)
+        }
+    }
 }

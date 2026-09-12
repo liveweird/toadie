@@ -6,11 +6,12 @@ type EntityLayoutDocument = {
   collapsed: string[];
 };
 
-// The Entity graph (Port migration phase 3, + Phase 4 ownership edges v1.26.0): two throwaway
-// blueprints seeded via the API — a parent blueprint carrying a `peer` MANY self-relation, and
-// a child blueprint carrying a single `parent` relation to it flagged as the
-// `hierarchyRelation` — plus two parent and two child entities (p1.peer -> [p2]; c1/c2.parent
-// -> p1) and one throwaway `_team` entity p1 is Direct-owned by (p1.team -> [team]). Every
+// The Entity graph (Port migration phase 3, + Phase 4 ownership edges v1.26.0; parallel
+// hierarchies v1.32.0): two throwaway blueprints seeded via the API — a parent blueprint
+// carrying a `peer` MANY self-relation, and a child blueprint carrying a single `parent`
+// relation flagged as the `composition` entry of its `hierarchyRelations` — plus two parent
+// and two child entities (p1.peer -> [p2]; c1/c2.parent -> p1) and one throwaway `_team`
+// entity p1 is Direct-owned by (p1.team -> [team]). Every
 // identifier shares ONE run marker so the graph can be narrowed to this run's own rows with
 // `q` even once `_team` (a workspace-wide blueprint other specs also write to) joins the
 // blueprint filter. A throwaway user owns the page's per-user layout document
@@ -52,7 +53,8 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
 
   try {
     // 0. Seed the two throwaway blueprints via the API: a `peer` MANY self-relation on the
-    // parent, and a single `parent` relation on the child flagged as its `hierarchyRelation`.
+    // parent, and a single `parent` relation on the child flagged as the `composition` entry
+    // of its `hierarchyRelations`.
     const parentBpResp = await page.request.post("/api/v1/blueprints", {
       headers: authHeaders,
       data: {
@@ -76,7 +78,7 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
         relations: {
           parent: { title: "Parent", target: parentBp, required: false, many: false },
         },
-        hierarchyRelation: "parent",
+        hierarchyRelations: { composition: "parent" },
       },
     });
     expect(childBpResp.status()).toBe(201);

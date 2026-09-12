@@ -41,8 +41,12 @@ class BlueprintImportPlanTest {
     private fun relationTo(target: String, required: Boolean = false, many: Boolean = false) =
         RelationDefinition(title = "R", target = target, required = required, many = many)
 
-    private fun plan(documents: List<JsonObject>, registry: List<RegistryBlueprint> = emptyList(), replaceExisting: Boolean = false) =
-        planBlueprintImport(documents, registry, replaceExisting)
+    private fun plan(
+        documents: List<JsonObject>,
+        registry: List<RegistryBlueprint> = emptyList(),
+        replaceExisting: Boolean = false,
+        knownHierarchies: Set<String> = emptySet(),
+    ) = planBlueprintImport(documents, registry, replaceExisting, knownHierarchies)
 
     @Test
     fun `decode failure keeps the raw identifier and reports the fixed schema message`() {
@@ -189,7 +193,7 @@ class BlueprintImportPlanTest {
     }
 
     @Test
-    fun `deferring a relation also strips its dependent mirror, ownership, and hierarchyRelation`() {
+    fun `deferring a relation also strips its dependent mirror, ownership, and hierarchyRelations`() {
         val a = BlueprintRequest(
             identifier = "a",
             title = "A",
@@ -197,16 +201,26 @@ class BlueprintImportPlanTest {
             relations = mapOf("toB" to relationTo("b")),
             mirrorProperties = mapOf("mirrored" to MirrorPropertyDefinition(title = "M", path = "toB.\$title")),
             ownership = OwnershipDefinition(type = "Inherited", path = "toB"),
-            hierarchyRelation = "toB",
+            hierarchyRelations = mapOf("composition" to "toB"),
         )
         val b = simple("b", relations = mapOf("peer" to relationTo("a")))
-        val result = plan(listOf(doc(a), doc(b)))
+        val result = plan(listOf(doc(a), doc(b)), knownHierarchies = setOf("composition"))
         val storeA = result.verdicts[0] as BlueprintPlanVerdict.Store
         assertEquals(setOf("b"), storeA.deferred)
         assertTrue(storeA.pass1.relations.isEmpty())
         assertTrue(storeA.pass1.mirrorProperties.isEmpty(), "a mirror path starting with the dropped relation must be stripped too")
         assertNull(storeA.pass1.ownership, "an Inherited ownership path starting with the dropped relation must be stripped too")
-        assertNull(storeA.pass1.hierarchyRelation, "a hierarchyRelation naming the dropped relation must be stripped too")
+        assertNull(storeA.pass1.hierarchyRelations, "a hierarchyRelations entry naming the dropped relation must be stripped too")
+    }
+
+    @Test
+    fun `a hierarchyRelations key outside the known set is INVALID`() {
+        val a = simple("a", relations = mapOf("self" to relationTo("a")))
+            .copy(hierarchyRelations = mapOf("nope" to "self"))
+        val result = plan(listOf(doc(a)), knownHierarchies = setOf("composition"))
+        val rejected = result.verdicts[0] as BlueprintPlanVerdict.Rejected
+        assertEquals(OntologyImportStatus.INVALID, rejected.row.status)
+        assertTrue(rejected.row.message!!.contains("names an unknown hierarchy 'nope'"))
     }
 
     @Test

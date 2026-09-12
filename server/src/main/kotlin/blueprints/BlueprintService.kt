@@ -1,6 +1,8 @@
 package ch.nokillswit.blueprints
 
 import ch.nokillswit.authz.ConflictException
+import ch.nokillswit.dictionaries.Dictionary
+import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.entities.EntityService
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.users.UserService
@@ -35,6 +37,12 @@ data class BlueprintUpdateResult(val affected: Int, val cascaded: List<String>, 
 /** [BlueprintService.delete]'s outcome: the affected-row count plus the deleted identifier (for the audit). */
 data class BlueprintDeleteResult(val affected: Int, val identifier: String?)
 
+/** The `blueprints.hierarchy_relations` column's JSON-object-in-TEXT codec (V34). */
+private fun decodeHierarchyRelations(raw: String): Map<String, String> = blueprintJson.decodeFromString(raw)
+
+private fun encodeHierarchyRelations(hierarchyRelations: Map<String, String>?): String =
+    blueprintJson.encodeToString(hierarchyRelations ?: emptyMap())
+
 class BlueprintService(private val database: R2dbcDatabase) {
     object Blueprints : UIntIdTable("blueprints") {
         // Case-folded identifier uniqueness is enforced by the partial unique index
@@ -47,9 +55,11 @@ class BlueprintService(private val database: R2dbcDatabase) {
         // Everything else (schema/relations/mirror/calculation/aggregation/ownership) as one
         // JSON document in TEXT (the catalog_files.content/lenses.filters precedent).
         val definition = text("definition")
-        // Port migration phase 3 (V29): a Toadie-only view extension stored BESIDE the Port
-        // document, never inside it — so `definition`/`toDefinition()` stay byte-identical.
-        val hierarchyRelation = varchar("hierarchy_relation", length = MAX_BLUEPRINT_IDENTIFIER_LENGTH).nullable()
+        // Port migration phase 3 (V29), widened to a MAP in V34: a Toadie-only view extension
+        // stored BESIDE the Port document, never inside it — so `definition`/`toDefinition()`
+        // stay byte-identical. One JSON object in TEXT (the `definition` column's own idiom),
+        // hierarchy identifier -> relation key; "{}" when unset.
+        val hierarchyRelations = text("hierarchy_relations").default("{}")
         // Phase 4 (V31): `_team`/`_user`, seeded by the migration — never set by application
         // code (see blueprints/SystemBlueprints.kt for the protections this flag gates).
         val isSystem = bool("is_system").default(false)
@@ -94,7 +104,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             calculationProperties = definition.calculationProperties,
             aggregationProperties = definition.aggregationProperties,
             ownership = definition.ownership,
-            hierarchyRelation = this[Blueprints.hierarchyRelation],
+            hierarchyRelations = decodeHierarchyRelations(this[Blueprints.hierarchyRelations]).ifEmpty { null },
             createdBy = this[Blueprints.createdBy].value,
             creatorName = this[UserService.Users.name],
             creatorDeleted = this[UserService.Users.markedAsDeleted],
@@ -117,12 +127,12 @@ class BlueprintService(private val database: R2dbcDatabase) {
         joined().selectAll().where { (Blueprints.id eq id) and active() }.map { it.toResponse() }.singleOrNull()
     }
 
-    /** One row's id, identifier, decoded definition, and hierarchy relation — the snapshot every mutation loads once. */
+    /** One row's id, identifier, decoded definition, and hierarchy relations map — the snapshot every mutation loads once. */
     private data class ActiveRow(
         val id: UInt,
         val identifier: String,
         val definition: BlueprintDefinition,
-        val hierarchyRelation: String?,
+        val hierarchyRelations: Map<String, String>,
         val isSystem: Boolean,
     )
 
@@ -132,7 +142,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
                 it[Blueprints.id].value,
                 it[Blueprints.identifier],
                 blueprintJson.decodeFromString<BlueprintDefinition>(it[Blueprints.definition]),
-                it[Blueprints.hierarchyRelation],
+                decodeHierarchyRelations(it[Blueprints.hierarchyRelations]),
                 it[Blueprints.isSystem],
             )
         }
@@ -143,6 +153,41 @@ class BlueprintService(private val database: R2dbcDatabase) {
         if (unknown.isNotEmpty()) {
             throw BadRequestException("Unknown relation/aggregation target(s): ${unknown.joinToString()}")
         }
+    }
+
+    /**
+     * Every `hierarchyRelations` KEY must be an ACTIVE `hierarchies` dictionary value
+     * ([Dictionary.HIERARCHY]) — a sanctioned cross-feature table read of
+     * [DictionaryService.Entries] (`.claude/docs/persistence.md`), run inside the SAME
+     * [writeTransaction] as the rest of create/update so a concurrent dictionary replace that
+     * removes a value in flight is serialized against this check the instant it, too, takes the
+     * `blueprints` lock (a follow-up — today the dictionary write takes no such lock, so this is
+     * a plain committed read, the same posture as [requireTargetsExist]'s `known` snapshot).
+     */
+    private fun hierarchyDictionaryPredicate(): Op<Boolean> =
+        (DictionaryService.Entries.dictionary eq Dictionary.HIERARCHY.name) and (DictionaryService.Entries.markedAsDeleted eq false)
+
+    private suspend fun requireKnownHierarchies(hierarchyRelations: Map<String, String>?) {
+        if (hierarchyRelations.isNullOrEmpty()) return
+        val known = DictionaryService.Entries
+            .selectAll()
+            .where { hierarchyDictionaryPredicate() }
+            .map { it[DictionaryService.Entries.value] }
+            .toList()
+            .toSet()
+        hierarchyRelations.keys.firstOrNull { it !in known }?.let {
+            throw BadRequestException("hierarchyRelations names an unknown hierarchy '$it'")
+        }
+    }
+
+    /** Active `hierarchies` dictionary values — a plain, lock-free read like [list] (the import planner's snapshot). */
+    suspend fun knownHierarchies(): Set<String> = suspendTransaction(database) {
+        DictionaryService.Entries
+            .selectAll()
+            .where { hierarchyDictionaryPredicate() }
+            .map { it[DictionaryService.Entries.value] }
+            .toList()
+            .toSet()
     }
 
     suspend fun create(request: BlueprintRequest, callerId: UInt): BlueprintResponse {
@@ -156,6 +201,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             if (Blueprints.selectAll().where { active() }.count() >= MAX_BLUEPRINTS) {
                 throw BadRequestException("The blueprint registry is full ($MAX_BLUEPRINTS blueprints)")
             }
+            requireKnownHierarchies(request.hierarchyRelations)
             val known = activeRows().map { it.identifier }.toSet()
             val definition = request.toDefinition()
             requireTargetsExist(definition, self = request.identifier, known = known)
@@ -173,7 +219,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             it[description] = request.description
             it[icon] = request.icon
             it[Blueprints.definition] = blueprintJson.encodeToString(definition)
-            it[hierarchyRelation] = request.hierarchyRelation
+            it[hierarchyRelations] = encodeHierarchyRelations(request.hierarchyRelations)
             it[createdBy] = callerId
             it[createdAt] = now
             it[updatedAt] = now
@@ -200,6 +246,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             // an identifier change.
             validateSystemExtension(current.identifier, request)
         }
+        requireKnownHierarchies(request.hierarchyRelations)
         val others = rows.filterNot { it.id == id }
         val renamed = current.identifier != request.identifier
         val definition = request.toDefinition().let {
@@ -215,7 +262,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
             it[description] = request.description
             it[icon] = request.icon
             it[Blueprints.definition] = blueprintJson.encodeToString(definition)
-            it[hierarchyRelation] = request.hierarchyRelation
+            it[hierarchyRelations] = encodeHierarchyRelations(request.hierarchyRelations)
             it[updatedAt] = System.currentTimeMillis()
         }
         BlueprintUpdateResult(1, cascaded, if (renamed) current.identifier else null, current.isSystem)

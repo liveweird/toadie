@@ -1,10 +1,15 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintRequest
+import ch.nokillswit.blueprints.BlueprintResponse
+import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.dictionaries.Dictionary
 import ch.nokillswit.dictionaries.DictionaryEntryInput
 import ch.nokillswit.dictionaries.DictionaryEntryList
 import ch.nokillswit.dictionaries.DictionaryUpdateRequest
 import ch.nokillswit.dictionaries.MAX_DICTIONARY_ENTRIES
+import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -474,5 +479,104 @@ class DictionaryTest {
         }
         val after = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
         assertTrue(after.none { it.value == value })
+    }
+
+    /** A minimal blueprint whose ONE relation `parent` is pointed at [hierarchyValue]'s hierarchy. */
+    private fun blueprintWithHierarchy(id: String, hierarchyValue: String) = BlueprintRequest(
+        identifier = id,
+        title = "T",
+        schema = BlueprintSchema(),
+        relations = mapOf(
+            "parent" to RelationDefinition(title = "Parent", target = id, required = false, many = false),
+        ),
+        hierarchyRelations = mapOf(hierarchyValue to "parent"),
+    )
+
+    @Test
+    fun `removing a hierarchy value still named by an active blueprint is 409`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("hierrefrm", UserRole.ADMIN)
+        val value = ns("hier-rm").lowercase()
+        val blueprintId = ns("bp-hier-rm").lowercase()
+        TestHierarchies.ensure(value)
+        admin.postJson("/api/v1/blueprints", blueprintWithHierarchy(blueprintId, value)).body<BlueprintResponse>()
+        try {
+            val current = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+            val withoutValue = current.filterNot { it.value == value }.map { DictionaryEntryInput(it.id, it.value) }
+            val response = admin.putJson("/api/v1/dictionaries/hierarchies", DictionaryUpdateRequest(withoutValue))
+            assertEquals(HttpStatusCode.Conflict, response.status)
+            val detail = response.body<ProblemDetail>().detail!!
+            assertTrue(detail.contains(value), "detail must name the still-referenced value: $detail")
+            assertTrue(detail.contains(blueprintId), "detail must name the referring blueprint: $detail")
+            val after = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+            assertTrue(after.any { it.value == value }, "the dictionary is unchanged on a refused save")
+        } finally {
+            TestBlueprints.remove(blueprintId)
+            TestHierarchies.remove(value)
+        }
+    }
+
+    @Test
+    fun `renaming a hierarchy value still named by an active blueprint is 409`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("hierrefrn", UserRole.ADMIN)
+        val value = ns("hier-rn").lowercase()
+        val blueprintId = ns("bp-hier-rn").lowercase()
+        TestHierarchies.ensure(value)
+        admin.postJson("/api/v1/blueprints", blueprintWithHierarchy(blueprintId, value)).body<BlueprintResponse>()
+        try {
+            val current = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+            val entry = current.single { it.value == value }
+            val renamedTo = ns("hier-rn-new").lowercase()
+            val renamed = current.map {
+                if (it.id == entry.id) DictionaryEntryInput(it.id, renamedTo) else DictionaryEntryInput(it.id, it.value)
+            }
+            val response = admin.putJson("/api/v1/dictionaries/hierarchies", DictionaryUpdateRequest(renamed))
+            assertEquals(HttpStatusCode.Conflict, response.status)
+            val detail = response.body<ProblemDetail>().detail!!
+            assertTrue(detail.contains(value), "detail must name the still-referenced OLD value: $detail")
+            assertTrue(detail.contains(blueprintId), "detail must name the referring blueprint: $detail")
+            val after = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+            assertTrue(after.any { it.value == value }, "the dictionary is unchanged on a refused save")
+            assertTrue(after.none { it.value == renamedTo }, "the rename must not have partially applied")
+        } finally {
+            TestBlueprints.remove(blueprintId)
+            TestHierarchies.remove(value)
+        }
+    }
+
+    @Test
+    fun `removing an unrelated hierarchy value succeeds`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("hierunrel", UserRole.ADMIN)
+        val value = ns("hier-unrel").lowercase()
+        TestHierarchies.ensure(value)
+        val current = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+        val withoutValue = current.filterNot { it.value == value }.map { DictionaryEntryInput(it.id, it.value) }
+        val response = admin.putJson("/api/v1/dictionaries/hierarchies", DictionaryUpdateRequest(withoutValue))
+        assertEquals(HttpStatusCode.NoContent, response.status)
+        val after = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+        assertTrue(after.none { it.value == value })
+    }
+
+    @Test
+    fun `removing a hierarchy value succeeds once its referring blueprint is deleted`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("hierdel", UserRole.ADMIN)
+        val value = ns("hier-del").lowercase()
+        val blueprintId = ns("bp-hier-del").lowercase()
+        TestHierarchies.ensure(value)
+        admin.postJson("/api/v1/blueprints", blueprintWithHierarchy(blueprintId, value)).body<BlueprintResponse>()
+        try {
+            TestBlueprints.remove(blueprintId)
+            val current = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+            val withoutValue = current.filterNot { it.value == value }.map { DictionaryEntryInput(it.id, it.value) }
+            val response = admin.putJson("/api/v1/dictionaries/hierarchies", DictionaryUpdateRequest(withoutValue))
+            assertEquals(HttpStatusCode.NoContent, response.status)
+            val after = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+            assertTrue(after.none { it.value == value })
+        } finally {
+            TestHierarchies.remove(value)
+        }
     }
 }

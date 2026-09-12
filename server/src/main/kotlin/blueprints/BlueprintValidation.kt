@@ -1,5 +1,6 @@
 package ch.nokillswit.blueprints
 
+import ch.nokillswit.dictionaries.MAX_DICTIONARY_ENTRIES
 import ch.nokillswit.infra.validation.requireNoDuplicates
 import io.ktor.server.plugins.BadRequestException
 
@@ -66,22 +67,34 @@ fun validateBlueprintRequest(request: BlueprintRequest) {
     validateCalculationProperties(request.calculationProperties)
     validateAggregationProperties(request.aggregationProperties)
     request.ownership?.let { validateOwnership(it, request.relations.keys) }
-    validateHierarchyRelation(request)
+    validateHierarchyRelations(request)
     validateDefinitionSize(request)
 }
 
 /**
  * A Toadie-only extension (`.claude/docs/port-data-model.md`), so this rule lives here rather
- * than in [validateDefinitionSize]'s Port-shaped byte budget: `hierarchyRelation` must name a
- * key of THIS request's own `relations` map, and that relation must be single-valued — a
- * many-relation names a set of parents, not one, so it can never define a tree.
+ * than in [validateDefinitionSize]'s Port-shaped byte budget: each `hierarchyRelations` entry
+ * maps a hierarchy identifier to a key of THIS request's own `relations` map, and that relation
+ * must be single-valued — a many-relation names a set of parents, not one, so it can never
+ * define a tree. Two different hierarchy identifiers may legitimately point at the SAME
+ * relation (one relation serving several parallel hierarchies at once, e.g. a `cluster`
+ * relation rooting both a composition and a deployment tree). The hierarchy identifier itself
+ * is only shape-checked here (non-blank, the shared entry-count cap) — whether it actually
+ * names an ACTIVE `hierarchies` dictionary value is a registry lookup, checked service-side
+ * under the V27 lock ([BlueprintService]), the same split as every other soft/registry rule.
  */
-private fun validateHierarchyRelation(request: BlueprintRequest) {
-    val hierarchyRelation = request.hierarchyRelation ?: return
-    val relation = request.relations[hierarchyRelation]
-        ?: throw BadRequestException("hierarchyRelation must name a relation of this blueprint")
-    if (relation.many) {
-        throw BadRequestException("hierarchyRelation must name a single relation")
+private fun validateHierarchyRelations(request: BlueprintRequest) {
+    val hierarchyRelations = request.hierarchyRelations ?: return
+    checkMax(hierarchyRelations.size, MAX_DICTIONARY_ENTRIES, "hierarchyRelations")
+    hierarchyRelations.forEach { (hierarchyId, relationKey) ->
+        if (hierarchyId.isBlank()) {
+            throw BadRequestException("hierarchyRelations keys must not be blank")
+        }
+        val relation = request.relations[relationKey]
+            ?: throw BadRequestException("hierarchyRelations.$hierarchyId must name a relation of this blueprint")
+        if (relation.many) {
+            throw BadRequestException("hierarchyRelations.$hierarchyId must name a single relation")
+        }
     }
 }
 

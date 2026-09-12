@@ -1,5 +1,9 @@
 package ch.nokillswit.dictionaries
 
+import ch.nokillswit.authz.ConflictException
+import ch.nokillswit.blueprints.BlueprintService
+import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.infra.db.lockingTransaction
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.flow.map
@@ -11,6 +15,7 @@ import org.jetbrains.exposed.v1.core.dao.id.UIntIdTable
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
+import org.jetbrains.exposed.v1.r2dbc.R2dbcTransaction
 import org.jetbrains.exposed.v1.r2dbc.insert
 import org.jetbrains.exposed.v1.r2dbc.select
 import org.jetbrains.exposed.v1.r2dbc.selectAll
@@ -18,6 +23,9 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
 
 val DictionaryServiceKey = AttributeKey<DictionaryService>("DictionaryService")
+
+/** The V27 lock [DictionaryService.replace] borrows for the `HIERARCHY` dictionary only. */
+private const val LOCK_BLUEPRINTS_SHARE_ROW_EXCLUSIVE = "LOCK TABLE blueprints IN SHARE ROW EXCLUSIVE MODE"
 
 /** What a whole-document replace actually did — carried into the `dictionary.updated` audit event. */
 data class DictionaryReplaceCounts(val added: Int, val renamed: Int, val removed: Int)
@@ -63,63 +71,125 @@ class DictionaryService(private val database: R2dbcDatabase) {
      * there is no reorder endpoint. Known inherited limitation: swapping two values in one
      * save trips the partial unique index mid-statement (23505 → 409) — rename through a
      * temporary value in two saves instead.
+     *
+     * The `HIERARCHY` dictionary ALONE runs under the `blueprints` table's V27
+     * `SHARE ROW EXCLUSIVE` lock ([lockingTransaction], the same lock `BlueprintService`'s own
+     * create/update/delete take — `.claude/docs/persistence.md` "Blueprint targets under
+     * concurrency (V27)"), because a hierarchy value about to disappear (removed from the
+     * payload, or renamed onto a different stored value) must be checked against every ACTIVE
+     * blueprint's `hierarchyRelations` map. Taking the SAME lock a concurrent blueprint write
+     * takes means whichever writer arrives second blocks until the first commits, then sees
+     * its COMMITTED result before deciding — so a blueprint can never end up naming a
+     * hierarchy value this replace just removed, and this replace can never remove a value a
+     * blueprint write in flight is about to name. Every other dictionary keeps the plain,
+     * lock-free transaction.
      */
     suspend fun replace(dict: Dictionary, request: DictionaryUpdateRequest): DictionaryReplaceCounts =
-        suspendTransaction(database) {
-            validateDictionaryUpdate(dict, request)
+        if (dict == Dictionary.HIERARCHY) {
+            lockingTransaction(database, LOCK_BLUEPRINTS_SHARE_ROW_EXCLUSIVE) { replaceLocked(dict, request) }
+        } else {
+            suspendTransaction(database) { replaceLocked(dict, request) }
+        }
 
-            // Snapshot the ACTIVE rows only (id -> stored value): a payload id pointing at a
-            // soft-deleted entry is a foreign id (400) — deleted entries are never
-            // resurrected; re-adding the same value mints a NEW id.
-            val existing: Map<UInt, String> =
-                Entries.select(Entries.id, Entries.value)
-                    .where { (Entries.dictionary eq dict.name) and active() }
-                    .map { it[Entries.id].value to it[Entries.value] }
-                    .toList()
-                    .toMap()
+    private suspend fun R2dbcTransaction.replaceLocked(
+        dict: Dictionary,
+        request: DictionaryUpdateRequest,
+    ): DictionaryReplaceCounts {
+        validateDictionaryUpdate(dict, request)
 
-            val payloadIds = request.items.mapNotNull { it.id }
-            requirePayloadIds(payloadIds, existing.keys)
+        // Snapshot the ACTIVE rows only (id -> stored value): a payload id pointing at a
+        // soft-deleted entry is a foreign id (400) — deleted entries are never
+        // resurrected; re-adding the same value mints a NEW id.
+        val existing: Map<UInt, String> =
+            Entries.select(Entries.id, Entries.value)
+                .where { (Entries.dictionary eq dict.name) and active() }
+                .map { it[Entries.id].value to it[Entries.value] }
+                .toList()
+                .toMap()
 
-            // Soft-delete FIRST: frees those values under the partial unique index before the
-            // upserts run, so "remove X + add new X" and "rename onto a just-removed value"
-            // succeed in one save. The dead rows keep their stale position on purpose.
-            val toSoftDelete = existing.keys - payloadIds.toSet()
-            if (toSoftDelete.isNotEmpty()) {
-                Entries.update({ Entries.id inList toSoftDelete }) { it[markedAsDeleted] = true }
-            }
+        val payloadIds = request.items.mapNotNull { it.id }
+        requirePayloadIds(payloadIds, existing.keys)
 
-            // Clear every active default flag BEFORE the upserts: moving the flag between two
-            // rows in one save would otherwise transiently hold two flagged rows mid-statement
-            // and trip the V9 partial unique index (the value-swap 409, but for the core flow).
-            Entries.update({ (Entries.dictionary eq dict.name) and active() }) { it[isDefault] = false }
+        // Soft-delete FIRST: frees those values under the partial unique index before the
+        // upserts run, so "remove X + add new X" and "rename onto a just-removed value"
+        // succeed in one save. The dead rows keep their stale position on purpose.
+        val toSoftDelete = existing.keys - payloadIds.toSet()
 
-            request.items.forEachIndexed { index, item ->
-                val normalized = normalizeDictionaryValue(item.value)
-                if (item.id != null) {
-                    Entries.update({ (Entries.id eq item.id) and active() }) {
-                        it[position] = index
-                        it[value] = normalized
-                        it[isDefault] = item.isDefault
-                    }
-                } else {
-                    Entries.insert {
-                        it[dictionary] = dict.name
-                        it[position] = index
-                        it[value] = normalized
-                        it[isDefault] = item.isDefault
-                    }
+        if (dict == Dictionary.HIERARCHY) {
+            val disappearing = buildList {
+                toSoftDelete.forEach { add(existing.getValue(it)) }
+                request.items.forEach { item ->
+                    val old = item.id?.let { existing[it] }
+                    val new = normalizeDictionaryValue(item.value)
+                    if (old != null && old != new) add(old)
                 }
             }
-
-            DictionaryReplaceCounts(
-                added = request.items.count { it.id == null },
-                renamed = request.items.count {
-                    it.id != null && existing[it.id] != normalizeDictionaryValue(it.value)
-                },
-                removed = toSoftDelete.size,
-            )
+            if (disappearing.isNotEmpty()) {
+                requireNoActiveHierarchyReferrers(disappearing)
+            }
         }
+
+        if (toSoftDelete.isNotEmpty()) {
+            Entries.update({ Entries.id inList toSoftDelete }) { it[markedAsDeleted] = true }
+        }
+
+        // Clear every active default flag BEFORE the upserts: moving the flag between two
+        // rows in one save would otherwise transiently hold two flagged rows mid-statement
+        // and trip the V9 partial unique index (the value-swap 409, but for the core flow).
+        Entries.update({ (Entries.dictionary eq dict.name) and active() }) { it[isDefault] = false }
+
+        request.items.forEachIndexed { index, item ->
+            val normalized = normalizeDictionaryValue(item.value)
+            if (item.id != null) {
+                Entries.update({ (Entries.id eq item.id) and active() }) {
+                    it[position] = index
+                    it[value] = normalized
+                    it[isDefault] = item.isDefault
+                }
+            } else {
+                Entries.insert {
+                    it[dictionary] = dict.name
+                    it[position] = index
+                    it[value] = normalized
+                    it[isDefault] = item.isDefault
+                }
+            }
+        }
+
+        return DictionaryReplaceCounts(
+            added = request.items.count { it.id == null },
+            renamed = request.items.count {
+                it.id != null && existing[it.id] != normalizeDictionaryValue(it.value)
+            },
+            removed = toSoftDelete.size,
+        )
+    }
+
+    /**
+     * Throws [ConflictException] naming the FIRST value in [disappearing] (payload order:
+     * soft-deletions first, then renames) that is still named by an ACTIVE blueprint's
+     * `hierarchy_relations` map — a sanctioned cross-feature table read of
+     * [BlueprintService.Blueprints], run inside the SAME locked transaction [replaceLocked]
+     * runs in, so it sees every blueprint write committed before this one took the lock.
+     * Referrers are reported sorted by identifier — an admin fixes one at a time.
+     */
+    private suspend fun requireNoActiveHierarchyReferrers(disappearing: List<String>) {
+        val activeBlueprints: List<Pair<String, Set<String>>> = BlueprintService.Blueprints
+            .select(BlueprintService.Blueprints.identifier, BlueprintService.Blueprints.hierarchyRelations)
+            .where { BlueprintService.Blueprints.markedAsDeleted eq false }
+            .map { row ->
+                row[BlueprintService.Blueprints.identifier] to
+                    blueprintJson.decodeFromString<Map<String, String>>(
+                        row[BlueprintService.Blueprints.hierarchyRelations],
+                    ).keys
+            }
+            .toList()
+
+        val value = disappearing.firstOrNull { candidate -> activeBlueprints.any { candidate in it.second } }
+            ?: return
+        val referrers = activeBlueprints.filter { value in it.second }.map { it.first }.sorted()
+        throw ConflictException("Hierarchy '$value' is still used by ${referrers.size} blueprint(s): ${referrers.joinToString()}")
+    }
 
     private fun requirePayloadIds(payloadIds: List<UInt>, existingIds: Set<UInt>) {
         if (payloadIds.size != payloadIds.toSet().size) {

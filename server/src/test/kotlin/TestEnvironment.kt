@@ -761,10 +761,10 @@ object TestBlueprints {
      * removing the row, which [remove] refuses to do.
      */
     suspend fun restoreSystemBlueprints() {
-        // The V31-seeded hierarchyRelation per identifier (only `_team` names one) — restored
-        // explicitly rather than read back from the current row, since a test may have changed
-        // or cleared it.
-        val seededHierarchyRelation = mapOf(ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT to "parent")
+        // The V31-seeded (V34-backfilled) hierarchyRelations per identifier (only `_team`
+        // names one, under the seeded `composition` hierarchy) — restored explicitly rather
+        // than read back from the current row, since a test may have changed or cleared it.
+        val seededHierarchyRelations = mapOf(ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT to mapOf("composition" to "parent"))
         val rows = service.list()
         ch.nokillswit.blueprints.SYSTEM_BLUEPRINT_BASES.forEach { (identifier, base) ->
             val row = rows.firstOrNull { it.identifier.equals(identifier, ignoreCase = true) } ?: return@forEach
@@ -781,7 +781,7 @@ object TestBlueprints {
                     calculationProperties = base.calculationProperties,
                     aggregationProperties = base.aggregationProperties,
                     ownership = base.ownership,
-                    hierarchyRelation = seededHierarchyRelation[identifier],
+                    hierarchyRelations = seededHierarchyRelations[identifier],
                 ),
             )
         }

@@ -9,11 +9,13 @@ import EntityFindingsBadge from "../components/EntityFindingsBadge";
 import EntityGraphToolbar from "../components/EntityGraphToolbar";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
+import HierarchyPicker from "../components/HierarchyPicker";
 import RowActionsMenu from "../components/RowActionsMenu";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
+import { useHierarchies } from "../hooks/useHierarchies";
 import { useStoredState, isString } from "../hooks/useStoredState";
-import { buildEntityHierarchy } from "../utils/entityGraph";
+import { buildEntityHierarchy, effectiveHierarchyId } from "../utils/entityGraph";
 import { editEntityPath } from "../utils/entityLinks";
 import { entityDeleteErrorMessage } from "../utils/entityForm";
 import { findPlacement, type HierarchyNode } from "../utils/hierarchy";
@@ -125,11 +127,12 @@ function TreeItem({
 }
 
 /**
- * The Entity hierarchy (Port migration phase 3, v1.25.0) — the Hierarchy page's shell over the
- * SAME `GET /api/v1/entities/graph` query the Entity graph page uses: a forest built by each
- * blueprint's admin-picked `hierarchyRelation` (`utils/entityGraph.ts#buildEntityHierarchy`).
- * Every authenticated user gets Pin/Edit/Delete on every row — entities are a shared
- * workspace, like catalog files.
+ * The Entity hierarchy (Port migration phase 3, v1.25.0; parallel hierarchies) — the
+ * Hierarchy page's shell over the SAME `GET /api/v1/entities/graph` query the Entity graph
+ * page uses: a forest built along ONE admin-curated hierarchy at a time
+ * (`HierarchyPicker` + `utils/entityGraph.ts#buildEntityHierarchy`), persisted per view under
+ * `entityHierarchy.hierarchy`. Every authenticated user gets Pin/Edit/Delete on every row —
+ * entities are a shared workspace, like catalog files.
  */
 export default function EntityHierarchy() {
   const { t } = useTranslation();
@@ -137,6 +140,9 @@ export default function EntityHierarchy() {
   const filters = useEntityGraphFilterState("entityHierarchy");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [pinnedId, setPinnedId] = useStoredState("entityHierarchy.pinnedNodeId", "", isString);
+  const { hierarchies } = useHierarchies();
+  const [storedHierarchyId, setStoredHierarchyId] = useStoredState("entityHierarchy.hierarchy", "", isString);
+  const hierarchyId = effectiveHierarchyId(storedHierarchyId, hierarchies.map((h) => h.value));
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["entities", "graph", filters.values],
@@ -144,7 +150,7 @@ export default function EntityHierarchy() {
     placeholderData: keepPreviousData,
   });
 
-  const roots = useMemo(() => (data ? buildEntityHierarchy(data) : []), [data]);
+  const roots = useMemo(() => (data ? buildEntityHierarchy(data, hierarchyId) : []), [data, hierarchyId]);
   const placement = useMemo(() => (pinnedId ? findPlacement(roots, pinnedId) : null), [roots, pinnedId]);
   const visible = placement ? [placement.item] : roots;
   const basePath = placement?.path ?? "";
@@ -174,6 +180,7 @@ export default function EntityHierarchy() {
         title={t("entityHierarchy.title")}
         toolbar={
           <EntityGraphToolbar viewKey="entityHierarchy" filters={filters}>
+            <HierarchyPicker value={hierarchyId} onChange={setStoredHierarchyId} />
             <Tooltip label={t("entityHierarchy.expandAll")}>
               <ActionIcon variant="default" size="md" aria-label={t("entityHierarchy.expandAll")} onClick={() => setCollapsed(new Set())}>
                 <IconChevronsDown size={16} />

@@ -99,8 +99,8 @@ export async function deleteEntity(id: number): Promise<void> {
 // -- Entity graph (Port migration phase 3, v1.25.0) --------------------------------------
 // GET /api/v1/entities/graph?blueprint=<repeated>&q= — the rendered-together view over
 // entities: nodes are shown entities (blueprint/search filtered), edges are relation values
-// with both ends shown (the catalog graph's rule); `hierarchy` marks the edge as the source
-// blueprint's admin-picked `hierarchyRelation`. Node id grammar: `"<blueprint>|<identifier>"`.
+// with both ends shown (the catalog graph's rule); `hierarchies` lists the hierarchy ids whose
+// entry in the source blueprint's `hierarchyRelations` is this edge's relation. Node id grammar: `"<blueprint>|<identifier>"`.
 
 export type EntityGraph =
   paths["/api/v1/entities/graph"]["get"]["responses"]["200"]["content"]["application/json"];

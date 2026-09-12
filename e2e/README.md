@@ -112,6 +112,22 @@ from Lettuce, that any new or edited spec must satisfy:
   spec's `pickLifecycle` relies on — and **`lifecycles.spec.ts` is the ONLY in-run writer**,
   appending and removing only its own unique `e2e-lc-*` value; no spec may remove or rename
   a seeded lifecycle.
+- **The hierarchies dictionary is single-writer state the same way, with a second value
+  minted OUTSIDE the parallel run.** `hierarchies.spec.ts` is the dictionary's ONLY in-run
+  WRITER, appending and removing only its own unique `e2e-hier-*` value; no spec may remove
+  or rename the seeded `composition` entry. `entity-hierarchy.spec.ts` needs a SECOND
+  hierarchy id (to prove a blueprint's `hierarchyRelations` may name several at once) but
+  never writes the dictionary itself — a second in-run writer racing `hierarchies.spec.ts`'s
+  whole-document PUT would drop whichever entry landed second, the same hazard the namespaces
+  bullet above describes. Instead **global-setup** mints ONE throwaway value (also prefixed
+  `e2e-hier-*`, coincidentally the same prefix `hierarchies.spec.ts` mints for its own
+  unrelated entry — harmless, since `uniqueText`-style suffixes never collide) before any
+  worker starts and exposes it via `runHierarchy()` in `helpers.ts`; global-teardown removes
+  it after every worker finishes, by which point `entity-hierarchy.spec.ts`'s own `finally`
+  has already deleted the blueprint that referenced it (the server refuses to remove a
+  hierarchy a blueprint still references). `entity-hierarchy.spec.ts` only ever READS this
+  value, flagging it (alongside `composition`) on its own throwaway child blueprint's
+  `hierarchyRelations` and switching the toolbar's Hierarchy picker to it.
 - **The label registry is single-writer state too.** Catalog writes accept only registered
   labels, so a concurrently deleted/edited label breaks parallel specs' saves —
   **`labels.spec.ts` is the registry's ONLY in-run writer**, and it only ever creates and
@@ -259,23 +275,26 @@ the same commit** — this list is the coverage map, the scenario file is the de
   aggregation-created delete cycle, then entities, then blueprints); the blueprint registry's
   other in-run writer, alongside `blueprints.spec.ts`.
 - [`entity-graph.spec.ts`](scenarios/entity-graph.md) — the Entity graph (Port migration phase
-  3; + Phase 4 ownership edges, v1.26.0): two throwaway blueprints (a parent with a `peer` many
-  self-relation, a child whose single `parent` relation is flagged as its `hierarchyRelation`),
-  four entities, and one throwaway `_team` entity owning one of the parents — all seeded via
-  the API under one shared run marker → a throwaway user filters the graph to the two
-  blueprints plus `_team` (narrowed by the run's own search marker), toggles the `peer` AND
-  `$team` relation chips to prune and restore an edge each, narrows further with the toolbar's
-  Team filter, folds/unfolds the hierarchy-relation parent (the owning team unaffected — it
-  never nests), and drags it in Manual mode, whose PUT is awaited by exact node id and
-  confirmed after a reload → cleanup.
+  3; + Phase 4 ownership edges, v1.26.0; parallel hierarchies, v1.32.0): two throwaway
+  blueprints (a parent with a `peer` many self-relation, a child whose single `parent`
+  relation is flagged as the `composition` entry of its `hierarchyRelations`), four entities,
+  and one throwaway `_team` entity owning one of the parents — all seeded via the API under
+  one shared run marker → a throwaway user filters the graph to the two blueprints plus
+  `_team` (narrowed by the run's own search marker), toggles the `peer` AND `$team` relation
+  chips to prune and restore an edge each, narrows further with the toolbar's Team filter,
+  folds/unfolds the `composition`-hierarchy parent (the owning team unaffected — it never
+  nests), and drags it in Manual mode, whose PUT is awaited by exact node id and confirmed
+  after a reload → cleanup.
 - [`entity-hierarchy.spec.ts`](scenarios/entity-hierarchy.md) — the Entity hierarchy (Port
-  migration phase 3; + Phase 4 ownership, v1.26.0): the same throwaway blueprint pair with one
-  parent, two children, one orphan child Direct-owned by a throwaway `_team` entity, all under
-  one shared run marker → filtered to the two blueprints plus `_team` (narrowed by `q`), the
-  tree nests the children under the parent via the hierarchy relation while the orphan AND the
-  owning team both stay roots beside it (ownership never nests), Pin narrows the tree to the
-  parent's subtree, and deleting the parent is refused (`409`) naming the referring children →
-  cleanup.
+  migration phase 3; + Phase 4 ownership, v1.26.0; parallel hierarchies, v1.32.0): the same
+  throwaway blueprint pair with one parent, two children, one orphan child Direct-owned by a
+  throwaway `_team` entity, all under one shared run marker → filtered to the two blueprints
+  plus `_team` (narrowed by `q`), the tree nests the children under the parent via the
+  `composition` hierarchy while the orphan AND the owning team both stay roots beside it
+  (ownership never nests), Pin narrows the tree to the parent's subtree, deleting the parent
+  is refused (`409`) naming the referring children, and switching the toolbar's Hierarchy
+  picker to global-setup's own second hierarchy value — flagged on the SAME `parent` relation
+  — reproduces the identical nesting before switching back → cleanup.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).

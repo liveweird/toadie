@@ -18,10 +18,20 @@ import { renderWithProviders } from "../test/render";
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
-function serveBlueprintList(mockFetch: FetchMock, items: { id: number; identifier: string }[] = []) {
+function serveBlueprintList(
+  mockFetch: FetchMock,
+  items: { id: number; identifier: string }[] = [],
+  hierarchies: { id: number; value: string }[] = [],
+) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-    if ((init?.method ?? "GET") === "GET" && url === "/api/v1/blueprints") {
+    const method = init?.method ?? "GET";
+    if (method === "GET" && url === "/api/v1/blueprints") {
       return Promise.resolve(jsonResponse(200, { items }));
+    }
+    if (method === "GET" && url === "/api/v1/dictionaries/hierarchies") {
+      return Promise.resolve(
+        jsonResponse(200, { items: hierarchies.map((h) => ({ ...h, isDefault: false })) }),
+      );
     }
     return Promise.resolve(jsonResponse(404, {}));
   });
@@ -234,7 +244,7 @@ describe("BlueprintFormFields", () => {
   });
 
   test("hierarchy: offers only the blueprint's CURRENT single relations, not many ones", async () => {
-    serveBlueprintList(mockFetch);
+    serveBlueprintList(mockFetch, [], [{ id: 1, value: "composition" }]);
     renderWithProviders(
       <Harness
         initial={{
@@ -245,9 +255,111 @@ describe("BlueprintFormFields", () => {
         }}
       />,
     );
-    await openCombobox(/^hierarchy relation$/i);
+    // The dictionary query resolves async — wait for the Select before opening it.
+    await screen.findByRole("combobox", { name: /^composition$/i });
+    await openCombobox(/^composition$/i);
     expect(await screen.findByRole("option", { name: "owningTeam" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "peers" })).not.toBeInTheDocument();
+  });
+
+  test("hierarchy: two dictionary entries render two Selects, each independently settable", async () => {
+    serveBlueprintList(
+      mockFetch,
+      [],
+      [
+        { id: 1, value: "composition" },
+        { id: 2, value: "org" },
+      ],
+    );
+    renderWithProviders(
+      <Harness
+        initial={{
+          relations: [{ ...emptyRelationDraft(), id: "owningTeam", title: "T", target: "team", many: false }],
+        }}
+      />,
+    );
+    expect(await screen.findByRole("combobox", { name: /^composition$/i })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /^org$/i })).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await openCombobox(/^composition$/i);
+    await user.click(await screen.findByRole("option", { name: "owningTeam" }));
+
+    expect(screen.getByRole("combobox", { name: /^composition$/i })).toHaveValue("owningTeam");
+    expect(screen.getByRole("combobox", { name: /^org$/i })).toHaveValue("");
+  });
+
+  test("hierarchy: clearing a Select removes just that hierarchy's entry", async () => {
+    serveBlueprintList(mockFetch, [], [{ id: 1, value: "composition" }]);
+    renderWithProviders(
+      <Harness
+        initial={{
+          relations: [{ ...emptyRelationDraft(), id: "owningTeam", title: "T", target: "team", many: false }],
+          hierarchyRelations: { composition: "owningTeam" },
+        }}
+      />,
+    );
+    const select = await screen.findByRole("combobox", { name: /^composition$/i });
+    expect(select).toHaveValue("owningTeam");
+
+    const user = userEvent.setup();
+    // Mantine's Input.ClearButton is `aria-hidden` (a mouse affordance — keyboard users clear
+    // with Backspace on the searchable input), so reach it by its label, the
+    // EntityGraphFilterControls idiom.
+    await user.click(screen.getByLabelText("Clear composition"));
+
+    expect(select).toHaveValue("");
+  });
+
+  test("hierarchy: a stored key no longer in the dictionary still renders, with a warning hint", async () => {
+    serveBlueprintList(mockFetch, [], [{ id: 1, value: "composition" }]);
+    renderWithProviders(
+      <Harness
+        initial={{
+          relations: [{ ...emptyRelationDraft(), id: "owningTeam", title: "T", target: "team", many: false }],
+          hierarchyRelations: { composition: "owningTeam", retired: "owningTeam" },
+        }}
+      />,
+    );
+    expect(await screen.findByRole("combobox", { name: /^retired$/i })).toHaveValue("owningTeam");
+    expect(
+      screen.getByText("This hierarchy no longer exists in the Hierarchies dictionary — clear it or re-add the value."),
+    ).toBeInTheDocument();
+  });
+
+  test("hierarchy: an empty dictionary shows the hint and renders no Selects", async () => {
+    serveBlueprintList(mockFetch, [], []);
+    renderWithProviders(<Harness initial={{}} />);
+    expect(await screen.findByText("No hierarchies defined yet — add them on the Hierarchies page.")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /^composition$/i })).not.toBeInTheDocument();
+  });
+
+  test("hierarchy: dictionary loading shows a named loading status", async () => {
+    let resolveHierarchies: (response: Response) => void = () => {};
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: [] }));
+      if (method === "GET" && url === "/api/v1/dictionaries/hierarchies") {
+        return new Promise<Response>((resolve) => {
+          resolveHierarchies = resolve;
+        });
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderWithProviders(<Harness initial={{}} />);
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    resolveHierarchies(jsonResponse(200, { items: [] }));
+  });
+
+  test("hierarchy: a dictionary load failure shows the load-error alert", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: [] }));
+      if (method === "GET" && url === "/api/v1/dictionaries/hierarchies") return Promise.resolve(jsonResponse(500, {}));
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderWithProviders(<Harness initial={{}} />);
+    expect(await screen.findByText("Could not load the blueprints")).toBeInTheDocument();
   });
 
   test("system locks: _user's base email property and team relation are locked, remove disabled", async () => {
@@ -310,16 +422,16 @@ describe("BlueprintFormFields", () => {
     expect(screen.getByText("A system blueprint's identifier cannot be changed.")).toBeInTheDocument();
   });
 
-  test("hierarchy: a stored value naming a many relation renders as unset (derive, don't clear)", () => {
-    serveBlueprintList(mockFetch);
+  test("hierarchy: a stored value naming a many relation renders as unset (derive, don't clear)", async () => {
+    serveBlueprintList(mockFetch, [], [{ id: 1, value: "composition" }]);
     renderWithProviders(
       <Harness
         initial={{
           relations: [{ ...emptyRelationDraft(), id: "peers", title: "P", target: "team", many: true }],
-          hierarchyRelation: "peers",
+          hierarchyRelations: { composition: "peers" },
         }}
       />,
     );
-    expect(screen.getByRole("combobox", { name: /^hierarchy relation$/i })).toHaveValue("");
+    expect(await screen.findByRole("combobox", { name: /^composition$/i })).toHaveValue("");
   });
 });

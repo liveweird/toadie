@@ -319,24 +319,24 @@ class BlueprintTest {
     }
 
     @Test
-    fun `hierarchyRelation round-trips, is absent when unset, and is validated`() = testApplication {
+    fun `hierarchyRelations round-trips, is absent when unset, and is validated`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("bphier", UserRole.ADMIN)
         val id = identifier("bphier")
         try {
             // Absent when unset: no key at all on the raw body, not an explicit null.
             val plain = admin.postJson("/api/v1/blueprints", simpleRequest(id))
-            assertFalse(plain.bodyAsText().contains("hierarchyRelation"))
+            assertFalse(plain.bodyAsText().contains("hierarchyRelations"))
             val plainCreated = plain.body<BlueprintResponse>()
-            assertEquals(null, plainCreated.hierarchyRelation)
+            assertEquals(null, plainCreated.hierarchyRelations)
 
             // Must name a relation of this blueprint's own request.
             val unknown = admin.putJson(
                 "/api/v1/blueprints/${plainCreated.id}",
-                simpleRequest(id).copy(hierarchyRelation = "nope"),
+                simpleRequest(id).copy(hierarchyRelations = mapOf("composition" to "nope")),
             )
             assertEquals(HttpStatusCode.BadRequest, unknown.status)
-            assertTrue(unknown.body<ProblemDetail>().detail!!.contains("hierarchyRelation must name a relation"))
+            assertTrue(unknown.body<ProblemDetail>().detail!!.contains("hierarchyRelations.composition must name a relation"))
 
             // Must be single-valued (many = false).
             val withRelations = simpleRequest(id).copy(
@@ -345,21 +345,45 @@ class BlueprintTest {
                     "peers" to relationTo(id, many = true),
                 ),
             )
-            val many = admin.putJson("/api/v1/blueprints/${plainCreated.id}", withRelations.copy(hierarchyRelation = "peers"))
+            val many = admin.putJson(
+                "/api/v1/blueprints/${plainCreated.id}",
+                withRelations.copy(hierarchyRelations = mapOf("composition" to "peers")),
+            )
             assertEquals(HttpStatusCode.BadRequest, many.status)
             assertTrue(many.body<ProblemDetail>().detail!!.contains("must name a single relation"))
 
             // Round trip: names the single relation.
-            val ok = admin.putJson("/api/v1/blueprints/${plainCreated.id}", withRelations.copy(hierarchyRelation = "parent"))
+            val ok = admin.putJson(
+                "/api/v1/blueprints/${plainCreated.id}",
+                withRelations.copy(hierarchyRelations = mapOf("composition" to "parent")),
+            )
             assertEquals(HttpStatusCode.NoContent, ok.status)
             val read = admin.get("/api/v1/blueprints/${plainCreated.id}")
-            assertEquals("parent", read.body<BlueprintResponse>().hierarchyRelation)
-            assertTrue(read.bodyAsText().contains("\"hierarchyRelation\":\"parent\""))
+            assertEquals(mapOf("composition" to "parent"), read.body<BlueprintResponse>().hierarchyRelations)
+            assertTrue(read.bodyAsText().contains("\"hierarchyRelations\":{"))
 
             // Clearing it (omitted from the PUT body) drops it again.
             val cleared = admin.putJson("/api/v1/blueprints/${plainCreated.id}", withRelations)
             assertEquals(HttpStatusCode.NoContent, cleared.status)
-            assertFalse(admin.get("/api/v1/blueprints/${plainCreated.id}").bodyAsText().contains("hierarchyRelation"))
+            assertFalse(admin.get("/api/v1/blueprints/${plainCreated.id}").bodyAsText().contains("hierarchyRelations"))
+        } finally {
+            TestBlueprints.remove(id)
+        }
+    }
+
+    @Test
+    fun `hierarchyRelations key must name an active hierarchies dictionary value`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("bphierdict", UserRole.ADMIN)
+        val id = identifier("bphierdict")
+        try {
+            val request = simpleRequest(id).copy(
+                relations = mapOf("parent" to relationTo(id, many = false)),
+                hierarchyRelations = mapOf("nope-hierarchy-${identifier("x")}" to "parent"),
+            )
+            val response = admin.postJson("/api/v1/blueprints", request)
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertTrue(response.body<ProblemDetail>().detail!!.contains("names an unknown hierarchy"))
         } finally {
             TestBlueprints.remove(id)
         }
@@ -379,6 +403,42 @@ class BlueprintTest {
             )
         }
         assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `a body still carrying the pre-1_32 singular hierarchyRelation key is rejected as 400`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("bpoldhier", UserRole.ADMIN)
+        val response = admin.post("/api/v1/blueprints") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"identifier":"${identifier("bpoh")}","title":"T","schema":{"properties":{},"required":[]},
+                    |"relations":{},"mirrorProperties":{},"calculationProperties":{},"aggregationProperties":{},
+                    |"hierarchyRelation":"parent"}
+                """.trimMargin(),
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `two hierarchyRelations keys folding onto one hierarchy are rejected as 400, never collapsed`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("bpduphier", UserRole.ADMIN)
+        // Both spellings would be valid alone (`composition` is seeded, `parent` is a single
+        // relation); the sanitizer must refuse the pair rather than silently keep the last one.
+        val response = admin.post("/api/v1/blueprints") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"identifier":"${identifier("bpdh")}","title":"T","schema":{"properties":{},"required":[]},
+                    |"relations":{"parent":{"title":"Parent","target":"_team","required":false,"many":false}},
+                    |"mirrorProperties":{},"calculationProperties":{},"aggregationProperties":{},
+                    |"hierarchyRelations":{"Composition":"parent","composition":"parent"}}
+                """.trimMargin(),
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.body<ProblemDetail>().detail!!.contains("hierarchyRelations keys must be unique"))
     }
 
     @Test

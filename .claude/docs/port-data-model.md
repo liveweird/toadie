@@ -20,7 +20,7 @@ Where Port's documentation states no explicit rule, the assumption Toadie made i
   "ontology" layer: descriptions and semantic relation titles are what give the schema meaning.
 - **Entity** — an instance of a blueprint (phase 2, v1.24.0 — the `entities/` package; see
   "Entities" below).
-- **Hierarchy relation (Toadie)** — an optional per-blueprint pointer at one of its own
+- **Hierarchy relations (Toadie, v1.32.0)** — an optional per-blueprint map of hierarchy identifiers (active `HIERARCHY` dictionary values) to keys of this blueprint's own
   `many: false` relations, naming the entity hierarchy's parent link (phase 3, v1.25.0 — not a
   Port concept; see "Toadie extensions" below).
 - **Meta-properties** — attributes every entity carries automatically, `$`-prefixed:
@@ -425,23 +425,30 @@ or evaluates computed properties at all, see `.claude/docs/persistence.md`).
 
 Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's own model:
 
-- **Hierarchy relation** — `Blueprint.hierarchyRelation: String?`, an optional identifier of ONE
-  of the blueprint's own `relations` entries. The rule: it must be a KEY of `relations`, and that
-  relation must have `many: false` (a hierarchy parent is singular by definition) — naming an
-  unknown or `many: true` relation is `400`. It is stored BESIDE the Port document, in its own
-  column (V29), never inside `definition`/`schema`/`relations` — so `toDefinition()`'s emitted
-  Port JSON stays byte-identical to what phase 1 already produced, and any future Port export
-  simply drops the column rather than needing to strip anything out of the document. Wire shape
-  follows the blueprint convention: optional, NOT `nullable`, ABSENT when unset (never `null`);
-  renaming/removing the named relation is not cross-checked (the same no-grandfathering-on-edit
+- **Hierarchy relations** — `Blueprint.hierarchyRelations: Map<String, String>?`, an optional
+  map of hierarchy identifiers to relation keys. The keys are active values from the `HIERARCHY`
+  dictionary (e.g. `"composition"`, `"deployment"`); the values are KEYs of the blueprint's own
+  `relations` entries. The rule: each value must be a KEY of `relations`, and that relation
+  must have `many: false` (a hierarchy parent is singular by definition) — naming an unknown
+  hierarchy id, unknown relation, or a `many: true` relation is `400`. It is stored BESIDE the
+  Port document, in its own column (V29, replaced by V34 map migration), never inside
+  `definition`/`schema`/`relations` — so `toDefinition()`'s emitted Port JSON stays
+  byte-identical to what phase 1 already produced, and any future Port export simply drops the
+  column rather than needing to strip anything out of the document. Wire shape follows the
+  blueprint convention: optional, NOT `nullable`, ABSENT when unset (never `null`);
+  renaming/removing a named relation is not cross-checked (the same no-grandfathering-on-edit
   posture as the schema/relations themselves — see "Lifecycle rules" above).
 
-  The **entity hierarchy** derives from it, purely: an entity's parent is the target of its
-  OWN blueprint's `hierarchyRelation` relation value (a `many: false` relation, so at most one
-  target); blueprints that set no `hierarchyRelation` are hierarchy roots, and so is any entity
-  whose relation value is unset or does not resolve. The entity graph (below) flags the edges
-  that carry this relation with `hierarchy: true`, so the hierarchy tree and the general
-  relation graph are two views over the same data, never a separately stored parent pointer.
+  The **entity hierarchies** derive from it, purely: for each hierarchy identifier H in the
+  blueprint's `hierarchyRelations` map, that hierarchy's tree is built from the relation key
+  the map names — an entity's parent in hierarchy H is the target of its OWN blueprint's
+  relation value for that key (a `many: false` relation, so at most one target per hierarchy);
+  blueprints that name no relation key for hierarchy H in their `hierarchyRelations` are H's
+  roots, and so is any entity whose relation value is unset or does not resolve. The entity
+  graph (below) flags the edges that carry a relation matching a blueprint's `hierarchyRelations`
+  value with `hierarchies: [<hierarchy-ids-that-name-this-relation>]`, so each hierarchy tree
+  and the general relation graph are two views over the same data, never separately stored
+  parent pointers.
 
 - **Entity graph** — `GET /api/v1/entities/graph` renders entities and their relations together
   (`entities/EntityGraph.kt`, the `catalog/Graph.kt` counterpart one level down). Each node's id
@@ -453,10 +460,14 @@ Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's ow
   node. Each node carries `findings` as a plain COUNT (not the detailed list `GET`/list return)
   of the same `entityFindings` computation — the stale marker, condensed for a graph face.
 
-  **Ownership edges** (v1.26.0, phase 4): when an entity carries an EFFECTIVE team value and
-  that node is shown in the graph, one edge is emitted per team value to the corresponding
-  `_team|<id>` node (if also shown). The edge carries `ownership: true, hierarchy: false`. A
-  `_team` node also matches a `team` filter (single value, case-insensitive), so a
+  **Hierarchy and ownership edges** (v1.32.0, hierarchies; v1.26.0 phase 4, ownership): a
+  relation edge carries `hierarchies: [<ids>]` (an array of hierarchy identifiers from the
+  SOURCE blueprint's `hierarchyRelations` that name this relation key) and `ownership: false`
+  when it is a regular entity-to-entity relation; it carries `hierarchies: []` and
+  `ownership: true` when it is an entity-to-`_team` node via the entity's EFFECTIVE team
+  value. When an entity carries an EFFECTIVE team value and that node is shown in the graph,
+  one ownership edge is emitted per team value to the corresponding `_team|<id>` node (if also
+  shown). A `_team` node also matches a `team` filter (single value, case-insensitive), so a
   team-filtered graph retains the team nodes to close ownership relations — since v1.30.0 the
   `team` filter matches an Inherited entity's EFFECTIVE team too (the same `ownership.path`
   walk the list uses), so it can appear in a team-filtered graph; a renamed or deleted `_team`
@@ -468,10 +479,11 @@ Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's ow
 Toadie seeds exactly two system blueprints — `_team` and `_user` — flagged `system: true` on the
 wire and protected against deletion and base-shape removal (v1.26.0, phase 4 of the Port
 data-model move, see `.claude/docs/persistence.md` "V31"). **Base shapes**: `_team` has a single
-optional self-relation `parent` (the entity hierarchy's parent link) and no properties; `_user`
-has a required `email` string property (format: email) and a many-valued optional relation
+optional self-relation `parent` (the composition hierarchy's parent link, named in the
+`hierarchyRelations` map under the `"composition"` key) and no properties; `_user` has a
+required `email` string property (format: email) and a many-valued optional relation
 `team → _team`. ADMIN may extend both with extra properties/relations, set or change
-`hierarchyRelation`, or add `ownership`; identifier rename, removal of a base property/relation,
+`hierarchyRelations`, or add `ownership`; identifier rename, removal of a base property/relation,
 or dropping a base `required` is rejected `400` (`validateSystemExtension`). Identifiers starting
 with `_` are reserved: `POST` creating any `_*` blueprint is `400`. DELETE on a system blueprint
 is `409` ("a property of the row"). The other Port system blueprints (`_scorecard`, `_rule`,
@@ -526,13 +538,13 @@ remaining document is emitted anyway, with every one of its references to a sibl
 placed DEFERRED — stripped from its first write (`pass1`), restored by a second full write
 (`update`) once every sibling exists. For a blueprint, stripping a relation also strips any
 mirror property whose path starts with it, an Inherited `ownership.path` starting with it, and
-a `hierarchyRelation` naming it (`BlueprintValidation.kt`'s own dependency rules, applied in
+a `hierarchyRelations` map naming it (`BlueprintValidation.kt`'s own dependency rules, applied in
 reverse). For an entity, a dropped SCALAR reference (a `many: false` relation, `team` string, or
 scalar `format` property) removes the key entirely (the `null`-means-absent convention already
 in place); a dropped ARRAY reference removes only the unresolved element(s), keeping the rest.
 
 **The required-reference exception (entities only).** A blueprint has no field that is mandatory
-at create time — every schema field, relation, and Toadie's own `hierarchyRelation` are optional
+at create time — every schema field, relation, and Toadie's own `hierarchyRelations` are optional
 on a bare `BlueprintRequest` — so a blueprint cycle is ALWAYS storable in two writes. An entity's
 `schema.required` and a relation's `required: true` are not: a cycle running through a
 `required: true` relation, or a `format: team|user` property named in `schema.required`, cannot

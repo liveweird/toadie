@@ -33,8 +33,8 @@ import { FORM_MAX_WIDTH } from "../utils/layout";
  * an ADMIN gets the whole-list document editor instead — add/edit/reorder/remove rows
  * locally, one Save replaces the dictionary atomically (a removed entry is soft-deleted
  * server-side). These entries name the parallel entity hierarchies (composition,
- * ownership, cost centre…) a blueprint may point one of its single relations at via
- * `hierarchyRelation`; the FIRST entry is the one the Entity hierarchy and Entity graph
+ * deployment, cost centre…) a blueprint may point one of its single relations at, per
+ * hierarchy, via `hierarchyRelations`; the FIRST entry is the one the Entity hierarchy and Entity graph
  * pages open on.
  */
 export default function Hierarchies() {

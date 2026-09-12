@@ -666,7 +666,7 @@ class EntityTest {
     }
 
     @Test
-    fun `graph - hierarchy is true end to end once the blueprint's hierarchyRelation is PUT`() = testApplication {
+    fun `graph - hierarchies lists the ids once the blueprint's hierarchyRelations is PUT`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("ent-graph-hierarchy", UserRole.ADMIN)
         val parentBp = unique("bp-graph-hp")
@@ -690,7 +690,7 @@ class EntityTest {
             )
 
             val before = client.get("/api/v1/entities/graph").body<EntityGraph>()
-            assertTrue(before.edges.single { it.relation == "parent" }.hierarchy.not())
+            assertTrue(before.edges.single { it.relation == "parent" }.hierarchies.isEmpty())
 
             val setHierarchy = client.putJson(
                 "/api/v1/blueprints/${child.id}",
@@ -699,13 +699,13 @@ class EntityTest {
                     title = "T",
                     schema = BlueprintSchema(),
                     relations = mapOf("parent" to RelationDefinition(title = "Parent", target = parentBp, required = false, many = false)),
-                    hierarchyRelation = "parent",
+                    hierarchyRelations = mapOf("composition" to "parent"),
                 ),
             )
             assertEquals(HttpStatusCode.NoContent, setHierarchy.status)
 
             val after = client.get("/api/v1/entities/graph").body<EntityGraph>()
-            assertTrue(after.edges.single { it.relation == "parent" }.hierarchy)
+            assertEquals(listOf("composition"), after.edges.single { it.relation == "parent" }.hierarchies)
 
             assertFalse(client.get("/api/v1/entities/graph").bodyAsText().contains(":null"))
         } finally {

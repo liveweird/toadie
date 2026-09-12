@@ -35,8 +35,14 @@ data class EntityGraphEdge(
     val targetId: String,
     /** [OWNERSHIP_RELATION_ID] (`"$team"`) for an ownership edge; a declared relation id otherwise. */
     val relation: String,
-    /** True when [relation] is the SOURCE blueprint's own `hierarchyRelation` (V29); always false for an ownership edge. */
-    val hierarchy: Boolean,
+    /**
+     * The hierarchy identifiers (from the `hierarchies` dictionary) whose `hierarchyRelations`
+     * entry (V34, one blueprint may name several PARALLEL hierarchies) equals [relation] on the
+     * SOURCE entity's blueprint — empty when this relation belongs to no hierarchy, and always
+     * empty for an ownership edge. Two different hierarchy identifiers may legitimately share
+     * one relation, so this is a LIST, not a single flag.
+     */
+    val hierarchies: List<String>,
     /** True for a Phase 4 ownership edge (source entity -> its effective team); false for a declared relation edge. */
     val ownership: Boolean,
 )
@@ -64,7 +70,8 @@ data class GraphBlueprint(
     val identifier: String,
     val title: String,
     val definition: BlueprintDefinition,
-    val hierarchyRelation: String?,
+    /** Hierarchy identifier -> relation key (V34); empty when this blueprint roots no hierarchy relation. */
+    val hierarchyRelations: Map<String, String>,
 )
 
 /**
@@ -126,7 +133,7 @@ fun buildEntityGraph(
                     sourceId = sourceId,
                     targetId = nodeIdByEntityId.getValue(targetRow.id),
                     relation = relationId,
-                    hierarchy = relationId == blueprint.hierarchyRelation,
+                    hierarchies = blueprint.hierarchyRelations.filterValues { it == relationId }.keys.sorted(),
                     ownership = false,
                 )
             }
@@ -142,7 +149,7 @@ fun buildEntityGraph(
                 sourceId = sourceId,
                 targetId = nodeIdByEntityId.getValue(targetRow.id),
                 relation = OWNERSHIP_RELATION_ID,
-                hierarchy = false,
+                hierarchies = emptyList(),
                 ownership = true,
             )
         }

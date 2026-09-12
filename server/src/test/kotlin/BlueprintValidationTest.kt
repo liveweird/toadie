@@ -141,24 +141,36 @@ class BlueprintValidationTest {
         assertInvalid(base(relations = mapOf("has space" to relation())))
     }
 
-    // ─── hierarchyRelation (Toadie-only extension, V29) ─────────────────────────────────────
+    // ─── hierarchyRelations (Toadie-only extension, V29, widened to a MAP in V34) ────────────
 
     @Test
-    fun `hierarchyRelation must name a relation of this blueprint`() {
-        assertInvalid(base(relations = mapOf("r" to relation()), ownership = null).copy(hierarchyRelation = "nope"))
-        assertValid(base(relations = mapOf("r" to relation())).copy(hierarchyRelation = "r"))
+    fun `hierarchyRelations entry must name a relation of this blueprint`() {
+        val invalid = base(relations = mapOf("r" to relation()), ownership = null)
+            .copy(hierarchyRelations = mapOf("composition" to "nope"))
+        assertInvalid(invalid)
+        assertValid(base(relations = mapOf("r" to relation())).copy(hierarchyRelations = mapOf("composition" to "r")))
     }
 
     @Test
-    fun `hierarchyRelation must name a single relation, not a many one`() {
-        assertInvalid(base(relations = mapOf("r" to relation(many = true))).copy(hierarchyRelation = "r"))
-        assertValid(base(relations = mapOf("r" to relation(many = false))).copy(hierarchyRelation = "r"))
+    fun `hierarchyRelations entry must name a single relation, not a many one`() {
+        val many = base(relations = mapOf("r" to relation(many = true))).copy(hierarchyRelations = mapOf("composition" to "r"))
+        assertInvalid(many)
+        val single = base(relations = mapOf("r" to relation(many = false))).copy(hierarchyRelations = mapOf("composition" to "r"))
+        assertValid(single)
     }
 
     @Test
-    fun `hierarchyRelation is optional and absent by default`() {
+    fun `hierarchyRelations is optional and absent by default`() {
         assertValid(base())
         assertValid(base(relations = mapOf("r" to relation())))
+    }
+
+    @Test
+    fun `two different hierarchy identifiers may legitimately share one relation`() {
+        val request = base(relations = mapOf("r" to relation())).copy(
+            hierarchyRelations = mapOf("composition" to "r", "deployment" to "r"),
+        )
+        assertValid(request)
     }
 
     // ─── mirror properties ───────────────────────────────────────────────────────────────

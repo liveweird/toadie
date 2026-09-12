@@ -1,5 +1,6 @@
 package ch.nokillswit.blueprints
 
+import ch.nokillswit.infra.validation.requireNoDuplicates
 import ch.nokillswit.infra.validation.sanitizeSingleLine
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -204,9 +205,13 @@ data class BlueprintRequest(
     val aggregationProperties: Map<String, AggregationPropertyDefinition> = emptyMap(),
     val ownership: OwnershipDefinition? = null,
     // Port migration phase 3 (.claude/docs/port-data-model.md): a Toadie-only extension, NOT
-    // part of the Port document — stored beside `definition`, absent when unset. Must name a
-    // key of `relations` above whose `many` is false (validateBlueprintRequest).
-    val hierarchyRelation: String? = null,
+    // part of the Port document — stored beside `definition`, absent when unset (v1.32.0: a
+    // MAP, one entry per PARALLEL entity hierarchy — the pre-1.32 single `hierarchyRelation`
+    // named exactly one). Each key must be an ACTIVE value of the `hierarchies` dictionary
+    // (checked service-side, under the V27 lock); each value must name a key of `relations`
+    // above whose `many` is false (validateBlueprintRequest) — two different hierarchy keys
+    // may legitimately share one relation value.
+    val hierarchyRelations: Map<String, String>? = null,
 )
 
 /** The flattened request/response shape: identity columns + [BlueprintDefinition]'s fields. */
@@ -223,7 +228,7 @@ data class BlueprintResponse(
     val calculationProperties: Map<String, CalculationPropertyDefinition> = emptyMap(),
     val aggregationProperties: Map<String, AggregationPropertyDefinition> = emptyMap(),
     val ownership: OwnershipDefinition? = null,
-    val hierarchyRelation: String? = null,
+    val hierarchyRelations: Map<String, String>? = null,
     val createdBy: UInt,
     val creatorName: String,
     val creatorDeleted: Boolean,
@@ -265,8 +270,25 @@ fun sanitizedBlueprintRequest(request: BlueprintRequest): BlueprintRequest = req
     calculationProperties = request.calculationProperties.mapValues { (_, calc) -> sanitizedCalculation(calc) },
     aggregationProperties = request.aggregationProperties.mapValues { (_, agg) -> sanitizedAggregation(agg) },
     ownership = request.ownership?.let { sanitizedOwnership(it) },
-    hierarchyRelation = request.hierarchyRelation?.trim(),
+    hierarchyRelations = sanitizedHierarchyRelations(request.hierarchyRelations),
 )
+
+/**
+ * Trims every value; keys are dictionary VALUES (not free-standing identifiers like every other
+ * map in this request), so they are trimmed AND lowercase-folded — the same normalization
+ * `dictionaries/Dictionary.kt`'s `normalizeDictionaryValue` applies to a stored hierarchy value,
+ * so a differently-cased key still matches the registry lookup. An empty map normalizes to
+ * `null` (absent on the wire), matching every other optional collection's "omitted means unset"
+ * convention here.
+ */
+private fun sanitizedHierarchyRelations(hierarchyRelations: Map<String, String>?): Map<String, String>? {
+    if (hierarchyRelations.isNullOrEmpty()) return null
+    val folded = hierarchyRelations.entries.map { (k, v) -> k.trim().lowercase() to v.trim() }
+    // Two request keys folding onto one hierarchy (`Composition` + `composition`) would otherwise
+    // silently keep the last one — the codebase's rule is to REJECT duplicates, never collapse them.
+    requireNoDuplicates(folded.map { it.first }, "hierarchyRelations keys must be unique")
+    return folded.toMap()
+}
 
 private fun sanitizedProperty(def: PropertyDefinition): PropertyDefinition = def.copy(
     title = def.title?.let { sanitizeSingleLine(it, "schema.properties title") },
