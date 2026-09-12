@@ -75,6 +75,11 @@ documented in `security.md`; cancellation does not forcibly terminate native wor
 cleanup must retain ownership across coroutine dispatcher cancellation, including setup.
 For early status rejection, observe EOF/reset on the fixture socket's read side; a finite
 write loop may fit entirely into Linux socket buffers before cancellation and never throw.
+The same buffer effect bit the held-headers/held-body cancellation case on CI (a 2 MiB fixed
+write loop finished without an `IOException`, so the 2-second disconnect wait timed out):
+`writeUntilDisconnected` now writes until the disconnect surfaces or a 10-second deadline
+passes, and the disconnect waits are bounded by that deadline plus slack — a generous outer
+bound around an observed event, never a sleep.
 A raw incomplete chunked response makes the body stall independent of send-buffer capacity.
 
 **Hosted timing and loading regressions.** Catalog editor save-flow fixtures use user-event

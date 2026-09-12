@@ -206,7 +206,16 @@ export async function pickType(page: Page, type: string): Promise<void> {
   // kind that allows it — the V22 lists happen to be disjoint, but nothing enforces that
   // (the dictionaries are INDEPENDENT). Every such option sets the same bare type, so the
   // first match is always correct (the form's own Select has unique options anyway).
-  await page.getByRole("option", { name: type, exact: true }).first().click();
+  //
+  // A CI trace on this exact pick showed the option retried for 60s under "element is not
+  // stable", then intercepted by the editor's sticky action bar and its fieldset in turn —
+  // the filtered dropdown option keeps moving under those elements while the live
+  // reference/registry check re-renders the form. A pointer click needs stable geometry;
+  // keyboard selection does not, so drive it once the exact option is visible.
+  const option = page.getByRole("option", { name: type, exact: true }).first();
+  await expect(option).toBeVisible();
+  await select.press("ArrowDown");
+  await select.press("Enter");
   await expect(select).toHaveValue(type);
 }
 
@@ -219,7 +228,13 @@ export async function pickLifecycle(page: Page, lifecycle: string): Promise<void
   const select = page.getByRole("combobox", { name: "Lifecycle" });
   await select.click();
   await select.fill(lifecycle);
-  await page.getByRole("option", { name: lifecycle, exact: true }).click();
+  // Same interception evidence as pickType above (sticky action bar / fieldset subtree
+  // stealing the pointer event while the live check re-renders) — keyboard selection needs
+  // no pointer geometry, so it is deterministic where a click is not.
+  const option = page.getByRole("option", { name: lifecycle, exact: true });
+  await expect(option).toBeVisible();
+  await select.press("ArrowDown");
+  await select.press("Enter");
   await expect(select).toHaveValue(lifecycle);
 }
 
