@@ -476,6 +476,46 @@ object TestLifecycles {
 }
 
 /**
+ * The hierarchies dictionary (V33) is SHARED suite state too, the [TestLifecycles] shape:
+ * seeded with `composition` (the one hierarchy the pre-1.32 single `hierarchyRelation`
+ * always described); tests append unique throwaway values via [ensure] and remove only what
+ * they added. No default-flag plumbing — the HIERARCHY dictionary has none. Purely additive
+ * today (`hierarchyRelations`, next release) — nothing consumes it yet.
+ */
+object TestHierarchies {
+    val service: ch.nokillswit.dictionaries.DictionaryService by lazy {
+        ch.nokillswit.dictionaries.DictionaryService(sharedTestDatabase)
+    }
+
+    private val DICT = ch.nokillswit.dictionaries.Dictionary.HIERARCHY
+
+    private suspend fun currentInputs(): List<ch.nokillswit.dictionaries.DictionaryEntryInput> =
+        service.read(DICT).map { ch.nokillswit.dictionaries.DictionaryEntryInput(it.id, it.value) }
+
+    /** Ensures every value in [values] is an active hierarchy entry (append-preserving replace). */
+    suspend fun ensure(vararg values: String) {
+        val current = service.read(DICT)
+        val missing = values.filterNot { v -> current.any { it.value == v } }
+        if (missing.isNotEmpty()) {
+            service.replace(
+                DICT,
+                ch.nokillswit.dictionaries.DictionaryUpdateRequest(
+                    currentInputs() + missing.map { ch.nokillswit.dictionaries.DictionaryEntryInput(value = it) },
+                ),
+            )
+        }
+    }
+
+    /** Removes [values] from the active document (a no-op for values not present). */
+    suspend fun remove(vararg values: String) {
+        service.replace(
+            DICT,
+            ch.nokillswit.dictionaries.DictionaryUpdateRequest(currentInputs().filterNot { it.value in values }),
+        )
+    }
+}
+
+/**
  * Direct access to the SHARED label registry (V10, seeded by V22) — like the namespaces
  * dictionary, suite state every catalog write is checked against. Tests only ever mint
  * UNIQUE keys (the `uniqueLabel` fixture) and remove them when a test's assertions depend

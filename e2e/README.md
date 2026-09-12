@@ -315,6 +315,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   → inline grammar validation → append a unique value → the regular user's read-only view →
   the editor's Lifecycle Select on a new Component → removal; the dictionary's only in-run
   writer (append-and-remove, the seeds survive).
+- [`hierarchies.spec.ts`](scenarios/hierarchies.md) — the hierarchies dictionary: seeded values
+  → inline grammar validation → append a unique value → the regular user's read-only view →
+  removal; the dictionary's only in-run writer (append-and-remove, the seed survives).
 - [`mfa.spec.ts`](scenarios/mfa.md) — email MFA + the flags surfaces: the /feature-flags
   row switch and per-user editor round-trip a throwaway user's MFA flag; an MFA-enabled
   account signs in through the emailed 6-digit code via Mailpit (local-only skip without it;

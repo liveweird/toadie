@@ -185,12 +185,15 @@ ch.nokillswit
 │                       replace: soft-delete-first reconcile, positions rewritten from payload
 │                       order — no reorder endpoint), DictionaryRoutes.kt —
 │                       GET /api/v1/dictionaries/{slug} (any authenticated, unpaged) +
-│                       PUT (ADMIN). Two dictionaries: NAMESPACE ("namespaces") — the
+│                       PUT (ADMIN). Three dictionaries: NAMESPACE ("namespaces") — the
 │                       allowlist every catalog-file write's namespace must be in; exactly
 │                       one entry flagged isDefault (what blank namespaces resolve to) —
 │                       and LIFECYCLE ("lifecycles") — the GLOBAL allowlist every write's
 │                       non-blank spec.lifecycle must be in; NO default (flags rejected;
-│                       the per-dictionary usesDefault branch in validateDictionaryUpdate)
+│                       the per-dictionary usesDefault branch in validateDictionaryUpdate) —
+│                       and HIERARCHY ("hierarchies", V33) — the identifiers of the parallel
+│                       entity hierarchies a blueprint's `hierarchyRelations` may name, seeded
+│                       with `composition`; NO default; purely additive, nothing consumes it yet
 ├── labels/             the ADMIN-curated label registry (per-entity CRUD — the nested
 │                       key+values+kinds shape doesn't fit the flat dictionary): Label.kt
 │                       (DTOs + sanitizedLabelRequest + validateLabelRequest — key/value

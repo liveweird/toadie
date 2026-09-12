@@ -24,7 +24,15 @@ enum class Dictionary(val slug: String, val usesDefault: Boolean) {
     // every catalog-file write with a non-blank lifecycle requires it to be an ACTIVE entry
     // here (CatalogFileService enforces it). No default — a blank lifecycle is the per-kind
     // requiredness tables' business, never resolved.
-    LIFECYCLE("lifecycles", usesDefault = false);
+    LIFECYCLE("lifecycles", usesDefault = false),
+
+    // The identifiers of the PARALLEL entity hierarchies (composition, ownership,
+    // cost-center…) a blueprint may point one of its single relations at (the
+    // `hierarchyRelations` map, next release — this dictionary is purely additive today,
+    // nothing consumes it yet). Payload order is the order the hierarchy pickers list them
+    // in; the FIRST entry is what the Entity hierarchy/graph pages open on. No default —
+    // there is no blank-hierarchy resolution concept, the LIFECYCLE posture.
+    HIERARCHY("hierarchies", usesDefault = false);
 
     companion object {
         fun fromSlug(slug: String): Dictionary? = entries.firstOrNull { it.slug == slug }
