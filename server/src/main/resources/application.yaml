@@ -82,6 +82,16 @@ security:
     # cookie-based session auth.
     enabled: "$SECURITY_CSRF_ENABLED:false"
 
+# Computed-property evaluation (phase 5): admin-authored jq calculation expressions run on a
+# bounded daemon pool (4 workers, 64 queued — code constants in entities/JqCalculation.kt) under
+# a per-expression deadline. An expression that misses it is ABSENT from the entity and stays
+# quarantined until its text changes or the server restarts; jackson-jq ignores interruption,
+# so the cancelled evaluation's worker stays busy until the expression finishes. See
+# .claude/docs/security.md "Computed-property evaluation (jq)".
+computed:
+  jq:
+    deadlineMillis: "$JQ_DEADLINE_MILLIS:500"
+
 jwt:
   secret: "$JWT_SECRET:secret"
   issuer: "$JWT_ISSUER:http://0.0.0.0:8081/"
