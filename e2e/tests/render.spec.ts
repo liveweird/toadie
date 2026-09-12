@@ -11,6 +11,7 @@ import {
   test,
   uniqueText,
   waitForApi,
+  readyDialog,
 } from "./helpers";
 
 type LayoutDocument = {
@@ -91,9 +92,13 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     await openFilters(page);
     await page.getByLabel("Name", { exact: true }).fill(ghost);
     await rowOperation(page, ghost, "Delete");
+    // The entrance rule (testing.md "Dialog entrance readiness"): a click that lands while the
+    // confirm is still sliding in is swallowed and no DELETE is ever sent — the response wait
+    // below then burns the whole budget (Dependabot #43, Mantine 9.6, three of three attempts).
+    const confirm = await readyDialog(page, "Delete catalog file?");
     await Promise.all([
       page.waitForResponse((r) => r.request().method() === "DELETE" && r.ok()),
-      page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(),
+      confirm.getByRole("button", { name: "Delete", exact: true }).click(),
     ]);
 
     // Render this attempt's entities by NAME: A and B stored, the ghost missing. The shared
