@@ -100,6 +100,26 @@ describe("OverwriteWithYamlModal", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  test("exposes a named loading status while the stored copy is pending", async () => {
+    let releaseDetail: (response: Response) => void = () => {};
+    const detailPromise = new Promise<Response>((resolve) => {
+      releaseDetail = resolve;
+    });
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url === "/api/v1/files/1" && method === "GET") return detailPromise;
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    render();
+
+    expect(
+      await screen.findByRole("status", { name: "Loading the stored copy" }),
+    ).toBeInTheDocument();
+
+    releaseDetail(jsonResponse(200, STORED));
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
   test("diffs the pasted YAML against the stored copy and PUTs it on confirm", async () => {
     mockRoutes(mockFetch);
     const user = userEvent.setup();

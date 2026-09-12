@@ -197,7 +197,9 @@ function OverwriteModalBody({
         </FileButton>
       </Group>
 
-      {detail.isLoading && <Loader size="sm" aria-label={t("catalog.overwrite.loadingAria")} />}
+      {detail.isLoading && (
+        <Loader size="sm" role="status" aria-label={t("catalog.overwrite.loadingAria")} />
+      )}
 
       {loadError && (
         <Alert color="red" variant="light" title={t("catalog.overwrite.loadFailed")}>

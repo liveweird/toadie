@@ -81,8 +81,10 @@ internal suspend fun issueMfaChallenge(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            audit("login.mfa_send_failed", "email" to user.email, "error" to e.message)
-            app.log.error("MFA code email delivery failed for ${user.email}", e)
+            // Mail-provider exceptions may include the message body: never log their text/cause
+            // (the email body itself carries the 6-digit sign-in code).
+            audit("login.mfa_send_failed", "email" to user.email, "errorType" to e.javaClass.simpleName)
+            app.log.error("MFA code email delivery failed for {} ({})", user.email, e.javaClass.simpleName)
         }
     }
     call.respond(
