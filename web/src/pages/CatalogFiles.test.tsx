@@ -4,48 +4,30 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { notifications } from "@mantine/notifications";
 import CatalogFiles from "./CatalogFiles";
 import { jsonResponse } from "../test/http";
+import { catalogFileListItem, catalogFileResponse, pageOf } from "../test/fixtures";
+import type { CatalogFileListItem } from "../api/catalogFiles";
 import { renderWithProviders } from "../test/render";
 
 const TOKEN_KEY = "toadie.auth.token";
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
-type FileRow = {
-  id: number;
-  kind: string;
-  name: string;
-  namespace: string;
-  title: string | null;
-  type: string;
-  lifecycle: string;
-  owner: string;
-  tags: string[];
-  creatorName: string;
-  creatorDeleted: boolean;
-  updatedAt: number;
-  sourceUrl: string | null;
-  lastSyncedAt: number;
-};
-
-const SEED_FILES: FileRow[] = [
-  {
+const SEED_FILES: CatalogFileListItem[] = [
+  catalogFileListItem({
     id: 1,
-    kind: "Component",
     name: "payments-svc",
-    namespace: "default",
     title: "Payments",
     type: "service",
     lifecycle: "production",
     owner: "group:platform",
     tags: ["java", "billing"],
     creatorName: "Alice Creator",
-    creatorDeleted: false,
     updatedAt: 1755900000000,
     // Synced from a repo, then edited locally (updatedAt > lastSyncedAt).
     sourceUrl: "https://raw.githubusercontent.com/acme/payments/main/catalog-info.yaml",
     lastSyncedAt: 1755800000000,
-  },
-  {
+  }),
+  catalogFileListItem({
     id: 2,
     kind: "API",
     name: "web-portal",
@@ -54,17 +36,14 @@ const SEED_FILES: FileRow[] = [
     type: "website",
     lifecycle: "experimental",
     owner: "team-a",
-    tags: [],
     creatorName: "Bob Builder",
     creatorDeleted: true,
     updatedAt: 1755900000000,
-    sourceUrl: null,
-    lastSyncedAt: 0,
-  },
+  }),
 ];
 
-function filesPage(items: FileRow[], total = items.length) {
-  return jsonResponse(200, { items, page: 1, pageSize: 20, total });
+function filesPage(items: CatalogFileListItem[], total = items.length) {
+  return jsonResponse(200, pageOf(items, { total }));
 }
 
 // The filter combos load their options from the admin-curated registries/dictionaries.
@@ -296,22 +275,16 @@ describe("CatalogFiles page", () => {
   test("picking an Owner refetches with the full entity reference", async () => {
     // The owner options come from the identity pool (the pageSize=100 loop), which offers
     // stored Groups/Users as full refs.
-    const groupRow: FileRow = {
+    const groupRow: CatalogFileListItem = catalogFileListItem({
       id: 7,
       kind: "Group",
       name: "platform",
-      namespace: "default",
-      title: null,
       type: "team",
       lifecycle: "production",
       owner: "group:platform",
-      tags: [],
       creatorName: "A",
-      creatorDeleted: false,
       updatedAt: 1755900000000,
-      sourceUrl: null,
-      lastSyncedAt: 0,
-    };
+    });
     setupMocks(mockFetch, (url) =>
       url.includes("pageSize=100") ? filesPage([groupRow]) : filesPage(SEED_FILES),
     );
@@ -508,17 +481,17 @@ describe("CatalogFiles page", () => {
     mockFetch.mockImplementation((url: string) => {
       if (url === "/api/v1/files/1") {
         return Promise.resolve(
-          jsonResponse(200, {
-            id: 1,
-            kind: "Component",
-            metadata: { name: "payments-svc", namespace: "default" },
-            spec: { type: "service", lifecycle: "production", owner: "group:platform" },
-            createdBy: 1,
-            creatorName: "Alice Creator",
-            creatorDeleted: false,
-            createdAt: 1,
-            updatedAt: 2,
-          }),
+          jsonResponse(
+            200,
+            catalogFileResponse({
+              id: 1,
+              metadata: { name: "payments-svc", namespace: "default" },
+              spec: { type: "service", lifecycle: "production", owner: "group:platform" },
+              creatorName: "Alice Creator",
+              createdAt: 1,
+              updatedAt: 2,
+            }),
+          ),
         );
       }
       if (url.startsWith("/api/v1/files?")) return Promise.resolve(filesPage(SEED_FILES));
@@ -585,19 +558,18 @@ describe("CatalogFiles page", () => {
         });
       }
       if (url === "/api/v1/files/1") {
-        return jsonResponse(200, {
-          id: 1,
-          kind: "Component",
-          metadata: { name: "payments-svc", namespace: "default" },
-          spec: {},
-          createdBy: 1,
-          creatorName: "Alice Creator",
-          creatorDeleted: false,
-          createdAt: 1,
-          updatedAt: SEED_FILES[0].updatedAt,
-          sourceUrl: SEED_FILES[0].sourceUrl,
-          lastSyncedAt: 0,
-        });
+        return jsonResponse(
+          200,
+          catalogFileResponse({
+            id: 1,
+            metadata: { name: "payments-svc", namespace: "default" },
+            spec: {},
+            creatorName: "Alice Creator",
+            createdAt: 1,
+            updatedAt: SEED_FILES[0].updatedAt,
+            sourceUrl: SEED_FILES[0].sourceUrl,
+          }),
+        );
       }
       if (url === "/api/v1/files/fetch") return jsonResponse(502, { status: 502 });
       return filesPage(SEED_FILES);
@@ -612,7 +584,17 @@ describe("CatalogFiles page", () => {
 
   test("Quick view from the Operations menu opens the drawer and addresses it with ?file=", async () => {
     setupMocks(mockFetch, (url) =>
-      url === "/api/v1/files/1" ? jsonResponse(200, { ...SEED_FILES[0], createdBy: 1, creatorName: "A", creatorDeleted: false, metadata: { name: SEED_FILES[0].name, namespace: "default" }, spec: {} }) : filesPage(SEED_FILES),
+      url === "/api/v1/files/1"
+        ? jsonResponse(
+            200,
+            catalogFileResponse({
+              id: 1,
+              metadata: { name: SEED_FILES[0].name, namespace: "default" },
+              spec: {},
+              creatorName: "A",
+            }),
+          )
+        : filesPage(SEED_FILES),
     );
     const user = userEvent.setup();
     renderPage();

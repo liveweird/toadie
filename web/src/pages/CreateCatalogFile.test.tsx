@@ -5,6 +5,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import CreateCatalogFile from "./CreateCatalogFile";
 import { jsonResponse } from "../test/http";
+import { catalogFileListItem, catalogFileResponse, pageOf } from "../test/fixtures";
 import { renderWithProviders } from "../test/render";
 import classes from "../theme.module.css";
 
@@ -128,7 +129,7 @@ describe("CreateCatalogFile page", () => {
     vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") !== "GET") return Promise.resolve(jsonResponse(404, {}));
       if (url.startsWith("/api/v1/files")) {
-        return Promise.resolve(jsonResponse(200, { items: [], page: 1, pageSize: 100, total: 0 }));
+        return Promise.resolve(jsonResponse(200, pageOf([], { pageSize: 100 })));
       }
       return Promise.resolve(jsonResponse(200, { items: [] }));
     });
@@ -152,17 +153,17 @@ describe("CreateCatalogFile page", () => {
       }
       if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files") {
         return Promise.resolve(
-          jsonResponse(201, {
-            id: 9,
-            kind: "Component",
-            metadata: { name: "my-svc", namespace: "default" },
-            spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
-            createdBy: 1,
-            creatorName: "A",
-            creatorDeleted: false,
-            createdAt: 1,
-            updatedAt: 1,
-          }),
+          jsonResponse(
+            201,
+            catalogFileResponse({
+              id: 9,
+              metadata: { name: "my-svc", namespace: "default" },
+              spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
+              creatorName: "A",
+              createdAt: 1,
+              updatedAt: 1,
+            }),
+          ),
         );
       }
       return Promise.resolve(jsonResponse(404, {}));
@@ -261,17 +262,17 @@ describe("CreateCatalogFile page", () => {
       }
       if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files") {
         return Promise.resolve(
-          jsonResponse(201, {
-            id: 9,
-            kind: "Component",
-            metadata: { name: "my-svc", namespace: "default" },
-            spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
-            createdBy: 1,
-            creatorName: "A",
-            creatorDeleted: false,
-            createdAt: 1,
-            updatedAt: 1,
-          }),
+          jsonResponse(
+            201,
+            catalogFileResponse({
+              id: 9,
+              metadata: { name: "my-svc", namespace: "default" },
+              spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
+              creatorName: "A",
+              createdAt: 1,
+              updatedAt: 1,
+            }),
+          ),
         );
       }
       return Promise.resolve(jsonResponse(404, {}));
@@ -315,17 +316,18 @@ describe("CreateCatalogFile page", () => {
 
   test("submits the trimmed request, toasts, and navigates to the list", async () => {
     const toast = vi.spyOn(notifications, "show").mockReturnValue("id");
-    mockPostStatus(mockFetch, 201, {
-      id: 9,
-      kind: "Component",
-      metadata: { name: "my-svc", namespace: "default" },
-      spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
-      createdBy: 1,
-      creatorName: "A",
-      creatorDeleted: false,
-      createdAt: 1,
-      updatedAt: 1,
-    });
+    mockPostStatus(
+      mockFetch,
+      201,
+      catalogFileResponse({
+        id: 9,
+        metadata: { name: "my-svc", namespace: "default" },
+        spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
+        creatorName: "A",
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    );
     const user = userEvent.setup();
     renderCreate();
 
@@ -358,17 +360,19 @@ describe("CreateCatalogFile page", () => {
   });
 
   test("switching the kind swaps the per-kind sections and submits a Group", async () => {
-    mockPostStatus(mockFetch, 201, {
-      id: 11,
-      kind: "Group",
-      metadata: { name: "team-a", namespace: "default" },
-      spec: { type: "team", children: [], members: [] },
-      createdBy: 1,
-      creatorName: "A",
-      creatorDeleted: false,
-      createdAt: 1,
-      updatedAt: 1,
-    });
+    mockPostStatus(
+      mockFetch,
+      201,
+      catalogFileResponse({
+        id: 11,
+        kind: "Group",
+        metadata: { name: "team-a", namespace: "default" },
+        spec: { type: "team", children: [], members: [] },
+        creatorName: "A",
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    );
     const user = userEvent.setup();
     renderCreate();
 
@@ -445,22 +449,50 @@ describe("CreateCatalogFile page", () => {
   test("the owner picker suggests stored groups and inserts the shortened ref", async () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") === "POST" && url === "/api/v1/files") {
-        return Promise.resolve(jsonResponse(201, {
-          id: 12, kind: "Component",
-          metadata: { name: "my-svc", namespace: "default" },
-          spec: { type: "service", lifecycle: "production", owner: "team-a" },
-          createdBy: 1, creatorName: "A", creatorDeleted: false, createdAt: 1, updatedAt: 1,
-        }));
+        return Promise.resolve(
+          jsonResponse(
+            201,
+            catalogFileResponse({
+              id: 12,
+              metadata: { name: "my-svc", namespace: "default" },
+              spec: { type: "service", lifecycle: "production", owner: "team-a" },
+              creatorName: "A",
+              createdAt: 1,
+              updatedAt: 1,
+            }),
+          ),
+        );
       }
       if (url.startsWith("/api/v1/files?")) {
         // The identity pool behind the pickers.
-        return Promise.resolve(jsonResponse(200, {
-          items: [
-            { id: 5, kind: "Group", name: "team-a", namespace: "default", title: null, type: "team", lifecycle: null, owner: null, creatorName: "A", creatorDeleted: false, updatedAt: 1 },
-            { id: 6, kind: "API", name: "billing-api", namespace: "default", title: null, type: "openapi", lifecycle: "production", owner: null, creatorName: "A", creatorDeleted: false, updatedAt: 1 },
-          ],
-          page: 1, pageSize: 100, total: 2,
-        }));
+        return Promise.resolve(
+          jsonResponse(
+            200,
+            pageOf(
+              [
+                catalogFileListItem({
+                  id: 5,
+                  kind: "Group",
+                  name: "team-a",
+                  type: "team",
+                  lifecycle: null,
+                  creatorName: "A",
+                  updatedAt: 1,
+                }),
+                catalogFileListItem({
+                  id: 6,
+                  kind: "API",
+                  name: "billing-api",
+                  type: "openapi",
+                  lifecycle: "production",
+                  creatorName: "A",
+                  updatedAt: 1,
+                }),
+              ],
+              { pageSize: 100 },
+            ),
+          ),
+        );
       }
       return Promise.resolve(jsonResponse(404, {}));
     });

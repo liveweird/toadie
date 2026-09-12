@@ -3,6 +3,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CatalogFileHistory from "./CatalogFileHistory";
 import { jsonResponse } from "../test/http";
+import { pageOf } from "../test/fixtures";
 import { renderWithProviders } from "../test/render";
 
 const TOKEN_KEY = "toadie.auth.token";
@@ -25,7 +26,7 @@ function event(type: string, params: Record<string, string> = {}) {
 
 function servePage(mockFetch: FetchMock, items: unknown[], total = items.length) {
   mockFetch.mockImplementation(() =>
-    Promise.resolve(jsonResponse(200, { items, page: 1, pageSize: 10, total })),
+    Promise.resolve(jsonResponse(200, pageOf(items, { pageSize: 10, total }))),
   );
 }
 

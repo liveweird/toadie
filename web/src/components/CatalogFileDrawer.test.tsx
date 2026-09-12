@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { renderWithProviders, screen, waitFor, within } from "../test/render";
+import { jsonResponse } from "../test/http";
+import { catalogFileResponse } from "../test/fixtures";
 import CatalogFileDrawer from "./CatalogFileDrawer";
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
-const FILE = {
+const FILE = catalogFileResponse({
   id: 7,
-  kind: "Component",
   metadata: {
     name: "payments-svc",
     namespace: "default",
@@ -19,18 +20,9 @@ const FILE = {
     annotations: { "example.com/a": "1", "example.com/b": "2" },
   },
   spec: { type: "service", lifecycle: "production", owner: "group:default/payments" },
-  createdBy: 1,
   creatorName: "Alice Admin",
-  creatorDeleted: false,
-  createdAt: 1_700_000_000_000,
   updatedAt: 1_700_000_100_000,
-  sourceUrl: null as string | null,
-  lastSyncedAt: 0,
-};
-
-function jsonResponse(status: number, body: unknown) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
+});
 
 function mockDetail(mockFetch: FetchMock, file: unknown = FILE, status = 200) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {

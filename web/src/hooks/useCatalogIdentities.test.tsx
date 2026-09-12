@@ -4,23 +4,19 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useCatalogIdentities } from "./useCatalogIdentities";
 import { jsonResponse } from "../test/http";
+import { catalogFileListItem, pageOf } from "../test/fixtures";
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
 function listItem(id: number) {
-  return {
+  return catalogFileListItem({
     id,
-    kind: "Component",
     name: `service-${id}`,
-    namespace: "default",
-    title: null,
     type: null,
     lifecycle: null,
-    owner: null,
     creatorName: "Alice",
-    creatorDeleted: false,
     updatedAt: 0,
-  };
+  });
 }
 
 function createWrapper() {
@@ -51,12 +47,7 @@ describe("useCatalogIdentities", () => {
     mockFetch.mockImplementation((url: string) => {
       const page = new URL(url, "http://test").searchParams.get("page");
       return Promise.resolve(
-        jsonResponse(200, {
-          items: page === "1" ? pageOne : pageTwo,
-          page: Number(page),
-          pageSize: 100,
-          total,
-        }),
+        jsonResponse(200, pageOf(page === "1" ? pageOne : pageTwo, { page: Number(page), pageSize: 100, total })),
       );
     });
 
@@ -75,9 +66,7 @@ describe("useCatalogIdentities", () => {
   });
 
   test("a single short page ends the pool loop immediately", async () => {
-    mockFetch.mockResolvedValue(
-      jsonResponse(200, { items: [listItem(1)], page: 1, pageSize: 100, total: 1 }),
-    );
+    mockFetch.mockResolvedValue(jsonResponse(200, pageOf([listItem(1)], { pageSize: 100 })));
 
     const { result } = renderHook(() => useCatalogIdentities(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current).toHaveLength(1));
