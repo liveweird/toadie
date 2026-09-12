@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.31.0",
+    date: "2026-09-12",
+    en: `**Save-anyway without the round trip; entity list filters in the address bar.**
+
+- A catalog file's strict save that is refused for soft findings now answers with the findings themselves, so the editor opens Save anyway straight from the rejection instead of asking the server a second time. API: the create and replace operations' \`400\` body gains a \`findings\` array (\`CatalogFileInvalidProblem\`); the message text is unchanged.
+- The Entities list keeps its search text in the URL beside the blueprint and team, so a filtered list is a shareable address and survives a reload; the Entity graph and hierarchy keep remembering their filters per view.
+- Dependency updates are now proposed weekly by Dependabot for the SPA, the browser suite, Gradle, GitHub Actions and the base images.`,
+    pl: `**Zapisz mimo wszystko bez dodatkowego zapytania; filtry listy encji w pasku adresu.**
+
+- Ścisły zapis pliku katalogu odrzucony z powodu miękkich ustaleń odpowiada teraz samymi ustaleniami, więc edytor otwiera Zapisz mimo wszystko wprost z odmowy, zamiast pytać serwer po raz drugi. API: treść \`400\` operacji tworzenia i zastępowania zyskuje tablicę \`findings\` (\`CatalogFileInvalidProblem\`); tekst komunikatu bez zmian.
+- Lista encji trzyma tekst wyszukiwania w adresie URL obok schematu i zespołu, więc przefiltrowana lista jest adresem do udostępnienia i przeżywa przeładowanie; graf i hierarchia encji nadal pamiętają swoje filtry per widok.
+- Aktualizacje zależności proponuje co tydzień Dependabot — dla SPA, zestawu przeglądarkowego, Gradle, GitHub Actions i obrazów bazowych.`,
+  },
+  {
     version: "1.30.3",
     date: "2026-09-12",
     en: `**Checkup refactors.**

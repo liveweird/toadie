@@ -11,6 +11,7 @@ const ciSource = readFileSync(resolve(repoRoot, ".github/workflows/ci.yml"), "ut
 const e2eSource = readFileSync(resolve(repoRoot, ".github/workflows/e2e.yml"), "utf8");
 const toolchainSource = readFileSync(resolve(repoRoot, "mise.toml"), "utf8");
 const dockerfileSource = readFileSync(resolve(repoRoot, "Dockerfile"), "utf8");
+const dependabotSource = readFileSync(resolve(repoRoot, ".github/dependabot.yml"), "utf8");
 
 describe("deployment and verification safety defaults", () => {
   it("uses the full Temurin version from the local toolchain in CI", () => {
@@ -85,5 +86,20 @@ describe("deployment and verification safety defaults", () => {
     const compose = parse(composeSource);
     expect(compose.services.app.healthcheck).toBeTruthy();
     expect(compose.services.app.healthcheck.test).toBeTruthy();
+  });
+
+  it("keeps Dependabot covering every dependency-bearing directory", () => {
+    const dependabot = parse(dependabotSource);
+    const pairs = dependabot.updates.map((update) => [update.directory, update["package-ecosystem"]]);
+    expect(pairs).toEqual(
+      expect.arrayContaining([
+        ["/web", "npm"],
+        ["/e2e", "npm"],
+        ["/", "gradle"],
+        ["/", "github-actions"],
+        ["/", "docker"],
+      ]),
+    );
+    expect(pairs).toHaveLength(5);
   });
 });

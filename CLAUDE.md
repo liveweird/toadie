@@ -140,7 +140,9 @@ ch.nokillswit
 │                       protocols)
 ├── infra/paging/       the shared list-endpoint machinery (PageRequest/parsePaging/applyPaging/
 │                       PageResponse + the strict query-param readers) — Lettuce's, ported verbatim
-├── infra/validation/   cross-feature input helpers (sanitizeSingleLine — trim + control-char 400)
+├── infra/validation/   cross-feature input helpers (sanitizeSingleLine — trim + control-char 400,
+│                       requireNoDuplicates) + InvalidPayloadException, the one findings-bearing 400
+│                       shape (catalog strict save, entity save) — ErrorHandling.kt renders it feature-free
 ├── infra/importing/    shared ontology bulk-import vocabulary (phase 6, v1.28.0 — the
 │                       `catalog/CatalogFileImport.kt` precedent, one level up): ImportBatch.kt —
 │                       `MAX_IMPORT_DOCUMENTS` (200), `OntologyImportStatus`, the per-row
@@ -361,6 +363,8 @@ ch.nokillswit
                         behind GET …/errors (the filterable workspace Errors report: soft
                         findings + the report-only STRUCTURE_INVALID/NAMESPACE_NOT_ALLOWED)
                         and POST …/check (the editor's live document check);
+                        + CatalogFileInvalidException/CatalogFileInvalidProblem (v1.31.0 — the strict
+                        save's aggregated 400 carrying those findings, an InvalidPayloadException);
                         Graph.kt — the same resolution machinery as a node/edge graph
                         (GET …/graph, the /graph page's backend);
                         Import.kt — the round-trip DTOs (GET …/export ships structured
@@ -371,7 +375,7 @@ ch.nokillswit
                         catalog-info.yaml URL (guards documented in security.md)
 ```
 
-**Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse`) with the `validateX` free function enforced by route AND service (in the DTO file, or a sibling `<Entity>Validation.kt` once the rules outgrow it — the catalog split), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_SECTIONS` entries (`web/src/utils/navigation.ts`), and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`.
+**Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse`) with the `validateX` free function enforced by route AND service (in the DTO file, or a sibling `<Entity>Validation.kt` once the rules outgrow it — the catalog split), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_SECTIONS` entries (`web/src/utils/navigation.ts`), and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`. Extract when byte-identical (`validateAllowedKinds`, `lockingTransaction`, `requireNoDuplicates`, `useRegistryQuery`); copy when the feature differs where the docs say it does (the tag-category lock, the lens visibility verdict, the dictionary whole-document replace). A sixth registry does not warrant a CRUD base class until two of them are byte-identical end to end.
 
 ### Authentication session lifecycle (V25)
 
