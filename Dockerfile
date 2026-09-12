@@ -19,10 +19,10 @@ RUN GIT_SHA=$(git rev-parse --short HEAD) \
     npm run build
 
 # ── Stage 2: build the server distribution ────────────────────────────────────
-# Pinned to the mise.toml patch (temurin-21.0.11+10.0.LTS → the Docker Hub tag's underscore
+# Pinned to the mise.toml patch (temurin-21.0.12+8.0.LTS → the Docker Hub tag's underscore
 # separator) so the build-stage JDK and the runtime-stage JRE below are provably the same
 # Java build, not just "21-jdk"/"21-jre" floating tags that can drift apart between pulls.
-FROM eclipse-temurin:21.0.11_10-jdk AS server
+FROM eclipse-temurin:21.0.12_8-jdk AS server
 WORKDIR /src
 # Copy build scripts + wrapper first so the Gradle distribution download caches.
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
@@ -43,7 +43,7 @@ RUN ./gradlew :server:installDist --no-daemon
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
 # The same pinned JDK/JRE build as the build stage (mise.toml and jvmToolchain(21)): one Java
 # version everywhere, tag-pinned rather than trusting "21-jre" to keep meaning the same bytes.
-FROM eclipse-temurin:21.0.11_10-jre AS runtime
+FROM eclipse-temurin:21.0.12_8-jre AS runtime
 # Non-root runtime user: the base image's default user is root, and the application never
 # needs to bind a privileged port (8081) or write outside its own install directory. Created
 # BEFORE the COPYs so `--chown` sets ownership in the copy layers themselves — a trailing
