@@ -1,5 +1,6 @@
 package ch.nokillswit.blueprints
 
+import ch.nokillswit.infra.validation.requireNoDuplicates
 import io.ktor.server.plugins.BadRequestException
 import java.net.URI
 import java.net.URISyntaxException
@@ -242,7 +243,7 @@ internal fun validateEnum(field: String, type: String, enum: List<JsonPrimitive>
         if (!enumEntryMatchesType(type, entry)) throw BadRequestException("$field.enum entries must be of type $type")
     }
     val values = enum.map { it.content }
-    if (values.size != values.toSet().size) throw BadRequestException("$field.enum must not contain duplicates")
+    requireNoDuplicates(values, "$field.enum must not contain duplicates")
     colors?.let { validateEnumColors(field, values.toSet(), it) }
 }
 

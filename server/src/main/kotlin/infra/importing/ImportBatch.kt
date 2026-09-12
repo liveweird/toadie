@@ -71,3 +71,57 @@ fun requireBatchSize(size: Int) {
         throw BadRequestException("documents must have at most $MAX_IMPORT_DOCUMENTS entries")
     }
 }
+
+/**
+ * One [orderWithDeferral] run's result: the write order, each index's deferred sibling keys,
+ * and — if [onForced] rejected a forced pick — where and why it stopped.
+ */
+data class OrderedBatch<K>(val order: List<Int>, val deferredByIndex: Map<Int, Set<K>>, val stoppedAt: Pair<Int, String>?)
+
+/**
+ * The Kahn topological-sort skeleton shared by `blueprints/BlueprintImport.kt`'s
+ * `orderCandidates` and `entities/EntityImport.kt`'s `attemptOrdering`: [indices] are the
+ * candidate positions still to place; [dependencies] maps each index to the sibling KEYS it
+ * references (a blueprint identifier, or an entity's `(blueprint, identifier)` pair) — already
+ * filtered by the caller to keys naming another candidate BEING STORED IN THIS BATCH, since an
+ * already-registered target is always satisfied; [keyIndex] resolves a key back to ITS OWN index
+ * so this function can track satisfaction internally as it places nodes, without either caller
+ * exposing its `satisfied` bookkeeping.
+ *
+ * Each step picks the lowest-index READY candidate (every dependency already placed); when
+ * nothing is ready it force-picks the lowest remaining index instead (input-order tie-breaking,
+ * the ONE fairness rule both planners share), computes THAT index's still-unmet dependencies,
+ * and offers [onForced] the chance to reject the whole ordering rather than deferring —
+ * returning a non-null message stops the sort immediately and reports it as
+ * [OrderedBatch.stoppedAt] (the entity planner's mandatory-reference-cycle rejection). The
+ * blueprint planner's callback never rejects, so every forced pick there is simply deferred to
+ * a second write pass. The per-kind edge collection ([dependencies]) and what a stop MEANS to
+ * the caller stay out of this function on purpose — it only runs the mechanical loop.
+ */
+fun <K> orderWithDeferral(
+    indices: List<Int>,
+    dependencies: Map<Int, List<K>>,
+    keyIndex: Map<K, Int>,
+    onForced: (index: Int, deferred: Set<K>) -> String? = { _, _ -> null },
+): OrderedBatch<K> {
+    val satisfied = mutableSetOf<Int>()
+    val remaining = indices.toMutableList()
+    val order = mutableListOf<Int>()
+    val deferredByIndex = mutableMapOf<Int, Set<K>>()
+    fun isSatisfied(key: K) = keyIndex[key]?.let { it in satisfied } ?: true
+
+    while (remaining.isNotEmpty()) {
+        val ready = remaining.filter { idx -> dependencies[idx].orEmpty().all(::isSatisfied) }
+        val pick = if (ready.isNotEmpty()) ready.min() else remaining.min()
+        if (ready.isEmpty()) {
+            val deferred = dependencies[pick].orEmpty().filterNot(::isSatisfied).toSet()
+            val violation = onForced(pick, deferred)
+            if (violation != null) return OrderedBatch(order, deferredByIndex, pick to violation)
+            deferredByIndex[pick] = deferred
+        }
+        order += pick
+        satisfied += pick
+        remaining.remove(pick)
+    }
+    return OrderedBatch(order, deferredByIndex, stoppedAt = null)
+}

@@ -26,7 +26,7 @@ after the catalog files list: sortable-field whitelist `identifier`, `title`, `u
 (exact, case-insensitive match against the blueprint identifier), the `team` equality filter
 (v1.26.0 — exact, case-insensitive match against the entity's EFFECTIVE team: the stored value
 for Direct/absent ownership via `jsonStringOrArrayContainsFolded`, or — v1.30.0 —
-`EntityService.inheritedTeamMatches` resolves the matching ids for Inherited ownership from the
+`entities/EntityFilter.kt`'s `inheritedTeamMatches` (an extension on `EntityService`) resolves the matching ids for Inherited ownership from the
 same committed read and folds them into the ONE SQL predicate as `id IN (…)`, so `total`/paging
 stay in SQL; no extra query runs when no Inherited blueprint is in scope), and `q` — the
 free-text filter over `identifier` OR `title` via `containsNormalized`. Computed

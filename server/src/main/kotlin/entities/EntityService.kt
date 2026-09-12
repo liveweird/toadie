@@ -6,14 +6,12 @@ import ch.nokillswit.blueprints.BlueprintService
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
-import ch.nokillswit.infra.db.containsNormalized
-import ch.nokillswit.infra.db.jsonStringOrArrayContainsFolded
+import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.users.UserService
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
-import io.r2dbc.spi.IsolationLevel
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
@@ -21,7 +19,6 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.JoinType
-import org.jetbrains.exposed.v1.core.LowerCase
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
@@ -29,8 +26,6 @@ import org.jetbrains.exposed.v1.core.dao.id.UIntIdTable
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.neq
-import org.jetbrains.exposed.v1.core.or
-import org.jetbrains.exposed.v1.core.stringParam
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.R2dbcTransaction
 import org.jetbrains.exposed.v1.r2dbc.insert
@@ -39,12 +34,6 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
 
 val EntityServiceKey = AttributeKey<EntityService>("EntityService")
-
-/** `team`: single value, case-insensitive, blank = absent (`infra/paging/QueryParams.kt`'s `optionalString` idiom); repetition is a 400. */
-data class EntityFilter(val blueprint: String?, val q: String?, val team: String? = null)
-
-/** `GET …/entities/graph`'s filter: `blueprints` is the repeated any-of param (IN semantics). */
-data class EntityGraphFilter(val blueprints: List<String>, val q: String?, val team: String? = null)
 
 data class EntityListResult(val items: List<EntityResponse>, val total: Long)
 
@@ -70,6 +59,10 @@ private fun systemFormatFor(blueprintIdentifier: String): String? = when (bluepr
     SYSTEM_USER_BLUEPRINT -> "user"
     else -> null
 }
+
+/** The V28 fixed global lock order this service's every mutation runs under (`.claude/docs/persistence.md`). */
+private const val LOCK_BLUEPRINTS_SHARE = "LOCK TABLE blueprints IN SHARE MODE"
+private const val LOCK_ENTITIES_SHARE_ROW_EXCLUSIVE = "LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE"
 
 class EntityService(private val database: R2dbcDatabase, private val jq: JqEvaluator = JqEvaluator()) {
     object Entities : UIntIdTable("entities") {
@@ -99,15 +92,12 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
      * SHARE on `blueprints` (self-compatible; entity writers only ever serialize against EACH
      * OTHER, on `entities`) yet conflicting with a blueprint writer's SHARE ROW EXCLUSIVE, so an
      * entity is never validated against a definition mid-change nor attached to a blueprint
-     * being deleted. READ COMMITTED so a writer that waited for either lock sees the prior
-     * writer's committed rows before deciding.
+     * being deleted — via the shared [lockingTransaction] helper (`infra/db/Locking.kt`), which
+     * executes [LOCK_BLUEPRINTS_SHARE] then [LOCK_ENTITIES_SHARE_ROW_EXCLUSIVE] in that fixed
+     * order.
      */
     private suspend fun <T> writeTransaction(block: suspend R2dbcTransaction.() -> T): T =
-        suspendTransaction(database, transactionIsolation = IsolationLevel.READ_COMMITTED) {
-            exec("LOCK TABLE blueprints IN SHARE MODE")
-            exec("LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE")
-            block()
-        }
+        lockingTransaction(database, LOCK_BLUEPRINTS_SHARE, LOCK_ENTITIES_SHARE_ROW_EXCLUSIVE, block = block)
 
     private fun active(): Op<Boolean> = Entities.markedAsDeleted eq false
 
@@ -119,7 +109,10 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
         .join(UserService.Users, JoinType.INNER, onColumn = Entities.createdBy, otherColumn = UserService.Users.id)
         .join(BlueprintService.Blueprints, JoinType.INNER, onColumn = Entities.blueprintId, otherColumn = BlueprintService.Blueprints.id)
 
-    private data class ActiveBlueprint(
+    // Widened to internal (from private) so entities/EntityFilter.kt's team/blueprint filter
+    // helpers — which need to read `.id`/`.definition` — can take it as a parameter; the ONE
+    // deliberate crack in this class's otherwise-private state (`.claude/docs/persistence.md`).
+    internal data class ActiveBlueprint(
         val id: UInt,
         val identifier: String,
         val title: String,
@@ -272,6 +265,17 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
         return EntitySnapshot(rows, blueprintsByIdentifier, blueprintsById)
     }
 
+    /**
+     * `entities/EntityFilter.kt`'s [inheritedTeamMatches] access point into this class's private
+     * snapshot machinery — it only ever needs the resulting [RowLookup] to walk an Inherited
+     * ownership path, never [EntitySnapshot]/[SnapshotRow] themselves, so this ONE narrow
+     * accessor is internal rather than [loadSnapshot] (or its private return type) directly.
+     */
+    internal suspend fun rowLookupFor(
+        definitions: Collection<BlueprintDefinition>,
+        blueprintsByIdentifier: Map<String, ActiveBlueprint>,
+    ): RowLookup = loadSnapshot(definitions, blueprintsByIdentifier, computed = false).rowLookup
+
     /** One entity row as [toResponse] needs it — decoded ONCE, before computed-property evaluation runs OUTSIDE the transaction. */
     private data class RawEntity(
         val id: UInt,
@@ -353,69 +357,9 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
         )
     }
 
-    /**
-     * `_team` self-match: `Entities.blueprintId eq <the _team blueprint>` AND
-     * `LOWER(identifier) = LOWER(value)` — so a team-filtered graph keeps the team node.
-     */
-    private fun teamSelfMatch(value: String, blueprintsByIdentifierFolded: Map<String, ActiveBlueprint>): Op<Boolean>? =
-        blueprintsByIdentifierFolded[SYSTEM_TEAM_BLUEPRINT.lowercase()]?.let { teamBlueprint ->
-            (Entities.blueprintId eq teamBlueprint.id) and (LowerCase(Entities.identifier) eq stringParam(value.lowercase()))
-        }
-
-    /**
-     * ONE SQL predicate covering all three ways a row matches `team`: the STORED
-     * `Entities.team` column (Direct/absent ownership), the `_team` self-match, and —
-     * v1.30.0 — an explicit `id IN (…)` disjunct for Inherited rows whose EFFECTIVE team was
-     * resolved in memory by [inheritedTeamMatches] over the same committed read. The `IN`
-     * disjunct is added only when [inheritedIds] is non-empty, so an entirely Direct/absent
-     * scope never renders `id IN ()`. `count()`/paging/sort stay pure SQL either way.
-     */
-    private fun teamPredicate(
-        team: String,
-        blueprintsByIdentifierFolded: Map<String, ActiveBlueprint>,
-        inheritedIds: List<UInt>,
-    ): Op<Boolean> {
-        val membership = Entities.team.jsonStringOrArrayContainsFolded(team)
-        val selfMatch = teamSelfMatch(team, blueprintsByIdentifierFolded)
-        var predicate = if (selfMatch == null) membership else membership or selfMatch
-        if (inheritedIds.isNotEmpty()) {
-            predicate = predicate or (Entities.id inList inheritedIds)
-        }
-        return predicate
-    }
-
-    /**
-     * Resolves which of [candidates]' active entities have an EFFECTIVE team ([effectiveTeam])
-     * matching [team] — the read-side counterpart of the Inherited ownership rule
-     * (`entities/EntityOwnership.kt`): Inherited blueprints store no `team` column at all, so
-     * the SQL predicate above can never see them. Runs INSIDE the caller's existing plain read
-     * transaction (no extra lock), over the SAME [loadSnapshot] every other read builds, so a
-     * multi-hop Inherited chain resolves without querying the database mid-walk. Returns
-     * `emptyList()` — with NO query issued — when no candidate blueprint is Inherited, so an
-     * all-Direct/absent scope pays nothing extra.
-     */
-    private suspend fun inheritedTeamMatches(
-        team: String,
-        candidates: List<ActiveBlueprint>,
-        blueprintsByIdentifier: Map<String, ActiveBlueprint>,
-    ): List<UInt> {
-        val inherited = candidates.filter { isInherited(it.definition) }
-        if (inherited.isEmpty()) return emptyList()
-        val inheritedById = inherited.associateBy { it.id }
-        val definitionsByIdentifier = blueprintsByIdentifier.mapValues { it.value.definition }
-        val snapshot = loadSnapshot(inherited.map { it.definition }, blueprintsByIdentifier, computed = false)
-        return Entities.selectAll().where { (Entities.blueprintId inList inherited.map { it.id }) and active() }
-            .map { row ->
-                val definition = inheritedById.getValue(row[Entities.blueprintId].value).definition
-                val document = blueprintJson.decodeFromString<EntityDocument>(row[Entities.document])
-                val storedTeam = row[Entities.team]?.let { blueprintJson.decodeFromString<JsonElement>(it) }
-                val effective = effectiveTeam(storedTeam, document, definition, definitionsByIdentifier, snapshot.rowLookup)
-                row[Entities.id].value to effective
-            }
-            .toList()
-            .filter { (_, effective) -> teamValueMatches(effective, team) }
-            .map { it.first }
-    }
+    // The list/graph filter machinery — teamSelfMatch, teamPredicate, inheritedTeamMatches, the
+    // `q` predicate, and the blueprint folded-lookup helpers — lives in `entities/EntityFilter.kt`
+    // (the `catalog/CatalogFileFilter.kt` shape), called from [list]/[graph] below.
 
     private data class Materialized<T>(val payload: T, val context: EntityContext)
 
@@ -438,15 +382,13 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
             // The list filter is the ONE case-insensitive lookup (blueprint identifiers are
             // unique case-insensitively); every other identifier-keyed map here (targetExists)
             // stays byte-exact.
-            val blueprintsByIdentifierFolded = activeBlueprints.associateBy { it.identifier.lowercase() }
-            val filterBlueprint = filter.blueprint?.let { blueprintsByIdentifierFolded[it.lowercase()] }
+            val blueprintsByIdentifierFolded = foldedByIdentifier(activeBlueprints)
+            val filterBlueprint = resolveBlueprintFilter(filter.blueprint, blueprintsByIdentifierFolded)
             val unknownBlueprint = filter.blueprint != null && filterBlueprint == null
 
             var predicate: Op<Boolean> = active()
             filterBlueprint?.let { predicate = predicate and (Entities.blueprintId eq it.id) }
-            filter.q?.let { q ->
-                predicate = predicate and (Entities.identifier.containsNormalized(q) or Entities.title.containsNormalized(q))
-            }
+            filter.q?.let { q -> predicate = predicate and qPredicate(q) }
             if (filter.team != null && !unknownBlueprint) {
                 val candidates = filterBlueprint?.let { listOf(it) } ?: activeBlueprints
                 val inheritedIds = inheritedTeamMatches(filter.team, candidates, blueprintsByIdentifier)
@@ -487,19 +429,19 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
         val blueprintsById = activeBlueprints.associateBy { it.id }
         val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
         val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
-        val blueprintsByIdentifierFolded = activeBlueprints.associateBy { it.identifier.lowercase() }
+        val blueprintsByIdentifierFolded = foldedByIdentifier(activeBlueprints)
 
         var predicate: Op<Boolean> = active()
         val candidates: List<ActiveBlueprint>
         if (filter.blueprints.isNotEmpty()) {
-            val resolved = filter.blueprints.mapNotNull { blueprintsByIdentifierFolded[it.lowercase()] }.distinct()
+            val resolved = resolveBlueprintsFilter(filter.blueprints, blueprintsByIdentifierFolded)
             if (resolved.isEmpty()) return@suspendTransaction EntityGraph(emptyList(), emptyList())
             predicate = predicate and (Entities.blueprintId inList resolved.map { it.id })
             candidates = resolved
         } else {
             candidates = activeBlueprints
         }
-        filter.q?.let { q -> predicate = predicate and (Entities.identifier.containsNormalized(q) or Entities.title.containsNormalized(q)) }
+        filter.q?.let { q -> predicate = predicate and qPredicate(q) }
         filter.team?.let { team ->
             val inheritedIds = inheritedTeamMatches(team, candidates, blueprintsByIdentifier)
             predicate = predicate and teamPredicate(team, blueprintsByIdentifierFolded, inheritedIds)

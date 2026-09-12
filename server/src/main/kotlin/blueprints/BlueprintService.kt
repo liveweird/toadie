@@ -2,10 +2,10 @@ package ch.nokillswit.blueprints
 
 import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.entities.EntityService
+import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.users.UserService
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
-import io.r2dbc.spi.IsolationLevel
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
@@ -23,6 +23,9 @@ import org.jetbrains.exposed.v1.r2dbc.insert
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
+
+/** The V27 lock this service's every mutation runs under (`.claude/docs/persistence.md`). */
+private const val LOCK_BLUEPRINTS_SHARE_ROW_EXCLUSIVE = "LOCK TABLE blueprints IN SHARE ROW EXCLUSIVE MODE"
 
 val BlueprintServiceKey = AttributeKey<BlueprintService>("BlueprintService")
 
@@ -59,14 +62,11 @@ class BlueprintService(private val database: R2dbcDatabase) {
     /**
      * Serializes the cross-row target-existence/rename-cascade/delete-409 invariants across
      * every application instance sharing this database — the tag-category table-lock idiom
-     * (`.claude/docs/persistence.md`, "cooperating writer protocol"). READ COMMITTED so a
-     * writer that waited for the lock sees the prior writer's committed rows before deciding.
+     * (`.claude/docs/persistence.md`, "cooperating writer protocol"), via the shared
+     * [lockingTransaction] helper (`infra/db/Locking.kt`).
      */
     private suspend fun <T> writeTransaction(block: suspend R2dbcTransaction.() -> T): T =
-        suspendTransaction(database, transactionIsolation = IsolationLevel.READ_COMMITTED) {
-            exec("LOCK TABLE blueprints IN SHARE ROW EXCLUSIVE MODE")
-            block()
-        }
+        lockingTransaction(database, LOCK_BLUEPRINTS_SHARE_ROW_EXCLUSIVE, block = block)
 
     private fun active(): Op<Boolean> = Blueprints.markedAsDeleted eq false
 

@@ -134,14 +134,22 @@ ch.nokillswit
 │                       bootstrap (admin rotation, prod fail-closed) + Sql.kt (containsNormalized,
 │                       jsonArrayContains, orVanished) + EventLog.kt/JsonParams.kt (Lettuce's
 │                       shared per-record audit-event machinery — the EventLogTable base behind
-│                       catalog_file_events, the first and so far only clone)
+│                       catalog_file_events, the first and so far only clone) + Locking.kt
+│                       (lockingTransaction — the shared cooperating-writer table-lock helper
+│                       behind BlueprintService/TagCategoryService/EntityService's V27/V11/V28
+│                       protocols)
 ├── infra/paging/       the shared list-endpoint machinery (PageRequest/parsePaging/applyPaging/
 │                       PageResponse + the strict query-param readers) — Lettuce's, ported verbatim
 ├── infra/validation/   cross-feature input helpers (sanitizeSingleLine — trim + control-char 400)
 ├── infra/importing/    shared ontology bulk-import vocabulary (phase 6, v1.28.0 — the
 │                       `catalog/CatalogFileImport.kt` precedent, one level up): ImportBatch.kt —
 │                       `MAX_IMPORT_DOCUMENTS` (200), `OntologyImportStatus`, the per-row
-│                       `decodeDocument`/`rawString`/`requireBatchSize` helpers behind
+│                       `decodeDocument`/`rawString`/`requireBatchSize` helpers, and
+│                       `orderWithDeferral` (the Kahn topological-sort skeleton — the
+│                       in-degree/queue loop and its input-order tie-break — shared by
+│                       `blueprints/BlueprintImport.kt`'s `orderCandidates` and
+│                       `entities/EntityImport.kt`'s `attemptOrdering`; the per-kind edge
+│                       collection and the cycle policy stay in each caller) behind
 │                       `blueprints/BlueprintImport.kt` and `entities/EntityImport.kt`
 ├── infra/concurrency/  BoundedExecution.kt — Executor.awaitBounded, the suspend-with-cancellation
 │                       bridge to a bounded ThreadPoolExecutor, extracted from
@@ -281,7 +289,12 @@ ch.nokillswit
 │                       properties validated similarly; + `teamValueMatches`, the in-memory twin
 │                       of `jsonStringOrArrayContainsFolded` behind the team filter's Inherited
 │                       half), EntityReferences.kt (pure
-│                       `entityTargets`/`withEntityTargetRenamed`), EntityService.kt (one row =
+│                       `entityTargets`/`withEntityTargetRenamed`), EntityFilter.kt (the shared
+│                       list/graph filter set — the `catalog/CatalogFileFilter.kt` shape, one
+│                       level down: `EntityFilter`/`EntityGraphFilter`, the `q`/blueprint-lookup
+│                       helpers, and the team-match predicate + `inheritedTeamMatches`, the
+│                       v1.30.0 in-memory Inherited-ownership resolver behind the `team` filter's
+│                       SQL `id IN (…)` disjunct), EntityService.kt (one row =
 │                       one entity, FK to blueprints.id; every mutation under the two-table
 │                       `blueprints`-then-`entities` lock — .claude/docs/persistence.md "Entity
 │                       targets under concurrency (V28)" — relation targets must be ACTIVE

@@ -1,5 +1,9 @@
 package ch.nokillswit
 
+import ch.nokillswit.annotations.AnnotationKeyRequest
+import ch.nokillswit.labels.LabelRequest
+import ch.nokillswit.types.EntityTypesRequest
+import ch.nokillswit.users.UserRole
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -79,6 +83,40 @@ class PayloadValidationTest {
             client.get("$CATALOG_FILES_PATH?name=a&name=b").status,
         )
     }
+
+    @Test
+    fun `a control character in a registry key or value is the sanitizer's 400, not the grammar regex's`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val admin = seededClient("payloadctl", UserRole.ADMIN)
+
+            // labels/Label.kt: sanitizedLabelRequest now runs sanitizeSingleLine over the key
+            // and every value BEFORE validateKey's grammar regex ever sees them.
+            val labelKey = admin.postJson(
+                "/api/v1/labels",
+                LabelRequest(key = "ctrlkey", values = listOf("v1"), kinds = listOf("Component")),
+            )
+            assertEquals(HttpStatusCode.BadRequest, labelKey.status)
+            assertContains(labelKey.bodyAsText(), "key must not contain control characters")
+
+            // annotations/AnnotationKey.kt: same sanitizer, same message shape.
+            val annotationKey = admin.postJson(
+                "/api/v1/annotation-keys",
+                AnnotationKeyRequest(key = "ctrlkey", kinds = listOf("Component")),
+            )
+            assertEquals(HttpStatusCode.BadRequest, annotationKey.status)
+            assertContains(annotationKey.bodyAsText(), "key must not contain control characters")
+
+            // types/EntityTypes.kt: a control character in a types entry — the kind itself
+            // ("Component") already has a seeded active dictionary, but sanitization runs
+            // before the service is ever called, so this never reaches the 409 path.
+            val typeValue = admin.postJson(
+                "/api/v1/entity-types",
+                EntityTypesRequest(kind = "Component", types = listOf("ctrltype")),
+            )
+            assertEquals(HttpStatusCode.BadRequest, typeValue.status)
+            assertContains(typeValue.bodyAsText(), "types entry must not contain control characters")
+        }
 
     @Test
     fun `a wrong method on an existing path is a 405 problem body`() = testApplication {

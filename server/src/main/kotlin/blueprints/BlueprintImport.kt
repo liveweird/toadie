@@ -3,6 +3,7 @@ package ch.nokillswit.blueprints
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.infra.importing.decodeDocument
+import ch.nokillswit.infra.importing.orderWithDeferral
 import ch.nokillswit.infra.importing.rawString
 import ch.nokillswit.plugins.isUniqueViolation
 import io.ktor.server.plugins.BadRequestException
@@ -200,8 +201,14 @@ private fun rejectOverCap(
     return survivors
 }
 
-/** Steps 6-7: Kahn ordering over batch-create targets; a stall defers the lowest remaining index's unmet targets. */
-private fun orderWithDeferral(remaining: List<Candidate>): BlueprintImportPlan {
+/**
+ * Steps 6-7: Kahn ordering over batch-create targets (the mechanical loop and its input-order
+ * tie-break live in `infra/importing/ImportBatch.kt`'s [orderWithDeferral], shared with
+ * `entities/EntityImport.kt`'s `attemptOrdering`) — a stall always DEFERS the lowest remaining
+ * index's unmet targets to a pass-2 write (never rejects, unlike the entity planner's
+ * mandatory-reference-cycle check).
+ */
+private fun orderCandidates(remaining: List<Candidate>): BlueprintImportPlan {
     val byIndex = remaining.associateBy { it.index }
     val storeIdentifiers = remaining.filter { it.existingId == null }.map { it.identifier }.toSet()
     val identifierToIndex = remaining.associate { it.identifier to it.index }
@@ -210,30 +217,13 @@ private fun orderWithDeferral(remaining: List<Candidate>): BlueprintImportPlan {
         c.index to targets.filter { it in storeIdentifiers }
     }
 
-    val satisfied = mutableSetOf<Int>()
-    val remainingIndices = remaining.map { it.index }.toMutableList()
-    val order = mutableListOf<Int>()
-    val deferredByIndex = mutableMapOf<Int, Set<String>>()
-
-    fun isSatisfied(target: String) = identifierToIndex[target]?.let { it in satisfied } ?: true
-
-    while (remainingIndices.isNotEmpty()) {
-        val ready = remainingIndices.filter { idx -> dependencies[idx].orEmpty().all(::isSatisfied) }
-        val pick = if (ready.isNotEmpty()) ready.min() else remainingIndices.min()
-        if (ready.isEmpty()) {
-            deferredByIndex[pick] = dependencies[pick].orEmpty().filterNot(::isSatisfied).toSet()
-        }
-        order += pick
-        satisfied += pick
-        remainingIndices.remove(pick)
-    }
-
-    val storeByIndex: Map<Int, BlueprintPlanVerdict.Store> = order.associateWith { idx ->
+    val batch = orderWithDeferral(remaining.map { it.index }, dependencies, identifierToIndex)
+    val storeByIndex: Map<Int, BlueprintPlanVerdict.Store> = batch.order.associateWith { idx ->
         val c = byIndex.getValue(idx)
-        val deferred = deferredByIndex[idx].orEmpty()
+        val deferred = batch.deferredByIndex[idx].orEmpty()
         BlueprintPlanVerdict.Store(c.request, c.existingId, deferred, withDeferredStripped(c.request, deferred))
     }
-    return BlueprintImportPlan(order.map { storeByIndex.getValue(it) }, order)
+    return BlueprintImportPlan(batch.order.map { storeByIndex.getValue(it) }, batch.order)
 }
 
 private fun firstSegment(path: String): String = path.substringBefore('.')
@@ -268,7 +258,7 @@ fun planBlueprintImport(documents: List<JsonObject>, registry: List<RegistryBlue
     val verdicts = arrayOfNulls<BlueprintPlanVerdict>(documents.size)
     val candidates = classifyDocuments(documents, registry, replaceExisting, verdicts)
     val remaining = fixpointTargetsAndCap(candidates, registry, verdicts)
-    val stored = orderWithDeferral(remaining)
+    val stored = orderCandidates(remaining)
     stored.order.forEachIndexed { position, idx -> verdicts[idx] = stored.verdicts[position] }
     return BlueprintImportPlan(verdicts.map { it ?: error("blueprint import document left unclassified") }, stored.order)
 }

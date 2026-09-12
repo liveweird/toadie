@@ -2,6 +2,7 @@ package ch.nokillswit.dictionaries
 
 import ch.nokillswit.catalog.MAX_ENTITY_PART_LENGTH
 import ch.nokillswit.catalog.NAMESPACE_REGEX
+import ch.nokillswit.infra.validation.requireNoDuplicates
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.Serializable
 
@@ -69,9 +70,7 @@ fun validateDictionaryUpdate(dictionary: Dictionary, request: DictionaryUpdateRe
             )
         }
     }
-    if (normalized.size != normalized.toSet().size) {
-        throw BadRequestException("Dictionary values must be unique")
-    }
+    requireNoDuplicates(normalized, "Dictionary values must be unique")
     if (dictionary.usesDefault) {
         // Exactly one DEFAULT per non-empty document (the empty document legally has none —
         // blank-namespace catalog writes then 400 until an entry is flagged).

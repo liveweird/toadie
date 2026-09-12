@@ -13,3 +13,15 @@ fun sanitizeSingleLine(value: String, field: String): String {
     }
     return trimmed
 }
+
+/**
+ * Rejects a collection carrying a duplicate, optionally folded before comparison (e.g. a
+ * case-insensitive check) — the hand-typed `size != toSet().size` check repeated across the
+ * registry validators, unified here. [message] is the caller's exact rejection text.
+ */
+fun requireNoDuplicates(values: Collection<String>, message: String, fold: (String) -> String = { it }) {
+    val folded = values.map(fold)
+    if (folded.size != folded.toSet().size) {
+        throw BadRequestException(message)
+    }
+}

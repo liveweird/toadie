@@ -1,5 +1,6 @@
 package ch.nokillswit.blueprints
 
+import ch.nokillswit.infra.validation.requireNoDuplicates
 import io.ktor.server.plugins.BadRequestException
 
 /**
@@ -101,9 +102,7 @@ private fun validateFamilyCaps(request: BlueprintRequest) {
 }
 
 private fun validateSchema(schema: BlueprintSchema) {
-    if (schema.required.toSet().size != schema.required.size) {
-        throw BadRequestException("schema.required must not contain duplicates")
-    }
+    requireNoDuplicates(schema.required, "schema.required must not contain duplicates")
     schema.required.forEach {
         if (it !in schema.properties) {
             throw BadRequestException("schema.required entry '$it' is not a declared property")

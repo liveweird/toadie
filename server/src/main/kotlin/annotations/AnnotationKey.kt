@@ -6,6 +6,7 @@ import ch.nokillswit.catalog.SERVER_WRITTEN_ANNOTATIONS
 import ch.nokillswit.catalog.canonicalizedKinds
 import ch.nokillswit.catalog.validateAllowedKinds
 import ch.nokillswit.catalog.validateKey
+import ch.nokillswit.infra.validation.sanitizeSingleLine
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.Serializable
 
@@ -40,12 +41,13 @@ const val MAX_ANNOTATION_KEYS = 200
 const val MAX_ANNOTATION_KEY_LENGTH = MAX_KEY_PREFIX_LENGTH + 1 + MAX_ENTITY_PART_LENGTH
 
 /**
- * Trims the key and normalizes kinds to canonical casing and order. The key keeps its case
- * — the grammar allows uppercase name parts, and silently rewriting what the admin typed
- * would mask a mistake (the sanitizer convention).
+ * Trims the key (via the control-character-rejecting single-line sanitizer) and normalizes
+ * kinds to canonical casing and order. The key keeps its case — the grammar allows uppercase
+ * name parts, and silently rewriting what the admin typed would mask a mistake (the sanitizer
+ * convention).
  */
 fun sanitizedAnnotationKeyRequest(request: AnnotationKeyRequest): AnnotationKeyRequest = AnnotationKeyRequest(
-    key = request.key.trim(),
+    key = sanitizeSingleLine(request.key, "key"),
     kinds = canonicalizedKinds(request.kinds),
 )
 
