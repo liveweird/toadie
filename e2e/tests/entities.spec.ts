@@ -332,6 +332,12 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(entityARow).toBeVisible();
 
+    // 5b. The free-text filter is a deep-link URL slot too (D2), like `?blueprint=`/`?team=`
+    // above — typing updates `?q=` after its debounce, while the matching row stays visible.
+    await page.getByRole("textbox", { name: "Search", exact: true }).fill(entityAIdentifier);
+    await expect(page).toHaveURL(/[?&]q=/);
+    await expect(entityARow).toBeVisible();
+
     // 6. Edit the target blueprint (API) to add a required "owner" property — entities go
     // stale, never re-validated until their next save.
     const updateResp = await page.request.put(`/api/v1/blueprints/${targetBlueprintId}`, {

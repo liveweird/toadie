@@ -148,22 +148,21 @@ export async function checkCatalogFile(req: CatalogFileRequest): Promise<Documen
 }
 
 /**
- * Classifies a save rejection for the Save-anyway flow: on a strict-save 400, asks /check
- * whether the document carries SOFT findings (waivable via `allowInvalid`). Null = not a
- * soft rejection (a structural 400, another status, or the check itself failed) — map it
- * through the ordinary error path instead.
+ * Classifies a save rejection for the Save-anyway flow: a strict-save `400`'s `findings`
+ * member (`CatalogFileInvalidProblem`), read DEFENSIVELY off the problem body via `ApiError`'s
+ * own public `body` field — the `api/entities.ts#entitySaveFindings` idiom, since `findings`
+ * is specific to this one response shape rather than a generic RFC 7807 member. Null = not a
+ * soft rejection (a structural/namespace `400` carries no `findings` member, as does any
+ * other status or a network error) — map it through the ordinary error path instead. No
+ * longer a network round trip: the rejected save's own body already carries what
+ * `POST …/check` would have reported.
  */
-export async function softRejectionFindings(
-  err: unknown,
-  req: CatalogFileRequest,
-): Promise<DocumentCheckFinding[] | null> {
+export function softRejectionFindings(err: unknown): DocumentCheckFinding[] | null {
   if (!(err instanceof ApiError) || err.status !== 400) return null;
-  try {
-    const report = await checkCatalogFile(req);
-    return report.findings.length > 0 ? report.findings : null;
-  } catch {
-    return null;
-  }
+  const body = err.body as { findings?: unknown } | null;
+  return Array.isArray(body?.findings) && body.findings.length > 0
+    ? (body.findings as DocumentCheckFinding[])
+    : null;
 }
 
 export type ImportResult =

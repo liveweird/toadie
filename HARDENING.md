@@ -511,6 +511,19 @@ port). Its containers/network/disposable database volume were removed afterwards
 regular development stack and volume were preserved. These are local follow-up results;
 the historical PR failure remains recorded above pending hosted verification of the fix.
 
+## Dependency updates
+
+Dependabot (not Renovate, decision D4) opens weekly, minor/patch-grouped pull requests per
+ecosystem — npm for `web/` and `e2e/`, Gradle for the root build, GitHub Actions, and Docker
+(`.github/dependabot.yml`); majors stay ungrouped so a breaking bump still gets its own review.
+Base images are pinned by TAG, not digest (`eclipse-temurin:21.0.11_10-jdk`/`-jre`, `node:24-alpine`
+in `Dockerfile`) — paired with Dependabot's `docker` ecosystem watching those same tags, this
+gives most of a digest pin's reproducibility without the churn of hand-editing a new digest on
+every upstream patch release; it is a separate, narrower concern from Stage 4's still-open item
+below (an immutable reference for the app's OWN released image at deploy time). Every Dependabot
+PR still runs the ordinary quality gates before merge, and a Gradle bump PR must be checked for
+regenerated lockfiles (see CLAUDE.md's "Dependency locking" line) before it can merge.
+
 ## Stage 4 — deployment
 
 - [ ] Replace ingress-nginx with Traefik; verify TLS, HSTS, redirects, forwarded-header trust,

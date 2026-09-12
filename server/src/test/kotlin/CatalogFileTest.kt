@@ -1,9 +1,11 @@
 package ch.nokillswit
 
 import ch.nokillswit.catalog.CatalogFile
+import ch.nokillswit.catalog.CatalogFileInvalidProblem
 import ch.nokillswit.catalog.CatalogFileMetadata
 import ch.nokillswit.catalog.CatalogFilePageResponse
 import ch.nokillswit.catalog.CatalogFileResponse
+import ch.nokillswit.catalog.ErrorStatus
 import ch.nokillswit.catalog.CatalogLink
 import ch.nokillswit.catalog.EntitySpec
 import ch.nokillswit.users.UserRole
@@ -602,7 +604,7 @@ class CatalogFileTest {
         val ghost = uniqueEntityName("lblghost")
         val unknown = client.postJson(CATALOG_FILES_PATH, labeled(uniqueEntityName("lku"), mapOf(ghost to "x")))
         assertEquals(HttpStatusCode.BadRequest, unknown.status)
-        assertTrue(unknown.body<ProblemDetail>().detail!!.contains("not a defined label"))
+        assertTrue(unknown.body<CatalogFileInvalidProblem>().detail!!.contains("not a defined label"))
 
         // Registered, but for another kind → 400.
         val apiOnly = uniqueLabel("lblapi", values = listOf("backend"), kinds = listOf("API"))
@@ -611,7 +613,7 @@ class CatalogFileTest {
             labeled(uniqueEntityName("lkk"), mapOf(apiOnly to "backend")),
         )
         assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
-        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("cannot be applied to kind"))
+        assertTrue(wrongKind.body<CatalogFileInvalidProblem>().detail!!.contains("cannot be applied to kind"))
 
         // Registered for the kind, but a value outside the closed list → 400.
         val lbl = uniqueLabel("lblok", values = listOf("backend", "frontend"), kinds = listOf("Component"))
@@ -620,7 +622,7 @@ class CatalogFileTest {
             labeled(uniqueEntityName("lkv"), mapOf(lbl to "database")),
         )
         assertEquals(HttpStatusCode.BadRequest, wrongValue.status)
-        assertTrue(wrongValue.body<ProblemDetail>().detail!!.contains("is not allowed for label"))
+        assertTrue(wrongValue.body<CatalogFileInvalidProblem>().detail!!.contains("is not allowed for label"))
 
         // The allowed combination stores and round-trips.
         val created = client.createCatalogFile(labeled(uniqueEntityName("lok"), mapOf(lbl to "backend")))
@@ -658,15 +660,15 @@ class CatalogFileTest {
         val ghost = uniqueTag("tagghost")
         val unknown = client.postJson(CATALOG_FILES_PATH, tagged(uniqueEntityName("tgu"), listOf(ghost)))
         assertEquals(HttpStatusCode.BadRequest, unknown.status)
-        assertTrue(unknown.body<ProblemDetail>().detail!!.contains("is not a defined tag"))
+        assertTrue(unknown.body<CatalogFileInvalidProblem>().detail!!.contains("is not a defined tag"))
 
         // Registered, but the category is for another kind → 400 naming tag AND category.
         val apiTag = uniqueTag("tagapi")
         val apiCategory = uniqueTagCategory("tagcatapi", tags = listOf(apiTag), kinds = listOf("API"))
         val wrongKind = client.postJson(CATALOG_FILES_PATH, tagged(uniqueEntityName("tgk"), listOf(apiTag)))
         assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
-        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("category '$apiCategory'"))
-        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("cannot be applied to kind"))
+        assertTrue(wrongKind.body<CatalogFileInvalidProblem>().detail!!.contains("category '$apiCategory'"))
+        assertTrue(wrongKind.body<CatalogFileInvalidProblem>().detail!!.contains("cannot be applied to kind"))
 
         // Registered for the kind → stores and round-trips.
         val okTag = uniqueTag("tagok")
@@ -707,7 +709,7 @@ class CatalogFileTest {
             componentFile(uniqueEntityName("rm"), namespace = ns, owner = uniqueEntityName("ghost-team")),
         )
         assertEquals(HttpStatusCode.BadRequest, ghostOwner.status)
-        assertTrue(ghostOwner.body<ProblemDetail>().detail!!.contains("does not resolve to a stored entity"))
+        assertTrue(ghostOwner.body<CatalogFileInvalidProblem>().detail!!.contains("does not resolve to a stored entity"))
 
         // WRONG_KIND: a stored Component named explicitly in owner (Group/User only).
         val comp = uniqueEntityName("rc")
@@ -717,7 +719,7 @@ class CatalogFileTest {
             componentFile(uniqueEntityName("rw"), namespace = ns, owner = "component:$ns/$comp"),
         )
         assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
-        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("must target Group or User"))
+        assertTrue(wrongKind.body<CatalogFileInvalidProblem>().detail!!.contains("must target Group or User"))
 
         // KIND_REQUIRED: a kind-less dependsOn entry, even when a component of that name exists.
         val kindless = client.postJson(
@@ -727,7 +729,7 @@ class CatalogFileTest {
             },
         )
         assertEquals(HttpStatusCode.BadRequest, kindless.status)
-        assertTrue(kindless.body<ProblemDetail>().detail!!.contains("needs an explicit kind"))
+        assertTrue(kindless.body<CatalogFileInvalidProblem>().detail!!.contains("needs an explicit kind"))
 
         // Violations AGGREGATE into one detail.
         val both = client.postJson(
@@ -737,8 +739,16 @@ class CatalogFileTest {
             },
         )
         assertEquals(HttpStatusCode.BadRequest, both.status)
-        val detail = both.body<ProblemDetail>().detail!!
+        val problem = both.body<CatalogFileInvalidProblem>()
+        val detail = problem.detail!!
         assertTrue(detail.contains("spec.owner") && detail.contains("spec.dependsOn"))
+        // The body carries the SAME findings /check would report — the Save-anyway modal's data
+        // (v1.31.0): the unresolved owner is MISSING, the bare dependsOn name KIND_REQUIRED,
+        // each field-named with the reference echoed.
+        val fields = problem.findings.map { it.field to it.status }
+        assertTrue(("spec.owner" to ErrorStatus.MISSING) in fields, "findings: " + problem.findings)
+        assertTrue(("spec.dependsOn" to ErrorStatus.KIND_REQUIRED) in fields, "findings: " + problem.findings)
+        assertTrue(problem.findings.all { it.reference.isNotBlank() })
 
         // A User resolves owner too (Group OR User are the allowed kinds).
         val person = uniqueEntityName("person")
@@ -758,7 +768,7 @@ class CatalogFileTest {
             },
         )
         assertEquals(HttpStatusCode.BadRequest, selfCreate.status)
-        assertTrue(selfCreate.body<ProblemDetail>().detail!!.contains("must not point at the entity itself"))
+        assertTrue(selfCreate.body<CatalogFileInvalidProblem>().detail!!.contains("must not point at the entity itself"))
     }
 
     @Test
@@ -797,7 +807,7 @@ class CatalogFileTest {
             }
             val response = client.putJson("$CATALOG_FILES_PATH/${created.id}", selfRef)
             assertEquals(HttpStatusCode.BadRequest, response.status, "self-reference '$ref' must 400")
-            assertTrue(response.body<ProblemDetail>().detail!!.contains("must not point at the entity itself"))
+            assertTrue(response.body<CatalogFileInvalidProblem>().detail!!.contains("must not point at the entity itself"))
         }
     }
 
@@ -959,7 +969,7 @@ class CatalogFileTest {
             componentFile(uniqueEntityName("typenf"), type = "never-registered-xyz"),
         )
         assertEquals(HttpStatusCode.BadRequest, bad.status)
-        assertTrue(bad.body<ProblemDetail>().detail!!.contains("not an allowed type"))
+        assertTrue(bad.body<CatalogFileInvalidProblem>().detail!!.contains("not an allowed type"))
 
         // A type appended to the kind's dictionary becomes saveable; when it is removed again,
         // the STORED file goes strict-invalid on its next save (no grandfathering).
@@ -972,7 +982,7 @@ class CatalogFileTest {
             TestEntityTypes.withKindTypes("Component", seededTypes) {
                 val update = client.putJson("$CATALOG_FILES_PATH/${created.id}", file)
                 assertEquals(HttpStatusCode.BadRequest, update.status)
-                assertTrue(update.body<ProblemDetail>().detail!!.contains("not an allowed type"))
+                assertTrue(update.body<CatalogFileInvalidProblem>().detail!!.contains("not an allowed type"))
             }
         }
     }
@@ -991,13 +1001,13 @@ class CatalogFileTest {
             annotated(uniqueEntityName("annenf"), "never-registered.example.com/${uniqueEntityName("k")}"),
         )
         assertEquals(HttpStatusCode.BadRequest, bad.status)
-        assertTrue(bad.body<ProblemDetail>().detail!!.contains("not a registered annotation key"))
+        assertTrue(bad.body<CatalogFileInvalidProblem>().detail!!.contains("not a registered annotation key"))
 
         // A registered key whose kinds exclude the file's kind is a 400 too.
         val groupOnly = uniqueAnnotationKey("anngrp", kinds = listOf("Group"))
         val wrongKind = client.postJson(CATALOG_FILES_PATH, annotated(uniqueEntityName("annwk"), groupOnly))
         assertEquals(HttpStatusCode.BadRequest, wrongKind.status)
-        assertTrue(wrongKind.body<ProblemDetail>().detail!!.contains("cannot be applied to kind"))
+        assertTrue(wrongKind.body<CatalogFileInvalidProblem>().detail!!.contains("cannot be applied to kind"))
 
         // A registered Component key works; once removed, the STORED file goes strict-invalid
         // on its next save (no grandfathering). Values stay free — no registry check on them.
@@ -1007,7 +1017,7 @@ class CatalogFileTest {
         TestAnnotationKeys.remove(allowed)
         val update = client.putJson("$CATALOG_FILES_PATH/${created.id}", file)
         assertEquals(HttpStatusCode.BadRequest, update.status)
-        assertTrue(update.body<ProblemDetail>().detail!!.contains("not a registered annotation key"))
+        assertTrue(update.body<CatalogFileInvalidProblem>().detail!!.contains("not a registered annotation key"))
     }
 
     @Test
@@ -1022,7 +1032,7 @@ class CatalogFileTest {
                 componentFile(uniqueEntityName("lcenf"), lifecycle = "never-registered-xyz"),
             )
             assertEquals(HttpStatusCode.BadRequest, bad.status)
-            assertTrue(bad.body<ProblemDetail>().detail!!.contains("not an allowed lifecycle"))
+            assertTrue(bad.body<CatalogFileInvalidProblem>().detail!!.contains("not an allowed lifecycle"))
 
             // A value appended to the dictionary becomes saveable; once removed again, the
             // STORED file goes strict-invalid on its next save (no grandfathering).
@@ -1034,7 +1044,7 @@ class CatalogFileTest {
                 TestLifecycles.remove(extra)
                 val update = client.putJson("$CATALOG_FILES_PATH/${created.id}", file)
                 assertEquals(HttpStatusCode.BadRequest, update.status)
-                assertTrue(update.body<ProblemDetail>().detail!!.contains("not an allowed lifecycle"))
+                assertTrue(update.body<CatalogFileInvalidProblem>().detail!!.contains("not an allowed lifecycle"))
             } finally {
                 TestLifecycles.remove(extra)
             }
@@ -1056,7 +1066,7 @@ class CatalogFileTest {
                     systemFile(uniqueEntityName("typeless"), type = "product"),
                 )
                 assertEquals(HttpStatusCode.BadRequest, withType.status)
-                assertTrue(withType.body<ProblemDetail>().detail!!.contains("No types are defined"))
+                assertTrue(withType.body<CatalogFileInvalidProblem>().detail!!.contains("No types are defined"))
 
                 // System's type is OPTIONAL — a type-less file saves fine without a dictionary.
                 val without = client.postJson(
@@ -1091,7 +1101,7 @@ class CatalogFileTest {
         // Strict default: ONE aggregated 400 naming every soft finding.
         val strict = client.postJson(CATALOG_FILES_PATH, file)
         assertEquals(HttpStatusCode.BadRequest, strict.status)
-        val detail = strict.body<ProblemDetail>().detail!!
+        val detail = strict.body<CatalogFileInvalidProblem>().detail!!
         assertTrue(detail.contains("does not resolve to a stored entity"))
         assertTrue(detail.contains("not a defined label"))
         assertTrue(detail.contains("not a registered annotation key"))

@@ -7,8 +7,7 @@ import ch.nokillswit.authz.ForbiddenException
 import ch.nokillswit.authz.NotFoundException
 import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.authz.UnauthorizedException
-import ch.nokillswit.entities.EntityInvalidException
-import ch.nokillswit.entities.EntityInvalidProblem
+import ch.nokillswit.infra.validation.InvalidPayloadException
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.http.ContentType
@@ -196,21 +195,20 @@ fun Application.configureErrorHandling() {
         exception<BadRequestException> { call, cause ->
             call.respondProblem(HttpStatusCode.BadRequest, clientSafeBadRequestDetail(cause))
         }
-        // Phase 4 entity ownership (.claude/docs/port-data-model.md): the aggregated strict-save
-        // 400 the entity create/replace routes throw when entityFindings() is non-empty — the
-        // ONLY 400 body that carries a `findings` extension member (EntityInvalidProblem in the
-        // OpenAPI contract), so the SPA can paint per-field errors without re-parsing `detail`.
-        exception<EntityInvalidException> { call, cause ->
+        // The one findings-bearing 400 shape (v1.31.0): every strict-save rejection that must
+        // surface its FULL list of violated checks on the RFC 7807 body — not just an
+        // aggregated `detail` string — goes through this ONE handler regardless of feature
+        // (EntityInvalidException, CatalogFileInvalidException, …). Each subtype encodes its
+        // OWN problem DTO (EntityInvalidProblem, CatalogFileInvalidProblem in the OpenAPI
+        // contract) via `problemJson`, so the SPA can paint per-field errors without re-parsing
+        // `detail` or asking a sibling `/check` endpoint.
+        exception<InvalidPayloadException> { call, cause ->
             call.respond(
                 TextContent(
-                    problemSerializer.encodeToString(
-                        EntityInvalidProblem.serializer(),
-                        EntityInvalidProblem(
-                            title = HttpStatusCode.BadRequest.description,
-                            status = HttpStatusCode.BadRequest.value,
-                            detail = cause.message,
-                            findings = cause.findings,
-                        ),
+                    cause.problemJson(
+                        title = HttpStatusCode.BadRequest.description,
+                        status = HttpStatusCode.BadRequest.value,
+                        instance = null,
                     ),
                     ProblemJson.withCharset(Charsets.UTF_8),
                     HttpStatusCode.BadRequest,

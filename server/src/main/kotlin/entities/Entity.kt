@@ -1,6 +1,8 @@
 package ch.nokillswit.entities
 
 import ch.nokillswit.infra.paging.PageResponse
+import ch.nokillswit.infra.validation.InvalidPayloadException
+import ch.nokillswit.infra.validation.invalidPayloadJson
 import ch.nokillswit.infra.validation.sanitizeSingleLine
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -62,7 +64,13 @@ data class EntityFinding(val code: String, val field: String, val message: Strin
  * OTHER 400 — shape-rule rejections stay a plain [ch.nokillswit.plugins.ProblemDetail]).
  */
 class EntityInvalidException(val findings: List<EntityFinding>) :
-    RuntimeException(findings.joinToString("; ") { "${it.field}: ${it.message}" })
+    InvalidPayloadException(findings.joinToString("; ") { "${it.field}: ${it.message}" }) {
+    override fun problemJson(title: String, status: Int, instance: String?): String =
+        invalidPayloadJson.encodeToString(
+            EntityInvalidProblem.serializer(),
+            EntityInvalidProblem(title = title, status = status, detail = message, instance = instance, findings = findings),
+        )
+}
 
 /**
  * [ch.nokillswit.plugins.ProblemDetail] plus the full [EntityFinding] list — the entity create/

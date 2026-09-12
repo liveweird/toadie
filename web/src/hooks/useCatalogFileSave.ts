@@ -65,7 +65,7 @@ export function useCatalogFileSave({
     try {
       await save(request, sourceUrl, false);
     } catch (err) {
-      const findings = await softRejectionFindings(err, request);
+      const findings = softRejectionFindings(err);
       if (findings) setWaiver({ request, sourceUrl, findings });
       else setError(mapError(err));
     } finally {

@@ -68,6 +68,12 @@ kover {
                     "ch.nokillswit.entities.EntityDocument", "ch.nokillswit.entities.EntityDocument$*",
                     "ch.nokillswit.entities.EntityFinding", "ch.nokillswit.entities.EntityFinding$*",
                     "ch.nokillswit.entities.EntityResponse", "ch.nokillswit.entities.EntityResponse$*",
+                    // The two findings-bearing RFC 7807 bodies (v1.31.0, infra/validation/
+                    // InvalidPayloadException.kt): ProblemDetail's five members plus `findings`, pure
+                    // data — the exception classes that build them and the ErrorHandling.kt handler stay
+                    // measured; only the DTOs' synthetic optional-field constructors are excluded.
+                    "ch.nokillswit.entities.EntityInvalidProblem", "ch.nokillswit.entities.EntityInvalidProblem$*",
+                    "ch.nokillswit.catalog.CatalogFileInvalidProblem", "ch.nokillswit.catalog.CatalogFileInvalidProblem$*",
                     // Phase 6 (v1.28.0, ontology import — blueprints/BlueprintImport.kt +
                     // entities/EntityImport.kt): the six request/row/response DTOs, the SAME
                     // logic-free family — every rule lives in the pure planBlueprintImport/
@@ -86,8 +92,8 @@ kover {
                 // Line-coverage floor (actual 97.72% locally, 2026-09-12 checkup re-measure — the CI runner
                 // historically lands within ~0.05pp; keep the margin below a full point in mind).
                 minBound(97)
-                // Branch-coverage floor (actual 78.28% locally, 2026-09-12 checkup re-measure, with the blueprint
-                // DTO exclusion above — the margin has eroded to ~0.3pp since the 2026-09-08 ~79.3%; the remaining
+                // Branch-coverage floor (actual 78.48% locally, 2026-09-12 v1.31.0 re-measure, with the blueprint
+                // DTO exclusion above — the margin has eroded to ~0.5pp since the 2026-09-08 ~79.3%; the remaining
                 // gap to 100% is dominated by kotlinx-serialization synthetic branches in the other @Serializable
                 // data classes. A red branch gate with no code change means re-measure, then either add the
                 // missing rows or lower deliberately in its own commit). NOTE: `check` runs only koverVerify —

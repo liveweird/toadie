@@ -1,5 +1,7 @@
 package ch.nokillswit.catalog
 
+import ch.nokillswit.infra.validation.InvalidPayloadException
+import ch.nokillswit.infra.validation.invalidPayloadJson
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.Serializable
 
@@ -83,6 +85,38 @@ data class DocumentCheckFinding(
 data class DocumentCheckReport(
     val findings: List<DocumentCheckFinding>,
 )
+
+/**
+ * [ch.nokillswit.plugins.ProblemDetail] plus the full [DocumentCheckFinding] list — the
+ * catalog-file create/replace `400` body only (`CatalogFileInvalidProblem`/`CatalogFileInvalid`
+ * in the OpenAPI contract), the SAME items `POST …/check` would report for the rejected
+ * document, so the SPA reads findings straight off the failed save (v1.31.0 — unified with the
+ * entity `EntityInvalidProblem` shape).
+ */
+@Serializable
+data class CatalogFileInvalidProblem(
+    val type: String = "about:blank",
+    val title: String,
+    val status: Int,
+    val detail: String? = null,
+    val instance: String? = null,
+    val findings: List<DocumentCheckFinding>,
+)
+
+/**
+ * Thrown by `CatalogFileService.requireOrWaive` when a strict save's soft findings are
+ * non-empty — the aggregated `400`. [detail] is the SAME joined message the previous plain
+ * `BadRequestException` carried (byte-identical wording); [findings] are the report-item shape
+ * (`SoftFinding.finding`) so the SPA gets exactly what `/check` would have answered.
+ */
+class CatalogFileInvalidException(val findings: List<DocumentCheckFinding>, detail: String) :
+    InvalidPayloadException(detail) {
+    override fun problemJson(title: String, status: Int, instance: String?): String =
+        invalidPayloadJson.encodeToString(
+            CatalogFileInvalidProblem.serializer(),
+            CatalogFileInvalidProblem(title = title, status = status, detail = message, instance = instance, findings = findings),
+        )
+}
 
 /** One error in the workspace report, tagged with its source file. */
 @Serializable

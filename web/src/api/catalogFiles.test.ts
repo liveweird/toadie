@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { jsonResponse } from "../test/http";
+import { ApiError } from "./http";
 import {
   checkCatalogFile,
   createCatalogFile,
@@ -11,6 +12,7 @@ import {
   importCatalogFiles,
   listAllCatalogFiles,
   listCatalogFiles,
+  softRejectionFindings,
   updateCatalogFile,
   type CatalogFileRequest,
 } from "./catalogFiles";
@@ -163,5 +165,42 @@ describe("catalogFiles API wrappers", () => {
     expect(JSON.parse(init.body as string)).toEqual({
       url: "https://example.com/catalog-info.yaml",
     });
+  });
+});
+
+describe("softRejectionFindings", () => {
+  test("reads the findings array off a 400 problem body — no /check round trip", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const err = new ApiError(400, {
+      title: "Bad Request",
+      status: 400,
+      findings: [{ field: "spec.owner", reference: "group:default/x", status: "MISSING" }],
+    });
+    expect(softRejectionFindings(err)).toEqual([
+      { field: "spec.owner", reference: "group:default/x", status: "MISSING" },
+    ]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  test("a 400 with no findings member answers null (a structural rejection)", () => {
+    expect(softRejectionFindings(new ApiError(400, { title: "Bad Request", status: 400 }))).toBeNull();
+  });
+
+  test("a 400 with an empty findings array answers null", () => {
+    expect(softRejectionFindings(new ApiError(400, { findings: [] }))).toBeNull();
+  });
+
+  test("a 400 with a malformed findings member answers null defensively", () => {
+    expect(softRejectionFindings(new ApiError(400, { findings: "not-an-array" }))).toBeNull();
+  });
+
+  test("a non-400 ApiError answers null", () => {
+    expect(softRejectionFindings(new ApiError(409, { findings: [{ status: "MISSING" }] }))).toBeNull();
+  });
+
+  test("a non-ApiError answers null", () => {
+    expect(softRejectionFindings(new Error("network"))).toBeNull();
   });
 });
