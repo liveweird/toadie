@@ -103,7 +103,8 @@ fun parseFetchUrl(raw: String): URI {
     return uri
 }
 
-fun requirePublicHost(host: String) {
+/** Test seam: production validates the pinned connect-time address snapshot via [requirePublicAddresses] instead. */
+internal fun requirePublicHost(host: String) {
     requirePublicAddresses(host, resolveAddresses(host))
 }
 

@@ -291,6 +291,27 @@ describe("SyncCatalogFileModal", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
+  test("exposes a named loading status while the sync state is pending", async () => {
+    let releaseState: (response: Response) => void = () => {};
+    const statePromise = new Promise<Response>((resolve) => {
+      releaseState = resolve;
+    });
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url === "/api/v1/files/1/sync" && method === "GET") return statePromise;
+      if (url === "/api/v1/files/1" && method === "GET") return Promise.resolve(jsonResponse(200, DETAIL));
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderModal();
+
+    expect(
+      await screen.findByRole("status", { name: "Loading the repo copy" }),
+    ).toBeInTheDocument();
+
+    releaseState(jsonResponse(200, SYNC_STATE));
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
   test("stays closed without a file", () => {
     renderModal(null);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

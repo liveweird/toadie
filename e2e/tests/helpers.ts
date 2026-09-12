@@ -15,7 +15,7 @@ export async function readyDialog(page: Page, title: string) {
 
 /** The seeded bootstrap admin (V3) — the compose demo leaves its password unrotated. */
 export const ADMIN = "admin@toadie.local";
-export const PASSWORD = "changeme";
+const PASSWORD = "changeme";
 export const MAILPIT = process.env.E2E_MAILPIT_URL ?? "http://localhost:8026";
 
 /**

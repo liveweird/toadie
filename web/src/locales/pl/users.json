@@ -55,7 +55,6 @@
   "toast": {
     "updated": "Zaktualizowano konto",
     "deleted": "Usunięto konto",
-    "passwordChanged": "Zmieniono hasło",
     "passwordChangedSignIn": "Zmieniono hasło. Zaloguj się ponownie na każdym urządzeniu.",
     "featuresSaved": "Zapisano flagi funkcji"
   },

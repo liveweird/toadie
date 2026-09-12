@@ -244,7 +244,6 @@
   "history": {
     "title": "History",
     "empty": "No history yet.",
-    "loadFailed": "Failed to load the history",
     "labelField": "Label “{{key}}”",
     "annotationField": "Annotation “{{key}}”"
   },

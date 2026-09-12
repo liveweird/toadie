@@ -205,7 +205,7 @@ function SyncModalBody({
           : t("catalog.sync.neverSynced")}
       </Text>
 
-      {loading && <Loader size="sm" aria-label={t("catalog.sync.loadingAria")} />}
+      {loading && <Loader size="sm" role="status" aria-label={t("catalog.sync.loadingAria")} />}
       {loadError != null && (
         <Alert color="red" variant="light" title={t("catalog.sync.loadFailed")}>
           {loadError}

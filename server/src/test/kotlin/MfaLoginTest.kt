@@ -3,22 +3,29 @@ package ch.nokillswit
 import ch.nokillswit.auth.LoginRequest
 import ch.nokillswit.auth.LoginResponse
 import ch.nokillswit.auth.MfaChallengeResponse
+import ch.nokillswit.auth.MfaChallenges
 import ch.nokillswit.auth.MfaVerifyRequest
 import ch.nokillswit.auth.hashPassword
+import ch.nokillswit.auth.issueMfaChallenge
+import ch.nokillswit.infra.mail.Mailer
 import ch.nokillswit.users.Feature
+import ch.nokillswit.users.User
 import ch.nokillswit.users.UserFeaturesUpdateRequest
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.routing.post
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -263,6 +270,56 @@ class MfaLoginTest {
             )
         } finally {
             auditEvents.detach()
+        }
+    }
+
+    @Test
+    fun `a mail-provider exception's message never reaches the audit trail or the application log`() = testApplication {
+        // configureAuthRoutes captures its Mailer once at module-load time (`val mailer =
+        // mailer()`), so overriding the MailerKey attribute after startApplication() cannot
+        // reach the real /login route (the CatalogUrlFetcherKey test-seam idiom doesn't apply
+        // here). Instead, call the worker under test — issueMfaChallenge — directly, through a
+        // throwaway test-only route, with a mailer whose send() throws an exception carrying
+        // the sign-in code in its message (the leak this test pins never happening again).
+        val leakingMessage = "SECRET-CODE-123456 leaked body"
+        val failingMailer = object : Mailer {
+            @Suppress("TooGenericExceptionThrown") // deliberate: pins the class-name-only fallback for the generic
+            // mail-provider exceptions the real transports (SmtpMailer/jakarta.mail) can throw.
+            override suspend fun send(to: String, subject: String, body: String) {
+                throw RuntimeException(leakingMessage)
+            }
+        }
+        val challenges = MfaChallenges(ttlMillis = 5 * 60_000L, maxAttempts = 5)
+        val email = uniqueEmail("mfa-leak")
+        val user = User(name = "Leak Test", email = email, passwordHash = "unused")
+        routing {
+            post("/test/mfa-send-failure") {
+                issueMfaChallenge(call, challenges, failingMailer, codeTtlMinutes = 5, userId = 1u, user = user)
+            }
+        }
+        usePostgresTestcontainer()
+        val auditEvents = LogCapture("ch.nokillswit.audit")
+        val appLog = LogCapture("io.ktor.server.Application")
+        try {
+            val response = jsonClient().post("/test/mfa-send-failure")
+            assertEquals(HttpStatusCode.OK, response.status)
+            val event = auditEvents.awaitEvent {
+                it.message == "login.mfa_send_failed" && it.hasKeyValue("email", email)
+            }
+            assertNotNull(event, "the failed delivery should be audited")
+            assertTrue(event.hasKeyValue("errorType", "RuntimeException"))
+            assertTrue(
+                event.keyValuePairs.orEmpty().none { it.key == "error" },
+                "the raw exception must never be logged, only its class name",
+            )
+            val leaked = (auditEvents.events + appLog.events).any { entry ->
+                entry.formattedMessage?.contains(leakingMessage) == true ||
+                    entry.throwableProxy?.message?.contains(leakingMessage) == true
+            }
+            assertFalse(leaked, "the exception message — which embeds the sign-in code — must never reach any log")
+        } finally {
+            auditEvents.detach()
+            appLog.detach()
         }
     }
 

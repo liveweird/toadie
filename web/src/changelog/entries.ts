@@ -17,6 +17,22 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.30.2",
+    date: "2026-09-12",
+    en: `**Checkup fixes.**
+
+- A failed MFA e-mail delivery no longer writes the mail provider's error text to the log (it could carry the message body, code included); only the error class is recorded, as the password-reset path already did.
+- The sync-from-repo and overwrite-with-YAML dialogs announce their loading spinner as a named status for assistive technology.
+- The documented audit-event catalog matches the code again (four events were missing, two were never emitted), and a test now keeps the two in sync; a second test flags translation keys nothing uses.
+- Stale measurements in comments, two unused translation keys and three orphan screenshots are cleaned up.`,
+    pl: `**Poprawki po przeglądzie.**
+
+- Nieudana wysyłka e-maila MFA nie zapisuje już w logu treści błędu dostawcy poczty (mogła zawierać treść wiadomości, w tym kod); zapisywana jest tylko klasa błędu, tak jak dotychczas przy resecie hasła.
+- Okna synchronizacji z repozytorium i nadpisywania YAML-em ogłaszają swój wskaźnik ładowania jako nazwany status dla technologii wspomagających.
+- Udokumentowany katalog zdarzeń audytowych znów zgadza się z kodem (brakowało czterech zdarzeń, dwa nigdy nie były emitowane), a test pilnuje odtąd ich zgodności; drugi test wskazuje nieużywane klucze tłumaczeń.
+- Uporządkowane nieaktualne pomiary w komentarzach, dwa nieużywane klucze tłumaczeń i trzy osierocone zrzuty ekranu.`,
+  },
+  {
     version: "1.30.1",
     date: "2026-09-12",
     en: `**Housekeeping.**

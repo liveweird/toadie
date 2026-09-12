@@ -10,6 +10,9 @@ import org.jetbrains.exposed.v1.core.QueryBuilder
 import org.jetbrains.exposed.v1.core.TextColumnType
 import org.jetbrains.exposed.v1.core.stringParam
 
+/** A single JSON path segment: identifier-only, guarding [jsonArrayContains]/[requireSimplePath]'s literal splice. */
+private val SIMPLE_JSON_PATH_SEGMENT = Regex("[A-Za-z0-9_]+")
+
 /**
  * Case- and diacritics-insensitive contains-match: renders
  * `LOWER(public.unaccent(col)) LIKE LOWER(public.unaccent(?)) ESCAPE '\'`, so "zolw" matches
@@ -62,7 +65,7 @@ internal fun containsPattern(raw: String): LikePattern {
  * literal).
  */
 fun Expression<String>.jsonArrayContains(path: List<String>, value: String): Op<Boolean> {
-    require(path.isNotEmpty() && path.all { it.matches(Regex("[A-Za-z0-9_]+")) }) {
+    require(path.isNotEmpty() && path.all { it.matches(SIMPLE_JSON_PATH_SEGMENT) }) {
         "jsonArrayContains path segments must be simple identifiers"
     }
     return object : Op<Boolean>() {
@@ -158,7 +161,7 @@ fun Expression<String?>.jsonStringOrArrayContainsFolded(value: String): Op<Boole
 }
 
 private fun requireSimplePath(path: List<String>) {
-    require(path.isNotEmpty() && path.all { it.matches(Regex("[A-Za-z0-9_]+")) }) {
+    require(path.isNotEmpty() && path.all { it.matches(SIMPLE_JSON_PATH_SEGMENT) }) {
         "JSON path segments must be simple identifiers"
     }
 }
