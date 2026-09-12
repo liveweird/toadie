@@ -40,6 +40,8 @@ internal fun passwordResetEmailBody(name: String, token: String, appUrl: String,
     }
 
 /** Uniform request latency: lookup and delivery run asynchronously; passwords are never touched. */
+// Mail-send boundary: any provider failure is classified and audited without its text (security.md), cancellation is rethrown above.
+@Suppress("TooGenericExceptionCaught")
 internal suspend fun processPasswordReset(
     app: Application,
     users: UserService,
@@ -73,6 +75,8 @@ internal suspend fun processPasswordReset(
 }
 
 /** A notification failure cannot roll back a confirmed password change or turn its 204 into 500. */
+// Mail-send boundary: any provider failure is classified and audited without its text (security.md), cancellation is rethrown above.
+@Suppress("TooGenericExceptionCaught")
 internal suspend fun notifyPasswordReset(app: Application, users: UserService, mailer: Mailer, userId: UInt) {
     try {
         val user = users.read(userId) ?: return

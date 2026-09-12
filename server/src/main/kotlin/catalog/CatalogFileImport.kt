@@ -165,6 +165,8 @@ private suspend fun checkOne(
     return storedRow(rowBase(index, stored), findings, fileId = null)
 }
 
+// Per-document isolation: one row's unexpected failure is reported as ERROR and never fails siblings (report & skip).
+@Suppress("TooGenericExceptionCaught")
 private suspend fun CatalogFileService.importOne(
     index: Int,
     raw: CatalogFile,
