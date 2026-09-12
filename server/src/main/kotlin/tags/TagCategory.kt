@@ -4,6 +4,7 @@ import ch.nokillswit.catalog.MAX_ENTITY_PART_LENGTH
 import ch.nokillswit.catalog.canonicalizedKinds
 import ch.nokillswit.catalog.validateAllowedKinds
 import ch.nokillswit.catalog.validateTagValue
+import ch.nokillswit.infra.validation.requireNoDuplicates
 import ch.nokillswit.infra.validation.sanitizeSingleLine
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.Serializable
@@ -63,9 +64,6 @@ fun validateTagCategoryRequest(request: TagCategoryRequest) {
     }
     request.tags.forEach { validateTagValue(it, "tags entry '$it'") }
     // Case-folded duplicate detection (defensive — the grammar is lowercase-only already).
-    val folded = request.tags.map { it.lowercase() }
-    if (folded.size != folded.toSet().size) {
-        throw BadRequestException("tags must not contain duplicates")
-    }
+    requireNoDuplicates(request.tags, "tags must not contain duplicates", String::lowercase)
     validateAllowedKinds(request.kinds)
 }

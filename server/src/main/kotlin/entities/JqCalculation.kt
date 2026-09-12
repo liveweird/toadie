@@ -173,6 +173,8 @@ class JqEvaluator internal constructor(
      * caller-supplied label (e.g. `"<blueprint>.<propertyId>"`) for the DEBUG failure log — [input]
      * itself is never logged (`.claude/docs/security.md`).
      */
+    // jq evaluation boundary: compile/runtime/type failures answer absent, logged without input document.
+    @Suppress("TooGenericExceptionCaught")
     fun evaluate(expression: String, input: JsonElement, context: String = ""): JsonElement? = try {
         val query = compileCached(expression, context)
         if (query == null) {

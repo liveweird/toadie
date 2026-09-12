@@ -21,6 +21,9 @@ import io.ktor.server.testing.testApplication
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * Per-user feature flags (V12) end to end: the PUT /users/{id}/features matrix, the
@@ -153,5 +156,34 @@ class FeatureFlagsTest {
                 parameter("featureEnabled", "true")
             }.status,
         )
+    }
+
+    @Test
+    fun `overlapping feature PUTs never conflict - one writer's set wins, never a 409`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("ff-race", role = ch.nokillswit.users.UserRole.ADMIN)
+        val targetId = TestUsers.seed(email = uniqueEmail("ff-race-target"), password = "pw-123456789")
+
+        // Two overlapping wholesale-replace PUTs for the SAME user under READ COMMITTED —
+        // {MFA} vs {} — used to race a delete against an insert on the (user_id, feature) PK
+        // and surface as an undeclared generic 409 (setDisabledFeatures used to
+        // deleteWhere-then-insert). Upserting row-by-row instead makes every response 204,
+        // and the final state is always exactly one of the two writers' legal sets.
+        repeat(10) {
+            lateinit var withMfaDisabled: HttpStatusCode
+            lateinit var withEverythingEnabled: HttpStatusCode
+            coroutineScope {
+                launch { withMfaDisabled = admin.setFlags(targetId, Feature.MFA).status }
+                launch { withEverythingEnabled = admin.setFlags(targetId).status }
+            }
+            assertEquals(HttpStatusCode.NoContent, withMfaDisabled)
+            assertEquals(HttpStatusCode.NoContent, withEverythingEnabled)
+
+            val disabled = admin.get("/api/v1/users/$targetId").body<UserResponse>().disabledFeatures
+            assertTrue(
+                disabled == listOf(Feature.MFA) || disabled == emptyList<Feature>(),
+                "expected one of the two writers' sets, got $disabled",
+            )
+        }
     }
 }

@@ -6,6 +6,8 @@ import ch.nokillswit.catalog.canonicalizedKinds
 import ch.nokillswit.catalog.validateAllowedKinds
 import ch.nokillswit.catalog.validateKey
 import ch.nokillswit.catalog.validateNamePart
+import ch.nokillswit.infra.validation.requireNoDuplicates
+import ch.nokillswit.infra.validation.sanitizeSingleLine
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.Serializable
 
@@ -39,14 +41,15 @@ const val MAX_LABEL_VALUES = 100
 const val MAX_LABEL_KEY_LENGTH = MAX_KEY_PREFIX_LENGTH + 1 + MAX_ENTITY_PART_LENGTH
 
 /**
- * Trims the payload's scalars and normalizes a case-variant kind to its canonical casing
- * (`api` → `API`) plus the canonical [SUPPORTED_KINDS] order. Keys and values keep their
- * case — the grammar allows uppercase name parts, and silently rewriting what the admin
- * typed would mask a mistake (the sanitizer convention).
+ * Trims the payload's scalars (via the control-character-rejecting single-line sanitizer) and
+ * normalizes a case-variant kind to its canonical casing (`api` → `API`) plus the canonical
+ * [SUPPORTED_KINDS] order. Keys and values keep their case — the grammar allows uppercase
+ * name parts, and silently rewriting what the admin typed would mask a mistake (the sanitizer
+ * convention).
  */
 fun sanitizedLabelRequest(request: LabelRequest): LabelRequest = LabelRequest(
-    key = request.key.trim(),
-    values = request.values.map { it.trim() },
+    key = sanitizeSingleLine(request.key, "key"),
+    values = request.values.map { sanitizeSingleLine(it, "values entry") },
     kinds = canonicalizedKinds(request.kinds),
 )
 
@@ -59,10 +62,7 @@ fun validateLabelRequest(request: LabelRequest) {
     }
     request.values.forEach { validateNamePart(it, "values entry '$it'") }
     // Case-folded duplicate detection: "Backend" next to "backend" would be a confusing twin.
-    val foldedValues = request.values.map { it.lowercase() }
-    if (foldedValues.size != foldedValues.toSet().size) {
-        throw BadRequestException("values must not contain duplicates")
-    }
+    requireNoDuplicates(request.values, "values must not contain duplicates", String::lowercase)
     // No duplicate check needed: the sanitizer's canonical-order rebuild already dedupes
     // supported kinds (and duplicate UNKNOWN kinds die inside validateAllowedKinds).
     validateAllowedKinds(request.kinds)

@@ -1,9 +1,9 @@
 package ch.nokillswit.tags
 
 import ch.nokillswit.authz.ConflictException
+import ch.nokillswit.infra.db.lockingTransaction
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
-import io.r2dbc.spi.IsolationLevel
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.json.Json
@@ -22,6 +22,9 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
 
 val TagCategoryServiceKey = AttributeKey<TagCategoryService>("TagCategoryService")
+
+/** The V11 lock this service's every mutation runs under (`.claude/docs/persistence.md`). */
+private const val LOCK_TAG_CATEGORIES_SHARE_ROW_EXCLUSIVE = "LOCK TABLE tag_categories IN SHARE ROW EXCLUSIVE MODE"
 
 class TagCategoryService(private val database: R2dbcDatabase) {
     object TagCategories : UIntIdTable("tag_categories") {
@@ -43,14 +46,10 @@ class TagCategoryService(private val database: R2dbcDatabase) {
      * Serializes the registry's service-enforced ownership check across every application
      * instance sharing this database. The table lock also covers an empty registry, unlike
      * locking the currently active rows, and ordinary SELECTs remain available while a writer
-     * holds it. READ COMMITTED is explicit so a writer that waited for the lock sees the prior
-     * writer's committed tag document before checking ownership.
+     * holds it — via the shared [lockingTransaction] helper (`infra/db/Locking.kt`).
      */
     private suspend fun <T> writeTransaction(block: suspend R2dbcTransaction.() -> T): T =
-        suspendTransaction(database, transactionIsolation = IsolationLevel.READ_COMMITTED) {
-            exec("LOCK TABLE tag_categories IN SHARE ROW EXCLUSIVE MODE")
-            block()
-        }
+        lockingTransaction(database, LOCK_TAG_CATEGORIES_SHARE_ROW_EXCLUSIVE, block = block)
 
     private fun active(): Op<Boolean> = TagCategories.markedAsDeleted eq false
 

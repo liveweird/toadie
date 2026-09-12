@@ -144,7 +144,10 @@ class UserService(private val database: R2dbcDatabase) {
     /**
      * Wholesale-replace the user's disabled-feature set (V12). Returns 1, or 0 when the id is
      * unknown or soft-deleted (the route 404s). Idempotent — a same-set re-PUT is a no-op
-     * replace, not a transition.
+     * replace, not a transition. Upserted row-by-row (rather than delete-then-insert) so two
+     * overlapping PUTs for the same user under READ COMMITTED never race a delete against an
+     * insert on the `(user_id, feature)` PK into an undeclared generic `23505` → 409 — one
+     * writer's set simply wins, matching the wholesale-replace contract.
      */
     suspend fun setDisabledFeatures(id: UInt, features: Set<Feature>): Int = suspendTransaction(database) {
         val exists = Users.select(Users.id)
@@ -152,12 +155,17 @@ class UserService(private val database: R2dbcDatabase) {
             .toList()
             .isNotEmpty()
         if (!exists) return@suspendTransaction 0
-        UserDisabledFeatures.deleteWhere { UserDisabledFeatures.userId eq id }
         features.forEach { f ->
-            UserDisabledFeatures.insert {
+            UserDisabledFeatures.upsert {
                 it[userId] = id
                 it[feature] = f.name
             }
+        }
+        val keep = features.map { it.name }
+        if (keep.isEmpty()) {
+            UserDisabledFeatures.deleteWhere { UserDisabledFeatures.userId eq id }
+        } else {
+            UserDisabledFeatures.deleteWhere { (UserDisabledFeatures.userId eq id) and (UserDisabledFeatures.feature notInList keep) }
         }
         1
     }

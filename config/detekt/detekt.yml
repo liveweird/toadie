@@ -5,11 +5,15 @@
 complexity:
   # Route registration is declarative by architecture — each feature's configureXxxRoutes lists
   # every endpoint in one function (see "Package layout" in CLAUDE.md), so *Routes.kt files are
-  # exempt from method-size/complexity rules; services and helpers are not. Tests are exempt
-  # from LongMethod: scenario tests are named sentences and read top-to-bottom.
+  # exempt from method-size/complexity rules; services and helpers are not. Plugin installers
+  # (plugins/*.kt — Http, ErrorHandling, Security) are declarative in the same way: one
+  # configureXxx listing every `install {}` block. Tests are exempt from LongMethod: scenario
+  # tests are named sentences and read top-to-bottom. Threshold 80 (detekt default 60) — the
+  # longest remaining service functions (EntityService.graph, CatalogFileService.loadRegistrySnapshot)
+  # sit in the 60s and are one cohesive read each.
   LongMethod:
-    excludes: ['**/src/test/**', '**/*Routes.kt']
-    threshold: 100
+    excludes: ['**/src/test/**', '**/*Routes.kt', '**/plugins/*.kt']
+    threshold: 80
   CyclomaticComplexMethod:
     excludes: ['**/*Routes.kt']
     threshold: 25
@@ -41,15 +45,18 @@ complexity:
     excludes: ['**/src/test/**']
 
 exceptions:
-  # Generic catches are the documented best-effort boundaries — the import loop's per-document
-  # isolation (report & skip), the URL fetch's upstream classification, the mail-send
-  # boundaries (auth/MfaEmail.kt, auth/PasswordResetEmail.kt — a delivery failure must never
-  # crash the request that triggered it), and the jq evaluation boundary
-  # (entities/JqCalculation.kt — an admin-authored expression's runtime failure must answer
-  # absent, not propagate) — and every site rethrows cancellation and logs or classifies the
-  # exception rather than swallowing it.
+  # ACTIVE (the detekt default): a generic catch is allowed only at the documented best-effort
+  # boundaries, each carrying a per-site @Suppress with a one-line justification — the import
+  # loops' per-document isolation (catalog/CatalogFileImport.kt, blueprints/BlueprintImport.kt,
+  # entities/EntityImport.kt: report & skip), the URL fetch's upstream classification
+  # (catalog/UrlFetch.kt: every failure a safe 502), the mail-send boundaries (auth/MfaEmail.kt,
+  # auth/PasswordResetEmail.kt: a delivery failure must never crash the request), and the jq
+  # evaluation boundary (entities/JqCalculation.kt: an admin-authored expression's failure
+  # answers absent). Every such site rethrows cancellation first and logs or classifies the
+  # exception rather than swallowing it. A NEW generic catch is a finding until it earns its
+  # own justified suppression — the rule stays on so the list cannot grow silently.
   TooGenericExceptionCaught:
-    active: false
+    active: true
 
 naming:
   # Feature files pair the typed-routing Resource declaration with the configureXxx extension

@@ -239,6 +239,9 @@ private class FetchOperation(
         call.get()?.cancel()
     }
 
+    // Generic-catch boundary: this catch only cancels the in-flight call before rethrowing unchanged;
+    // the caller classifies every transport failure into a safe 502 and lets cancellation through.
+    @Suppress("TooGenericExceptionCaught")
     fun execute(): FetchedContent {
         val target = targetResolver(rawUrl)
         failIfCancelled()

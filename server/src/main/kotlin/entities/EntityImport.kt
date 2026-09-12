@@ -8,6 +8,7 @@ import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.infra.importing.decodeDocument
+import ch.nokillswit.infra.importing.orderWithDeferral
 import ch.nokillswit.infra.importing.rawString
 import ch.nokillswit.plugins.isUniqueViolation
 import io.ktor.server.plugins.BadRequestException
@@ -299,6 +300,14 @@ private data class OrderingAttempt(
     val mandatoryViolation: Pair<Int, String>?,
 )
 
+/**
+ * The mechanical loop and its input-order tie-break live in `infra/importing/ImportBatch.kt`'s
+ * [orderWithDeferral], shared with `blueprints/BlueprintImport.kt`'s `orderCandidates`; this
+ * function only collects the entity-shaped edges (relations/`team`/format-properties, via
+ * [siblingReferences]) and supplies the ONE policy difference — a forced pick whose deferred set
+ * would drop a MANDATORY reference ([mandatoryFieldNaming]) stops the sort outright instead of
+ * deferring it to pass 2.
+ */
 private fun attemptOrdering(remaining: List<Candidate>): OrderingAttempt {
     val byIndex = remaining.associateBy { it.index }
     val createKeysByBlueprint: Map<String, Set<String>> =
@@ -309,34 +318,10 @@ private fun attemptOrdering(remaining: List<Candidate>): OrderingAttempt {
         c.index to refs.filter { (bp, id) -> createKeysByBlueprint[bp]?.contains(id) == true }
     }
 
-    val satisfied = mutableSetOf<Int>()
-    val remainingIndices = remaining.map { it.index }.toMutableList()
-    val order = mutableListOf<Int>()
-    val deferredByIndex = mutableMapOf<Int, Set<Pair<String, String>>>()
-
-    fun isSatisfied(ref: Pair<String, String>) = indexByKey[ref]?.let { it in satisfied } ?: true
-
-    while (remainingIndices.isNotEmpty()) {
-        val ready = remainingIndices.filter { idx -> dependencies[idx].orEmpty().all(::isSatisfied) }
-        if (ready.isNotEmpty()) {
-            val pick = ready.min()
-            order += pick
-            satisfied += pick
-            remainingIndices.remove(pick)
-            continue
-        }
-        val pick = remainingIndices.min()
-        val deferred = dependencies[pick].orEmpty().filterNot(::isSatisfied).toSet()
-        val violation = mandatoryFieldNaming(byIndex.getValue(pick), deferred)
-        if (violation != null) {
-            return OrderingAttempt(order, deferredByIndex, pick to violation)
-        }
-        deferredByIndex[pick] = deferred
-        order += pick
-        satisfied += pick
-        remainingIndices.remove(pick)
+    val batch = orderWithDeferral(remaining.map { it.index }, dependencies, indexByKey) { idx, deferred ->
+        mandatoryFieldNaming(byIndex.getValue(idx), deferred)
     }
-    return OrderingAttempt(order, deferredByIndex, mandatoryViolation = null)
+    return OrderingAttempt(batch.order, batch.deferredByIndex, batch.stoppedAt)
 }
 
 /** Drops every relation/team/format-property value naming a [deferred] sibling — the pass-1 write's temporary shape. */
@@ -457,6 +442,8 @@ suspend fun EntityService.import(documents: List<JsonObject>, callerId: UInt, re
     return rows.map { it ?: error("entity import row left unset") }
 }
 
+// Per-document isolation: one row's unexpected failure is reported as ERROR and never fails siblings (report & skip).
+@Suppress("TooGenericExceptionCaught")
 private suspend fun EntityService.writeEntityRow(
     index: Int,
     verdict: EntityPlanVerdict.Store,

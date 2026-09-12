@@ -40,8 +40,11 @@ transaction-scoped `SHARE ROW EXCLUSIVE` lock on `blueprints` before the first r
 create/update/delete: every relation/aggregation `target` inside a definition is a byte-exact
 blueprint identifier held in JSON, not a foreign key, so the "target exists", "rename cascades
 into the referrers" and "a targeted blueprint cannot be deleted" rules are cooperating-writer
-rules over ≤200 rows loaded once under the lock. The same caveats apply verbatim: direct SQL
-writers bypass it, readers never wait, cancellation may land only after the lock releases.
+rules over ≤200 rows loaded once under the lock. `infra/db/Locking.kt`'s `lockingTransaction`
+is the shared helper behind this lock (and `TagCategoryService`'s and `EntityService`'s below) —
+one `LOCK TABLE …` per statement, in the order given, inside a READ COMMITTED transaction. The
+same caveats apply verbatim: direct SQL writers bypass it, readers never wait, cancellation may
+land only after the lock releases.
 
 **Entity targets under concurrency (V28).** Entity create/update/delete run under a TWO-table
 lock protocol, in one fixed global order (deadlock-free): `LOCK TABLE blueprints IN SHARE MODE`
@@ -70,9 +73,12 @@ The lock-mode compatibility and transaction lifetime follow the
 the blueprint has `ownership: { type: Inherited }` (the computed `team` is never stored) and
 MUST carry a value when Direct/absent (the stored `team` field). The rule is enforced during
 entity write validation. This storage rule is unchanged by the v1.30.0 read-side `team` filter:
-`EntityService.inheritedTeamMatches` resolves Inherited teams in memory over the SAME snapshot
-`loadSnapshot` builds, costing one extra bounded query per team-filtered request over the
-in-scope Inherited blueprints' entities, and none at all when no Inherited blueprint is in scope.
+`entities/EntityFilter.kt`'s `inheritedTeamMatches` (an extension on `EntityService`) resolves
+Inherited teams in memory over the SAME snapshot machinery every other read builds, reached
+through `EntityService.rowLookupFor` — the one narrow internal accessor into the otherwise-private
+`loadSnapshot`/`EntitySnapshot` — costing one extra bounded query per team-filtered request over
+the in-scope Inherited blueprints' entities, and none at all when no Inherited blueprint is in
+scope.
 
 **Computed-property evaluation and the widened snapshot (phase 5, v1.27.0).**
 `EntityService.loadSnapshot(definitions, blueprintsByIdentifier, computed)` widens the same

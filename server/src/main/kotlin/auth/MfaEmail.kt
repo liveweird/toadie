@@ -50,6 +50,8 @@ internal fun mfaEmailBody(name: String, code: String, ttlMinutes: Long, language
  * itself (503 fail-closed on a mail-less deployment, else the challenge); the login
  * handler returns right after calling it.
  */
+// Mail-send boundary: any provider failure is classified and audited without its text (security.md), cancellation is rethrown above.
+@Suppress("TooGenericExceptionCaught")
 internal suspend fun issueMfaChallenge(
     call: ApplicationCall,
     challenges: MfaChallenges,

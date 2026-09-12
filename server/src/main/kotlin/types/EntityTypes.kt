@@ -3,6 +3,8 @@ package ch.nokillswit.types
 import ch.nokillswit.catalog.SUPPORTED_KINDS
 import ch.nokillswit.catalog.TYPE_BEARING_KINDS
 import ch.nokillswit.catalog.validateSingleWord
+import ch.nokillswit.infra.validation.requireNoDuplicates
+import ch.nokillswit.infra.validation.sanitizeSingleLine
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.Serializable
 
@@ -37,16 +39,18 @@ data class EntityTypesRequest(
 const val MAX_KIND_TYPES = 100
 
 /**
- * Trims the payload's scalars and normalizes the kind to canonical casing (an unknown kind
- * passes through trimmed for [validateEntityTypesRequest] to reject by name). Types keep
- * their exact (trimmed) form — silently rewriting what the admin typed would mask a mistake
- * (the sanitizer convention).
+ * Trims the payload's scalars (via the control-character-rejecting single-line sanitizer) and
+ * normalizes the kind to canonical casing (an unknown kind passes through trimmed for
+ * [validateEntityTypesRequest] to reject by name). Types keep their exact (trimmed) form —
+ * silently rewriting what the admin typed would mask a mistake (the sanitizer convention).
  */
-fun sanitizedEntityTypesRequest(request: EntityTypesRequest): EntityTypesRequest = EntityTypesRequest(
-    kind = SUPPORTED_KINDS.firstOrNull { it.equals(request.kind.trim(), ignoreCase = true) }
-        ?: request.kind.trim(),
-    types = request.types.map { it.trim() },
-)
+fun sanitizedEntityTypesRequest(request: EntityTypesRequest): EntityTypesRequest {
+    val kind = sanitizeSingleLine(request.kind, "kind")
+    return EntityTypesRequest(
+        kind = SUPPORTED_KINDS.firstOrNull { it.equals(kind, ignoreCase = true) } ?: kind,
+        types = request.types.map { sanitizeSingleLine(it, "types entry") },
+    )
+}
 
 /** The registry's validation rules — enforced by the route AND re-checked by the service. */
 fun validateEntityTypesRequest(request: EntityTypesRequest) {
@@ -61,8 +65,5 @@ fun validateEntityTypesRequest(request: EntityTypesRequest) {
     }
     request.types.forEach { validateSingleWord(it, "types entry '$it'") }
     // Case-folded duplicate detection — "Service" beside "service" would be a trap.
-    val folded = request.types.map { it.lowercase() }
-    if (folded.size != folded.toSet().size) {
-        throw BadRequestException("types must not contain duplicates")
-    }
+    requireNoDuplicates(request.types, "types must not contain duplicates", String::lowercase)
 }
