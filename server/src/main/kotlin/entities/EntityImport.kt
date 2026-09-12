@@ -442,6 +442,8 @@ suspend fun EntityService.import(documents: List<JsonObject>, callerId: UInt, re
     return rows.map { it ?: error("entity import row left unset") }
 }
 
+// Per-document isolation: one row's unexpected failure is reported as ERROR and never fails siblings (report & skip).
+@Suppress("TooGenericExceptionCaught")
 private suspend fun EntityService.writeEntityRow(
     index: Int,
     verdict: EntityPlanVerdict.Store,

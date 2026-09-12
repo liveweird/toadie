@@ -295,6 +295,8 @@ suspend fun BlueprintService.import(documents: List<JsonObject>, callerId: UInt,
     return rows.map { it ?: error("blueprint import row left unset") }
 }
 
+// Per-document isolation: one row's unexpected failure is reported as ERROR and never fails siblings (report & skip).
+@Suppress("TooGenericExceptionCaught")
 private suspend fun BlueprintService.writeBlueprintRow(
     index: Int,
     verdict: BlueprintPlanVerdict.Store,
