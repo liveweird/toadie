@@ -19,7 +19,7 @@
         "description": "The Languages tag category.",
         "items": {
           "type": "string",
-          "enum": ["java", "python", "php", "javascript", "typescript"],
+          "enum": ["java", "python", "php", "javascript", "typescript", "kotlin"],
           "enumColors": { "java": "gold", "python": "blue", "php": "purple", "javascript": "yellow", "typescript": "paleBlue" }
         },
         "uniqueItems": true
