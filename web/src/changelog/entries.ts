@@ -23,12 +23,12 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
 
 - \`kotlin\` joins the seeded Languages tag category (a new migration appends it to an existing, active category and never resurrects a removed one); the sample \`service\`/\`library\` blueprints and the Toadie sample service follow.
 - The sample catalog README's graph counts are corrected.
-- Three intermittent test failures are made deterministic: the graph-layout hook test, the catalog editor's Type/Lifecycle pick in the browser journeys, and the outbound-fetch cancellation case.`,
+- Five intermittent test failures are made deterministic: the graph-layout hook test, the overwrite-with-YAML modal test, the catalog editor's Type/Lifecycle pick in the browser journeys, the render journey's budget and cleanup, and the outbound-fetch cancellation case.`,
     pl: `**Porządki.**
 
 - \`kotlin\` dołącza do wbudowanej kategorii tagów Languages (nowa migracja dopisuje go do istniejącej, aktywnej kategorii i nigdy nie przywraca usuniętej); przykładowe schematy \`service\`/\`library\` i przykładowa usługa Toadie idą w ślad.
 - Poprawione liczby grafu w README przykładowego katalogu.
-- Trzy niestabilne testy są teraz deterministyczne: test hooka układu grafu, wybór Typu/Cyklu życia w edytorze katalogu w scenariuszach przeglądarkowych oraz przypadek anulowania pobierania z adresu URL.`,
+- Pięć niestabilnych testów jest teraz deterministycznych: test hooka układu grafu, test okna nadpisywania YAML-em, wybór Typu/Cyklu życia w edytorze katalogu w scenariuszach przeglądarkowych, budżet i porządkowanie scenariusza renderowania grafu oraz przypadek anulowania pobierania z adresu URL.`,
   },
   {
     version: "1.30.0",
