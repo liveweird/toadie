@@ -426,4 +426,53 @@ class DictionaryTest {
             val after = admin.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items
             assertTrue(after.none { it.isDefault })
         }
+
+    @Test
+    fun `the hierarchies dictionary is seeded with composition and readable by any authenticated user`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("hierseed")
+            val entries = client.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+            assertTrue(entries.any { it.value == "composition" }, "V33 must seed the composition hierarchy")
+            assertTrue(entries.none { it.isDefault }, "hierarchies have no default entry")
+        }
+
+    @Test
+    fun `the hierarchies dictionary is ADMIN-only for writes`() = testApplication {
+        usePostgresTestcontainer()
+        val user = seededClient("hierauth")
+        val current = user.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+        val payload = DictionaryUpdateRequest(current.map { DictionaryEntryInput(it.id, it.value) })
+        assertEquals(HttpStatusCode.Forbidden, user.putJson("/api/v1/dictionaries/hierarchies", payload).status)
+    }
+
+    @Test
+    fun `a default flag on the hierarchies dictionary is 400`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("hierflag", UserRole.ADMIN)
+        val current = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+        val flagged = DictionaryUpdateRequest(
+            current.mapIndexed { i, e -> DictionaryEntryInput(e.id, e.value, isDefault = i == 0) },
+        )
+        val response = admin.putJson("/api/v1/dictionaries/hierarchies", flagged)
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val after = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+        assertTrue(after.none { it.isDefault })
+    }
+
+    @Test
+    fun `the hierarchies document round-trips appends and removals without default flags`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("hiercrud", UserRole.ADMIN)
+        val value = ns("test-hier").lowercase()
+        TestHierarchies.ensure(value)
+        try {
+            val listed = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+            assertTrue(listed.any { it.value == value })
+        } finally {
+            TestHierarchies.remove(value)
+        }
+        val after = admin.get("/api/v1/dictionaries/hierarchies").body<DictionaryEntryList>().items
+        assertTrue(after.none { it.value == value })
+    }
 }

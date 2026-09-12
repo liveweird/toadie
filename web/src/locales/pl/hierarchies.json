@@ -1,0 +1,29 @@
+{
+  "title": "Hierarchie",
+  "intro": "Równoległe hierarchie encji (kompozycja, własność, centrum kosztów…), na jedną z własnych relacji pojedynczych może wskazywać schemat blueprintu. Pierwsza pozycja jest tą, na której otwierają się strony Hierarchii encji i Grafu encji. Administratorzy i administratorki zarządzają listą i jej kolejnością.",
+  "empty": "Nie zdefiniowano jeszcze hierarchii",
+  "loadFailed": "Nie udało się wczytać hierarchii",
+  "addEntry": "Dodaj hierarchię",
+  "entryAria": "Hierarchia {{position}}",
+  "moveUp": "Przesuń hierarchię {{position}} w górę",
+  "moveDown": "Przesuń hierarchię {{position}} w dół",
+  "removeEntry": "Usuń hierarchię {{position}}",
+  "valueRequired": "Hierarchia jest wymagana",
+  "valueInvalid": "Musi mieć 1–63 małe znaki alfanumeryczne z pojedynczymi myślnikami",
+  "valueDuplicate": "Ta hierarchia jest już na liście",
+  "discardTitle": "Odrzucić zmiany?",
+  "discardMessage": "Niezapisane zmiany hierarchii zostaną utracone.",
+  "keepEditing": "Kontynuuj edycję",
+  "discard": "Odrzuć",
+  "savedButStale": "Zapisano — ale ponowne wczytanie edytora nie powiodło się. Przeładuj stronę przed dalszymi zmianami.",
+  "toast": {
+    "saved": "Hierarchie zapisane"
+  },
+  "error": {
+    "permission": "Tylko administratorzy i administratorki mogą edytować hierarchie",
+    "conflict": "Konflikt zapisu — zamiana dwóch wartości wymaga dwóch zapisów; zmień nazwę przez wartość tymczasową",
+    "validation": "Co najmniej jedna wartość jest nieprawidłowa",
+    "saveFailedStatus": "Zapis nie powiódł się ({{status}})",
+    "saveFailed": "Zapis nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
+  }
+}

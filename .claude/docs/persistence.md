@@ -128,7 +128,7 @@ concurrent-change residual, not a bug in the ordering. `planBlueprintImport`/`pl
 themselves touch no table at all: pure functions over the snapshot and the batch, so the two
 planner test files run without Docker.
 
-Current migrations are `V1`–`V32` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V33` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -277,6 +277,15 @@ same `? 'kotlin'` containment check on `Languages` itself. `tags` is read back e
 through `Json.decodeFromString` (`TagCategoryService.kt`) and never string-compared, so
 PostgreSQL's `jsonb` round-trip re-serializing the array with spaces is immaterial. Migration
 checksums, including V32, are pinned in `MigrationChecksumTest`.
+
+- `V33__seed_hierarchies` — seeds the new `HIERARCHY` dictionary (V7's table, a third `Dictionary`
+  enum value) with the single value `composition` (position 0, the V8/V16 conflict idiom). NO
+  default flag — `Dictionary.usesDefault` is false for HIERARCHY, and `validateDictionaryUpdate`
+  rejects flagged items on it (the LIFECYCLE branch). `composition` is the one entity hierarchy
+  the pre-1.32 single blueprint `hierarchyRelation` always described; a later migration backfills
+  every existing `hierarchyRelation` pointer into this seeded entry once `hierarchyRelations`
+  (plural, next release) exists. Purely additive today — nothing yet validates a blueprint's
+  `hierarchyRelations` keys against this dictionary.
 
 ### Soft delete (convention)
 

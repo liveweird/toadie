@@ -1,0 +1,29 @@
+{
+  "title": "Hierarchies",
+  "intro": "The parallel entity hierarchies (composition, ownership, cost centre…) a blueprint may point one of its single relations at. The first entry is the one the Entity hierarchy and Entity graph pages open on. Administrators curate the list and its order.",
+  "empty": "No hierarchies defined yet",
+  "loadFailed": "Could not load the hierarchies",
+  "addEntry": "Add hierarchy",
+  "entryAria": "Hierarchy {{position}}",
+  "moveUp": "Move hierarchy {{position}} up",
+  "moveDown": "Move hierarchy {{position}} down",
+  "removeEntry": "Remove hierarchy {{position}}",
+  "valueRequired": "Hierarchy is required",
+  "valueInvalid": "Must be 1–63 lowercase alphanumeric characters with single dashes",
+  "valueDuplicate": "This hierarchy is already in the list",
+  "discardTitle": "Discard changes?",
+  "discardMessage": "Your unsaved hierarchy changes will be lost.",
+  "keepEditing": "Keep editing",
+  "discard": "Discard",
+  "savedButStale": "Saved — but reloading the editor failed. Reload the page before making further changes.",
+  "toast": {
+    "saved": "Hierarchies saved"
+  },
+  "error": {
+    "permission": "Only administrators can edit hierarchies",
+    "conflict": "Save conflict — swapping two values needs two saves; rename through a temporary value first",
+    "validation": "One or more values are invalid",
+    "saveFailedStatus": "Save failed ({{status}})",
+    "saveFailed": "Save failed. Check your connection and try again."
+  }
+}

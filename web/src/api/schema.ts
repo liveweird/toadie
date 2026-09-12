@@ -892,8 +892,8 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to) or `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry). */
-                dictionary: "namespaces" | "lifecycles";
+                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to), `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry), or `hierarchies` (the identifiers of the parallel entity hierarchies a blueprint's `hierarchyRelations` may name — no default entry; purely additive today, nothing consumes it yet). */
+                dictionary: "namespaces" | "lifecycles" | "hierarchies";
             };
             cookie?: never;
         };
@@ -903,7 +903,7 @@ export interface paths {
          *     deliberately unpaged (a dictionary holds at most 200 entries by validation), NOT a
          *     standard list endpoint. Each dictionary is an allowlist every catalog-file write is
          *     validated against: `namespaces` for `metadata.namespace`, `lifecycles` for
-         *     `spec.lifecycle`.
+         *     `spec.lifecycle`. `hierarchies` is not yet consulted by any write.
          */
         get: operations["getDictionary"];
         /**
@@ -915,8 +915,8 @@ export interface paths {
          *     to lowercase, and must satisfy the shared value grammar (lowercase alphanumerics
          *     with single dashes). The default flag branches per dictionary: a non-empty
          *     `namespaces` document must mark EXACTLY one item `isDefault` (what blank
-         *     catalog-file namespaces resolve to), while `lifecycles` has no default — any
-         *     flagged item there is a `400`.
+         *     catalog-file namespaces resolve to), while `lifecycles` and `hierarchies` have no
+         *     default — any flagged item there is a `400`.
          *     Swapping two values in one save is a `409` (the value uniqueness index) — rename
          *     through a temporary value in two saves.
          */
@@ -4047,8 +4047,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to) or `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry). */
-                dictionary: "namespaces" | "lifecycles";
+                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to), `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry), or `hierarchies` (the identifiers of the parallel entity hierarchies a blueprint's `hierarchyRelations` may name — no default entry; purely additive today, nothing consumes it yet). */
+                dictionary: "namespaces" | "lifecycles" | "hierarchies";
             };
             cookie?: never;
         };
@@ -4073,8 +4073,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to) or `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry). */
-                dictionary: "namespaces" | "lifecycles";
+                /** @description The dictionary's URL slug: `namespaces` (the allowed catalog-file namespaces, with the DEFAULT entry blank namespaces resolve to), `lifecycles` (the GLOBAL allowed `spec.lifecycle` values — no default entry), or `hierarchies` (the identifiers of the parallel entity hierarchies a blueprint's `hierarchyRelations` may name — no default entry; purely additive today, nothing consumes it yet). */
+                dictionary: "namespaces" | "lifecycles" | "hierarchies";
             };
             cookie?: never;
         };

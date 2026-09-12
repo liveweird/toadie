@@ -37,6 +37,7 @@ const Labels = lazy(() => import("./pages/Labels"));
 const Tags = lazy(() => import("./pages/Tags"));
 const Types = lazy(() => import("./pages/Types"));
 const Lifecycles = lazy(() => import("./pages/Lifecycles"));
+const Hierarchies = lazy(() => import("./pages/Hierarchies"));
 const Annotations = lazy(() => import("./pages/Annotations"));
 const Users = lazy(() => import("./pages/Users"));
 const UserFeatures = lazy(() => import("./pages/UserFeatures"));
@@ -180,6 +181,7 @@ export default function App() {
             <Route path="tags" element={<Tags />} />
             <Route path="types" element={<Types />} />
             <Route path="lifecycles" element={<Lifecycles />} />
+            <Route path="hierarchies" element={<Hierarchies />} />
             <Route path="annotations" element={<Annotations />} />
             <Route path="users" element={<Users />} />
             <Route path="users/new" element={<CreateUser />} />
