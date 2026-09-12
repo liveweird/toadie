@@ -219,7 +219,23 @@ instead of iterating, a compile error / `error("x")` / a type error (`.a.b` on a
 absent, `def f: f; f` → absent, `env`/`$ENV` shadowed even though the real process environment
 is non-empty (`System.getenv("PATH")` proving it), `include "x"; .` failing closed with no
 module loader ever installed, one compile per distinct expression text regardless of how many
-times it is evaluated, and an oversized result → absent, never truncated. `EntityComputedTest`
+times it is evaluated, and an oversized result → absent, never truncated. `JqCalculationTest`
+(v1.29.0) gains bounded-executor cases through `evaluateBounded` with an INJECTED executor —
+**hold the executor with a latch, never run a slow jq expression**, so no test strands a real
+worker or burns CPU: parity with the synchronous path through the real pool; a deadline miss →
+absent and the expression quarantined; a quarantined text is never resubmitted while a
+different text still runs; the quarantine WARN is logged once with the `<blueprint>.<propertyId>`
+context and no input value; pool rejection → absent, never quarantined, ONE saturation WARN
+across many rejections, reset after the next accepted submission; caller cancellation
+propagates `CancellationException`, quarantines nothing, and removes the queued task; a deadline
+miss while the task is still QUEUED (a 1-worker pool whose worker is latch-held) is absent but
+NOT quarantined and logs the saturation WARN once; 200
+concurrent coroutines over 8 expressions on the REAL pool yield correct values and
+`cacheSize == 8`; and the cache clear-on-overflow case. `UrlFetchTest` pins the shared
+`infra/concurrency/BoundedExecution.kt` bridge (`Executor.awaitBounded`) unchanged now that it
+is extracted and reused by the jq evaluator. A boot pin: `computed.jq.deadlineMillis = 0` fails
+startup, the `security.passwordReset.tokenTtlSeconds` range-validation idiom.
+`EntityComputedTest`
 is the pure mirror-walk/orchestration suite (`entities/EntityComputed.kt`): single-hop,
 two-hop, and `many`-hop mirrors, one-level flattening, structural dedupe, an empty-but-resolved
 `[]`, every broken-hop give-up case, the hop budget, a computed terminal of the landed
@@ -234,7 +250,8 @@ shape), a foreign `fromBlueprint`, a malformed `pathFilter` entry, `count` answe
 value, `average` per period with an injected `now`, and each `property/<func>` including the
 Long-vs-Double integral-result rule. `AggregationQueryTest` (`entities/AggregationQuery.kt`)
 covers one hit/miss/absent case per operator, both combinators, nested rules, the depth cap,
-and the always-array `$team` lookup.
+and the always-array `$team` lookup. `EntityComputedTest`'s calculation cases run under
+`runBlocking` (v1.29.0 — evaluation went through the bounded executor and became `suspend`).
 
 `EntityTest` gains the route-level phase 5 cases: computed values appear identically on
 create/GET/list, follow a related entity's later change, and are ignored by `q` and by sort; a

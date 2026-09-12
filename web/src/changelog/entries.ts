@@ -17,6 +17,16 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "1.29.0",
+    date: "2026-09-12",
+    en: `**Bounded jq worker pool for calculation properties.**
+
+- Calculation properties now run on a bounded worker pool with a per-expression deadline (default 500 ms, \`JQ_DEADLINE_MILLIS\`); an expression that exceeds it is left out of the entity and stays out until it is edited, so one runaway jq expression can no longer slow every entity read.`,
+    pl: `**Ograniczona pula wątków jq dla właściwości obliczanych.**
+
+- Właściwości obliczane (jq) działają teraz na ograniczonej puli wątków z limitem czasu na wyrażenie (domyślnie 500 ms, \`JQ_DEADLINE_MILLIS\`); wyrażenie, które go przekroczy, jest pomijane w encji aż do jego edycji, więc jedno rozbiegane wyrażenie jq nie spowalnia już każdego odczytu encji.`,
+  },
+  {
     version: "1.28.0",
     date: "2026-09-12",
     en: `**Ontology import and export.**

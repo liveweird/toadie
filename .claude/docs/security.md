@@ -165,19 +165,44 @@ properties", phase 5, v1.27.0) run server-side, IN PROCESS, on EVERY entity read
 `GET`/list/create for every authenticated reader (the entities shared-workspace rule: any
 authenticated user evaluates whatever ANY admin wrote onto ANY blueprint). `net.thisptr:
 jackson-jq` 1.3.0 (jq 1.6 semantics) is **not a sandbox**: it enforces no sub-tree isolation, no
-module loading, and no timeout. Admin-trusted BY DECISION, not by construction — an expression
-that never emits (`def f: f; f`) blocks its calling worker until the JVM stack overflows, and
-jackson-jq cannot be interrupted mid-evaluation. Two mitigations ship today: evaluation runs
-OUTSIDE the entity's database transaction (`list`/`read`/`create` materialize rows and the
-snapshot inside `suspendTransaction`/`writeTransaction`, then evaluate AFTER it closes —
-`.claude/docs/persistence.md`), so a pathological expression pins a request-handling coroutine,
-never a pooled R2DBC connection or the entity write lock; and the FIRST jq output wins,
-aborting the instant it is emitted (`range(1e9)` yields `0` instead of iterating a billion
-times) — a `StackOverflowError` from unbounded recursion is caught, not left to crash the
-worker. **Named follow-up, not shipped here**: a bounded executor with a per-expression
-deadline — the `UrlFetch` worker-pool idiom above ("Native DNS limitation and bounded
-containment") — would cap the blast radius of a hostile or merely buggy expression instead of
-relying on admin trust alone.
+module loading, and no timeout of its own. Admin-trusted BY DECISION, not by construction — an
+expression that never emits (`def f: f; f`) blocks its calling worker until the JVM stack
+overflows, and jackson-jq cannot be interrupted mid-evaluation. Two mitigations shipped with
+phase 5: evaluation runs OUTSIDE the entity's database transaction (`list`/`read`/`create`
+materialize rows and the snapshot inside `suspendTransaction`/`writeTransaction`, then evaluate
+AFTER it closes — `.claude/docs/persistence.md`), so a pathological expression pins a
+request-handling coroutine, never a pooled R2DBC connection or the entity write lock; and the
+FIRST jq output wins, aborting the instant it is emitted (`range(1e9)` yields `0` instead of
+iterating a billion times) — a `StackOverflowError` from unbounded recursion is caught, not left
+to crash the worker.
+
+**Bounded executor and per-expression deadline (v1.29.0).** `EntityService` owns ONE shared,
+thread-safe `JqEvaluator` (constructed in `infra/db/Database.kt`), so the compile cache
+(`ConcurrentHashMap`, capped at 4096 entries, clear-on-overflow — hygiene only, admin-authored
+expressions never approach it) is process-lifetime rather than per-request. Every evaluation runs
+on a bounded daemon worker pool named `entity-jq` (`ThreadPoolExecutor`, 4 workers, queue 64,
+`AbortPolicy`) — the same idiom as the outbound URL fetch's pool ("Native DNS limitation and
+bounded containment" below), but a SEPARATE pool so a stranded jq worker never costs a URL
+fetch; the coroutine bridge (`Executor.awaitBounded`, suspend-with-cancellation over a bounded
+`ThreadPoolExecutor`) was extracted from `catalog/UrlFetch.kt` into
+`infra/concurrency/BoundedExecution.kt` and is now shared by both consumers. Each evaluation is
+also bounded by a **per-expression deadline** — `computed.jq.deadlineMillis`
+(`$JQ_DEADLINE_MILLIS`, default **500 ms**, valid range 1..60000; boot fails outside it, the
+`security.passwordReset.tokenTtlSeconds` idiom) covering compile plus evaluation of ONE
+expression, enforced via `withTimeoutOrNull` around the pool submission on the caller's
+coroutine. An expression TEXT that misses its deadline is **quarantined until edited**: recorded
+in a process-lifetime set, so every later evaluation of that exact text answers absent
+IMMEDIATELY without touching a worker — recovery is either an admin edit (new text = new cache
+key) or a server restart. This bounds the blast radius to at most ONE stranded worker per
+distinct bad expression, ever: jackson-jq does not observe `Thread.interrupt()`, so the
+cancelled task's worker stays busy until the expression finishes or overflows the stack — the
+same class of residual as native DNS ignoring interruption, below. Pool saturation (4 busy + 64
+queued) answers absent for that read without quarantining anything — a transient load spike,
+not a property of the expression. The same distinction governs the deadline itself: it covers
+queue wait + compile + evaluation, but only a miss AFTER the task began running quarantines the
+text — a miss while the task was still queued (the workers stranded by OTHER expressions) is
+treated as saturation, so four bad expressions can strand four workers but can never quarantine
+the good expressions waiting behind them.
 
 `env/0` is a jackson-jq BUILTIN (`EnvFunction`, backed by `System.getenv`) that would otherwise
 let an admin-authored calculation read `JWT_SECRET`, the database password, or any other
@@ -201,7 +226,13 @@ is the same ReDoS class as any regex engine and is not specially guarded against
 caveat). Evaluation failures — compile errors, runtime errors, type mismatches, recursion
 overflow — are logged at DEBUG on `ch.nokillswit.entities.computed` with the property id,
 blueprint identifier, and `Throwable.toString()` ONLY; the INPUT document (the entity's
-`properties`/`relations`, which may carry sensitive business data) is NEVER logged.
+`properties`/`relations`, which may carry sensitive business data) is NEVER logged. Two more
+events on the same logger, both WARN, both context-only (no input value): **once per
+quarantine** ("jq calculation exceeded its {}ms deadline and is quarantined ({})" with the
+`<blueprint>.<propertyId>` context) and **once per saturation episode** (the first pool
+rejection — "jq worker pool saturated, calculation absent ({})" — or the first queued-miss
+timeout — "jq calculation timed out while queued, calculation absent ({})" — logs WARN, later
+ones in the same episode DEBUG, reset by the next accepted submission).
 
 ### Not yet ported from Lettuce
 

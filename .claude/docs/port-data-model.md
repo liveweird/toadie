@@ -343,8 +343,10 @@ runaway recursion (`StackOverflowError`, e.g. `def f: f; f`) all mean absent, ne
 error. The winning output is then checked STRICTLY against the declared `type` (the same
 structural check [`jsonMatchesType`] `entityFindings` itself uses): a shape mismatch is absent,
 never coerced — `tostring`/`tonumber` are the admin's own tools to fix a mismatched expression.
-See `.claude/docs/security.md` "Computed-property evaluation (jq)" for the sandboxing posture,
-`env`/`$ENV` shadowing, and the output-size cap.
+A calculation whose evaluation exceeds the server's per-expression deadline (default 500 ms) is
+likewise absent, and stays absent until its expression text is changed (v1.29.0 — see
+`.claude/docs/security.md` "Computed-property evaluation (jq)"). See that section for the
+sandboxing posture, `env`/`$ENV` shadowing, and the output-size cap.
 
 **Aggregation.** `relatedEntities` finds every ACTIVE row of `target` related to the subject:
 with NO `pathFilter`, DIRECT relations in EITHER direction — every entity of `target` naming the
