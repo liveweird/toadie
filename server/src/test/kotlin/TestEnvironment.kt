@@ -568,6 +568,31 @@ object TestLenses {
 }
 
 /**
+ * Raw-row access to the saved-entity-queries table (V35) — the `TestLenses` shape one level
+ * down (saved queries are the same per-owner CRUD template, PR3). Tests mint unique
+ * `eq-<uuid8>` names and clean up in `finally` via [remove], a direct table update bypassing
+ * the ownership/verdict guards (the `TestUsers.softDelete` idiom) so a test can also clean up
+ * a row it deliberately could not delete through the API (e.g. a foreign-owned fixture).
+ */
+object TestSavedEntityQueries {
+    data class RawRow(val id: UInt, val name: String, val createdBy: UInt, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.entityquery.SavedEntityQueryService.EntityQueries
+        t.selectAll().map { RawRow(it[t.id].value, it[t.name], it[t.createdBy].value, it[t.markedAsDeleted]) }.toList()
+    }
+
+    /** Soft-deletes the given ids directly, regardless of owner (a no-op for an absent id). */
+    suspend fun remove(vararg ids: UInt) {
+        if (ids.isEmpty()) return
+        suspendTransaction(sharedTestDatabase) {
+            val t = ch.nokillswit.entityquery.SavedEntityQueryService.EntityQueries
+            t.update({ t.id inList ids.toList() }) { it[markedAsDeleted] = true }
+        }
+    }
+}
+
+/**
  * Direct access to the SHARED annotation-key registry (V17, seeded by V22) — the label
  * registry's sibling (keys + kinds, no values), suite state every catalog write's annotation
  * keys are checked against. Tests only ever mint UNIQUE keys (the `uniqueAnnotationKey`
