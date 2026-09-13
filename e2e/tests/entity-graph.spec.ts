@@ -133,22 +133,11 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     await page.goto("/entity-graph");
     await expect(page.getByRole("heading", { name: "Entity graph" })).toBeVisible();
 
-    // 3. Filter to the two throwaway blueprints PLUS `_team` (p1's ownership target) and the
-    // run's own search marker — `_team` is a workspace-wide blueprint other specs also write
-    // to, so without `q` the graph would not be isolated to this run's own team.
+    // 3. Narrow the graph to this run's own rows with the search filter — the run marker on
+    // every seeded identifier/title already isolates this run without picking blueprints
+    // (the always-visible Blueprints pill row starts every blueprint shown, so nothing needs
+    // toggling to see them).
     await openFilters(page);
-    const blueprintFilter = page.getByRole("combobox", { name: "Blueprints" });
-    await blueprintFilter.click();
-    await blueprintFilter.fill(parentBp);
-    await page.getByRole("option", { name: parentBp, exact: true }).click();
-    await blueprintFilter.fill(childBp);
-    await page.getByRole("option", { name: childBp, exact: true }).click();
-    await blueprintFilter.fill("_team");
-    await page.getByRole("option", { name: "_team", exact: true }).click();
-    // The MultiSelect stays open for further picks; its dropdown overlaps the canvas below and
-    // would otherwise intercept the chip/toggle/drag interactions that follow (the
-    // annotations.spec.ts idiom: Escape closes it without touching the selections just made).
-    await page.keyboard.press("Escape");
     await page.getByRole("textbox", { name: "Search" }).fill(run);
 
     // 4. Five nodes, three blueprint frames (labelled by blueprint TITLE) — the throwaway team
@@ -196,6 +185,20 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     // Mantine renders a Select's clear button aria-hidden (mouse-only affordance), so a role
     // query never sees it — target its aria-label attribute directly.
     await page.locator('button[aria-label="Clear team filter"]').click();
+
+    // 5d. Toggling the child blueprint's pill off (in the always-visible Blueprints group)
+    // hides its two entities without touching the parent's or the team's; toggling it back on
+    // restores them. Other parallel specs' own blueprints may appear as extra chips in this
+    // workspace-wide group, so the chip is located by its exact identifier.
+    const blueprintsGroup = page.getByRole("group", { name: "Blueprints" });
+    const childChip = blueprintsGroup.getByText(childBp, { exact: true });
+    await childChip.click();
+    await expect(page.getByText(c1Id, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(c2Id, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(p1Id, { exact: true })).toBeVisible();
+    await childChip.click();
+    await expect(page.getByText(c1Id, { exact: true })).toBeVisible();
+    await expect(page.getByText(c2Id, { exact: true })).toBeVisible();
 
     // 6. Collapse p1 via its fold toggle: c1/c2 (its hierarchy-relation descendants) hide, and
     // the pill names the hidden count. The team node is unaffected — ownership never nests.

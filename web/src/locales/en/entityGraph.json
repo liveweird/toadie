@@ -2,8 +2,8 @@
   "title": "Entity graph",
   "loadFailed": "Failed to load the entity graph",
   "relationsLabel": "Relations",
+  "blueprintsLabel": "Blueprints",
   "filter": {
-    "blueprints": "Blueprints",
     "q": "Search",
     "clearQ": "Clear search filter",
     "team": "Team",

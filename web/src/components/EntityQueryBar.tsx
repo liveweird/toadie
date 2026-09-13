@@ -1,4 +1,4 @@
-import { Badge, Box, Button, Group, Stack, Text, Tooltip } from "@mantine/core";
+import { Box, Button, Group, Stack, Text, Tooltip } from "@mantine/core";
 import { IconPlayerPlay, IconX } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import type { EntityQueryDiagnostic } from "../api/entities";
@@ -15,11 +15,16 @@ function modKeyLabel(): string {
 
 /**
  * The entity query bar (phase 7, v2.0.0 — `.claude/docs/entity-query-language.md`): the
- * CodeMirror editor plus Run (with its Mod+Enter hint)/Clear, the "Applied · N entities" badge
- * once a query narrows the canvas, and the diagnostics list underneath — the SAME diagnostics
- * whether they came from the live `/query/check` (while typing) or the last failed graph
- * request (the page decides which to pass down). Rendered identically by the Entity graph and
- * Entity hierarchy pages, through `EntityGraphToolbar`.
+ * CodeMirror editor plus Run (with its Mod+Enter hint)/Clear and the diagnostics list
+ * underneath — the SAME diagnostics whether they came from the live `/query/check` (while
+ * typing) or the last failed graph request (the page decides which to pass down). Rendered
+ * identically by the Entity graph and Entity hierarchy pages, inside `EntityGraphToolbar`'s
+ * collapsible Query section. Since 2.4.1 the "Applied · N entities" badge lives on the section's
+ * OWN toggle (visible while collapsed too) rather than in this bar — `appliedCount` is gone, and
+ * `applied` (the currently-narrowing text, `""` when none) instead decides Clear's disabled
+ * state alongside the draft: Clear stays available whenever there is either a draft to erase or
+ * an applied query still in force, even after the draft itself was erased by hand (the blank-
+ * draft-clears-applied invariant lives in `useEntityQuery`, not here).
  */
 export default function EntityQueryBar({
   value,
@@ -28,7 +33,7 @@ export default function EntityQueryBar({
   onClear,
   diagnostics,
   completionSchema,
-  appliedCount,
+  applied,
   draft,
   onPick,
 }: {
@@ -38,8 +43,8 @@ export default function EntityQueryBar({
   onClear: () => void;
   diagnostics: EntityQueryDiagnostic[];
   completionSchema: QueryCompletionSchema;
-  /** Set once a query is applied and the graph loaded successfully; the shown entity count. */
-  appliedCount?: number;
+  /** The currently applied (narrowing) query text; `""` when none is applied. */
+  applied: string;
   /** The bar's current draft text — the saved-query picker's "Modified" comparison. */
   draft: string;
   /** Applies a saved query's text to BOTH the draft and the applied query (`useEntityQuery`'s
@@ -83,15 +88,10 @@ export default function EntityQueryBar({
           variant="default"
           leftSection={<IconX size={14} />}
           onClick={onClear}
-          disabled={value === ""}
+          disabled={value === "" && applied === ""}
         >
           {t("entityQuery.clear")}
         </Button>
-        {appliedCount != null && (
-          <Badge data-testid="entityQuery-applied" variant="light" color="gray" size="lg" tt="none" style={{ flexShrink: 0 }}>
-            {t("entityQuery.applied")} · {t("entityQuery.appliedCount", { count: appliedCount })}
-          </Badge>
-        )}
       </Group>
       {diagnostics.length > 0 && (
         <Stack gap={2} role="list" aria-label={t("entityQuery.diagnosticsTitle")}>

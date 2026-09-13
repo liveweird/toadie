@@ -1,5 +1,6 @@
 {
   "label": "Entity query",
+  "toggle": "Query",
   "placeholder": "MATCH (s:service)-[:owned_by]->(t:_team) RETURN s, t",
   "run": "Run",
   "runHint": "Run the query ({{key}}+Enter)",

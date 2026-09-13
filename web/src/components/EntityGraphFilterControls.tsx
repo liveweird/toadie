@@ -1,6 +1,5 @@
-import { MultiSelect, Select } from "@mantine/core";
+import { Select } from "@mantine/core";
 import { useTranslation } from "react-i18next";
-import { useBlueprints } from "../hooks/useBlueprints";
 import { useEntityOptions } from "../hooks/useEntityOptions";
 import type { EntityGraphFilterControlsState } from "../hooks/useEntityGraphFilterState";
 import { TEAM_BLUEPRINT } from "../utils/systemBlueprints";
@@ -8,12 +7,12 @@ import ClearableTextInput from "./ClearableTextInput";
 
 /**
  * The Entity graph/hierarchy pages' filter controls (v1.25.0, + the Phase 4 Team select,
- * v1.26.0): a blueprint `MultiSelect` fed by `hooks/useBlueprints.ts` (a stored identifier the
- * registry no longer carries is appended to its own options, the registry-Select idiom, so it
- * keeps displaying), the free-text search `ClearableTextInput`, and a Team `Select` fed by
- * `useEntityOptions(TEAM_BLUEPRINT)` (the `_team` system blueprint's own entities, labelled
- * `identifier — title`; same stale-value-append idiom). Rendered inside `FilterPanel` via
- * `EntityGraphToolbar.tsx`.
+ * v1.26.0) — Search and Team only since 2.4.1: the free-text search `ClearableTextInput`, and a
+ * Team `Select` fed by `useEntityOptions(TEAM_BLUEPRINT)` (the `_team` system blueprint's own
+ * entities, labelled `identifier — title`; a stored value the pool doesn't currently carry is
+ * appended so it keeps displaying — the registry-Select idiom). The blueprint slot moved OUT of
+ * this panel to the always-visible `BlueprintPills` row (`EntityGraphToolbar.tsx`). Rendered
+ * inside the Filters section via `EntityGraphToolbar.tsx`.
  */
 export default function EntityGraphFilterControls({
   controls,
@@ -21,13 +20,6 @@ export default function EntityGraphFilterControls({
   controls: EntityGraphFilterControlsState;
 }) {
   const { t } = useTranslation();
-  const { blueprints } = useBlueprints();
-  const known = new Set(blueprints.map((b) => b.identifier));
-  const options = [
-    ...blueprints.map((b) => ({ value: b.identifier, label: b.identifier })),
-    ...controls.blueprints.filter((id) => !known.has(id)).map((id) => ({ value: id, label: id })),
-  ];
-
   const { options: teams } = useEntityOptions(TEAM_BLUEPRINT);
   const knownTeams = new Set(teams.map((team) => team.identifier));
   const teamOptions = [
@@ -39,15 +31,6 @@ export default function EntityGraphFilterControls({
 
   return (
     <>
-      <MultiSelect
-        label={t("entityGraph.filter.blueprints")}
-        data={options}
-        value={controls.blueprints}
-        onChange={controls.setBlueprints}
-        searchable
-        clearable
-        w={280}
-      />
       <ClearableTextInput
         label={t("entityGraph.filter.q")}
         value={controls.q}

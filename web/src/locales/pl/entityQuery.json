@@ -1,5 +1,6 @@
 {
   "label": "Zapytanie o encje",
+  "toggle": "Zapytanie",
   "placeholder": "MATCH (s:service)-[:owned_by]->(t:_team) RETURN s, t",
   "run": "Uruchom",
   "runHint": "Uruchom zapytanie ({{key}}+Enter)",

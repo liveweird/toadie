@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.4.1",
+    date: "2026-09-13",
+    en: `**A more compact Entity graph and Entity hierarchy toolbar.**
+
+- Blueprint pills replace the Blueprints filter on both Port canvases: every blueprint starts shown, toggling one off hides its entities, and the choice is remembered per page — an earlier Blueprints filter selection resets once.
+- The toolbar now lives on the title row: Filters and Query are collapsible toggles, and the Query toggle carries its own "Applied · N" badge, reopening by itself when a run is refused.
+- Erasing the query text by hand now shows everything again immediately, and Clear stays available.`,
+    pl: `**Bardziej kompaktowy pasek narzędzi Grafu encji i Hierarchii encji.**
+
+- Chipy blueprintów zastępują filtr Blueprintów na obu widokach Port: każdy blueprint startuje jako widoczny, wyłączenie jednego ukrywa jego encje, a wybór jest zapamiętywany dla każdej strony — wcześniejszy wybór filtra Blueprintów resetuje się jednorazowo.
+- Pasek narzędzi mieszka teraz w wierszu tytułu: Filtry i Zapytanie to zwijane przełączniki, a przełącznik Zapytania niesie własną odznakę "Zastosowano · N", otwierając się samoczynnie, gdy uruchomienie zostanie odrzucone.
+- Ręczne usunięcie tekstu zapytania natychmiast pokazuje wszystko ponownie, a przycisk Wyczyść pozostaje dostępny.`,
+  },
+  {
     version: "2.4.0",
     date: "2026-09-13",
     en: `**Entity reads are now memory-bounded.**

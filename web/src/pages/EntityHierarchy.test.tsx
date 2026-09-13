@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import { blueprintResponse } from "../test/fixtures";
 
 // The entity query bar's real CodeMirror editor is covered by its own QueryEditor.test.tsx
 // (a real mount) and EntityQueryBar.test.tsx — page tests drive a plain textarea stand-in.
@@ -56,15 +57,21 @@ const HIERARCHIES = [
   { id: 2, value: "cost-center", isDefault: false },
 ];
 
+const BLUEPRINTS = [
+  blueprintResponse({ id: 1, identifier: "team", title: "Team" }),
+  blueprintResponse({ id: 2, identifier: "service", title: "Service" }),
+];
+
 function mockGraph(
   mockFetch: FetchMock,
   body: unknown = GRAPH,
   status = 200,
   hierarchies: unknown = HIERARCHIES,
   checkDiagnostics: unknown[] = [],
+  blueprints: unknown = BLUEPRINTS,
 ) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-    if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: [] }));
+    if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: blueprints }));
     if (url.startsWith("/api/v1/dictionaries/hierarchies")) return Promise.resolve(jsonResponse(200, { items: hierarchies }));
     if (url.startsWith("/api/v1/entity-queries")) return Promise.resolve(jsonResponse(200, { items: [] }));
     if (url === "/api/v1/entities/query/check")
@@ -287,6 +294,28 @@ describe("EntityHierarchy page", () => {
     expect(screen.getByText("No hierarchies defined — add them on the Hierarchies page")).toBeInTheDocument();
   });
 
+  test("the Blueprints pill group renders every registered blueprint, and toggling one off hides its rows", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Platform");
+    const pills = screen.getByRole("group", { name: "Blueprints" });
+    expect(within(pills).getByRole("checkbox", { name: "team" })).toBeChecked();
+    expect(within(pills).getByRole("checkbox", { name: "service" })).toBeChecked();
+
+    await user.click(within(pills).getByText("service", { exact: true }));
+    await waitFor(() => {
+      const called = mockFetch.mock.calls.some(
+        ([url]) =>
+          typeof url === "string" &&
+          url.startsWith("/api/v1/entities/graph") &&
+          url.includes("blueprint=team"),
+      );
+      expect(called).toBe(true);
+    });
+  });
+
   describe("entity query bar (phase 7, v2.0.0)", () => {
     test("typing debounces a live check request against /api/v1/entities/query/check", async () => {
       mockGraph(mockFetch);
@@ -294,6 +323,7 @@ describe("EntityHierarchy page", () => {
       renderPage();
 
       await screen.findByText("Platform");
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
 
       await waitFor(() => {
@@ -309,6 +339,7 @@ describe("EntityHierarchy page", () => {
       renderPage();
 
       await screen.findByText("Platform");
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
       await user.click(screen.getByRole("button", { name: "Run" }));
 
@@ -360,6 +391,7 @@ describe("EntityHierarchy page", () => {
       renderPage();
 
       await screen.findByText("Platform");
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a:srv)");
       await user.click(screen.getByRole("button", { name: "Run" }));
 
@@ -374,6 +406,7 @@ describe("EntityHierarchy page", () => {
       renderPage();
 
       await screen.findByText("Platform");
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
       await user.click(screen.getByRole("button", { name: "Run" }));
       await waitFor(() =>
@@ -400,6 +433,7 @@ describe("EntityHierarchy page", () => {
       renderPage();
 
       await screen.findByText("Platform");
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
 
       await waitFor(() => expect(localStorage.getItem("toadie.viewSettings.entityQuery.text")).toBe('"MATCH (a)"'));
@@ -415,7 +449,7 @@ describe("EntityHierarchy page", () => {
       await screen.findByText("Checkout");
       await user.click(screen.getByRole("button", { name: "Operations for Checkout" }));
 
-      expect(await screen.findByText("Query")).toBeInTheDocument();
+      expect(within(await screen.findByRole("menu")).getByText("Query")).toBeInTheDocument();
       expect(screen.getByRole("menuitem", { name: "Expand 1 hop" })).toBeInTheDocument();
       expect(screen.getByRole("menuitem", { name: "Expand 2 hops" })).toBeInTheDocument();
       expect(screen.getByRole("menuitem", { name: "Expand 3 hops" })).toBeInTheDocument();
@@ -458,7 +492,7 @@ describe("EntityHierarchy page", () => {
 
       await screen.findByText("Checkout");
       await user.click(screen.getByRole("button", { name: "Operations for Checkout" }));
-      expect(await screen.findByText("Query")).toBeInTheDocument();
+      expect(within(await screen.findByRole("menu")).getByText("Query")).toBeInTheDocument();
       expect(screen.queryByRole("menuitem", { name: "Owned by this team" })).not.toBeInTheDocument();
       await user.keyboard("{Escape}");
 

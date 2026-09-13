@@ -1,4 +1,4 @@
-import { expect, login, openFilters, readyDialog, test, uniqueText, waitForApi } from "./helpers";
+import { expect, login, openFilters, openQuery, readyDialog, test, uniqueText, waitForApi } from "./helpers";
 
 // Saved entity queries (Port migration phase 7, v2.1.0): the entity-query.spec.ts blueprint/entity
 // shape (a parent blueprint P with no relations, a child blueprint C carrying a single `parent`
@@ -89,6 +89,7 @@ test("a saved entity query applies on both canvases and stays creator-only", asy
     await page.getByRole("textbox", { name: "Search" }).fill(run);
 
     const matchQuery = `MATCH (a:\`${childBp}\`)-[:parent]->(b:\`${parentBp}\`) RETURN a, b`;
+    await openQuery(page);
     const queryBox = page.getByRole("textbox", { name: "Entity query" });
     await queryBox.click();
     await queryBox.pressSequentially(matchQuery);
@@ -143,6 +144,7 @@ test("a saved entity query applies on both canvases and stays creator-only", asy
     await page.goto("/entity-hierarchy");
     await expect(page.getByRole("heading", { name: "Entity hierarchy" })).toBeVisible();
     await openFilters(page);
+    await openQuery(page);
     const hierarchyCombobox = page.getByRole("combobox", { name: "Saved query", exact: true });
 
     const [hierarchyGraphResp] = await Promise.all([
@@ -195,6 +197,7 @@ test("a saved entity query applies on both canvases and stays creator-only", asy
       await otherPage.goto("/entity-graph");
       await expect(otherPage.getByRole("heading", { name: "Entity graph" })).toBeVisible();
       await openFilters(otherPage);
+      await openQuery(otherPage);
       const otherCombobox = otherPage.getByRole("combobox", { name: "Saved query", exact: true });
 
       const [otherGraphResp] = await Promise.all([

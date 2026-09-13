@@ -124,27 +124,15 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
     expect(c3Resp.status()).toBe(201);
     c3EntityId = (await c3Resp.json()).id;
 
-    // 3. Open the Entity hierarchy and filter to the two throwaway blueprints PLUS `_team`
-    // (the orphan's ownership target) and the run's own search marker — `_team` is a
-    // workspace-wide blueprint other specs also write to, so without `q` the tree would not be
-    // isolated to this run's own team. This page persists its OWN filter state
-    // (`toadie.viewSettings.entityHierarchy.*`), independent of the Entity graph page's, though
-    // both render through the same shared filter controls.
+    // 3. Open the Entity hierarchy and narrow it to this run's own rows with the search filter
+    // (the run marker on every seeded identifier/title already isolates this run — the
+    // always-visible Blueprints pill row starts every blueprint shown, so nothing needs
+    // toggling to see the two throwaway blueprints plus `_team`). This page persists its OWN
+    // filter state (`toadie.viewSettings.entityHierarchy.*`), independent of the Entity graph
+    // page's, though both render through the same shared filter controls.
     await page.goto("/entity-hierarchy");
     await expect(page.getByRole("heading", { name: "Entity hierarchy" })).toBeVisible();
     await openFilters(page);
-    const blueprintFilter = page.getByRole("combobox", { name: "Blueprints" });
-    await blueprintFilter.click();
-    await blueprintFilter.fill(parentBp);
-    await page.getByRole("option", { name: parentBp, exact: true }).click();
-    await blueprintFilter.fill(childBp);
-    await page.getByRole("option", { name: childBp, exact: true }).click();
-    await blueprintFilter.fill("_team");
-    await page.getByRole("option", { name: "_team", exact: true }).click();
-    // The MultiSelect stays open for further picks; its dropdown overlaps the tree below and
-    // would otherwise intercept the row-button clicks that follow (the annotations.spec.ts
-    // idiom: Escape closes it without touching the selections just made).
-    await page.keyboard.press("Escape");
     await page.getByRole("textbox", { name: "Search" }).fill(run);
 
     await expect(page.getByText(p1Title, { exact: true })).toBeVisible();
@@ -152,6 +140,20 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
     await expect(page.getByText(c2Title, { exact: true })).toBeVisible();
     await expect(page.getByText(c3Title, { exact: true })).toBeVisible();
     await expect(page.getByText(teamTitle, { exact: true })).toBeVisible();
+
+    // 3b. Toggling the child blueprint's pill off (the always-visible Blueprints group) hides
+    // its children without touching the parent, the orphan, or the team; toggling it back on
+    // restores them. Other parallel specs' own blueprints may appear as extra chips in this
+    // workspace-wide group, so the chip is located by its exact identifier.
+    const blueprintsGroup = page.getByRole("group", { name: "Blueprints" });
+    const childChip = blueprintsGroup.getByText(childBp, { exact: true });
+    await childChip.click();
+    await expect(page.getByText(c1Title, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(c2Title, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(p1Title, { exact: true })).toBeVisible();
+    await childChip.click();
+    await expect(page.getByText(c1Title, { exact: true })).toBeVisible();
+    await expect(page.getByText(c2Title, { exact: true })).toBeVisible();
 
     // 4. Collapsing p1's branch hides only its hierarchy-relation children; the orphan c3 and
     // the throwaway team (both roots of their own — the team owns c3, but ownership never

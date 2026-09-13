@@ -9,8 +9,6 @@ type FetchMock = ReturnType<typeof vi.fn>;
 
 function controls(overrides: Partial<EntityGraphFilterControlsState> = {}): EntityGraphFilterControlsState {
   return {
-    blueprints: [],
-    setBlueprints: vi.fn(),
     q: "",
     setQ: vi.fn(),
     team: "",
@@ -41,26 +39,13 @@ describe("EntityGraphFilterControls", () => {
             total: 2,
           }),
         );
-      return Promise.resolve(
-        jsonResponse(200, { items: [{ id: 1, identifier: "team" }, { id: 2, identifier: "service" }] }),
-      );
+      return Promise.resolve(jsonResponse(200, { items: [] }));
     });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     localStorage.clear();
-  });
-
-  test("picking a blueprint calls setBlueprints with the new selection", async () => {
-    const setBlueprints = vi.fn();
-    const user = userEvent.setup();
-    renderWithProviders(<EntityGraphFilterControls controls={controls({ setBlueprints })} />);
-
-    await user.click(screen.getByLabelText("Blueprints", { selector: "input" }));
-    await user.click(await screen.findByRole("option", { name: "team" }));
-
-    expect(setBlueprints).toHaveBeenCalledWith(["team"]);
   });
 
   test("typing in the search field calls setQ, and the clear button resets it", async () => {

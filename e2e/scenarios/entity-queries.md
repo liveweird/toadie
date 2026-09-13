@@ -21,9 +21,10 @@
    `composition` entry of its `hierarchyRelations`, plus three entities: p1 (parent blueprint),
    c1 (child blueprint, `parent` naming p1), and c2 (child blueprint, no `parent`).
    - *Expected*: every creation succeeds (`201`).
-2. On **Entity graph**, narrowed to this run's own rows with the search filter, they type
+2. On **Entity graph**, narrowed to this run's own rows with the search filter, they open the
+   toolbar's collapsible **Query** section, type
    `` MATCH (a:`<child-blueprint>`)-[:parent]->(b:`<parent-blueprint>`) RETURN a, b `` into the
-   "Entity query" editor and click **Run**.
+   "Entity query" editor, and click **Run**.
    - *Expected*: exactly two nodes remain (c1 and p1); an "Applied" badge appears.
 3. From **Saved query actions** they choose **Save as new query…**, name it a unique
    `e2e-eqs-…` value, leave visibility at Private, and Save.
@@ -32,8 +33,8 @@
 4. They append ` LIMIT 1` to the editor text without re-running it.
    - *Expected*: a "Modified" badge appears (the draft has diverged from the selected saved
      query).
-5. They open **Entity hierarchy**, re-apply the search filter, and pick the saved query from its
-   own "Saved query" combobox.
+5. They open **Entity hierarchy**, re-apply the search filter, re-open the Query section, and
+   pick the saved query from its own "Saved query" combobox.
    - *Expected*: a `GET …/entities/graph` request carrying `query=` answers `200`; the tree shows
      p1 with c1 nested under it, and c2 does not appear (the ` LIMIT 1` draft is discarded — the
      pick restores and re-runs the saved query's own stored text).
@@ -41,9 +42,9 @@
    rename it to `<name>-renamed`, flip visibility to Public, and Save.
    - *Expected*: `PUT /api/v1/entity-queries/{id}` answers `204`; the combobox shows the new name.
 7. In a second, independent browser context, a throwaway regular user (created via the API) signs
-   in, opens **Entity graph**, re-applies the search filter, and picks the now-public query from
-   the combobox — rendered `<name>-renamed — Admin`, since a foreign public entry names its
-   creator.
+   in, opens **Entity graph**, re-applies the search filter, re-opens the Query section, and picks
+   the now-public query from the combobox — rendered `<name>-renamed — Admin`, since a foreign
+   public entry names its creator.
    - *Expected*: the graph request carries `query=` and narrows identically (c1 and p1 shown, c2
      not); opening **Saved query actions** offers only **Save as new query…** — no **Save
      changes**, **Rename / visibility…**, or **Delete** item is rendered at all for a query this
