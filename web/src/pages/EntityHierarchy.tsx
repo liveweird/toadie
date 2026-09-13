@@ -166,7 +166,7 @@ export default function EntityHierarchy() {
   const query = useEntityQuery();
   const { diagnostics: liveDiagnostics } = useQueryDiagnostics(query.draft);
 
-  const { data, isPending, isError, error } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["entities", "graph", filters.values, query.applied],
     queryFn: () => getEntityGraph({ ...filters.values, query: query.applied || undefined }),
     enabled: filters.ready && !filters.noBlueprints,
@@ -185,7 +185,7 @@ export default function EntityHierarchy() {
   const runDiagnostics = query.draft === query.applied ? refusedRun : [];
   const diagnostics = runDiagnostics.length > 0 ? runDiagnostics : liveDiagnostics;
   const completionSchema = useMemo(() => ({ blueprints, hierarchies: hierarchies.map((h) => h.value) }), [blueprints, hierarchies]);
-  const appliedCount = query.applied ? (filters.noBlueprints ? 0 : data?.nodes.length) : undefined;
+  const appliedCount = query.applied ? (filters.noBlueprints ? 0 : graph?.nodes.length) : undefined;
 
   const roots = useMemo(() => (graph ? buildEntityHierarchy(graph, hierarchyId) : []), [graph, hierarchyId]);
   const placement = useMemo(() => (pinnedId ? findPlacement(roots, pinnedId) : null), [roots, pinnedId]);
@@ -281,7 +281,7 @@ export default function EntityHierarchy() {
       )}
 
       <Paper withBorder p="md">
-        {!filters.ready || (isPending && !graph) ? (
+        {!filters.ready || (isLoading && !graph) ? (
           <LoadingBlock py="md" />
         ) : visible.length > 0 ? (
           visible.map((root) => (

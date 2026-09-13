@@ -139,6 +139,32 @@ describe("EntityHierarchy page", () => {
     expect(await screen.findByText(/no entities match/i)).toBeInTheDocument();
   });
 
+  test("toggling every blueprint pill off shows the empty state with no request, never the spinner", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Platform");
+    const pills = screen.getByRole("group", { name: "Blueprints" });
+    await user.click(within(pills).getByText("service", { exact: true }));
+    await waitFor(() => {
+      expect(
+        mockFetch.mock.calls.some(
+          ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities/graph") && url.includes("blueprint=team"),
+        ),
+      ).toBe(true);
+    });
+
+    mockFetch.mock.calls.length = 0;
+    await user.click(within(pills).getByText("team", { exact: true }));
+
+    expect(await screen.findByText(/no entities match/i)).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      mockFetch.mock.calls.some(([url]) => typeof url === "string" && url.startsWith("/api/v1/entities/graph")),
+    ).toBe(false);
+  });
+
   test("shows an alert when the graph fails to load", async () => {
     mockGraph(mockFetch, { title: "boom", status: 500 }, 500);
     renderPage();

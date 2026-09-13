@@ -144,7 +144,7 @@ export default function EntityGraph() {
   const runDiagnostics = query.draft === query.applied ? refusedRun : [];
   const diagnostics = runDiagnostics.length > 0 ? runDiagnostics : liveDiagnostics;
   const completionSchema = useMemo(() => ({ blueprints, hierarchies: hierarchies.map((h) => h.value) }), [blueprints, hierarchies]);
-  const appliedCount = query.applied ? (filters.noBlueprints ? 0 : data?.nodes.length) : undefined;
+  const appliedCount = query.applied ? (filters.noBlueprints ? 0 : graph?.nodes.length) : undefined;
 
   // Every relation starts ON — the fold chips are a separate, unpersisted dimension from the
   // filters above (the Render page's own posture); new relations therefore always start shown.

@@ -8,12 +8,17 @@ import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 function Host({
   queryForcedOpen = false,
   appliedCount,
+  unstableSetter = false,
 }: {
   queryForcedOpen?: boolean;
   appliedCount?: number;
+  /** Hand the toolbar a FRESH `onQueryOpenChange` closure on every render — the shape a
+   *  `useStoredState` setter has on the real pages, not `useState`'s stable one. */
+  unstableSetter?: boolean;
 }) {
   const filters = useEntityGraphFilterState("toolbarTest", ["team", "service"]);
-  const [queryOpen, setQueryOpen] = useState(false);
+  const [queryOpen, setQueryOpenStable] = useState(false);
+  const setQueryOpen = unstableSetter ? (open: boolean) => setQueryOpenStable(open) : setQueryOpenStable;
   return (
     <EntityGraphToolbar
       title="Entity graph"
@@ -86,5 +91,20 @@ describe("EntityGraphToolbar", () => {
     renderWithProviders(<Host queryForcedOpen />);
     expect(screen.getByRole("button", { name: /^Query/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("the query bar")).toBeInTheDocument();
+  });
+
+  test("a forced-open section can still be closed by hand while the refusal stays in force, even with an unstable setter", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Host queryForcedOpen unstableSetter />);
+    const toggle = screen.getByRole("button", { name: /^Query/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("the query bar")).not.toBeInTheDocument();
+
+    // A further re-render (another user interaction) must not re-arm the forced open.
+    await user.click(screen.getByRole("button", { name: "Filters" }));
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 });

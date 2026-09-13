@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge, Group, Paper, Stack } from "@mantine/core";
 import { IconCode, IconFilter } from "@tabler/icons-react";
@@ -54,8 +54,15 @@ export default function EntityGraphToolbar({
   const { t } = useTranslation();
   const [filtersOpen, setFiltersOpen] = useStoredState(`${viewKey}.filtersOpen`, false, isBoolean);
 
+  // Fires on the RISING edge of `queryForcedOpen` only. The setter is a fresh closure on every
+  // render of the owning page (a `useStoredState` setter is not memoized), so the effect re-runs
+  // after the user's own Close click re-renders the page — without the edge guard it would see
+  // `queryForcedOpen` still true and flip the section straight back open.
+  const wasForcedOpen = useRef(false);
   useEffect(() => {
-    if (queryForcedOpen) onQueryOpenChange(true);
+    const rising = queryForcedOpen && !wasForcedOpen.current;
+    wasForcedOpen.current = queryForcedOpen;
+    if (rising) onQueryOpenChange(true);
   }, [queryForcedOpen, onQueryOpenChange]);
 
   const filtersPanelId = `${viewKey}-entity-filters`;
