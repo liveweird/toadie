@@ -88,6 +88,10 @@ from Lettuce, that any new or edited spec must satisfy:
   its two throwaway `e2e-eq-*` blueprints and three entities (run as the seed admin; the
   shared `entityQuery.*` draft/applied state lives in the browser context's own localStorage,
   never on the server);
+  `entity-queries` owns its two throwaway `e2e-eqs-*` blueprints and three entities, its one
+  throwaway `e2e-eqs-*`-named saved entity query (deleted mid-journey), and one throwaway
+  regular user (run as the seed admin, with a second browser context signed in as that
+  throwaway user for the foreign-public-query half);
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
@@ -137,20 +141,22 @@ from Lettuce, that any new or edited spec must satisfy:
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
   first moving label registration into global-setup (the run-namespace pattern). V22 seeds
   eight curated keys — no spec may edit or delete those either.
-- **The blueprint registry is single-writer state the same way, now with SIX writers.**
+- **The blueprint registry is single-writer state the same way, now with SEVEN writers.**
   Blueprint identifiers are unique and relation targets name other blueprints, so a
   concurrently deleted or renamed blueprint breaks a parallel spec's saves — **each spec
   owns its own uniquely named blueprints and entities and never edits or deletes a foreign
   row**: `blueprints.spec.ts` (`e2e-bp-*`), `entities.spec.ts` (`e2e-ent-bp-*`),
   `entity-graph.spec.ts` (`e2e-eg-*`), `entity-hierarchy.spec.ts` (`e2e-eh-*`),
-  `ontology-import.spec.ts` (`e2e-oi-bp-*`, `e2e-oi-ent-*` — Phase 6, v1.28.0), and
-  `entity-query.spec.ts` (`e2e-eq-*` — phase 7, v2.0.0); the
+  `ontology-import.spec.ts` (`e2e-oi-bp-*`, `e2e-oi-ent-*` — Phase 6, v1.28.0),
+  `entity-query.spec.ts` (`e2e-eq-*` — phase 7, v2.0.0), and
+  `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
   what makes their concurrent creates safe — the same rule the other registries' single
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
-  `e2e-oi-ent-*`, `e2e-eq-*` today) and is removed by that same spec before it returns, so a future
-  entity-creating spec can join safely as long as it never touches another spec's rows.
+  `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-eqs-*` today) and is removed by that same spec before it
+  returns, so a future entity-creating spec can join safely as long as it never touches
+  another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
   registry (the Blueprints page's only export mode) and re-imports it as part of its round-trip
   check — safe under concurrent writers because it always sends `replaceExisting: false` there,
@@ -307,6 +313,15 @@ the same commit** — this list is the coverage map, the scenario file is the de
   draft/applied query and nesting from its own localStorage-shared state → a mistyped label's
   debounced live check on the graph page suggests the real blueprint identifier → Clear drops
   the badge and the `query` param → cleanup.
+- [`entity-queries.spec.ts`](scenarios/entity-queries.md) — saved entity queries (Port migration
+  phase 7, v2.1.0): the same throwaway blueprint pair and three entities as `entity-query.spec.ts`
+  under their own `e2e-eqs-*` marker → a MATCH query run on the Entity graph is saved as a new
+  private saved query, then edited (Modified badge) → picked on the Entity hierarchy page,
+  narrowing it identically → renamed and flipped to Public → a second browser context signed in
+  as a throwaway regular user picks the now-public query (labelled with the creator's name),
+  confirms it applies, and confirms the actions menu offers no Save changes/Rename/Delete for a
+  foreign public query (the `LensPicker` disclosure split, restated for saved queries) → the
+  admin deletes it → cleanup.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).
