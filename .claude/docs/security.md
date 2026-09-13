@@ -247,6 +247,57 @@ rejection — "jq worker pool saturated, calculation absent ({})" — or the fir
 timeout — "jq calculation timed out while queued, calculation absent ({})" — logs WARN, later
 ones in the same episode DEBUG, reset by the next accepted submission).
 
+### Entity query evaluation (phase 7, v2.0.0)
+
+`GET /api/v1/entities/graph?query=` and `POST /api/v1/entities/query/check` evaluate USER-TYPED
+text in process, for any authenticated user (`.claude/docs/entity-query-language.md`). Unlike the
+admin-authored jq calculations above this is NOT a general-purpose language: a hand-written
+parser accepts a fixed grammar (patterns, `WHERE` comparisons, `RETURN` of node variables), the
+evaluator is a pure Kotlin loop over an in-memory snapshot — no code execution, no filesystem,
+no environment, no regex engine (`=~` is rejected precisely because `java.util.regex` cannot
+honour the deadline), no functions. Resource bounds are structural and per request: the query
+text ≤ 2000 characters (a plain `400` at the route, before parsing), ≤ 32 node patterns and
+variables, expression nesting ≤ 64, hops ≤ 10, ≤ 100 000 intermediate bindings checked after
+every produced row (`BINDING_LIMIT`), and a cooperative deadline (`entityQuery.deadlineMillis`,
+`$ENTITY_QUERY_DEADLINE_MILLIS`, default 2000 ms, boot-validated 1..60000 — the
+`computed.jq.deadlineMillis` idiom) observed at EVERY checkpoint, i.e. once per produced
+candidate (`DEADLINE_EXCEEDED`). The budget is cooperative — nothing preempts a candidate
+mid-way, and an outer `withTimeout` could only cancel at the same checkpoint, so there is none —
+which is why per-candidate work is itself capped: `CONTAINS`/`STARTS WITH`/`ENDS WITH` answer
+UNKNOWN past 16 384 haystack / 256 needle characters (`MAX_STRING_OPERAND_CHARS`/
+`MAX_STRING_NEEDLE_CHARS`; `String.contains` is O(haystack × needle) and two 256 KiB properties
+would otherwise be minutes of uninterruptible work per candidate), and the Levenshtein suggestion
+scan skips inputs longer than any identifier (`MAX_SUGGESTION_INPUT_CHARS`, 128). Evaluation
+runs on the dedicated `entity-query` daemon pool (`MAX_CONCURRENT_ENTITY_QUERIES` = 4 threads),
+NEVER on `Dispatchers.Default`, which bcrypt (`auth/Passwords.kt`) and the request pipeline
+share — a slow query can cost query capacity, never a login. In-flight evaluations are bounded by
+the same number of permits (`tryAcquire` after validation and before the workspace read — a
+`429` problem when none is free, a refused query costing none), because each holds the decoded
+workspace on the 256 MiB heap for the length of its evaluation; the decode itself and the
+parse/validate step run OUTSIDE the read transactions (the schema is read in one short
+transaction, the workspace rows in a second, both closed before any QUERY CPU work — the shown
+rows' own decode and effective-team resolution stay inside the second, as in the query-less
+graph), so nothing query-driven holds a pooled connection or the entity lock. Caller cancellation
+propagates unchanged; nothing is quarantined or cached across requests. A budget miss is a
+semantic `400` for THIS query and logs ONE DEBUG line on `ch.nokillswit.entityquery` with the
+code and the query LENGTH — the SERVER never logs the text, which may carry business data
+(entity identifiers, property values); the text does ride the GET request line, so like `q` it
+reaches access/proxy logs and browser history, and an OTel trace exporter that captures
+`url.query` would carry it too (none is configured by default). Diagnostics echo only the
+user's own unknown name plus a suggestion drawn from blueprint identifiers/titles and relation/
+property keys every authenticated user can already read. Neither endpoint audits (pure reads,
+the `/check`/`/errors`/export rule). `EntityQueryRouteTest` pins the deadline, cancellation and
+saturation paths through injected clock/permit seams.
+
+**The 16 KiB request line.** `ktor.deployment.maxInitialLineLength: 16384` (`application.yaml`;
+Ktor 3.5.2's `EngineMain` reads it into Netty's `HttpServerCodec`) raises Netty's 4096-byte
+default so a 2000-character query — roughly 6 KB URL-encoded on the graph GET — is parsed rather
+than answered with a connection-level 414 (2000 non-ASCII characters can encode to 12–18 KB — CJK
+text hits the ceiling and gets a 414 without diagnostics, accepted). Still a hard ceiling: a
+longer request line is refused by Netty before any handler runs, `maxHeaderSize`/`maxChunkSize` keep their defaults, the 10 MiB
+body ceiling is unchanged, and ingress-nginx's default `large_client_header_buffers 4 8k` fits
+the same 6 KB. `ProductionHttpTest` pins that a ~6 KB request line reaches the JWT challenge.
+
 ### Not yet ported from Lettuce
 
 Each of these is a fully worked-out Lettuce subsystem (implementation + tests + docs); port it rather than redesigning, and restore its section of Lettuce's security doc alongside:

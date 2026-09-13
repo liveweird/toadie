@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.0.0",
+    date: "2026-09-13",
+    en: `**Entity query language.**
+
+- A query bar on the Entity graph and Entity hierarchy accepts an openCypher-shaped, read-only subset — \`MATCH (s:service)-[:owned_by]->(t:_team) WHERE t.$identifier = 'platform' RETURN s, t\` — with syntax highlighting, schema-aware autocomplete (blueprints, relations, hierarchies, properties, enum values) and live diagnostics that point at the offending position and suggest the nearest known name. Run it with the button or Ctrl/⌘+Enter; the draft and the applied query are shared by both canvases.
+- The entities the query returns become the shown set, on top of the existing blueprint, search and team filters; the query itself walks the whole workspace, so a path may pass through entities the filters hide. Variable-length hops up to 10 (\`-[:depends_on*1..3]->\`), hierarchy identifiers as virtual edge types (\`-[:composition*]->\`), \`$team\` as the ownership edge, \`WHERE\` over stored properties and the \`$\` meta-properties, \`OPTIONAL MATCH\` and \`LIMIT\`. Queries run under a 2-second budget; one that exceeds it, or whose join grows past 100 000 rows, is refused with a clear message.
+- API: \`GET /api/v1/entities/graph\` gains the optional \`query\` parameter (up to 2000 characters; a refused query is a \`400\` carrying \`diagnostics\`), and \`POST /api/v1/entities/query/check\` validates a query without running it. No existing request or response changes — the major version marks the size of the feature, not a breaking change.`,
+    pl: `**Język zapytań o encje.**
+
+- Pasek zapytań na stronach Graf encji i Hierarchia encji przyjmuje podzbiór składni openCypher, wyłącznie do odczytu — \`MATCH (s:service)-[:owned_by]->(t:_team) WHERE t.$identifier = 'platform' RETURN s, t\` — z podświetlaniem składni, podpowiedziami znającymi schemat (schematy, relacje, hierarchie, właściwości, wartości enum) i diagnostyką na żywo, która wskazuje miejsce błędu i podpowiada najbliższą znaną nazwę. Uruchamiasz przyciskiem lub Ctrl/⌘+Enter; szkic i zastosowane zapytanie są wspólne dla obu widoków.
+- Encje zwrócone przez zapytanie stają się zbiorem pokazywanym, ponad istniejącymi filtrami schematu, wyszukiwania i zespołu; samo zapytanie przechodzi całą przestrzeń roboczą, więc ścieżka może wieść przez encje ukryte przez filtry. Skoki o zmiennej długości do 10 (\`-[:depends_on*1..3]->\`), identyfikatory hierarchii jako wirtualne typy krawędzi (\`-[:composition*]->\`), \`$team\` jako krawędź własności, \`WHERE\` po zapisanych właściwościach i metawłaściwościach \`$\`, \`OPTIONAL MATCH\` i \`LIMIT\`. Zapytania działają w budżecie 2 sekund; takie, które go przekroczy lub którego złączenie urośnie ponad 100 000 wierszy, jest odrzucane z czytelnym komunikatem.
+- API: \`GET /api/v1/entities/graph\` zyskuje opcjonalny parametr \`query\` (do 2000 znaków; odrzucone zapytanie to \`400\` z \`diagnostics\`), a \`POST /api/v1/entities/query/check\` sprawdza zapytanie bez uruchamiania. Żadne istniejące żądanie ani odpowiedź się nie zmienia — numer wersji głównej oznacza rozmiar funkcji, nie zmianę łamiącą.`,
+  },
+  {
     version: "1.32.0",
     date: "2026-09-12",
     en: `**Parallel entity hierarchies.**
