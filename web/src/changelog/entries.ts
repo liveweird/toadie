@@ -17,6 +17,16 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.2.1",
+    date: "2026-09-13",
+    en: `**Graph re-fit after expanding.**
+
+- On the Graph and Entity graph canvases, expanding a collapsed node (or "Expand all") could re-fit the viewport to the previous node set and leave the re-added node off-canvas — a timing race between the layout and React Flow's queued fit, exposed by a dependency update. The re-fit now waits for the new node set to reach the canvas.`,
+    pl: `**Dopasowanie widoku po rozwinięciu.**
+
+- Na widokach Graf i Graf encji rozwinięcie zwiniętego węzła (lub „Rozwiń wszystko") mogło dopasować widok do poprzedniego zbioru węzłów i zostawić przywrócony węzeł poza kanwą — wyścig czasowy między układem a kolejkowanym dopasowaniem React Flow, ujawniony przez aktualizację zależności. Dopasowanie czeka teraz, aż nowy zbiór węzłów trafi na kanwę.`,
+  },
+  {
     version: "2.2.0",
     date: "2026-09-13",
     en: `**Canvas context actions.**

@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import { fitViewCalls } from "../test/reactFlowStub";
 
 // React Flow needs real DOM measurement (ResizeObserver, bounding boxes) that happy-dom can't
 // give — the canvas is stubbed to a list of node buttons (src/test/reactFlowStub.tsx, shared
@@ -109,6 +110,7 @@ describe("RenderGraph page", () => {
     localStorage.setItem(TOKEN_KEY, "fake-token");
     // The layout document is loaded and saved per user — the mock serves user 9.
     localStorage.setItem("toadie.auth.userId", "9");
+    fitViewCalls.length = 0;
   });
 
   afterEach(() => {
@@ -379,6 +381,28 @@ describe("RenderGraph page", () => {
     expect(screen.getByTestId("edge:component:default/a->resource:default/db:spec.dependsOn")).toHaveTextContent("dependsOn");
     await waitFor(() =>
       expect(layoutPuts(mockFetch).at(-1)).toEqual({ mode: "auto", positions: {}, collapsed: [] }),
+    );
+  });
+
+  test("re-fits the viewport only after the expanded node set has reached React Flow", async () => {
+    mockGraph(mockFetch, FOLD_GRAPH);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/svc-a \[STORED\]/);
+    await user.click(screen.getByRole("button", { name: "Collapse shop" }));
+    await screen.findByRole("button", { name: "Expand shop (2 hidden)" });
+
+    const callsBeforeExpand = fitViewCalls.length;
+    await user.click(screen.getByRole("button", { name: "Expand shop (2 hidden)" }));
+    await screen.findByText(/svc-a \[STORED\]/);
+
+    // At least one more fit was requested after the expand…
+    await waitFor(() => expect(fitViewCalls.length).toBeGreaterThan(callsBeforeExpand));
+    // …and the LAST one recorded the node set AFTER the re-added components reached the stub's
+    // `nodes` prop — never the stale, still-collapsed set a fit queued too early would see.
+    expect(fitViewCalls.at(-1)).toEqual(
+      [SHOP, DB, "component:default/a", "component:default/b"].sort(),
     );
   });
 

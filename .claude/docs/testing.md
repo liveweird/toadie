@@ -37,6 +37,7 @@ predicates match the exact user path and method; assert status after receiving t
 Match the saved document too when multiple writes overlap: a mode-only acknowledgement must
 not satisfy a drag waiter. Confirm the request contains that node's position before reloading;
 the checked Manual radio and moved canvas only prove local state, not completed persistence.
+The stub's `onInit` hands the page a fake instance whose `fitView` records the node ids the stub holds at call time; the `RenderGraph`/`EntityGraph` re-fit cases assert the fit after an expand saw the re-added node (v2.2.1 — the fit must be keyed off the live `nodes`, not `baseLayout`).
 
 **Refresh crossing sign-out.** Use held responses to exercise the shared transport after an
 old protected request receives 401: hold refresh, perform the real best-effort logout with

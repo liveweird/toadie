@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 // -- test scaffolding: mocked helpers/components share one file (the test/render.tsx idiom);
 // fast-refresh is irrelevant under vitest.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * The `@xyflow/react` mock shared by the Render, Entity graph, and Entity hierarchy page
@@ -42,6 +42,18 @@ type StubNodeData = {
 
 type StubNode = { id: string; position: { x: number; y: number }; data: StubNodeData };
 
+/**
+ * Every `fitView()` call across every stub-rendered canvas, recorded as the SORTED node ids
+ * the stub currently held at call time — pins the ordering the "re-fit only after the expanded
+ * node set has reached React Flow" regression cares about (RenderGraph.test.tsx/
+ * EntityGraph.test.tsx). A real React Flow instance queues `fitView()` and resolves it once
+ * every node the STORE holds has been measured; this stub instead reads a ref updated on every
+ * render (never inside an effect), so a call made from a stale `structureKey` genuinely observes
+ * a stale node set rather than one the stub happened to have caught up to by mount order alone.
+ * Tests reset this array in `beforeEach` (`fitViewCalls.length = 0`).
+ */
+export const fitViewCalls: string[][] = [];
+
 function faceLabel(apiNode: StubApiNode): string {
   const primary = apiNode.name ?? apiNode.identifier ?? "";
   const secondary = apiNode.status ?? apiNode.blueprint ?? "";
@@ -74,6 +86,7 @@ export function ReactFlow({
   nodes,
   edges,
   nodesDraggable,
+  onInit,
   onNodesChange,
   onNodeDragStart,
   onNodeDragStop,
@@ -84,6 +97,7 @@ export function ReactFlow({
   nodes: StubNode[];
   edges: { id: string; label?: unknown; style?: { strokeDasharray?: unknown } }[];
   nodesDraggable?: boolean;
+  onInit?: (instance: { fitView: () => void }) => void;
   onNodesChange?: (changes: unknown[]) => void;
   onNodeDragStart?: () => void;
   onNodeDragStop?: () => void;
@@ -91,6 +105,28 @@ export function ReactFlow({
   onNodeContextMenu?: (event: unknown, node: StubNode) => void;
   children?: React.ReactNode;
 }) {
+  // Kept in sync with the LATEST rendered `nodes` prop via an unconditional (no-deps) effect —
+  // never mutated during render (React forbids that). Child effects run before a parent's own
+  // effects within the SAME commit, so by the time a page's `fitView()`-calling effect (declared
+  // on the parent) runs, this one has already updated for that commit: a `fitView()` call made
+  // from an instance minted once at mount always reads the node set the stub most recently
+  // rendered with, never one it happens to have caught up to only by mount-order luck.
+  const nodesRef = useRef(nodes);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  });
+
+  useEffect(() => {
+    // Real React Flow calls `onInit` once, when the instance is created — never again on
+    // later prop changes, which is exactly what a page's `setRfInstance(instance)` relies on.
+    onInit?.({
+      fitView: () => {
+        fitViewCalls.push(nodesRef.current.map((n) => n.id).sort());
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once, mirroring React Flow's own onInit contract
+  }, []);
+
   return (
     <div data-testid="flow" data-draggable={String(nodesDraggable ?? true)}>
       {/* The canvas overlays (cluster frames, Background, Controls) are children. */}

@@ -5,6 +5,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
 import { expandQuery, ownedByQuery } from "../utils/queryTemplates";
+import { fitViewCalls } from "../test/reactFlowStub";
 
 // React Flow needs real DOM measurement happy-dom can't give — shared stub (v1.25.0,
 // extracted from RenderGraph.test.tsx). The pure shaping (entityGraph.ts/graphLayout.ts) is
@@ -138,6 +139,7 @@ describe("EntityGraph page", () => {
     vi.stubGlobal("fetch", mockFetch);
     localStorage.setItem(TOKEN_KEY, "fake-token");
     localStorage.setItem("toadie.auth.userId", "9");
+    fitViewCalls.length = 0;
   });
 
   afterEach(() => {
@@ -216,6 +218,26 @@ describe("EntityGraph page", () => {
     await waitFor(() =>
       expect(layoutPuts(mockFetch)).toEqual([{ mode: "auto", positions: {}, collapsed: ["team|platform"] }]),
     );
+  });
+
+  test("re-fits the viewport only after the expanded node set has reached React Flow", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/checkout \[service\]/);
+    await user.click(screen.getByRole("button", { name: "Collapse platform" }));
+    await screen.findByRole("button", { name: "Expand platform (1 hidden)" });
+
+    const callsBeforeExpand = fitViewCalls.length;
+    await user.click(screen.getByRole("button", { name: "Expand platform (1 hidden)" }));
+    await screen.findByText(/checkout \[service\]/);
+
+    // At least one more fit was requested after the expand…
+    await waitFor(() => expect(fitViewCalls.length).toBeGreaterThan(callsBeforeExpand));
+    // …and the LAST one recorded the node set AFTER the re-added entity reached the stub's
+    // `nodes` prop — never the stale, still-collapsed set a fit queued too early would see.
+    expect(fitViewCalls.at(-1)).toEqual(["service|checkout", "service|solo", "team|platform"].sort());
   });
 
   test("switching to Manual persists the mode and enables dragging", async () => {
