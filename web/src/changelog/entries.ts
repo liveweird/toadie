@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.3.0",
+    date: "2026-09-13",
+    en: `**Backstage | Port world switch.**
+
+- The sidebar shows one world at a time: a Backstage | Port switch at its top. The world follows the page you open (a deep link into the other world flips the sidebar), the switch jumps to that world's home — the Hierarchy at \`/hierarchy\` for Backstage, the Entity hierarchy for Port — and account or administration pages keep the last world. \`/\` and the Toadie brand open the last used world's home; a first visit lands on Port.
+- The command palette follows: its pages, actions and search are the current world's — catalog files by name in Backstage, entities by identifier or title in Port.`,
+    pl: `**Przełącznik światów Backstage | Port.**
+
+- Pasek boczny pokazuje jeden świat naraz: u góry przełącznik Backstage | Port. Świat podąża za otwartą stroną (głęboki link do drugiego świata przełącza pasek), przełącznik przenosi do strony głównej danego świata — Hierarchii pod \`/hierarchy\` w Backstage i Hierarchii encji w Port — a strony konta i administracji zachowują ostatni świat. \`/\` oraz marka Toadie otwierają stronę główną ostatnio używanego świata; pierwsza wizyta trafia do Port.
+- Paleta poleceń podąża za tym: jej strony, akcje i wyszukiwanie należą do bieżącego świata — pliki katalogu po nazwie w Backstage, encje po identyfikatorze lub tytule w Port.`,
+  },
+  {
     version: "2.2.1",
     date: "2026-09-13",
     en: `**Graph re-fit after expanding.**
