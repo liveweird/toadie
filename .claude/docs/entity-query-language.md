@@ -278,6 +278,10 @@ header row on both canvases: picking sets the draft AND runs it (`useEntityQuery
 "Modified" badge marks a draft that drifted from the picked text, and Save as / Save changes /
 Rename-visibility / Delete carry the lens conflict/forbidden/gone mappings.
 
+## Canvas actions (v2.2.0)
+
+Four client-side template generators produce queries from a clicked node or row. The Entity graph's `onNodeContextMenu` and the Entity hierarchy's `RowActionsMenu` both surface them under "Query": **Expand 1/2/3** (`expandQuery(node, hops)` where hops ∈ 1..3 — `MATCH (n:L {$identifier: 'x'}) OPTIONAL MATCH (n)-[*1..H]-(m) RETURN n, m`), **Ancestors** (`ancestorsQuery(node, hierarchyId)` — `MATCH (n:L {$identifier: 'x'}) OPTIONAL MATCH (n)-[:HIER*1..10]->(a) RETURN n, a` using the canvas's SELECTED hierarchy id) and **Descendants** (`descendantsQuery(node, hierarchyId)` — `MATCH (n:L {$identifier: 'x'}) OPTIONAL MATCH (n)<-[:HIER*1..10]-(d) RETURN n, d`), and **Owned by this team** (`ownedByQuery(teamIdentifier)` on `_team` nodes only — `MATCH (t:_team {$identifier: 'x'}) OPTIONAL MATCH (e)-[:$team]->(t) RETURN t, e`). Every template preserves the anchor in the returned set — `OPTIONAL MATCH` keeps it shown even when nothing extends — and uses the hop ceiling (the Expand's explicit range, Ancestors/Descendants' 10 hardcoded). Calling `useEntityQuery().runText(text)` lands the generated text in the shared bar (both draft AND applied) and runs it at once; saving stores nothing, and the editor sees it as a draft drifted from a picked saved query if one is active. Pure client-side: `web/src/utils/queryTemplates.ts`.
+
 ## Performance and the snapshot-cache trigger
 
 At the caps: 10 000 rows → one `SELECT` plus 10 000 `blueprintJson` decodes (~50–150 ms; today's
