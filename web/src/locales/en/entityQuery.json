@@ -1,0 +1,13 @@
+{
+  "label": "Entity query",
+  "placeholder": "MATCH (s:service)-[:owned_by]->(t:_team) RETURN s, t",
+  "run": "Run",
+  "runHint": "Run the query ({{key}}+Enter)",
+  "clear": "Clear",
+  "applied": "Applied",
+  "appliedCount_one": "{{count}} entity",
+  "appliedCount_other": "{{count}} entities",
+  "diagnosticsTitle": "Query problems",
+  "didYouMean": "Did you mean `{{name}}`?",
+  "position": "line {{line}}, column {{column}}"
+}

@@ -1,0 +1,15 @@
+{
+  "label": "Zapytanie o encje",
+  "placeholder": "MATCH (s:service)-[:owned_by]->(t:_team) RETURN s, t",
+  "run": "Uruchom",
+  "runHint": "Uruchom zapytanie ({{key}}+Enter)",
+  "clear": "Wyczyść",
+  "applied": "Zastosowano",
+  "appliedCount_one": "{{count}} encja",
+  "appliedCount_few": "{{count}} encje",
+  "appliedCount_many": "{{count}} encji",
+  "appliedCount_other": "{{count}} encji",
+  "diagnosticsTitle": "Problemy z zapytaniem",
+  "didYouMean": "Czy chodziło o `{{name}}`?",
+  "position": "wiersz {{line}}, kolumna {{column}}"
+}

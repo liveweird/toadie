@@ -423,7 +423,8 @@ or evaluates computed properties at all, see `.claude/docs/persistence.md`).
 
 ## Toadie extensions (not Port)
 
-Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's own model:
+Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's own model, and phase 7
+(v2.0.0) one Toadie-only READ surface over the model (the second bullet):
 
 - **Hierarchy relations** — `Blueprint.hierarchyRelations: Map<String, String>?`, an optional
   map of hierarchy identifiers to relation keys. The keys are active values from the `HIERARCHY`
@@ -473,6 +474,18 @@ Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's ow
   walk the list uses), so it can appear in a team-filtered graph; a renamed or deleted `_team`
   affects inherited entities' stale findings AND their graph presence (an unresolvable path
   has no team and is dropped from a team-filtered graph).
+
+- **Entity queries (v2.0.0)** — `GET /api/v1/entities/graph?query=…` and
+  `POST /api/v1/entities/query/check` accept a read-only, openCypher-shaped query
+  (`.claude/docs/entity-query-language.md`) whose labels are blueprint identifiers (case-folded),
+  whose edge types are relation KEYS (byte-exact), hierarchy identifiers (the virtual
+  child → parent edge each blueprint's `hierarchyRelations` names for that hierarchy) or the
+  `$team` ownership pseudo-edge (entity → its EFFECTIVE `_team`), and whose `WHERE` sees the
+  STORED `properties` plus the seven meta-properties `$identifier`/`$title`/`$blueprint`/`$team`/
+  `$icon`/`$createdAt`/`$updatedAt` — never a mirror/calculation/aggregation value (those are
+  computed per response and never stored, so they are unsearchable everywhere). Nothing about the
+  stored Port document or the wire shapes changes: a query is a filter over instances, not a model
+  feature, and Port has no equivalent.
 
 ## System blueprints (V31)
 

@@ -84,7 +84,10 @@ from Lettuce, that any new or edited spec must satisfy:
   `e2e-eg-*`-marked `_team` entity, plus its throwaway user's `entity-graph-layout` document
   (see its own bullet below, alongside `graph-persistence`/`render`); `entity-hierarchy` owns
   its two throwaway `e2e-eh-*` blueprints and entities plus one throwaway `e2e-eh-*`-marked
-  `_team` entity (run as the seed admin — entities carry no admin gate);
+  `_team` entity (run as the seed admin — entities carry no admin gate); `entity-query` owns
+  its two throwaway `e2e-eq-*` blueprints and three entities (run as the seed admin; the
+  shared `entityQuery.*` draft/applied state lives in the browser context's own localStorage,
+  never on the server);
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
@@ -134,18 +137,19 @@ from Lettuce, that any new or edited spec must satisfy:
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
   first moving label registration into global-setup (the run-namespace pattern). V22 seeds
   eight curated keys — no spec may edit or delete those either.
-- **The blueprint registry is single-writer state the same way, now with FIVE writers.**
+- **The blueprint registry is single-writer state the same way, now with SIX writers.**
   Blueprint identifiers are unique and relation targets name other blueprints, so a
   concurrently deleted or renamed blueprint breaks a parallel spec's saves — **each spec
   owns its own uniquely named blueprints and entities and never edits or deletes a foreign
   row**: `blueprints.spec.ts` (`e2e-bp-*`), `entities.spec.ts` (`e2e-ent-bp-*`),
-  `entity-graph.spec.ts` (`e2e-eg-*`), `entity-hierarchy.spec.ts` (`e2e-eh-*`), and
-  `ontology-import.spec.ts` (`e2e-oi-bp-*`, `e2e-oi-ent-*` — Phase 6, v1.28.0); the
+  `entity-graph.spec.ts` (`e2e-eg-*`), `entity-hierarchy.spec.ts` (`e2e-eh-*`),
+  `ontology-import.spec.ts` (`e2e-oi-bp-*`, `e2e-oi-ent-*` — Phase 6, v1.28.0), and
+  `entity-query.spec.ts` (`e2e-eq-*` — phase 7, v2.0.0); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
   what makes their concurrent creates safe — the same rule the other registries' single
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
-  `e2e-oi-ent-*` today) and is removed by that same spec before it returns, so a future
+  `e2e-oi-ent-*`, `e2e-eq-*` today) and is removed by that same spec before it returns, so a future
   entity-creating spec can join safely as long as it never touches another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
   registry (the Blueprints page's only export mode) and re-imports it as part of its round-trip
@@ -295,6 +299,14 @@ the same commit** — this list is the coverage map, the scenario file is the de
   is refused (`409`) naming the referring children, and switching the toolbar's Hierarchy
   picker to global-setup's own second hierarchy value — flagged on the SAME `parent` relation
   — reproduces the identical nesting before switching back → cleanup.
+- [`entity-query.spec.ts`](scenarios/entity-query.md) — the entity query bar (Port migration
+  phase 7, entity query language): two throwaway blueprints (a parent, a child with a `parent`
+  relation flagged as `composition`) and three entities (p1, c1 -> p1, orphan c2) seeded via
+  the API → a MATCH query typed into the shared "Entity query" editor and run on the Entity
+  graph narrows it to c1/p1 with an "Applied" badge → the Entity hierarchy page shows the same
+  draft/applied query and nesting from its own localStorage-shared state → a mistyped label's
+  debounced live check on the graph page suggests the real blueprint identifier → Clear drops
+  the badge and the `query` param → cleanup.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).

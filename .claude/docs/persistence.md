@@ -35,6 +35,29 @@ blueprint snapshot for titles/`hierarchyRelations`, and computes each returned r
 with the SAME `entityFindings` the list/read endpoints use, condensed to a count. No lock is
 taken — a plain committed read, like the entity list.
 
+**Entity query reads (phase 7, v2.0.0).** With a `query` (`.claude/docs/entity-query-language.md`)
+`EntityService.graph` runs TWO short read transactions with the CPU work between and after them:
+the first (`loadQuerySchema`) reads the active blueprints plus the active `HIERARCHY` dictionary
+values from `DictionaryService.Entries` — a sanctioned cross-feature table read, the
+`BlueprintService` precedent — and closes; the query is parsed and validated against that
+committed schema OUTSIDE any transaction (a refused query never reads an entity row, and the
+Levenshtein suggestion scan never holds a pooled connection); the second is today's graph read
+plus `loadWorkspaceSnapshot` — every active row of every active blueprint, the `SnapshotRow` shape
+of `loadSnapshot` with NO `blueprintId IN (…)` narrowing and NO decode yet — rather than the
+shown blueprints' targets only, since a traversal may pass through entities the
+`blueprint`/`q`/`team` filters hide. After it closes, the rows are decoded, `InMemoryQueryGraph`
+is built and `InMemoryQueryExecutor` runs on the dedicated `entity-query` pool under the
+cooperative `QueryBudget` (the phase-5 rule: a wide join never pins a pooled R2DBC connection or
+the entity lock); the shown rows are then intersected with the returned `(blueprint,
+identifier)` set and handed to the unchanged `buildEntityGraph`. The two reads are independent
+committed snapshots: a blueprint changed between them is validated against the first and
+evaluated against the second, which the evaluator tolerates (an unknown label or relation simply
+matches nothing). Both are plain reads, no lock; in-flight evaluations are bounded by
+`MAX_CONCURRENT_ENTITY_QUERIES` permits taken after validation, before the second read (`429`
+when none is free; a refused query costs no permit);
+no snapshot cache (the trigger is documented in the language reference). `checkQuery` is the
+first transaction alone, validation after it, no entity rows at all.
+
 **Blueprint targets under concurrency (V27).** `BlueprintService` takes the same
 transaction-scoped `SHARE ROW EXCLUSIVE` lock on `blueprints` before the first read in
 create/update/delete: every relation/aggregation `target` inside a definition is a byte-exact

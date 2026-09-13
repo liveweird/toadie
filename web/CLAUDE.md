@@ -256,6 +256,45 @@ Port migration phase 3 (v1.25.0): the entity counterparts of the Render/Hierarch
 
 **Tests and access.** `src/test/reactFlowStub.tsx` (extracted from `RenderGraph.test.tsx`) is now the ONE `@xyflow/react` mock for all three page tests: a node's face text is `name ?? identifier` bracketing `status ?? blueprint`, so it renders both the catalog `GraphNode` and the entity `EntityGraphNode` without touching the Render page's existing text assertions. Like every other entity feature, there is **no `isAdmin()` gate anywhere on these two pages** — entities are the shared workspace the Entities section above describes, and Pin/Edit/Delete on the Entity hierarchy tree are available to every authenticated user.
 
+## Entity query bar (v2.0.0, `components/EntityQueryBar.tsx`)
+
+**One bar, two canvases, one stored pair.** The Entity graph and Entity hierarchy pages render the
+same `EntityQueryBar` as the toolbar's `query` row (`EntityGraphToolbar`'s new slot, between the
+filter panel and the secondary controls). `hooks/useEntityQuery.ts` is deliberately NOT per view:
+`useStoredState("entityQuery.text")` is the draft, `useStoredState("entityQuery.applied")` the
+query that actually narrows the graph request (`getEntityGraph({...filters, query: applied ||
+undefined})`, `applied` in the react-query key), so switching pages keeps both and hits the cache.
+Running happens ONLY on Run / Mod+Enter (both share the blank guard) — never per keystroke — plus
+on load when an applied query is stored; `clear()` empties both; `runText(text)` sets both at
+once (the seam a later canvas action will use). **Diagnostics have two sources with a precedence
+rule**: `hooks/useQueryDiagnostics.ts` debounces the DRAFT 300 ms into `POST …/entities/query/check`
+(keyed by the text, so a stale response can never overwrite a newer one; blank checks nothing),
+while a REFUSED run's `400` carries `diagnostics` read off the transport error by
+`utils/queryDiagnostics.ts#queryProblemDiagnostics` (the `entitySaveFindings` clone) — the run's
+diagnostics win only while `draft === applied`; the moment the user edits, the live check takes
+over, since the run's positions describe text that no longer exists. When a graph error carries
+diagnostics the page suppresses its generic load-failed Alert (the bar is the error surface).
+
+**The editor.** `components/QueryEditor.tsx` wraps ONE CodeMirror 6 `EditorView` per mount
+(`@codemirror/state|view|language|autocomplete|lint|commands`, `@lezer/highlight` — all MIT,
+bundled same-origin under the unchanged CSP; their injected styles ride the existing
+`style-src 'unsafe-inline'`; the `codemirror` `manualChunks` group in `vite.config.ts` is shared
+by both lazy pages): `utils/queryLanguage.ts#cypherStream` is a `StreamLanguage` tokenizer (no
+Lezer grammar build step) mapped to highlight tags; `utils/queryCompletion.ts#queryCompletions`
+is a PURE, best-effort completion source over the text before the cursor — blueprints by title
+after `(v:`/`|`, the left node's relation keys ∪ hierarchy ids ∪ `$team` in an edge body,
+properties + the seven `$` metas after `v.`, a property's `enum` values after `v.prop =`/`IN [`,
+clause keywords at clause starts, every name through `quoteIfNeeded` (bracket scanning skips
+quoted runs, so a `(` inside a string is text); `toLintDiagnostics` maps 1-based/end-exclusive
+server positions to clamped offsets (positionless → the whole doc). External `value` changes are
+dispatched only when they differ from the doc; `onChange`/`onRun` live in refs so the view is
+built once; a `Compartment` follows `useComputedColorScheme`. The content element carries
+`aria-label` (the `entityQuery.label` string — e2e's `getByRole("textbox", { name: "Entity query" })`)
+and `aria-multiline`. `QueryEditor.test.tsx` mounts the REAL editor under happy-dom with two
+shims (`document.createRange` + `ResizeObserver`); page and bar tests mock it as a `<textarea>`.
+i18n namespace `entityQuery` (EN/PL, Polish plurals on `appliedCount`); the diagnostics list
+renders the server's `message` verbatim plus "Did you mean `x`?" and "line L, column C".
+
 ## Ontology import & export (v1.28.0)
 
 Phase 6 of the Port data-model move: a thin Import page under Port Ontology (`pages/ImportOntology.tsx`, route `/ontology/import`, nav leaf LAST in `appShell.section.dataModel`) accepting pasted or uploaded JSON — including a Port API export verbatim — over the new bulk endpoints `POST /api/v1/blueprints/import(/check)` (ADMIN) and `POST /api/v1/entities/import(/check)` (any authenticated), plus client-side JSON export from the Blueprints and Entities pages whose output the import accepts back unchanged.

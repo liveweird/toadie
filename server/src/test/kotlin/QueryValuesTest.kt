@@ -4,6 +4,8 @@ import ch.nokillswit.entities.QueryCandidate
 import ch.nokillswit.entityquery.ComparisonOp
 import ch.nokillswit.entityquery.Expr
 import ch.nokillswit.entityquery.Literal
+import ch.nokillswit.entityquery.MAX_STRING_NEEDLE_CHARS
+import ch.nokillswit.entityquery.MAX_STRING_OPERAND_CHARS
 import ch.nokillswit.entityquery.Operand
 import ch.nokillswit.entityquery.Span
 import ch.nokillswit.entityquery.StringOperator
@@ -222,5 +224,19 @@ class QueryValuesTest {
         // a.$identifier CONTAINS 'id' -> TRUE (meta resolution shares AggregationQuery's candidateValue)
         val stringOpExpr = Expr.StringOp(StringOperator.CONTAINS, prop("a", "\$identifier"), value(JsonPrimitive("id")), span)
         assertEquals(Truth.TRUE, evaluate(stringOpExpr, candidateOf))
+    }
+
+    @Test
+    fun `string operators are UNKNOWN past the operand caps`() {
+        val longHaystack = JsonPrimitive("a".repeat(MAX_STRING_OPERAND_CHARS + 1))
+        val longNeedle = JsonPrimitive("a".repeat(MAX_STRING_NEEDLE_CHARS + 1))
+        assertEquals(Truth.UNKNOWN, stringOp(StringOperator.CONTAINS, longHaystack, JsonPrimitive("a")))
+        assertEquals(Truth.UNKNOWN, stringOp(StringOperator.CONTAINS, JsonPrimitive("aaa"), longNeedle))
+        assertEquals(Truth.UNKNOWN, stringOp(StringOperator.STARTS_WITH, longHaystack, JsonPrimitive("a")))
+        assertEquals(Truth.UNKNOWN, stringOp(StringOperator.ENDS_WITH, JsonPrimitive("aaa"), longNeedle))
+        // Exactly at the caps still compares.
+        val atHaystack = JsonPrimitive("a".repeat(MAX_STRING_OPERAND_CHARS))
+        val atNeedle = JsonPrimitive("a".repeat(MAX_STRING_NEEDLE_CHARS))
+        assertEquals(Truth.TRUE, stringOp(StringOperator.CONTAINS, atHaystack, atNeedle))
     }
 }

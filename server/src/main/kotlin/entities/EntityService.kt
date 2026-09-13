@@ -6,15 +6,40 @@ import ch.nokillswit.blueprints.BlueprintService
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.dictionaries.Dictionary
+import ch.nokillswit.dictionaries.DictionaryService
+import ch.nokillswit.authz.TooManyRequestsException
+import ch.nokillswit.entityquery.DEFAULT_ENTITY_QUERY_DEADLINE_MILLIS
+import ch.nokillswit.entityquery.EntityQueryInvalidException
+import ch.nokillswit.entityquery.InMemoryQueryExecutor
+import ch.nokillswit.entityquery.InMemoryQueryGraph
+import ch.nokillswit.entityquery.MAX_CONCURRENT_ENTITY_QUERIES
+import ch.nokillswit.entityquery.MAX_QUERY_BINDINGS
+import ch.nokillswit.entityquery.Query
+import ch.nokillswit.entityquery.QueryBudget
+import ch.nokillswit.entityquery.QueryBudgetExceeded
+import ch.nokillswit.entityquery.QueryDiagnostic
+import ch.nokillswit.entityquery.QueryDiagnosticCodes
+import ch.nokillswit.entityquery.QueryException
+import ch.nokillswit.entityquery.QueryGraph
+import ch.nokillswit.entityquery.QueryResult
+import ch.nokillswit.entityquery.QuerySchema
+import ch.nokillswit.entityquery.VariableSlots
+import ch.nokillswit.entityquery.parseEntityQuery
+import ch.nokillswit.entityquery.validateAndBind
+import ch.nokillswit.entityquery.validateEntityQuery
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.users.UserService
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.Column
@@ -32,6 +57,9 @@ import org.jetbrains.exposed.v1.r2dbc.insert
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
+import org.slf4j.LoggerFactory
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
 
 val EntityServiceKey = AttributeKey<EntityService>("EntityService")
 
@@ -64,7 +92,40 @@ private fun systemFormatFor(blueprintIdentifier: String): String? = when (bluepr
 private const val LOCK_BLUEPRINTS_SHARE = "LOCK TABLE blueprints IN SHARE MODE"
 private const val LOCK_ENTITIES_SHARE_ROW_EXCLUSIVE = "LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE"
 
-class EntityService(private val database: R2dbcDatabase, private val jq: JqEvaluator = JqEvaluator()) {
+/** Entity-query evaluation logs (budget misses only — never the query text) on this logger, the `entities/JqCalculation.kt` idiom. */
+private val queryLog = LoggerFactory.getLogger("ch.nokillswit.entityquery")
+
+/**
+ * The dedicated `entity-query` pool every query evaluation runs on (phase 7, 2.0.0 —
+ * `.claude/docs/security.md` "Entity query evaluation"): exactly [MAX_CONCURRENT_ENTITY_QUERIES]
+ * daemon threads, the same count as the permits [EntityService] hands out, so an evaluation
+ * never queues and — unlike `Dispatchers.Default` — a slow query can never starve bcrypt or the
+ * request pipeline. Process-lifetime, like `JQ_EXECUTOR` in `JqCalculation.kt`.
+ */
+private val QUERY_DISPATCHER = Executors.newFixedThreadPool(
+    MAX_CONCURRENT_ENTITY_QUERIES,
+    ThreadFactory { runnable -> Thread(runnable, "entity-query").apply { isDaemon = true } },
+).asCoroutineDispatcher()
+
+class EntityService(
+    private val database: R2dbcDatabase,
+    private val jq: JqEvaluator = JqEvaluator(),
+    /** `entityQuery.deadlineMillis` (`infra/db/Database.kt`) — the per-`query` evaluation budget (`graph`). */
+    private val queryDeadlineMillis: Long = DEFAULT_ENTITY_QUERY_DEADLINE_MILLIS,
+    /** The evaluation budget's clock — injectable so tests pin the deadline and cancellation paths deterministically. */
+    private val queryClock: () -> Long = System::nanoTime,
+    /** In-flight query evaluations this instance allows at once (each holds a decoded workspace) — a test seam. */
+    queryPermits: Int = MAX_CONCURRENT_ENTITY_QUERIES,
+) {
+    /** `tryAcquire` only — a saturated instance answers `429` immediately rather than queueing a workspace load. */
+    private val querySlots = Semaphore(queryPermits)
+
+    init {
+        // The pool ([QUERY_DISPATCHER]) has exactly MAX_CONCURRENT_ENTITY_QUERIES threads: more
+        // permits than threads would queue evaluations, each holding a decoded workspace.
+        require(queryPermits in 1..MAX_CONCURRENT_ENTITY_QUERIES) { "queryPermits must be between 1 and $MAX_CONCURRENT_ENTITY_QUERIES" }
+    }
+
     object Entities : UIntIdTable("entities") {
         // Case-folded identifier uniqueness PER BLUEPRINT is enforced by the partial unique
         // index uq_entities_blueprint_identifier_active (active rows only; V28) — a
@@ -247,23 +308,69 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
             emptyList()
         } else {
             Entities.selectAll().where { (Entities.blueprintId inList targetIds) and active() }
-                .map {
-                    val blueprint = blueprintsById.getValue(it[Entities.blueprintId].value)
-                    SnapshotRow(
-                        blueprintId = blueprint.id,
-                        blueprint = blueprint.identifier,
-                        identifier = it[Entities.identifier],
-                        title = it[Entities.title],
-                        icon = it[Entities.icon],
-                        teamRaw = it[Entities.team],
-                        documentRaw = it[Entities.document],
-                        createdAt = it[Entities.createdAt],
-                        updatedAt = it[Entities.updatedAt],
-                    )
-                }
+                .map { it.toSnapshotRow(blueprintsById) }
                 .toList()
         }
         return EntitySnapshot(rows, blueprintsByIdentifier, blueprintsById)
+    }
+
+    private fun ResultRow.toSnapshotRow(blueprintsById: Map<UInt, ActiveBlueprint>): SnapshotRow {
+        val blueprint = blueprintsById.getValue(this[Entities.blueprintId].value)
+        return SnapshotRow(
+            blueprintId = blueprint.id,
+            blueprint = blueprint.identifier,
+            identifier = this[Entities.identifier],
+            title = this[Entities.title],
+            icon = this[Entities.icon],
+            teamRaw = this[Entities.team],
+            documentRaw = this[Entities.document],
+            createdAt = this[Entities.createdAt],
+            updatedAt = this[Entities.updatedAt],
+        )
+    }
+
+    /**
+     * The FULL active workspace — every active entity of every active blueprint — as one
+     * [EntitySnapshot] (feeding `effectiveTeam`/`entityFindings` exactly like [loadSnapshot])
+     * PLUS the same rows, still UNDECODED, for [InMemoryQueryGraph] (phase 7, 2.0.0 —
+     * `.claude/docs/entity-query-language.md`): an entity `query`'s traversal may pass THROUGH
+     * an entity the `blueprint`/`q`/`team` filters hide (hidden is not absent), so [graph] widens
+     * to this superset of [loadSnapshot]'s target-only rows only when a query is present. The
+     * JSON decode of every row ([SnapshotRow.decoded]) is forced by [evaluateEntityQuery] on the
+     * query pool, AFTER the transaction closed — never while a pooled connection is held.
+     */
+    private suspend fun loadWorkspaceSnapshot(
+        blueprintsByIdentifier: Map<String, ActiveBlueprint>,
+    ): Pair<EntitySnapshot, List<SnapshotRow>> {
+        val blueprintsById = blueprintsByIdentifier.values.associateBy { it.id }
+        val rows = Entities.selectAll().where { active() }.map { it.toSnapshotRow(blueprintsById) }.toList()
+        return EntitySnapshot(rows, blueprintsByIdentifier, blueprintsById) to rows
+    }
+
+    /** One read of the active blueprints + `HIERARCHY` values as the validator's [QuerySchema] — no entity rows. */
+    private suspend fun loadQuerySchema(): QuerySchema {
+        val graphBlueprintsByIdentifier = loadActiveBlueprints().associate {
+            it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations)
+        }
+        return QuerySchema(graphBlueprintsByIdentifier, loadActiveHierarchies())
+    }
+
+    /**
+     * The active `HIERARCHY` dictionary values a `[:hierarchyId]` query edge type may name — a
+     * sanctioned cross-feature table read of [DictionaryService.Entries] (`.claude/docs/
+     * persistence.md`), run inside the SAME transaction as [graph]'s other reads (the
+     * `blueprints/BlueprintService.kt` `hierarchyDictionaryPredicate`/`knownHierarchies`
+     * precedent, which opens its own separate transaction — this one shares the caller's).
+     */
+    private suspend fun loadActiveHierarchies(): Set<String> {
+        val hierarchyDictionary = DictionaryService.Entries.dictionary eq Dictionary.HIERARCHY.name
+        val active = DictionaryService.Entries.markedAsDeleted eq false
+        return DictionaryService.Entries
+            .selectAll()
+            .where { hierarchyDictionary and active }
+            .map { it[DictionaryService.Entries.value] }
+            .toList()
+            .toSet()
     }
 
     /**
@@ -411,6 +518,37 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
         return EntityListResult(rows.map { toResponse(it, materialized.context) }, total)
     }
 
+    private data class RawGraphSource(
+        val id: UInt,
+        val blueprintId: UInt,
+        val identifier: String,
+        val title: String,
+        val icon: String?,
+        val document: EntityDocument,
+        val storedTeam: JsonElement?,
+    )
+
+    /** [graph]'s parse/validate result — produced OUTSIDE any transaction, before the workspace rows are loaded. */
+    private data class ParsedQuery(val query: Query, val slots: VariableSlots, val hierarchies: Set<String>, val textLength: Int)
+
+    /** [graph]'s query orchestration payload — non-null only when [EntityGraphFilter.query] is present. */
+    private data class GraphQueryPlan(
+        val query: Query,
+        val slots: VariableSlots,
+        /** Undecoded on purpose — decoded on the query pool by [evaluateEntityQuery]. */
+        val workspaceRows: List<SnapshotRow>,
+        val blueprintsByIdentifier: Map<String, GraphBlueprint>,
+        val hierarchies: Set<String>,
+        val textLength: Int,
+    )
+
+    private data class GraphMaterialized(
+        val sources: List<EntityGraphSource>,
+        val graphBlueprintsById: Map<UInt, GraphBlueprint>,
+        val findings: (EntityGraphSource) -> Int,
+        val queryPlan: GraphQueryPlan?,
+    )
+
     /**
      * `GET …/entities/graph`: a plain read (no write-lock — reads never wait behind the
      * blueprints/entities writer lock). `blueprints` folds case-insensitively against the
@@ -424,19 +562,56 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
      * SAME effective value (v1.30.0) — [inheritedTeamMatches] resolves the Inherited half over
      * the candidate blueprints the `blueprints` filter already narrowed to, folded into the ONE
      * SQL predicate the same way [list] does.
+     *
+     * Phase 7 (2.0.0 — `.claude/docs/entity-query-language.md`): when [EntityGraphFilter.query]
+     * is set, the query is parsed/validated OUTSIDE any transaction against one committed read
+     * of the blueprints and hierarchies (a refused query never reads an entity row, and the
+     * suggestion scan never holds a pooled connection), then one of
+     * [MAX_CONCURRENT_ENTITY_QUERIES] permits is taken (none free → `429`, before the workspace
+     * is loaded — each in-flight evaluation holds a decoded workspace; a refused query costs no
+     * permit), and only then is the workspace loaded and the query EVALUATED on the dedicated
+     * `entity-query` pool after that transaction closed (the phase-5
+     * computed-property rule: a pathological query pins a pool thread, never a pooled connection
+     * or the entity write lock). A traversal runs over the FULL active workspace (an entity the
+     * other filters hide may still be a hop along the way), and only the `RETURN`ed entities
+     * narrow the shown rows.
      */
-    suspend fun graph(filter: EntityGraphFilter): EntityGraph = suspendTransaction(database) {
+    suspend fun graph(filter: EntityGraphFilter): EntityGraph {
+        val text = filter.query ?: return graphWithPlan(filter, null)
+        val schema = suspendTransaction(database) { loadQuerySchema() }
+        val (query, slots) = requireValidEntityQuery(text, schema)
+        if (!querySlots.tryAcquire()) {
+            throw TooManyRequestsException("Too many entity queries are being evaluated — retry shortly")
+        }
+        try {
+            return graphWithPlan(filter, ParsedQuery(query, slots, schema.hierarchies, text.length))
+        } finally {
+            querySlots.release()
+        }
+    }
+
+    private suspend fun graphWithPlan(filter: EntityGraphFilter, parsed: ParsedQuery?): EntityGraph {
+        val materialized = suspendTransaction(database) { materializeGraph(filter, parsed) } ?: return EntityGraph(emptyList(), emptyList())
+        val sources = materialized.queryPlan?.let { plan -> narrowByQuery(materialized.sources, materialized.graphBlueprintsById, plan) }
+            ?: materialized.sources
+        return buildEntityGraph(sources, materialized.graphBlueprintsById, materialized.findings)
+    }
+
+    private suspend fun materializeGraph(filter: EntityGraphFilter, parsedQuery: ParsedQuery?): GraphMaterialized? {
         val activeBlueprints = loadActiveBlueprints()
         val blueprintsById = activeBlueprints.associateBy { it.id }
         val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
         val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
         val blueprintsByIdentifierFolded = foldedByIdentifier(activeBlueprints)
+        val graphBlueprintsByIdentifier = activeBlueprints.associate {
+            it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations)
+        }
 
         var predicate: Op<Boolean> = active()
         val candidates: List<ActiveBlueprint>
         if (filter.blueprints.isNotEmpty()) {
             val resolved = resolveBlueprintsFilter(filter.blueprints, blueprintsByIdentifierFolded)
-            if (resolved.isEmpty()) return@suspendTransaction EntityGraph(emptyList(), emptyList())
+            if (resolved.isEmpty()) return null
             predicate = predicate and (Entities.blueprintId inList resolved.map { it.id })
             candidates = resolved
         } else {
@@ -448,18 +623,8 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
             predicate = predicate and teamPredicate(team, blueprintsByIdentifierFolded, inheritedIds)
         }
 
-        data class RawSource(
-            val id: UInt,
-            val blueprintId: UInt,
-            val identifier: String,
-            val title: String,
-            val icon: String?,
-            val document: EntityDocument,
-            val storedTeam: JsonElement?,
-        )
-
         val rawSources = Entities.selectAll().where { predicate }.map {
-            RawSource(
+            RawGraphSource(
                 id = it[Entities.id].value,
                 blueprintId = it[Entities.blueprintId].value,
                 identifier = it[Entities.identifier],
@@ -470,8 +635,14 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
             )
         }.toList()
 
+        // A query traverses the FULL workspace (a hop may pass through an entity the other
+        // filters hide), so its snapshot/index widens past [shownDefinitions]' narrower targets.
         val shownDefinitions = rawSources.mapNotNull { blueprintsById[it.blueprintId]?.definition }
-        val snapshot = loadSnapshot(shownDefinitions, blueprintsByIdentifier, computed = false)
+        val (snapshot, workspaceRows) = if (parsedQuery != null) {
+            loadWorkspaceSnapshot(blueprintsByIdentifier)
+        } else {
+            loadSnapshot(shownDefinitions, blueprintsByIdentifier, computed = false) to emptyList()
+        }
         val storedTeamById = rawSources.associate { it.id to it.storedTeam }
 
         val sources = rawSources.map { raw ->
@@ -490,9 +661,101 @@ class EntityService(private val database: R2dbcDatabase, private val jq: JqEvalu
         val graphBlueprintsById = blueprintsById.mapValues {
             GraphBlueprint(it.value.identifier, it.value.title, it.value.definition, it.value.hierarchyRelations)
         }
-        buildEntityGraph(sources, graphBlueprintsById) { source ->
-            val blueprint = blueprintsById.getValue(source.blueprintId)
-            entityFindings(source.document, blueprint.definition, snapshot.targetExists, storedTeamById[source.id]).size
+        return GraphMaterialized(
+            sources = sources,
+            graphBlueprintsById = graphBlueprintsById,
+            findings = { source ->
+                val blueprint = blueprintsById.getValue(source.blueprintId)
+                entityFindings(source.document, blueprint.definition, snapshot.targetExists, storedTeamById[source.id]).size
+            },
+            queryPlan = parsedQuery?.let {
+                GraphQueryPlan(it.query, it.slots, workspaceRows, graphBlueprintsByIdentifier, it.hierarchies, it.textLength)
+            },
+        )
+    }
+
+    /**
+     * Evaluates [plan] over the workspace ([InMemoryQueryGraph]) OUTSIDE the caller's
+     * transaction, then narrows [sources] to the `RETURN`ed `(blueprint, identifier)` keys —
+     * the both-ends rule stays with [buildEntityGraph], unaffected by this narrowing.
+     */
+    private suspend fun narrowByQuery(
+        sources: List<EntityGraphSource>,
+        graphBlueprintsById: Map<UInt, GraphBlueprint>,
+        plan: GraphQueryPlan,
+    ): List<EntityGraphSource> {
+        val result = evaluateEntityQuery(plan)
+        val matched = result.rows.map { it.key }.toSet()
+        return sources.filter { source -> (graphBlueprintsById.getValue(source.blueprintId).identifier to source.identifier) in matched }
+    }
+
+    /**
+     * Compiles/validates [text] against [schema] — a `QueryException` (the parser's first
+     * syntax error) or non-empty validator diagnostics both become [EntityQueryInvalidException],
+     * the ONE findings-bearing `400` this endpoint throws for a refused query.
+     */
+    private fun requireValidEntityQuery(text: String, schema: QuerySchema): Pair<Query, VariableSlots> {
+        val query = try {
+            parseEntityQuery(text)
+        } catch (cause: QueryException) {
+            throw EntityQueryInvalidException(cause.diagnostics).apply { initCause(cause) }
+        }
+        val (diagnostics, slots) = validateAndBind(query, schema)
+        if (diagnostics.isNotEmpty()) throw EntityQueryInvalidException(diagnostics)
+        return query to slots
+    }
+
+    /**
+     * Decodes the workspace, builds [InMemoryQueryGraph] and runs [InMemoryQueryExecutor] on the
+     * dedicated `entity-query` pool ([QUERY_DISPATCHER]) under the cooperative [QueryBudget]:
+     * every checkpoint observes caller cancellation and [queryClock], and per-candidate work is
+     * capped (`MAX_STRING_OPERAND_CHARS`), so a deadline is honoured within one candidate's work
+     * — nothing preempts a running candidate, which is why there is no outer `withTimeout`
+     * (it could only cancel at the same checkpoint). A miss is [EntityQueryInvalidException]
+     * with ONE [QueryDiagnostic] naming the budget code; [kotlinx.coroutines.CancellationException]
+     * propagates unchanged.
+     */
+    private suspend fun evaluateEntityQuery(plan: GraphQueryPlan): QueryResult {
+        val budget = QueryBudget(queryDeadlineMillis, nanoTime = queryClock)
+        try {
+            return withContext(QUERY_DISPATCHER) {
+                val graph: QueryGraph =
+                    InMemoryQueryGraph(plan.workspaceRows.map { it.decoded }, plan.blueprintsByIdentifier, plan.hierarchies)
+                InMemoryQueryExecutor().execute(plan.query, plan.slots, graph, budget)
+            }
+        } catch (cause: QueryBudgetExceeded) {
+            logQueryBudgetMiss(cause.code, plan.textLength)
+            throw EntityQueryInvalidException(listOf(budgetDiagnostic(cause.code))).apply { initCause(cause) }
+        }
+    }
+
+    private fun budgetDiagnostic(code: String): QueryDiagnostic =
+        if (code == QueryDiagnosticCodes.BINDING_LIMIT) {
+            QueryDiagnostic(code, "The query produced more than $MAX_QUERY_BINDINGS intermediate bindings")
+        } else {
+            deadlineDiagnostic()
+        }
+
+    private fun deadlineDiagnostic(): QueryDiagnostic =
+        QueryDiagnostic(QueryDiagnosticCodes.DEADLINE_EXCEEDED, "The query exceeded its $queryDeadlineMillis ms evaluation budget")
+
+    private fun logQueryBudgetMiss(code: String, textLength: Int) {
+        queryLog.debug("entity query budget miss ({}): queryLength={}", code, textLength)
+    }
+
+    /**
+     * `POST …/entities/query/check`: parses/validates [text] against the CURRENT active
+     * blueprints/`hierarchies` — never evaluates it, never throws (a [QueryException] simply
+     * RETURNS its diagnostics, the parser's own failure shape). Blank text has no diagnostics.
+     */
+    suspend fun checkQuery(text: String): List<QueryDiagnostic> {
+        if (text.isBlank()) return emptyList()
+        val schema = suspendTransaction(database) { loadQuerySchema() }
+        // Outside the transaction: the suggestion scan is CPU work, never on a pooled connection.
+        return try {
+            validateEntityQuery(parseEntityQuery(text), schema)
+        } catch (e: QueryException) {
+            e.diagnostics
         }
     }
 

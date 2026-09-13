@@ -84,6 +84,13 @@ kover {
                     "ch.nokillswit.entities.EntityImportRequest", "ch.nokillswit.entities.EntityImportRequest$*",
                     "ch.nokillswit.entities.EntityImportRow", "ch.nokillswit.entities.EntityImportRow$*",
                     "ch.nokillswit.entities.EntityImportResponse", "ch.nokillswit.entities.EntityImportResponse$*",
+                    // Phase 7 (2.0.0, entity query bar — PR2): the entity-query wire DTOs, the SAME
+                    // logic-free family — every rule lives in QueryParser.kt/QueryValidator.kt/
+                    // QueryEvaluator.kt and EntityService.kt's orchestration, never in these classes.
+                    "ch.nokillswit.entityquery.QueryDiagnostic", "ch.nokillswit.entityquery.QueryDiagnostic$*",
+                    "ch.nokillswit.entityquery.EntityQueryProblem", "ch.nokillswit.entityquery.EntityQueryProblem$*",
+                    "ch.nokillswit.entityquery.EntityQueryCheckRequest", "ch.nokillswit.entityquery.EntityQueryCheckRequest$*",
+                    "ch.nokillswit.entityquery.EntityQueryCheckResponse", "ch.nokillswit.entityquery.EntityQueryCheckResponse$*",
                 )
             }
         }

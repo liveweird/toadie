@@ -91,6 +91,16 @@ class ProductionHttpTest {
             val spoofedLocation = assertNotNull(spoofed.headers().firstValue("Location").orElse(null))
             assertTrue("evil.example" !in spoofedLocation, "X-Forwarded-Server must not set the host: $spoofedLocation")
 
+            // Pins `ktor.deployment.maxInitialLineLength` (application.yaml): a ~2000-character
+            // entity query (MAX_QUERY_LENGTH) URL-encodes to roughly 6 KB on the request line.
+            // Ktor's test engine never surfaces Netty's request-line ceiling (only the real
+            // Netty engine enforces it), so this real-server fixture is the only place that can
+            // pin it. A too-small ceiling would answer a connection reset or 414 instead of the
+            // ordinary anonymous 401 an authenticated route gives every other unauthenticated call.
+            val longQuery = "a%20".repeat(1500)
+            val queried = get("/api/v1/entities/graph?query=$longQuery", "X-Forwarded-Proto", "https")
+            assertEquals(401, queried.statusCode(), "a ~6 KB request line must be parsed, not rejected")
+
             val unhandled = log.events.filter {
                 it.level == ch.qos.logback.classic.Level.ERROR && it.message.startsWith("Unhandled exception")
             }

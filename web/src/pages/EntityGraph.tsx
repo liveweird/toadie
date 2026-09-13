@@ -31,6 +31,7 @@ import { getEntityGraph, type EntityGraphNode as EntityGraphNodeApi } from "../a
 import ClusterFrames from "../components/ClusterFrames";
 import EntityGraphNode from "../components/EntityGraphNode";
 import EntityGraphToolbar from "../components/EntityGraphToolbar";
+import EntityQueryBar from "../components/EntityQueryBar";
 import EmptyState from "../components/EmptyState";
 import HierarchyPicker from "../components/HierarchyPicker";
 import {
@@ -54,11 +55,15 @@ import {
   toFoldable,
 } from "../utils/entityGraph";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
+import { useEntityQuery } from "../hooks/useEntityQuery";
+import { useQueryDiagnostics } from "../hooks/useQueryDiagnostics";
 import { useHierarchies } from "../hooks/useHierarchies";
+import { useBlueprints } from "../hooks/useBlueprints";
 import { useStoredState, isString } from "../hooks/useStoredState";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 import { editEntityPath } from "../utils/entityLinks";
 import { OWNERSHIP_RELATION } from "../utils/systemBlueprints";
+import { queryProblemDiagnostics } from "../utils/queryDiagnostics";
 import LoadingBlock from "../components/LoadingBlock";
 import PageHeader from "../components/PageHeader";
 import classes from "../theme.module.css";
@@ -107,14 +112,31 @@ export default function EntityGraph() {
   const colorScheme = useComputedColorScheme("light");
   const filters = useEntityGraphFilterState("entityGraph");
   const { hierarchies } = useHierarchies();
+  const { blueprints } = useBlueprints();
   const [storedHierarchyId, setStoredHierarchyId] = useStoredState("entityGraph.hierarchy", "", isString);
   const hierarchyId = effectiveHierarchyId(storedHierarchyId, hierarchies.map((h) => h.value));
 
+  const query = useEntityQuery();
+  const { diagnostics: liveDiagnostics } = useQueryDiagnostics(query.draft);
+
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["entities", "graph", filters.values],
-    queryFn: () => getEntityGraph(filters.values),
+    queryKey: ["entities", "graph", filters.values, query.applied],
+    queryFn: () => getEntityGraph({ ...filters.values, query: query.applied || undefined }),
     placeholderData: keepPreviousData,
   });
+
+  // The last RUN query's own diagnostics (a real EntityQueryInvalid 400) win over the live
+  // typing-check ones — they're authoritative for the text that was actually applied, and
+  // their presence also means the generic load-failed Alert below stays suppressed.
+  // A refused run carries `diagnostics`; they describe the APPLIED text, so the bar shows them
+  // only while the draft still equals it (afterwards the live check takes over — the run's
+  // positions would land on the wrong characters), but the generic load-failed alert stays
+  // suppressed either way: the failure is the query, and the bar is its error surface.
+  const refusedRun = isError ? queryProblemDiagnostics(error) : [];
+  const runDiagnostics = query.draft === query.applied ? refusedRun : [];
+  const diagnostics = runDiagnostics.length > 0 ? runDiagnostics : liveDiagnostics;
+  const completionSchema = useMemo(() => ({ blueprints, hierarchies: hierarchies.map((h) => h.value) }), [blueprints, hierarchies]);
+  const appliedCount = query.applied && data ? data.nodes.length : undefined;
 
   // Every relation starts ON — the fold chips are a separate, unpersisted dimension from the
   // filters above (the Render page's own posture); new relations therefore always start shown.
@@ -245,7 +267,21 @@ export default function EntityGraph() {
       <PageHeader
         title={t("entityGraph.title")}
         toolbar={
-          <EntityGraphToolbar viewKey="entityGraph" filters={filters}>
+          <EntityGraphToolbar
+            viewKey="entityGraph"
+            filters={filters}
+            query={
+              <EntityQueryBar
+                value={query.draft}
+                onChange={query.setDraft}
+                onRun={query.run}
+                onClear={query.clear}
+                diagnostics={diagnostics}
+                completionSchema={completionSchema}
+                appliedCount={appliedCount}
+              />
+            }
+          >
             <HierarchyPicker value={hierarchyId} onChange={setStoredHierarchyId} />
             <Chip.Group
               multiple
@@ -373,7 +409,7 @@ export default function EntityGraph() {
         </Text>
       )}
 
-      {isError && (
+      {isError && refusedRun.length === 0 && (
         <Alert color="red" variant="light" title={t("entityGraph.loadFailed")} style={{ flexShrink: 0 }}>
           {loadErrorMessage(error, t)}
         </Alert>

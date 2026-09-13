@@ -24,8 +24,13 @@ import org.jetbrains.exposed.v1.r2dbc.selectAll
 /** `team`: single value, case-insensitive, blank = absent (`infra/paging/QueryParams.kt`'s `optionalString` idiom); repetition is a 400. */
 data class EntityFilter(val blueprint: String?, val q: String?, val team: String? = null)
 
-/** `GET …/entities/graph`'s filter: `blueprints` is the repeated any-of param (IN semantics). */
-data class EntityGraphFilter(val blueprints: List<String>, val q: String?, val team: String? = null)
+/**
+ * `GET …/entities/graph`'s filter: `blueprints` is the repeated any-of param (IN semantics).
+ * [query] (phase 7, 2.0.0 — `.claude/docs/entity-query-language.md`) is the optional entity
+ * query text; `null` = no query, never evaluated. The route rejects a query longer than
+ * [ch.nokillswit.entityquery.MAX_QUERY_LENGTH] before this filter is even built.
+ */
+data class EntityGraphFilter(val blueprints: List<String>, val q: String?, val team: String? = null, val query: String? = null)
 
 private typealias ActiveBlueprint = EntityService.ActiveBlueprint
 private typealias Entities = EntityService.Entities

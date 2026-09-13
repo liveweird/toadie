@@ -35,6 +35,15 @@ are evaluated only in the response body and are never stored, so `q`, sort, and 
 above see the entity's STORED fields only — a computed value can never be searched, sorted, or
 filtered on.
 
+**The entity graph's `query` (phase 7, v2.0.0).** `GET /api/v1/entities/graph` stays unpaged; its
+`query` parameter (`maxLength` 2000, blank = absent, repetition `400` — the `singleValue` rule) is
+one more filter, evaluated in memory over the whole active workspace and intersected with the
+`blueprint`/`q`/`team` set (`.claude/docs/entity-query-language.md`). Like `q`, sort and every
+other filter it sees the entity's STORED fields only — `WHERE` addresses stored `properties` and
+the seven `$` meta-properties, never a computed value. Its `LIMIT` caps the returned node SET
+(1..`MAX_ENTITIES_TOTAL`), a query-language construct rather than paging: there is no `page`/
+`pageSize`, and the graph's node count is bounded by the workspace cap.
+
 **Sub-collections.** A record's own collection is paged like any other when it is unbounded: the catalog file's change history (`GET /api/v1/files/{id}/events`) rides the shared machinery through `EventLog.listFor` with its own `-timestamp,-id` default sort and a `{timestamp, id}` whitelist. This is a deliberate deviation from Lettuce, whose seven `*_events` endpoints answer an unpaged `{items}`: their per-record counts are intrinsically tiny, while a synced catalog file mints an event per sync run. Reserve the plain `{items}` wrapper for genuinely bounded sets (the registries, at most a few dozen rows).
 
 **Ontology import responses are not list endpoints.** `POST /api/v1/blueprints/import` and

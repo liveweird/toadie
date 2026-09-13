@@ -328,6 +328,42 @@ re-GET, and an identical second run answers every row `EXISTS`.
 
 **E2E scenarios (design artifacts).** The Playwright suite in `e2e/` is governed by `e2e/README.md` (run recipes, the parallel state-ownership rulebook, the coverage map). Every spec has a **natural-language scenario file** in `e2e/scenarios/` — versioned, deliberately non-executable design artifacts (actors, owned state, numbered user-level steps, expected outcomes; `## Scenario:` headings equal the `test()` titles verbatim). `e2e/scenarios/README.md` holds the format and the **compiler contract** — the house rules any human/agent/tool must satisfy when turning a scenario into spec code. Same-commit rule: a new or behaviorally changed test lands with its scenario file and its one-line entry in the e2e README's coverage map; `cd e2e && npm run check:scenarios` enforces the parity mechanically (both directions, orphan files included; `accessibility.spec.ts` is the one registered template-title skip), and `npm run typecheck` covers what Playwright's transpile-only TS handling never checks.
 
+**Entity query language (phase 7, v2.0.0).** The engine's suites are pure (no Docker):
+`QueryLexerTest`, `QueryParserTest` (one case per production, EVERY `UNSUPPORTED` message, every
+cap), `QueryValidatorTest` (each diagnostic code with position + suggestion, including the
+title-based suggestion and the "targets `Y`, not `Z`" relation check), `SuggestionsTest`,
+`QueryValuesTest` (the Kleene table, mixed types, `IN` both ways, `1 = 1.0`), `QueryEvaluatorTest`
+over a hand-built `InMemoryQueryGraph` (direction, undirected, bare arrow incl. `$team`, `*`
+bounds incl. `*0..` and the shortest-level case, hierarchy virtual edges across two blueprints
+with DIFFERENT relation keys, ownership incl. an Inherited effective team, inline props, every
+WHERE operator, multi-MATCH joins, OPTIONAL null-keeping incl. a chain through a null slot,
+dedupe, LIMIT after dedupe, the binding cap, the deadline via an injected clock, caller
+cancellation propagating unswallowed), `QueryEvaluatorScaleTest` (synthetic 10k rows / 10
+blueprints — correct counts under a GENEROUS `withTimeout`, never a tight timing) and
+`QueryTckCasesTest` (26 hand-transcribed openCypher TCK scenarios as a table over one fixture —
+no `.feature` reader, the TCK uses `CREATE` + tabular results). Route level
+(`EntityQueryRouteTest`): a
+query narrowing the graph under the unchanged both-ends rule, a traversal THROUGH an entity the
+`blueprint` filter hides (never drawn), `-[:$team]->` from an Inherited-team entity, a hierarchy
+id as a virtual edge type across two blueprints, a mistyped label → `400 UNKNOWN_LABEL` with a
+1-based position and the `suggestion`, `WITH` → `UNSUPPORTED`, a 2001-character query → a plain
+`400` without `diagnostics`, `/query/check` answering the SAME diagnostics as the GET / `[]` for a
+valid query / `401` anonymous / no audit event, a deterministic `BINDING_LIMIT` over a
+chained many-relation fixture (never a timing assertion), and — via `TestEntities.queryService`,
+a private `EntityService` with the `queryClock`/`queryPermits` seams injected — `DEADLINE_EXCEEDED`
+on the first checkpoint past an injected clock, caller cancellation propagating as a
+`CancellationException` (never the 400 mapping), and a one-permit instance answering
+`TooManyRequestsException` while an evaluation is parked on its clock, then recovering.
+`QueryValuesTest` pins the string-operator caps (UNKNOWN past 16 384/256 characters, TRUE at
+them). `EntityQueryDeadlineConfigTest` pins
+the boot range; `ProductionHttpTest` pins that a ~6 KB request line is parsed
+(`maxInitialLineLength`). Frontend: the pure-module tests (`queryLanguage`, `queryCompletion` one
+case per context, `queryDiagnostics` offset math incl. clamping and positionless diagnostics),
+the `QueryEditor` smoke, and the page tests through a mocked editor (typing → the debounced
+check, Run → `query=` on the graph request, a `400` with `diagnostics` rendered without the
+generic load-failed alert, Clear, the draft shared across both canvases). E2E:
+`entity-query.spec.ts`.
+
 ### Reset-link regressions (V26)
 
 `PasswordResetServiceTest` uses an injected clock (no expiry sleeps) and separate service

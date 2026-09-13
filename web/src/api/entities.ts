@@ -115,11 +115,31 @@ export type GetEntityGraphQuery = {
   team?: string;
   /** Substring over identifier OR title. */
   q?: string;
+  /** An entity query (phase 7, v2.0.0 — `.claude/docs/entity-query-language.md`), narrowing
+   *  the shown set to the entities its `RETURN` variables bind to, intersected with the other
+   *  filters. Blank/absent = no query. A refused query is the `EntityQueryInvalid` `400`. */
+  query?: string;
 };
 
 export async function getEntityGraph(query: GetEntityGraphQuery = {}): Promise<EntityGraph> {
-  const params = buildQuery({ blueprint: query.blueprints, team: query.team, q: query.q });
+  const params = buildQuery({ blueprint: query.blueprints, team: query.team, q: query.q, query: query.query });
   return jsonRequest<EntityGraph>(`/api/v1/entities/graph${params ? `?${params}` : ""}`);
+}
+
+// -- Entity query check (phase 7, v2.0.0 — `.claude/docs/entity-query-language.md`) ----------
+// POST /api/v1/entities/query/check: the editor's live diagnostics — parse + validate `query`
+// against the current active blueprints/hierarchies without evaluating it, so the two
+// evaluation-time codes (DEADLINE_EXCEEDED, BINDING_LIMIT) never appear here.
+
+export type EntityQueryCheckResponse =
+  paths["/api/v1/entities/query/check"]["post"]["responses"]["200"]["content"]["application/json"];
+export type EntityQueryDiagnostic = EntityQueryCheckResponse["diagnostics"][number];
+
+export async function checkEntityQuery(query: string): Promise<EntityQueryCheckResponse> {
+  return jsonRequest<EntityQueryCheckResponse>("/api/v1/entities/query/check", {
+    method: "POST",
+    body: JSON.stringify({ query }),
+  });
 }
 
 // -- Bulk import (Phase 6, v1.28.0 — .claude/docs/port-data-model.md "Import and export") ---

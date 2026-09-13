@@ -800,6 +800,16 @@ object TestEntities {
         ch.nokillswit.entities.EntityService(sharedTestDatabase)
     }
 
+    /**
+     * A private service instance with the entity-query seams injected —
+     * `EntityQueryRouteTest`'s deadline/cancellation/saturation cases.
+     */
+    fun queryService(
+        queryClock: () -> Long,
+        queryPermits: Int = ch.nokillswit.entityquery.MAX_CONCURRENT_ENTITY_QUERIES,
+    ): ch.nokillswit.entities.EntityService =
+        ch.nokillswit.entities.EntityService(sharedTestDatabase, queryClock = queryClock, queryPermits = queryPermits)
+
     data class RawRow(val id: UInt, val identifier: String, val blueprintId: UInt, val markedAsDeleted: Boolean)
 
     suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {

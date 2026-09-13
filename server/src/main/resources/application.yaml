@@ -5,6 +5,11 @@ ktor:
   development: "$KTOR_DEVELOPMENT:true"
   deployment:
     port: 8081
+    # Netty's default request-line ceiling is 4096 bytes; a 2000-character entity query
+    # (phase 7, 2.0.0 — MAX_QUERY_LENGTH) URL-encodes to roughly 6 KB on
+    # `GET /api/v1/entities/graph?query=`. 16 KiB leaves headroom and stays within
+    # ingress-nginx's default `large_client_header_buffers 4 8k` (8 KB per header line).
+    maxInitialLineLength: 16384
   application:
     modules:
       # — base plugins
@@ -91,6 +96,12 @@ security:
 computed:
   jq:
     deadlineMillis: "$JQ_DEADLINE_MILLIS:500"
+
+# Entity query evaluation (phase 7, 2.0.0): a `query` on GET /api/v1/entities/graph is evaluated
+# in memory over the active workspace under this per-query deadline (cooperative checkpoints in
+# entityquery/QueryBudget.kt); a miss is a 400 with DEADLINE_EXCEEDED. Valid range 1..60000.
+entityQuery:
+  deadlineMillis: "$ENTITY_QUERY_DEADLINE_MILLIS:2000"
 
 jwt:
   secret: "$JWT_SECRET:secret"

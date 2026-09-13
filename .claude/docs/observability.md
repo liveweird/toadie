@@ -26,7 +26,12 @@
 - `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail).
 
-**Not audit events.** The bounded jq executor's (v1.29.0) two WARN events on
+**Not audit events.** The entity query engine's (phase 7, v2.0.0) ONE DEBUG line on
+`ch.nokillswit.entityquery` per evaluation-budget miss — the refusal code (`DEADLINE_EXCEEDED`/
+`BINDING_LIMIT`) and the query's LENGTH, never its text, which may carry business data — is an
+operational signal, not an audit event (the text still rides the GET request line into access/
+proxy logs, like `q`; the server itself never writes it); the graph GET's `query` and `POST …/entities/query/check`
+are pure reads and audit nothing (`.claude/docs/authorization.md`). The bounded jq executor's (v1.29.0) two WARN events on
 `ch.nokillswit.entities.computed` — one per calculation quarantine, one per pool-saturation
 episode (see `.claude/docs/security.md` "Computed-property evaluation (jq)") — ride the same
 Logback→OTel pipeline as everything above but are deliberately NOT `audit(...)` events: neither
