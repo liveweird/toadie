@@ -1,6 +1,6 @@
 # Rendering the files together (the relationship graph)
 
-- **Spec**: [tests/render.spec.ts](../tests/render.spec.ts)
+- **Spec**: [tests/graph.spec.ts](../tests/graph.spec.ts)
 - **Actors**: the seed administrator (`admin@toadie.local`) creates and later removes one
   throwaway regular user, who exercises the shared catalog workspace and owns the tested layout
 - **Owns** (exclusive server-side state): four throwaway files sharing one per-attempt
@@ -72,7 +72,7 @@
 - **The fold rules** — which nodes a collapse hides, how a hidden node's relations
   re-attribute and merge (`dependsOn ×3`), the multi-parent User, nested collapses, stale
   ids — pure logic pinned by `graphFold.test.ts`; the page-level wiring (immediate save,
-  Expand all clearing stale ids, Reset layout keeping the list) by `RenderGraph.test.tsx`.
-- **Stored-node click navigation** — unit-tested (`RenderGraph.test.tsx`); here the canvas
+  Expand all clearing stale ids, Reset layout keeping the list) by `Graph.test.tsx`.
+- **Stored-node click navigation** — unit-tested (`Graph.test.tsx`); here the canvas
   is exercised through the manual-layout journey instead (the drag deliberately must NOT
   navigate).

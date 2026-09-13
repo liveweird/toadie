@@ -11,7 +11,7 @@
 
 (Lettuce has one more fail-closed check — the data-encryption key; it arrives with field encryption at rest, see "Not yet ported" below.)
 
-**JWT/session model** (`auth/Tokens.kt`, `auth/AuthSessionService.kt`, `plugins/Security.kt`): every access/refresh pair carries a random `jti` and a shared `sid` identifying one login's database-backed family (`auth_sessions`, V25). The verifier requires signature/issuer/audience/expiry, access `typ`, a non-revoked `jti`, and a LIVE family belonging to the token's non-wrapping UInt user id. Every request checks the family against the active user's monotonic `auth_version` in PostgreSQL — acceptance is never cached. Password changes (including bootstrap/reset) and email/role changes advance that version atomically; deletion fails the active-user check. Same-clock-tick changes invalidate old access AND refresh tokens, and restoring a role never resurrects an old session. Logout deletes the entire family, including every superseded refresh generation, without requiring a body; unrelated logins/devices stay alive. Renewal updates an existing row only, cannot resurrect logout, and never shortens the family's expiry. The older per-jti blocklist/cache remains an additional defense, not the account/session revocation boundary. Already-authorized in-flight requests may finish. **Upgrade:** tokens without `sid` are rejected; deploying V25 requires everyone to sign in again. Session revocation works across instances; MFA challenges and throttles still require the documented single-replica posture.
+**JWT/session model** (`auth/Tokens.kt`, `auth/AuthSessionService.kt`, `plugins/Security.kt`): every access/refresh pair carries a random `jti` and a shared `sid` identifying one login's database-backed family (`auth_sessions`, V25). The verifier requires signature/issuer/audience/expiry, access `typ`, a non-revoked `jti`, and a LIVE family belonging to the token's non-wrapping UInt user id. Every request checks the family against the active user's monotonic `auth_version` in PostgreSQL — acceptance is never cached. Password changes (including bootstrap/reset) and email/role changes advance that version atomically; deletion fails the active-user check. Same-clock-tick changes invalidate old access AND refresh tokens, and restoring a role never resurrects an old session. Logout deletes the entire family, including every superseded refresh generation, without requiring a body; unrelated logins/devices stay alive. Renewal updates an existing row only, cannot resurrect logout, and never shortens the family's expiry. The older per-jti blocklist/cache remains an additional defense, not the account/session revocation boundary. Already-authorized in-flight requests may finish. **Upgrade:** tokens without `sid` are rejected; deploying V25 requires everyone to sign in again. Session revocation works across instances; MFA challenges and throttles still require the documented single-replica posture. Configuration: `JWT_SECRET` (above), `JWT_ISSUER` (default `http://0.0.0.0:8081/`), `JWT_AUDIENCE` (`toadie-api`), `JWT_REALM` (`toadie-api`), `JWT_ACCESS_EXPIRES_IN_SECONDS` (900 — the short-lived bearer the SPA silently refreshes) and `JWT_REFRESH_EXPIRES_IN_SECONDS` (3600 — pure-sliding: each refresh mints a fresh pair, so an idle session ends after this window), all in `application.yaml`'s `jwt:` block.
 
 **SPA session boundaries.** Graph controllers and HTTP refresh work belong to one login
 family. Decode `sid` only to partition local work, never as proof of authentication; the
@@ -255,10 +255,7 @@ admin-authored jq calculations above this is NOT a general-purpose language: a h
 parser accepts a fixed grammar (patterns, `WHERE` comparisons, `RETURN` of node variables), the
 evaluator is a pure Kotlin loop over an in-memory snapshot — no code execution, no filesystem,
 no environment, no regex engine (`=~` is rejected precisely because `java.util.regex` cannot
-honour the deadline), no functions. Resource bounds are structural and per request: the query
-text ≤ 2000 characters (a plain `400` at the route, before parsing), ≤ 32 node patterns and
-variables, expression nesting ≤ 64, hops ≤ 10, ≤ 100 000 intermediate bindings checked after
-every produced row (`BINDING_LIMIT`), and a cooperative deadline (`entityQuery.deadlineMillis`,
+honour the deadline), no functions. Resource bounds are structural and per request: the caps are listed in `.claude/docs/entity-query-language.md` (the reference), and a cooperative deadline (`entityQuery.deadlineMillis`,
 `$ENTITY_QUERY_DEADLINE_MILLIS`, default 2000 ms, boot-validated 1..60000 — the
 `computed.jq.deadlineMillis` idiom) observed at EVERY checkpoint, i.e. once per produced
 candidate (`DEADLINE_EXCEEDED`). The budget is cooperative — nothing preempts a candidate
@@ -266,12 +263,11 @@ mid-way, and an outer `withTimeout` could only cancel at the same checkpoint, so
 which is why per-candidate work is itself capped: `CONTAINS`/`STARTS WITH`/`ENDS WITH` answer
 UNKNOWN past 16 384 haystack / 256 needle characters (`MAX_STRING_OPERAND_CHARS`/
 `MAX_STRING_NEEDLE_CHARS`; `String.contains` is O(haystack × needle) and two 256 KiB properties
-would otherwise be minutes of uninterruptible work per candidate), and the Levenshtein suggestion
-scan skips inputs longer than any identifier (`MAX_SUGGESTION_INPUT_CHARS`, 128). Evaluation
-runs on the dedicated `entity-query` daemon pool (`MAX_CONCURRENT_ENTITY_QUERIES` = 4 threads),
+would otherwise be minutes of uninterruptible work per candidate). Evaluation
+runs on the dedicated `entity-query` daemon pool (4 threads),
 NEVER on `Dispatchers.Default`, which bcrypt (`auth/Passwords.kt`) and the request pipeline
 share — a slow query can cost query capacity, never a login. In-flight evaluations are bounded by
-the same number of permits (`tryAcquire` after validation and before the workspace read — a
+4 permits (`tryAcquire` after validation and before the workspace read — a
 `429` problem when none is free, a refused query costing none), because each holds the decoded
 workspace on the 256 MiB heap for the length of its evaluation; the decode itself and the
 parse/validate step run OUTSIDE the read transactions (the schema is read in one short

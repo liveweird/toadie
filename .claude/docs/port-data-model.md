@@ -533,7 +533,7 @@ it; renders gray in the SPA, not red — nothing failed), `INVALID` (shape/regis
 validation failure, an unresolvable target, a registry cap, or a cycle through a MANDATORY
 reference — see below), `CONFLICT` (an in-batch duplicate identifier, case-insensitive; the
 later document loses), `ERROR` (an unexpected storage failure, or a pass-2 residual — see
-below). The response is `200` even when every document failed.
+below). The response is `200` even when every document failed. The status vocabulary is deliberately NOT the catalog import's (`CREATED`/`CREATED_WITH_FINDINGS`/`INVALID`/`CONFLICT`/`ERROR`): a catalog import always waives soft findings and never replaces, while an ontology import can `replaceExisting` (`UPDATED`) and reports an untouched existing row (`EXISTS`).
 
 **Ordering and deferral, one mechanism for forward references and cycles.** Both planners
 topologically order the batch (Kahn's algorithm, ties broken by the document's 0-based batch

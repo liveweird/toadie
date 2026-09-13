@@ -14,7 +14,7 @@ describe("sectionsFor", () => {
     const sections = sectionsFor("backstage", false);
     expect(sections.map((s) => s.label)).toEqual([
       "appShell.section.catalog",
-      "appShell.section.registries",
+      "appShell.section.catalogDictionaries",
     ]);
     const catalog = sections.find((s) => s.label === "appShell.section.catalog");
     expect(catalog?.items[0]?.to).toBe("/hierarchy");

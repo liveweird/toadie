@@ -11,10 +11,10 @@ import {
 } from "./helpers";
 
 // The ⌘K / Ctrl K command palette (v1.19.0): page navigation plus a server-side catalog file
-// search by name. Owns exactly one throwaway System in the render run namespace.
+// search by name. Owns exactly one throwaway System in the graph run namespace.
 test("the command palette jumps to pages and opens a file by name", async ({ page }) => {
   await login(page);
-  const ns = runNamespace("render");
+  const ns = runNamespace("graph");
   const name = uniqueText("e2e-palette");
 
   await page.goto("/files/new");

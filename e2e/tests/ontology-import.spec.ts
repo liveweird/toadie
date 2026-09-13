@@ -114,7 +114,7 @@ test("a mixed batch imports with a two-pass blueprint cycle, then round-trips th
   let b1EntityId: number | undefined;
 
   try {
-    // 1. Open Import from the Port Ontology nav.
+    // 1. Open Import from the Ontology nav.
     await portOntologyNav.getByRole("link", { name: "Import", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Import ontology" })).toBeVisible();
     await expect(replaceSwitch).not.toBeChecked();

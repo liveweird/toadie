@@ -79,11 +79,11 @@ async function registerRunNamespaces(): Promise<void> {
   const uniq = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
   const minted: Record<string, string> = {
     KINDS: `e2e-kns-${uniq}`,
-    RENDER: `e2e-rns-${uniq}`,
-    // render.spec needs a SECOND namespace on one canvas: namespace frames only appear when
+    GRAPH: `e2e-rns-${uniq}`,
+    // graph.spec needs a SECOND namespace on one canvas: namespace frames only appear when
     // the shown graph spans two, and since the filters now decide what is shown, a neighbour
     // from another namespace can no longer wander in.
-    RENDERALT: `e2e-rns2-${uniq}`,
+    GRAPHALT: `e2e-rns2-${uniq}`,
     ROUNDTRIP: `e2e-rtns-${uniq}`,
     HIERARCHY: `e2e-hns-${uniq}`,
   };

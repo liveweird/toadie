@@ -8,7 +8,7 @@ import { expandQuery, ownedByQuery } from "../utils/queryTemplates";
 import { fitViewCalls } from "../test/reactFlowStub";
 
 // React Flow needs real DOM measurement happy-dom can't give — shared stub (v1.25.0,
-// extracted from RenderGraph.test.tsx). The pure shaping (entityGraph.ts/graphLayout.ts) is
+// extracted from Graph.test.tsx). The pure shaping (entityGraph.ts/graphLayout.ts) is
 // covered by its own unit tests.
 vi.mock("@xyflow/react", () => import("../test/reactFlowStub"));
 

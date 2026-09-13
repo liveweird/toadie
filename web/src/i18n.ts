@@ -20,6 +20,7 @@ import enEntityHierarchy from "./locales/en/entityHierarchy.json";
 import enEntityQueries from "./locales/en/entityQueries.json";
 import enEntityQuery from "./locales/en/entityQuery.json";
 import enErrors from "./locales/en/errors.json";
+import enGraph from "./locales/en/graph.json";
 import enHierarchy from "./locales/en/hierarchy.json";
 import enHierarchies from "./locales/en/hierarchies.json";
 import enLabels from "./locales/en/labels.json";
@@ -29,7 +30,6 @@ import enNamespaces from "./locales/en/namespaces.json";
 import enOntology from "./locales/en/ontology.json";
 import enTags from "./locales/en/tags.json";
 import enTypes from "./locales/en/types.json";
-import enRender from "./locales/en/render.json";
 import enUsers from "./locales/en/users.json";
 
 /**
@@ -80,6 +80,7 @@ export const en = {
   entityQueries: enEntityQueries,
   entityQuery: enEntityQuery,
   errors: enErrors,
+  graph: enGraph,
   hierarchy: enHierarchy,
   hierarchies: enHierarchies,
   labels: enLabels,
@@ -89,7 +90,6 @@ export const en = {
   ontology: enOntology,
   tags: enTags,
   types: enTypes,
-  render: enRender,
   users: enUsers,
 };
 

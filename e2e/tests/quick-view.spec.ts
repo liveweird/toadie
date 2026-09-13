@@ -12,10 +12,10 @@ import {
 } from "./helpers";
 
 // The quick-view drawer (v1.21.0): a file's summary/findings/YAML beside the Files list,
-// addressed by ?file=<id>. Owns exactly one throwaway System in the render run namespace.
+// addressed by ?file=<id>. Owns exactly one throwaway System in the graph run namespace.
 test("the quick-view drawer opens from a row, survives a reload, and hands over to the editor", async ({ page }) => {
   await login(page);
-  const ns = runNamespace("render");
+  const ns = runNamespace("graph");
   const name = uniqueText("e2e-qv");
 
   await page.goto("/files/new");

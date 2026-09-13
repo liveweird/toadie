@@ -20,7 +20,7 @@ export default function CatalogToolbar({
   filters,
   children,
 }: {
-  /** The per-view storage key ("catalogFiles" | "hierarchy" | "renderGraph" | "errors"). */
+  /** The per-view storage key ("catalogFiles" | "hierarchy" | "graph" | "errors"). */
   viewKey: string;
   filters: ReturnType<typeof useCatalogFileFilterState>;
   children?: ReactNode;

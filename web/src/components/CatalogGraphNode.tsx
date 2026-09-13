@@ -73,7 +73,7 @@ function CatalogGraphNode({ data }: NodeProps<LaidOutNode>) {
           ...STATUS_STYLE[node.status],
           ...(fold?.collapsed ? COLLAPSED_FACE_STYLE[node.status] : {}),
         }}
-        aria-label={t("render.nodeAria", { name: node.name })}
+        aria-label={t("graph.nodeAria", { name: node.name })}
       >
         {/* The name owns the whole first line. The kind badge used to float over it
             (`position: absolute`), so long names ran underneath instead of ellipsizing; putting

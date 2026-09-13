@@ -1,7 +1,7 @@
 import { expect, login, openFilters, rowOperation, test, uniqueText } from "./helpers";
 
 // The entity query bar (Port migration phase 7, entity query language, 2.0.0): a Cypher-shaped
-// `MATCH` query narrows both Port Ontology canvases at once. Two throwaway blueprints seeded
+// `MATCH` query narrows both Port canvases at once. Two throwaway blueprints seeded
 // via the API under one run marker — a parent blueprint P with no relations, and a child
 // blueprint C carrying a single `parent` relation to P flagged as the `composition` entry of
 // its `hierarchyRelations` (the entity-graph.spec.ts shape, needed here too so the Entity

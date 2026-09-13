@@ -37,6 +37,6 @@
 
 ## Not covered here (and why)
 
-Real node folding and canvas dragging remain in `render.spec.ts`; this journey uses mode controls
+Real node folding and canvas dragging remain in `graph.spec.ts`; this journey uses mode controls
 and invisible stored IDs so its ordering assertions do not depend on shared catalog fixtures or
 React Flow geometry.
