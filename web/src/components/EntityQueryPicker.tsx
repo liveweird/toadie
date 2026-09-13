@@ -128,6 +128,9 @@ export default function EntityQueryPicker({
           aria-label={t("entityQueries.picker.label")}
           data={data}
           value={selectedId}
+          // Re-picking the already-picked query must not DESELECT it (Mantine's default): the pick
+          // is shared across both canvases, so it is usually already selected when a page opens.
+          allowDeselect={false}
           onChange={applyPick}
           searchable
           clearable

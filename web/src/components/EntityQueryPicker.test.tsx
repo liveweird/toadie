@@ -104,6 +104,16 @@ describe("EntityQueryPicker", () => {
     await waitFor(() => expect(screen.getByTestId("draft")).toHaveTextContent("MATCH (a)"));
   });
 
+  test("re-picking the already-picked query keeps it selected (never deselects)", async () => {
+    // The pick is shared across canvases: a page usually opens with it already selected.
+    localStorage.setItem("toadie.viewSettings.entityQuery.picked", JSON.stringify("1"));
+    renderWithProviders(<Harness />);
+    await waitFor(() => expect(screen.getByLabelText("Saved query", { selector: "input" })).toHaveValue("My private"));
+    await openPicker();
+    fireEvent.click(screen.getByRole("option", { name: "My private" }));
+    await waitFor(() => expect(screen.getByLabelText("Saved query", { selector: "input" })).toHaveValue("My private"));
+  });
+
   test("diverging from the picked query shows the modified badge", async () => {
     renderWithProviders(<Harness />);
     await openPicker();
