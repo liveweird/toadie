@@ -306,13 +306,17 @@ the same commit** — this list is the coverage map, the scenario file is the de
   picker to global-setup's own second hierarchy value — flagged on the SAME `parent` relation
   — reproduces the identical nesting before switching back → cleanup.
 - [`entity-query.spec.ts`](scenarios/entity-query.md) — the entity query bar (Port migration
-  phase 7, entity query language): two throwaway blueprints (a parent, a child with a `parent`
-  relation flagged as `composition`) and three entities (p1, c1 -> p1, orphan c2) seeded via
-  the API → a MATCH query typed into the shared "Entity query" editor and run on the Entity
-  graph narrows it to c1/p1 with an "Applied" badge → the Entity hierarchy page shows the same
-  draft/applied query and nesting from its own localStorage-shared state → a mistyped label's
-  debounced live check on the graph page suggests the real blueprint identifier → Clear drops
-  the badge and the `query` param → cleanup.
+  phase 7, entity query language; + canvas context actions, v2.2.0): two throwaway blueprints
+  (a parent, a child with a `parent` relation flagged as `composition`) and three entities (p1,
+  c1 -> p1, orphan c2) seeded via the API → a MATCH query typed into the shared "Entity query"
+  editor and run on the Entity graph narrows it to c1/p1 with an "Applied" badge → the Entity
+  hierarchy page shows the same draft/applied query and nesting from its own localStorage-shared
+  state → a mistyped label's debounced live check on the graph page suggests the real blueprint
+  identifier → Clear drops the badge and the `query` param → cleanup; a second, independently
+  fixtured journey right-clicks Entity graph nodes to run "Ancestors in composition" and
+  "Descendants in composition" from the node context menu, then opens the Entity hierarchy row
+  menu's own "Query" group to run "Expand 1 hop", each narrowing the graph via a generated
+  `query` param → cleanup.
 - [`entity-queries.spec.ts`](scenarios/entity-queries.md) — saved entity queries (Port migration
   phase 7, v2.1.0): the same throwaway blueprint pair and three entities as `entity-query.spec.ts`
   under their own `e2e-eqs-*` marker → a MATCH query run on the Entity graph is saved as a new
