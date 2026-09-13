@@ -36,8 +36,8 @@ Decisions, all taken 2026-09-12 and pinned here:
   evaluated per response (phase 5) and never stored, exactly as the list's `q`/sort/filter never
   see them (`.claude/docs/list-endpoints.md`).
 - **Surfaces**: the Entity graph and Entity hierarchy canvases share ONE query bar (one stored
-  draft, one applied query — `entityQuery.text`/`entityQuery.applied`); the Entities list keeps
-  its pills only.
+  draft, one applied query, one open state — `entityQuery.text`/`entityQuery.applied`/
+  `entityQuery.open`); the Entities list keeps its pills only.
 - **Transport**: `GET /api/v1/entities/graph?query=…` (`maxLength` 2000) — the query is one more
   filter on the graph read, cacheable by the SPA like the others; the request line is raised to
   16 KiB (`ktor.deployment.maxInitialLineLength`, `.claude/docs/security.md`) because a
@@ -264,11 +264,18 @@ queryCompletion.ts` the schema-aware completion source (blueprints by title afte
 keys ∪ hierarchy ids ∪ `$team` in an edge body, properties + metas after `v.`, `enum` values after
 `v.prop =`/`IN [`, clause keywords at clause starts, backticks via `quoteIfNeeded`), `utils/
 queryDiagnostics.ts` the server-diagnostic → lint-marker mapping; `components/QueryEditor.tsx`
-wraps the `EditorView`, `components/EntityQueryBar.tsx` adds Run (Mod+Enter), Clear, the
-"Applied · N" badge and the diagnostics list; `hooks/useEntityQuery.ts` holds the ONE shared
-draft/applied pair, `hooks/useQueryDiagnostics.ts` the 300 ms-debounced `/query/check`. Running
-happens only on Run / Mod+Enter (and on load when an applied query is stored); diagnostics on
-every keystroke, debounced.
+wraps the `EditorView`, `components/EntityQueryBar.tsx` adds Run (Mod+Enter), Clear and the
+diagnostics list; `hooks/useEntityQuery.ts` holds the ONE shared draft/applied pair plus the
+section's open state (`entityQuery.open`), `hooks/useQueryDiagnostics.ts` the 300 ms-debounced
+`/query/check`. Since 2.4.1 the bar is a COLLAPSIBLE section of `components/EntityGraphToolbar.tsx`
+(collapsed on a first visit, the open state remembered like the Filters drawer): its "Query"
+toggle on the title row carries the "Applied · N entities" badge while a query narrows the canvas,
+so the count stays visible with the editor folded away, and a refused run (a 400 with
+diagnostics) or a picked/generated query (`runText`) forces the section open. Running happens
+only on Run / Mod+Enter (and on load when an applied query is stored); diagnostics on every
+keystroke, debounced. A BLANK draft means NO query: erasing the editor's text clears the applied
+query too (the stored pair is normalized on load), and Clear stays enabled while a query is still
+applied — the canvas can never silently show a stale query's result behind an empty bar.
 
 ## Saved queries (v2.1.0)
 
@@ -282,8 +289,8 @@ return and tab allowed, every other control character a `400`) and must PARSE
 (`parseEntityQuery` — a `QueryException` becomes the `EntityQueryInvalid` 400 with its
 diagnostics), while SCHEMA validity is deliberately not checked at save time: blueprints change,
 and a saved query that names a since-renamed relation simply shows its diagnostics when applied.
-The SPA's `components/EntityQueryPicker.tsx` (the `LensPicker` clone) sits in the query bar's
-header row on both canvases: picking sets the draft AND runs it (`useEntityQuery.runText`), a
+The SPA's `components/EntityQueryPicker.tsx` (the `LensPicker` clone) sits in the query
+section's header row on both canvases (inside the collapsible section, 2.4.1): picking sets the draft AND runs it (`useEntityQuery.runText`), a
 "Modified" badge marks a draft that drifted from the picked text, and Save as / Save changes /
 Rename-visibility / Delete carry the lens conflict/forbidden/gone mappings.
 

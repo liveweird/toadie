@@ -4,6 +4,7 @@
 // defaults; pass `overrides` to change only what a test cares about.
 
 import type { CatalogFileListItem, CatalogFileResponse } from "../api/catalogFiles";
+import type { Blueprint } from "../api/blueprints";
 
 const EPOCH = 1_700_000_000_000;
 
@@ -18,6 +19,27 @@ export function pageOf<T>(
     page: overrides.page ?? 1,
     pageSize: overrides.pageSize ?? 20,
     total: overrides.total ?? items.length,
+  };
+}
+
+/** A `Blueprint` registry row — the Blueprints list/entity-graph-filter shape. */
+export function blueprintResponse(overrides: Partial<Blueprint> = {}): Blueprint {
+  return {
+    id: 1,
+    identifier: "service",
+    title: "Service",
+    schema: { properties: {}, required: [] },
+    relations: {},
+    mirrorProperties: {},
+    calculationProperties: {},
+    aggregationProperties: {},
+    createdBy: 1,
+    creatorName: "Alice Creator",
+    creatorDeleted: false,
+    createdAt: EPOCH,
+    updatedAt: EPOCH,
+    system: false,
+    ...overrides,
   };
 }
 

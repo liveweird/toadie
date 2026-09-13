@@ -31,27 +31,31 @@
    children (c1, c2) whose `parent` relation names p1, and one orphan child (c3) whose
    `parent` relation is left unset but whose `team` names the throwaway team.
    - *Expected*: all five creations succeed (`201`).
-3. They open **Entity hierarchy** from the nav's Ontology section, expand the filter
-   panel, pick both throwaway blueprints PLUS `_team` in the Blueprints MultiSelect, and set
-   the search filter to the run's own marker (the workspace may carry other specs'
-   blueprints/entities/teams running in parallel, so the unfiltered `_team` blueprint alone
-   would not be isolated) — this page keeps its OWN filter state, independent of the Entity
+3. They open **Entity hierarchy** from the nav's Ontology section, expand the filter panel,
+   and set the search filter to the run's own marker (the always-visible Blueprints pill row
+   starts every blueprint shown, so the two throwaway blueprints plus `_team` need no picking —
+   the run's own search marker is what isolates this run from other specs' blueprints/entities/
+   teams running in parallel) — this page keeps its OWN filter state, independent of the Entity
    graph page's, though both render through the same shared filter controls.
    - *Expected*: all four entities' titles plus the throwaway team's are visible.
-4. They collapse p1's branch from its row toggle, then expand it again.
+4. They toggle the child blueprint's pill off, then back on, in the always-visible Blueprints
+   group.
+   - *Expected*: the two child entities disappear while off (the parent, the orphan, and the
+     team stay), and reappear once the pill is back on.
+5. They collapse p1's branch from its row toggle, then expand it again.
    - *Expected*: collapsing hides only c1 and c2 (p1's hierarchy-relation children) while the
      orphan c3 and the throwaway team — both roots of their own, even though the team owns c3
      and `_team` carries its own seeded `hierarchyRelations` (ownership never nests) — stay
      visible; expanding restores c1/c2. This is the proof that c1/c2 nest under p1 and neither
      c3 nor the team does.
-5. They **Pin** p1 from its row's Operations menu, then clear the pin.
+6. They **Pin** p1 from its row's Operations menu, then clear the pin.
    - *Expected*: pinning narrows the tree to p1 and its descendants (c1, c2 stay, c3
      disappears) behind a "Pinned: p1" badge; clearing it restores c3.
-6. They try to **Delete** p1 from its row's Operations menu and confirm.
+7. They try to **Delete** p1 from its row's Operations menu and confirm.
    - *Expected*: the request is refused (`409`); the confirm dialog names the reason ("This
      entity is still targeted by another entity's relation") since c1/c2's `parent` relation
      still targets it; they cancel and p1 remains.
-7. They switch the toolbar's Hierarchy picker (defaulted to `composition`) to the run's own
+8. They switch the toolbar's Hierarchy picker (defaulted to `composition`) to the run's own
    second hierarchy value, then toggle p1's branch closed and open again, then switch the
    picker back to `composition`.
    - *Expected*: the picker starts on `composition`; switching to the second hierarchy value
@@ -59,7 +63,7 @@
      hierarchies, so it is one tree read two ways) — c1/c2 still nest under p1, and the
      collapse/expand toggle still hides/restores exactly them; switching back to `composition`
      leaves the picker there.
-8. Cleanup (API): the three children, then p1, then the throwaway team (now unreferenced),
+9. Cleanup (API): the three children, then p1, then the throwaway team (now unreferenced),
    then the child blueprint, then the parent blueprint. (Global-teardown separately removes
    the second hierarchy value from the `hierarchies` dictionary after every spec finishes, by
    which point no blueprint still references it.)

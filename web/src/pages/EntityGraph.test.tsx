@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import { blueprintResponse } from "../test/fixtures";
 import { expandQuery, ownedByQuery } from "../utils/queryTemplates";
 import { fitViewCalls } from "../test/reactFlowStub";
 
@@ -61,6 +62,11 @@ const HIERARCHIES = [
   { id: 2, value: "cost-center", isDefault: false },
 ];
 
+const BLUEPRINTS = [
+  blueprintResponse({ id: 1, identifier: "team", title: "Team" }),
+  blueprintResponse({ id: 2, identifier: "service", title: "Service" }),
+];
+
 function mockGraph(
   mockFetch: FetchMock,
   body: unknown = GRAPH,
@@ -68,9 +74,10 @@ function mockGraph(
   layout: unknown = { mode: "auto", positions: {} },
   hierarchies: unknown = HIERARCHIES,
   checkDiagnostics: unknown[] = [],
+  blueprints: unknown = BLUEPRINTS,
 ) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-    if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: [] }));
+    if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: blueprints }));
     if (url.startsWith("/api/v1/dictionaries/hierarchies")) return Promise.resolve(jsonResponse(200, { items: hierarchies }));
     if (url.startsWith("/api/v1/entity-queries")) return Promise.resolve(jsonResponse(200, { items: [] }));
     if (url === "/api/v1/entities/query/check")
@@ -285,20 +292,36 @@ describe("EntityGraph page", () => {
     expect(screen.getByText("Hierarchy edge")).toBeInTheDocument();
   });
 
-  test("the blueprint filter refetches with a repeated blueprint= param", async () => {
+  test("toggling a blueprint pill off refetches the graph with a blueprint= param, and both off shows the empty state with no request", async () => {
     mockGraph(mockFetch);
+    const user = userEvent.setup();
     renderPage();
 
     await screen.findByText(/platform \[team\]/);
-    fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
-    await screen.findByLabelText("Blueprints", { selector: "input" });
+    const pills = screen.getByRole("group", { name: "Blueprints" });
+    expect(within(pills).getByRole("checkbox", { name: "team" })).toBeChecked();
+    expect(within(pills).getByRole("checkbox", { name: "service" })).toBeChecked();
 
+    await user.click(within(pills).getByText("service", { exact: true }));
     await waitFor(() => {
       const called = mockFetch.mock.calls.some(
-        ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities/graph"),
+        ([url]) =>
+          typeof url === "string" &&
+          url.startsWith("/api/v1/entities/graph") &&
+          url.includes("blueprint=team"),
       );
       expect(called).toBe(true);
     });
+
+    mockFetch.mock.calls.length = 0;
+    await user.click(within(pills).getByText("team", { exact: true }));
+
+    expect(await screen.findByText(/nothing to render/i)).toBeInTheDocument();
+    expect(
+      mockFetch.mock.calls.some(
+        ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities/graph"),
+      ),
+    ).toBe(false);
   });
 
   test("a $team ownership edge draws dashed gray and shows in the legend", async () => {
@@ -399,6 +422,7 @@ describe("EntityGraph page", () => {
       renderPage();
 
       await screen.findByText(/platform \[team\]/);
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
 
       await waitFor(() => {
@@ -414,6 +438,7 @@ describe("EntityGraph page", () => {
       renderPage();
 
       await screen.findByText(/platform \[team\]/);
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
       await user.click(screen.getByRole("button", { name: "Run" }));
 
@@ -446,6 +471,7 @@ describe("EntityGraph page", () => {
       renderPage();
 
       await screen.findByText(/platform \[team\]/);
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       fireEvent.click(screen.getByLabelText("Saved query", { selector: "input" }));
       fireEvent.click(await screen.findByRole("option", { name: "Owners" }));
 
@@ -501,6 +527,7 @@ describe("EntityGraph page", () => {
       renderPage();
 
       await screen.findByText(/platform \[team\]/);
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a:srv)");
       await user.click(screen.getByRole("button", { name: "Run" }));
 
@@ -523,6 +550,7 @@ describe("EntityGraph page", () => {
       renderPage();
 
       await screen.findByText(/platform \[team\]/);
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
       await user.click(screen.getByRole("button", { name: "Run" }));
       await waitFor(() =>
@@ -543,12 +571,38 @@ describe("EntityGraph page", () => {
       });
     });
 
+    test("erasing the draft by hand drops the query= param and the badge, and Clear disables itself", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/platform \[team\]/);
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
+      await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
+      await user.click(screen.getByRole("button", { name: "Run" }));
+      await screen.findByTestId("entityQuery-applied");
+
+      mockFetch.mock.calls.length = 0;
+      await user.clear(screen.getByRole("textbox", { name: "Entity query" }));
+
+      await waitFor(() => {
+        const called = mockFetch.mock.calls.some(
+          ([url]) =>
+            typeof url === "string" && url.startsWith("/api/v1/entities/graph") && url.includes("query="),
+        );
+        expect(called).toBe(false);
+      });
+      expect(screen.queryByTestId("entityQuery-applied")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
+    });
+
     test("the draft survives a page switch via the shared entityQuery.text storage key", async () => {
       mockGraph(mockFetch);
       const user = userEvent.setup();
       renderPage();
 
       await screen.findByText(/platform \[team\]/);
+      fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
 
       await waitFor(() => expect(localStorage.getItem("toadie.viewSettings.entityQuery.text")).toBe('"MATCH (a)"'));

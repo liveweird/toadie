@@ -24,13 +24,14 @@
 3. The admin opens **Entity graph** and narrows it to this run's own rows with the search
    filter (the workspace may carry other specs' blueprints/entities running in parallel).
    - *Expected*: p1, c1, and c2's identifiers are all visible; exactly three nodes render.
-4. They type `MATCH (a:<child-blueprint>)-[:parent]->(b:<parent-blueprint>) RETURN a, b` into
-   the "Entity query" editor and click **Run**.
+4. They open the toolbar's collapsible **Query** section, type
+   `MATCH (a:<child-blueprint>)-[:parent]->(b:<parent-blueprint>) RETURN a, b` into
+   the "Entity query" editor, and click **Run**.
    - *Expected*: the resulting `GET …/entities/graph` request carries both the existing `q`
      filter and the new `query` param, and answers `200`; exactly two nodes remain (c1 and
      p1, joined by the `parent` edge), c2 drops out, and an "Applied" badge appears.
-5. They open **Entity hierarchy**, re-apply the same search filter, and look at the query bar
-   and the tree without touching either.
+5. They open **Entity hierarchy**, re-apply the same search filter and re-open the Query
+   section, and look at the query bar and the tree without touching either.
    - *Expected*: the editor already shows the identical query text and the "Applied" badge
      (both canvases share one localStorage-backed draft/applied query); the tree shows p1 with
      c1 nested under it, and c2 does not appear.

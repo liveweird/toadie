@@ -1,4 +1,4 @@
-import { expect, login, openFilters, rowOperation, test, uniqueText } from "./helpers";
+import { expect, login, openFilters, openQuery, rowOperation, test, uniqueText } from "./helpers";
 
 // The entity query bar (Port migration phase 7, entity query language, 2.0.0): a Cypher-shaped
 // `MATCH` query narrows both Port canvases at once. Two throwaway blueprints seeded
@@ -92,10 +92,12 @@ test("the entity query narrows both canvases and reports a suggestion for a mist
     await expect(page.getByText(c2Id, { exact: true })).toBeVisible();
     await expect(page.locator(".react-flow__node")).toHaveCount(3);
 
-    // 3. Type a MATCH query selecting c1's `parent` edge to p1, and run it. The graph request
+    // 3. Open the collapsible Query section, type a MATCH query selecting c1's `parent` edge to
+    // p1, and run it. The graph request
     // carries both the run's own `q` filter and the new `query` param.
     // The run marker carries hyphens, so the labels are backticked (`IDENT` is `[A-Za-z_][A-Za-z0-9_]*`).
     const validQuery = `MATCH (a:\`${childBp}\`)-[:parent]->(b:\`${parentBp}\`) RETURN a, b`;
+    await openQuery(page);
     const queryBox = page.getByRole("textbox", { name: "Entity query" });
     await queryBox.click();
     await queryBox.pressSequentially(validQuery);
@@ -129,6 +131,7 @@ test("the entity query narrows both canvases and reports a suggestion for a mist
     await expect(page.getByRole("heading", { name: "Entity hierarchy" })).toBeVisible();
     await openFilters(page);
     await page.getByRole("textbox", { name: "Search" }).fill(run);
+    await openQuery(page);
 
     const hierarchyQueryBox = page.getByRole("textbox", { name: "Entity query" });
     await expect(hierarchyQueryBox).toContainText(validQuery);
@@ -141,6 +144,7 @@ test("the entity query narrows both canvases and reports a suggestion for a mist
     // debounced live check run; it must suggest the real blueprint identifier.
     await page.goto("/entity-graph");
     await expect(page.getByRole("heading", { name: "Entity graph" })).toBeVisible();
+    await openQuery(page);
     const mistypedQuery = `MATCH (a:\`${childBp}x\`) RETURN a`;
     const queryBoxAgain = page.getByRole("textbox", { name: "Entity query" });
 

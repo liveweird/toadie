@@ -27,7 +27,8 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { IconInfoCircle, IconTopologyStar3 } from "@tabler/icons-react";
-import { getEntityGraph, type EntityGraphNode as EntityGraphNodeApi } from "../api/entities";
+import { getEntityGraph, type EntityGraph, type EntityGraphNode as EntityGraphNodeApi } from "../api/entities";
+import CaptionedChipGroup from "../components/CaptionedChipGroup";
 import ClusterFrames from "../components/ClusterFrames";
 import EntityGraphNode from "../components/EntityGraphNode";
 import EntityGraphToolbar from "../components/EntityGraphToolbar";
@@ -66,7 +67,6 @@ import { editEntityPath } from "../utils/entityLinks";
 import { OWNERSHIP_RELATION } from "../utils/systemBlueprints";
 import { queryProblemDiagnostics } from "../utils/queryDiagnostics";
 import LoadingBlock from "../components/LoadingBlock";
-import PageHeader from "../components/PageHeader";
 import classes from "../theme.module.css";
 import { useGraphLayout } from "../hooks/useGraphLayout";
 import { useSessionUserId } from "../auth";
@@ -111,9 +111,10 @@ export default function EntityGraph() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const colorScheme = useComputedColorScheme("light");
-  const filters = useEntityGraphFilterState("entityGraph");
+  const { blueprints, loading: blueprintsLoading } = useBlueprints();
+  const activeBlueprints = useMemo(() => blueprints.map((b) => b.identifier), [blueprints]);
+  const filters = useEntityGraphFilterState("entityGraph", activeBlueprints, blueprintsLoading);
   const { hierarchies } = useHierarchies();
-  const { blueprints } = useBlueprints();
   const [storedHierarchyId, setStoredHierarchyId] = useStoredState("entityGraph.hierarchy", "", isString);
   const hierarchyId = effectiveHierarchyId(storedHierarchyId, hierarchies.map((h) => h.value));
 
@@ -123,8 +124,14 @@ export default function EntityGraph() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["entities", "graph", filters.values, query.applied],
     queryFn: () => getEntityGraph({ ...filters.values, query: query.applied || undefined }),
+    enabled: filters.ready && !filters.noBlueprints,
     placeholderData: keepPreviousData,
   });
+  // `enabled: false` (every blueprint hidden, or the registry still resolving a stored hidden
+  // list — `filters.ready`) does not clear a cached `keepPreviousData` result, so every derived
+  // shaping below reads THIS, never `data` directly, or toggling every blueprint off would keep
+  // showing the last-fetched graph.
+  const graph: EntityGraph | undefined = filters.ready && !filters.noBlueprints ? data : undefined;
 
   // The last RUN query's own diagnostics (a real EntityQueryInvalid 400) win over the live
   // typing-check ones — they're authoritative for the text that was actually applied, and
@@ -137,12 +144,12 @@ export default function EntityGraph() {
   const runDiagnostics = query.draft === query.applied ? refusedRun : [];
   const diagnostics = runDiagnostics.length > 0 ? runDiagnostics : liveDiagnostics;
   const completionSchema = useMemo(() => ({ blueprints, hierarchies: hierarchies.map((h) => h.value) }), [blueprints, hierarchies]);
-  const appliedCount = query.applied && data ? data.nodes.length : undefined;
+  const appliedCount = query.applied ? (filters.noBlueprints ? 0 : graph?.nodes.length) : undefined;
 
   // Every relation starts ON — the fold chips are a separate, unpersisted dimension from the
   // filters above (the Render page's own posture); new relations therefore always start shown.
   const [disabled, setDisabled] = useState<Set<string>>(new Set());
-  const relations = useMemo(() => (data ? relationsOf(data) : []), [data]);
+  const relations = useMemo(() => (graph ? relationsOf(graph) : []), [graph]);
 
   const userId = useSessionUserId();
   const layout = useGraphLayout(userId, "entityGraph");
@@ -162,16 +169,16 @@ export default function EntityGraph() {
   // Containment for the fold comes from the FULL payload (never the relation-chip-filtered
   // one), so an entity stays collapsible with any chip off — the Render page's rule — along
   // the SELECTED hierarchy only; other hierarchies' edges draw as ordinary relations.
-  const forest = useMemo(() => (data ? buildEntityHierarchy(data, hierarchyId) : []), [data, hierarchyId]);
+  const forest = useMemo(() => (graph ? buildEntityHierarchy(graph, hierarchyId) : []), [graph, hierarchyId]);
   const titleByBlueprint = useMemo(
-    () => new Map((data?.nodes ?? []).map((n) => [n.blueprint, n.blueprintTitle])),
-    [data],
+    () => new Map((graph?.nodes ?? []).map((n) => [n.blueprint, n.blueprintTitle])),
+    [graph],
   );
   const baseLayout = useMemo(() => {
-    if (!data) return { nodes: [] as LaidOutNode<EntityGraphNodeApi>[], edges: [] as Edge[], anyCollapsed: false };
-    const filtered = filterEntityGraph(data, disabled);
+    if (!graph) return { nodes: [] as LaidOutNode<EntityGraphNodeApi>[], edges: [] as Edge[], anyCollapsed: false };
+    const filtered = filterEntityGraph(graph, disabled);
     const hierarchyRelations = new Set(
-      data.edges.filter((e) => e.hierarchies.includes(hierarchyId)).map((e) => e.relation),
+      graph.edges.filter((e) => e.hierarchies.includes(hierarchyId)).map((e) => e.relation),
     );
     const folded = foldGraph(toFoldable(filtered), forest, new Set(collapsed));
     const laidOut = layoutGraph(folded, ENTITY_CLUSTER);
@@ -202,7 +209,7 @@ export default function EntityGraph() {
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges, anyCollapsed };
-  }, [data, disabled, forest, collapsed, layoutReady, hierarchyId]);
+  }, [graph, disabled, forest, collapsed, layoutReady, hierarchyId]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode<EntityGraphNodeApi>>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
@@ -284,113 +291,115 @@ export default function EntityGraph() {
 
   return (
     <Stack gap="md" className={classes.fillPage}>
-      <PageHeader
+      <EntityGraphToolbar
         title={t("entityGraph.title")}
-        toolbar={
-          <EntityGraphToolbar
-            viewKey="entityGraph"
-            filters={filters}
-            query={
-              <EntityQueryBar
-                value={query.draft}
-                onChange={query.setDraft}
-                onRun={query.run}
-                onClear={query.clear}
-                diagnostics={diagnostics}
-                completionSchema={completionSchema}
-                appliedCount={appliedCount}
-                draft={query.draft}
-                onPick={query.runText}
-              />
-            }
-          >
-            <HierarchyPicker value={hierarchyId} onChange={setStoredHierarchyId} />
-            <Chip.Group
-              multiple
-              value={relations.filter((r) => !disabled.has(r))}
-              onChange={(values) => setDisabled(new Set(relations.filter((r) => !values.includes(r))))}
-            >
-              <Group gap={6} role="group" aria-label={t("entityGraph.relationsLabel")}>
-                {relations.map((relation) => (
-                  <Chip key={relation} value={relation} size="xs">
-                    {relation}
-                  </Chip>
-                ))}
-              </Group>
-            </Chip.Group>
-            <Group gap="xs" ml="auto" wrap="wrap">
-              <SegmentedControl
-                size="xs"
-                value={mode}
-                disabled={!layoutReady}
-                onChange={(value) => layout.update((current) => ({ ...current, mode: value as LayoutMode }))}
-                data={[
-                  { value: "auto", label: t("entityGraph.layoutMode.auto") },
-                  { value: "manual", label: t("entityGraph.layoutMode.manual") },
-                ]}
-                aria-label={t("entityGraph.layoutMode.label")}
-              />
-              {mode === "manual" && (
-                <Button
-                  variant="default"
-                  size="xs"
-                  disabled={!layoutReady}
-                  onClick={() => layout.update((current) => ({ ...current, positions: {} }))}
-                >
-                  {t("entityGraph.resetLayout")}
-                </Button>
-              )}
-              {baseLayout.anyCollapsed && (
-                <Button
-                  variant="default"
-                  size="xs"
-                  disabled={!layoutReady}
-                  onClick={() => layout.update((current) => ({ ...current, collapsed: [] }))}
-                >
-                  {t("entityGraph.expandAll")}
-                </Button>
-              )}
-              <Popover position="bottom-end" shadow="md" withArrow>
-                <Popover.Target>
-                  <Button variant="subtle" size="xs" color="gray" leftSection={<IconInfoCircle size={14} />}>
-                    {t("entityGraph.legend.title")}
-                  </Button>
-                </Popover.Target>
-                <Popover.Dropdown>
-                  <Stack gap="xs">
-                    {LEGEND.map(({ key, style }) => (
-                      <Group key={key} gap={8} wrap="nowrap">
-                        <span
-                          style={{ width: 14, height: 14, borderRadius: 4, display: "inline-block", flexShrink: 0, ...style }}
-                        />
-                        <Text size="xs">{t(`entityGraph.legend.${key}`)}</Text>
-                      </Group>
-                    ))}
-                    <Group gap={8} wrap="nowrap">
-                      <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
-                        <line x1={0} y1={4} x2={14} y2={4} stroke="currentColor" strokeWidth={2} />
-                      </svg>
-                      <Text size="xs">{t("entityGraph.legend.hierarchyEdge")}</Text>
-                    </Group>
-                    <Group gap={8} wrap="nowrap">
-                      <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
-                        <line x1={0} y1={4} x2={14} y2={4} stroke="currentColor" strokeWidth={1.5} style={FOLDED_EDGE_STYLE} />
-                      </svg>
-                      <Text size="xs">{t("entityGraph.legend.folded")}</Text>
-                    </Group>
-                    <Group gap={8} wrap="nowrap">
-                      <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
-                        <line x1={0} y1={4} x2={14} y2={4} strokeWidth={1.5} style={OWNERSHIP_EDGE_STYLE} />
-                      </svg>
-                      <Text size="xs">{t("entityGraph.legend.ownershipEdge")}</Text>
-                    </Group>
-                  </Stack>
-                </Popover.Dropdown>
-              </Popover>
-            </Group>
-          </EntityGraphToolbar>
+        viewKey="entityGraph"
+        filters={filters}
+        queryOpen={query.open}
+        onQueryOpenChange={query.setOpen}
+        queryForcedOpen={runDiagnostics.length > 0}
+        appliedCount={appliedCount}
+        query={
+          <EntityQueryBar
+            value={query.draft}
+            onChange={query.setDraft}
+            onRun={query.run}
+            onClear={query.clear}
+            diagnostics={diagnostics}
+            completionSchema={completionSchema}
+            applied={query.applied}
+            draft={query.draft}
+            onPick={query.runText}
+          />
         }
-      />
+        pills={
+          <Chip.Group
+            multiple
+            value={relations.filter((r) => !disabled.has(r))}
+            onChange={(values) => setDisabled(new Set(relations.filter((r) => !values.includes(r))))}
+          >
+            <CaptionedChipGroup label={t("entityGraph.relationsLabel")}>
+              {relations.map((relation) => (
+                <Chip key={relation} value={relation} size="xs">
+                  {relation}
+                </Chip>
+              ))}
+            </CaptionedChipGroup>
+          </Chip.Group>
+        }
+      >
+        <HierarchyPicker value={hierarchyId} onChange={setStoredHierarchyId} />
+        <Group gap="xs" wrap="wrap">
+          <SegmentedControl
+            size="xs"
+            value={mode}
+            disabled={!layoutReady}
+            onChange={(value) => layout.update((current) => ({ ...current, mode: value as LayoutMode }))}
+            data={[
+              { value: "auto", label: t("entityGraph.layoutMode.auto") },
+              { value: "manual", label: t("entityGraph.layoutMode.manual") },
+            ]}
+            aria-label={t("entityGraph.layoutMode.label")}
+          />
+          {mode === "manual" && (
+            <Button
+              variant="default"
+              size="xs"
+              disabled={!layoutReady}
+              onClick={() => layout.update((current) => ({ ...current, positions: {} }))}
+            >
+              {t("entityGraph.resetLayout")}
+            </Button>
+          )}
+          {baseLayout.anyCollapsed && (
+            <Button
+              variant="default"
+              size="xs"
+              disabled={!layoutReady}
+              onClick={() => layout.update((current) => ({ ...current, collapsed: [] }))}
+            >
+              {t("entityGraph.expandAll")}
+            </Button>
+          )}
+          <Popover position="bottom-end" shadow="md" withArrow>
+            <Popover.Target>
+              <Button variant="subtle" size="xs" color="gray" leftSection={<IconInfoCircle size={14} />}>
+                {t("entityGraph.legend.title")}
+              </Button>
+            </Popover.Target>
+            <Popover.Dropdown>
+              <Stack gap="xs">
+                {LEGEND.map(({ key, style }) => (
+                  <Group key={key} gap={8} wrap="nowrap">
+                    <span
+                      style={{ width: 14, height: 14, borderRadius: 4, display: "inline-block", flexShrink: 0, ...style }}
+                    />
+                    <Text size="xs">{t(`entityGraph.legend.${key}`)}</Text>
+                  </Group>
+                ))}
+                <Group gap={8} wrap="nowrap">
+                  <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
+                    <line x1={0} y1={4} x2={14} y2={4} stroke="currentColor" strokeWidth={2} />
+                  </svg>
+                  <Text size="xs">{t("entityGraph.legend.hierarchyEdge")}</Text>
+                </Group>
+                <Group gap={8} wrap="nowrap">
+                  <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
+                    <line x1={0} y1={4} x2={14} y2={4} stroke="currentColor" strokeWidth={1.5} style={FOLDED_EDGE_STYLE} />
+                  </svg>
+                  <Text size="xs">{t("entityGraph.legend.folded")}</Text>
+                </Group>
+                <Group gap={8} wrap="nowrap">
+                  <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
+                    <line x1={0} y1={4} x2={14} y2={4} strokeWidth={1.5} style={OWNERSHIP_EDGE_STYLE} />
+                  </svg>
+                  <Text size="xs">{t("entityGraph.legend.ownershipEdge")}</Text>
+                </Group>
+              </Stack>
+            </Popover.Dropdown>
+          </Popover>
+        </Group>
+      </EntityGraphToolbar>
 
       {layout.phase === "loading" && (
         <Text role="status" aria-label={t("entityGraph.layout.loading")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
@@ -437,7 +446,7 @@ export default function EntityGraph() {
         </Alert>
       )}
 
-      {isLoading && !data ? (
+      {!filters.ready || (isLoading && !graph) ? (
         <LoadingBlock />
       ) : !isLoading && !isError && nodes.length === 0 ? (
         <EmptyState icon={IconTopologyStar3} label={t("entityGraph.empty")} />

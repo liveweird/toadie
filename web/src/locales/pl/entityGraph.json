@@ -2,8 +2,8 @@
   "title": "Graf encji",
   "loadFailed": "Nie udało się wczytać grafu encji",
   "relationsLabel": "Relacje",
+  "blueprintsLabel": "Blueprinty",
   "filter": {
-    "blueprints": "Blueprinty",
     "q": "Szukaj",
     "clearQ": "Wyczyść filtr wyszukiwania",
     "team": "Zespół",

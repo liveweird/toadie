@@ -27,7 +27,6 @@ import { findPlacement, type HierarchyNode } from "../utils/hierarchy";
 import { loadErrorMessage } from "../utils/saveError";
 import { queryProblemDiagnostics } from "../utils/queryDiagnostics";
 import LoadingBlock from "../components/LoadingBlock";
-import PageHeader from "../components/PageHeader";
 import classes from "../theme.module.css";
 
 function pathKey(path: string, node: EntityGraphNode): string {
@@ -155,22 +154,27 @@ function TreeItem({
 export default function EntityHierarchy() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const filters = useEntityGraphFilterState("entityHierarchy");
+  const { blueprints, loading: blueprintsLoading } = useBlueprints();
+  const activeBlueprints = useMemo(() => blueprints.map((b) => b.identifier), [blueprints]);
+  const filters = useEntityGraphFilterState("entityHierarchy", activeBlueprints, blueprintsLoading);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [pinnedId, setPinnedId] = useStoredState("entityHierarchy.pinnedNodeId", "", isString);
   const { hierarchies } = useHierarchies();
-  const { blueprints } = useBlueprints();
   const [storedHierarchyId, setStoredHierarchyId] = useStoredState("entityHierarchy.hierarchy", "", isString);
   const hierarchyId = effectiveHierarchyId(storedHierarchyId, hierarchies.map((h) => h.value));
 
   const query = useEntityQuery();
   const { diagnostics: liveDiagnostics } = useQueryDiagnostics(query.draft);
 
-  const { data, isPending, isError, error } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["entities", "graph", filters.values, query.applied],
     queryFn: () => getEntityGraph({ ...filters.values, query: query.applied || undefined }),
+    enabled: filters.ready && !filters.noBlueprints,
     placeholderData: keepPreviousData,
   });
+  // See EntityGraph.tsx — `enabled: false` does not clear a cached `keepPreviousData` result,
+  // so every derived shaping below reads THIS, never `data` directly.
+  const graph = filters.ready && !filters.noBlueprints ? data : undefined;
 
   // The last RUN query's own diagnostics win over the live typing-check ones — see EntityGraph.
   // A refused run carries `diagnostics`; they describe the APPLIED text, so the bar shows them
@@ -181,16 +185,18 @@ export default function EntityHierarchy() {
   const runDiagnostics = query.draft === query.applied ? refusedRun : [];
   const diagnostics = runDiagnostics.length > 0 ? runDiagnostics : liveDiagnostics;
   const completionSchema = useMemo(() => ({ blueprints, hierarchies: hierarchies.map((h) => h.value) }), [blueprints, hierarchies]);
-  const appliedCount = query.applied && data ? data.nodes.length : undefined;
+  const appliedCount = query.applied ? (filters.noBlueprints ? 0 : graph?.nodes.length) : undefined;
 
-  const roots = useMemo(() => (data ? buildEntityHierarchy(data, hierarchyId) : []), [data, hierarchyId]);
+  const roots = useMemo(() => (graph ? buildEntityHierarchy(graph, hierarchyId) : []), [graph, hierarchyId]);
   const placement = useMemo(() => (pinnedId ? findPlacement(roots, pinnedId) : null), [roots, pinnedId]);
   const visible = placement ? [placement.item] : roots;
   const basePath = placement?.path ?? "";
 
   useEffect(() => {
-    if (pinnedId && data && !placement) setPinnedId("");
-  }, [pinnedId, data, placement, setPinnedId]);
+    // Guarded on `graph` (never fires mid-load or while every blueprint is hidden — the
+    // `Hierarchy.tsx`/`noKinds` rule: all-pills-off is not the entity being gone).
+    if (pinnedId && graph && !placement) setPinnedId("");
+  }, [pinnedId, graph, placement, setPinnedId]);
 
   const deleteConfirm = useDeleteConfirm<EntityGraphNode>({
     mutationFn: (row) => deleteEntity(row.entityId),
@@ -209,64 +215,64 @@ export default function EntityHierarchy() {
 
   return (
     <Stack gap="md">
-      <PageHeader
+      <EntityGraphToolbar
         title={t("entityHierarchy.title")}
-        toolbar={
-          <EntityGraphToolbar
-            viewKey="entityHierarchy"
-            filters={filters}
-            query={
-              <EntityQueryBar
-                value={query.draft}
-                onChange={query.setDraft}
-                onRun={query.run}
-                onClear={query.clear}
-                diagnostics={diagnostics}
-                completionSchema={completionSchema}
-                appliedCount={appliedCount}
-                draft={query.draft}
-                onPick={query.runText}
+        viewKey="entityHierarchy"
+        filters={filters}
+        queryOpen={query.open}
+        onQueryOpenChange={query.setOpen}
+        queryForcedOpen={runDiagnostics.length > 0}
+        appliedCount={appliedCount}
+        query={
+          <EntityQueryBar
+            value={query.draft}
+            onChange={query.setDraft}
+            onRun={query.run}
+            onClear={query.clear}
+            diagnostics={diagnostics}
+            completionSchema={completionSchema}
+            applied={query.applied}
+            draft={query.draft}
+            onPick={query.runText}
+          />
+        }
+      >
+        <HierarchyPicker value={hierarchyId} onChange={setStoredHierarchyId} />
+        <Tooltip label={t("entityHierarchy.expandAll")}>
+          <ActionIcon variant="default" size="md" aria-label={t("entityHierarchy.expandAll")} onClick={() => setCollapsed(new Set())}>
+            <IconChevronsDown size={16} />
+          </ActionIcon>
+        </Tooltip>
+        <Tooltip label={t("entityHierarchy.collapseAll")}>
+          <ActionIcon
+            variant="default"
+            size="md"
+            aria-label={t("entityHierarchy.collapseAll")}
+            onClick={() => setCollapsed(new Set(branchKeys(visible, basePath, [])))}
+          >
+            <IconChevronsUp size={16} />
+          </ActionIcon>
+        </Tooltip>
+        {placement && (
+          <Badge
+            variant="light"
+            color="gray"
+            size="lg"
+            tt="none"
+            leftSection={<IconPin size={12} />}
+            rightSection={
+              <CloseButton
+                size="xs"
+                variant="transparent"
+                aria-label={t("entityHierarchy.pinned.clearAria", { name: placement.item.node.title })}
+                onClick={() => setPinnedId("")}
               />
             }
           >
-            <HierarchyPicker value={hierarchyId} onChange={setStoredHierarchyId} />
-            <Tooltip label={t("entityHierarchy.expandAll")}>
-              <ActionIcon variant="default" size="md" aria-label={t("entityHierarchy.expandAll")} onClick={() => setCollapsed(new Set())}>
-                <IconChevronsDown size={16} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label={t("entityHierarchy.collapseAll")}>
-              <ActionIcon
-                variant="default"
-                size="md"
-                aria-label={t("entityHierarchy.collapseAll")}
-                onClick={() => setCollapsed(new Set(branchKeys(visible, basePath, [])))}
-              >
-                <IconChevronsUp size={16} />
-              </ActionIcon>
-            </Tooltip>
-            {placement && (
-              <Badge
-                variant="light"
-                color="gray"
-                size="lg"
-                tt="none"
-                leftSection={<IconPin size={12} />}
-                rightSection={
-                  <CloseButton
-                    size="xs"
-                    variant="transparent"
-                    aria-label={t("entityHierarchy.pinned.clearAria", { name: placement.item.node.title })}
-                    onClick={() => setPinnedId("")}
-                  />
-                }
-              >
-                {t("entityHierarchy.pinned.badge", { name: placement.item.node.title })}
-              </Badge>
-            )}
-          </EntityGraphToolbar>
-        }
-      />
+            {t("entityHierarchy.pinned.badge", { name: placement.item.node.title })}
+          </Badge>
+        )}
+      </EntityGraphToolbar>
 
       {isError && refusedRun.length === 0 && (
         <Alert color="red" variant="light" title={t("entityHierarchy.loadFailed")}>
@@ -275,7 +281,7 @@ export default function EntityHierarchy() {
       )}
 
       <Paper withBorder p="md">
-        {isPending && !data ? (
+        {!filters.ready || (isLoading && !graph) ? (
           <LoadingBlock py="md" />
         ) : visible.length > 0 ? (
           visible.map((root) => (

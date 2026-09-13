@@ -214,6 +214,23 @@ export async function openFilters(page: Page): Promise<void> {
 }
 
 /**
+ * Ensure the Entity graph/hierarchy canvases' collapsible Query section is expanded (2.4.1) —
+ * the `openFilters` twin, over the toggle labelled "Query" (anchored `/^Query( |$)/`: a plain
+ * substring match on "Query" would also hit the saved-query picker's "Saved query actions"
+ * button). Idempotent: the open state persists under the shared `entityQuery.open` key, so a
+ * revisited page (or a canvas action that already opened it, e.g. a context-menu query) is left
+ * alone rather than toggled shut.
+ */
+export async function openQuery(page: Page): Promise<void> {
+  const toggle = page.getByRole("button", { name: /^Query( |$)/ });
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
+
+/**
  * The per-run namespaces registered in the namespaces dictionary by global-setup (and
  * removed by global-teardown). Catalog writes accept only defined namespaces, and the
  * dictionary PUT is a whole-document replace — parallel workers must never write it

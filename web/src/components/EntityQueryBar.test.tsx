@@ -43,6 +43,7 @@ function renderBar(overrides: Partial<Parameters<typeof EntityQueryBar>[0]> = {}
     onClear: vi.fn(),
     diagnostics: [] as EntityQueryDiagnostic[],
     completionSchema: schema,
+    applied: "",
     draft: "",
     onPick: vi.fn(),
     ...overrides,
@@ -93,7 +94,17 @@ describe("EntityQueryBar", () => {
     expect(onRun).toHaveBeenCalledTimes(1);
   });
 
-  test("Clear is disabled for an empty value and calls onClear when clicked", async () => {
+  test("Clear is disabled with a blank draft and no applied query", () => {
+    renderBar({ value: "", applied: "" });
+    expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
+  });
+
+  test("Clear stays enabled once a query is applied, even after the draft is erased by hand", () => {
+    renderBar({ value: "", applied: "MATCH (a)" });
+    expect(screen.getByRole("button", { name: "Clear" })).toBeEnabled();
+  });
+
+  test("Clear is enabled for a non-blank draft and calls onClear when clicked", async () => {
     const user = userEvent.setup();
     const { onClear } = renderBar({ value: "MATCH (a)" });
     const clearButton = screen.getByRole("button", { name: "Clear" });
@@ -115,21 +126,6 @@ describe("EntityQueryBar", () => {
     const content = screen.getByRole("textbox", { name: "Entity query" });
     content.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }));
     expect(onRun).toHaveBeenCalledTimes(1);
-  });
-
-  test("shows no applied badge when appliedCount is unset", () => {
-    renderBar({ value: "MATCH (a)" });
-    expect(screen.queryByText(/Applied/)).not.toBeInTheDocument();
-  });
-
-  test("shows the applied · N entities badge when a query is applied", () => {
-    renderBar({ value: "MATCH (a)", appliedCount: 3 });
-    expect(screen.getByTestId("entityQuery-applied")).toHaveTextContent("Applied · 3 entities");
-  });
-
-  test("singular applied count", () => {
-    renderBar({ value: "MATCH (a)", appliedCount: 1 });
-    expect(screen.getByTestId("entityQuery-applied")).toHaveTextContent("Applied · 1 entity");
   });
 
   test("renders no diagnostics list when there are none", () => {

@@ -292,19 +292,22 @@ the same commit** — this list is the coverage map, the scenario file is the de
   blueprints (a parent with a `peer` many self-relation, a child whose single `parent`
   relation is flagged as the `composition` entry of its `hierarchyRelations`), four entities,
   and one throwaway `_team` entity owning one of the parents — all seeded via the API under
-  one shared run marker → a throwaway user filters the graph to the two blueprints plus
-  `_team` (narrowed by the run's own search marker), toggles the `peer` AND `$team` relation
-  chips to prune and restore an edge each, narrows further with the toolbar's Team filter,
+  one shared run marker → a throwaway user narrows the graph to this run with the search
+  filter (the always-visible Blueprints pill row starts every blueprint shown), toggles the
+  child blueprint's pill off and back on, toggles the `peer` AND `$team` relation chips to
+  prune and restore an edge each, narrows further with the toolbar's Team filter,
   folds/unfolds the `composition`-hierarchy parent (the owning team unaffected — it never
   nests), and drags it in Manual mode, whose PUT is awaited by exact node id and confirmed
   after a reload → cleanup.
 - [`entity-hierarchy.spec.ts`](scenarios/entity-hierarchy.md) — the Entity hierarchy (Port
   migration phase 3; + Phase 4 ownership, v1.26.0; parallel hierarchies, v1.32.0): the same
   throwaway blueprint pair with one parent, two children, one orphan child Direct-owned by a
-  throwaway `_team` entity, all under one shared run marker → filtered to the two blueprints
-  plus `_team` (narrowed by `q`), the tree nests the children under the parent via the
-  `composition` hierarchy while the orphan AND the owning team both stay roots beside it
-  (ownership never nests), Pin narrows the tree to the parent's subtree, deleting the parent
+  throwaway `_team` entity, all under one shared run marker → narrowed to this run with the
+  search filter (the always-visible Blueprints pill row starts every blueprint shown; the
+  child blueprint's pill is also toggled off and back on), the tree nests the children under
+  the parent via the `composition` hierarchy while the orphan AND the owning team both stay
+  roots beside it (ownership never nests), Pin narrows the tree to the parent's subtree,
+  deleting the parent
   is refused (`409`) naming the referring children, and switching the toolbar's Hierarchy
   picker to global-setup's own second hierarchy value — flagged on the SAME `parent` relation
   — reproduces the identical nesting before switching back → cleanup.
