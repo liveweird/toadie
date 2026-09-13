@@ -445,6 +445,8 @@ describe("EntityGraph page", () => {
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), " RETURN a");
       await waitFor(() => expect(screen.queryByText("Did you mean `service`?")).not.toBeInTheDocument());
       expect(screen.queryByText("line 1, column 8")).not.toBeInTheDocument();
+      // …and the generic alert must not reappear in their place: the failure is still the query.
+      expect(screen.queryByText("Failed to load the entity graph")).not.toBeInTheDocument();
     });
 
     test("Clear empties the query so the next graph request carries no query param", async () => {

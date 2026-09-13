@@ -128,9 +128,12 @@ export default function EntityGraph() {
   // The last RUN query's own diagnostics (a real EntityQueryInvalid 400) win over the live
   // typing-check ones — they're authoritative for the text that was actually applied, and
   // their presence also means the generic load-failed Alert below stays suppressed.
-  // A failed run's diagnostics describe the APPLIED text: once the draft diverges from it they
-  // would land on the wrong characters, so the live check takes over the moment the user edits.
-  const runDiagnostics = isError && query.draft === query.applied ? queryProblemDiagnostics(error) : [];
+  // A refused run carries `diagnostics`; they describe the APPLIED text, so the bar shows them
+  // only while the draft still equals it (afterwards the live check takes over — the run's
+  // positions would land on the wrong characters), but the generic load-failed alert stays
+  // suppressed either way: the failure is the query, and the bar is its error surface.
+  const refusedRun = isError ? queryProblemDiagnostics(error) : [];
+  const runDiagnostics = query.draft === query.applied ? refusedRun : [];
   const diagnostics = runDiagnostics.length > 0 ? runDiagnostics : liveDiagnostics;
   const completionSchema = useMemo(() => ({ blueprints, hierarchies: hierarchies.map((h) => h.value) }), [blueprints, hierarchies]);
   const appliedCount = query.applied && data ? data.nodes.length : undefined;
@@ -406,7 +409,7 @@ export default function EntityGraph() {
         </Text>
       )}
 
-      {isError && runDiagnostics.length === 0 && (
+      {isError && refusedRun.length === 0 && (
         <Alert color="red" variant="light" title={t("entityGraph.loadFailed")} style={{ flexShrink: 0 }}>
           {loadErrorMessage(error, t)}
         </Alert>
