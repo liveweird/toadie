@@ -26,7 +26,7 @@
   "section": {
     "catalog": "Catalog",
     "dataModel": "Ontology",
-    "registries": "Dictionaries",
+    "catalogDictionaries": "Dictionaries",
     "administration": "Administration",
     "portDictionaries": "Dictionaries"
   },

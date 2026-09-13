@@ -80,12 +80,12 @@ function toggleCollapsed(current: { collapsed: string[] }, id: string) {
     : [...current.collapsed, id];
 }
 
-export default function RenderGraph() {
+export default function Graph() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const colorScheme = useComputedColorScheme("light");
-  // The Files list's full filter set (per-view persisted under renderGraph.filter.*).
-  const filters = useCatalogFileFilterState("renderGraph");
+  // The Files list's full filter set (per-view persisted under graph.filter.*).
+  const filters = useCatalogFileFilterState("graph");
   // Deliberately not persisted: all relations on is the right starting view.
   const [enabled, setEnabled] = useState<RelationFamily[]>([...RELATION_FAMILIES]);
 
@@ -220,19 +220,19 @@ export default function RenderGraph() {
   return (
     <Stack gap="md" className={classes.fillPage}>
       <PageHeader
-        title={t("render.title")}
+        title={t("graph.title")}
         toolbar={
-          <CatalogToolbar viewKey="renderGraph" filters={filters}>
+          <CatalogToolbar viewKey="graph" filters={filters}>
             {/* Which RELATIONSHIP families draw edges — the group's aria-label names it. */}
             <Chip.Group
               multiple
               value={enabled}
               onChange={(values) => setEnabled(values as RelationFamily[])}
             >
-              <Group gap={6} role="group" aria-label={t("render.relationsLabel")}>
+              <Group gap={6} role="group" aria-label={t("graph.relationsLabel")}>
                 {RELATION_FAMILIES.map((family) => (
                   <Chip key={family} value={family} size="xs">
-                    {t(`render.relation.${family}`)}
+                    {t(`graph.relation.${family}`)}
                   </Chip>
                 ))}
               </Group>
@@ -247,10 +247,10 @@ export default function RenderGraph() {
                   mode: value as LayoutMode,
                 }))}
                 data={[
-                  { value: "auto", label: t("render.layoutMode.auto") },
-                  { value: "manual", label: t("render.layoutMode.manual") },
+                  { value: "auto", label: t("graph.layoutMode.auto") },
+                  { value: "manual", label: t("graph.layoutMode.manual") },
                 ]}
-                aria-label={t("render.layoutMode.label")}
+                aria-label={t("graph.layoutMode.label")}
               />
               {/* Reset layout clears POSITIONS only — the fold is its own dimension with its
                   own reset, so straightening a dragged canvas never unfolds it. */}
@@ -261,7 +261,7 @@ export default function RenderGraph() {
                   disabled={!layoutReady}
                   onClick={() => layout.update((current) => ({ ...current, positions: {} }))}
                 >
-                  {t("render.resetLayout")}
+                  {t("graph.resetLayout")}
                 </Button>
               )}
               {/* Expand all clears the WHOLE list, stale ids of filtered-out nodes included,
@@ -274,13 +274,13 @@ export default function RenderGraph() {
                   disabled={!layoutReady}
                   onClick={() => layout.update((current) => ({ ...current, collapsed: [] }))}
                 >
-                  {t("render.expandAll")}
+                  {t("graph.expandAll")}
                 </Button>
               )}
               <Popover position="bottom-end" shadow="md" withArrow>
                 <Popover.Target>
                   <Button variant="subtle" size="xs" color="gray" leftSection={<IconInfoCircle size={14} />}>
-                    {t("render.legend.title")}
+                    {t("graph.legend.title")}
                   </Button>
                 </Popover.Target>
                 <Popover.Dropdown>
@@ -290,7 +290,7 @@ export default function RenderGraph() {
                         <span
                           style={{ width: 14, height: 14, borderRadius: 4, display: "inline-block", flexShrink: 0, ...style }}
                         />
-                        <Text size="xs">{t(`render.legend.${key}`)}</Text>
+                        <Text size="xs">{t(`graph.legend.${key}`)}</Text>
                       </Group>
                     ))}
                     <Group gap={8} wrap="nowrap">
@@ -298,7 +298,7 @@ export default function RenderGraph() {
                       <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
                         <line x1={0} y1={4} x2={14} y2={4} stroke="currentColor" strokeWidth={1.5} style={FOLDED_EDGE_STYLE} />
                       </svg>
-                      <Text size="xs">{t("render.legend.folded")}</Text>
+                      <Text size="xs">{t("graph.legend.folded")}</Text>
                     </Group>
                   </Stack>
                 </Popover.Dropdown>
@@ -309,46 +309,46 @@ export default function RenderGraph() {
       />
 
       {layout.phase === "loading" && (
-        <Text role="status" aria-label={t("render.layout.loading")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
-          {t("render.layout.loading")}
+        <Text role="status" aria-label={t("graph.layout.loading")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
+          {t("graph.layout.loading")}
         </Text>
       )}
       {layout.phase === "loadError" && (
-        <Alert color="red" variant="light" title={t("render.layout.loadFailed")} style={{ flexShrink: 0 }}>
+        <Alert color="red" variant="light" title={t("graph.layout.loadFailed")} style={{ flexShrink: 0 }}>
           <Stack gap="xs" align="flex-start">
             <Text size="sm">{loadErrorMessage(layout.loadError, t)}</Text>
             <Button variant="default" size="xs" onClick={layout.retryLoad}>
-              {t("render.layout.retryLoad")}
+              {t("graph.layout.retryLoad")}
             </Button>
           </Stack>
         </Alert>
       )}
       {layout.saveError != null && (
-        <Alert color="red" variant="light" title={t("render.layout.saveFailed")} style={{ flexShrink: 0 }}>
+        <Alert color="red" variant="light" title={t("graph.layout.saveFailed")} style={{ flexShrink: 0 }}>
           <Stack gap="xs" align="flex-start">
             <Text size="sm">{saveErrorMessage(layout.saveError, t, {
               failedStatus: "common.error.saveFailedStatus",
               failed: "common.error.saveFailedNetwork",
             })}</Text>
             <Button variant="default" size="xs" onClick={layout.retrySave}>
-              {t("render.layout.retrySave")}
+              {t("graph.layout.retrySave")}
             </Button>
           </Stack>
         </Alert>
       )}
       {!layout.saveError && layout.saving && (
-        <Text role="status" aria-label={t("render.layout.saving")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
-          {t("render.layout.saving")}
+        <Text role="status" aria-label={t("graph.layout.saving")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
+          {t("graph.layout.saving")}
         </Text>
       )}
       {!layout.saveError && !layout.saving && layout.pending && (
-        <Text role="status" aria-label={t("render.layout.pending")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
-          {t("render.layout.pending")}
+        <Text role="status" aria-label={t("graph.layout.pending")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>
+          {t("graph.layout.pending")}
         </Text>
       )}
 
       {isError && (
-        <Alert color="red" variant="light" title={t("render.loadFailed")} style={{ flexShrink: 0 }}>
+        <Alert color="red" variant="light" title={t("graph.loadFailed")} style={{ flexShrink: 0 }}>
           {loadErrorMessage(error, t)}
         </Alert>
       )}
@@ -358,7 +358,7 @@ export default function RenderGraph() {
       ) : !isLoading && !isError && nodes.length === 0 ? (
         <EmptyState
           icon={IconTopologyStar3}
-          label={t("render.empty")}
+          label={t("graph.empty")}
         />
       ) : (
         <Paper withBorder radius="md" className={classes.fillPageCanvas}>

@@ -20,7 +20,7 @@ type LayoutDocument = {
   collapsed: string[];
 };
 
-// The render-graph journey across this run's two throwaway NAMESPACES (registered by
+// The graph journey across this run's two throwaway NAMESPACES (registered by
 // global-setup — the form accepts only defined namespaces). Isolation runs off a per-attempt
 // unique NAME stem shared by all three nodes, so the graph's name filter selects exactly this
 // attempt's entities and retries never inherit their own residue; the second namespace is what
@@ -34,13 +34,13 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
   await login(page);
   const adminToken = await page.evaluate(() => localStorage.getItem("toadie.auth.token"));
   expect(adminToken !== null, "the admin login must provide cleanup authorization").toBe(true);
-  const user = await createUserViaUi(page, "E2E Render Graph");
+  const user = await createUserViaUi(page, "E2E Graph");
   const layoutPath = `/api/v1/users/${user.id}/graph-layout`;
   // Names computed up front (pure, no await) and ids captured at creation below, both kept
   // reachable from `finally`: cleanup deletes A/B/System via the API instead of round-tripping
   // the Files UI (see the cleanup block below).
-  const ns = runNamespace("render");
-  const nsAlt = runNamespace("renderAlt");
+  const ns = runNamespace("graph");
+  const nsAlt = runNamespace("graphAlt");
   const stem = uniqueText("e2e-rnode");
   const a = `${stem}-a`;
   const b = `${stem}-b`;

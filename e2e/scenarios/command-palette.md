@@ -3,7 +3,7 @@
 - **Spec**: [tests/command-palette.spec.ts](../tests/command-palette.spec.ts)
 - **Actors**: the seed administrator (`admin@toadie.local`)
 - **Owns** (exclusive server-side state): one throwaway System named `e2e-palette-…` in the
-  `render` run namespace, created through the editor and deleted at the end
+  `graph` run namespace, created through the editor and deleted at the end
 
 ## Scenario: the command palette jumps to pages and opens a file by name
 

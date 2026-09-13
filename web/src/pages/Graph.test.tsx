@@ -12,7 +12,7 @@ import { fitViewCalls } from "../test/reactFlowStub";
 // (filterGraph/layoutGraph) is covered in graphLayout.test.ts.
 vi.mock("@xyflow/react", () => import("../test/reactFlowStub"));
 
-import RenderGraph from "./RenderGraph";
+import Graph from "./Graph";
 
 const TOKEN_KEY = "toadie.auth.token";
 
@@ -94,14 +94,14 @@ function PathProbe() {
 function renderPage() {
   return renderWithProviders(
     <Routes>
-      <Route path="/graph" element={<RenderGraph />} />
+      <Route path="/graph" element={<Graph />} />
       <Route path="/files/:id/edit" element={<PathProbe />} />
     </Routes>,
     { route: "/graph" },
   );
 }
 
-describe("RenderGraph page", () => {
+describe("Graph page", () => {
   let mockFetch: FetchMock;
 
   beforeEach(() => {

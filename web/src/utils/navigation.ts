@@ -82,7 +82,7 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
     ],
   },
   {
-    label: "appShell.section.registries",
+    label: "appShell.section.catalogDictionaries",
     world: "backstage",
     items: [
       { to: "/namespaces", label: "appShell.nav.namespaces", icon: IconFolders },

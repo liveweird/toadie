@@ -31,7 +31,7 @@
    children (c1, c2) whose `parent` relation names p1, and one orphan child (c3) whose
    `parent` relation is left unset but whose `team` names the throwaway team.
    - *Expected*: all five creations succeed (`201`).
-3. They open **Entity hierarchy** from the nav's Port Ontology section, expand the filter
+3. They open **Entity hierarchy** from the nav's Ontology section, expand the filter
    panel, pick both throwaway blueprints PLUS `_team` in the Blueprints MultiSelect, and set
    the search filter to the run's own marker (the workspace may carry other specs'
    blueprints/entities/teams running in parallel, so the unfiltered `_team` blueprint alone

@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.3.1",
+    date: "2026-09-13",
+    en: `**Consistency pass.**
+
+- The Graph page's internal name now matches its title (it was "render" in code, translations and stored settings): locally stored Graph filters reset once; the server-side layout is untouched.
+- The API contract declares the negative-id \`400\` on every by-id operation, shares one \`Visibility\` enum between lenses and saved queries, and composes the three findings-bearing problem bodies from the common problem detail — no change on the wire.
+- Docs caught up with the world switch and now list every configuration variable.`,
+    pl: `**Przegląd spójności.**
+
+- Wewnętrzna nazwa strony Graf odpowiada teraz jej tytułowi (w kodzie, tłumaczeniach i zapisanych ustawieniach była to „render"): lokalnie zapisane filtry Grafu zerują się jednorazowo; układ po stronie serwera pozostaje bez zmian.
+- Kontrakt API deklaruje \`400\` dla ujemnego identyfikatora na każdej operacji po identyfikatorze, współdzieli jedno wyliczenie \`Visibility\` między soczewkami a zapisanymi zapytaniami i składa trzy ciała problemów z ustaleniami ze wspólnego opisu problemu — bez zmian na łączu.
+- Dokumentacja nadążyła za przełącznikiem światów i wymienia teraz każdą zmienną konfiguracyjną.`,
+  },
+  {
     version: "2.3.0",
     date: "2026-09-13",
     en: `**Backstage | Port world switch.**

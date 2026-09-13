@@ -4,8 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * The `@xyflow/react` mock shared by the Render, Entity graph, and Entity hierarchy page
- * tests (extracted from `pages/RenderGraph.test.tsx` in v1.25.0, where it originated). React
+ * The `@xyflow/react` mock shared by the Graph, Entity graph, and Entity hierarchy page
+ * tests (extracted from `pages/Graph.test.tsx` in v1.25.0, where it originated). React
  * Flow needs real DOM measurement (ResizeObserver, bounding boxes) that happy-dom can't give,
  * so the canvas is stubbed to a list of node buttons; the real rendering is e2e's job. The
  * pure shaping (`filterGraph`/`layoutGraph`/`foldGraph`/`entityGraph`) is covered by their own
@@ -45,7 +45,7 @@ type StubNode = { id: string; position: { x: number; y: number }; data: StubNode
 /**
  * Every `fitView()` call across every stub-rendered canvas, recorded as the SORTED node ids
  * the stub currently held at call time — pins the ordering the "re-fit only after the expanded
- * node set has reached React Flow" regression cares about (RenderGraph.test.tsx/
+ * node set has reached React Flow" regression cares about (Graph.test.tsx/
  * EntityGraph.test.tsx). A real React Flow instance queues `fitView()` and resolves it once
  * every node the STORE holds has been measured; this stub instead reads a ref updated on every
  * render (never inside an effect), so a call made from a stale `structureKey` genuinely observes

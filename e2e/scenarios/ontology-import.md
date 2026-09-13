@@ -17,7 +17,7 @@
 
 ## Scenario: a mixed batch imports with a two-pass blueprint cycle, then round-trips through export
 
-1. The admin signs in and opens **Import** from the Port Ontology nav.
+1. The admin signs in and opens **Import** from the Ontology section of the Port nav.
    - *Expected*: the page renders with the Replace-existing switch off and Import disabled.
 2. They paste a batch with two blueprints (A carrying `createdAt`/`_meta` noise, a relation, a
    mirror, and an aggregation that all forward-reference B, declared afterward — together with

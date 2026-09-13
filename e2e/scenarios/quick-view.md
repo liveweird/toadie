@@ -3,7 +3,7 @@
 - **Spec**: [tests/quick-view.spec.ts](../tests/quick-view.spec.ts)
 - **Actors**: the seed administrator (`admin@toadie.local`)
 - **Owns** (exclusive server-side state): one throwaway System named `e2e-qv-…` in the
-  `render` run namespace, created through the editor and deleted at the end
+  `graph` run namespace, created through the editor and deleted at the end
 
 ## Scenario: the quick-view drawer opens from a row, survives a reload, and hands over to the editor
 

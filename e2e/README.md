@@ -12,6 +12,8 @@ cd e2e
 npm install
 npm run install:browsers      # one-time: download Chromium
 npm test                      # brings the stack up (docker compose), runs specs, tears it down
+npm run test:headed           # headed browser — real Chromium window, helps visualize failures
+npm run test:ui               # Playwright Inspector UI mode for debugging
 ```
 
 - `global-setup.ts` starts `docker compose up -d --build` and waits for `:8081` — **unless a stack
@@ -67,7 +69,7 @@ from Lettuce, that any new or edited spec must satisfy:
   `dialog-readiness` opens and cancels an unsaved editor (browser-only entrance hold, no stored state);
   `password-reveal-readiness` owns its throwaway user;
   `catalog-files`, `errors`, and `source-sync` own throwaway files (unique names in `default`); `kinds`,
-  `render`, `round-trip`, and `hierarchy` own throwaway files in this RUN's namespaces (below); `users` owns
+  `graph`, `round-trip`, and `hierarchy` own throwaway files in this RUN's namespaces (below); `users` owns
   its throwaway accounts; `i18n` owns its throwaway user (and ONLY that user's language —
   **seeded accounts must stay English**: every login applies the stored language to that
   session's UI, so a Polish seed admin would flip parallel specs mid-run);
@@ -82,7 +84,7 @@ from Lettuce, that any new or edited spec must satisfy:
   blocks deletion like a relation target), and the dependent's mirror goes with the dependent;
   `entity-graph` owns its two throwaway `e2e-eg-*` blueprints and entities, one throwaway
   `e2e-eg-*`-marked `_team` entity, plus its throwaway user's `entity-graph-layout` document
-  (see its own bullet below, alongside `graph-persistence`/`render`); `entity-hierarchy` owns
+  (see its own bullet below, alongside `graph-persistence`/`graph`); `entity-hierarchy` owns
   its two throwaway `e2e-eh-*` blueprints and entities plus one throwaway `e2e-eh-*`-marked
   `_team` entity (run as the seed admin — entities carry no admin gate); `entity-query` owns
   its two throwaway `e2e-eq-*` blueprints and three entities (run as the seed admin; the
@@ -203,7 +205,7 @@ from Lettuce, that any new or edited spec must satisfy:
 - Seeded accounts are never mutated. The seed admin (`admin@toadie.local`) is a shared
   read-mostly actor: specs sign in as it but must not change its password, roles, or state — a
   future spec that needs a mutated account creates a throwaway.
-- `render.spec.ts` creates one throwaway user and exclusively owns that user's graph LAYOUT
+- `graph.spec.ts` creates one throwaway user and exclusively owns that user's graph LAYOUT
   document, restores its pristine default, and deletes the user with retained admin authorization.
 - `graph-persistence.spec.ts` creates one throwaway user and exclusively owns that user's graph
   layout document. It retains the unrevoked admin login only for `finally` cleanup, deletes the
@@ -252,10 +254,10 @@ the same commit** — this list is the coverage map, the scenario file is the de
   the overwritten document) → download `catalog-info.yaml` → delete.
 - [`command-palette.spec.ts`](scenarios/command-palette.md) — Ctrl K opens the palette:
   a page name jumps there, a file name searches the catalog and opens the editor (owns one
-  throwaway System in the `render` run namespace).
+  throwaway System in the `graph` run namespace).
 - [`quick-view.spec.ts`](scenarios/quick-view.md) — the quick-view drawer opens from a
   row menu, is addressed by `?file=`, survives a reload, scans clean, and hands over to the
-  editor (owns one throwaway System in the `render` run namespace).
+  editor (owns one throwaway System in the `graph` run namespace).
 - [`blueprints.spec.ts`](scenarios/blueprints.md) — the blueprint registry (Port
   compatibility, phase 1; + Phase 4 system-blueprint protections, v1.26.0): the seeded `_team`
   system row's System badge/disabled Delete and its editor's read-only identifier + locked
@@ -393,7 +395,7 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`password-reveal-readiness.spec.ts`](scenarios/password-reveal-readiness.md) — suppress one
   real Show-password click, prove the helper rejects instead of returning the mask, then reveal
   normally, sign in, and delete the throwaway user with retained admin authorization.
-- [`render.spec.ts`](scenarios/render.md) — the relationship graph draws stored and
+- [`graph.spec.ts`](scenarios/graph.md) — the relationship graph draws stored and
   (deletion-orphaned) missing nodes for one per-attempt name stem, faced name + type, with the
   two-namespace canvas clustered inside labelled namespace frames and the unmatched shared
   owner group left out; toggling a relation family prunes the missing nodes it strands;

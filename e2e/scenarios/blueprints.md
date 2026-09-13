@@ -11,7 +11,7 @@
 
 ## Scenario: admin curates the blueprint registry; a rename cascades; a regular user reads it
 
-1. The admin signs in and opens **Blueprints** from the nav's Port Ontology section.
+1. The admin signs in and opens **Blueprints** from the nav's Ontology section.
    - *Expected*: the registry page renders with the **New blueprint** action (ADMIN-only).
 2. The seeded `_team` system row shows a "System" badge and a disabled Delete control; they
    open its editor and go back without saving.

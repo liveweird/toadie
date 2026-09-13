@@ -103,9 +103,9 @@ const DYNAMIC_KEY_PREFIXES: ReadonlyArray<string> = [
   "entities.computed.kind.",
   // t(`entityGraph.legend.${key}`) — pages/EntityGraph.tsx (the status legend map).
   "entityGraph.legend.",
-  // t(`render.relation.${family}`) / t(`render.legend.${key}`) — pages/RenderGraph.tsx.
-  "render.relation.",
-  "render.legend.",
+  // t(`graph.relation.${family}`) / t(`graph.legend.${key}`) — pages/Graph.tsx.
+  "graph.relation.",
+  "graph.legend.",
 ];
 
 function usedDynamically(key: string): boolean {

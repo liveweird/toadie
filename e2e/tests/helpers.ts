@@ -220,7 +220,7 @@ export async function openFilters(page: Page): Promise<void> {
  * concurrently, so the setup process is the one writer and specs just read these values
  * (namespaces.spec.ts, the sole in-run writer, appends/removes only its own entries).
  */
-export function runNamespace(key: "kinds" | "render" | "renderAlt" | "roundTrip" | "hierarchy"): string {
+export function runNamespace(key: "kinds" | "graph" | "graphAlt" | "roundTrip" | "hierarchy"): string {
   const value = process.env[`E2E_NS_${key.toUpperCase()}`];
   if (!value) throw new Error(`global-setup did not register the "${key}" run namespace`);
   return value;
@@ -318,7 +318,7 @@ export async function rowOperation(
 }
 
 /**
- * Pick a namespace in a namespace Select — the catalog form's field AND the list/render
+ * Pick a namespace in a namespace Select — the catalog form's field AND the list/graph
  * pages' filter combo (both offer only the dictionary's entries; free text is not
  * accepted). Mantine Select inputs carry the combobox role; searchable filtering narrows
  * the dropdown before the option click.

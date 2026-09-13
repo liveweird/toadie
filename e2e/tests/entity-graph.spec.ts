@@ -247,7 +247,7 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
       (async () => {
         await page.mouse.down();
         await page.mouse.move(cx + 140, cy - 60, { steps: 8 });
-        // Mid-gesture the node must stay painted (the render.spec.ts idiom) — this also gives
+        // Mid-gesture the node must stay painted (the graph.spec.ts idiom) — this also gives
         // React Flow's own pointer handling a turn to register the move before mouse.up() fires.
         await expect(nodeP1).toBeVisible();
         await page.mouse.up();

@@ -48,7 +48,7 @@ const FeatureFlags = lazy(() => import("./pages/FeatureFlags"));
 const CreateUser = lazy(() => import("./pages/CreateUser"));
 const EditUser = lazy(() => import("./pages/EditUser"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
-const RenderGraph = lazy(() => import("./pages/RenderGraph"));
+const Graph = lazy(() => import("./pages/Graph"));
 const Changelog = lazy(() => import("./pages/Changelog"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -198,7 +198,7 @@ export default function App() {
             <Route path="entity-hierarchy" element={<EntityHierarchy />} />
             <Route path="ontology/import" element={<ImportOntology />} />
             <Route path="errors" element={<ErrorsPage />} />
-            <Route path="graph" element={<RenderGraph />} />
+            <Route path="graph" element={<Graph />} />
             <Route path="namespaces" element={<Namespaces />} />
             <Route path="labels" element={<Labels />} />
             <Route path="tags" element={<Tags />} />
