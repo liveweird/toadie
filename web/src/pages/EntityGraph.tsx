@@ -213,9 +213,16 @@ export default function EntityGraph() {
   }, [mode, baseLayout, positions, setNodes, setEdges]);
 
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance<LaidOutNode<EntityGraphNodeApi>, Edge> | null>(null);
+  // Keyed off the LIVE node array, not `baseLayout`: React Flow's `fitView()` is queued and
+  // resolves against the nodes ITS store holds once every one of them is measured. `baseLayout`
+  // changes one render before the new set reaches the `nodes` prop, so a fit queued from it
+  // could resolve against the previous (already measured) set — the Mantine 9.6 bump exposed
+  // exactly that race after "Expand all" (an unmeasured re-added node, a fit to the old three,
+  // the fourth left off-canvas). Deriving the key from `nodes` runs this effect in the commit
+  // whose child `StoreUpdater` effect has already handed the new set to the store.
   const structureKey = useMemo(
-    () => baseLayout.nodes.map((n) => n.id).sort((a, b) => a.localeCompare(b)).join("|"),
-    [baseLayout.nodes],
+    () => nodes.map((n) => n.id).sort((a, b) => a.localeCompare(b)).join("|"),
+    [nodes],
   );
   useEffect(() => {
     void rfInstance?.fitView();
