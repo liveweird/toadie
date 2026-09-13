@@ -116,6 +116,10 @@ class EntityService(
     private val queryClock: () -> Long = System::nanoTime,
     /** In-flight query evaluations this instance allows at once (each holds a decoded workspace) — a test seam. */
     queryPermits: Int = MAX_CONCURRENT_ENTITY_QUERIES,
+    /** The workspace document byte budget every create/replace/import is checked against — a test seam. */
+    internal val workspaceDocumentBytes: Long = MAX_WORKSPACE_DOCUMENT_BYTES,
+    /** The process-wide read ledger every graph/list/read charges (`EntityReadBudget.kt`) — a test seam. */
+    internal val readLedger: EntityReadLedger = EntityReadLedger(),
 ) {
     /** `tryAcquire` only — a saturated instance answers `429` immediately rather than queueing a workspace load. */
     private val querySlots = Semaphore(queryPermits)
@@ -124,6 +128,7 @@ class EntityService(
         // The pool ([QUERY_DISPATCHER]) has exactly MAX_CONCURRENT_ENTITY_QUERIES threads: more
         // permits than threads would queue evaluations, each holding a decoded workspace.
         require(queryPermits in 1..MAX_CONCURRENT_ENTITY_QUERIES) { "queryPermits must be between 1 and $MAX_CONCURRENT_ENTITY_QUERIES" }
+        require(workspaceDocumentBytes > 0) { "workspaceDocumentBytes must be positive" }
     }
 
     object Entities : UIntIdTable("entities") {
