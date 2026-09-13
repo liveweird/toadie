@@ -1,6 +1,7 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders, screen } from "../test/render";
+import { jsonResponse } from "../test/http";
+import { renderWithProviders, screen, waitFor } from "../test/render";
 import EntityQueryBar from "./EntityQueryBar";
 import type { EntityQueryDiagnostic } from "../api/entities";
 import type { QueryCompletionSchema } from "../utils/queryCompletion";
@@ -30,6 +31,10 @@ vi.mock("./QueryEditor", () => ({
 
 const schema: QueryCompletionSchema = { blueprints: [], hierarchies: [] };
 
+const SAVED_QUERIES = [
+  { id: 1, name: "My query", visibility: "PRIVATE", query: "MATCH (a)", createdBy: 5, creatorName: "Me", creatorDeleted: false, createdAt: 1, updatedAt: 1 },
+];
+
 function renderBar(overrides: Partial<Parameters<typeof EntityQueryBar>[0]> = {}) {
   const props = {
     value: "",
@@ -38,6 +43,8 @@ function renderBar(overrides: Partial<Parameters<typeof EntityQueryBar>[0]> = {}
     onClear: vi.fn(),
     diagnostics: [] as EntityQueryDiagnostic[],
     completionSchema: schema,
+    draft: "",
+    onPick: vi.fn(),
     ...overrides,
   };
   renderWithProviders(<EntityQueryBar {...props} />);
@@ -45,6 +52,32 @@ function renderBar(overrides: Partial<Parameters<typeof EntityQueryBar>[0]> = {}
 }
 
 describe("EntityQueryBar", () => {
+  let mockFetch: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    mockFetch = vi.fn((url: string) => {
+      if (url.startsWith("/api/v1/entity-queries")) return Promise.resolve(jsonResponse(200, { items: SAVED_QUERIES }));
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    vi.stubGlobal("fetch", mockFetch);
+    localStorage.setItem("toadie.auth.token", "fake-token");
+    localStorage.setItem("toadie.auth.userId", "5");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  test("renders the saved-query picker in the header row and picking runs the text", async () => {
+    const onPick = vi.fn();
+    renderBar({ draft: "", onPick });
+    const select = await screen.findByLabelText("Saved query", { selector: "input" });
+    await userEvent.click(select);
+    await userEvent.click(await screen.findByRole("option", { name: "My query" }));
+    await waitFor(() => expect(onPick).toHaveBeenCalledWith("MATCH (a)"));
+  });
+
   test("renders the mocked editor with the entity-query label", () => {
     renderBar({ value: "MATCH (a)" });
     expect(screen.getByRole("textbox", { name: "Entity query" })).toHaveValue("MATCH (a)");

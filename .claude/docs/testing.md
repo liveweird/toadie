@@ -362,7 +362,13 @@ case per context, `queryDiagnostics` offset math incl. clamping and positionless
 the `QueryEditor` smoke, and the page tests through a mocked editor (typing → the debounced
 check, Run → `query=` on the graph request, a `400` with `diagnostics` rendered without the
 generic load-failed alert, Clear, the draft shared across both canvases). E2E:
-`entity-query.spec.ts`.
+`entity-query.spec.ts`. **Saved queries (v2.1.0):** `SavedEntityQueryTest` is `LensTest`'s case
+list retargeted (401; CRUD + the visibility flip; the per-owner 409 freed by delete; private
+invisible to others / public read-only; a multi-line text kept verbatim, a control character
+`400`; a syntax-invalid text → the `EntityQueryProblem` 400 with positioned diagnostics on POST
+and PUT; the PUT verdict before validation; the three audit events), `MigrationChecksumTest` pins
+V35; frontend `EntityQueryPicker.test.tsx` is the `LensPicker.test.tsx` clone plus one bar
+integration case; e2e `entity-queries.spec.ts`.
 
 ### Reset-link regressions (V26)
 

@@ -21,6 +21,8 @@ import ch.nokillswit.entities.EntityServiceKey
 import ch.nokillswit.entities.JqEvaluator
 import ch.nokillswit.entities.MAX_JQ_DEADLINE_MILLIS
 import ch.nokillswit.entityquery.MAX_ENTITY_QUERY_DEADLINE_MILLIS
+import ch.nokillswit.entityquery.SavedEntityQueryService
+import ch.nokillswit.entityquery.SavedEntityQueryServiceKey
 import ch.nokillswit.labels.LabelService
 import ch.nokillswit.labels.LabelServiceKey
 import ch.nokillswit.lenses.LensService
@@ -57,6 +59,7 @@ suspend fun Application.configureDatabase() {
     attributes.put(DictionaryServiceKey, DictionaryService(database))
     attributes.put(LabelServiceKey, LabelService(database))
     attributes.put(LensServiceKey, LensService(database))
+    attributes.put(SavedEntityQueryServiceKey, SavedEntityQueryService(database))
     attributes.put(TagCategoryServiceKey, TagCategoryService(database))
     attributes.put(EntityTypesServiceKey, EntityTypesService(database))
     attributes.put(AnnotationKeyServiceKey, AnnotationKeyService(database))

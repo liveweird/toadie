@@ -44,6 +44,8 @@ the seven `$` meta-properties, never a computed value. Its `LIMIT` caps the retu
 (1..`MAX_ENTITIES_TOTAL`), a query-language construct rather than paging: there is no `page`/
 `pageSize`, and the graph's node count is bounded by the workspace cap.
 
+**Saved entity queries (v2.1.0).** `GET /api/v1/entity-queries` answers the unpaged `{items}` wrapper like `GET /api/v1/lenses` — own plus PUBLIC rows, a personal-plus-curated scale, name-ordered case-insensitively — not a standard list endpoint.
+
 **Sub-collections.** A record's own collection is paged like any other when it is unbounded: the catalog file's change history (`GET /api/v1/files/{id}/events`) rides the shared machinery through `EventLog.listFor` with its own `-timestamp,-id` default sort and a `{timestamp, id}` whitelist. This is a deliberate deviation from Lettuce, whose seven `*_events` endpoints answer an unpaged `{items}`: their per-record counts are intrinsically tiny, while a synced catalog file mints an event per sync run. Reserve the plain `{items}` wrapper for genuinely bounded sets (the registries, at most a few dozen rows).
 
 **Ontology import responses are not list endpoints.** `POST /api/v1/blueprints/import` and

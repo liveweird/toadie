@@ -295,6 +295,19 @@ shims (`document.createRange` + `ResizeObserver`); page and bar tests mock it as
 i18n namespace `entityQuery` (EN/PL, Polish plurals on `appliedCount`); the diagnostics list
 renders the server's `message` verbatim plus "Did you mean `x`?" and "line L, column C".
 
+**Saved queries (v2.1.0, `components/EntityQueryPicker.tsx`).** The `LensPicker` clone in the
+bar's header row, on both canvases: `api/entityQueries.ts` + `hooks/useSavedEntityQueries.ts`
+(`useRegistryQuery`, key `["entityQueries"]`) over `/api/v1/entity-queries`; the picker takes the
+bar's `draft` and `onPick = query.runText`, so picking sets the editor text AND runs it; the
+"Modified" badge means the draft drifted from the picked query's text; Save as / Save changes /
+Rename-visibility / Delete are the lens actions with the same conflict (409) / forbidden (403,
+a foreign public query) / gone (404) mappings, plus a `400` carrying `diagnostics` (the text no
+longer parses) surfaced under the dialog's name field — the dialog always saves the CURRENT
+draft, never a copy of its own. i18n namespace `entityQueries` (EN/PL). The picked id is stored under
+`entityQuery.picked` — shared by both canvases like the draft/applied pair, so the pick (and its
+owner-only actions) survives the Entity graph ↔ Entity hierarchy switch. Clearing the select only
+forgets the pick; it never clears the bar (that is the bar's own Clear).
+
 ## Ontology import & export (v1.28.0)
 
 Phase 6 of the Port data-model move: a thin Import page under Port Ontology (`pages/ImportOntology.tsx`, route `/ontology/import`, nav leaf LAST in `appShell.section.dataModel`) accepting pasted or uploaded JSON — including a Port API export verbatim — over the new bulk endpoints `POST /api/v1/blueprints/import(/check)` (ADMIN) and `POST /api/v1/entities/import(/check)` (any authenticated), plus client-side JSON export from the Blueprints and Entities pages whose output the import accepts back unchanged.

@@ -17,6 +17,7 @@ import enChangelog from "./locales/en/changelog.json";
 import enEntities from "./locales/en/entities.json";
 import enEntityGraph from "./locales/en/entityGraph.json";
 import enEntityHierarchy from "./locales/en/entityHierarchy.json";
+import enEntityQueries from "./locales/en/entityQueries.json";
 import enEntityQuery from "./locales/en/entityQuery.json";
 import enErrors from "./locales/en/errors.json";
 import enHierarchy from "./locales/en/hierarchy.json";
@@ -76,6 +77,7 @@ export const en = {
   entities: enEntities,
   entityGraph: enEntityGraph,
   entityHierarchy: enEntityHierarchy,
+  entityQueries: enEntityQueries,
   entityQuery: enEntityQuery,
   errors: enErrors,
   hierarchy: enHierarchy,

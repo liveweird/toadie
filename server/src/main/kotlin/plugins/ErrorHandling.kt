@@ -107,6 +107,7 @@ private val UNIQUE_CONSTRAINT_DETAILS = mapOf(
     "uq_entity_types_kind_active" to "This kind already has a type dictionary",
     "uq_annotation_keys_key_active" to "An annotation key with this name already exists",
     "uq_lenses_owner_name_active" to "You already have a lens with this name",
+    "uq_entity_queries_owner_name_active" to "You already have a saved query with this name",
     "uq_blueprints_identifier_active" to "A blueprint with this identifier already exists",
     "uq_entities_blueprint_identifier_active" to "An entity with this identifier already exists in this blueprint",
 )

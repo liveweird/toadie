@@ -3,6 +3,7 @@ import { IconPlayerPlay, IconX } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import type { EntityQueryDiagnostic } from "../api/entities";
 import type { QueryCompletionSchema } from "../utils/queryCompletion";
+import EntityQueryPicker from "./EntityQueryPicker";
 import QueryEditor from "./QueryEditor";
 import classes from "../theme.module.css";
 
@@ -28,6 +29,8 @@ export default function EntityQueryBar({
   diagnostics,
   completionSchema,
   appliedCount,
+  draft,
+  onPick,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -37,11 +40,19 @@ export default function EntityQueryBar({
   completionSchema: QueryCompletionSchema;
   /** Set once a query is applied and the graph loaded successfully; the shown entity count. */
   appliedCount?: number;
+  /** The bar's current draft text — the saved-query picker's "Modified" comparison. */
+  draft: string;
+  /** Applies a saved query's text to BOTH the draft and the applied query (`useEntityQuery`'s
+   *  `runText`). */
+  onPick: (text: string) => void;
 }) {
   const { t } = useTranslation();
 
   return (
     <Stack gap={4}>
+      <Group gap="xs" wrap="nowrap">
+        <EntityQueryPicker draft={draft} onPick={onPick} />
+      </Group>
       <Group gap="xs" align="flex-start" wrap="nowrap">
         <Box className={classes.queryEditor} style={{ flex: 1, minWidth: 0 }}>
           <QueryEditor

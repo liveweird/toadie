@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.1.0",
+    date: "2026-09-13",
+    en: `**Saved entity queries.**
+
+- The query bar on the Entity graph and Entity hierarchy gains a Saved query picker: save the current query under a name as Private (only you) or Public (everyone can apply it, only you can change it), pick a saved query to run it on either canvas, and Save changes, Rename / visibility or Delete your own — the same model as Lenses. A "Modified" badge shows when the editor drifted from the picked query.
+- A saved query must parse, but it does not have to match today's blueprints: if a blueprint changes underneath it, the query stays and shows its diagnostics when applied.
+- API: \`GET/POST /api/v1/entity-queries\` and \`PUT/DELETE /api/v1/entity-queries/{id}\` (any authenticated user, creator-only changes).`,
+    pl: `**Zapisane zapytania o encje.**
+
+- Pasek zapytań na stronach Graf encji i Hierarchia encji zyskuje wybór Zapisane zapytanie: zapisz bieżące zapytanie pod nazwą jako Prywatne (tylko Ty) lub Publiczne (każdy może je zastosować, tylko Ty możesz je zmienić), wybierz zapisane zapytanie, by uruchomić je na dowolnym z widoków, i zapisuj zmiany, zmieniaj nazwę/widoczność lub usuwaj własne — ten sam model co Soczewki. Odznaka „Zmienione” pokazuje, że edytor odszedł od wybranego zapytania.
+- Zapisane zapytanie musi się parsować, ale nie musi pasować do dzisiejszych schematów: gdy schemat się pod nim zmieni, zapytanie zostaje i pokazuje swoją diagnostykę przy zastosowaniu.
+- API: \`GET/POST /api/v1/entity-queries\` oraz \`PUT/DELETE /api/v1/entity-queries/{id}\` (każdy zalogowany użytkownik/użytkowniczka, zmiany tylko dla twórcy/twórczyni).`,
+  },
+  {
     version: "2.0.0",
     date: "2026-09-13",
     en: `**Entity query language.**

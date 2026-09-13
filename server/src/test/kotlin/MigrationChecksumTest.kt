@@ -54,6 +54,7 @@ class MigrationChecksumTest {
         "V32__languages_kotlin.sql" to -625232583,
         "V33__seed_hierarchies.sql" to 1660107318,
         "V34__blueprint_hierarchy_relations.sql" to -1251230367,
+        "V35__create_entity_queries.sql" to 1945661794,
     )
 
     @Test

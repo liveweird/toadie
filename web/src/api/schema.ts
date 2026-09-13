@@ -1252,6 +1252,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/entity-queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the saved entity queries visible to the caller
+         * @description Any authenticated user. Returns every active saved query the caller may see: their
+         *     OWN queries (both visibilities) plus everyone's PUBLIC ones — name-ordered
+         *     case-insensitively, deliberately unpaged (a personal-plus-curated scale). A saved
+         *     query is a named entity-query text (phase 7, v2.1.0 —
+         *     `.claude/docs/entity-query-language.md`) for the Entity graph / Entity hierarchy
+         *     query bar; PRIVATE queries never appear in anyone else's list (admins included —
+         *     ADMIN gets no special content access).
+         */
+        get: operations["listEntityQueries"];
+        put?: never;
+        /**
+         * Save an entity query
+         * @description Any authenticated user; the caller becomes the creator. The query text is trimmed,
+         *     must not be blank, at most 2000 characters, may span lines (tab/newline allowed,
+         *     other control characters are a `400`), and must PARSE — a syntax error or an
+         *     unsupported Cypher feature is the `EntityQueryInvalid` `400` carrying positioned
+         *     `diagnostics`. Schema validity (unknown blueprints/relations/properties) is NOT
+         *     required at save time: blueprints change, and a stale query shows its diagnostics
+         *     when it is applied. A name already held by one of the caller's own active saved
+         *     queries (case-insensitively) is a `409`; different users may reuse a name.
+         */
+        post: operations["createEntityQuery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entity-queries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a saved entity query
+         * @description Creator only — whole-row replacement: overwrite (save-again), rename, and the
+         *     visibility flip are all this one operation. A foreign PRIVATE (or unknown) id is a
+         *     uniform `404` — a private query's existence is itself private — while a foreign
+         *     PUBLIC one (visible in everyone's list anyway) is an honest `403`; admins get the
+         *     same treatment. The verdict runs BEFORE validation (403/404 win over 400). Same
+         *     validation and `409` rules as create.
+         */
+        put: operations["replaceEntityQuery"];
+        post?: never;
+        /**
+         * Delete a saved entity query
+         * @description Creator only — soft delete; the name becomes reusable by a NEW saved query of the
+         *     same owner. The same disclosure split as replace: foreign PRIVATE/unknown → `404`,
+         *     foreign PUBLIC → `403`.
+         */
+        delete: operations["deleteEntityQuery"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/blueprints": {
         parameters: {
             query?: never;
@@ -2308,6 +2378,50 @@ export interface components {
             name: string;
             visibility: components["schemas"]["LensVisibility"];
             filters: components["schemas"]["LensFilters"];
+        };
+        /**
+         * @description PRIVATE saved queries are visible only to their creator; PUBLIC ones are visible to every authenticated user. Both stay creator-only mutable.
+         * @enum {string}
+         */
+        SavedEntityQueryVisibility: "PRIVATE" | "PUBLIC";
+        SavedEntityQuery: {
+            /** Format: int32 */
+            id: number;
+            /** @description Unique case-insensitively among the CREATOR'S active saved queries. */
+            name: string;
+            visibility: components["schemas"]["SavedEntityQueryVisibility"];
+            /** @description The entity query text as saved (trimmed; may span lines). */
+            query: string;
+            /**
+             * Format: int32
+             * @description The creator's user id — the only user who may replace or delete the row.
+             */
+            createdBy: number;
+            /** @description The creator's display name (from the users table at read time). */
+            creatorName: string;
+            /** @description True when the creator's account has since been soft-deleted. */
+            creatorDeleted: boolean;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            createdAt: number;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            updatedAt: number;
+        };
+        SavedEntityQueryList: {
+            /** @description Visible saved queries, name-ordered case-insensitively. */
+            items: components["schemas"]["SavedEntityQuery"][];
+        };
+        SavedEntityQueryRequest: {
+            /** @description Trimmed; must not be blank. */
+            name: string;
+            visibility: components["schemas"]["SavedEntityQueryVisibility"];
+            /** @description Trimmed; must not be blank; newlines/tabs allowed, other control characters rejected; must parse (syntax + supported subset), schema validity not required. */
+            query: string;
         };
         TagCategory: {
             /** Format: int32 */
@@ -4712,6 +4826,112 @@ export interface operations {
         };
     };
     deleteLens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listEntityQueries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedEntityQueryList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createEntityQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedEntityQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new saved query resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedEntityQuery"];
+                };
+            };
+            400: components["responses"]["EntityQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceEntityQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedEntityQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["EntityQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteEntityQuery: {
         parameters: {
             query?: never;
             header?: never;
