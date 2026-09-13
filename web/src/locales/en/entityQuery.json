@@ -9,5 +9,12 @@
   "appliedCount_other": "{{count}} entities",
   "diagnosticsTitle": "Query problems",
   "didYouMean": "Did you mean `{{name}}`?",
-  "position": "line {{line}}, column {{column}}"
+  "position": "line {{line}}, column {{column}}",
+  "actionsAria": "Query actions for {{name}}",
+  "actionsGroup": "Query",
+  "actionExpand_one": "Expand {{count}} hop",
+  "actionExpand_other": "Expand {{count}} hops",
+  "actionAncestors": "Ancestors in {{hierarchy}}",
+  "actionDescendants": "Descendants in {{hierarchy}}",
+  "actionOwnedBy": "Owned by this team"
 }

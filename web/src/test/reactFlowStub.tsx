@@ -78,6 +78,7 @@ export function ReactFlow({
   onNodeDragStart,
   onNodeDragStop,
   onNodeClick,
+  onNodeContextMenu,
   children,
 }: {
   nodes: StubNode[];
@@ -87,6 +88,7 @@ export function ReactFlow({
   onNodeDragStart?: () => void;
   onNodeDragStop?: () => void;
   onNodeClick?: (event: unknown, node: StubNode) => void;
+  onNodeContextMenu?: (event: unknown, node: StubNode) => void;
   children?: React.ReactNode;
 }) {
   return (
@@ -121,6 +123,15 @@ export function ReactFlow({
             </button>
           )}
           <span data-testid={`pos:${n.id}`}>{`${n.position.x},${n.position.y}`}</span>
+          {/* Right-click stand-in: a synthetic event carrying `preventDefault` plus fixed
+              pointer coordinates, the shape `EntityGraph.tsx`'s `onNodeContextMenu` reads. */}
+          <button
+            type="button"
+            data-testid={`context:${n.id}`}
+            onClick={() => onNodeContextMenu?.({ preventDefault: () => {}, clientX: 100, clientY: 200 }, n)}
+          >
+            context {n.id}
+          </button>
           <button
             type="button"
             data-testid={`drag:${n.id}`}

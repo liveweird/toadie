@@ -368,7 +368,7 @@ invisible to others / public read-only; a multi-line text kept verbatim, a contr
 `400`; a syntax-invalid text → the `EntityQueryProblem` 400 with positioned diagnostics on POST
 and PUT; the PUT verdict before validation; the three audit events), `MigrationChecksumTest` pins
 V35; frontend `EntityQueryPicker.test.tsx` is the `LensPicker.test.tsx` clone plus one bar
-integration case; e2e `entity-queries.spec.ts`.
+integration case; e2e `entity-queries.spec.ts`. **Canvas actions (v2.2.0):** `queryTemplates.test.ts` pins each builder's text incl. backtick/escape cases; the `EntityGraph`/`EntityHierarchy` page tests drive the node context menu (through the stub's `onNodeContextMenu`) and the row menu's Query group and assert the graph refetch's `query=` equals the builder's text; e2e `entity-query.spec.ts` gains the "canvas context actions generate and run a query on both canvases" journey.
 
 ### Reset-link regressions (V26)
 

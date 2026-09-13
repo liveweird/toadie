@@ -31,6 +31,7 @@ import { getEntityGraph, type EntityGraphNode as EntityGraphNodeApi } from "../a
 import ClusterFrames from "../components/ClusterFrames";
 import EntityGraphNode from "../components/EntityGraphNode";
 import EntityGraphToolbar from "../components/EntityGraphToolbar";
+import EntityNodeContextMenu, { type EntityNodeContextMenuTarget } from "../components/EntityNodeContextMenu";
 import EntityQueryBar from "../components/EntityQueryBar";
 import EmptyState from "../components/EmptyState";
 import HierarchyPicker from "../components/HierarchyPicker";
@@ -262,6 +263,18 @@ export default function EntityGraph() {
     navigate(editEntityPath(node.data.apiNode.entityId));
   }
 
+  const [menuTarget, setMenuTarget] = useState<EntityNodeContextMenuTarget | null>(null);
+  function onNodeContextMenu(event: React.MouseEvent, node: LaidOutNode<EntityGraphNodeApi>) {
+    event.preventDefault();
+    const apiNode = node.data.apiNode;
+    setMenuTarget({
+      node: { blueprint: apiNode.blueprint, identifier: apiNode.identifier },
+      name: apiNode.title,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
   return (
     <Stack gap="md" className={classes.fillPage}>
       <PageHeader
@@ -432,6 +445,7 @@ export default function EntityGraph() {
             onNodeDragStart={onNodeDragStart}
             onNodeDragStop={onNodeDragStop}
             onNodeClick={onNodeClick}
+            onNodeContextMenu={onNodeContextMenu}
             colorMode={colorScheme}
             fitView
             minZoom={0.2}
@@ -444,6 +458,12 @@ export default function EntityGraph() {
             <Background />
             <Controls showInteractive={false} />
           </ReactFlow>
+          <EntityNodeContextMenu
+            target={menuTarget}
+            hierarchyId={hierarchyId}
+            onRun={query.runText}
+            onClose={() => setMenuTarget(null)}
+          />
         </Paper>
       )}
     </Stack>

@@ -17,6 +17,16 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.2.0",
+    date: "2026-09-13",
+    en: `**Canvas context actions.**
+
+- Right-click a node on the Entity graph, or open a row's operations menu on the Entity hierarchy, to generate a query from it: Expand 1, 2 or 3 hops (everything within that many relation or ownership hops), Ancestors or Descendants in the selected hierarchy, and — on a team — Owned by this team. The generated query lands in the query bar and runs at once, so it can be read, edited and saved like one you typed.`,
+    pl: `**Akcje kontekstowe na kanwie.**
+
+- Kliknij prawym przyciskiem węzeł na Grafie encji lub otwórz menu operacji wiersza w Hierarchii encji, by wygenerować z niego zapytanie: Rozwiń o 1, 2 lub 3 kroki (wszystko w tylu krokach po relacjach lub własności), Przodkowie lub Potomkowie w wybranej hierarchii, a na zespole — Własność tego zespołu. Wygenerowane zapytanie trafia do paska zapytań i od razu się uruchamia, więc można je czytać, edytować i zapisać jak własne.`,
+  },
+  {
     version: "2.1.0",
     date: "2026-09-13",
     en: `**Saved entity queries.**
