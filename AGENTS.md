@@ -12,20 +12,32 @@ persistence, UI, and testing conventions shared by the project. For API work,
 reviews. If documentation and executable configuration disagree, the configuration and code win;
 update the affected guidance in the same change.
 
-Toadie deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce). The implemented
-surface includes authentication/session handling, admin-managed users and feature flags, synced
-user language, per-user graph layouts, email MFA and password reset, shared paging, saved filter
-lenses, catalog-file CRUD across the seven landscape kinds, curated namespace, label, annotation,
-tag, type, and lifecycle registries, the Errors report and live checks, hierarchy and relationship-graph
-views, multi-document YAML import/export with a dry run, repository-source synchronization, and
-per-file change history. When adding another capability Lettuce already has (encryption at rest,
-notifications, teams/management chains…), port Lettuce's implementation rather than inventing a
-new one — the docs above mark each such capability as a "port from Lettuce" note.
+Toadie has two product worlds: the Backstage catalog and the Port-style ontology. Both share
+authentication/session handling, admin-managed users and feature flags, synced language, email
+MFA/password reset, and the application shell. Backstage includes seven-kind catalog-file CRUD,
+curated registries, Errors/live checks, hierarchy/graph views, saved filter lenses, YAML
+import/export and dry run, repository-source synchronization, and per-file history. Port includes
+blueprints, entities, system teams/users, direct/inherited ownership, computed properties,
+parallel named hierarchies, JSON import/export and dry run, entity graph/hierarchy views, a
+bounded entity query language, saved queries, and query-generating canvas actions.
+
+Toadie deliberately mirrors [Lettuce](https://github.com/liveweird/lettuce) for shared capabilities.
+When adding a capability Lettuce already has (encryption at rest, notifications…), inspect and
+port its implementation while preserving Toadie's documented security rules. Port-specific
+ontology/query features are Toadie implementations; follow their local domain references.
 
 `.claude/docs/backstage-descriptor-format.md` is the local domain reference for the catalog
 descriptor envelope, metadata validation, kinds, entity-reference defaults, substitutions, and
 well-known annotations. Consult it before designing catalog behavior; re-check its linked
 upstream Backstage documentation when introducing a new validation rule.
+
+For blueprint/entity work, read `.claude/docs/port-data-model.md` (Port wire shapes, validation,
+ownership, computed properties, lifecycle, import/export, and Toadie extensions) and
+`.claude/docs/ontology.md` (the eleven-blueprint baseline and Backstage round-trip decisions).
+For query work, also read `.claude/docs/entity-query-language.md`: it defines the implemented
+subset, semantics, budgets, diagnostics, saved queries, and canvas actions. Update the relevant
+reference in the same change. `HARDENING.md` contains completed work and outstanding follow-ups;
+it is a historical implementation tracker, not a list of only unfinished tasks.
 
 The playbooks in `.claude/skills/` are useful repository-local references even outside Claude:
 `api-review` covers the two-pass OpenAPI review, `run-stack` covers packaging/deployment, and
@@ -39,11 +51,15 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
   bootstrap.
 - `server/` is the Kotlin/JVM Ktor application. Feature packages live directly under
   `server/src/main/kotlin/`: `auth`, `users`, `catalog`, `dictionaries`, `labels`, `annotations`,
-  `tags`, `types`, and `lenses`. `catalog` is the feature reference implementation: seven
-  Backstage kinds (Component, API, System, Domain, Resource, Group, User), full CRUD + paginated
+  `tags`, `types`, `lenses`, `blueprints`, `entities`, and `entityquery`. `catalog` is the feature
+  reference implementation: seven Backstage kinds (Component, API, System, Domain, Resource,
+  Group, User), full CRUD + paginated
   list, validation/checking, the workspace Errors report, graph, import/export and dry-run import,
-  SSRF-guarded URL fetch/repo sync, and immutable per-file events. `users` also owns synced
-  language and per-user Graph layout settings. Cross-cutting wiring and policy live in `plugins/`,
+  SSRF-guarded URL fetch/repo sync, and immutable per-file events. `blueprints` owns the schema
+  registry; `entities` owns instances, ownership/computation, graph data, and entity import;
+  `entityquery` owns the pure query engine and persisted saved queries. `dictionaries` also
+  owns the Port `HIERARCHY` dictionary. `users` owns synced language and separate per-user
+  Backstage/Port graph layouts. Cross-cutting wiring and policy live in `plugins/`,
   `audit/`, and `authz/`; database, mail, paging, and shared validation infrastructure live in
   `infra/`.
 - `server/src/main/resources/application.yaml` declaratively registers application modules.
@@ -59,15 +75,22 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
   organized into `pages/`, `components/`, `hooks/`, `utils/`, `api/`, `changelog/`, and bilingual
   resources under `locales/{en,pl}/`. It includes catalog editing, quick view, import/export and
   source sync, hierarchy/graph/Errors views, lenses, all six catalog registries, catalog history,
-  user/feature administration, MFA, password reset, command palette, and changelog.
-- `sample-data/` contains the hand-imported multi-document example workspace. Migrations never
-  seed catalog files; a new environment deliberately starts with an empty catalog workspace.
+  user/feature administration, MFA, password reset, command palette, and changelog, plus the
+  Port blueprint/entity editors, hierarchy registry, ontology import, and query-enabled canvases.
+- `sample-data/catalog-info.yaml` is the hand-imported Backstage workspace;
+  `sample-data/blueprints/` contains the eleven-blueprint baseline and `sample-data/entities/`
+  its entity examples. Use their `load.sh` scripts or the matching import UI. Migrations never
+  seed catalog files or entity instances. V31 seeds only the protected `_team`/`_user` system
+  blueprints, which the sample blueprint import extends.
 - Backend tests are in `server/src/test/kotlin/`, colocated frontend tests use `*.test.ts(x)`, and
   Playwright journeys are in `e2e/tests/*.spec.ts` with their design artifacts in
   `e2e/scenarios/*.md`.
 
 Routing is feature-local. Cross-cutting Ktor wiring functions are named `configureXxx` and must be
 registered in `application.yaml`. `plugins/Routing.kt` is only the final SPA/static-file catch-all.
+`infra/db/Database.kt` publishes services through application attributes; there is no DI framework.
+Packages declare `ch.nokillswit.<area>` while files stay directly under `<area>/`, without a
+`ch/nokillswit/` directory prefix.
 
 ## Build, Test, and Development Commands
 
@@ -84,6 +107,8 @@ registered in `application.yaml`. `plugins/Routing.kt` is only the final SPA/sta
   Testcontainers.
 - `./gradlew :server:test --tests "<fully-qualified test name>"`: run one backend test.
 - `./gradlew detekt`: static analysis over `core` + `server` — zero-findings gate, no baseline.
+- After a Gradle dependency change, run `./gradlew build --write-locks` and include the updated
+  module/root lockfiles. Never delete a lockfile to bypass a stale-lock resolution failure.
 - `cd web && npm run dev`: start Vite on port 5174, proxying `/api` to Ktor on :8081.
 - `cd web && npm run build && npm run lint && npm test`: type-check, bundle, lint, and run Vitest.
 - `cd web && npm run test:coverage`: run frontend coverage gates. `npm run knip`: dead-code gate.
@@ -96,6 +121,9 @@ registered in `application.yaml`. `plugins/Routing.kt` is only the final SPA/sta
 For a clean frontend install, use `cd web && npm install --legacy-peer-deps`;
 `openapi-typescript` declares a TypeScript 5 peer while the project uses TypeScript 6. Keep the
 Gradle and npm toolchains disjoint.
+Keep `mise.toml`, Docker base-image toolchains, and CI selectors aligned. CI's Temurin selector
+uses the complete version including its build/LTS suffix. Detekt overrides belong in
+`config/detekt/detekt.yml` with a rationale; do not add unexplained suppressions.
 
 Package deployments with `./gradlew :server:installDist`. Never use `buildFatJar`: merging Flyway
 service descriptors breaks plugin discovery at runtime. JVM runtime flags are intentionally set in
@@ -126,7 +154,11 @@ and partial unique indexes where deleted values may be reused); follow the detai
 events for security-relevant mutations and denials, and never log passwords or tokens. The
 per-user graph-layout PUT is the documented exception: it is high-frequency view state and is
 deliberately unaudited. Catalog-file product history is separate from the security audit trail;
-catalog mutations extend both where applicable.
+catalog mutations extend both where applicable. File changes and history events commit in one
+transaction with a required actor; routes audit only after success. Imports retain one transaction
+per document. Preserve no-op PUT suppression, always-recorded syncs, redaction, and concurrent
+diff accuracy. Tag-category writes serialize the ownership check and mutation in the same
+transaction; a conflict must preserve the complete losing category.
 
 Catalog content is a shared authenticated workspace; ADMIN has no extra content privilege.
 Catalog validation has two classes. Structural descriptor rules and namespace resolution are
@@ -159,6 +191,70 @@ transport invariants and remaining native-DNS limitation.
 Use four-space indentation, preserve existing package boundaries, PascalCase for Kotlin types,
 and camelCase for functions and variables. Name backend test classes `*Test`.
 
+## Port Ontology and Entity Queries
+
+Blueprint definitions are ADMIN-managed and readable by any authenticated user; entity CRUD is
+a shared authenticated workspace with no ADMIN content privilege. `_team` and `_user` are
+protected, extendable system blueprints, distinct from login accounts. Ownership is informational,
+never an authorization rule. Direct ownership stores a team string/array; Inherited ownership
+resolves `ownership.path` at read time. List/graph team filters match effective ownership,
+including inherited teams; graph relation/ownership resolution remains byte-exact.
+
+PostgreSQL remains the only store: blueprint `definition` and entity `document` (`properties` +
+`relations`) are JSON serialized into TEXT with `blueprintJson`; unset optional response fields
+are absent, not null. Entity rows reference blueprint IDs. Preserve caps and strict validation
+from `Blueprint.kt`/`Entity.kt` and reuse `entityFindings` for save rejection and read-time
+findings. Do not apply Backstage's `allowInvalid` waiver to Port entity writes. Blueprint renames
+cascade target definitions; entity renames cascade relation, team, and team/user-format property
+references. Deletes reject active referrers. Keep the documented cooperating-writer locks:
+blueprints first, then entities for entity mutations; see `.claude/docs/persistence.md`.
+Blueprint edits do not rewrite or revalidate existing instances on write: subsequent reads
+recompute findings against the current definition, and the next entity save must fix them.
+
+`hierarchyRelations` is the current extension: an optional map from active `HIERARCHY` dictionary
+values to the blueprint's own single-valued (`many: false`) relation keys. It is stored beside
+the Port definition (V34 replaces V29's singular `hierarchyRelation`). One relation may serve
+several hierarchies; an entity without a selected hierarchy's parent link is a root. Graph edges
+carry `hierarchies: string[]`; `$team` ownership edges are separate and never hierarchy parents.
+Hierarchy dictionary replacement shares the blueprint write lock and refuses removal of a value
+still referenced by an active blueprint. These are relation-based forests, not arbitrary
+multi-parent ownership trees. The renderer guards cycles and promotes disconnected cycle
+islands to roots; the hierarchy marker does not impose acyclicity on stored entity relations.
+
+Mirrors, jq calculations, and aggregations are computed on reads and merged into response
+properties; computed IDs are rejected as write input. Unresolvable computed values are absent,
+not findings. Materialize dependencies inside the read transaction, then evaluate outside it.
+The shared `JqEvaluator` uses the bounded `entity-jq` worker pool, output cap, per-expression
+deadline (default 500 ms), and quarantine for timed-out expression text. Preserve cancellation,
+environment/module restrictions, and input-free logging; consult the security/testing docs.
+
+Ontology import accepts up to 200 JSON documents per batch and shares classification with its
+dry run. Blueprint import is ADMIN-only; entity import accepts any authenticated user. Preserve
+dependency ordering, optional-reference deferral, mandatory entity-cycle rejection, per-row
+report-and-skip behavior, and `replaceExisting` full replacement. Reuse the existing planners
+and service writes; keep exports compatible with import, including Toadie hierarchy mappings.
+
+The entity query language is an openCypher-shaped read-only subset, not full Cypher. Its pure
+parser/validator/evaluator live in `entityquery/`; saved-query persistence/routes share that
+package. `GET /api/v1/entities/graph?query=...` evaluates over the whole active workspace, then
+intersects returned entities with ordinary blueprint/q/team filters. Hidden intermediate nodes
+remain traversable; rendered edges still require both endpoints to be shown. `RETURN` yields a
+deduplicated entity set, not projected rows; `LIMIT` applies after deduplication. Predicates see
+stored properties and documented metadata, including effective `$team`, not computed properties.
+Preserve the language's three-valued comparisons and level-set BFS semantics; do not conflate
+them with Port aggregation-filter semantics. Hierarchy identifiers also resolve as virtual
+child-to-parent edge types; consult the language reference for precedence and direction rules.
+
+Parse/validate outside database transactions before reading the entity workspace. Evaluation
+runs outside the transaction on the dedicated `entity-query` pool with four permits, a
+cooperative deadline (default 2 seconds), and binding/hop/input budgets. Saturation returns 429;
+semantic/budget refusals return 400 with diagnostics; caller cancellation propagates. The live
+`POST /api/v1/entities/query/check` validates without evaluation. Keep diagnostics, grammar,
+completion, generated query templates, OpenAPI, and tests synchronized; there is no cross-request
+query snapshot cache. Saved queries (`/api/v1/entity-queries`, V35) follow lenses' PRIVATE/PUBLIC
+visibility and creator-only mutations, soft deletion, and authorization-before-validation.
+Save requires syntactic validity; schema validity is checked when applied against current data.
+
 ## Frontend Conventions
 
 Use two-space indentation, PascalCase for React components, and the existing shared
@@ -178,6 +274,10 @@ replace their constrained pickers with free-form clones. Keep `utils/catalogYaml
 strict inverse parser in `utils/catalogImport.ts` in lockstep. Soft server findings remain
 presentational orange warnings and must not be put into Mantine's hard-error form state; hard
 client validation stays red and blocks submission.
+Reuse `useCatalogFileSave`/`useEntitySave` and their finding-to-field helpers; entity save findings
+are hard errors with no waiver. Route transport failures through `saveErrorMessage` and
+`loadErrorMessage`; never expose raw exception messages as UI copy. Keep stored/stale findings
+and rejected-save findings visible on the appropriate fields.
 
 Files, Hierarchy, Graph, and Errors share `CatalogToolbar`, the nine-slot catalog filter state,
 always-visible kind pills, and saved lenses. Files/Hierarchy/Graph interpret filters as entities
@@ -185,20 +285,44 @@ shown; Errors interprets them as files reported while resolving references works
 quick-view drawer is URL-carried via `?file=<id>`; ordinary view filters remain per-view local
 storage. Whole-file operations are centralized and PUT callers must preserve full-replace fields.
 
-The `/graph` page keeps React Flow and dagre in its lazy chunk. It supports Auto and Manual modes,
-with mode, dragged positions, and collapsed node IDs persisted server-side in the current user's
-single graph-layout document. React Flow owns live drag state; persist accumulated positions only
-after a drag ends, merge with the full stored map rather than pruning filtered-out nodes, and keep
-mode/fold/reset saves as wholesale document replacements. Filtering runs before folding; folding
-uses `buildHierarchy`'s containment rules, and namespace frames derive from live node positions.
-Do not let a drag navigate, do not refit the viewport on drags/mode/reset, and keep fold controls
-outside the node's interactive face.
+Repo sync and Overwrite with YAML share `utils/yamlDiff.ts`/`components/YamlDiffView.tsx`.
+Bound detailed LCS work and rendered row count before allocating the matrix. Large documents
+fall back to complete stored/replacement YAML panes, never truncated content. Preserve canonical
+equality, side attribution, explicit confirmation, and the exact mutation payload; see
+`web/CLAUDE.md` for the budgets and fallback accessibility rules.
+
+The `/graph` and `/entity-graph` pages keep React Flow/dagre in lazy chunks and use shared
+layout, cluster-frame, fold, and persistence machinery. They have separate per-user server-side
+`{mode, positions, collapsed}` documents selected by `useGraphLayout(userId, view)`. A successful
+baseline load must precede writes. The persistence controller serializes saves, coalesces queued
+edits, and retains failed local changes for explicit retry across ordinary SPA navigation.
+Preserve account/view isolation and full documents, including filtered-out node IDs. React Flow
+owns live drag state; persist drag positions only after drag end. Do not refit on drags/mode/reset
+or let a drag navigate; keep fold controls outside the node's interactive face. Filtering precedes folding;
+Backstage uses `buildHierarchy` containment and namespace frames, while Port uses
+`buildEntityHierarchy(graph, hierarchyId)` and blueprint frames derived from live positions.
+
+The entity graph and hierarchy share `HierarchyPicker`, the query bar, and the graph API.
+Hierarchy selection is stored per view; an obsolete selection falls back to the first dictionary
+value, or no hierarchy when empty. Only the selected hierarchy controls folding and hierarchy
+edge styling. The entity graph's persisted collapsed-node list is intentionally shared across
+hierarchy selections, not a separate layout per hierarchy. Relation chips remain unpersisted.
+`useEntityQuery` shares one draft/applied query between both canvases; validation is debounced,
+but evaluation occurs on Run/Mod+Enter, saved-query selection, or a canvas query action. Reuse
+`queryTemplates.ts` for Expand/Ancestors/Descendants/Owned-by actions; preserve the anchor via
+OPTIONAL MATCH and use the selected hierarchy for ancestor/descendant traversal.
 
 Pages are lazy and use shared `PageHeader` chrome; navigation is defined once in
-`utils/navigation.ts` for the sidebar, user menu, and command palette. Administrator-created/reset
-passwords are generated client-side and revealed exactly once; self-service reset links let the
-recipient choose a password. The server never returns plaintext passwords. The selected UI
-language is also stored on the user and drives server-composed email.
+`utils/navigation.ts` for the sidebar, user menu, and command palette. `NavSection.world` assigns
+sections to Backstage, Port, or global; derive the active world from the route and remember it
+on global pages. `/` redirects to the last world's home, defaulting to Port: `/entity-hierarchy`
+for Port, `/hierarchy` for Backstage. Preserve cross-world deep links and the shared world switch.
+
+Administrator-created/reset passwords are generated client-side and revealed exactly once;
+self-service reset links let the recipient choose a password. The server never returns plaintext
+passwords. The selected UI language is also stored on the user and drives server-composed email.
+Shared HTTP refresh must respect login boundaries: late responses cannot restore a signed-out
+session, replay an old mutation, or clear a newer login.
 
 `web/src/changelog/version.ts` (`APP_VERSION`) is the sole source of the displayed app version;
 the Gradle snapshot version is unrelated. A release adds the newest bilingual markdown entry to
@@ -240,10 +364,19 @@ markers (`uniqueEmail(...)`) instead of asserting global counts.
 
 Every `/api/` interaction made through the shared backend test clients is checked against OpenAPI.
 Prefer `jsonClient()`/`authedClient()` so tests do not bypass conformance validation. `check`
-enforces Kover floors of 97% lines and 76% branches. Frontend coverage floors in
+enforces Kover floors of 97% lines and 78% branches (`server/build.gradle.kts`). Frontend floors in
 `web/vite.config.ts` are 97% lines, 95% statements, 92% functions, and 91% branches. Re-measure and
 raise floors as coverage improves; do not lower them to accommodate new code. Any test-local
-Mantine provider must set `env="test"` so popovers and selects work under happy-dom.
+Mantine provider must set `env="test"` so popovers and selects work under happy-dom, and use
+`TEST_THEME`/`respectReducedMotion: true` with the shared reduced-motion mock so transitions
+finish synchronously rather than leaving timers after cleanup. Browser journeys retain real
+animations and use dialog-readiness helpers. Use paste for heavy editor fixture setup, retaining
+real typing where keyboard/preview behavior is under test.
+
+The pure entity-query parser/validator/evaluator tests run without Docker; route and persistence
+tests still require PostgreSQL/Testcontainers. Scale tests establish correctness, not a production
+latency guarantee. Run `:server:koverXmlReport` when measuring current backend coverage;
+`check` runs the verification gate without refreshing that report.
 
 A new or behaviorally changed e2e test lands with its scenario file in `e2e/scenarios/` and its
 coverage-map line in `e2e/README.md` in the same commit (`npm run check:scenarios` enforces the
