@@ -276,8 +276,12 @@ class CatalogFileService(
      * order-independently). A rename's "self" is the NEW identity — uniform across create,
      * update, import, and the ad-hoc check.
      */
-    private suspend fun softFindings(stored: CatalogFile, extraIdentities: Set<EntityIdentity>): List<SoftFinding> {
-        val references = checkDocument(stored, activeIdentities() + extraIdentities).findings
+    private suspend fun softFindings(
+        stored: CatalogFile,
+        extraIdentities: Set<EntityIdentity>,
+        excludingId: UInt? = null,
+    ): List<SoftFinding> {
+        val references = checkDocument(stored, activeIdentities(excludingId) + extraIdentities).findings
             .map { SoftFinding(it, referenceFindingMessage(it)) }
         return references + registryFindings(stored, loadRegistrySnapshot())
     }
@@ -337,8 +341,9 @@ class CatalogFileService(
         stored: CatalogFile,
         extraIdentities: Set<EntityIdentity>,
         allowInvalid: Boolean,
+        excludingId: UInt? = null,
     ): List<SoftFinding> {
-        val findings = softFindings(stored, extraIdentities)
+        val findings = softFindings(stored, extraIdentities, excludingId)
         if (findings.isNotEmpty() && !allowInvalid) {
             throw CatalogFileInvalidException(
                 findings = findings.map { it.finding },
@@ -366,7 +371,7 @@ class CatalogFileService(
             validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
             val source = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
             val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
-            val findings = requireOrWaive(stored, emptySet(), allowInvalid)
+            val findings = requireOrWaive(stored, emptySet(), allowInvalid, excludingId = id)
             val encoded = json.encodeToString(stored)
             // The current row decides the sync-state consequences: a changed/cleared reference
             // resets the sync state (a different source was never synced from), and updatedAt
@@ -509,10 +514,19 @@ class CatalogFileService(
         DocumentCheckReport(findings = references + registry)
     }
 
-    /** The identity triple of every active file, from the denormalized columns alone. */
-    private suspend fun activeIdentities(): Set<EntityIdentity> =
-        CatalogFiles.select(CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name)
+    /**
+     * The identity triple of every active file, from the denormalized columns alone.
+     * [excludingId] drops one row's OWN identity from the set — used by [update] so a
+     * rename's reference check resolves against the document as it will exist AFTER the
+     * write, not against the row's still-current (pre-rename) identity read inside the same
+     * transaction: without it, a sibling's reference to the OLD identity would keep resolving
+     * even though nothing will carry that identity once this write commits.
+     */
+    private suspend fun activeIdentities(excludingId: UInt? = null): Set<EntityIdentity> =
+        CatalogFiles.select(CatalogFiles.id, CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name)
             .where { active() }
+            .toList()
+            .filter { excludingId == null || it[CatalogFiles.id].value != excludingId }
             .map {
                 EntityIdentity(
                     kind = it[CatalogFiles.kind].lowercase(),
@@ -520,7 +534,6 @@ class CatalogFileService(
                     name = it[CatalogFiles.name].lowercase(),
                 )
             }
-            .toList()
             .toSet()
 
     /**

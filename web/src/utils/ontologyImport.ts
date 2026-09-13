@@ -175,9 +175,12 @@ export function buildComputedIdsByBlueprint(
     }
   }
   for (const blueprint of registryBlueprints) {
-    const registryIds = computedPropertyIds(blueprint);
-    const existing = result[blueprint.identifier];
-    result[blueprint.identifier] = existing ? new Set([...existing, ...registryIds]) : registryIds;
+    // A blueprint the batch REDEFINES is authoritative on its own — the batch's own
+    // definition (however it reshapes computed properties) wins outright, so the stored
+    // registry's stale computed ids must not carry over and strip a property the batch
+    // turned into an ordinary schema property.
+    if (blueprint.identifier in result) continue;
+    result[blueprint.identifier] = computedPropertyIds(blueprint);
   }
   return result;
 }

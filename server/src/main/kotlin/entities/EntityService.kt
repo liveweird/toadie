@@ -867,7 +867,26 @@ class EntityService(
         if (request.blueprint != currentBlueprint.identifier) {
             throw BadRequestException("blueprint must be '${currentBlueprint.identifier}' and cannot be changed")
         }
-        val document = request.toDocument()
+        var document = request.toDocument()
+        var team = request.team
+        val currentIdentifier = row[Entities.identifier]
+        val renamed = currentIdentifier != request.identifier
+        // A rename must also rewrite this SAME entity's own self-reference before validation:
+        // the submitted document/team typically still names the OLD identifier (a client that
+        // renamed the identifier field but forgot its own self-relation/team), and both the
+        // synthetic self-match below and baseSnapshot's pre-rename read would otherwise let that
+        // stale reference pass entityFindings and be stored unchanged.
+        if (renamed) {
+            document = withEntityTargetRenamed(
+                document, currentBlueprint.definition, currentBlueprint.identifier, currentIdentifier, request.identifier,
+            )
+            systemFormatFor(currentBlueprint.identifier)?.let { format ->
+                document = withFormatTargetRenamed(document, currentBlueprint.definition, format, currentIdentifier, request.identifier)
+                if (format == "team") {
+                    team = withTeamRenamed(team, currentIdentifier, request.identifier)
+                }
+            }
+        }
         val baseSnapshot = loadSnapshot(listOf(currentBlueprint.definition), blueprintsByIdentifier, computed = false)
         // The SELECT backing baseSnapshot runs before THIS row's identifier rename is written,
         // so a self-blueprint relation naming the row's own NEW identifier would be wrongly
@@ -876,12 +895,10 @@ class EntityService(
             (targetBlueprint == currentBlueprint.identifier && entityId == request.identifier) ||
                 baseSnapshot.targetExists(targetBlueprint, entityId)
         }
-        requireNoFindings(entityFindings(document, currentBlueprint.definition, targetExists, request.team))
+        requireNoFindings(entityFindings(document, currentBlueprint.definition, targetExists, team))
 
-        val currentIdentifier = row[Entities.identifier]
-        val renamed = currentIdentifier != request.identifier
         val cascaded = if (renamed) {
-            cascadeRename(activeBlueprints, currentBlueprint.identifier, currentIdentifier, request.identifier)
+            cascadeRename(activeBlueprints, currentBlueprint.identifier, currentIdentifier, request.identifier, excludingId = id)
         } else {
             emptyList()
         }
@@ -889,7 +906,7 @@ class EntityService(
             it[identifier] = request.identifier
             it[title] = request.title
             it[icon] = request.icon
-            it[team] = request.team?.let { team -> blueprintJson.encodeToString(team) }
+            it[Entities.team] = team?.let { t -> blueprintJson.encodeToString(t) }
             it[Entities.document] = blueprintJson.encodeToString(document)
             it[updatedAt] = System.currentTimeMillis()
         }
@@ -909,6 +926,7 @@ class EntityService(
         blueprintIdentifier: String,
         oldIdentifier: String,
         newIdentifier: String,
+        excludingId: UInt,
     ): List<String> {
         val format = systemFormatFor(blueprintIdentifier)
         val candidateBlueprintIds =
@@ -917,7 +935,9 @@ class EntityService(
         val blueprintsById = activeBlueprints.associateBy { it.id }
         val now = System.currentTimeMillis()
         val cascaded = mutableListOf<String>()
-        candidateEntities(candidateBlueprintIds).forEach { candidate ->
+        // The renamed row itself is never a cascade candidate: its own self-references are rewritten
+        // in [update] before validation, and counting it here would inflate the audited `cascaded`.
+        candidateEntities(candidateBlueprintIds).filter { it[Entities.id].value != excludingId }.forEach { candidate ->
             val candidateBlueprint = blueprintsById.getValue(candidate[Entities.blueprintId].value)
             val candidateDocument = blueprintJson.decodeFromString<EntityDocument>(candidate[Entities.document])
             val storedTeam = candidate[Entities.team]?.let { blueprintJson.decodeFromString<JsonElement>(it) }

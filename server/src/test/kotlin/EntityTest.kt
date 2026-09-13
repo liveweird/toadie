@@ -364,6 +364,59 @@ class EntityTest {
     }
 
     @Test
+    fun `rename with a self-relation still naming the OLD identifier is corrected automatically`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-rename-stale-self", UserRole.ADMIN)
+        val selfBpId = unique("bp-rename-stale-self")
+        val oldId = unique("ent-rename-stale-old")
+        val newId = unique("ent-rename-stale-new")
+        try {
+            val selfBp = client.createBlueprint(
+                BlueprintRequest(
+                    identifier = selfBpId,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("self" to RelationDefinition(title = "Self", target = selfBpId, required = false, many = false)),
+                ),
+            )
+            // Created plain (a create cannot resolve a relation to the row it is about to insert),
+            // then the self-relation is set by an identifier-preserving PUT — the stored state a
+            // stale client copy is taken from.
+            val entity = client.postJson("/api/v1/entities", entityRequest(selfBp.identifier, oldId)).body<EntityResponse>()
+            val selfRelated = client.putJson(
+                "/api/v1/entities/${entity.id}",
+                entityRequest(selfBp.identifier, oldId).copy(relations = buildJsonObject { put("self", oldId) }),
+            )
+            assertEquals(HttpStatusCode.NoContent, selfRelated.status)
+
+            // Rename oldId -> newId but the PUT body's relations still names the OLD identifier
+            // (a client that forgot to update its own self-relation): the server must rewrite it
+            // to the new identifier before storing, rather than store the now-stale reference.
+            withAuditCapture { capture ->
+                val response = client.putJson(
+                    "/api/v1/entities/${entity.id}",
+                    entityRequest(selfBp.identifier, newId).copy(relations = buildJsonObject { put("self", oldId) }),
+                )
+                assertEquals(HttpStatusCode.NoContent, response.status)
+                // The row's own self-relation is rewritten in place, never counted as a cascade into
+                // "another" entity — the audited `cascaded` must not name the renamed row itself.
+                val cascaded = capture.events.filter { it.message == "entity.updated" }
+                    .flatMap { it.keyValuePairs.orEmpty() }
+                    .filter { it.key == "cascaded" }.map { it.value }
+                assertEquals(listOf<Any?>(0), cascaded)
+            }
+
+            val updated = client.get("/api/v1/entities/${entity.id}").body<EntityResponse>()
+            assertEquals(newId, updated.identifier)
+            assertEquals(newId, updated.relations.getValue("self").jsonPrimitive.content)
+            assertTrue(updated.findings.isEmpty())
+        } finally {
+            TestEntities.remove(oldId, newId)
+            TestBlueprints.remove(selfBpId)
+        }
+    }
+
+    @Test
     fun `deleting a blueprint with active entities is 409 naming the count`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("ent-bp-delete", UserRole.ADMIN)

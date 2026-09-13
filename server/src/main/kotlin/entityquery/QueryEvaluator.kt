@@ -1,5 +1,6 @@
 package ch.nokillswit.entityquery
 
+import ch.nokillswit.entities.GraphBlueprint
 import ch.nokillswit.entities.QueryCandidate
 import ch.nokillswit.entities.candidateValue
 import kotlinx.serialization.json.JsonPrimitive
@@ -341,18 +342,30 @@ private fun expandFrom(knownRow: QueryRow, edge: EdgePattern, knownIsLeft: Boole
     }
 }
 
+/**
+ * Every relation KEY [type] resolves to on [sourceBlueprint]: [type] itself when it names one
+ * of the blueprint's OWN relations, UNION the relation [type] (case-insensitively) maps to
+ * when it names an active hierarchy id — so a relation literally sharing a hierarchy's name is
+ * never shadowed by the alias (`.claude/docs/entity-query-language.md`).
+ */
+private fun relationKeysFor(sourceBlueprint: GraphBlueprint, type: String, graph: QueryGraph): Set<String> {
+    val keys = mutableSetOf<String>()
+    if (type in sourceBlueprint.definition.relations) keys += type
+    if (graph.isHierarchyType(type)) {
+        graph.hierarchyRelation(sourceBlueprint, type.lowercase())?.let { keys += it }
+    }
+    return keys
+}
+
 /** [sourceRow] treated as the relation SOURCE: its declared relations, plus `$team`; empty [types] = every one of them. */
 private fun outNeighbors(sourceRow: QueryRow, types: List<String>, graph: QueryGraph): List<QueryRow> {
     val resolvedTypes = types.ifEmpty { sourceRow.blueprint.definition.relations.keys.toList() + OWNERSHIP_EDGE_TYPE }
     val result = LinkedHashSet<QueryRow>()
     resolvedTypes.forEach { type ->
-        when {
-            type == OWNERSHIP_EDGE_TYPE -> result += graph.owners(sourceRow)
-            graph.isHierarchyType(type) -> {
-                val relationKey = graph.hierarchyRelation(sourceRow.blueprint, type.lowercase())
-                relationKey?.let { result += graph.outgoing(sourceRow, it) }
-            }
-            else -> result += graph.outgoing(sourceRow, type)
+        if (type == OWNERSHIP_EDGE_TYPE) {
+            result += graph.owners(sourceRow)
+        } else {
+            relationKeysFor(sourceRow.blueprint, type, graph).forEach { key -> result += graph.outgoing(sourceRow, key) }
         }
     }
     return result.toList()
@@ -368,10 +381,8 @@ private fun inNeighbors(targetRow: QueryRow, types: List<String>, graph: QueryGr
     } else {
         val relationTypes = types.filterNot { it == OWNERSHIP_EDGE_TYPE }
         incoming.forEach { (source, relKey) ->
-            val matchesHierarchy = relationTypes.any { t ->
-                graph.isHierarchyType(t) && graph.hierarchyRelation(source.blueprint, t.lowercase()) == relKey
-            }
-            if (relKey in relationTypes || matchesHierarchy) result += source
+            val resolved = relationTypes.flatMapTo(mutableSetOf()) { t -> relationKeysFor(source.blueprint, t, graph) }
+            if (relKey in resolved) result += source
         }
     }
     return result.toList()

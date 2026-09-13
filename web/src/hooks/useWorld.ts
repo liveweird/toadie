@@ -5,7 +5,7 @@
 // brand link open the world the user last worked in; a first-ever visit lands on `DEFAULT_WORLD`.
 // ONE owner: the shell calls this hook and passes `world` down — never two writers of the key.
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DEFAULT_WORLD, homeOf, isWorld, type World, worldOf } from "../utils/navigation";
 import { readStoredJson, useStoredState } from "./useStoredState";
@@ -25,11 +25,23 @@ export function useWorld(): { world: World; switchTo: (world: World) => void } {
   const routeWorld = worldOf(pathname);
   const world = routeWorld ?? stored;
 
+  // React Router 7 wraps `navigate` in startTransition: switchTo's synchronous setStored(next)
+  // renders once with the OLD pathname (the transition to the new route hasn't committed
+  // yet), and without this guard the reconcile effect below would see that stale
+  // (routeWorld !== stored) mismatch and write the OLD world back into storage — a write that
+  // can land AFTER the transition's own, leaving the WRONG value on disk for a reload to pick
+  // up (the world-switch.spec.ts CI flake). `pending` names the world switchTo is headed to;
+  // the effect stays out of the way until the route actually reflects it.
+  const pending = useRef<World | null>(null);
+
   useEffect(() => {
+    if (pending.current !== null && routeWorld !== pending.current) return;
+    pending.current = null;
     if (routeWorld !== null && routeWorld !== stored) setStored(routeWorld);
   }, [routeWorld, stored, setStored]);
 
   function switchTo(next: World) {
+    pending.current = next;
     setStored(next);
     navigate(homeOf(next));
   }

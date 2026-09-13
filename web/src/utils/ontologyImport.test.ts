@@ -170,6 +170,29 @@ describe("buildComputedIdsByBlueprint", () => {
     const map = buildComputedIdsByBlueprint([], [registryBlueprint]);
     expect(map.team).toEqual(new Set(["size"]));
   });
+
+  test("a blueprint the batch REDEFINES is authoritative — the stored registry's stale computed ids never carry over", () => {
+    const registryBlueprint = {
+      identifier: "service",
+      mirrorProperties: { teamName: { title: "Team", path: "x" } },
+      calculationProperties: {},
+      aggregationProperties: {},
+    } as unknown as Blueprint;
+    const docs: OntologyDocument[] = [
+      {
+        index: 0,
+        kind: "blueprint",
+        identifier: "service",
+        // The batch turns `teamName` into an ordinary schema property — no longer computed.
+        body: { mirrorProperties: {}, calculationProperties: {}, aggregationProperties: {} },
+        stripped: [],
+        strippedComputed: [],
+        source: "s",
+      },
+    ];
+    const map = buildComputedIdsByBlueprint(docs, [registryBlueprint]);
+    expect(map.service).toEqual(new Set());
+  });
 });
 
 describe("parseOntologySources", () => {
@@ -228,6 +251,32 @@ describe("parseOntologySources", () => {
     );
     expect(documents[0].body.properties).toEqual({ language: "kotlin" });
     expect(documents[0].strippedComputed).toEqual(["teamName"]);
+  });
+
+  test("a batch blueprint that redefines a stored computed property as a schema property keeps it on the entity", () => {
+    const registryBlueprint = {
+      identifier: "service",
+      mirrorProperties: { teamName: { title: "Team", path: "x" } },
+      calculationProperties: {},
+      aggregationProperties: {},
+    } as unknown as Blueprint;
+    const { documents } = parseOntologySources(
+      [
+        {
+          label: "s",
+          text: JSON.stringify({
+            // The batch redefines "service" without teamName as computed — it is now an
+            // ordinary schema property, so it must survive on the entity untouched.
+            blueprints: [blueprintDoc({ mirrorProperties: {}, calculationProperties: {}, aggregationProperties: {} })],
+            entities: [entityDoc({ properties: { language: "kotlin", teamName: "Platform" } })],
+          }),
+        },
+      ],
+      [registryBlueprint],
+    );
+    const entity = documents.find((d) => d.kind === "entity")!;
+    expect(entity.body.properties).toEqual({ language: "kotlin", teamName: "Platform" });
+    expect(entity.strippedComputed).toEqual([]);
   });
 });
 

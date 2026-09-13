@@ -418,6 +418,23 @@ fun planEntityImport(documents: List<JsonObject>, snapshot: EntityImportSnapshot
 
 private const val ENTITY_STORAGE_FAILED = "Storage failed"
 
+// Per-document isolation, shared by both writer passes: rethrow cancellation, classify a
+// unique-violation race as EXISTS, anything else as a safe-message ERROR — never let an
+// unexpected storage failure escape as a 500 and fail the whole batch (report & skip).
+@Suppress("TooGenericExceptionCaught")
+internal fun storageFailureRow(
+    e: Exception,
+    index: Int,
+    blueprint: String?,
+    identifier: String?,
+    id: UInt? = null,
+    messageFor: (String) -> String = { it },
+): EntityImportRow = if (e.isUniqueViolation()) {
+    EntityImportRow(index, blueprint, identifier, OntologyImportStatus.EXISTS, id = id, message = messageFor("created concurrently"))
+} else {
+    EntityImportRow(index, blueprint, identifier, OntologyImportStatus.ERROR, id = id, message = messageFor(ENTITY_STORAGE_FAILED))
+}
+
 /**
  * The real run: workspace snapshot → plan → pass 1 in [EntityImportPlan.order] (reusing
  * [EntityService.create]/[EntityService.update] per row, so every write still runs under the
@@ -473,14 +490,13 @@ private suspend fun EntityService.writeEntityRow(
     } catch (e: BadRequestException) {
         EntityImportRow(index, blueprint, identifier, OntologyImportStatus.INVALID, message = e.message)
     } catch (e: Exception) {
-        if (e.isUniqueViolation()) {
-            EntityImportRow(index, blueprint, identifier, OntologyImportStatus.EXISTS, message = "created concurrently")
-        } else {
-            EntityImportRow(index, blueprint, identifier, OntologyImportStatus.ERROR, message = ENTITY_STORAGE_FAILED)
-        }
+        storageFailureRow(e, index, blueprint, identifier)
     }
 }
 
+// Per-document isolation, the writeEntityRow precedent: an unexpected pass-2 storage failure is
+// reported as ERROR (via storageFailureRow) rather than escaping and failing the whole batch.
+@Suppress("TooGenericExceptionCaught")
 private suspend fun EntityService.pass2Entity(id: UInt, verdict: EntityPlanVerdict.Store, previousRow: EntityImportRow): EntityImportRow =
     try {
         update(id, verdict.request)
@@ -494,6 +510,10 @@ private suspend fun EntityService.pass2Entity(id: UInt, verdict: EntityPlanVerdi
         )
     } catch (e: BadRequestException) {
         previousRow.copy(status = OntologyImportStatus.ERROR, id = id, message = "Stored without its deferred references: ${e.message}")
+    } catch (e: Exception) {
+        storageFailureRow(e, previousRow.index, previousRow.blueprint, previousRow.identifier, id) {
+            "Stored without its deferred references: $it"
+        }
     }
 
 /** The dry-run: the identical classification, storing nothing. */
