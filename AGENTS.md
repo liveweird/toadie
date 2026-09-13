@@ -77,11 +77,14 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
   source sync, hierarchy/graph/Errors views, lenses, all six catalog registries, catalog history,
   user/feature administration, MFA, password reset, command palette, and changelog, plus the
   Port blueprint/entity editors, hierarchy registry, ontology import, and query-enabled canvases.
-- `sample-data/catalog-info.yaml` is the hand-imported Backstage workspace;
-  `sample-data/blueprints/` contains the eleven-blueprint baseline and `sample-data/entities/`
-  its entity examples. Use their `load.sh` scripts or the matching import UI. Migrations never
+- `sample-data/backstage/commerce-payments/catalog-info.yaml` is the hand-imported Backstage
+  demo; `sample-data/port/commerce-payments/blueprints/` contains the eleven-blueprint baseline
+  and its sibling `entities/` directory contains the Port instances. Use the Port `load.sh`
+  scripts or each paradigm's matching import UI. Migrations never
   seed catalog files or entity instances. V31 seeds only the protected `_team`/`_user` system
   blueprints, which the sample blueprint import extends.
+  Start with the [sample-data guide](sample-data/README.md) for each demo
+  and its prerequisites, loading instructions, expected results, and cleanup.
 - Backend tests are in `server/src/test/kotlin/`, colocated frontend tests use `*.test.ts(x)`, and
   Playwright journeys are in `e2e/tests/*.spec.ts` with their design artifacts in
   `e2e/scenarios/*.md`.

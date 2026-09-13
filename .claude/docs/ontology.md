@@ -1,9 +1,10 @@
 ### The baseline ontology (Port blueprints)
 
-**`sample-data/blueprints/` is the eleven-blueprint model the platform catalog is built on**
+**`sample-data/port/commerce-payments/blueprints/` is the eleven-blueprint model the platform catalog is built on**
 (the baseline ontology, v1.25.2; the sample set itself since v1.25.3, when it replaced the
-feature-showcase set), and `sample-data/entities/` is the same landscape as
-`sample-data/catalog-info.yaml` re-told as its entities — the two samples tell one story, which
+feature-showcase set), and `sample-data/port/commerce-payments/entities/` is the same broad
+landscape as `sample-data/backstage/commerce-payments/catalog-info.yaml` re-told as Port entities —
+the two independent demos share a story and vocabulary, which
 is what the Backstage round trip below is about.
 The design decisions, taken 2026-09-10: `service` + `library` rather than one `component` or a
 five-way split (a Port relation targets ONE blueprint, so every extra blueprint multiplies the
@@ -64,7 +65,7 @@ one meaning (`repository`, `docs`, `ci_pipeline`, `dashboard`, `logs`, `runbook`
 boolean` on `system`/`api` preserves the `external` namespace (third parties). No secrets,
 connection strings or hostnames as properties, ever.
 
-**Computed properties (phase 5, v1.27.0).** Nine mirror/calculation/aggregation properties
+**Computed properties (phase 5, v1.27.0).** Eleven mirror/calculation/aggregation properties
 across five blueprints, evaluated at entity read time (`.claude/docs/port-data-model.md`
 "Computed properties"); `SampleEntitiesTest` derives every expected value from the sample
 entity files rather than hardcoding them.
@@ -86,7 +87,7 @@ never a finding, never a save blocker; `01-team.json`'s `member_count` is the on
 blueprint extension (`_team` may add aggregation properties like any other field). Because an
 aggregation's `target` must already be an ACTIVE blueprint, `domain.critical_systems` and
 `system`'s three aggregations name a blueprint that loads LATER in the numbered set — the
-loader (`sample-data/blueprints/load.sh`, `SampleData.loadBlueprints`) applies these in TWO
+loader (`sample-data/port/commerce-payments/blueprints/load.sh`, `SampleData.loadBlueprints`) applies these in TWO
 passes: every file first, with `aggregationProperties` stripped, then a second pass PUTs the
 full file back onto every blueprint that declares one, once every target exists.
 

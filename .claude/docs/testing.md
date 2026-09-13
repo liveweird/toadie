@@ -161,6 +161,17 @@ Backend tests live flat in `server/src/test/kotlin/` (kotlin.test + `io.ktor.ser
 
 **Production-mode HTTP posture.** `ProductionHttpTest` boots the REAL Netty engine (`EngineMain.createServer` with `-P:` overrides, `ktor.development=false`, `mail.transport=disabled`, rotated seed password + strong JWT secret) because Ktor's test engine never surfaces the header-after-commit failure the HTTPS redirect used to hit: it pins the 301 with the security headers, `X-Forwarded-Proto: https` skipping the redirect (the k8s probe contract, incl. `/healthz` + `/readyz`), and that only `X-Forwarded-Host` may name the redirect target. `ForwardedHeadersTest` pins `http.proxyHops` (rate-limit buckets key on the LAST `X-Forwarded-For` value); `HealthTest` the two probe endpoints in development mode. Restore the seed accounts in `finally` (the production boot rotates the admin).
 
+**Sample catalogs.** `SampleCatalogTest` loads
+`sample-data/backstage/commerce-payments/catalog-info.yaml` through the real import API and pins
+the 32 `CREATED` / 2 `CREATED_WITH_FINDINGS` result, the four intentional reference findings,
+and the 34 report-only `SOURCE_MISSING` findings. The frontend's
+`sampleCatalogImport.test.ts` parses the same moved fixture with the production YAML parser.
+
+Each Port sample test explicitly provisions its required `composition`/`deployment` hierarchy
+values and snapshots the prior dictionary, including entry IDs. Cleanup removes sample entity
+and blueprint references before restoring that dictionary. Every case must pass independently
+on a freshly migrated database; never rely on another sample test having added `deployment`.
+
 **Blueprints (V27).** `BlueprintValidationTest` is the pure rule table (one case per rule in
 `.claude/docs/port-data-model.md`, no database); `BlueprintReferencesTest` pins the pure
 target/rename helpers; `BlueprintTest` drives the routes with Port-shaped JSON bodies and pins
@@ -169,14 +180,17 @@ feature-local `explicitNulls = false` serializer is what keeps the wire Port-nat
 unknown-key 400, the cascade rename observed on the dependent's GET, and the delete 409 naming
 the referrers; `BlueprintConcurrencyTest` is the tag-category held-lock proof for a relation
 create racing its target's delete (one wins, never a dangling target). `SampleBlueprintsTest`
-is executable documentation for `sample-data/blueprints/` — since v1.25.3 the baseline
+is executable documentation for `sample-data/port/commerce-payments/blueprints/` — since
+v1.25.3 the baseline
 ontology in `.claude/docs/ontology.md`: it POSTs the eleven files in dependency order, pins the
-round trip, and asserts the three contracts the set makes — every registry-mirroring enum
+round trip, and asserts the model contracts — every registry-mirroring enum
 (per-kind types, lifecycles, label value lists, tag categories) equals the seeded registry read
-back through the API, the `hierarchyRelations` map forms exactly the org and architecture trees,
-and `owned_by → team` is required and single wherever Backstage requires `spec.owner`. (The
+back through the API, the `hierarchyRelations` map defines the `composition` and `deployment`
+forests, direct and inherited ownership match the declared model, and the protected system
+blueprints remain the seeded rows. (The
 v1.23.1–v1.25.2 feature-showcase set and its union assertions were retired with it; the pure
-rule tables carry that coverage.) `SampleEntitiesTest` is the same for `sample-data/entities/`
+rule tables carry that coverage.) `SampleEntitiesTest` is the same for
+`sample-data/port/commerce-payments/entities/`
 (59 entities, the catalog landscape re-told in the baseline ontology): it loads the blueprint
 set, POSTs every entity in dependency order asserting `201` with ZERO findings on create and
 re-GET, pins the `properties`/`relations` round trip, and asserts the coverage the README

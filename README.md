@@ -97,17 +97,12 @@ Ports are chosen to coexist with [Lettuce](https://github.com/liveweird/lettuce)
 machine: the app is on **8081**, Postgres is host-mapped to **5433**, and the Vite dev server
 uses **5174**.
 
-The database comes up with the admin-curated registries already filled in — namespaces,
-lifecycles, per-kind types, labels, tag categories and annotation keys — but with an **empty
-catalog**. To get something to look at, load [`sample-data/`](sample-data/README.md): a
-34-entity landscape covering all seven kinds, pasted or picked on the **Import** page. It
-speaks only the seeded vocabulary, and carries four deliberately broken references so the
-Errors report and the Graph have something to show. The blueprint registry (`/blueprints`)
-starts empty too — load [`sample-data/blueprints/`](sample-data/README.md#blueprints-port)
-with `sample-data/blueprints/load.sh` for the eleven-blueprint baseline ontology the catalog is
-built on ([`.claude/docs/ontology.md`](.claude/docs/ontology.md)), then
-[`sample-data/entities/`](sample-data/README.md#entities-port) with its own `load.sh` for the
-same landscape as Port entities.
+The database comes up with the admin-curated registries already filled in, but catalog content
+is not seeded. [`sample-data/`](sample-data/README.md) offers two independent commerce/payments
+demos: a [Backstage software catalog](sample-data/backstage/commerce-payments/README.md) with 34
+documents and four intentional reference findings, and a
+[Port ontology](sample-data/port/commerce-payments/README.md) with eleven blueprint definitions
+and 59 entity instances. Each guide names its own import page and loader workflow.
 
 ## Running on Kubernetes (local)
 
