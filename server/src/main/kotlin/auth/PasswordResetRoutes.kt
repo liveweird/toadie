@@ -6,12 +6,14 @@ import ch.nokillswit.authz.UnauthorizedException
 import ch.nokillswit.infra.mail.mailAppUrl
 import ch.nokillswit.infra.mail.mailer
 import ch.nokillswit.plugins.respondProblem
+import ch.nokillswit.users.MAX_EMAIL_LENGTH
 import ch.nokillswit.users.UserServiceKey
 import ch.nokillswit.users.canonicalEmail
 import ch.nokillswit.users.validateEmail
 import ch.nokillswit.users.validatePassword
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.*
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receive
@@ -67,6 +69,11 @@ fun Application.configurePasswordResetRoutes() {
         rateLimit(RateLimitName(PASSWORD_RESET_RATE_LIMIT)) {
             post(RESET_PATH) {
                 val email = canonicalEmail(call.receive<PasswordResetRequest>().email)
+                // No stored account can exceed this length — rejected up front, before the
+                // per-email throttle ever sees it (there is nothing to enumerate here).
+                if (email.length > MAX_EMAIL_LENGTH) {
+                    throw BadRequestException("email must be at most $MAX_EMAIL_LENGTH characters")
+                }
                 validateEmail(email)
                 if (mailer == null || appUrl == null) {
                     call.respondProblem(HttpStatusCode.ServiceUnavailable, "Password reset email is not configured")

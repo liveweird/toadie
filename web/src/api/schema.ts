@@ -1805,7 +1805,7 @@ export interface components {
             language: components["schemas"]["Language"];
         };
         /**
-         * @description An additional role. Every user is implicitly a regular user; the array only ever carries privileges added on top of that baseline.
+         * @description An additional role. Every user is implicitly a regular user; the array only ever carries privileges added on top of that baseline. The wire `roles` array must never name USER (the implicit baseline) — only additional roles beyond it may appear.
          * @enum {string}
          */
         UserRole: "ADMIN";

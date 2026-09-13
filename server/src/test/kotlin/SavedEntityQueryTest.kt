@@ -297,10 +297,16 @@ class SavedEntityQueryTest {
         val alice = seededClient("eqordera")
         val bob = seededClient("eqorderb")
         val invalid = request(eqName(), query = "MATCH (a RETURN a")
+        // A control character in `name` fails at the SANITIZE step (sanitizeSingleLine), a
+        // different code path than the syntax-invalid query above (which fails at
+        // validateSavedEntityQueryRequest, downstream of sanitize) — the sanitize step must
+        // also run AFTER the ownership verdict, not route-side ahead of it.
+        val malformed = request("eqctl\u0007name")
         val ids = mutableListOf<UInt>()
         try {
             // Unknown id + invalid payload → the 404, not the 400 (the password-PUT precedent).
             assertEquals(HttpStatusCode.NotFound, alice.putJson("/api/v1/entity-queries/999999", invalid).status)
+            assertEquals(HttpStatusCode.NotFound, alice.putJson("/api/v1/entity-queries/999999", malformed).status)
 
             val publicQuery = alice.postJson(
                 "/api/v1/entity-queries",
@@ -312,10 +318,18 @@ class SavedEntityQueryTest {
                 HttpStatusCode.Forbidden,
                 bob.putJson("/api/v1/entity-queries/${publicQuery.id}", invalid).status,
             )
-            // The owner with the same invalid payload gets the 400.
+            assertEquals(
+                HttpStatusCode.Forbidden,
+                bob.putJson("/api/v1/entity-queries/${publicQuery.id}", malformed).status,
+            )
+            // The owner with the same invalid/malformed payload gets the 400.
             assertEquals(
                 HttpStatusCode.BadRequest,
                 alice.putJson("/api/v1/entity-queries/${publicQuery.id}", invalid).status,
+            )
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                alice.putJson("/api/v1/entity-queries/${publicQuery.id}", malformed).status,
             )
         } finally {
             cleanup(ids)

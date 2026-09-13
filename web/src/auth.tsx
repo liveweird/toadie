@@ -2,6 +2,7 @@
 // -- the auth store helpers (signIn/signOut/useAuthed) live beside the route guards on purpose; a mixed file opts out of fast-refresh, which is fine for this rarely-edited module
 import { useSyncExternalStore, type ReactElement } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   getSessionFamilyId,
   getSessionUserId,
@@ -50,6 +51,18 @@ export function subscribeAuthLifecycle(cb: () => void): () => void {
     window.removeEventListener("storage", onStorage);
     lifecycleListeners.delete(cb);
   };
+}
+
+/**
+ * Clears the whole query cache at every auth boundary — the lifecycle fires from the
+ * transport's definitive refresh rejection (`api/http.ts`), `Login.tsx#finishSignIn`, and
+ * cross-tab `storage` sid changes, so cached data from a former session can never leak into
+ * the next one via a query that hasn't refetched yet. Call once, right after the QueryClient
+ * is constructed (`main.tsx`); the explicit sign-out's own `queryClient.clear()`
+ * (`UserMenu.tsx`) stays in place too — a harmless double.
+ */
+export function bindQueryCacheToAuthBoundary(client: QueryClient): () => void {
+  return subscribeAuthLifecycle(() => client.clear());
 }
 
 let pendingSignedOutBanner = false;

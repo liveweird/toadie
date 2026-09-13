@@ -812,6 +812,48 @@ class CatalogFileTest {
     }
 
     @Test
+    fun `a rename judges the file's own reference to its OLD name as MISSING, while referrers still dangle freely`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("refrename")
+            val ns = uniqueNamespace("refrnns")
+            val oldName = uniqueEntityName("old-name")
+            val parent = client.createCatalogFile(componentFile(uniqueEntityName("parent"), namespace = ns))
+            val x = client.createCatalogFile(
+                componentFile(oldName, namespace = ns).let {
+                    it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/${parent.metadata.name}"))
+                },
+            )
+            // Y references X by its ORIGINAL name — resolves while X still carries it.
+            client.createCatalogFile(
+                componentFile(uniqueEntityName("sibling"), namespace = ns).let {
+                    it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$oldName"))
+                },
+            )
+
+            val newName = uniqueEntityName("new-name")
+            // A stale copy: X renames itself but its own subcomponentOf still names the OLD identity.
+            // Before 2.3.2 the pre-rename row satisfied the resolver and the stale reference stored.
+            val stale = componentFile(newName, namespace = ns).let {
+                it.copy(spec = it.spec.copy(subcomponentOf = "component:$ns/$oldName"))
+            }
+            val strict = client.putJson("$CATALOG_FILES_PATH/${x.id}", stale)
+            assertEquals(HttpStatusCode.BadRequest, strict.status)
+            val problem = strict.body<CatalogFileInvalidProblem>()
+            assertTrue(problem.findings.any { it.status == ErrorStatus.MISSING && it.field == "spec.subcomponentOf" })
+
+            // Waived, the stale reference stores and becomes an Errors finding — the import posture.
+            val waived = client.putJson("$CATALOG_FILES_PATH/${x.id}?allowInvalid=true", stale)
+            assertEquals(HttpStatusCode.NoContent, waived.status)
+            assertEquals(newName, client.get("$CATALOG_FILES_PATH/${x.id}").body<CatalogFileResponse>().metadata.name)
+
+            // A clean rename is never blocked by OTHER files referencing the old name: referrers
+            // go dangling by design (the deletion rule applied to renames).
+            val clean = client.putJson("$CATALOG_FILES_PATH/${x.id}", componentFile(uniqueEntityName("newer"), namespace = ns))
+            assertEquals(HttpStatusCode.NoContent, clean.status)
+        }
+
+    @Test
     fun `list filters by name and namespace, sorts and paginates`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("cataloguser")

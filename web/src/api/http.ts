@@ -46,13 +46,20 @@ type RefreshOutcome =
   | { kind: "rejected"; owner: SessionBoundary }
   | { kind: "unavailable"; owner: SessionBoundary };
 
-type SessionBoundary = {
+export type SessionBoundary = {
   familyId: string | null;
   clearGeneration: number;
   refreshToken: string | null;
 };
 
-function sessionBoundary(): SessionBoundary {
+/**
+ * Snapshot of the session a caller belongs to — capture it BEFORE an await and recheck with
+ * `ownsCurrentSession` afterward, so a late completion (a definitive rejection, a logout's
+ * revoke, …) can tell whether it still belongs to the CURRENT session or an old one a
+ * sign-out/new-login has since replaced. `sid` decoding stays a lifecycle partition key only,
+ * never auth validation — the server remains the verifier.
+ */
+export function sessionBoundary(): SessionBoundary {
   return {
     familyId: getSessionFamilyId(),
     clearGeneration: getClearSessionGeneration(),
@@ -70,7 +77,7 @@ function sameSession(left: SessionBoundary, right: SessionBoundary): boolean {
   return left.refreshToken === right.refreshToken;
 }
 
-function ownsCurrentSession(owner: SessionBoundary): boolean {
+export function ownsCurrentSession(owner: SessionBoundary): boolean {
   return sameSession(owner, sessionBoundary());
 }
 

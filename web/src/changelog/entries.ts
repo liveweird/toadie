@@ -17,6 +17,30 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.3.2",
+    date: "2026-09-13",
+    en: `**External quality review fixes.**
+
+- Signing out — including the automatic sign-out after an expired session — now clears every cached list, so another account signing in on the same browser never sees the previous account's private lenses or saved queries, and a slow sign-out can no longer wipe a newer sign-in.
+- Oversized login emails are refused up front and the login/password-reset throttles are capacity-bounded.
+- Renaming an entity rewrites its own references to the old identifier; renaming a catalog file now flags a reference to its old name.
+- Ontology import no longer strips a property that a replaced blueprint turned from computed into stored.
+- A relation named like a hierarchy now traverses in both directions of an entity query, and a reused query variable is validated against its bound blueprint.
+- The world switch no longer forgets a just-made choice on an immediate reload.
+- Ontology import's second pass reports storage failures per row instead of failing the batch.
+- Lens/saved-query edits decide ownership before any input check; the user \`roles\` field rejects the baseline role; label/annotation-key limits are enforced atomically.`,
+    pl: `**Poprawki z przeglądu jakości.**
+
+- Wylogowanie — w tym automatyczne wylogowanie po wygaśnięciu sesji — teraz czyści każdą listę w pamięci podręcznej, więc inne konto logujące się na tej samej przeglądarce nigdy nie widzi prywatnych soczewek/zapisanych zapytań poprzedniego konta, a wolne wylogowanie nie może już wytrzeć nowszego logowania.
+- Zbyt długie wiadomości e-mail dotyczące logowania są odrzucane z góry, a przepustnice logowania/resetowania hasła są ograniczone pojemnością.
+- Zmiana nazwy encji przepisuje jej własne odniesienia do starej nazwy; zmiana nazwy pliku katalogu teraz sygnalizuje odniesienie do starej nazwy.
+- Import ontologii nie powoduje już pominięcia właściwości, którą zastąpiony plan zmienił z obliczanej na przechowywaną.
+- Relacja nazwana jak hierarchia teraz przechodzi w obu kierunkach zapytania encji, a zmienna zapytania jest weryfikowana względem powiązanego blueprintu.
+- Przełącznik świata nie zapomina już o niedawno dokonanym wyborze na bezpośrednim przeładowaniu.
+- Drugi przebieg importu ontologii raportuje błędy magazynowania dla poszczególnych wierszy zamiast unieważniać całą partię.
+- Edycja soczewek/zapisanych zapytań podejmuje decyzję o właścicielu przed jakąkolwiek kontrolą wejścia; pole \`roles\` użytkownika odrzuca rolę bazową; limity etykiet/kluczy adnotacji są egzekwowane atomowo.`,
+  },
+  {
     version: "2.3.1",
     date: "2026-09-13",
     en: `**Consistency pass.**

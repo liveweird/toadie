@@ -9,6 +9,7 @@ import ch.nokillswit.entities.EntityDocument
 import ch.nokillswit.entities.EntityIndex
 import ch.nokillswit.entities.Inbound
 import ch.nokillswit.entities.IndexedRow
+import ch.nokillswit.entities.MAX_MIRROR_FANOUT
 import ch.nokillswit.entities.QueryCandidate
 import ch.nokillswit.entities.RowLookup
 import ch.nokillswit.entities.applyCalculationSpec
@@ -102,6 +103,18 @@ class EntityAggregationTest {
         val subj = subject(xBp, document = doc(relations = buildJsonObject { put("peer", "op") }))
         val result = relatedEntities(subj, def, definitions, index)
         assertEquals(setOf("op", "ip"), result.map { it.identifier }.toSet())
+    }
+
+    @Test
+    fun `relatedEntities - direct candidates are capped at MAX_MIRROR_FANOUT`() {
+        val bBp = "component"
+        val tBp = "issue"
+        val inboundHits = (0 until 1500).map { Inbound(row(tBp, "i$it"), "owner") }
+        val index = FakeIndex(inboundMap = mapOf((bBp to "subj") to inboundHits))
+        val def = countAggregation(tBp)
+        val definitions = mapOf(bBp to BlueprintDefinition(), tBp to BlueprintDefinition())
+        val result = relatedEntities(subject(bBp), def, definitions, index)
+        assertEquals(MAX_MIRROR_FANOUT, result.size)
     }
 
     @Test

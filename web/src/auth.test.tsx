@@ -1,7 +1,15 @@
 import { describe, expect, test } from "vitest";
 import { Route, Routes } from "react-router-dom";
+import { QueryClient } from "@tanstack/react-query";
 import { renderWithProviders, screen } from "./test/render";
-import { RedirectIfAuthed, RequireAuth, consumeSignedOut, flagSignedOut } from "./auth";
+import {
+  RedirectIfAuthed,
+  RequireAuth,
+  bindQueryCacheToAuthBoundary,
+  consumeSignedOut,
+  flagSignedOut,
+  notifyAuthChange,
+} from "./auth";
 
 const TOKEN_KEY = "toadie.auth.token";
 
@@ -44,5 +52,22 @@ describe("route guards", () => {
     flagSignedOut();
     expect(consumeSignedOut()).toBe(true);
     expect(consumeSignedOut()).toBe(false);
+  });
+});
+
+describe("bindQueryCacheToAuthBoundary", () => {
+  test("clears the query cache when the auth lifecycle fires, and stops once unsubscribed", () => {
+    const client = new QueryClient();
+    client.setQueryData(["thing"], { hello: "world" });
+    expect(client.getQueryData(["thing"])).toEqual({ hello: "world" });
+
+    const unsubscribe = bindQueryCacheToAuthBoundary(client);
+    notifyAuthChange();
+    expect(client.getQueryData(["thing"])).toBeUndefined();
+
+    unsubscribe();
+    client.setQueryData(["thing"], { hello: "again" });
+    notifyAuthChange();
+    expect(client.getQueryData(["thing"])).toEqual({ hello: "again" });
   });
 });

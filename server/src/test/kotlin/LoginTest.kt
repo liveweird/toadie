@@ -2,6 +2,7 @@ package ch.nokillswit
 
 import ch.nokillswit.auth.LoginRequest
 import ch.nokillswit.auth.LoginResponse
+import ch.nokillswit.users.MAX_EMAIL_LENGTH
 import ch.nokillswit.users.UserRole
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
@@ -104,5 +105,16 @@ class LoginTest {
         // would disclose account existence.
         val response = jsonClient().postJson("/api/v1/login", LoginRequest(email, "x".repeat(200)))
         assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `an over-long email is a plain 400, never the uniform 401`() = testApplication {
+        usePostgresTestcontainer()
+        // No stored account can exceed MAX_EMAIL_LENGTH, so this must be rejected up front —
+        // before the lockout/throttle machinery ever sees it — with a 400, not the ordinary
+        // unauthenticated-attempt 401 (there is nothing to enumerate here).
+        val overLong = "x".repeat(MAX_EMAIL_LENGTH + 1) + "@test"
+        val response = jsonClient().postJson("/api/v1/login", LoginRequest(overLong, "whatever"))
+        assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 }

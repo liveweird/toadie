@@ -112,15 +112,17 @@ class SavedEntityQueryService(private val database: R2dbcDatabase) {
      */
     suspend fun update(id: UInt, request: SavedEntityQueryRequest, callerId: UInt): SavedEntityQueryMutationResult =
         suspendTransaction(database) {
-            // Verdict BEFORE validation — 403/404 wins over 400 (the convention everywhere);
-            // the route deliberately does NOT pre-validate the PUT for the same reason.
+            // Verdict BEFORE sanitize/validation — 403/404 wins over 400 (the convention
+            // everywhere); the route deliberately does NOT pre-sanitize/pre-validate the PUT
+            // for the same reason (sanitizing could itself throw a 400).
             val verdict = mutationVerdict(id, callerId)
             if (verdict != SavedEntityQueryMutationResult.OK) return@suspendTransaction verdict
-            validateSavedEntityQueryRequest(request)
+            val sanitized = sanitizedSavedEntityQueryRequest(request)
+            validateSavedEntityQueryRequest(sanitized)
             EntityQueries.update({ (EntityQueries.id eq id) and active() }) {
-                it[name] = request.name
-                it[visibility] = request.visibility.name
-                it[query] = request.query
+                it[name] = sanitized.name
+                it[visibility] = sanitized.visibility.name
+                it[query] = sanitized.query
                 it[updatedAt] = System.currentTimeMillis()
             }
             SavedEntityQueryMutationResult.OK

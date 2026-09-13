@@ -1,6 +1,7 @@
 package ch.nokillswit.auth
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Per-account login throttle: after [threshold] consecutive failures for the same submitted
@@ -38,13 +39,13 @@ class LoginThrottle(
 
     /** Record a failed attempt; returns true when this failure trips the lockout. */
     fun recordFailure(email: String): Boolean {
-        pruneIfOversized()
         val now = clock()
         val next = states.compute(key(email)) { _, cur ->
             val failures = (cur?.failures ?: 0) + 1
             if (failures >= threshold) State(0, now + lockoutMillis, now)
             else State(failures, 0, now)
         }
+        maintain() // after the insert, so the map never ends a call above MAX_TRACKED
         return next != null && next.lockedUntil > now
     }
 
@@ -52,15 +53,52 @@ class LoginThrottle(
         states.remove(key(email))
     }
 
+    /** Test-only visibility into the tracked population size (capacity-eviction pins). */
+    internal val trackedCount: Int
+        get() = states.size
+
     // Memory bound: an attacker spraying distinct emails must not grow the map without limit.
-    // Cheap opportunistic prune of stale entries once the map gets large.
-    private fun pruneIfOversized() {
-        if (states.size <= MAX_TRACKED) return
-        val cutoff = clock() - lockoutMillis
-        states.entries.removeIf { it.value.lastTouched < cutoff && it.value.lockedUntil <= clock() }
+    // A slowly-growing population that never exceeds MAX_TRACKED in one shot must still be
+    // reclaimed, so the stale-entry sweep runs on a FIXED CADENCE (every CALLS_PER_PRUNE calls)
+    // regardless of current size, not only once the map is already oversized. If the map is
+    // STILL oversized afterwards (a burst, or entries mid-lockout that stale-pruning can't
+    // touch), a hard-capacity eviction removes the oldest-touched, non-locked-out entries down
+    // to LOW_WATER (not merely to the cap, so the sort runs once per ~1,000 inserts under a
+    // spray rather than on every request) — an active lockout is never evicted just to make room.
+    private val callCount = AtomicLong(0)
+
+    private fun maintain() {
+        // Increment unconditionally on every call so the cadence stays accurate even while
+        // the map is oversized (an `||` short-circuit would otherwise skip the count).
+        val cadenceHit = callCount.incrementAndGet() % CALLS_PER_PRUNE == 0L
+        if (cadenceHit || states.size > MAX_TRACKED) {
+            pruneStale()
+        }
+        if (states.size > MAX_TRACKED) {
+            evictOldestUnlocked()
+        }
+    }
+
+    private fun pruneStale() {
+        val now = clock()
+        val cutoff = now - lockoutMillis
+        states.entries.removeIf { it.value.lastTouched < cutoff && it.value.lockedUntil <= now }
+    }
+
+    private fun evictOldestUnlocked() {
+        val now = clock()
+        val excess = states.size - LOW_WATER
+        if (excess <= 0) return
+        states.entries
+            .filter { it.value.lockedUntil <= now }
+            .sortedBy { it.value.lastTouched }
+            .take(excess)
+            .forEach { states.remove(it.key, it.value) }
     }
 
     private companion object {
         const val MAX_TRACKED = 10_000
+        const val LOW_WATER = 9_000
+        const val CALLS_PER_PRUNE = 256L
     }
 }

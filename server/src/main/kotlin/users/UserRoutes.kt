@@ -146,6 +146,7 @@ fun Application.configureUserRoutes() {
                 validateNameAndEmail(name, email)
                 validatePassword(req.password)
                 validateLanguage(req.language)
+                validateRoles(req.roles)
                 val role = rolesToStored(req.roles)
                 // The password arrives client-generated and leaves this handler only as a
                 // bcrypt hash — no response ever carries plaintext. A duplicate active email
@@ -190,6 +191,7 @@ fun Application.configureUserRoutes() {
                 val name = sanitizeSingleLine(req.name, "Name")
                 val email = canonicalEmail(req.email)
                 validateNameAndEmail(name, email)
+                validateRoles(req.roles)
                 val requestedRole = rolesToStored(req.roles)
                 val existing = userService.read(route.id).orNotFound("User")
                 // Last-admin protection: demoting the final active administrator would lock

@@ -9,8 +9,12 @@ import kotlinx.serialization.Serializable
  * (`.claude/docs/backstage-descriptor-format.md`). `spec` is ONE flat superset of every kind's
  * fields (no oneOf/discriminator — hostile to the 3.0 tooling); the per-kind table in
  * CatalogFileValidation.kt enforces required and forbidden fields, so stored documents stay
- * canonical. References are validated by GRAMMAR only — resolving them is the Errors report
- * feature's job.
+ * canonical. Every WRITE resolves references AND the registry rules (labels, annotations,
+ * tags, type, lifecycle) as SOFT findings — strict by default, one aggregated 400, but
+ * waivable per write via `allowInvalid=true` (`CatalogFileService.softFindings`, see
+ * `.claude/docs/authorization.md`); the Errors report (`Errors.kt`) additionally runs the
+ * report-only `STRUCTURE_INVALID`/`NAMESPACE_NOT_ALLOWED`/`SOURCE_MISSING` checks over stored
+ * content, whose rules stay HARD on writes.
  */
 @Serializable
 data class CatalogFile(

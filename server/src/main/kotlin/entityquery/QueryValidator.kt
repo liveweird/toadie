@@ -108,7 +108,7 @@ private class QueryValidation(private val schema: QuerySchema) {
 
     private fun processNode(node: NodePattern, plainPatternIndex: Int?) {
         validateLabels(node.labels, node.span)
-        node.properties.keys.forEach { key -> validatePropertyKey(key, node.labels, node.span) }
+        node.properties.keys.forEach { key -> validatePropertyKey(key, effectiveLabels(node), node.span) }
         val variable = node.variable ?: return
         trackVariable(variable, VariableKind.NODE, node.labels, node.span)
         nodeSlots.putIfAbsent(variable, nodeSlots.size)

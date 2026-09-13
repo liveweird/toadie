@@ -291,6 +291,43 @@ class QueryEvaluatorTest {
         assertEquals(setOf(k("environment", "prod")), result.keys())
     }
 
+    @Test
+    fun `a relation named like a hierarchy id is unioned with the hierarchy's aliased relation, not shadowed`() = runBlocking {
+        // "node" has an ORDINARY relation literally called "composition" AND names "composition"
+        // as the hierarchy id whose relation is the DIFFERENT "parent" relation — both target
+        // "target". n1 populates BOTH relations, pointing at two DIFFERENT target rows, so
+        // `-[:composition]->` must reach both: the literal relation's own edge must never be
+        // shadowed by the hierarchy alias (`.claude/docs/entity-query-language.md`).
+        val nodeDefinition = BlueprintDefinition(
+            relations = mapOf("composition" to relation("target"), "parent" to relation("target")),
+        )
+        val nodeBp = GraphBlueprint("node", "Node", nodeDefinition, mapOf("composition" to "parent"))
+        val targetBp = GraphBlueprint("target", "Target", BlueprintDefinition(), emptyMap())
+        val t1 = row("target", "shadow-t1")
+        val t2 = row("target", "shadow-t2")
+        val n1 = row(
+            "node",
+            "n1",
+            document = doc(relations = buildJsonObject { put("composition", "shadow-t1"); put("parent", "shadow-t2") }),
+        )
+        val shadowGraph = InMemoryQueryGraph(
+            listOf(t1, t2, n1),
+            mapOf("node" to nodeBp, "target" to targetBp),
+            setOf("composition"),
+        )
+
+        val outgoing = run("MATCH (n:node {\$identifier: 'n1'})-[:composition]->(x) RETURN x", shadowGraph)
+        assertEquals(setOf(k("target", "shadow-t1"), k("target", "shadow-t2")), outgoing.keys())
+
+        val incomingViaLiteral = run("MATCH (t:target {\$identifier: 'shadow-t1'})<-[:composition]-(n) RETURN n", shadowGraph)
+        assertEquals(setOf(k("node", "n1")), incomingViaLiteral.keys())
+        val incomingViaAlias = run("MATCH (t:target {\$identifier: 'shadow-t2'})<-[:composition]-(n) RETURN n", shadowGraph)
+        assertEquals(setOf(k("node", "n1")), incomingViaAlias.keys())
+
+        val undirected = run("MATCH (n:node {\$identifier: 'n1'})-[:composition]-(x) RETURN x", shadowGraph)
+        assertEquals(setOf(k("target", "shadow-t1"), k("target", "shadow-t2")), undirected.keys())
+    }
+
     // ---------------------------------------------------------------------------------------
     // Ownership ($team), Direct and Inherited
     // ---------------------------------------------------------------------------------------

@@ -110,6 +110,51 @@ class UserRoutesTest {
     }
 
     @Test
+    fun `roles may only name additional roles - USER is never accepted on the wire`() = testApplication {
+        usePostgresTestcontainer()
+        val (client, _) = adminClient()
+
+        // Create: an explicit USER entry (alone or alongside ADMIN) is rejected outright,
+        // rather than silently folded away by rolesToStored.
+        val createWithUser = client.postJson(
+            "/api/v1/users",
+            createRequest(uniqueEmail("rolesuser"), roles = listOf(UserRole.USER)),
+        )
+        assertEquals(HttpStatusCode.BadRequest, createWithUser.status)
+        assertEquals("roles may name only additional roles", createWithUser.body<ProblemDetail>().detail)
+
+        // Unaffected: an empty array (a regular user) and ADMIN alone still work as before.
+        val plain = client.createUser(createRequest(uniqueEmail("rolesempty"), roles = emptyList()))
+        assertEquals(emptyList(), plain.roles)
+        val admin = client.createUser(createRequest(uniqueEmail("rolesadmin"), roles = listOf(UserRole.ADMIN)))
+        assertEquals(listOf(UserRole.ADMIN), admin.roles)
+
+        // Update: the same rejection, both for USER alone and ADMIN+USER together.
+        val target = client.createUser(createRequest(uniqueEmail("rolestarget")))
+        val updateWithUser = client.putJson(
+            "/api/v1/users/${target.id}",
+            UserUpdateRequest(name = target.name, email = target.email, roles = listOf(UserRole.USER)),
+        )
+        assertEquals(HttpStatusCode.BadRequest, updateWithUser.status)
+        assertEquals("roles may name only additional roles", updateWithUser.body<ProblemDetail>().detail)
+
+        val updateWithAdminAndUser = client.putJson(
+            "/api/v1/users/${target.id}",
+            UserUpdateRequest(name = target.name, email = target.email, roles = listOf(UserRole.ADMIN, UserRole.USER)),
+        )
+        assertEquals(HttpStatusCode.BadRequest, updateWithAdminAndUser.status)
+        assertEquals("roles may name only additional roles", updateWithAdminAndUser.body<ProblemDetail>().detail)
+
+        // Unaffected: a plain ADMIN update still works.
+        val updateWithAdmin = client.putJson(
+            "/api/v1/users/${target.id}",
+            UserUpdateRequest(name = target.name, email = target.email, roles = listOf(UserRole.ADMIN)),
+        )
+        assertEquals(HttpStatusCode.NoContent, updateWithAdmin.status)
+        assertEquals(listOf(UserRole.ADMIN), client.get("/api/v1/users/${target.id}").body<UserResponse>().roles)
+    }
+
+    @Test
     fun `the list is ADMIN-only and filters by name, email, and role`() = testApplication {
         usePostgresTestcontainer()
         val (client, _) = adminClient()

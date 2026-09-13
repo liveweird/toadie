@@ -21,7 +21,11 @@ model are unchanged, and conflicts retain the existing `409` response. This is a
 writer protocol, not a unique constraint over array members: direct SQL writers and old
 application versions must not bypass it. Deploy all tag writers with this protocol before
 relying on the guarantee. Existing duplicate ownership is not silently repaired. Concurrent
-full replacements of one category still use last-write-wins semantics.
+full replacements of one category still use last-write-wins semantics. `LabelService.create`
+and `AnnotationKeyService.create` now run their count-then-insert `MAX_LABELS`/
+`MAX_ANNOTATION_KEYS` cap check under the same `lockingTransaction` `SHARE ROW EXCLUSIVE`
+table-lock pattern (over `labels`/`annotation_keys` respectively), closing the identical
+overshoot race for those two registries.
 
 The current R2DBC path may finish cancellation only after a blocking database lock is
 released. A cancelled write then rolls back; this protocol does not add a lock-wait deadline
@@ -155,7 +159,11 @@ stale the instant a concurrent writer commits, which is exactly why a pass-2 fai
 and is reported `ERROR` naming the row's `id` rather than silently left `CREATED`/`UPDATED` — a
 concurrent-change residual, not a bug in the ordering. `planBlueprintImport`/`planEntityImport`
 themselves touch no table at all: pure functions over the snapshot and the batch, so the two
-planner test files run without Docker.
+planner test files run without Docker. Pass-2 writes share the SAME per-document
+storage-failure classification as pass-1 (rethrow cancellation, a unique-violation race as
+EXISTS, anything else as a safe-message ERROR) via one extracted `storageFailureRow` helper
+per file, so an unexpected pass-2 failure keeps the row's already-committed id and reports
+report-and-skip instead of failing the whole batch with a 500.
 
 Current migrations are `V1`–`V35` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 

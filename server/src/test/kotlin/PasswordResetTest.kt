@@ -5,6 +5,7 @@ import ch.nokillswit.auth.PasswordResetRequest
 import ch.nokillswit.auth.PasswordResetConfirmRequest
 import ch.nokillswit.auth.LoginResponse
 import ch.nokillswit.auth.RefreshRequest
+import ch.nokillswit.users.MAX_EMAIL_LENGTH
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.bearerAuth
@@ -166,6 +167,20 @@ class PasswordResetTest {
             }
             assertEquals(HttpStatusCode.BadRequest, response.status, "for input '${bad.take(20)}'")
         }
+    }
+
+    @Test
+    fun `an over-long email is a plain 400, never the throttled 202`() = testApplication {
+        usePostgresTestcontainer()
+        // No stored account can exceed MAX_EMAIL_LENGTH, so this must be rejected up front —
+        // before the per-email throttle ever sees it — with a 400, not the ordinary uniform
+        // 202 accepted-regardless-of-existence response (there is nothing to enumerate here).
+        val overLong = "x".repeat(MAX_EMAIL_LENGTH + 1) + "@test"
+        val response = jsonClient().post("/api/v1/password-reset") {
+            contentType(ContentType.Application.Json)
+            setBody(PasswordResetRequest(overLong))
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
     @Test

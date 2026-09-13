@@ -288,6 +288,22 @@ fun planBlueprintImport(
 
 private const val BLUEPRINT_STORAGE_FAILED = "Storage failed"
 
+// Per-document isolation, shared by both writer passes: rethrow cancellation, classify a
+// unique-violation race as EXISTS, anything else as a safe-message ERROR — never let an
+// unexpected storage failure escape as a 500 and fail the whole batch (report & skip).
+@Suppress("TooGenericExceptionCaught")
+internal fun storageFailureRow(
+    e: Exception,
+    index: Int,
+    identifier: String?,
+    id: UInt? = null,
+    messageFor: (String) -> String = { it },
+): BlueprintImportRow = if (e.isUniqueViolation()) {
+    BlueprintImportRow(index, identifier, OntologyImportStatus.EXISTS, id = id, message = messageFor("created concurrently"))
+} else {
+    BlueprintImportRow(index, identifier, OntologyImportStatus.ERROR, id = id, message = messageFor(BLUEPRINT_STORAGE_FAILED))
+}
+
 /**
  * The real run: registry snapshot → plan → pass 1 in [BlueprintImportPlan.order] (reusing
  * [BlueprintService.create]/[BlueprintService.update] per row, so every write still runs under
@@ -342,11 +358,7 @@ private suspend fun BlueprintService.writeBlueprintRow(
     } catch (e: BadRequestException) {
         BlueprintImportRow(index, identifier, OntologyImportStatus.INVALID, message = e.message)
     } catch (e: Exception) {
-        if (e.isUniqueViolation()) {
-            BlueprintImportRow(index, identifier, OntologyImportStatus.EXISTS, message = "created concurrently")
-        } else {
-            BlueprintImportRow(index, identifier, OntologyImportStatus.ERROR, message = BLUEPRINT_STORAGE_FAILED)
-        }
+        storageFailureRow(e, index, identifier)
     }
 }
 
@@ -355,6 +367,9 @@ private suspend fun BlueprintService.writeBlueprintRow(
  * concurrent-change residual (the pre-flight fixpoint already proved the FULL document resolves
  * against the batch) — reported `ERROR` WITH the row's id, never silently left `CREATED`/`UPDATED`.
  */
+// Per-document isolation, the writeBlueprintRow precedent: an unexpected pass-2 storage failure
+// is reported as ERROR (via storageFailureRow) rather than escaping and failing the whole batch.
+@Suppress("TooGenericExceptionCaught")
 private suspend fun BlueprintService.pass2Blueprint(
     id: UInt,
     verdict: BlueprintPlanVerdict.Store,
@@ -367,6 +382,8 @@ private suspend fun BlueprintService.pass2Blueprint(
         throw e
     } catch (e: BadRequestException) {
         previousRow.copy(status = OntologyImportStatus.ERROR, id = id, message = "Stored without its deferred targets: ${e.message}")
+    } catch (e: Exception) {
+        storageFailureRow(e, previousRow.index, previousRow.identifier, id) { "Stored without its deferred targets: $it" }
     }
 
 /** The dry-run: the identical classification, storing nothing — `Store` verdicts predict CREATED/UPDATED. */

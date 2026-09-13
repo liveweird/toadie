@@ -112,15 +112,17 @@ class LensService(private val database: R2dbcDatabase) {
      */
     suspend fun update(id: UInt, request: LensRequest, callerId: UInt): LensMutationResult =
         suspendTransaction(database) {
-            // Verdict BEFORE validation — 403/404 wins over 400 (the convention everywhere);
-            // the route deliberately does NOT pre-validate the PUT for the same reason.
+            // Verdict BEFORE sanitize/validation — 403/404 wins over 400 (the convention
+            // everywhere); the route deliberately does NOT pre-sanitize/pre-validate the PUT
+            // for the same reason (sanitizing could itself throw a 400).
             val verdict = mutationVerdict(id, callerId)
             if (verdict != LensMutationResult.OK) return@suspendTransaction verdict
-            validateLensRequest(request)
+            val sanitized = sanitizedLensRequest(request)
+            validateLensRequest(sanitized)
             Lenses.update({ (Lenses.id eq id) and active() }) {
-                it[name] = request.name
-                it[visibility] = request.visibility.name
-                it[filters] = json.encodeToString(request.filters)
+                it[name] = sanitized.name
+                it[visibility] = sanitized.visibility.name
+                it[filters] = json.encodeToString(sanitized.filters)
                 it[updatedAt] = System.currentTimeMillis()
             }
             LensMutationResult.OK

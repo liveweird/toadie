@@ -1,5 +1,6 @@
 package ch.nokillswit.labels
 
+import ch.nokillswit.infra.db.lockingTransaction
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.flow.map
@@ -53,7 +54,10 @@ class LabelService(private val database: R2dbcDatabase) {
             .toList()
     }
 
-    suspend fun create(request: LabelRequest): UInt = suspendTransaction(database) {
+    suspend fun create(request: LabelRequest): UInt = lockingTransaction(
+        database,
+        "LOCK TABLE labels IN SHARE ROW EXCLUSIVE MODE",
+    ) {
         validateLabelRequest(request) // re-checked service-side so direct callers stay guarded
         if (Labels.selectAll().where { active() }.count() >= MAX_LABELS) {
             throw BadRequestException("The label registry is full ($MAX_LABELS labels)")

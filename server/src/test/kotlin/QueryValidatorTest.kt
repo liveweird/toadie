@@ -257,6 +257,22 @@ class QueryValidatorTest {
     }
 
     @Test
+    fun `an unlabelled re-reference's inline property is checked against the label it was bound with`() {
+        // "groupOnly" exists on "group", NOT "service": (a:service), (a {groupOnly: 'x'}) RETURN a
+        // must resolve `a`'s effective label as "service" (its first, labelled mention) rather
+        // than checking against the union of every blueprint.
+        val schemaWithGroupOnly = schema(
+            blueprint("service", properties = mapOf("name" to PropertyDefinition(type = "string"))),
+            blueprint("group", properties = mapOf("groupOnly" to PropertyDefinition(type = "string"))),
+        )
+        val first = singlePattern(node("a", listOf("service"), line = 1))
+        val second = singlePattern(node("a", properties = mapOf("groupOnly" to Literal(JsonPrimitive("x"), span(2))), line = 2))
+        val q = query(listOf(match(first, second)), returns = returnVars("a"))
+        val finding = validateEntityQuery(q, schemaWithGroupOnly).single { it.code == QueryDiagnosticCodes.UNKNOWN_PROPERTY }
+        assertEquals(2, finding.line)
+    }
+
+    @Test
     fun `a meta property never trips UNKNOWN_PROPERTY`() {
         val a = node("a", listOf("service"))
         val where = Expr.Compare(ComparisonOp.EQUAL, prop("a", "\$identifier"), lit("x"), span(1))

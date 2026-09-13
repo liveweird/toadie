@@ -1,5 +1,6 @@
 package ch.nokillswit.annotations
 
+import ch.nokillswit.infra.db.lockingTransaction
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.flow.map
@@ -51,7 +52,10 @@ class AnnotationKeyService(private val database: R2dbcDatabase) {
             .toList()
     }
 
-    suspend fun create(request: AnnotationKeyRequest): UInt = suspendTransaction(database) {
+    suspend fun create(request: AnnotationKeyRequest): UInt = lockingTransaction(
+        database,
+        "LOCK TABLE annotation_keys IN SHARE ROW EXCLUSIVE MODE",
+    ) {
         validateAnnotationKeyRequest(request) // re-checked service-side so direct callers stay guarded
         if (AnnotationKeys.selectAll().where { active() }.count() >= MAX_ANNOTATION_KEYS) {
             throw BadRequestException("The annotation-key registry is full ($MAX_ANNOTATION_KEYS keys)")

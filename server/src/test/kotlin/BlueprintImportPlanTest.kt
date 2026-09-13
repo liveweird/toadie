@@ -11,8 +11,10 @@ import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.blueprints.planBlueprintImport
+import ch.nokillswit.blueprints.storageFailureRow
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.infra.importing.OntologyImportStatus
+import io.r2dbc.spi.R2dbcDataIntegrityViolationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
@@ -233,5 +235,34 @@ class BlueprintImportPlanTest {
             check(verdict is BlueprintPlanVerdict.Store)
             assertTrue(verdict.deferred.isEmpty())
         }
+    }
+
+    // storageFailureRow — the pass-1/pass-2 shared storage-failure classifier (no database:
+    // isUniqueViolation walks the exception's cause chain for an R2dbcException sqlState).
+
+    @Test
+    fun `storageFailureRow classifies a unique-violation-shaped exception as EXISTS`() {
+        val row = storageFailureRow(R2dbcDataIntegrityViolationException("duplicate key", "23505"), 0, "a")
+        assertEquals(OntologyImportStatus.EXISTS, row.status)
+        assertEquals("created concurrently", row.message)
+    }
+
+    @Test
+    fun `storageFailureRow classifies a plain exception as ERROR with the safe storage-failed message`() {
+        val row = storageFailureRow(RuntimeException("connection reset by peer"), 0, "a")
+        assertEquals(OntologyImportStatus.ERROR, row.status)
+        assertEquals("Storage failed", row.message)
+        assertTrue(row.message?.contains("connection reset") != true, "never the raw exception message")
+    }
+
+    @Test
+    fun `storageFailureRow applies the messageFor transform, the pass-2 prefix shape`() {
+        val existsRow = storageFailureRow(R2dbcDataIntegrityViolationException("dup", "23505"), 0, "a", id = 7u) { "prefix: $it" }
+        assertEquals("prefix: created concurrently", existsRow.message)
+        assertEquals(7u, existsRow.id)
+
+        val errorRow = storageFailureRow(RuntimeException("boom"), 0, "a", id = 7u) { "prefix: $it" }
+        assertEquals("prefix: Storage failed", errorRow.message)
+        assertEquals(7u, errorRow.id)
     }
 }
