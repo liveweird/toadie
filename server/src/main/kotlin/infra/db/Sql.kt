@@ -4,6 +4,7 @@ import org.jetbrains.exposed.v1.core.CustomFunction
 import org.jetbrains.exposed.v1.core.Expression
 import org.jetbrains.exposed.v1.core.LikeEscapeOp
 import org.jetbrains.exposed.v1.core.LikePattern
+import org.jetbrains.exposed.v1.core.LongColumnType
 import org.jetbrains.exposed.v1.core.LowerCase
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.QueryBuilder
@@ -159,6 +160,18 @@ fun Expression<String?>.jsonStringOrArrayContainsFolded(value: String): Op<Boole
         queryBuilder.append(")")
     }
 }
+
+/**
+ * PostgreSQL `octet_length(col)` — reads a TEXT value's stored byte length from its varlena
+ * header without detoasting it, so summing it over many rows (the entity workspace document
+ * byte budget, `.claude/docs/persistence.md` "Entity targets under concurrency (V28)") is cheap
+ * even when individual documents are large. Postgres's own `octet_length` returns `integer`;
+ * this is decoded through [LongColumnType] so a `Sum` over the whole active table never risks
+ * 32-bit overflow. A NULL [column] (an absent `entities.team`) extracts to SQL NULL — read it
+ * back via `ResultRow.getOrNull` and fall back to `0`, never assume non-null.
+ */
+fun octetLength(column: Expression<out String?>): CustomFunction<Long> =
+    CustomFunction("octet_length", LongColumnType(), column)
 
 private fun requireSimplePath(path: List<String>) {
     require(path.isNotEmpty() && path.all { it.matches(SIMPLE_JSON_PATH_SEGMENT) }) {

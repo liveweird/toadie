@@ -26,6 +26,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.testing.testApplication
 import java.util.UUID
 import kotlinx.serialization.json.JsonArray
@@ -36,6 +37,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -1173,4 +1175,60 @@ class EntityTest {
             TestBlueprints.remove(childBp, subjBp)
         }
     }
+
+    private fun noteBlueprint(id: String) = BlueprintRequest(
+        identifier = id,
+        title = "T",
+        schema = BlueprintSchema(properties = mapOf("note" to PropertyDefinition(type = "string"))),
+    )
+
+    private fun noteEntity(blueprint: String, identifier: String, note: String) = EntityRequest(
+        blueprint = blueprint,
+        identifier = identifier,
+        title = identifier,
+        properties = buildJsonObject { put("note", note) },
+    )
+
+    // 2.4.0: the workspace-wide document+team byte budget (`.claude/docs/persistence.md` "Entity
+    // targets under concurrency (V28)"), service-level via `TestEntities.tunedService` so a 4096-byte
+    // budget makes the boundary deterministic without multi-megabyte fixtures.
+    @Test
+    fun `the workspace document byte budget rejects an overflowing create, and a shrinking update or a delete frees room`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val userId = TestUsers.seed(email = uniqueEmail("ent-budget"), password = "pw", role = UserRole.USER)
+            val bpId = unique("bp-budget")
+            val createdIdentifiers = mutableListOf<String>()
+            try {
+                TestBlueprints.service.create(noteBlueprint(bpId), userId)
+                val service = TestEntities.tunedService(workspaceDocumentBytes = 4096)
+                val bigNote = "x".repeat(3000)
+
+                val firstIdentifier = unique("ent-budget-1")
+                val first = service.create(noteEntity(bpId, firstIdentifier, bigNote), userId)
+                createdIdentifiers += firstIdentifier
+
+                val secondIdentifier = unique("ent-budget-2")
+                val exception = assertFailsWith<BadRequestException> {
+                    service.create(noteEntity(bpId, secondIdentifier, bigNote), userId)
+                }
+                assertTrue(exception.message!!.contains("workspace is full"), exception.message!!)
+
+                // Shrinking the first entity's document frees enough room for the second to fit.
+                service.update(first.id, noteEntity(bpId, firstIdentifier, "small"))
+                val second = service.create(noteEntity(bpId, secondIdentifier, bigNote), userId)
+                createdIdentifiers += secondIdentifier
+
+                // A third same-size create is refused again until the second is deleted, which frees its room.
+                val thirdIdentifier = unique("ent-budget-3")
+                assertFailsWith<BadRequestException> { service.create(noteEntity(bpId, thirdIdentifier, bigNote), userId) }
+                service.delete(second.id)
+                createdIdentifiers -= secondIdentifier
+                service.create(noteEntity(bpId, thirdIdentifier, bigNote), userId)
+                createdIdentifiers += thirdIdentifier
+            } finally {
+                TestEntities.remove(*createdIdentifiers.toTypedArray())
+                TestBlueprints.remove(bpId)
+            }
+        }
 }

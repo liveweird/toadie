@@ -299,12 +299,60 @@ longer request line is refused by Netty before any handler runs, `maxHeaderSize`
 body ceiling is unchanged, and ingress-nginx's default `large_client_header_buffers 4 8k` fits
 the same 6 KB. `ProductionHttpTest` pins that a ~6 KB request line reaches the JWT challenge.
 
-### Known scaling assumption
+### Entity read memory budget (2.4.0)
 
-The entity registry caps (2,000 entities per blueprint, 10,000 total, 256 KiB per document)
-can in the worst case exceed the 256 MB heap budget when a single graph/query read
-materializes many large documents at once; a workspace byte budget and a single reusable
-snapshot are planned as a separate follow-up change.
+The entity registry caps (2,000 entities per blueprint, 10,000 total, 256 KiB per document) can
+in the worst case exceed the 256 MB heap budget when a single graph/query read materializes many
+large documents at once. `entities/EntityReadBudget.kt` bounds this with a process-wide,
+in-flight-bytes ledger (`ENTITY_READ_BUDGET_BYTES` = 64 MiB, derived from `-Xmx256m`
+— `server/build.gradle.kts`'s JVM-args comment cross-references this constant; change the two
+together) every `list`/`read`/`create`/`update`/`graph` read charges through ONE consolidated
+read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persistence.md`
+"Entity read memory budget and the consolidated read set"):
+
+- **Heap layout.** `-Xmx256m` leaves roughly 170 MiB of old-generation headroom once the JVM's
+  own baseline (class metadata, thread stacks, the JIT, GC bookkeeping) is subtracted — measured
+  at ~21 MiB idle. The 64 MiB ledger is well inside that remaining headroom, leaving slack for
+  request-handling overhead outside the ledger's own accounting (HTTP buffers, JSON encoding of
+  the RESPONSE, computed-property evaluation's own working set).
+- **Two charge layers.** (1) An up-front, PER-ROW-SET admission charge — `SUM(octet_length
+  (document)) + SUM(octet_length(team))`, read straight off PostgreSQL — BEFORE a single document
+  crosses the wire, using the STORED byte length as a fast, conservative proxy for decoded size.
+  (2) A per-row, per-tier DECODE charge — `estimatedHeapBytes` (`EntityReadBudget.kt`'s measured
+  formula) of the relations/team (`WorkspaceRow.skeleton()`) or additionally the properties
+  (`WorkspaceRow.full()`) — charged once each, memoized, only when that row is actually decoded.
+  A row admitted by (1) can still be charged further by (2) as more of the workspace is
+  materialized; the ledger simply keeps accumulating until either the request finishes (releasing
+  everything at once via `EntityReadLedger.Reservation.close()`) or a charge would exceed
+  capacity.
+- **Refusal semantics.** `ReadBudgetExceeded.ownRequest` distinguishes "this read's own combined
+  row set is too large to ever fit" (`true` — a `400`, or `EntityQueryInvalidException`
+  `WORKSPACE_TOO_LARGE` for `graph`) from "other in-flight reads currently hold the room" (`false`
+  — a `429`, the same shape as the entity-query evaluation permit's contention response). `list`/
+  `read` throw a plain `BadRequestException`/`TooManyRequestsException`; `graph` throws the
+  query-shaped `EntityQueryInvalidException`/`TooManyRequestsException` pair — WITH or WITHOUT a
+  `query` present, since the plain graph is itself an unpaged, workspace-scale read.
+- **Writers are exempt.** `create`/`update` pass `reservation = null` through `loadReadSet` —
+  already serialized one-at-a-time by the V28 two-table lock (`.claude/docs/persistence.md`), so
+  admission control adds nothing there; only the five READ paths listed above open a
+  `readLedger.open()` reservation.
+- **Documented residuals.** (1) A single `WorkspaceRow.full()` decode is charged transiently but
+  its memoized field lives for the reservation's whole lifetime (the request), so a graph read's
+  peak charge can include EVERY shown row's `properties` even though only one is "in scope" at
+  any instant — a documented ≤ one-document (≤ 256 KiB raw, larger once decoded) slack per shown
+  row, favoring UNDER-admission (refusing sooner) rather than over-admission. (2) A workspace
+  whose rows are unusually DENSE JSON (deeply nested, many short keys — `estimatedHeapBytes`'s
+  per-scalar/per-entry overhead dominates) can be refused well below the raw 64 MiB figure; this
+  is intentional — the ledger charges the ESTIMATED HEAP cost, not the wire size. (3) The two
+  charge layers can double-count the same bytes across the SQL admission check and the later
+  decode; this is deliberate defense in depth, not a bug — the SQL charge exists to avoid ever
+  fetching an oversized workspace off the wire in the first place, while the decode charge
+  reflects the JVM object graph's real footprint (typically several times the raw byte count,
+  since `estimatedHeapBytes` carries per-scalar/per-entry/per-string constant overhead).
+
+Rule of thumb: change `ENTITY_READ_BUDGET_BYTES` together with `-Xmx` (`server/build.gradle.kts`)
+— raising one without the other either starves ordinary requests of heap or lets the ledger admit
+more than the heap can actually hold.
 
 ### Not yet ported from Lettuce
 

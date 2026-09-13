@@ -7,7 +7,7 @@ PostgreSQL is the only database. Connection settings come from the `postgres:` b
 
 The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flyway; runtime queries go through R2DBC.
 
-**Cross-feature table reads (the service-layer rule, inherited from Lettuce).** A feature service MAY query another feature's Exposed table objects directly when the read must run **inside its own transaction** (SQL joins, atomic snapshots) — calling the other feature's *service* would open a second transaction and break atomicity. Route handlers never touch tables (services only). The reads in place: `BlueprintService`'s read of the active `HIERARCHY` rows in `DictionaryService.Entries` (every `hierarchyRelations` key must be one, inside the V27 locked write) and `DictionaryService.replace`'s read of `BlueprintService.Blueprints` (the hierarchy referrer check, under the same lock — V34), `CatalogFileService.joined()`, `LensService.joined()`, and `EntityService.joined()` (catalog list/read, the lens list, and the entity list/read join `UserService.Users` for the creator's display fields), `EntityService.loadSnapshot()` — the per-call read of active rows from `BlueprintService.Blueprints`, the `_team`/`_user` system blueprints (if they exist), and the set of blueprints named by any Inherited `ownership.path` (each entry decoded once inside the transaction), used to validate relation targets and compute inherited teams. The definition each entity's `entityFindings` is checked against, and every map (`(blueprintId, identifier)` pairs for relations, `(blueprintId, teamId)` for ownership, and the blueprint-graph for path-following) are read inside the calling write/list/read transaction so an entity is never validated against definitions mid-change — see the V28 lock protocol below, `CatalogFileService.resolvedNamespace()` (every catalog write resolves its namespace against the active `NAMESPACE` dictionary entries inside the write's own transaction: blank → the ADMIN-flagged default entry, none flagged → 400; a concrete value must be an active entry — STRICT, no grandfathering: a stored file whose namespace was since removed cannot be saved until it is re-added or changed. The stored row AND content JSON always carry the resolved concrete value), and `CatalogFileService.loadRegistrySnapshot()` (one snapshot of the five soft-check registries — active labels with kinds+closed value lists, annotation keys with kinds, tag categories, per-kind `entity_types` dictionaries, and the GLOBAL `LIFECYCLE` dictionary entries — plus the active `NAMESPACE` dictionary values (feeding ONLY the Errors report's report-only namespace check, never the soft checks) — read inside the calling write/report transaction; the soft rules themselves are the PURE `registryFindings` in `catalog/Errors.kt`: label key registered + kind allowed + value in the closed list, annotation KEY registered + kind allowed with values staying free, tag registered in a category whose kinds allow the file's kind, non-blank `spec.type` in the kind's active dictionary — no dictionary allows no types — and non-blank `spec.lifecycle` an active entry, byte-exact against the lowercase-folded stored values; empty registries allow nothing). These are the write path's SOFT checks (`CatalogFileService.softFindings` adds reference resolution): strict by default with the same no-grandfathering rule — a stored file whose registry row was since removed cannot be strict-saved until fixed — but waivable per write via `allowInvalid=true` (see `.claude/docs/authorization.md`), and the same snapshot feeds the Errors report (`GET …/errors` — which adds the report-only `STRUCTURE_INVALID`/`NAMESPACE_NOT_ALLOWED` checks over stored content, rules that stay HARD on writes) and `POST …/check`.
+**Cross-feature table reads (the service-layer rule, inherited from Lettuce).** A feature service MAY query another feature's Exposed table objects directly when the read must run **inside its own transaction** (SQL joins, atomic snapshots) — calling the other feature's *service* would open a second transaction and break atomicity. Route handlers never touch tables (services only). The reads in place: `BlueprintService`'s read of the active `HIERARCHY` rows in `DictionaryService.Entries` (every `hierarchyRelations` key must be one, inside the V27 locked write) and `DictionaryService.replace`'s read of `BlueprintService.Blueprints` (the hierarchy referrer check, under the same lock — V34), `CatalogFileService.joined()`, `LensService.joined()`, and `EntityService.joined()` (catalog list/read, the lens list, and the entity list/read join `UserService.Users` for the creator's display fields), `EntityService`'s `narrowTargets`/`loadReadSet` (`entities/EntityWorkspaceRead.kt`, 2.4.0) — the per-call read of active rows from `BlueprintService.Blueprints`, the `_team`/`_user` system blueprints (if they exist), and the set of blueprints named by any Inherited `ownership.path` (rows raw inside the transaction, decoded outside it under the read ledger), used to validate relation targets and compute inherited teams. The definition each entity's `entityFindings` is checked against, and every map (`(blueprintId, identifier)` pairs for relations, `(blueprintId, teamId)` for ownership, and the blueprint-graph for path-following) are read inside the calling write/list/read transaction so an entity is never validated against definitions mid-change — see the V28 lock protocol below, `CatalogFileService.resolvedNamespace()` (every catalog write resolves its namespace against the active `NAMESPACE` dictionary entries inside the write's own transaction: blank → the ADMIN-flagged default entry, none flagged → 400; a concrete value must be an active entry — STRICT, no grandfathering: a stored file whose namespace was since removed cannot be saved until it is re-added or changed. The stored row AND content JSON always carry the resolved concrete value), and `CatalogFileService.loadRegistrySnapshot()` (one snapshot of the five soft-check registries — active labels with kinds+closed value lists, annotation keys with kinds, tag categories, per-kind `entity_types` dictionaries, and the GLOBAL `LIFECYCLE` dictionary entries — plus the active `NAMESPACE` dictionary values (feeding ONLY the Errors report's report-only namespace check, never the soft checks) — read inside the calling write/report transaction; the soft rules themselves are the PURE `registryFindings` in `catalog/Errors.kt`: label key registered + kind allowed + value in the closed list, annotation KEY registered + kind allowed with values staying free, tag registered in a category whose kinds allow the file's kind, non-blank `spec.type` in the kind's active dictionary — no dictionary allows no types — and non-blank `spec.lifecycle` an active entry, byte-exact against the lowercase-folded stored values; empty registries allow nothing). These are the write path's SOFT checks (`CatalogFileService.softFindings` adds reference resolution): strict by default with the same no-grandfathering rule — a stored file whose registry row was since removed cannot be strict-saved until fixed — but waivable per write via `allowInvalid=true` (see `.claude/docs/authorization.md`), and the same snapshot feeds the Errors report (`GET …/errors` — which adds the report-only `STRUCTURE_INVALID`/`NAMESPACE_NOT_ALLOWED` checks over stored content, rules that stay HARD on writes) and `POST …/check`.
 
 **Tag-category ownership under concurrency.** `TagCategoryService` takes a transaction-scoped
 PostgreSQL `SHARE ROW EXCLUSIVE` lock on `tag_categories` before the first registry read in
@@ -31,13 +31,42 @@ The current R2DBC path may finish cancellation only after a blocking database lo
 released. A cancelled write then rolls back; this protocol does not add a lock-wait deadline
 or promise immediate database-query cancellation.
 
+**Entity read memory budget and the consolidated read set (2.4.0).** `entities/
+EntityWorkspaceRead.kt` replaces the pre-2.4.0 trio (`loadSnapshot`, `loadWorkspaceSnapshot`, and
+`graph`'s own raw row `SELECT`) with ONE function, `loadReadSet(shownPredicate,
+targetIdentifiers, blueprintsByIdentifier, reservation)`, called by `list`/`read`/`create`/
+`update`/`graph` alike (see `.claude/docs/security.md` "Entity read memory budget" for the
+budget/refusal semantics). Inside ONE transaction it: (1) resolves which ids match
+`shownPredicate` alone (`list`/`read`/`create`/`update` pass `Op.FALSE` — nothing of THEIRS is
+"shown" via this path, only validation/computed-property lookup TARGETS, computed by the pure
+`narrowTargets` helper exactly as `loadSnapshot` used to inline: relation targets, `_team`/
+`_user`, Inherited `ownership.path` blueprints, and — when `computed`, i.e. `list`/`read`/
+`create` — every `computedPathBlueprints` target; `graph` passes the real `blueprint`/`q`/`team`
+filter as `shownPredicate`, since a plain graph read genuinely IS this budget's target: it is
+unpaged); (2) when `reservation` is non-null, charges it the up-front
+`SUM(octet_length(document)) + SUM(octet_length(team))` over the COMBINED (shown ∪ targets) row
+set, in PostgreSQL, before a single document crosses the wire; (3) selects the combined row set
+into `WorkspaceRow`s — raw, undecoded, tagged `shown = id ∈ shownIds`. `EntitySnapshot` (also in
+`EntityWorkspaceRead.kt`) wraps the resulting rows exactly as before (`targetExists`,
+`rowLookup`, the lazily-built `inbound` index), but each row's `EntityRowView` (`entities/
+EntityComputed.kt`) decodes and charges lazily: `WorkspaceRow.skeleton()` (relations + team) and
+`WorkspaceRow.full()` (adds `properties`) each decode and charge the SAME reservation ONCE,
+memoized, so an aggregation that only counts inbound relations (`EntityIndex.inbound`, built
+from `skeleton()`) never touches — or charges for — a target row's `properties` at all.
+`reservation = null` exempts `create`/`update` (writers, already serialized by the V28 lock)
+from both the admission check and the later decode charges — `narrowTargets`/`loadReadSet` are
+otherwise identical for reads and writes.
+
 **Entity graph reads.** `EntityService.graph(EntityGraphFilter)` (Phase 3, v1.25.0) is a plain
-read transaction, not a write path: it loads ONLY the rows the `blueprint`/`q` filters show
-(the catalog graph's rule, one level down — an edge needs BOTH ends shown, so a row the filter
-hid contributes neither a node nor an edge, never a virtual/MISSING one), joins the active
-blueprint snapshot for titles/`hierarchyRelations`, and computes each returned row's `findings`
-with the SAME `entityFindings` the list/read endpoints use, condensed to a count. No lock is
-taken — a plain committed read, like the entity list.
+read transaction, not a write path: `materializeGraph` calls `loadReadSet` with the `blueprint`/
+`q`/`team` filter as `shownPredicate` (the catalog graph's rule, one level down — an edge needs
+BOTH ends shown, so a row the filter hid contributes neither a node nor an edge, never a virtual/
+MISSING one) and, without a `query`, `narrowTargets` of the shown blueprints as the target set
+(computed = false: a plain graph never evaluates computed properties). Each SHOWN
+`WorkspaceRow.full()` is decoded once (transiently, for `entityFindings`/`effectiveTeam` only —
+`EntityGraphSource` itself carries only `relations`, never `properties`) to compute the returned
+row's `findings`, condensed to a count. No lock is taken — a plain committed read, like the
+entity list.
 
 **Entity query reads (phase 7, v2.0.0).** With a `query` (`.claude/docs/entity-query-language.md`)
 `EntityService.graph` runs TWO short read transactions with the CPU work between and after them:
@@ -45,22 +74,28 @@ the first (`loadQuerySchema`) reads the active blueprints plus the active `HIERA
 values from `DictionaryService.Entries` — a sanctioned cross-feature table read, the
 `BlueprintService` precedent — and closes; the query is parsed and validated against that
 committed schema OUTSIDE any transaction (a refused query never reads an entity row, and the
-Levenshtein suggestion scan never holds a pooled connection); the second is today's graph read
-plus `loadWorkspaceSnapshot` — every active row of every active blueprint, the `SnapshotRow` shape
-of `loadSnapshot` with NO `blueprintId IN (…)` narrowing and NO decode yet — rather than the
-shown blueprints' targets only, since a traversal may pass through entities the
-`blueprint`/`q`/`team` filters hide. After it closes, the rows are decoded, `InMemoryQueryGraph`
-is built and `InMemoryQueryExecutor` runs on the dedicated `entity-query` pool under the
-cooperative `QueryBudget` (the phase-5 rule: a wide join never pins a pooled R2DBC connection or
-the entity lock); the shown rows are then intersected with the returned `(blueprint,
-identifier)` set and handed to the unchanged `buildEntityGraph`. The two reads are independent
-committed snapshots: a blueprint changed between them is validated against the first and
-evaluated against the second, which the evaluator tolerates (an unknown label or relation simply
-matches nothing). Both are plain reads, no lock; in-flight evaluations are bounded by
-`MAX_CONCURRENT_ENTITY_QUERIES` permits taken after validation, before the second read (`429`
-when none is free; a refused query costs no permit);
-no snapshot cache (the trigger is documented in the language reference). `checkQuery` is the
-first transaction alone, validation after it, no entity rows at all.
+Levenshtein suggestion scan never holds a pooled connection); the second is `materializeGraph`'s
+own `loadReadSet` call, this time with `targetIdentifiers` widened to EVERY active blueprint
+identifier — rather than the shown blueprints' targets only, since a traversal may pass through
+entities the `blueprint`/`q`/`team` filters hide — admission-charged exactly like the plain graph
+above, over the full workspace. After that transaction closes, `evaluateEntityQuery` (still on
+the request-handling coroutine, then moved to the dedicated `entity-query` pool) walks every
+`WorkspaceRow` calling `budget.checkpoint()` then `row.skeleton()` — decoding/charging relations +
+team for the WHOLE workspace under the cooperative deadline BEFORE `InMemoryQueryGraph` is built,
+so its own (unbudgeted) index-building loops never do uninterruptible work; `properties` stays
+undecoded and uncharged unless a WHERE/RETURN actually reads one (`QueryRow.candidate`'s
+`by lazy`). `InMemoryQueryExecutor` then runs on that pool under the same `QueryBudget` (the
+phase-5 rule: a wide join never pins a pooled R2DBC connection or the entity lock); the shown
+rows are intersected with the returned `(blueprint, identifier)` set and handed to the unchanged
+`buildEntityGraph`. The two reads are independent committed snapshots: a blueprint changed
+between them is validated against the first and evaluated against the second, which the
+evaluator tolerates (an unknown label or relation simply matches nothing). Both are plain reads,
+no lock; in-flight evaluations are bounded by `MAX_CONCURRENT_ENTITY_QUERIES` permits taken
+after validation, before the second read (`429` when none is free; a refused query costs no
+permit); a `429` also covers OTHER in-flight reads holding the read-memory-budget room (a
+[`ReadBudgetExceeded`] whose `ownRequest` is false) — no snapshot cache (the trigger is
+documented in the language reference). `checkQuery` is the first transaction alone, validation
+after it, no entity rows at all.
 
 **Blueprint targets under concurrency (V27).** `BlueprintService` takes the same
 transaction-scoped `SHARE ROW EXCLUSIVE` lock on `blueprints` before the first read in
@@ -95,7 +130,15 @@ schema/relation PUTs need nothing new: entities are not re-validated at edit tim
 "Entities" → "Lifecycle rules". Entity/`_team` rename cascades (v1.26.0, phase 4) and referrer
 checks for all three target sources — relations, `team` field, and `format: team|user` properties
 — run under the same lock protocol; the three sources are checked in one referrer sweep on
-delete. The `_team` delete-vs-entity-create race is pinned in `EntityConcurrencyTest`. The same
+delete. **The workspace document+team byte budget (2.4.0)** — `SUM(octet_length(document)) +
+SUM(octet_length(team))` over active rows (`infra/db/Sql.kt`'s `octetLength`) — is read inside
+the SAME two-table-locked write as the entity-count caps, both in `create` and in `update`
+(charged only the delta against the row's own already-loaded current size), so the aggregate a
+write is checked against is never stale mid-write; the bulk-import planner mirrors this with a
+per-row `EntityImportSnapshot.bytesFor` read once, outside any lock (the same plain-read posture
+as its entity-count counterpart), so a concurrent write can still make its byte prediction stale
+— reported the same way an unexpected pass-2 storage failure is, never silently wrong. The
+`_team` delete-vs-entity-create race is pinned in `EntityConcurrencyTest`. The same
 caveats as V27 apply: direct SQL writers bypass the protocol, readers never wait, and cancellation
 may land only after a held lock releases.
 
@@ -109,27 +152,30 @@ entity write validation. This storage rule is unchanged by the v1.30.0 read-side
 `entities/EntityFilter.kt`'s `inheritedTeamMatches` (an extension on `EntityService`) resolves
 Inherited teams in memory over the SAME snapshot machinery every other read builds, reached
 through `EntityService.rowLookupFor` — the one narrow internal accessor into the otherwise-private
-`loadSnapshot`/`EntitySnapshot` — costing one extra bounded query per team-filtered request over
+read set (`loadReadSet`/`EntitySnapshot`, 2.4.0) — costing one extra bounded query per team-filtered request over
 the in-scope Inherited blueprints' entities, and none at all when no Inherited blueprint is in
 scope.
 
-**Computed-property evaluation and the widened snapshot (phase 5, v1.27.0).**
-`EntityService.loadSnapshot(definitions, blueprintsByIdentifier, computed)` widens the same
-per-call snapshot read above with every blueprint a mirror path, an aggregation `target`, or a
-`pathFilter` chain (in either direction) might touch, plus the Inherited ownership path
+**Computed-property evaluation and the widened target set (phase 5, v1.27.0; read-set model
+since 2.4.0).** `narrowTargets(definitions, definitionsByIdentifier, computed)` — the pure set
+computation `entities/EntityWorkspaceRead.kt` extracted from the pre-2.4.0 `loadSnapshot` —
+widens `loadReadSet`'s target set with every blueprint a mirror path, an aggregation `target`, or
+a `pathFilter` chain (in either direction) might touch, plus the Inherited ownership path
 blueprints of each of THOSE — `entities/EntityComputed.kt`'s `computedPathBlueprints`, the
 static twin of `ownershipPathBlueprints` — so mirror/aggregation evaluation never issues a fresh
 query mid-walk. The widening runs only when `computed = true`: `list`, `read`, and `create`
 request it (their responses evaluate computed properties); `update` (a `204`, no body) and
 `graph` (nodes carry no `properties` at all) pass `computed = false` and never pay for it — the
-`SnapshotRow.decoded`/`EntitySnapshot.inbound` machinery below is built or not per call, not
-per feature. Each snapshot row decodes its document/team JSON ONCE regardless of how many
-computed properties or findings ask for it (`SnapshotRow.decoded`, `by lazy` — before phase 5
-`rowLookup` re-decoded on every call), and the reverse-lookup index aggregation candidates need
-(`EntitySnapshot.inbound`, `EntityIndex.inbound`, keyed by `(target blueprint, relation value)`
-over every snapshot row's relations) is itself `by lazy` — built only the first time a computed
-property actually asks "who points at this entity", so an `update`/`graph` snapshot never
-constructs it at all.
+`WorkspaceRow.full()`/`EntitySnapshot.inbound` machinery below is built or not per call, not per
+feature. Each `WorkspaceRow` decodes its relations/team ONCE via `skeleton()` and its properties
+ONCE (additionally) via `full()`, regardless of how many computed properties or findings ask for
+either (both memoized; before phase 5 `rowLookup` re-decoded on every call), and the
+reverse-lookup index aggregation candidates need (`EntitySnapshot.inbound`, `EntityIndex.inbound`,
+keyed by `(target blueprint, relation value)` over every row's relations via `skeleton()` alone —
+never `properties`) is itself `by lazy` — built only the first time a computed property actually
+asks "who points at this entity", so an `update`/`graph` snapshot never constructs it at all, and
+even when it IS built (e.g. a `list` request's inbound-count aggregation) the target rows'
+`properties` stay undecoded and uncharged unless something ELSE also asks for them.
 
 Evaluation itself runs OUTSIDE the transaction that built the snapshot: `list`/`read`/`create`
 materialize their rows (as an in-memory `RawEntity`) plus the `EntitySnapshot` INSIDE
@@ -382,7 +428,7 @@ shortens its expiry. No runtime DDL; prior migration checksums remain untouched.
 
 **Freeing a unique business field on delete.** To let a value be reused once its holder is soft-deleted, use a **partial unique index** over active rows instead of a global `UNIQUE`: `CREATE UNIQUE INDEX uq_<t>_<col>_active ON <t>(<col>) WHERE NOT marked_as_deleted;`. Skip the Exposed `.uniqueIndex()` on that column (Exposed defs are query-only — the DB enforces it). A clash with an **active** row still raises `23505 → 409` (mapped centrally in `plugins/ErrorHandling.kt`, which names WHAT clashed per constraint — extend `UNIQUE_CONSTRAINT_DETAILS` when adding a partial unique index). In place today: `users.email` (`uq_users_email_active`, `V1`), the catalog-file identity (`uq_catalog_files_entity_active`, `V5` — an expression index over `LOWER(name)`, so identity is case-insensitive like Backstage's), the dictionary value (`uq_dictionary_entries_value_active`, `V7` — the whole-document replace soft-deletes omitted entries FIRST, so remove+re-add works in one save; the documented limitation is that swapping two values in one save trips the index → 409), the label key (`uq_labels_key_active`, `V10` — an expression index over `LOWER(key)`, so no case-twin keys), the tag-category name (`uq_tag_categories_name_active`, `V11` — same `LOWER(name)` shape; a category's TAGS are freed by soft-delete too, but through the service-side check, not an index), and the type-dictionary kind (`uq_entity_types_kind_active`, `V14` — plain `kind`, stored canonical; a soft-deleted dictionary frees its kind for a new one), and the annotation key (`uq_annotation_keys_key_active`, `V17` — the `LOWER(key)` labels shape), and the per-owner lens name (`uq_lenses_owner_name_active`, `V20` — `(created_by, LOWER(name))`, so uniqueness is scoped to the creator), its saved-entity-query twin (`uq_entity_queries_owner_name_active`, `V35` — the same shape), and the per-blueprint entity identifier (`uq_entities_blueprint_identifier_active`, `V28` — `(blueprint_id, LOWER(identifier))`, so uniqueness is scoped to the owning blueprint and a soft-deleted entity frees its identifier within it; its `UNIQUE_CONSTRAINT_DETAILS` entry names the clash). (V9's `uq_dictionary_entries_default_active` is a partial unique index too — the at-most-one default backstop, not a freed business field — and has its own `UNIQUE_CONSTRAINT_DETAILS` entry.)
 
-**`infra/db/Sql.kt`** (ported from Lettuce with the first list endpoint): `containsNormalized` — the case- AND accent-insensitive substring filter over `public.unaccent` (V4); every per-column substring filter MUST use it. Also `jsonArrayContains` (parameter-bound `jsonb_exists` over a JSON TEXT column — the catalog list's tag filter), `jsonStringOrArrayContainsFolded` (v1.26.0 — case-insensitive match of a scalar value against a JSON string OR array column, e.g. entity `team` filter matching the stored value exactly; used only when the column value matches the exact search term, not for substring), and `orVanished` (post-commit read-back guard → 500, used by the catalog create). Lettuce's `requireValidReferences` (client-supplied-FK failures → 400) was dropped as unused — re-port it with the first route that takes a client-supplied foreign key.
+**`infra/db/Sql.kt`** (ported from Lettuce with the first list endpoint): `containsNormalized` — the case- AND accent-insensitive substring filter over `public.unaccent` (V4); every per-column substring filter MUST use it. Also `jsonArrayContains` (parameter-bound `jsonb_exists` over a JSON TEXT column — the catalog list's tag filter), `jsonStringOrArrayContainsFolded` (v1.26.0 — case-insensitive match of a scalar value against a JSON string OR array column, e.g. entity `team` filter matching the stored value exactly; used only when the column value matches the exact search term, not for substring), and `orVanished` (post-commit read-back guard → 500, used by the catalog create), and `octetLength` (2.4.0 — a `bigint`-decoded `CustomFunction` over PostgreSQL's `octet_length(col)`, which reads a TEXT value's stored byte length from its varlena header without detoasting it; a NULL column extracts to SQL NULL, read back via `ResultRow.getOrNull` and folded to `0` — backs `EntityService`'s workspace document+team byte budget and its import-planner snapshot, summed via Exposed's `Sum`). Lettuce's `requireValidReferences` (client-supplied-FK failures → 400) was dropped as unused — re-port it with the first route that takes a client-supplied foreign key.
 
 **`infra/db/EventLog.kt` + `JsonParams.kt`** (ported from Lettuce with the first history trail, v1.15.0): the shared per-record audit-event machinery. A feature declares `object XEvents : EventLogTable("x_events", "x_id", XTable)` — an FK to the owning record, the acting `user_id`, a server-set `created_at`, `event_type VARCHAR(40)` (no CHECK — the Kotlin enum is the whitelist) and a `params TEXT` JSON `Map<String,String>` — and keeps only its typed `create`/`listFor` wrapper (`catalog/CatalogFileEventService.kt` is the first and so far only one). **Events are stored STRUCTURALLY so the SPA localizes them: no rendered string is ever stored.** Two deliberate departures from Lettuce's copy: its opt-in `commentColumn` hook (an encrypted free-text column on `goal_events`) was left behind — Toadie's events store no free text at all, recording only the FACT that a free-text field changed — and `listFor` is PAGED (`EventLogPage`), because a catalog file's event count is unbounded while Lettuce's per-record counts are intrinsically tiny (see `.claude/docs/list-endpoints.md`). Rows are IMMUTABLE: minted as a side-effect of the mutations, with no create/update/delete API.
 

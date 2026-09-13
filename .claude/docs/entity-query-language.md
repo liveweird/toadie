@@ -190,6 +190,7 @@ SET, never rows: two bindings of the same entity count once.
 | `MAX_STRING_OPERAND_CHARS` / `MAX_STRING_NEEDLE_CHARS` | 16 384 / 256 characters for the string operators | the comparison is UNKNOWN (never an error) |
 | `MAX_CONCURRENT_ENTITY_QUERIES` | 4 in-flight evaluations per instance | `429 Too Many Requests` (plain problem, no diagnostics) |
 | `MAX_SUGGESTION_INPUT_CHARS` | 128 — an unknown name longer than any identifier gets no suggestion | (no refusal) |
+| `ENTITY_READ_BUDGET_BYTES` (2.4.0, `entities/EntityReadBudget.kt`) | 64 MiB process-wide, shared with every `list`/`read`/`create`/`update`/`graph` read (`.claude/docs/security.md` "Entity read memory budget") | `WORKSPACE_TOO_LARGE` (own request) or `429 Too Many Requests` (contention) — with or without a `query` |
 
 `QueryBudget` is COOPERATIVE: the evaluator calls `checkpoint()` per produced candidate, and
 EVERY call checks caller cancellation (`ensureActive`) and the clock (a `nanoTime` read is far
@@ -224,8 +225,11 @@ ends are labelled), `UNKNOWN_PROPERTY` (the label's `schema.properties` ∪ the 
 union when unlabelled; suppressed when the label itself is unknown), `UNKNOWN_VARIABLE`,
 `DUPLICATE_VARIABLE` (re-bound with different labels, or as a different kind),
 `RELATIONSHIP_VARIABLE_REFERENCE`, `RANGE_INVALID`, `LIMIT_INVALID`, `DISCONNECTED_PATTERN`,
-`TOO_MANY_PATTERNS`, `TOO_MANY_VARIABLES`, `QUERY_TOO_LONG`, and the two positionless
-evaluation refusals `DEADLINE_EXCEEDED`/`BINDING_LIMIT`.
+`TOO_MANY_PATTERNS`, `TOO_MANY_VARIABLES`, `QUERY_TOO_LONG`, and the three positionless
+evaluation refusals `DEADLINE_EXCEEDED`/`BINDING_LIMIT`/`WORKSPACE_TOO_LARGE` (2.4.0 — the
+combined shown-plus-lookup-target row set exceeds the process-wide entity read budget before any
+document is decoded; `.claude/docs/security.md` "Entity read memory budget"; a `ReadBudgetExceeded`
+whose `ownRequest` is false is a plain `429` instead, never this diagnostic).
 
 ## API
 
@@ -233,9 +237,14 @@ evaluation refusals `DEADLINE_EXCEEDED`/`BINDING_LIMIT`.
   rule). The service reads the blueprints + hierarchies in one short transaction, parses and
   validates OUTSIDE it (a refusal never reads an entity row, and the suggestion scan never
   holds a pooled connection), takes a permit (none free → `429`, before the workspace read; a
-  refused query never costs one), then loads the WHOLE active workspace (`EntityService.loadWorkspaceSnapshot`, every active row of
-  every active blueprint, still undecoded) in a second transaction, and decodes + evaluates on
-  the `entity-query` pool after it closed, keeping the filtered rows whose `(blueprint,
+  refused query never costs one), then loads the WHOLE active workspace (`loadReadSet` with
+  `targetIdentifiers` widened to every active blueprint identifier — `entities/
+  EntityWorkspaceRead.kt`, `.claude/docs/persistence.md` "Entity query reads" — every active row
+  of every active blueprint, still undecoded) in a second transaction, admission-charging the
+  process-wide entity read budget over that combined row set BEFORE any document crosses the wire
+  (`WORKSPACE_TOO_LARGE`/`429` above), and decodes + evaluates on the `entity-query` pool after it
+  closed (decoding relations/team under the SAME budget's per-row charge, `properties` staying
+  uncharged unless a WHERE/RETURN reads one), keeping the filtered rows whose `(blueprint,
   identifier)` the query returned. Blank `query` = absent; repetition and over-length are plain
   `400`s. Not audited (a pure read). The query text rides the request line, so — like `q` — it
   appears in access/proxy logs and browser history; the SERVER never logs it.
@@ -291,6 +300,14 @@ levels × degree, joins bounded by `MAX_QUERY_BINDINGS` — well inside the 2 s 
 **No snapshot cache in 2.0.0.** The documented trigger for adding one: a measured p95 above
 ~500 ms for `GET …/graph?query=` on the real workspace where the DB read + decode dominates →
 a version-stamped per-instance cache keyed on `(count, max(updated_at))` of the active rows.
+
+**The read budget (2.4.0) bounds the OTHER failure mode** the caps above do not: not slow
+evaluation, but a workspace too large to DECODE at all within the 256 MiB heap. It is a
+memory admission gate, evaluated ONCE per read before any row is materialized, orthogonal to
+`QueryBudget`'s per-candidate cooperative time/binding limits — a query can be well within its
+2-second/100k-binding budget and still be refused `WORKSPACE_TOO_LARGE` if the workspace itself
+(or the plain graph's shown-plus-target set) would not fit. See `.claude/docs/security.md`
+"Entity read memory budget" for the charge model and refusal semantics.
 
 ## Tests
 

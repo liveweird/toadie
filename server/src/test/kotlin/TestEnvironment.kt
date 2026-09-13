@@ -832,8 +832,26 @@ object TestEntities {
     fun queryService(
         queryClock: () -> Long,
         queryPermits: Int = ch.nokillswit.entityquery.MAX_CONCURRENT_ENTITY_QUERIES,
-    ): ch.nokillswit.entities.EntityService =
-        ch.nokillswit.entities.EntityService(sharedTestDatabase, queryClock = queryClock, queryPermits = queryPermits)
+    ): ch.nokillswit.entities.EntityService = tunedService(queryClock = queryClock, queryPermits = queryPermits)
+
+    /**
+     * A private service instance with any of the four seams injected (2.4.0): the read ledger and
+     * the workspace byte budget (`EntityReadBudget.kt`, `MAX_WORKSPACE_DOCUMENT_BYTES`) beside the
+     * entity-query clock/permits — a small capacity makes the budget cases deterministic without
+     * multi-megabyte fixtures.
+     */
+    fun tunedService(
+        readLedger: ch.nokillswit.entities.EntityReadLedger = ch.nokillswit.entities.EntityReadLedger(),
+        workspaceDocumentBytes: Long = ch.nokillswit.entities.MAX_WORKSPACE_DOCUMENT_BYTES,
+        queryClock: () -> Long = System::nanoTime,
+        queryPermits: Int = ch.nokillswit.entityquery.MAX_CONCURRENT_ENTITY_QUERIES,
+    ): ch.nokillswit.entities.EntityService = ch.nokillswit.entities.EntityService(
+        sharedTestDatabase,
+        queryClock = queryClock,
+        queryPermits = queryPermits,
+        workspaceDocumentBytes = workspaceDocumentBytes,
+        readLedger = readLedger,
+    )
 
     data class RawRow(val id: UInt, val identifier: String, val blueprintId: UInt, val markedAsDeleted: Boolean)
 

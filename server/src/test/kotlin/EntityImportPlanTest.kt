@@ -13,6 +13,7 @@ import ch.nokillswit.entities.EntityPlanVerdict
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.MAX_ENTITIES_PER_BLUEPRINT
 import ch.nokillswit.entities.MAX_ENTITIES_TOTAL
+import ch.nokillswit.entities.documentByteSize
 import ch.nokillswit.entities.planEntityImport
 import ch.nokillswit.entities.storageFailureRow
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
@@ -47,10 +48,12 @@ class EntityImportPlanTest {
         blueprints: List<EntityImportBlueprint>,
         existing: List<Triple<UInt, String, UInt>> = emptyList(),
         total: Long = existing.size.toLong(),
+        documentBytes: Long = 0L,
+        bytesById: Map<UInt, Long> = emptyMap(),
     ): EntityImportSnapshot {
         val byBlueprint = existing.groupBy({ it.first }, { it.second to it.third })
         val counts = existing.groupingBy { it.first }.eachCount().mapValues { it.value.toLong() }
-        return EntityImportSnapshot(blueprints, byBlueprint, total, counts)
+        return EntityImportSnapshot(blueprints, byBlueprint, total, counts, documentBytes, bytesById)
     }
 
     private fun request(blueprint: String, identifier: String, relations: JsonObject = JsonObject(emptyMap())) =
@@ -283,6 +286,46 @@ class EntityImportPlanTest {
         val row = (plan.verdicts[1] as EntityPlanVerdict.Rejected).row
         assertEquals(OntologyImportStatus.INVALID, row.status)
         assertTrue(row.message!!.contains("full"), row.message!!)
+    }
+
+    @Test
+    fun `the workspace byte budget rejects a create that would overflow it`() {
+        val a = blueprint("a", 1u, BlueprintDefinition())
+        val fits = request("a", "fits")
+        val overflow = request("a", "overflow-with-a-longer-identifier-to-add-more-bytes")
+        // Exactly enough room for "fits" alone: it lands right at the budget, and "overflow"
+        // (any non-zero size) must then overflow it.
+        val budget = documentByteSize(fits).toLong()
+        val plan = planEntityImport(listOf(doc(fits), doc(overflow)), snapshot(listOf(a)), false, budget)
+        assertTrue(plan.verdicts[0] is EntityPlanVerdict.Store)
+        val row = (plan.verdicts[1] as EntityPlanVerdict.Rejected).row
+        assertEquals(OntologyImportStatus.INVALID, row.status)
+        assertTrue(row.message!!.contains("full"), row.message!!)
+    }
+
+    @Test
+    fun `an UPDATED row that shrinks its document frees workspace byte budget for a later create`() {
+        val definition = BlueprintDefinition(schema = BlueprintSchema(properties = mapOf("note" to PropertyDefinition(type = "string"))))
+        val a = blueprint("a", 1u, definition)
+        fun withNote(note: String) =
+            EntityRequest(blueprint = "a", identifier = "shrink-me", title = "T", properties = buildJsonObject { put("note", note) })
+        val bigRequest = withNote("x".repeat(100))
+        val bigBytes = documentByteSize(bigRequest).toLong()
+        val shrunkRequest = withNote("x")
+        val shrunkBytes = documentByteSize(shrunkRequest).toLong()
+        val createRequest = request("a", "new-one")
+        val createBytes = documentByteSize(createRequest).toLong()
+        // Room for the SHRUNK update plus the create, but not for the ORIGINAL (bigger) size
+        // plus the create — proving the shrink's freed bytes are what let the create land.
+        val budget = shrunkBytes + createBytes
+        assertTrue(bigBytes + createBytes > budget, "fixture must actually need the shrink to fit")
+        val existing = listOf(Triple(1u, "shrink-me", 99u))
+        val snap = snapshot(listOf(a), existing, documentBytes = bigBytes, bytesById = mapOf(99u to bigBytes))
+        val plan = planEntityImport(
+            listOf(doc(shrunkRequest), doc(createRequest)), snap, replaceExisting = true, workspaceDocumentBytes = budget,
+        )
+        assertTrue(plan.verdicts[0] is EntityPlanVerdict.Store, plan.verdicts[0].toString())
+        assertTrue(plan.verdicts[1] is EntityPlanVerdict.Store, plan.verdicts[1].toString())
     }
 
     // storageFailureRow — the pass-1/pass-2 shared storage-failure classifier (no database:

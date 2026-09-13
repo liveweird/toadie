@@ -38,6 +38,11 @@ const val MAX_ENTITY_TEAM_LENGTH = 100
 // of the per-field caps (the blueprints.definition precedent).
 const val MAX_ENTITY_DOCUMENT_BYTES = 256 * 1024
 
+// The WORKSPACE-wide budget of stored document + team bytes over active rows (2.4.0), enforced
+// on create/replace/import under the V28 lock: ENTITY_READ_BUDGET_BYTES / 4, so a whole
+// workspace fits a read with its decoded relations/team beside it. Sample data is ~16 KiB.
+const val MAX_WORKSPACE_DOCUMENT_BYTES = 16L * 1024 * 1024
+
 @Serializable
 data class EntityRequest(
     val blueprint: String,

@@ -311,6 +311,30 @@ versa. On the frontend, `web/src/test/reactFlowStub.tsx` is the shared React Flo
 tests and the new `EntityGraph`/`EntityHierarchy` page tests drive, so the canvas contract is
 pinned once rather than duplicated per page.
 
+**Entity read budget (2.4.0).** `EntityReadBudgetTest` is the pure suite (no database):
+`estimatedHeapBytes` per shape (`JsonNull`, a scalar, an array, an object, nesting), and
+`EntityReadLedger` — a reservation charges/releases against the shared ledger, an own-request
+charge that alone exceeds capacity throws `ReadBudgetExceeded(ownRequest = true)`, a charge that
+only fails because a SIBLING reservation already holds room throws `ownRequest = false`, `peak`
+tracks the highest observed in-flight total across overlapping reservations without shrinking
+when one closes, and a non-positive charge is a no-op. `EntityQueryRouteTest` adds three
+route-level cases via `TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))`
+(the same private-service-injection idiom `queryService` already uses for the entity-query
+deadline/permit seams) — a 1-byte capacity trips on the raw `octet_length` of even a bare
+`{"properties":{},"relations":{}}` document, deterministically, with no timing: the plain graph
+AND the query graph both refuse `EntityQueryInvalidException`/`WORKSPACE_TOO_LARGE`, and `list`
+refuses `BadRequestException` once its blueprint has a SELF relation (so `narrowTargets` widens
+to the blueprint's own active rows — a relation-less blueprint would widen only to `_team`/
+`_user`, which may hold zero rows and never trip a tiny capacity). Contention is pinned
+without concurrency: a second reservation pre-charges the shared ledger, so `list` and `graph`
+answer `TooManyRequestsException` (never the own-request `400`) and succeed once it closes with
+zero bytes left in flight; the writer exemption is pinned by `create`/`update` succeeding on a
+capacity-1 ledger that refuses every read. Existing
+pins across `EntityTest`, `EntityQueryRouteTest`, `EntityGraphTest`, `QueryEvaluatorTest`,
+`QueryEvaluatorScaleTest`, `QueryTckCasesTest`, and `EntityAggregationTest` stay GREEN unchanged
+(the default-capacity ledger never trips at ordinary test-fixture scale) — `EntityGraphTest`'s
+own fixtures were mechanically updated for `EntityGraphSource.relations` replacing `.document`.
+
 **Ontology import (v1.28.0).** `BlueprintImportPlanTest` and `EntityImportPlanTest` are the pure
 planners (`blueprints/BlueprintImport.kt`/`entities/EntityImport.kt`, no database): one case per
 rule in `.claude/docs/port-data-model.md` "Import and export" — decode/validate failures, the

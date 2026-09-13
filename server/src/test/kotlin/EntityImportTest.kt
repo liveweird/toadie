@@ -2,12 +2,15 @@ package ch.nokillswit
 
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.entities.EntityImportRequest
 import ch.nokillswit.entities.EntityImportResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
+import ch.nokillswit.entities.import
+import ch.nokillswit.entities.importCheck
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
@@ -173,6 +176,43 @@ class EntityImportTest {
             val checkResponse = admin.importCheck(EntityImportRequest(documents = listOf(entity))).body<EntityImportResponse>()
             assertEquals(OntologyImportStatus.CREATED, checkResponse.results[0].status)
             assertEquals(before, TestEntities.rawRows().size, "the dry-run must store nothing")
+        } finally {
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    // 2.4.0: the workspace document byte budget must reject the SAME row on the real run and its
+    // dry-run — service-level via `TestEntities.tunedService` so a tiny budget makes the single
+    // document overflow deterministically without a multi-megabyte fixture.
+    @Test
+    fun `the workspace byte budget makes import and its dry-run agree on the same INVALID row`() = testApplication {
+        usePostgresTestcontainer()
+        val userId = TestUsers.seed(email = uniqueEmail("ent-import-budget"), password = "pw", role = UserRole.USER)
+        val bpId = identifier("bp-import-budget")
+        try {
+            TestBlueprints.service.create(
+                BlueprintRequest(
+                    identifier = bpId,
+                    title = "T",
+                    schema = BlueprintSchema(properties = mapOf("note" to PropertyDefinition(type = "string"))),
+                ),
+                userId,
+            )
+            val tuned = TestEntities.tunedService(workspaceDocumentBytes = 100)
+            val big = doc(
+                EntityRequest(
+                    blueprint = bpId,
+                    identifier = identifier("ent-import-budget"),
+                    title = "T",
+                    properties = buildJsonObject { put("note", "x".repeat(200)) },
+                ),
+            )
+            val checkRow = tuned.importCheck(listOf(big), replaceExisting = false).single()
+            val realRow = tuned.import(listOf(big), userId, replaceExisting = false).single()
+            assertEquals(OntologyImportStatus.INVALID, checkRow.status)
+            assertEquals(checkRow.status, realRow.status)
+            assertEquals(checkRow.message, realRow.message)
+            assertTrue(checkRow.message!!.contains("full"), checkRow.message!!)
         } finally {
             TestBlueprints.remove(bpId)
         }

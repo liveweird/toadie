@@ -67,6 +67,10 @@ class EntityImportSnapshot(
     identifiersByBlueprint: Map<UInt, List<Pair<String, UInt>>>,
     val total: Long,
     private val countsByBlueprint: Map<UInt, Long>,
+    /** The workspace's CURRENT total of `octet_length(document) + octet_length(team)` over active rows (2.4.0). */
+    val documentBytes: Long,
+    /** Per-row byte size (by entity id), keyed the same way [total]/[countsByBlueprint] are — never the row's text. */
+    private val bytesById: Map<UInt, Long>,
 ) {
     private val blueprintsByIdentifier: Map<String, EntityImportBlueprint> = blueprints.associateBy { it.identifier }
     private val exactByBlueprint: Map<UInt, Map<String, UInt>> = identifiersByBlueprint.mapValues { it.value.toMap() }
@@ -85,6 +89,9 @@ class EntityImportSnapshot(
         blueprintsByIdentifier[blueprint]?.let { foldedByBlueprint[it.id]?.get(identifier.lowercase()) }
 
     fun countFor(blueprintId: UInt): Long = countsByBlueprint[blueprintId] ?: 0L
+
+    /** The stored byte size an UPDATED row's own current document+team already contributes to [documentBytes]. */
+    fun bytesFor(id: UInt): Long = bytesById[id] ?: 0L
 }
 
 /** [planEntityImport]'s per-document outcome — the `blueprints/BlueprintImport.kt` shape, one level down. */
@@ -194,13 +201,14 @@ private fun fixpointFindingsAndCap(
     initial: List<Candidate>,
     snapshot: EntityImportSnapshot,
     verdicts: Array<EntityPlanVerdict?>,
+    workspaceDocumentBytes: Long,
 ): List<Candidate> {
     var remaining = initial
     var changed = true
     while (changed) {
         changed = false
         remaining = rejectFindings(remaining, snapshot, verdicts) { changed = true }
-        remaining = rejectOverCap(remaining, snapshot, verdicts) { changed = true }
+        remaining = rejectOverCap(remaining, snapshot, verdicts, workspaceDocumentBytes) { changed = true }
     }
     return remaining
 }
@@ -232,31 +240,39 @@ private fun rejectFindings(
     return survivors
 }
 
+/**
+ * The entity-count caps ([MAX_ENTITIES_TOTAL]/[MAX_ENTITIES_PER_BLUEPRINT], CREATE rows only —
+ * an UPDATE never grows the registry) PLUS the workspace document-byte budget (2.4.0), which
+ * applies to every Store candidate — CREATE and UPDATE alike, since a shrinking edit frees room
+ * for a later create. [runningBytes] is a running delta over [snapshot.documentBytes] in
+ * submission order (`documentByteSize(request) − snapshot.bytesFor(existingId)` per candidate),
+ * mirroring the write path's `EntityService.checkDocumentByteBudget`.
+ */
 private fun rejectOverCap(
     remaining: List<Candidate>,
     snapshot: EntityImportSnapshot,
     verdicts: Array<EntityPlanVerdict?>,
+    workspaceDocumentBytes: Long,
     onReject: () -> Unit,
 ): List<Candidate> {
     val survivors = mutableListOf<Candidate>()
     var totalCreates = 0
     val createsByBlueprint = mutableMapOf<UInt, Int>()
+    var runningBytes = snapshot.documentBytes
     for (c in remaining) {
-        if (c.existingId != null) {
-            survivors += c
-            continue
-        }
-        totalCreates++
-        val bpCreates = (createsByBlueprint[c.blueprintId] ?: 0) + 1
-        createsByBlueprint[c.blueprintId] = bpCreates
-        val message = when {
-            snapshot.total + totalCreates > MAX_ENTITIES_TOTAL -> "The entity registry is full ($MAX_ENTITIES_TOTAL entities)"
-            snapshot.countFor(c.blueprintId) + bpCreates > MAX_ENTITIES_PER_BLUEPRINT ->
-                "This blueprint's entities are full ($MAX_ENTITIES_PER_BLUEPRINT entities)"
-            else -> null
+        val replacingBytes = c.existingId?.let { snapshot.bytesFor(it) } ?: 0L
+        val projectedBytes = runningBytes - replacingBytes + documentByteSize(c.request)
+        val message = if (c.existingId != null) {
+            byteBudgetMessage(projectedBytes, workspaceDocumentBytes)
+        } else {
+            totalCreates++
+            val bpCreates = (createsByBlueprint[c.blueprintId] ?: 0) + 1
+            createsByBlueprint[c.blueprintId] = bpCreates
+            countCapMessage(c, snapshot, totalCreates, bpCreates) ?: byteBudgetMessage(projectedBytes, workspaceDocumentBytes)
         }
         if (message == null) {
             survivors += c
+            runningBytes = projectedBytes
         } else {
             verdicts[c.index] = rejected(c.index, c.blueprintIdentifier, c.identifier, message)
             onReject()
@@ -264,6 +280,16 @@ private fun rejectOverCap(
     }
     return survivors
 }
+
+private fun countCapMessage(c: Candidate, snapshot: EntityImportSnapshot, totalCreates: Int, bpCreates: Int): String? = when {
+    snapshot.total + totalCreates > MAX_ENTITIES_TOTAL -> "The entity registry is full ($MAX_ENTITIES_TOTAL entities)"
+    snapshot.countFor(c.blueprintId) + bpCreates > MAX_ENTITIES_PER_BLUEPRINT ->
+        "This blueprint's entities are full ($MAX_ENTITIES_PER_BLUEPRINT entities)"
+    else -> null
+}
+
+private fun byteBudgetMessage(projectedBytes: Long, workspaceDocumentBytes: Long): String? =
+    if (projectedBytes > workspaceDocumentBytes) "The entity workspace is full ($workspaceDocumentBytes bytes of documents)" else null
 
 /** A reference that MAY NOT be dropped: a `required: true` relation, or a `format: team|user` property in `schema.required`. */
 private fun mandatoryFieldNaming(c: Candidate, deferred: Set<Pair<String, String>>): String? {
@@ -386,10 +412,15 @@ private fun stripPropertyValue(def: PropertyDefinition, value: JsonElement, defe
  * deferral — a mandatory-reference cycle rejects its document and re-runs the fixpoint, since one
  * fewer candidate can change what other documents resolve against.
  */
-fun planEntityImport(documents: List<JsonObject>, snapshot: EntityImportSnapshot, replaceExisting: Boolean): EntityImportPlan {
+fun planEntityImport(
+    documents: List<JsonObject>,
+    snapshot: EntityImportSnapshot,
+    replaceExisting: Boolean,
+    workspaceDocumentBytes: Long = MAX_WORKSPACE_DOCUMENT_BYTES,
+): EntityImportPlan {
     val verdicts = arrayOfNulls<EntityPlanVerdict>(documents.size)
     var remaining = classifyDocuments(documents, snapshot, replaceExisting, verdicts)
-    remaining = fixpointFindingsAndCap(remaining, snapshot, verdicts)
+    remaining = fixpointFindingsAndCap(remaining, snapshot, verdicts, workspaceDocumentBytes)
 
     while (true) {
         val attempt = attemptOrdering(remaining)
@@ -408,7 +439,7 @@ fun planEntityImport(documents: List<JsonObject>, snapshot: EntityImportSnapshot
         val (idx, field) = violation
         val c = remaining.first { it.index == idx }
         verdicts[idx] = rejected(idx, c.blueprintIdentifier, c.identifier, "Circular required reference '$field' within the batch")
-        remaining = fixpointFindingsAndCap(remaining.filterNot { it.index == idx }, snapshot, verdicts)
+        remaining = fixpointFindingsAndCap(remaining.filterNot { it.index == idx }, snapshot, verdicts, workspaceDocumentBytes)
     }
 }
 
@@ -441,7 +472,7 @@ internal fun storageFailureRow(
  * ordinary two-table V28 lock) → pass 2 for rows with deferred references.
  */
 suspend fun EntityService.import(documents: List<JsonObject>, callerId: UInt, replaceExisting: Boolean): List<EntityImportRow> {
-    val plan = planEntityImport(documents, importSnapshot(), replaceExisting)
+    val plan = planEntityImport(documents, importSnapshot(), replaceExisting, workspaceDocumentBytes)
     val rows = arrayOfNulls<EntityImportRow>(documents.size)
     plan.verdicts.forEachIndexed { idx, verdict -> if (verdict is EntityPlanVerdict.Rejected) rows[idx] = verdict.row }
 
@@ -518,7 +549,7 @@ private suspend fun EntityService.pass2Entity(id: UInt, verdict: EntityPlanVerdi
 
 /** The dry-run: the identical classification, storing nothing. */
 suspend fun EntityService.importCheck(documents: List<JsonObject>, replaceExisting: Boolean): List<EntityImportRow> {
-    val plan = planEntityImport(documents, importSnapshot(), replaceExisting)
+    val plan = planEntityImport(documents, importSnapshot(), replaceExisting, workspaceDocumentBytes)
     return plan.verdicts.mapIndexed { idx, verdict ->
         when (verdict) {
             is EntityPlanVerdict.Rejected -> verdict.row

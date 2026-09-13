@@ -7,8 +7,10 @@ import ch.nokillswit.blueprints.OwnershipDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.authz.TooManyRequestsException
+import ch.nokillswit.entities.EntityFilter
 import ch.nokillswit.entities.EntityGraph
 import ch.nokillswit.entities.EntityGraphFilter
+import ch.nokillswit.entities.EntityReadLedger
 import ch.nokillswit.entityquery.EntityQueryInvalidException
 import ch.nokillswit.entities.EntityImportRequest
 import ch.nokillswit.entities.EntityImportResponse
@@ -18,6 +20,7 @@ import ch.nokillswit.entityquery.EntityQueryCheckResponse
 import ch.nokillswit.entityquery.EntityQueryProblem
 import ch.nokillswit.entityquery.QueryDiagnosticCodes
 import ch.nokillswit.infra.importing.OntologyImportStatus
+import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
@@ -25,6 +28,7 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -478,6 +482,133 @@ class EntityQueryRouteTest {
             assertEquals(ids.toSet(), service.graph(filter).nodes.map { it.identifier }.toSet())
         } finally {
             TestEntities.remove(*ids.toTypedArray())
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    // -- The read-budget seam (`TestEntities.tunedService(readLedger = ...)`, 2.4.0): a tiny
+    // capacity trips deterministically on the raw document/team bytes a bare entity already
+    // carries, before any row is decoded — see `.claude/docs/security.md` "Entity read memory
+    // budget". No timing, no sleeps: the ledger capacity itself is the seam.
+
+    @Test
+    fun `a workspace too large for the ledger refuses the plain graph with WORKSPACE_TOO_LARGE`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-rb-plain", UserRole.ADMIN)
+        val bp = unique("bp-rb-plain")
+        val id = unique("ent-rb-plain")
+        try {
+            client.createBlueprint(simpleBlueprint(bp))
+            client.postJson("/api/v1/entities", entityRequest(bp, id))
+            // Capacity 1 byte: even a bare {"properties":{},"relations":{}} document's raw
+            // octet_length trips the up-front admission charge before any row is decoded.
+            val tuned = TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))
+            val failure = assertFailsWith<EntityQueryInvalidException> {
+                tuned.graph(EntityGraphFilter(listOf(bp), q = null))
+            }
+            assertEquals(QueryDiagnosticCodes.WORKSPACE_TOO_LARGE, failure.diagnostics.single().code)
+        } finally {
+            TestEntities.remove(id)
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    @Test
+    fun `a workspace too large for the ledger refuses a query graph with WORKSPACE_TOO_LARGE`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-rb-query", UserRole.ADMIN)
+        val bp = unique("bp-rb-query")
+        val id = unique("ent-rb-query")
+        try {
+            client.createBlueprint(simpleBlueprint(bp))
+            client.postJson("/api/v1/entities", entityRequest(bp, id))
+            val tuned = TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))
+            val failure = assertFailsWith<EntityQueryInvalidException> {
+                tuned.graph(EntityGraphFilter(listOf(bp), q = null, query = "MATCH (a:`$bp`) RETURN a"))
+            }
+            assertEquals(QueryDiagnosticCodes.WORKSPACE_TOO_LARGE, failure.diagnostics.single().code)
+        } finally {
+            TestEntities.remove(id)
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    @Test
+    fun `list refuses with a plain 400 when the ledger cannot fit its computed-property lookup targets`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-rb-list", UserRole.ADMIN)
+        // A SELF relation makes this blueprint's own active rows a "target" `list` widens to
+        // (`narrowTargets`), so its own page's bytes are charged against the ledger too — a
+        // blueprint with no relations at all would only widen to `_team`/`_user`, which may hold
+        // zero active rows and never trip a tiny capacity.
+        val bp = unique("bp-rb-list")
+        val id = unique("ent-rb-list")
+        try {
+            val selfRelation = RelationDefinition(title = "Self", target = bp, required = false, many = false)
+            client.createBlueprint(BlueprintRequest(identifier = bp, title = "T", relations = mapOf("self" to selfRelation)))
+            client.postJson("/api/v1/entities", entityRequest(bp, id))
+            val tuned = TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))
+            val filter = EntityFilter(blueprint = bp, q = null)
+            assertFailsWith<BadRequestException> { tuned.list(filter, PageRequest(1, 20, emptyList())) }
+        } finally {
+            TestEntities.remove(id)
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    @Test
+    fun `another in-flight read holding the ledger makes list answer 429, not 400`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-rb-busy", UserRole.ADMIN)
+        val bp = unique("bp-rb-busy")
+        val id = unique("ent-rb-busy")
+        try {
+            val selfRelation = RelationDefinition(title = "Self", target = bp, required = false, many = false)
+            client.createBlueprint(BlueprintRequest(identifier = bp, title = "T", relations = mapOf("self" to selfRelation)))
+            client.postJson("/api/v1/entities", entityRequest(bp, id))
+            // A generous capacity with all but one byte already held by ANOTHER reservation: this
+            // request's own charge (a few KiB even with the shared container's `_team`/`_user` rows
+            // widened in) would fit an empty ledger, so the refusal is contention (429), never the
+            // own-request 400.
+            val capacity = 8L * 1024 * 1024
+            val ledger = EntityReadLedger(capacity = capacity)
+            val other = ledger.open().apply { charge(capacity - 1) }
+            try {
+                val tuned = TestEntities.tunedService(readLedger = ledger)
+                val filter = EntityFilter(blueprint = bp, q = null)
+                assertFailsWith<TooManyRequestsException> { tuned.list(filter, PageRequest(1, 20, emptyList())) }
+                assertFailsWith<TooManyRequestsException> { tuned.graph(EntityGraphFilter(listOf(bp), q = null)) }
+            } finally {
+                other.close()
+            }
+            // Released, the same reads succeed and the ledger is back to zero in flight.
+            val tuned = TestEntities.tunedService(readLedger = ledger)
+            assertEquals(1L, tuned.list(EntityFilter(blueprint = bp, q = null), PageRequest(1, 20, emptyList())).total)
+            assertEquals(0L, ledger.inFlightBytes)
+        } finally {
+            TestEntities.remove(id)
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    @Test
+    fun `writers are exempt from the read ledger`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-rb-writer", UserRole.ADMIN)
+        val bp = unique("bp-rb-writer")
+        val id = unique("ent-rb-writer")
+        try {
+            val selfRelation = RelationDefinition(title = "Self", target = bp, required = false, many = false)
+            client.createBlueprint(BlueprintRequest(identifier = bp, title = "T", relations = mapOf("self" to selfRelation)))
+            val userId = TestUsers.seed(uniqueEmail("ent-rb-writer-svc"), "pw")
+            // An exhausted ledger (capacity 1) refuses every read, yet create and update — serialized
+            // by the V28 lock, at most one raw candidate set at a time — pass a null reservation.
+            val tuned = TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))
+            val created = tuned.create(entityRequest(bp, id), userId)
+            assertEquals(1, tuned.update(created.id, entityRequest(bp, id).copy(title = "renamed")).affected)
+            assertFailsWith<BadRequestException> { tuned.list(EntityFilter(blueprint = bp, q = null), PageRequest(1, 20, emptyList())) }
+        } finally {
+            TestEntities.remove(id)
             TestBlueprints.remove(bp)
         }
     }

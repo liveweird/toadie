@@ -1518,6 +1518,12 @@ export interface paths {
          *     Each returned item carries `findings` — the same validation a strict save would
          *     enforce, re-evaluated against the blueprint's CURRENT definition, so an entity left
          *     stale by a blueprint edit is flagged here without waiting for a save attempt.
+         *
+         *     Since 2.4.0 the page's own rows plus the validation/computed-property lookup targets
+         *     they widen to are checked against a process-wide entity read memory budget before any
+         *     document is decoded (`.claude/docs/security.md` "Entity read memory budget"): a
+         *     workspace too large on its own answers `400`, contention from other in-flight reads
+         *     answers `429`.
          */
         get: operations["listEntities"];
         put?: never;
@@ -1540,7 +1546,10 @@ export interface paths {
          *     active, registered blueprint, else `400`. `identifier` is unique PER BLUEPRINT,
          *     case-insensitively — a clash is `409` (the same identifier may be reused across
          *     different blueprints). The registry is capped per-blueprint and overall (`400`
-         *     "full" once reached).
+         *     "full" once reached), and the WORKSPACE-WIDE stored document+team byte total
+         *     (`.claude/docs/persistence.md` "Entity targets under concurrency (V28)") is capped
+         *     too — a `400` "The entity workspace is full (… bytes of documents)" when this
+         *     entity's document would push the total over the budget.
          */
         post: operations["createEntity"];
         delete?: never;
@@ -1597,6 +1606,14 @@ export interface paths {
          *     immediately, before the workspace is loaded — retry shortly. Evaluation is a pure read —
          *     no audit event.
          *
+         *     Since 2.4.0 the combined shown-plus-lookup-target row set is checked against a
+         *     process-wide entity read memory budget BEFORE any document is decoded
+         *     (`.claude/docs/security.md` "Entity read memory budget") — with OR without a `query`.
+         *     A workspace too large on its own answers `400` `WORKSPACE_TOO_LARGE` (one `diagnostics`
+         *     entry, no position); contention from other in-flight reads answers `429` instead. The
+         *     PLAIN graph (no `query`) never takes one of the four query-evaluation permits above —
+         *     only a `query` does.
+         *
          *     Unpaged by design — a report-style computation over the workspace.
          */
         get: operations["getEntityGraph"];
@@ -1632,7 +1649,9 @@ export interface paths {
          *     `replaceExisting` is off — nothing stored, `id` names the existing row), `INVALID`
          *     (schema/validation failure, an unknown blueprint, a relation/`team`/`format: team|user`
          *     target that does not resolve against the workspace PLUS the batch, one of the two
-         *     10 000/2000 caps, or a cycle through a MANDATORY reference — a `required: true`
+         *     10 000/2000 entity-count caps, the workspace document+team byte budget — a running
+         *     total over Store candidates in submission order, an UPDATED row's shrink freeing
+         *     room for a later create — or a cycle through a MANDATORY reference — a `required: true`
          *     relation or a `format: team|user` property named in `schema.required` — carrying the
          *     full `findings` array when the rejection came from the blueprint's own rule table),
          *     `CONFLICT` (an in-batch duplicate identifier within the same blueprint,
@@ -1675,7 +1694,8 @@ export interface paths {
          * Dry-run an entity import batch (nothing is stored)
          * @description Any authenticated user. The IDENTICAL classification `importEntities` runs — decode,
          *     validation, blueprint lookup, target resolution against the workspace plus the batch,
-         *     the caps, ordering and deferral — reported as predictions and storing nothing:
+         *     the entity-count and workspace-byte-budget caps, ordering and deferral — reported as
+         *     predictions and storing nothing:
          *     `CREATED`/`UPDATED` read "would be created/replaced"; `id` is set only for `UPDATED`
          *     and `EXISTS`. A pure computation: no audit events. The report is a snapshot — a
          *     concurrent write between the check and the real import can change the actual outcome.
@@ -1727,7 +1747,7 @@ export interface paths {
         };
         /**
          * Get an entity
-         * @description Any authenticated user. Plain `404` for a missing or soft-deleted entity — the workspace idiom, no existence secrecy. Carries `findings` re-evaluated against the blueprint's CURRENT definition, so an entity left stale by a blueprint edit since this entity's last save is flagged without waiting for a save attempt.
+         * @description Any authenticated user. Plain `404` for a missing or soft-deleted entity — the workspace idiom, no existence secrecy. Carries `findings` re-evaluated against the blueprint's CURRENT definition, so an entity left stale by a blueprint edit since this entity's last save is flagged without waiting for a save attempt. Since 2.4.0 the validation/computed-property lookup targets this read widens to are checked against a process-wide entity read memory budget before any document is decoded (`.claude/docs/security.md` "Entity read memory budget"): a workspace too large on its own answers `400`, contention from other in-flight reads answers `429`.
          */
         get: operations["getEntity"];
         /**
@@ -1735,8 +1755,10 @@ export interface paths {
          * @description Any authenticated user — whole-entity replacement, identifier rename included. The
          *     `blueprint` field must equal the entity's STORED blueprint; naming a different
          *     blueprint is `400` (moving an entity between blueprints is not supported). Same
-         *     shape/findings/target/`409` rules as create (`400` bodies carry `findings`,
-         *     `EntityInvalidProblem`). Renaming the identifier CASCADES: every other active
+         *     shape/findings/target/`409` rules as create, including the workspace document+team
+         *     byte budget checked against the entity's OWN current stored size — a shrinking
+         *     replacement can free room a growing one would otherwise refuse (`400` bodies carry
+         *     `findings`, `EntityInvalidProblem`). Renaming the identifier CASCADES: every other active
          *     entity's `relations` naming the old identifier are rewritten to the new one, in the
          *     same locked transaction — and, when the renamed entity's OWN blueprint is `_team` or
          *     `_user` (Phase 4 system blueprints), every OTHER active entity's `team` column and
@@ -2787,7 +2809,7 @@ export interface components {
         /** @description One problem with an entity query, positioned in the SOURCE text when it has a position (1-based `line`/`column`, `endLine`/`endColumn` exclusive) — the evaluation-time refusals carry none. `suggestion` is the nearest known name for the `UNKNOWN_*` codes ("did you mean …"), absent otherwise. Every code is an error: a query is accepted whole or refused. */
         QueryDiagnostic: {
             /** @enum {string} */
-            code: "SYNTAX" | "UNSUPPORTED" | "UNKNOWN_LABEL" | "UNKNOWN_RELATION" | "UNKNOWN_PROPERTY" | "UNKNOWN_VARIABLE" | "DUPLICATE_VARIABLE" | "RELATIONSHIP_VARIABLE_REFERENCE" | "RANGE_INVALID" | "LIMIT_INVALID" | "DISCONNECTED_PATTERN" | "TOO_MANY_PATTERNS" | "TOO_MANY_VARIABLES" | "QUERY_TOO_LONG" | "DEADLINE_EXCEEDED" | "BINDING_LIMIT";
+            code: "SYNTAX" | "UNSUPPORTED" | "UNKNOWN_LABEL" | "UNKNOWN_RELATION" | "UNKNOWN_PROPERTY" | "UNKNOWN_VARIABLE" | "DUPLICATE_VARIABLE" | "RELATIONSHIP_VARIABLE_REFERENCE" | "RANGE_INVALID" | "LIMIT_INVALID" | "DISCONNECTED_PATTERN" | "TOO_MANY_PATTERNS" | "TOO_MANY_VARIABLES" | "QUERY_TOO_LONG" | "DEADLINE_EXCEEDED" | "BINDING_LIMIT" | "WORKSPACE_TOO_LARGE";
             message: string;
             line?: number;
             column?: number;
@@ -5186,6 +5208,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5357,6 +5380,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };

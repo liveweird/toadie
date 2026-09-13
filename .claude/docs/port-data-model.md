@@ -259,8 +259,9 @@ Unset optionals are ABSENT, never `null` — the `blueprintJson` convention, reu
 ### Validation — `entityFindings`, a PURE function
 
 Two layers, the phase-1 shape: `validateEntityRequest` enforces the blueprint-FREE shape rules
-above (identifier grammar/length, title, `team` shape, key grammar, a 256 KiB document cap) as
-an ordinary `400`. `entityFindings(document, definition, targetExists)` is the
+above (identifier grammar/length, title, `team` shape, key grammar, a 256 KiB per-entity
+document+team byte cap via `documentByteSize` — the SAME function the workspace-wide budget
+below measures with) as an ordinary `400`. `entityFindings(document, definition, targetExists)` is the
 BLUEPRINT-DEPENDENT rule table below — it never throws, so the exact same list backs both the
 strict-save `400` (non-empty → one aggregated failure) and the `findings` field every GET/list
 response carries (see "Lifecycle rules" below). `EntityFinding{code, field, message}`, `field` =
@@ -427,6 +428,15 @@ or evaluates computed properties at all, see `.claude/docs/persistence.md`).
   idiom, expressed as `blueprint/identifier` — the referrer's location — from all three
   sources: `team` field, `format: team` properties, and `format: user` properties).
 
+**Workspace budget (2.4.0).** Beside the per-entity 256 KiB document+team cap above, the
+WORKSPACE-WIDE total of `octet_length(document) + octet_length(team)` over every active entity
+is capped at `MAX_WORKSPACE_DOCUMENT_BYTES` (16 MiB, `entities/Entity.kt`) — a `400` "The
+entity workspace is full (… bytes of documents)" from `create`, `replace`, and the import
+planner alike when a write would push the total over budget. A replace is charged only the
+DELTA against the row's own current size (already loaded under the same lock), so a shrinking
+edit can free room for a later create; see `.claude/docs/persistence.md` "Entity targets under
+concurrency (V28)" for the lock the aggregate is read under.
+
 ## Toadie extensions (not Port)
 
 Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's own model, and phase 7
@@ -578,7 +588,10 @@ to a fixpoint: a blueprint's unresolved relation/aggregation target (checked aga
 `registry ∪ will-store identifiers`, `blueprintTargets`) or an entity's `entityFindings` against
 `registry ∪ will-store keys` rejects the document; the registry cap (`MAX_BLUEPRINTS`,
 `MAX_ENTITIES_TOTAL`/`MAX_ENTITIES_PER_BLUEPRINT`, counted over CREATE rows only, in submission
-order) rejects any create past the limit. Removing a document for one reason can free a cap slot
+order) rejects any create past the limit, and for entities the workspace document+team byte
+budget (`MAX_WORKSPACE_DOCUMENT_BYTES`, above) rejects any Store candidate — CREATE or UPDATED
+alike — whose running byte delta over the snapshot's current total, counted over CREATE rows
+and UPDATED deltas in submission order, would overflow it. Removing a document for one reason can free a cap slot
 or resolve an unknown-target rejection for another (an earlier document's own removal shrinks the
 create count another document is measured against), so the iteration repeats until a full pass
 rejects nothing further — this is what makes the dry-run's prediction match the real run's

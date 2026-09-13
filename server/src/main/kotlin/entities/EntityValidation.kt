@@ -96,9 +96,24 @@ fun teamValues(team: JsonElement?): List<String> = when (team) {
     else -> emptyList()
 }
 
+/**
+ * UTF-8 byte length of [request]'s stored document plus its encoded `team` value (if present) —
+ * the exact bytes `entities.document`/`entities.team` will hold, shared by [validateDocumentSize]
+ * (the per-entity 256 KiB ceiling) and the workspace-wide byte budget check
+ * ([ch.nokillswit.entities.EntityService] `checkCaps`/the import planner's `rejectOverCap`) so
+ * Kotlin's prediction and PostgreSQL's `octet_length` count the exact same bytes.
+ */
+fun documentByteSize(request: EntityRequest): Int = documentByteSize(request.toDocument(), request.team)
+
+/** The same count over an already-built (possibly rename-rewritten) document and team. */
+fun documentByteSize(document: EntityDocument, team: JsonElement?): Int {
+    val documentBytes = blueprintJson.encodeToString(document).toByteArray(Charsets.UTF_8).size
+    val teamBytes = team?.let { blueprintJson.encodeToString(it).toByteArray(Charsets.UTF_8).size } ?: 0
+    return documentBytes + teamBytes
+}
+
 private fun validateDocumentSize(request: EntityRequest) {
-    val encoded = blueprintJson.encodeToString(request.toDocument())
-    val bytes = encoded.toByteArray(Charsets.UTF_8).size
+    val bytes = documentByteSize(request)
     if (bytes > MAX_ENTITY_DOCUMENT_BYTES) {
         throw BadRequestException("The entity document must be at most $MAX_ENTITY_DOCUMENT_BYTES bytes")
     }
