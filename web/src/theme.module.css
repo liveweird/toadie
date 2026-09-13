@@ -72,8 +72,8 @@
   box-shadow: inset 3px 0 0 var(--mantine-primary-color-filled);
 }
 
-/* The sidebar's section labels (Catalog / Registries / Administration): a static caption,
-   never a toggle — every leaf stays in the DOM. */
+/* The sidebar's section labels (Catalog / Ontology / Dictionaries / Administration): a static
+   caption, never a toggle — every leaf stays in the DOM. */
 .navSectionLabel {
   padding: 14px 12px 4px;
   font-size: 11px;
