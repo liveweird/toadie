@@ -11,5 +11,14 @@
   "appliedCount_other": "{{count}} encji",
   "diagnosticsTitle": "Problemy z zapytaniem",
   "didYouMean": "Czy chodziło o `{{name}}`?",
-  "position": "wiersz {{line}}, kolumna {{column}}"
+  "position": "wiersz {{line}}, kolumna {{column}}",
+  "actionsAria": "Akcje zapytania dla {{name}}",
+  "actionsGroup": "Zapytanie",
+  "actionExpand_one": "Rozwiń o {{count}} krok",
+  "actionExpand_few": "Rozwiń o {{count}} kroki",
+  "actionExpand_many": "Rozwiń o {{count}} kroków",
+  "actionExpand_other": "Rozwiń o {{count}} kroków",
+  "actionAncestors": "Przodkowie w hierarchii {{hierarchy}}",
+  "actionDescendants": "Potomkowie w hierarchii {{hierarchy}}",
+  "actionOwnedBy": "Własność tego zespołu"
 }

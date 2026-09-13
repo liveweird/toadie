@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import { expandQuery, ownedByQuery } from "../utils/queryTemplates";
 
 // React Flow needs real DOM measurement happy-dom can't give — shared stub (v1.25.0,
 // extracted from RenderGraph.test.tsx). The pure shaping (entityGraph.ts/graphLayout.ts) is
@@ -92,6 +93,17 @@ function mockGraph(
       );
     return Promise.resolve(jsonResponse(404, {}));
   });
+}
+
+/** The `query=` param of the LAST `entities/graph` request, decoded — `null` when the latest
+ *  such request carried none. */
+function lastGraphQuery(mockFetch: FetchMock): string | null {
+  const calls = mockFetch.mock.calls.filter(
+    ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities/graph"),
+  );
+  const [url] = calls.at(-1) ?? [];
+  if (typeof url !== "string") return null;
+  return new URLSearchParams(url.split("?")[1] ?? "").get("query");
 }
 
 function layoutPuts(mockFetch: FetchMock): unknown[] {
@@ -518,6 +530,81 @@ describe("EntityGraph page", () => {
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
 
       await waitFor(() => expect(localStorage.getItem("toadie.viewSettings.entityQuery.text")).toBe('"MATCH (a)"'));
+    });
+  });
+
+  describe("node context menu (v2.2.0)", () => {
+    test("right-clicking a node opens a menu named after it, listing the query actions", async () => {
+      mockGraph(mockFetch);
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      fireEvent.click(screen.getByTestId("context:service|checkout"));
+
+      const menu = await screen.findByRole("menu", { name: "Query actions for Checkout" });
+      expect(within(menu).getByRole("menuitem", { name: "Expand 1 hop" })).toBeInTheDocument();
+      expect(within(menu).getByRole("menuitem", { name: "Expand 2 hops" })).toBeInTheDocument();
+      expect(within(menu).getByRole("menuitem", { name: "Expand 3 hops" })).toBeInTheDocument();
+      expect(within(menu).getByRole("menuitem", { name: "Ancestors in composition" })).toBeInTheDocument();
+      expect(within(menu).getByRole("menuitem", { name: "Descendants in composition" })).toBeInTheDocument();
+      expect(within(menu).queryByRole("menuitem", { name: "Owned by this team" })).not.toBeInTheDocument();
+    });
+
+    test("clicking Expand 2 hops runs the expand query, closes the menu, and fills the editor", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      fireEvent.click(screen.getByTestId("context:service|checkout"));
+      const menu = await screen.findByRole("menu", { name: "Query actions for Checkout" });
+      await user.click(within(menu).getByRole("menuitem", { name: "Expand 2 hops" }));
+
+      const expected = expandQuery({ blueprint: "service", identifier: "checkout" }, 2);
+      await waitFor(() => expect(lastGraphQuery(mockFetch)).toBe(expected));
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Entity query" })).toHaveValue(expected);
+    });
+
+    test("Owned by this team appears only for a _team node and runs the ownership query", async () => {
+      const graph = {
+        nodes: [
+          { id: "_team|platform", entityId: 1, blueprint: "_team", blueprintTitle: "Team", identifier: "platform", title: "Platform", findings: 0 },
+          { id: "service|checkout", entityId: 2, blueprint: "service", blueprintTitle: "Service", identifier: "checkout", title: "Checkout", findings: 0 },
+        ],
+        edges: [
+          { sourceId: "service|checkout", targetId: "_team|platform", relation: "$team", hierarchies: [], ownership: true },
+        ],
+      };
+      mockGraph(mockFetch, graph);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+
+      fireEvent.click(screen.getByTestId("context:service|checkout"));
+      const checkoutMenu = await screen.findByRole("menu", { name: "Query actions for Checkout" });
+      expect(within(checkoutMenu).queryByRole("menuitem", { name: "Owned by this team" })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("context:_team|platform"));
+      const menu = await screen.findByRole("menu", { name: "Query actions for Platform" });
+      await user.click(within(menu).getByRole("menuitem", { name: "Owned by this team" }));
+
+      const expected = ownedByQuery("platform");
+      await waitFor(() => expect(lastGraphQuery(mockFetch)).toBe(expected));
+      expect(screen.getByRole("textbox", { name: "Entity query" })).toHaveValue(expected);
+    });
+
+    test("an empty hierarchies dictionary omits the Ancestors/Descendants items", async () => {
+      mockGraph(mockFetch, GRAPH, 200, { mode: "auto", positions: {} }, []);
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      fireEvent.click(screen.getByTestId("context:service|checkout"));
+
+      const menu = await screen.findByRole("menu", { name: "Query actions for Checkout" });
+      expect(within(menu).queryByRole("menuitem", { name: /Ancestors in/ })).not.toBeInTheDocument();
+      expect(within(menu).queryByRole("menuitem", { name: /Descendants in/ })).not.toBeInTheDocument();
     });
   });
 });

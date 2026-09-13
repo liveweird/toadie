@@ -31,6 +31,7 @@ vi.mock("../components/QueryEditor", () => ({
 }));
 
 import EntityHierarchy from "./EntityHierarchy";
+import { descendantsQuery } from "../utils/queryTemplates";
 
 const TOKEN_KEY = "toadie.auth.token";
 
@@ -402,6 +403,67 @@ describe("EntityHierarchy page", () => {
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
 
       await waitFor(() => expect(localStorage.getItem("toadie.viewSettings.entityQuery.text")).toBe('"MATCH (a)"'));
+    });
+  });
+
+  describe("row 'Query' actions (v2.2.0)", () => {
+    test("a row's operations menu carries the Query group with the expand/ancestors/descendants items", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText("Checkout");
+      await user.click(screen.getByRole("button", { name: "Operations for Checkout" }));
+
+      expect(await screen.findByText("Query")).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Expand 1 hop" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Expand 2 hops" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Expand 3 hops" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Ancestors in composition" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Descendants in composition" })).toBeInTheDocument();
+    });
+
+    test("Descendants in composition refetches the graph with the generated query and shows it in the bar", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText("Checkout");
+      await user.click(screen.getByRole("button", { name: "Operations for Checkout" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Descendants in composition" }));
+
+      const expected = descendantsQuery({ blueprint: "service", identifier: "checkout" }, "composition");
+
+      await waitFor(() => {
+        const call = mockFetch.mock.calls.find(
+          ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities/graph") && url.includes("query="),
+        );
+        expect(call).toBeDefined();
+        const search = new URL(call![0] as string, "http://localhost").searchParams;
+        expect(search.get("query")).toBe(expected);
+      });
+      expect(screen.getByRole("textbox", { name: "Entity query" })).toHaveValue(expected);
+    });
+
+    test("Owned by this team appears only on a _team row's menu", async () => {
+      mockGraph(mockFetch, {
+        nodes: [
+          { id: "_team|platform", entityId: 1, blueprint: "_team", blueprintTitle: "Team", identifier: "platform", title: "Platform", findings: 0 },
+          { id: "service|checkout", entityId: 2, blueprint: "service", blueprintTitle: "Service", identifier: "checkout", title: "Checkout", findings: 0 },
+        ],
+        edges: [],
+      });
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText("Checkout");
+      await user.click(screen.getByRole("button", { name: "Operations for Checkout" }));
+      expect(await screen.findByText("Query")).toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "Owned by this team" })).not.toBeInTheDocument();
+      await user.keyboard("{Escape}");
+
+      await user.click(screen.getByRole("button", { name: "Operations for Platform" }));
+      expect(await screen.findByRole("menuitem", { name: "Owned by this team" })).toBeInTheDocument();
     });
   });
 });

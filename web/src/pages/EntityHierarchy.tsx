@@ -7,6 +7,7 @@ import { IconChevronDown, IconChevronRight, IconChevronsDown, IconChevronsUp, Ic
 import { deleteEntity, getEntityGraph, type EntityGraphNode } from "../api/entities";
 import EntityFindingsBadge from "../components/EntityFindingsBadge";
 import EntityGraphToolbar from "../components/EntityGraphToolbar";
+import EntityQueryActionItems from "../components/EntityQueryActionItems";
 import EntityQueryBar from "../components/EntityQueryBar";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
@@ -52,6 +53,8 @@ function TreeItem({
   onPin,
   pinnedId,
   onDelete,
+  hierarchyId,
+  onRunQuery,
 }: {
   item: HierarchyNode<EntityGraphNode>;
   path: string;
@@ -60,6 +63,8 @@ function TreeItem({
   onPin: (id: string) => void;
   pinnedId: string;
   onDelete: (node: EntityGraphNode) => void;
+  hierarchyId: string;
+  onRunQuery: (query: string) => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -108,6 +113,12 @@ function TreeItem({
             <Menu.Item color="red" onClick={() => onDelete(node)}>
               {t("common.action.delete")}
             </Menu.Item>
+            <Menu.Divider />
+            <EntityQueryActionItems
+              node={{ blueprint: node.blueprint, identifier: node.identifier }}
+              hierarchyId={hierarchyId}
+              onRun={onRunQuery}
+            />
           </RowActionsMenu>
         </Box>
       </Group>
@@ -123,6 +134,8 @@ function TreeItem({
               onPin={onPin}
               pinnedId={pinnedId}
               onDelete={onDelete}
+              hierarchyId={hierarchyId}
+              onRunQuery={onRunQuery}
             />
           ))}
         </Box>
@@ -275,6 +288,8 @@ export default function EntityHierarchy() {
               onPin={(id) => setPinnedId(id === pinnedId ? "" : id)}
               pinnedId={pinnedId}
               onDelete={(node) => deleteConfirm.requestDelete(node)}
+              hierarchyId={hierarchyId}
+              onRunQuery={query.runText}
             />
           ))
         ) : !isError ? (
