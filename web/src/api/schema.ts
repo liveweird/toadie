@@ -1540,7 +1540,10 @@ export interface paths {
          *     active, registered blueprint, else `400`. `identifier` is unique PER BLUEPRINT,
          *     case-insensitively — a clash is `409` (the same identifier may be reused across
          *     different blueprints). The registry is capped per-blueprint and overall (`400`
-         *     "full" once reached).
+         *     "full" once reached), and the WORKSPACE-WIDE stored document+team byte total
+         *     (`.claude/docs/persistence.md` "Entity targets under concurrency (V28)") is capped
+         *     too — a `400` "The entity workspace is full (… bytes of documents)" when this
+         *     entity's document would push the total over the budget.
          */
         post: operations["createEntity"];
         delete?: never;
@@ -1632,7 +1635,9 @@ export interface paths {
          *     `replaceExisting` is off — nothing stored, `id` names the existing row), `INVALID`
          *     (schema/validation failure, an unknown blueprint, a relation/`team`/`format: team|user`
          *     target that does not resolve against the workspace PLUS the batch, one of the two
-         *     10 000/2000 caps, or a cycle through a MANDATORY reference — a `required: true`
+         *     10 000/2000 entity-count caps, the workspace document+team byte budget — a running
+         *     total over Store candidates in submission order, an UPDATED row's shrink freeing
+         *     room for a later create — or a cycle through a MANDATORY reference — a `required: true`
          *     relation or a `format: team|user` property named in `schema.required` — carrying the
          *     full `findings` array when the rejection came from the blueprint's own rule table),
          *     `CONFLICT` (an in-batch duplicate identifier within the same blueprint,
@@ -1675,7 +1680,8 @@ export interface paths {
          * Dry-run an entity import batch (nothing is stored)
          * @description Any authenticated user. The IDENTICAL classification `importEntities` runs — decode,
          *     validation, blueprint lookup, target resolution against the workspace plus the batch,
-         *     the caps, ordering and deferral — reported as predictions and storing nothing:
+         *     the entity-count and workspace-byte-budget caps, ordering and deferral — reported as
+         *     predictions and storing nothing:
          *     `CREATED`/`UPDATED` read "would be created/replaced"; `id` is set only for `UPDATED`
          *     and `EXISTS`. A pure computation: no audit events. The report is a snapshot — a
          *     concurrent write between the check and the real import can change the actual outcome.
@@ -1735,8 +1741,10 @@ export interface paths {
          * @description Any authenticated user — whole-entity replacement, identifier rename included. The
          *     `blueprint` field must equal the entity's STORED blueprint; naming a different
          *     blueprint is `400` (moving an entity between blueprints is not supported). Same
-         *     shape/findings/target/`409` rules as create (`400` bodies carry `findings`,
-         *     `EntityInvalidProblem`). Renaming the identifier CASCADES: every other active
+         *     shape/findings/target/`409` rules as create, including the workspace document+team
+         *     byte budget checked against the entity's OWN current stored size — a shrinking
+         *     replacement can free room a growing one would otherwise refuse (`400` bodies carry
+         *     `findings`, `EntityInvalidProblem`). Renaming the identifier CASCADES: every other active
          *     entity's `relations` naming the old identifier are rewritten to the new one, in the
          *     same locked transaction — and, when the renamed entity's OWN blueprint is `_team` or
          *     `_user` (Phase 4 system blueprints), every OTHER active entity's `team` column and

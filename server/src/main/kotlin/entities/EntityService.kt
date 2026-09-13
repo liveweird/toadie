@@ -29,6 +29,7 @@ import ch.nokillswit.entityquery.parseEntityQuery
 import ch.nokillswit.entityquery.validateAndBind
 import ch.nokillswit.entityquery.validateEntityQuery
 import ch.nokillswit.infra.db.lockingTransaction
+import ch.nokillswit.infra.db.octetLength
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.users.UserService
@@ -44,8 +45,10 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.LongColumnType
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.Sum
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.UIntIdTable
 import org.jetbrains.exposed.v1.core.eq
@@ -54,6 +57,7 @@ import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.R2dbcTransaction
 import org.jetbrains.exposed.v1.r2dbc.insert
+import org.jetbrains.exposed.v1.r2dbc.select
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
@@ -791,13 +795,30 @@ class EntityService(
     suspend fun importSnapshot(): EntityImportSnapshot = suspendTransaction(database) {
         val activeBlueprints = loadActiveBlueprints()
         val blueprints = activeBlueprints.map { EntityImportBlueprint(it.id, it.identifier, it.definition) }
-        val rows = Entities.selectAll().where { active() }
-            .map { Triple(it[Entities.blueprintId].value, it[Entities.identifier], it[Entities.id].value) }
+        val documentBytesExpr = octetLength(Entities.document)
+        val teamBytesExpr = octetLength(Entities.team)
+        val rows = Entities.select(Entities.blueprintId, Entities.identifier, Entities.id, documentBytesExpr, teamBytesExpr)
+            .where { active() }
+            .map {
+                ImportSnapshotRow(
+                    it[Entities.blueprintId].value,
+                    it[Entities.identifier],
+                    it[Entities.id].value,
+                    (it.getOrNull(documentBytesExpr) ?: 0L) + (it.getOrNull(teamBytesExpr) ?: 0L),
+                )
+            }
             .toList()
-        val identifiersByBlueprint = rows.groupBy({ it.first }, { it.second to it.third })
-        val countsByBlueprint = rows.groupingBy { it.first }.eachCount().mapValues { it.value.toLong() }
-        EntityImportSnapshot(blueprints, identifiersByBlueprint, rows.size.toLong(), countsByBlueprint)
+        val identifiersByBlueprint = rows.groupBy({ it.blueprintId }, { it.identifier to it.id })
+        val countsByBlueprint = rows.groupingBy { it.blueprintId }.eachCount().mapValues { it.value.toLong() }
+        val bytesById = rows.associate { it.id to it.bytes }
+        EntityImportSnapshot(
+            blueprints, identifiersByBlueprint, rows.size.toLong(), countsByBlueprint,
+            documentBytes = rows.sumOf { it.bytes }, bytesById = bytesById,
+        )
     }
+
+    /** One [importSnapshot] row's identity plus its stored document+team byte size — never the text (`.claude/docs/persistence.md`). */
+    private data class ImportSnapshotRow(val blueprintId: UInt, val identifier: String, val id: UInt, val bytes: Long)
 
     suspend fun create(request: EntityRequest, callerId: UInt): EntityResponse {
         validateEntityRequest(request) // re-checked service-side so direct callers stay guarded
@@ -806,7 +827,7 @@ class EntityService(
             val activeBlueprints = loadActiveBlueprints()
             val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
             val blueprint = blueprintsByIdentifier[request.blueprint] ?: throw BadRequestException("Unknown blueprint")
-            checkCaps(blueprint.id)
+            checkCaps(blueprint.id, documentByteSize(request).toLong())
             val document = request.toDocument()
             val snapshot = loadSnapshot(listOf(blueprint.definition), blueprintsByIdentifier, computed = true)
             val findings = entityFindings(document, blueprint.definition, snapshot.targetExists, request.team)
@@ -823,12 +844,32 @@ class EntityService(
         return toResponse(materialized.payload, materialized.context)
     }
 
-    private suspend fun checkCaps(blueprintId: UInt) {
+    private suspend fun checkCaps(blueprintId: UInt, incomingBytes: Long) {
         if (Entities.selectAll().where { active() }.count() >= MAX_ENTITIES_TOTAL) {
             throw BadRequestException("The entity registry is full ($MAX_ENTITIES_TOTAL entities)")
         }
         if (Entities.selectAll().where { (Entities.blueprintId eq blueprintId) and active() }.count() >= MAX_ENTITIES_PER_BLUEPRINT) {
             throw BadRequestException("This blueprint's entities are full ($MAX_ENTITIES_PER_BLUEPRINT entities)")
+        }
+        checkDocumentByteBudget(incomingBytes)
+    }
+
+    /**
+     * The workspace-wide document+team byte budget (2.4.0, `.claude/docs/persistence.md` "Entity
+     * targets under concurrency (V28)"): `SUM(octet_length(document)) + SUM(octet_length(team))`
+     * over active rows, read under the SAME V28 lock [checkCaps]/[update] already hold, so the
+     * count is never stale mid-write. [replacingBytes] is the row's OWN current contribution
+     * (already loaded by the caller) — a replace/update only grows the workspace by the
+     * DIFFERENCE, so a shrinking edit frees room for a later create.
+     */
+    private suspend fun checkDocumentByteBudget(incomingBytes: Long, replacingBytes: Long = 0L) {
+        val documentSum = Sum(octetLength(Entities.document), LongColumnType())
+        val teamSum = Sum(octetLength(Entities.team), LongColumnType())
+        val row = Entities.select(documentSum, teamSum).where { active() }.singleOrNull()
+            ?: error("an aggregate SELECT without GROUP BY must always answer exactly one row")
+        val total = (row.getOrNull(documentSum) ?: 0L) + (row.getOrNull(teamSum) ?: 0L)
+        if (total - replacingBytes + incomingBytes > workspaceDocumentBytes) {
+            throw BadRequestException("The entity workspace is full ($workspaceDocumentBytes bytes of documents)")
         }
     }
 
@@ -872,6 +913,9 @@ class EntityService(
         if (request.blueprint != currentBlueprint.identifier) {
             throw BadRequestException("blueprint must be '${currentBlueprint.identifier}' and cannot be changed")
         }
+        val replacingBytes = row[Entities.document].toByteArray(Charsets.UTF_8).size.toLong() +
+            (row[Entities.team]?.toByteArray(Charsets.UTF_8)?.size?.toLong() ?: 0L)
+        checkDocumentByteBudget(documentByteSize(request).toLong(), replacingBytes)
         var document = request.toDocument()
         var team = request.team
         val currentIdentifier = row[Entities.identifier]
