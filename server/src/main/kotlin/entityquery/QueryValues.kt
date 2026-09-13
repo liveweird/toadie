@@ -128,10 +128,15 @@ internal fun inList(left: JsonElement?, right: JsonElement?): Truth {
     }
 }
 
-/** `CONTAINS`/`STARTS WITH`/`ENDS WITH` — both sides must be JSON strings, compared byte-exact. */
+/**
+ * `CONTAINS`/`STARTS WITH`/`ENDS WITH` — both sides must be JSON strings, compared byte-exact;
+ * UNKNOWN when either exceeds [MAX_STRING_OPERAND_CHARS]/[MAX_STRING_NEEDLE_CHARS].
+ */
 internal fun stringOp(op: StringOperator, left: JsonElement?, right: JsonElement?): Truth {
     val l = left?.takeUnless { it is JsonNull }?.let { jsonString(it) } ?: return Truth.UNKNOWN
     val r = right?.takeUnless { it is JsonNull }?.let { jsonString(it) } ?: return Truth.UNKNOWN
+    // Bounded per-candidate work (the budget only observes the clock BETWEEN candidates).
+    if (l.length > MAX_STRING_OPERAND_CHARS || r.length > MAX_STRING_NEEDLE_CHARS) return Truth.UNKNOWN
     return boolTruth(
         when (op) {
             StringOperator.CONTAINS -> l.contains(r)

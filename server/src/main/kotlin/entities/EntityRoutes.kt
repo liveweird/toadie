@@ -4,6 +4,9 @@ import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.entityquery.EntityQueryCheckRequest
+import ch.nokillswit.entityquery.EntityQueryCheckResponse
+import ch.nokillswit.entityquery.MAX_QUERY_LENGTH
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.infra.importing.requireBatchSize
 import ch.nokillswit.infra.paging.SortField
@@ -19,6 +22,7 @@ import io.ktor.http.withCharset
 import io.ktor.resources.Resource
 import io.ktor.server.application.*
 import io.ktor.server.auth.authenticate
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
 import io.ktor.server.resources.delete
 import io.ktor.server.resources.get
@@ -48,6 +52,15 @@ class EntitiesRoute {
         @Serializable
         @Resource("check")
         class Check(val parent: Import = Import())
+    }
+
+    // Phase 7 (2.0.0, entity query bar): a second literal segment, the same Import.Check shape.
+    @Serializable
+    @Resource("query")
+    class Query(val parent: EntitiesRoute = EntitiesRoute()) {
+        @Serializable
+        @Resource("check")
+        class Check(val parent: Query = Query())
     }
 }
 
@@ -89,10 +102,13 @@ fun Application.configureEntityRoutes() {
             }
             get<EntitiesRoute.Graph> {
                 call.caller()
+                val query = call.request.queryParameters.optionalString("query")
+                requireQueryLength(query)
                 val filter = EntityGraphFilter(
                     blueprints = call.request.queryParameters.repeatedValues("blueprint"),
                     q = call.request.queryParameters.optionalString("q"),
                     team = call.request.queryParameters.optionalString("team"),
+                    query = query,
                 )
                 call.respondEntity(HttpStatusCode.OK, entityService.graph(filter))
             }
@@ -169,7 +185,23 @@ fun Application.configureEntityRoutes() {
                 rows.forEach { row -> auditImportedEntityRow(caller.userId, row) }
                 call.respondEntity(HttpStatusCode.OK, EntityImportResponse(rows))
             }
+            // Phase 7 (2.0.0, entity query bar): the editor's live-diagnostics call — a pure
+            // read (never evaluates the query), so no audit event (the `/errors`/`/check`
+            // posture, `.claude/docs/authorization.md`).
+            post<EntitiesRoute.Query.Check> {
+                call.caller()
+                val request = call.receive<EntityQueryCheckRequest>()
+                requireQueryLength(request.query)
+                call.respondEntity(HttpStatusCode.OK, EntityQueryCheckResponse(entityService.checkQuery(request.query)))
+            }
         }
+    }
+}
+
+/** The route-level `query` length gate, shared by the graph filter and the check body — a plain 400 before the service ever sees it. */
+private fun requireQueryLength(query: String?) {
+    if (query != null && query.length > MAX_QUERY_LENGTH) {
+        throw BadRequestException("query must be at most $MAX_QUERY_LENGTH characters")
     }
 }
 

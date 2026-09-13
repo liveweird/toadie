@@ -1,5 +1,7 @@
 package ch.nokillswit.entityquery
 
+import ch.nokillswit.infra.validation.InvalidPayloadException
+import ch.nokillswit.infra.validation.invalidPayloadJson
 import kotlinx.serialization.Serializable
 
 /**
@@ -34,6 +36,28 @@ const val MAX_QUERY_HOPS = 10
 
 /** Intermediate join rows (bindings) an evaluation may hold before it is refused (`BINDING_LIMIT`). */
 const val MAX_QUERY_BINDINGS = 100_000
+
+/**
+ * `CONTAINS`/`STARTS WITH`/`ENDS WITH` operand ceilings: a haystack longer than
+ * [MAX_STRING_OPERAND_CHARS] or a needle longer than [MAX_STRING_NEEDLE_CHARS] makes the
+ * comparison UNKNOWN. `String.contains` is O(haystack × needle) in the worst case, and one
+ * comparison runs between two budget checkpoints, so these caps bound how far past the deadline
+ * a single candidate can carry the evaluation (a 256 KiB document property against a 256 KiB
+ * needle would otherwise be minutes of uninterruptible work).
+ */
+const val MAX_STRING_OPERAND_CHARS = 16_384
+const val MAX_STRING_NEEDLE_CHARS = 256
+
+/**
+ * Concurrent evaluations one instance runs (`EntityService`): each holds the decoded workspace
+ * for the length of its evaluation, so the count is bounded (a `429` when exhausted) and every
+ * evaluation runs on the dedicated `entity-query` pool of the same size — never on
+ * `Dispatchers.Default`, which bcrypt and the request pipeline share.
+ */
+const val MAX_CONCURRENT_ENTITY_QUERIES = 4
+
+/** Suggestion inputs longer than this (no identifier is) skip the Levenshtein scan — `Suggestions.kt`. */
+const val MAX_SUGGESTION_INPUT_CHARS = 128
 
 /** Evaluation budget bounds (`entityQuery.deadlineMillis`, the `computed.jq.deadlineMillis` idiom). */
 const val MAX_ENTITY_QUERY_DEADLINE_MILLIS = 60_000L
@@ -116,3 +140,44 @@ class QueryException(val diagnostics: List<QueryDiagnostic>) : RuntimeException(
 ) {
     constructor(diagnostic: QueryDiagnostic) : this(listOf(diagnostic))
 }
+
+/**
+ * PR2 (`entities/EntityService.kt`'s `graph`): thrown when a `query` filter fails to parse,
+ * fails validation, or exhausts its evaluation budget — the ONE findings-bearing `400` this
+ * feature uses (the `entities.EntityInvalidException`/`EntityInvalidProblem` idiom,
+ * `infra/validation/InvalidPayloadException.kt`). Carries the FULL [diagnostics] list so the
+ * SPA can paint them on the query bar without a second `/query/check` round trip.
+ */
+class EntityQueryInvalidException(val diagnostics: List<QueryDiagnostic>) : InvalidPayloadException(
+    diagnostics.joinToString("; ") { d -> if (d.line != null) "${d.line}:${d.column} ${d.message}" else d.message },
+) {
+    override fun problemJson(title: String, status: Int, instance: String?): String =
+        invalidPayloadJson.encodeToString(
+            EntityQueryProblem.serializer(),
+            EntityQueryProblem(title = title, status = status, detail = message, instance = instance, diagnostics = diagnostics),
+        )
+}
+
+/**
+ * [ch.nokillswit.plugins.ProblemDetail]'s own shape plus [diagnostics] — the `getEntityGraph`
+ * `400` body (`EntityQueryInvalid` response in the OpenAPI contract). A `400` that is not about
+ * the query text itself (a repeated scalar parameter, an over-long `query`) is thrown as a plain
+ * `BadRequestException` instead and never reaches this shape.
+ */
+@Serializable
+data class EntityQueryProblem(
+    val type: String = "about:blank",
+    val title: String,
+    val status: Int,
+    val detail: String? = null,
+    val instance: String? = null,
+    val diagnostics: List<QueryDiagnostic>,
+)
+
+/** `POST /api/v1/entities/query/check` request body — the editor's live-diagnostics call. */
+@Serializable
+data class EntityQueryCheckRequest(val query: String)
+
+/** `POST /api/v1/entities/query/check` response — in source order, empty when [EntityQueryCheckRequest.query] would be accepted. */
+@Serializable
+data class EntityQueryCheckResponse(val diagnostics: List<QueryDiagnostic>)

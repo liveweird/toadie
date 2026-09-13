@@ -20,6 +20,7 @@ import ch.nokillswit.entities.EntityService
 import ch.nokillswit.entities.EntityServiceKey
 import ch.nokillswit.entities.JqEvaluator
 import ch.nokillswit.entities.MAX_JQ_DEADLINE_MILLIS
+import ch.nokillswit.entityquery.MAX_ENTITY_QUERY_DEADLINE_MILLIS
 import ch.nokillswit.labels.LabelService
 import ch.nokillswit.labels.LabelServiceKey
 import ch.nokillswit.lenses.LensService
@@ -62,7 +63,16 @@ suspend fun Application.configureDatabase() {
     attributes.put(BlueprintServiceKey, BlueprintService(database))
     val jqDeadlineMillis = environment.config.property("computed.jq.deadlineMillis").getString().toLong()
         .also { require(it in 1..MAX_JQ_DEADLINE_MILLIS) { "computed.jq.deadlineMillis must be between 1 and $MAX_JQ_DEADLINE_MILLIS" } }
-    attributes.put(EntityServiceKey, EntityService(database, JqEvaluator(deadlineMillis = jqDeadlineMillis)))
+    val entityQueryDeadlineMillis = environment.config.property("entityQuery.deadlineMillis").getString().toLong()
+        .also {
+            require(it in 1..MAX_ENTITY_QUERY_DEADLINE_MILLIS) {
+                "entityQuery.deadlineMillis must be between 1 and $MAX_ENTITY_QUERY_DEADLINE_MILLIS"
+            }
+        }
+    attributes.put(
+        EntityServiceKey,
+        EntityService(database, JqEvaluator(deadlineMillis = jqDeadlineMillis), queryDeadlineMillis = entityQueryDeadlineMillis),
+    )
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
     attributes.put(AuthSessionServiceKey, AuthSessionService(database))
     attributes.put(PasswordResetServiceKey, PasswordResetService(

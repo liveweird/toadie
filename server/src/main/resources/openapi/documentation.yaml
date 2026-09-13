@@ -2116,11 +2116,27 @@ paths:
         Phase 4 adds ownership edges: one per effective team value, `relation: "$team"` and
         `ownership: true` (`hierarchies` always empty), from the owning entity to its `_team` node.
 
+        Since 2.0.0 the optional `query` (`.claude/docs/entity-query-language.md`) narrows the
+        shown set further: a read-only, openCypher-shaped `MATCH … RETURN …` query is
+        evaluated over the FULL active workspace (a traversal may pass THROUGH entities the
+        other filters hide — hidden is not absent), and only the entities its `RETURN`
+        variables bind to stay shown, intersected with the `blueprint`/`q`/`team` set. The
+        both-ends rule is unchanged. A query the parser or validator refuses — a syntax
+        error, an unsupported Cypher feature, an unknown blueprint/relation/property — or
+        one that exhausts its evaluation budget (`DEADLINE_EXCEEDED`, `BINDING_LIMIT`)
+        answers `400` with the `diagnostics` list (positions 1-based, end exclusive, plus a
+        `suggestion` for the nearest known name); a query longer than 2000 characters is a
+        plain `400`. Each instance evaluates at most four queries at once (each holds the
+        decoded workspace for its evaluation): a fifth concurrent VALID query answers `429`
+        immediately, before the workspace is loaded — retry shortly. Evaluation is a pure read —
+        no audit event.
+
         Unpaged by design — a report-style computation over the workspace.
       parameters:
         - $ref: '#/components/parameters/EntityBlueprintFilter'
         - $ref: '#/components/parameters/Q'
         - $ref: '#/components/parameters/EntityTeamFilter'
+        - $ref: '#/components/parameters/EntityQueryFilter'
       responses:
         '200':
           description: The graph
@@ -2128,8 +2144,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EntityGraph'
-        '400': { $ref: '#/components/responses/BadRequest' }
+        '400': { $ref: '#/components/responses/EntityQueryInvalid' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
   /api/v1/entities/import:
@@ -2218,6 +2235,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EntityImportResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/entities/query/check:
+    post:
+      tags: [entities]
+      operationId: checkEntityQuery
+      summary: Validate an entity query without evaluating it
+      description: |
+        Any authenticated user. Parses and validates `query` against the CURRENT active
+        blueprints and `hierarchies` dictionary — the SAME checks `getEntityGraph` runs before
+        it evaluates a query — and answers the diagnostics as a `200` payload (an empty list
+        = the query would be accepted; the `/import/check` posture: problems with the checked
+        text are the payload, not an error). Nothing is evaluated, so the evaluation-time
+        codes (`DEADLINE_EXCEEDED`, `BINDING_LIMIT`) never appear here. A pure computation:
+        no audit event. The editor's live-diagnostics endpoint. The `400` covers only the
+        request itself (an undecodable body, or a query longer than 2000 characters).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityQueryCheckRequest'
+      responses:
+        '200':
+          description: The diagnostics, in source order (empty when the query is accepted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityQueryCheckResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalServerError' }
@@ -2454,6 +2502,18 @@ components:
         being the `_team` entity named by this value, so a team-filtered graph keeps that
         team's own node. Blank is absent; repetition is `400`. An Inherited entity whose
         path does not resolve has no team and never matches.
+    EntityQueryFilter:
+      name: query
+      in: query
+      required: false
+      schema: { type: string, maxLength: 2000 }
+      description: >-
+        An entity query (2.0.0 — `.claude/docs/entity-query-language.md`): a read-only,
+        openCypher-shaped subset (`MATCH`+, trailing `OPTIONAL MATCH`*, `WHERE`, `RETURN` of
+        node variables only, `LIMIT`) evaluated over the FULL active workspace; the entities
+        its `RETURN` variables bind to become the shown set, intersected with the other
+        filters. Blank is absent; repetition is `400`; longer than 2000 characters is a plain
+        `400`; a refused query is the `EntityQueryInvalid` `400` carrying `diagnostics`.
 
   responses:
     BadRequest:
@@ -2509,6 +2569,17 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
+    EntityQueryInvalid:
+      description: >-
+        The request is malformed (a plain `ProblemDetail`, no `diagnostics` member — a
+        repeated scalar parameter, a `query` longer than 2000 characters), OR the entity
+        query was refused: the `diagnostics` list names every finding the parser (its FIRST
+        syntax error) or the validator (every unknown name, each with a `suggestion` when a
+        near match exists) produced, or the ONE evaluation-budget refusal
+        (`DEADLINE_EXCEEDED`/`BINDING_LIMIT`, no position).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/EntityQueryProblem' }
     EntityInvalid:
       description: >-
         The entity payload violates its blueprint's current `schema`/`relations` (including
@@ -4490,6 +4561,101 @@ components:
           type: string
           description: '`properties.<id>` or `relations.<id>` naming the offending key, or `team` (Phase 4 ownership).'
         message: { type: string }
+
+    QueryDiagnostic:
+      type: object
+      description: >-
+        One problem with an entity query, positioned in the SOURCE text when it has a
+        position (1-based `line`/`column`, `endLine`/`endColumn` exclusive) — the
+        evaluation-time refusals carry none. `suggestion` is the nearest known name for the
+        `UNKNOWN_*` codes ("did you mean …"), absent otherwise. Every code is an error: a
+        query is accepted whole or refused.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - SYNTAX
+            - UNSUPPORTED
+            - UNKNOWN_LABEL
+            - UNKNOWN_RELATION
+            - UNKNOWN_PROPERTY
+            - UNKNOWN_VARIABLE
+            - DUPLICATE_VARIABLE
+            - RELATIONSHIP_VARIABLE_REFERENCE
+            - RANGE_INVALID
+            - LIMIT_INVALID
+            - DISCONNECTED_PATTERN
+            - TOO_MANY_PATTERNS
+            - TOO_MANY_VARIABLES
+            - QUERY_TOO_LONG
+            - DEADLINE_EXCEEDED
+            - BINDING_LIMIT
+        message:
+          type: string
+        line:
+          type: integer
+          minimum: 1
+        column:
+          type: integer
+          minimum: 1
+        endLine:
+          type: integer
+          minimum: 1
+        endColumn:
+          type: integer
+          minimum: 1
+        suggestion:
+          type: string
+
+    EntityQueryProblem:
+      type: object
+      description: >-
+        RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the optional `diagnostics`
+        list — the `getEntityGraph` `400` body (`EntityQueryInvalid` response). A `400` that
+        is not about the query text itself (a repeated scalar parameter, an over-long
+        `query`) omits `diagnostics`.
+      required: [title, status]
+      properties:
+        type:
+          type: string
+          default: about:blank
+          description: A URI reference identifying the problem type.
+        title:
+          type: string
+          description: Short, human-readable summary of the problem type.
+        status:
+          type: integer
+          description: HTTP status code.
+        detail:
+          type: string
+          description: Human-readable explanation specific to this occurrence.
+        instance:
+          type: string
+          description: URI reference of the specific occurrence (the request path).
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryDiagnostic'
+
+    EntityQueryCheckRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          maxLength: 2000
+          description: The entity query text to validate (blank = no diagnostics).
+
+    EntityQueryCheckResponse:
+      type: object
+      required: [diagnostics]
+      properties:
+        diagnostics:
+          type: array
+          description: In source order; empty when the query would be accepted.
+          items:
+            $ref: '#/components/schemas/QueryDiagnostic'
 
     EntityInvalidProblem:
       type: object

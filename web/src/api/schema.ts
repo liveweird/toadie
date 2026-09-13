@@ -1512,6 +1512,21 @@ export interface paths {
          *     Phase 4 adds ownership edges: one per effective team value, `relation: "$team"` and
          *     `ownership: true` (`hierarchies` always empty), from the owning entity to its `_team` node.
          *
+         *     Since 2.0.0 the optional `query` (`.claude/docs/entity-query-language.md`) narrows the
+         *     shown set further: a read-only, openCypher-shaped `MATCH … RETURN …` query is
+         *     evaluated over the FULL active workspace (a traversal may pass THROUGH entities the
+         *     other filters hide — hidden is not absent), and only the entities its `RETURN`
+         *     variables bind to stay shown, intersected with the `blueprint`/`q`/`team` set. The
+         *     both-ends rule is unchanged. A query the parser or validator refuses — a syntax
+         *     error, an unsupported Cypher feature, an unknown blueprint/relation/property — or
+         *     one that exhausts its evaluation budget (`DEADLINE_EXCEEDED`, `BINDING_LIMIT`)
+         *     answers `400` with the `diagnostics` list (positions 1-based, end exclusive, plus a
+         *     `suggestion` for the nearest known name); a query longer than 2000 characters is a
+         *     plain `400`. Each instance evaluates at most four queries at once (each holds the
+         *     decoded workspace for its evaluation): a fifth concurrent VALID query answers `429`
+         *     immediately, before the workspace is loaded — retry shortly. Evaluation is a pure read —
+         *     no audit event.
+         *
          *     Unpaged by design — a report-style computation over the workspace.
          */
         get: operations["getEntityGraph"];
@@ -1598,6 +1613,33 @@ export interface paths {
          *     element, or more than 200 documents).
          */
         post: operations["checkEntityImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entities/query/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate an entity query without evaluating it
+         * @description Any authenticated user. Parses and validates `query` against the CURRENT active
+         *     blueprints and `hierarchies` dictionary — the SAME checks `getEntityGraph` runs before
+         *     it evaluates a query — and answers the diagnostics as a `200` payload (an empty list
+         *     = the query would be accepted; the `/import/check` posture: problems with the checked
+         *     text are the payload, not an error). Nothing is evaluated, so the evaluation-time
+         *     codes (`DEADLINE_EXCEEDED`, `BINDING_LIMIT`) never appear here. A pure computation:
+         *     no audit event. The editor's live-diagnostics endpoint. The `400` covers only the
+         *     request itself (an undecodable body, or a query longer than 2000 characters).
+         */
+        post: operations["checkEntityQuery"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2633,6 +2675,42 @@ export interface components {
             field: string;
             message: string;
         };
+        /** @description One problem with an entity query, positioned in the SOURCE text when it has a position (1-based `line`/`column`, `endLine`/`endColumn` exclusive) — the evaluation-time refusals carry none. `suggestion` is the nearest known name for the `UNKNOWN_*` codes ("did you mean …"), absent otherwise. Every code is an error: a query is accepted whole or refused. */
+        QueryDiagnostic: {
+            /** @enum {string} */
+            code: "SYNTAX" | "UNSUPPORTED" | "UNKNOWN_LABEL" | "UNKNOWN_RELATION" | "UNKNOWN_PROPERTY" | "UNKNOWN_VARIABLE" | "DUPLICATE_VARIABLE" | "RELATIONSHIP_VARIABLE_REFERENCE" | "RANGE_INVALID" | "LIMIT_INVALID" | "DISCONNECTED_PATTERN" | "TOO_MANY_PATTERNS" | "TOO_MANY_VARIABLES" | "QUERY_TOO_LONG" | "DEADLINE_EXCEEDED" | "BINDING_LIMIT";
+            message: string;
+            line?: number;
+            column?: number;
+            endLine?: number;
+            endColumn?: number;
+            suggestion?: string;
+        };
+        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the optional `diagnostics` list — the `getEntityGraph` `400` body (`EntityQueryInvalid` response). A `400` that is not about the query text itself (a repeated scalar parameter, an over-long `query`) omits `diagnostics`. */
+        EntityQueryProblem: {
+            /**
+             * @description A URI reference identifying the problem type.
+             * @default about:blank
+             */
+            type: string;
+            /** @description Short, human-readable summary of the problem type. */
+            title: string;
+            /** @description HTTP status code. */
+            status: number;
+            /** @description Human-readable explanation specific to this occurrence. */
+            detail?: string;
+            /** @description URI reference of the specific occurrence (the request path). */
+            instance?: string;
+            diagnostics?: components["schemas"]["QueryDiagnostic"][];
+        };
+        EntityQueryCheckRequest: {
+            /** @description The entity query text to validate (blank = no diagnostics). */
+            query: string;
+        };
+        EntityQueryCheckResponse: {
+            /** @description In source order; empty when the query would be accepted. */
+            diagnostics: components["schemas"]["QueryDiagnostic"][];
+        };
         /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list — the entity create/replace `400` body only (`EntityInvalid` response). Other `400`s on those operations omit `findings`. */
         EntityInvalidProblem: {
             /**
@@ -2867,6 +2945,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["ProblemDetail"];
             };
         };
+        /** @description The request is malformed (a plain `ProblemDetail`, no `diagnostics` member — a repeated scalar parameter, a `query` longer than 2000 characters), OR the entity query was refused: the `diagnostics` list names every finding the parser (its FIRST syntax error) or the validator (every unknown name, each with a `suggestion` when a near match exists) produced, or the ONE evaluation-budget refusal (`DEADLINE_EXCEEDED`/`BINDING_LIMIT`, no position). */
+        EntityQueryInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["EntityQueryProblem"];
+            };
+        };
         /** @description The entity payload violates its blueprint's current `schema`/`relations` (including Phase 4 ownership: `team`/`format: team|user` target rules) — the full `findings` list is the SAME validation a strict save enforces, one entry per violated rule. Other `400`s on the same operations (an unknown blueprint, a malformed body) carry no `findings` member. */
         EntityInvalid: {
             headers: {
@@ -2931,6 +3018,8 @@ export interface components {
         EntityBlueprintFilter: string[];
         /** @description Case-insensitive match against the entity's EFFECTIVE team — the stored value for Direct/absent ownership, the value computed along `ownership.path` for Inherited ownership, i.e. exactly what the response's `team` field carries — OR the row itself being the `_team` entity named by this value, so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose path does not resolve has no team and never matches. */
         EntityTeamFilter: string;
+        /** @description An entity query (2.0.0 — `.claude/docs/entity-query-language.md`): a read-only, openCypher-shaped subset (`MATCH`+, trailing `OPTIONAL MATCH`*, `WHERE`, `RETURN` of node variables only, `LIMIT`) evaluated over the FULL active workspace; the entities its `RETURN` variables bind to become the shown set, intersected with the other filters. Blank is absent; repetition is `400`; longer than 2000 characters is a plain `400`; a refused query is the `EntityQueryInvalid` `400` carrying `diagnostics`. */
+        EntityQueryFilter: string;
     };
     requestBodies: never;
     headers: never;
@@ -4916,6 +5005,8 @@ export interface operations {
                 q?: components["parameters"]["Q"];
                 /** @description Case-insensitive match against the entity's EFFECTIVE team — the stored value for Direct/absent ownership, the value computed along `ownership.path` for Inherited ownership, i.e. exactly what the response's `team` field carries — OR the row itself being the `_team` entity named by this value, so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose path does not resolve has no team and never matches. */
                 team?: components["parameters"]["EntityTeamFilter"];
+                /** @description An entity query (2.0.0 — `.claude/docs/entity-query-language.md`): a read-only, openCypher-shaped subset (`MATCH`+, trailing `OPTIONAL MATCH`*, `WHERE`, `RETURN` of node variables only, `LIMIT`) evaluated over the FULL active workspace; the entities its `RETURN` variables bind to become the shown set, intersected with the other filters. Blank is absent; repetition is `400`; longer than 2000 characters is a plain `400`; a refused query is the `EntityQueryInvalid` `400` carrying `diagnostics`. */
+                query?: components["parameters"]["EntityQueryFilter"];
             };
             header?: never;
             path?: never;
@@ -4932,8 +5023,9 @@ export interface operations {
                     "application/json": components["schemas"]["EntityGraph"];
                 };
             };
-            400: components["responses"]["BadRequest"];
+            400: components["responses"]["EntityQueryInvalid"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -4985,6 +5077,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EntityImportResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    checkEntityQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityQueryCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description The diagnostics, in source order (empty when the query is accepted) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityQueryCheckResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

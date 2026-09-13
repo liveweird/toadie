@@ -42,7 +42,7 @@ internal fun levenshtein(a: String, b: String): Int {
  * its payload; `null` when nothing qualifies.
  */
 internal fun <T> bestMatch(input: String, candidates: Collection<Pair<String, T>>): Pair<String, T>? {
-    if (candidates.isEmpty()) return null
+    if (candidates.isEmpty() || input.length > MAX_SUGGESTION_INPUT_CHARS) return null
     val foldedInput = fold(input)
     candidates.firstOrNull { fold(it.first) == foldedInput }?.let { return it }
 
