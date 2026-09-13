@@ -26,7 +26,7 @@ authorized server requests may still finish; client cancellation is not transact
 
 **Login timing equalizer** (`auth/AuthRoutes.kt` + `TIMING_EQUALIZER_HASH` in `auth/Passwords.kt`): an unknown email pays a full, discarded bcrypt verify against a fixed cost-12 hash so its 401 takes as long as a wrong password's — without it, response timing is an account-enumeration oracle (the reset path equalizes via async processing; login equalizes in-line).
 
-**Per-account login lockout** (`auth/LoginThrottle.kt`, wired in `configureAuthRoutes`): after `security.lockout.threshold` (default 5, `$LOGIN_LOCKOUT_THRESHOLD`) consecutive failures for one submitted email, `/login` answers `429` for `security.lockout.durationSeconds` (default 900, `$LOGIN_LOCKOUT_DURATION_SECONDS`) — even with the correct password, and regardless of whether the account exists (no enumeration signal). A success resets the counter. In-memory and per-instance by design (single-replica deployment; a restart only resets the throttle). Complements the per-IP `RateLimit` bucket, which rotating hosts sidestep. The lockout 429 is **thrown** (`TooManyRequestsException`), never `respondProblem`ed directly — StatusPages' generic 429 status handler rewrites any non-StatusPages 429, so only the exception path keeps the specific detail. Tests: `LoginThrottleTest` (unit, injected clock) + `LoginLockoutTest` (route). The SPA maps the 429 to `auth.accountLocked`.
+**Per-account login lockout** (`auth/LoginThrottle.kt`, wired in `configureAuthRoutes`): after `security.lockout.threshold` (default 5, `$LOGIN_LOCKOUT_THRESHOLD`) consecutive failures for one submitted email, `/login` answers `429` for `security.lockout.durationSeconds` (default 900, `$LOGIN_LOCKOUT_DURATION_SECONDS`) — even with the correct password, and regardless of whether the account exists (no enumeration signal). A success resets the counter. In-memory and per-instance by design (single-replica deployment; a restart only resets the throttle). Complements the per-IP `RateLimit` bucket, which rotating hosts sidestep. The lockout 429 is **thrown** (`TooManyRequestsException`), never `respondProblem`ed directly — StatusPages' generic 429 status handler rewrites any non-StatusPages 429, so only the exception path keeps the specific detail. Tests: `LoginThrottleTest` (unit, injected clock) + `LoginLockoutTest` (route). The SPA maps the 429 to `auth.accountLocked`. An email longer than 254 characters is rejected with a plain `400` before the lockout logic ever runs (`auth/AuthRoutes.kt`, sharing `users/MAX_EMAIL_LENGTH`) — no stored account can exceed that length, so this carries no enumeration signal.
 
 **Self-service password reset** (`auth/PasswordResetRoutes.kt`, V26): public
 `POST /api/v1/password-reset` accepts `{email}` and returns uniform `202`; active-account lookup,
@@ -69,7 +69,12 @@ Tests: `PasswordResetServiceTest` (injected-clock expiry, digest storage, concur
 revocation, MFA, throttles), `LocalizedEmailTest`, frontend confirmation tests, and the Mailpit
 browser journey. The design follows the [OWASP reset guidance](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).
 Lettuce was inspected but still has the replaced emailed-password design; retain the existing
-mail/localization/throttle primitives, not that weakness.
+mail/localization/throttle primitives, not that weakness. `POST /api/v1/password-reset`
+likewise rejects an over-254-character email with a plain `400` before the per-email throttle
+ever sees it (sharing `users/MAX_EMAIL_LENGTH`); `LoginThrottle` and `PasswordResetThrottle`
+also replaced their "prune only once already oversized" pruning with a fixed-256-call
+maintenance cadence plus a hard `MAX_TRACKED` capacity eviction (locked-out `LoginThrottle`
+entries are never evicted to make room).
 
 **Per-IP login bucket** (`security.rateLimit.loginPerMinute`, `$LOGIN_RATE_LIMIT_PER_MINUTE`, registered in `configureAuthRoutes`): blank **follows the mode** — 10/min in production, 1000/min in development — and an explicit number pins it in either mode (the `http.exposeOpenApi` idiom). Development is lifted because the e2e suite drives its logins from one host and would otherwise sleep out the bucket; **the per-account lockout above is the actual brute-force defence and is identical in both modes**. The sibling `refresh` bucket defaults to 30/min in both modes and is pinnable via `security.rateLimit.refreshPerMinute` (`$REFRESH_RATE_LIMIT_PER_MINUTE`). `RateLimitResponseTest` and `LoginTest` pin the value to `10` explicitly, since tests run in development mode.
 
@@ -293,6 +298,13 @@ text hits the ceiling and gets a 414 without diagnostics, accepted). Still a har
 longer request line is refused by Netty before any handler runs, `maxHeaderSize`/`maxChunkSize` keep their defaults, the 10 MiB
 body ceiling is unchanged, and ingress-nginx's default `large_client_header_buffers 4 8k` fits
 the same 6 KB. `ProductionHttpTest` pins that a ~6 KB request line reaches the JWT challenge.
+
+### Known scaling assumption
+
+The entity registry caps (2,000 entities per blueprint, 10,000 total, 256 KiB per document)
+can in the worst case exceed the 256 MB heap budget when a single graph/query read
+materializes many large documents at once; a workspace byte budget and a single reusable
+snapshot are planned as a separate follow-up change.
 
 ### Not yet ported from Lettuce
 

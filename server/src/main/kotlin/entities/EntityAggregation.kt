@@ -79,7 +79,7 @@ private fun directCandidates(
         .filterValues { it.target == target }
         .flatMap { (relationId, relation) -> hopTargetIdentifiers(subject.document.relations[relationId], relation.many) }
         .mapNotNull { index.row(target, it) }
-    return inboundHits + outboundHits
+    return (inboundHits + outboundHits).take(MAX_MIRROR_FANOUT)
 }
 
 private fun pathFilterCandidates(

@@ -453,6 +453,24 @@ describe("auth flows", () => {
     expect(getRefreshToken()).toBeNull();
   });
 
+  test("a held logout cannot clear a different session that replaced it while the revoke was in flight", async () => {
+    persistSession(SESSION);
+    const revoke = deferred<Response>();
+    fetchMock().mockReturnValueOnce(revoke.promise);
+
+    const logoutPromise = logout();
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(1));
+    // Another tab signs out of A's session and a different session (B) logs in while the
+    // revoke request is still pending.
+    clearSession();
+    persistSession(NEXT_SESSION);
+    revoke.resolve(jsonResponse(200, {}));
+    await logoutPromise;
+
+    expect(getToken()).toBe(NEXT_SESSION.token);
+    expect(getRefreshToken()).toBe(NEXT_SESSION.refreshToken);
+  });
+
   test("logout without a stored token is a no-op fetch-wise", async () => {
     localStorage.setItem(TOKEN_KEY, "");
     clearSession();

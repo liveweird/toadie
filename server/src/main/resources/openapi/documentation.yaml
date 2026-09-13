@@ -3,16 +3,27 @@ info:
   title: toadie-api
   version: 1.0.0
   description: |
-    JWT-authenticated REST API for Toadie — a Backstage `catalog-info.yaml` helper.
-    Exposes the authentication surface, admin-managed user accounts, and the catalog-file
-    workspace: CRUD across the seven landscape kinds, the Errors report and live
-    document check, the relationship graph, the structured export/import round-trip, and
-    the SSRF-guarded URL fetch.
+    JWT-authenticated REST API for Toadie — a Backstage `catalog-info.yaml` helper moving
+    toward Port.io's ontology. Exposes the authentication surface, admin-managed user
+    accounts, and the catalog-file workspace: CRUD across the seven landscape kinds, the
+    Errors report and live document check, the relationship graph, the structured
+    export/import round-trip, and the SSRF-guarded URL fetch. Alongside it, the Port data
+    model: ADMIN-curated `blueprints` (typed properties, relations, mirror/calculation/
+    aggregation computed properties, ownership), any-authenticated `entities` (instances of
+    a blueprint, with `$team` ownership and per-write/per-read `findings`), the entity
+    graph and entity hierarchy, the entity query language (`GET …/entities/graph?query=`
+    and `POST …/entities/query/check`) with its own saved queries (`/api/v1/entity-queries`),
+    ontology import/export, and per-user Graph/Entity-graph layouts.
 
     Authorization model: every user is implicitly a regular user; additional global roles
     (`ADMIN`) are carried as the `roles` array and only ever ADD privileges on top of that
-    baseline. `ADMIN` is the management role and owns the whole `/users` surface; catalog
-    content is a shared workspace where ADMIN gets no special access.
+    baseline. `ADMIN` is the management role and owns the whole `/users` surface plus every
+    ADMIN-curated registry/dictionary and the `blueprints` registry. Two authorization
+    postures run side by side: ADMIN-curated registries (namespaces, lifecycles, labels,
+    annotation keys, tag categories, entity types, blueprints) are readable by anyone but
+    writable only by ADMIN, while the shared-workspace resources (catalog files, entities,
+    lenses, saved entity queries) are readable AND writable by any authenticated user, with
+    ADMIN getting no special content access there.
 
     All error responses use RFC 7807 `application/problem+json` (`ProblemDetail`).
     Any endpoint may additionally return `500` (`InternalServerError`) on an
@@ -2741,7 +2752,7 @@ components:
       type: object
       required: [email, password]
       properties:
-        email: { type: string }
+        email: { type: string, maxLength: 254 }
         password: { type: string }
 
     LoginResponse:
@@ -2779,7 +2790,8 @@ components:
       enum: [ADMIN]
       description: >-
         An additional role. Every user is implicitly a regular user; the array only ever
-        carries privileges added on top of that baseline.
+        carries privileges added on top of that baseline. The wire `roles` array must never
+        name USER (the implicit baseline) — only additional roles beyond it may appear.
 
     Feature:
       type: string

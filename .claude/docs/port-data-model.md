@@ -362,7 +362,9 @@ BACKWARDS from the subject through `EntityIndex.inbound`, one hop at a time, mat
 step's expected source blueprint and relation id — the REVERSE direction, needed when the
 relation is declared on `target` rather than the subject (e.g. a `system`'s `workload_replicas`
 reading `workload → service → system`); any other `fromBlueprint`, or a malformed entry,
-contributes nothing (**assumption**). Candidates are deduped by identifier, then filtered by
+contributes nothing (**assumption**). Direct-relation aggregation candidates (no `pathFilter`)
+are capped at `MAX_MIRROR_FANOUT`, the same bound the `pathFilter` walks already apply.
+Candidates are deduped by identifier, then filtered by
 `query` (Port's `combinator`+`rules` search syntax, `entities/AggregationQuery.kt`): `null`
 matches everything; `and` requires every rule (empty → true), `or` requires at least one
 (empty → false), any other combinator → false; a nested rule (`combinator`+`rules`, no
@@ -414,7 +416,11 @@ or evaluates computed properties at all, see `.claude/docs/persistence.md`).
   entity's `relations` naming the old identifier, in the same locked transaction (audited
   `cascaded`/`renamedFrom`, the phase-1 shape). Additionally, renaming a `_team` or `_user`
   entity cascades into the `team` column of every entity carrying a Direct/absent ownership,
-  and into every property value with `format: team|user` across all entities.
+  and into every property value with `format: team|user` across all entities. The rename also
+  rewrites the SAME entity's own self-referencing relations/team/format-properties from the old
+  identifier to the new one before the write, so a client that renames an entity without
+  updating its own self-reference is corrected automatically rather than left with a stale
+  reference.
 - **Ownership targets cannot be deleted**: deleting a `_team` entity that is named by ANY
   active entity's `team` field or `format: team` property, or deleting a `_user` entity named
   by any `format: user` property, is `409` naming the referrers (the phase-1 blueprint-target

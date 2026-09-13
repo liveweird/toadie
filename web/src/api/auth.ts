@@ -1,6 +1,6 @@
 // Auth flows — login and logout (transport in ./http, session state in ./session).
 
-import { API_BASE, ApiError, safeJson, timeoutSignal } from "./http";
+import { API_BASE, ApiError, ownsCurrentSession, safeJson, sessionBoundary, timeoutSignal } from "./http";
 import type { components, paths } from "./schema";
 import { clearSession, getRefreshToken, getToken, persistSession } from "./session";
 
@@ -83,6 +83,9 @@ export async function confirmPasswordReset(token: string, password: string): Pro
 export async function logout(): Promise<void> {
   const token = getToken();
   if (!token) return;
+  // Captured BEFORE the await: if the session is signed out and ANOTHER login happens while
+  // the revoke is in flight, this call's late completion must not wipe the new session.
+  const owner = sessionBoundary();
   try {
     await fetch(`${API_BASE}/api/v1/logout`, {
       method: "POST",
@@ -95,5 +98,5 @@ export async function logout(): Promise<void> {
     // Best-effort revoke: offline/timeout must not block the LOCAL sign-out — a rejected
     // fetch skipping clearSession would leave the user apparently signed in.
   }
-  clearSession();
+  if (ownsCurrentSession(owner)) clearSession();
 }

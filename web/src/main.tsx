@@ -17,12 +17,17 @@ import "./i18n";
 import App from "./App.tsx";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { shouldRetryQuery } from "./api/http";
+import { bindQueryCacheToAuthBoundary } from "./auth";
 import { theme } from "./theme";
 
 const queryClient = new QueryClient({
   // Never retry a 4xx; up to two retries for transient failures (see shouldRetryQuery).
   defaultOptions: { queries: { retry: shouldRetryQuery } },
 });
+// Every auth boundary (a definitive refresh rejection, sign-in, cross-tab session
+// replacement) discards cached data from the FORMER session — not just the explicit
+// sign-out's own queryClient.clear() in UserMenu.tsx.
+bindQueryCacheToAuthBoundary(queryClient);
 
 // A redeploy invalidates the hashed lazy chunks — the first failed dynamic import reloads the
 // page once to pick up the new index.html. Rate-limited via sessionStorage (at most one

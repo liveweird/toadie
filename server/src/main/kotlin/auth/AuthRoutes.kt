@@ -8,6 +8,7 @@ import ch.nokillswit.infra.mail.mailer
 import ch.nokillswit.plugins.JwtConfig
 import ch.nokillswit.plugins.JwtConfigKey
 import ch.nokillswit.users.Feature
+import ch.nokillswit.users.MAX_EMAIL_LENGTH
 import ch.nokillswit.users.User
 import ch.nokillswit.users.UserRole
 import ch.nokillswit.users.UserServiceKey
@@ -212,6 +213,12 @@ fun Application.configureAuthRoutes() {
         rateLimit(RateLimitName(LOGIN_RATE_LIMIT)) {
             post("/api/v1/login") {
                 val req = call.receive<LoginRequest>()
+                // No stored account can exceed this length, so an over-long email is rejected
+                // up front — before the lockout/throttle machinery ever sees it — with a plain
+                // 400, never a uniform 401 (there is nothing to enumerate here).
+                if (req.email.length > MAX_EMAIL_LENGTH) {
+                    throw BadRequestException("email must be at most $MAX_EMAIL_LENGTH characters")
+                }
                 // Canonical identity: accounts are stored under the folded email, so the login
                 // lookup folds the same way — a padded or case-variant submission matches its
                 // account (and keeps sharing one lockout bucket).
