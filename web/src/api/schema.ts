@@ -1518,6 +1518,12 @@ export interface paths {
          *     Each returned item carries `findings` — the same validation a strict save would
          *     enforce, re-evaluated against the blueprint's CURRENT definition, so an entity left
          *     stale by a blueprint edit is flagged here without waiting for a save attempt.
+         *
+         *     Since 2.4.0 the page's own rows plus the validation/computed-property lookup targets
+         *     they widen to are checked against a process-wide entity read memory budget before any
+         *     document is decoded (`.claude/docs/security.md` "Entity read memory budget"): a
+         *     workspace too large on its own answers `400`, contention from other in-flight reads
+         *     answers `429`.
          */
         get: operations["listEntities"];
         put?: never;
@@ -1599,6 +1605,14 @@ export interface paths {
          *     decoded workspace for its evaluation): a fifth concurrent VALID query answers `429`
          *     immediately, before the workspace is loaded — retry shortly. Evaluation is a pure read —
          *     no audit event.
+         *
+         *     Since 2.4.0 the combined shown-plus-lookup-target row set is checked against a
+         *     process-wide entity read memory budget BEFORE any document is decoded
+         *     (`.claude/docs/security.md` "Entity read memory budget") — with OR without a `query`.
+         *     A workspace too large on its own answers `400` `WORKSPACE_TOO_LARGE` (one `diagnostics`
+         *     entry, no position); contention from other in-flight reads answers `429` instead. The
+         *     PLAIN graph (no `query`) never takes one of the four query-evaluation permits above —
+         *     only a `query` does.
          *
          *     Unpaged by design — a report-style computation over the workspace.
          */
@@ -1733,7 +1747,7 @@ export interface paths {
         };
         /**
          * Get an entity
-         * @description Any authenticated user. Plain `404` for a missing or soft-deleted entity — the workspace idiom, no existence secrecy. Carries `findings` re-evaluated against the blueprint's CURRENT definition, so an entity left stale by a blueprint edit since this entity's last save is flagged without waiting for a save attempt.
+         * @description Any authenticated user. Plain `404` for a missing or soft-deleted entity — the workspace idiom, no existence secrecy. Carries `findings` re-evaluated against the blueprint's CURRENT definition, so an entity left stale by a blueprint edit since this entity's last save is flagged without waiting for a save attempt. Since 2.4.0 the validation/computed-property lookup targets this read widens to are checked against a process-wide entity read memory budget before any document is decoded (`.claude/docs/security.md` "Entity read memory budget"): a workspace too large on its own answers `400`, contention from other in-flight reads answers `429`.
          */
         get: operations["getEntity"];
         /**
@@ -2795,7 +2809,7 @@ export interface components {
         /** @description One problem with an entity query, positioned in the SOURCE text when it has a position (1-based `line`/`column`, `endLine`/`endColumn` exclusive) — the evaluation-time refusals carry none. `suggestion` is the nearest known name for the `UNKNOWN_*` codes ("did you mean …"), absent otherwise. Every code is an error: a query is accepted whole or refused. */
         QueryDiagnostic: {
             /** @enum {string} */
-            code: "SYNTAX" | "UNSUPPORTED" | "UNKNOWN_LABEL" | "UNKNOWN_RELATION" | "UNKNOWN_PROPERTY" | "UNKNOWN_VARIABLE" | "DUPLICATE_VARIABLE" | "RELATIONSHIP_VARIABLE_REFERENCE" | "RANGE_INVALID" | "LIMIT_INVALID" | "DISCONNECTED_PATTERN" | "TOO_MANY_PATTERNS" | "TOO_MANY_VARIABLES" | "QUERY_TOO_LONG" | "DEADLINE_EXCEEDED" | "BINDING_LIMIT";
+            code: "SYNTAX" | "UNSUPPORTED" | "UNKNOWN_LABEL" | "UNKNOWN_RELATION" | "UNKNOWN_PROPERTY" | "UNKNOWN_VARIABLE" | "DUPLICATE_VARIABLE" | "RELATIONSHIP_VARIABLE_REFERENCE" | "RANGE_INVALID" | "LIMIT_INVALID" | "DISCONNECTED_PATTERN" | "TOO_MANY_PATTERNS" | "TOO_MANY_VARIABLES" | "QUERY_TOO_LONG" | "DEADLINE_EXCEEDED" | "BINDING_LIMIT" | "WORKSPACE_TOO_LARGE";
             message: string;
             line?: number;
             column?: number;
@@ -5194,6 +5208,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5365,6 +5380,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };

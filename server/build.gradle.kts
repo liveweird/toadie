@@ -19,6 +19,9 @@ application {
     //                          small heap / few cores; SerialGC alone saved ~75 MiB here.
     //   - Xmx256m            : the app holds no large caches; 256 MiB is comfortable headroom for
     //                          light bursts (drop to 192m to trim ~25 MiB more if traffic stays low).
+    //                          `entities/EntityReadBudget.kt`'s ENTITY_READ_BUDGET_BYTES (64 MiB) is
+    //                          sized off THIS value — change the two together (`.claude/docs/security.md`
+    //                          "Entity read memory budget").
     //   - TieredStopAtLevel=1: C1-only JIT — trims code-cache + C2-compiler memory (~50 MiB here).
     //                          Peak CPU-bound throughput is lower, which is irrelevant for an
     //                          I/O-bound tool; REMOVE this flag if the service ever runs hot.

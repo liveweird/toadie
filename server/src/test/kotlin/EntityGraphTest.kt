@@ -2,7 +2,6 @@ package ch.nokillswit
 
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.RelationDefinition
-import ch.nokillswit.entities.EntityDocument
 import ch.nokillswit.entities.EntityGraphEdge
 import ch.nokillswit.entities.EntityGraphSource
 import ch.nokillswit.entities.GraphBlueprint
@@ -55,10 +54,7 @@ class EntityGraphTest {
         identifier = identifier,
         title = title,
         icon = icon,
-        document = EntityDocument(
-            properties = buildJsonObject { },
-            relations = buildJsonObject { relations.forEach { (k, v) -> put(k, v) } },
-        ),
+        relations = buildJsonObject { relations.forEach { (k, v) -> put(k, v) } },
         team = team,
     )
 

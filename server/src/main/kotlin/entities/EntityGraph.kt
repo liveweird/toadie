@@ -5,6 +5,7 @@ import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -53,14 +54,18 @@ data class EntityGraph(
     val edges: List<EntityGraphEdge>,
 )
 
-/** One entity row as the pure builder needs it — no service/DB types leak in. */
+/**
+ * One entity row as the pure builder needs it — no service/DB types leak in. [relations] alone
+ * (2.4.0): [buildEntityGraph] reads no other part of an entity's document, so the caller never
+ * needs to decode/charge `properties` for a graph read (`.claude/docs/persistence.md`).
+ */
 data class EntityGraphSource(
     val id: UInt,
     val blueprintId: UInt,
     val identifier: String,
     val title: String,
     val icon: String?,
-    val document: EntityDocument,
+    val relations: JsonObject,
     /** The EFFECTIVE team (`entities/EntityOwnership.kt`'s `effectiveTeam`, already resolved by the caller) — empty when unowned. */
     val team: List<String> = emptyList(),
 )
@@ -125,7 +130,7 @@ fun buildEntityGraph(
     for (row in rows) {
         val blueprint = blueprintsById.getValue(row.blueprintId)
         val sourceId = nodeIdByEntityId.getValue(row.id)
-        row.document.relations.forEach { (relationId, value) ->
+        row.relations.forEach { (relationId, value) ->
             val relationDef = blueprint.definition.relations[relationId] ?: return@forEach
             relationValues(value).forEach { targetIdentifier ->
                 val targetRow = rowByBlueprintAndIdentifier[relationDef.target to targetIdentifier] ?: return@forEach

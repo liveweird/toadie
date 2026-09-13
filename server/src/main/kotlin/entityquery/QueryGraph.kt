@@ -2,18 +2,19 @@ package ch.nokillswit.entityquery
 
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
+import ch.nokillswit.entities.EntityRowView
 import ch.nokillswit.entities.GraphBlueprint
-import ch.nokillswit.entities.IndexedRow
 import ch.nokillswit.entities.QueryCandidate
 import ch.nokillswit.entities.RowLookup
 import ch.nokillswit.entities.asOwned
 import ch.nokillswit.entities.effectiveTeam
 import ch.nokillswit.entities.hopTargetIdentifiers
+import ch.nokillswit.entities.relationsOnlyDocument
 import ch.nokillswit.entities.teamValues
 
 /**
  * The in-memory graph `QueryEvaluator.kt` walks — one snapshot per query, built from the SAME
- * `IndexedRow`/`GraphBlueprint` shapes `entities/EntityComputed.kt` and `entities/EntityGraph.kt`
+ * `EntityRowView`/`GraphBlueprint` shapes `entities/EntityComputed.kt` and `entities/EntityGraph.kt`
  * already use, so the service (PR2) can hand the evaluator the workspace snapshot it already
  * loads for computed properties. Pure, DB-free: every lookup here is a map read over indexes
  * built once at construction (or lazily, on first use).
@@ -26,7 +27,7 @@ import ch.nokillswit.entities.teamValues
  * WHERE/RETURN actually needs them.
  */
 class QueryRow internal constructor(
-    val row: IndexedRow,
+    val row: EntityRowView,
     val blueprint: GraphBlueprint,
     private val definitionsByIdentifier: Map<String, BlueprintDefinition>,
     private val rowLookup: RowLookup,
@@ -36,10 +37,14 @@ class QueryRow internal constructor(
 
     /** The EFFECTIVE team (`entities/EntityOwnership.kt`'s `effectiveTeam`) — Direct's stored value, or the Inherited walk. */
     val team: List<String> by lazy {
-        teamValues(effectiveTeam(row.team, row.document, blueprint.definition, definitionsByIdentifier, rowLookup))
+        teamValues(effectiveTeam(row.team, row.relationsOnlyDocument(), blueprint.definition, definitionsByIdentifier, rowLookup))
     }
 
-    /** The `QueryValues.kt`/`AggregationQuery.kt` meta+property resolution shape for this row. */
+    /**
+     * The `QueryValues.kt`/`AggregationQuery.kt` meta+property resolution shape for this row —
+     * `by lazy` so a traversal-only query (a WHERE/RETURN that never reads `v.someProperty`)
+     * never triggers [EntityRowView.properties]' lazy decode/charge (2.4.0).
+     */
     val candidate: QueryCandidate by lazy {
         QueryCandidate(
             identifier = row.identifier,
@@ -49,7 +54,7 @@ class QueryRow internal constructor(
             team = team,
             createdAt = row.createdAt,
             updatedAt = row.updatedAt,
-            properties = row.document.properties,
+            properties = row.properties,
         )
     }
 
@@ -97,7 +102,7 @@ interface QueryGraph {
 
 /** The evaluator's one implementation: everything indexed once (or lazily) from [rows]/[blueprints]/[hierarchies]. */
 class InMemoryQueryGraph(
-    rows: List<IndexedRow>,
+    rows: List<EntityRowView>,
     override val blueprints: Map<String, GraphBlueprint>,
     override val hierarchies: Set<String>,
 ) : QueryGraph {
@@ -140,7 +145,7 @@ class InMemoryQueryGraph(
     override fun outgoing(row: QueryRow, relationKey: String): List<QueryRow> {
         val relation = row.blueprint.definition.relations[relationKey] ?: return emptyList()
         val target = foldedBlueprints[relation.target.lowercase()] ?: return emptyList()
-        val ids = hopTargetIdentifiers(row.row.document.relations[relationKey], relation.many)
+        val ids = hopTargetIdentifiers(row.row.relations[relationKey], relation.many)
         return ids.mapNotNull { rowsByKey[target.identifier to it] }
     }
 
@@ -162,7 +167,7 @@ class InMemoryQueryGraph(
         rowsByKey.values.forEach { source ->
             source.blueprint.definition.relations.forEach { (relationKey, relation) ->
                 val target = foldedBlueprints[relation.target.lowercase()] ?: return@forEach
-                hopTargetIdentifiers(source.row.document.relations[relationKey], relation.many).forEach { id ->
+                hopTargetIdentifiers(source.row.relations[relationKey], relation.many).forEach { id ->
                     val targetRow = rowsByKey[target.identifier to id] ?: return@forEach
                     map.getOrPut(targetRow.key) { mutableListOf() } += source to relationKey
                 }

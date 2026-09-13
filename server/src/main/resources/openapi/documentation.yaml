@@ -2135,6 +2135,12 @@ paths:
         Each returned item carries `findings` — the same validation a strict save would
         enforce, re-evaluated against the blueprint's CURRENT definition, so an entity left
         stale by a blueprint edit is flagged here without waiting for a save attempt.
+
+        Since 2.4.0 the page's own rows plus the validation/computed-property lookup targets
+        they widen to are checked against a process-wide entity read memory budget before any
+        document is decoded (`.claude/docs/security.md` "Entity read memory budget"): a
+        workspace too large on its own answers `400`, contention from other in-flight reads
+        answers `429`.
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
@@ -2157,6 +2163,7 @@ paths:
                 $ref: '#/components/schemas/EntityPage'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalServerError' }
     post:
       tags: [entities]
@@ -2254,6 +2261,14 @@ paths:
         decoded workspace for its evaluation): a fifth concurrent VALID query answers `429`
         immediately, before the workspace is loaded — retry shortly. Evaluation is a pure read —
         no audit event.
+
+        Since 2.4.0 the combined shown-plus-lookup-target row set is checked against a
+        process-wide entity read memory budget BEFORE any document is decoded
+        (`.claude/docs/security.md` "Entity read memory budget") — with OR without a `query`.
+        A workspace too large on its own answers `400` `WORKSPACE_TOO_LARGE` (one `diagnostics`
+        entry, no position); contention from other in-flight reads answers `429` instead. The
+        PLAIN graph (no `query`) never takes one of the four query-evaluation permits above —
+        only a `query` does.
 
         Unpaged by design — a report-style computation over the workspace.
       parameters:
@@ -2408,7 +2423,11 @@ paths:
         Any authenticated user. Plain `404` for a missing or soft-deleted entity — the
         workspace idiom, no existence secrecy. Carries `findings` re-evaluated against the
         blueprint's CURRENT definition, so an entity left stale by a blueprint edit since
-        this entity's last save is flagged without waiting for a save attempt.
+        this entity's last save is flagged without waiting for a save attempt. Since 2.4.0
+        the validation/computed-property lookup targets this read widens to are checked
+        against a process-wide entity read memory budget before any document is decoded
+        (`.claude/docs/security.md` "Entity read memory budget"): a workspace too large on
+        its own answers `400`, contention from other in-flight reads answers `429`.
       responses:
         '200':
           description: OK
@@ -2419,6 +2438,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalServerError' }
     put:
       tags: [entities]
@@ -4790,6 +4810,7 @@ components:
             - QUERY_TOO_LONG
             - DEADLINE_EXCEEDED
             - BINDING_LIMIT
+            - WORKSPACE_TOO_LARGE
         message:
           type: string
         line:

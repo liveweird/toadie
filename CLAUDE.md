@@ -302,7 +302,12 @@ ch.nokillswit
 │                       level down: `EntityFilter`/`EntityGraphFilter`, the `q`/blueprint-lookup
 │                       helpers, and the team-match predicate + `inheritedTeamMatches`, the
 │                       v1.30.0 in-memory Inherited-ownership resolver behind the `team` filter's
-│                       SQL `id IN (…)` disjunct), EntityService.kt (one row =
+│                       SQL `id IN (…)` disjunct), EntityReadBudget.kt (2.4.0 — the process-wide
+│                       entity read memory ledger: `ENTITY_READ_BUDGET_BYTES`, `estimatedHeapBytes`,
+│                       `EntityReadLedger`/`ReadBudgetExceeded`; `EntityWorkspaceRead.kt`'s
+│                       `WorkspaceRow`/`EntitySnapshot`/`loadReadSet` charge it — see
+│                       `.claude/docs/security.md` "Entity read memory budget"), EntityService.kt
+│                       (one row =
 │                       one entity, FK to blueprints.id; every mutation under the two-table
 │                       `blueprints`-then-`entities` lock — .claude/docs/persistence.md "Entity
 │                       targets under concurrency (V28)" — relation targets must be ACTIVE

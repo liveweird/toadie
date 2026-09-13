@@ -11,8 +11,8 @@ import java.util.concurrent.atomic.AtomicLong
  * The entity READ memory budget (2.4.0): every graph/list/read charges the raw bytes it loads
  * and the estimated heap of what it decodes against one process-wide ledger, so a read that
  * cannot fit answers a named `400`/`429` instead of exhausting the heap. Derived from
- * `-Xmx256m` (`server/build.gradle.kts`): ~130 MiB of old-generation headroom after the idle
- * baseline, half of it the ledger — change the two together. Writers are exempt (serialized by
+ * `-Xmx256m` (`server/build.gradle.kts`): a ~170 MiB old generation, ~130 MiB of it headroom after
+ * the ~21 MiB idle baseline, half of that headroom the ledger — change the two together. Writers are exempt (serialized by
  * the V28 lock, at most one raw candidate set at a time). `.claude/docs/security.md`
  * "Entity read memory budget".
  */

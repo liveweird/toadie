@@ -22,12 +22,12 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     en: `**Entity reads are now memory-bounded.**
 
 - The ontology workspace is capped at 16 MiB of stored entity documents: a create, replace or import that would exceed it is refused, and the import dry-run predicts the refusal.
-- Every entity graph, list and read is charged against a 64 MiB read budget — a read that cannot fit answers a WORKSPACE_TOO_LARGE diagnostic instead of exhausting memory, and a busy instance answers 429 so the request can be retried.
+- Every entity graph, list and read is charged against a 64 MiB read budget — a graph read that cannot fit answers a WORKSPACE_TOO_LARGE diagnostic and a list or single read a plain 400, instead of exhausting memory; a busy instance answers 429 so the request can be retried.
 - The entity graph now reads the workspace once instead of twice, and a query that only traverses relations never decodes property values.`,
     pl: `**Odczyty encji są teraz ograniczone pamięcią.**
 
 - Obszar roboczy ontologii jest ograniczony do 16 MiB przechowywanych dokumentów encji: zapis, zastąpienie lub import, który by go przekroczył, są odrzucane, a podgląd importu (dry-run) przewiduje odmowę.
-- Każdy graf encji, lista i odczyt są naliczane względem budżetu odczytu 64 MiB — odczyt, który się nie zmieści, odpowiada diagnostyką WORKSPACE_TOO_LARGE zamiast wyczerpywać pamięć, a zajęta instancja odpowiada 429, aby żądanie mogło być ponowione.
+- Każdy graf encji, lista i odczyt są naliczane względem budżetu odczytu 64 MiB — odczyt grafu, który się nie zmieści, odpowiada diagnostyką WORKSPACE_TOO_LARGE, a lista lub pojedynczy odczyt zwykłym 400, zamiast wyczerpywać pamięć; zajęta instancja odpowiada 429, aby żądanie mogło być ponowione.
 - Graf encji teraz odczytuje obszar roboczy raz zamiast dwa razy, a zapytanie, które przemierza wyłącznie relacje, nigdy nie dekoduje wartości właściwości.`,
   },
   {

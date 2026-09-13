@@ -103,9 +103,12 @@ fun teamValues(team: JsonElement?): List<String> = when (team) {
  * ([ch.nokillswit.entities.EntityService] `checkCaps`/the import planner's `rejectOverCap`) so
  * Kotlin's prediction and PostgreSQL's `octet_length` count the exact same bytes.
  */
-fun documentByteSize(request: EntityRequest): Int {
-    val documentBytes = blueprintJson.encodeToString(request.toDocument()).toByteArray(Charsets.UTF_8).size
-    val teamBytes = request.team?.let { blueprintJson.encodeToString(it).toByteArray(Charsets.UTF_8).size } ?: 0
+fun documentByteSize(request: EntityRequest): Int = documentByteSize(request.toDocument(), request.team)
+
+/** The same count over an already-built (possibly rename-rewritten) document and team. */
+fun documentByteSize(document: EntityDocument, team: JsonElement?): Int {
+    val documentBytes = blueprintJson.encodeToString(document).toByteArray(Charsets.UTF_8).size
+    val teamBytes = team?.let { blueprintJson.encodeToString(it).toByteArray(Charsets.UTF_8).size } ?: 0
     return documentBytes + teamBytes
 }
 

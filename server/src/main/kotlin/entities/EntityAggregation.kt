@@ -26,7 +26,7 @@ private const val SECONDS_PER_WEEK = 7 * SECONDS_PER_DAY
 private const val SECONDS_PER_MONTH = 30 * SECONDS_PER_DAY
 
 /** [this] as an [AggregationQuery] filter subject of [blueprint] — its EFFECTIVE team resolved via [effectiveTeamOf]. */
-fun IndexedRow.toQueryCandidate(
+fun EntityRowView.toQueryCandidate(
     blueprint: String,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
     index: EntityIndex,
@@ -39,7 +39,7 @@ fun IndexedRow.toQueryCandidate(
         team = teamValues(effectiveTeamOf(this, blueprint, blueprintsByIdentifier, index)),
         createdAt = createdAt,
         updatedAt = updatedAt,
-        properties = document.properties,
+        properties = properties,
     )
 
 /**
@@ -56,7 +56,7 @@ fun relatedEntities(
     def: AggregationPropertyDefinition,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
     index: EntityIndex,
-): List<IndexedRow> {
+): List<EntityRowView> {
     val target = def.target
     if (target !in blueprintsByIdentifier) return emptyList()
     val filters = def.pathFilter.orEmpty()
@@ -68,17 +68,23 @@ fun relatedEntities(
     return rows.distinctBy { it.identifier }
 }
 
+// Caps candidates BEFORE concatenating inbound + outbound (2.4.0), so a fan-out that already
+// exhausts MAX_MIRROR_FANOUT on ONE side never buys itself extra headroom from the other.
 private fun directCandidates(
     subject: ComputedSubject,
     target: String,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
     index: EntityIndex,
-): List<IndexedRow> {
-    val inboundHits = index.inbound(subject.blueprint, subject.identifier).filter { it.source.blueprint == target }.map { it.source }
+): List<EntityRowView> {
+    val inboundHits = index.inbound(subject.blueprint, subject.identifier)
+        .filter { it.source.blueprint == target }
+        .map { it.source }
+        .take(MAX_MIRROR_FANOUT)
     val outboundHits = blueprintsByIdentifier[subject.blueprint]?.relations.orEmpty()
         .filterValues { it.target == target }
         .flatMap { (relationId, relation) -> hopTargetIdentifiers(subject.document.relations[relationId], relation.many) }
         .mapNotNull { index.row(target, it) }
+        .take(MAX_MIRROR_FANOUT)
     return (inboundHits + outboundHits).take(MAX_MIRROR_FANOUT)
 }
 
@@ -88,7 +94,7 @@ private fun pathFilterCandidates(
     target: String,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
     index: EntityIndex,
-): List<IndexedRow> {
+): List<EntityRowView> {
     val from = (entry["fromBlueprint"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return emptyList()
     val path = (entry["path"] as? JsonArray)?.filterIsInstance<JsonPrimitive>()?.filter { it.isString }?.map { it.content }.orEmpty()
     if (path.isEmpty()) return emptyList()
@@ -109,10 +115,10 @@ private fun forwardPathCandidates(
     target: String,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
     index: EntityIndex,
-): List<IndexedRow> {
+): List<EntityRowView> {
     if (path.size > MAX_COMPUTED_HOPS) return emptyList()
     var currentBlueprint = subject.blueprint
-    var currentRows = listOf(subject.toIndexedRow())
+    var currentRows: List<EntityRowView> = listOf(subject.toIndexedRow())
     path.forEachIndexed { i, relationId ->
         val relation = blueprintsByIdentifier[currentBlueprint]?.relations?.get(relationId) ?: return emptyList()
         if (relation.target !in blueprintsByIdentifier) return emptyList()
@@ -133,7 +139,7 @@ private fun reversePathCandidates(
     target: String,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
     index: EntityIndex,
-): List<IndexedRow> {
+): List<EntityRowView> {
     if (path.size > MAX_COMPUTED_HOPS) return emptyList()
     val expectedBlueprints = mutableListOf(target)
     var current = target
@@ -145,11 +151,11 @@ private fun reversePathCandidates(
     }
     if (current != subject.blueprint) return emptyList()
 
-    var frontier: List<IndexedRow> = listOf(subject.toIndexedRow())
+    var frontier: List<EntityRowView> = listOf(subject.toIndexedRow())
     for (step in path.indices.reversed()) {
         val relationId = path[step]
         val expectedSource = expectedBlueprints[step]
-        val nextFrontier = mutableListOf<IndexedRow>()
+        val nextFrontier = mutableListOf<EntityRowView>()
         for (node in frontier) {
             index.inbound(node.blueprint, node.identifier)
                 .filter { it.relationId == relationId && it.source.blueprint == expectedSource }

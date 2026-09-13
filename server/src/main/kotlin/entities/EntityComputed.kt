@@ -29,29 +29,58 @@ const val MAX_COMPUTED_HOPS = 10
 const val MAX_MIRROR_FANOUT = 1000
 
 /**
+ * The read-only shape every computed-property/aggregation/query lookup actually consumes
+ * (2.4.0 — `.claude/docs/persistence.md` "Entity read memory budget"): identity/timestamps and
+ * [relations]/[team] are always cheap, but [properties] MAY decode (and charge) lazily on first
+ * touch and MAY throw [ReadBudgetExceeded] when the workspace read budget is exhausted — a
+ * traversal-only query (relations/team only) never pays for it. [IndexedRow] implements this
+ * EAGERLY (every field already decoded) so every existing pure test keeps constructing it
+ * unchanged; `entities/EntityService.kt`'s `WorkspaceRow.view` implements it LAZILY over its
+ * `skeleton()`/`full()` charged decodes.
+ */
+interface EntityRowView {
+    val blueprint: String
+    val identifier: String
+    val title: String
+    val icon: String?
+    val createdAt: Long
+    val updatedAt: Long
+    val relations: JsonObject
+    val team: JsonElement?
+    val properties: JsonObject
+}
+
+/**
  * One entity row as computed-property evaluation needs it — [EntityOwnership.kt]'s [OwnedRow]
  * widened with the identity/timestamp fields mirror and aggregation terminals read. [team] is
- * always the STORED (raw) value; callers resolve the EFFECTIVE one via [effectiveTeamOf].
+ * always the STORED (raw) value; callers resolve the EFFECTIVE one via [effectiveTeamOf]. Every
+ * field is already decoded (EAGER), so [EntityRowView.properties] here never throws.
  */
 data class IndexedRow(
-    val blueprint: String,
-    val identifier: String,
-    val title: String,
-    val icon: String?,
-    val createdAt: Long,
-    val updatedAt: Long,
+    override val blueprint: String,
+    override val identifier: String,
+    override val title: String,
+    override val icon: String?,
+    override val createdAt: Long,
+    override val updatedAt: Long,
     val document: EntityDocument,
-    val team: JsonElement?,
-)
+    override val team: JsonElement?,
+) : EntityRowView {
+    override val relations: JsonObject get() = document.relations
+    override val properties: JsonObject get() = document.properties
+}
 
-/** [IndexedRow] narrowed to what [EntityOwnership.kt]'s Inherited walk needs. */
-fun IndexedRow.asOwned(): OwnedRow = OwnedRow(blueprint, identifier, document, team)
+/** [this] as a relations-only [EntityDocument] — enough for the ownership walk, which never reads `properties`. */
+fun EntityRowView.relationsOnlyDocument(): EntityDocument = EntityDocument(JsonObject(emptyMap()), relations)
+
+/** [EntityOwnership.kt]'s Inherited walk needs only [relations]/[team] — never [EntityRowView.properties]. */
+fun EntityRowView.asOwned(): OwnedRow = OwnedRow(blueprint, identifier, relationsOnlyDocument(), team)
 
 /** [subject] wrapped as an [IndexedRow] — the walk's own identity is hop zero of a mirror path or a `pathFilter` chain. */
 fun ComputedSubject.toIndexedRow(): IndexedRow = IndexedRow(blueprint, identifier, title, icon, createdAt, updatedAt, document, team)
 
 /** One inbound reference: [source] names the CURRENT row through its own relation [relationId]. */
-data class Inbound(val source: IndexedRow, val relationId: String)
+data class Inbound(val source: EntityRowView, val relationId: String)
 
 /**
  * The read-only snapshot computed-property evaluation walks: [row] resolves one entity by
@@ -61,7 +90,7 @@ data class Inbound(val source: IndexedRow, val relationId: String)
  * computed property actually asks for it — `update`/`graph` never touch [row]/[inbound] at all.
  */
 interface EntityIndex {
-    fun row(blueprint: String, identifier: String): IndexedRow?
+    fun row(blueprint: String, identifier: String): EntityRowView?
     fun inbound(blueprint: String, identifier: String): List<Inbound>
     val rowLookup: RowLookup
 }
@@ -93,10 +122,10 @@ fun hopTargetIdentifiers(value: JsonElement?, many: Boolean): List<String> = whe
  * Follows [rows]' [relationId] value(s) (single or `many`, per [many]) into [EntityIndex.row]
  * lookups of [target], capped at [MAX_MIRROR_FANOUT].
  */
-fun landHop(rows: List<IndexedRow>, relationId: String, target: String, many: Boolean, index: EntityIndex): List<IndexedRow> {
-    val landed = mutableListOf<IndexedRow>()
+fun landHop(rows: List<EntityRowView>, relationId: String, target: String, many: Boolean, index: EntityIndex): List<EntityRowView> {
+    val landed = mutableListOf<EntityRowView>()
     outer@ for (row in rows) {
-        for (identifier in hopTargetIdentifiers(row.document.relations[relationId], many)) {
+        for (identifier in hopTargetIdentifiers(row.relations[relationId], many)) {
             index.row(target, identifier)?.let { landed += it }
             if (landed.size >= MAX_MIRROR_FANOUT) break@outer
         }
@@ -109,13 +138,13 @@ fun landHop(rows: List<IndexedRow>, relationId: String, target: String, many: Bo
  * stored value, Inherited walks [EntityOwnership.kt]'s `effectiveTeam`.
  */
 fun effectiveTeamOf(
-    row: IndexedRow,
+    row: EntityRowView,
     blueprint: String,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
     index: EntityIndex,
 ): JsonElement? {
     val definition = blueprintsByIdentifier[blueprint] ?: return null
-    return effectiveTeam(row.team, row.document, definition, blueprintsByIdentifier, index.rowLookup)
+    return effectiveTeam(row.team, row.relationsOnlyDocument(), definition, blueprintsByIdentifier, index.rowLookup)
 }
 
 /**
@@ -173,7 +202,7 @@ fun mirrorValue(
     if (hops.size > MAX_COMPUTED_HOPS) return null
 
     var currentBlueprint = subject.blueprint
-    var currentRows = listOf(subject.toIndexedRow())
+    var currentRows: List<EntityRowView> = listOf(subject.toIndexedRow())
     var anyMany = false
 
     for (segment in hops) {
@@ -196,7 +225,7 @@ fun mirrorValue(
 private fun terminalValue(
     terminal: String,
     landedBlueprint: String,
-    row: IndexedRow,
+    row: EntityRowView,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
     index: EntityIndex,
 ): JsonElement? {
@@ -204,13 +233,13 @@ private fun terminalValue(
     val definition = blueprintsByIdentifier[landedBlueprint] ?: return null
     if (terminal in computedPropertyIds(definition)) return null // a computed id of the LANDED blueprint -> absent, never recursed into
     if (terminal !in definition.schema.properties) return null
-    return row.document.properties[terminal]
+    return row.properties[terminal] // may decode/charge the ledger lazily (`EntityReadBudget.kt`)
 }
 
 private fun metaTerminalValue(
     terminal: String,
     landedBlueprint: String,
-    row: IndexedRow,
+    row: EntityRowView,
     blueprintsByIdentifier: Map<String, BlueprintDefinition>,
     index: EntityIndex,
 ): JsonElement? = when (terminal) {

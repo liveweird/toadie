@@ -107,6 +107,13 @@ object QueryDiagnosticCodes {
 
     /** Evaluation refused: more than [MAX_QUERY_BINDINGS] intermediate rows. No position. */
     const val BINDING_LIMIT = "BINDING_LIMIT"
+
+    /**
+     * Evaluation refused (2.4.0 — `.claude/docs/security.md` "Entity read memory budget"): the
+     * combined shown-plus-target row set exceeds the process-wide entity read budget, with or
+     * without a `query`. No position — this is a workspace-scale refusal, not a text one.
+     */
+    const val WORKSPACE_TOO_LARGE = "WORKSPACE_TOO_LARGE"
 }
 
 /**
