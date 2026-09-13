@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Loads (or, with --delete, removes) the sample entity set at sample-data/entities/*.json
+# Loads (or, with --delete, removes) the sample entity set at sample-data/port/commerce-payments/entities/*.json
 # against a running toadie instance, using the entity API — the blueprints/load.sh precedent, a
 # scriptable, re-runnable alternative to the Import page (/ontology/import, v1.28.0 — see
-# sample-data/README.md "Through the Import page"). Run sample-data/blueprints/load.sh FIRST:
+# sample-data/port/commerce-payments/README.md "Through the Import page"). Run sample-data/port/commerce-payments/blueprints/load.sh FIRST:
 # every entity names a blueprint, and the blueprint registry must already hold it.
 #
 # Env:
@@ -32,7 +32,7 @@ HEADERS="$WORK/headers"
 BODY="$WORK/response"
 
 # Source the shared API helpers.
-source "$(dirname "$0")/../lib/api.sh"
+source "$SCRIPT_DIR/../../../lib/api.sh"
 
 sample_files() { printf '%s\n' "$SCRIPT_DIR"/[0-9][0-9]-*.json | sort; }
 

@@ -39,10 +39,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Loads the numbered JSON files under `sample-data/entities` — the sample landscape for the
+ * Loads the numbered JSON files under `sample-data/port/commerce-payments/entities` — the
+ * sample landscape for the
  * baseline ontology (v1.25.3; adopting the v1.26.0 system blueprints and real `team` ownership
- * since v1.26.0): the e-commerce/payments catalog `sample-data/catalog-info.yaml` describes,
- * re-told as Port entities of the eleven `sample-data/blueprints/` — through the real API, in
+ * since v1.26.0): the e-commerce/payments catalog
+ * `sample-data/backstage/commerce-payments/catalog-info.yaml` describes, re-told as Port entities
+ * of the eleven `sample-data/port/commerce-payments/blueprints/` — through the real API, in
  * dependency order, on top of the blueprint set ([SampleBlueprintsTest]'s files, loaded here too
  * via [SampleData.loadBlueprint] since entities cannot exist without their blueprint —
  * `_team`/`_user` are `PUT` extensions of the V31-seeded rows, every other blueprint a fresh
@@ -50,7 +52,7 @@ import kotlin.test.assertTrue
  * ([ch.nokillswit.entities.validateEntityRequest] + [ch.nokillswit.entities.entityFindings]) —
  * every created row and its re-GET carry NO findings — and that the stored document round trips
  * (`properties`/`relations` equal the request's, after [toDocument]'s null-drop). A second pass
- * pins the coverage the set promises (`sample-data/README.md`): every blueprint has entities,
+ * pins the coverage the set promises (`sample-data/port/commerce-payments/README.md`): every blueprint has entities,
  * every property AND every relation of every blueprint is used at least once (the `_user.team`
  * and `_team.parent` relations included), every value of the registry-mirroring `type` and
  * `lifecycle` enums is used at least once (the dictionary pickers are all checkable), the `team`
@@ -63,7 +65,8 @@ import kotlin.test.assertTrue
  * reads back the exact `team` of the `service` entity its `service` relation names.
  *
  * Test cwd is `server/` (the Gradle test task's default working directory), so fixtures are read
- * via `../sample-data/{blueprints,entities}`. The blueprint identifiers (`_team`, `domain`, …)
+ * via `../sample-data/port/commerce-payments/{blueprints,entities}`. The blueprint identifiers
+ * (`_team`, `domain`, …)
  * and entity identifiers (`storefront`, `commerce`, …) are plain, but the shared Testcontainers
  * database is fine: this test removes every entity it created, restores the system blueprints'
  * base shape, then removes every non-system blueprint identifier in `finally` (the plan's order);
@@ -96,8 +99,10 @@ class SampleEntitiesTest {
         val blueprintRequestsByIdentifier = mutableMapOf<String, BlueprintRequest>()
         val blueprintFileIndex = mutableMapOf<String, Int>()
         val responseByKey = mutableMapOf<String, EntityResponse>()
+        val hierarchiesBefore = SampleData.snapshotHierarchies()
 
         try {
+            TestHierarchies.ensure(*SampleData.requiredHierarchies)
             bpFiles.forEachIndexed { index, file ->
                 val request = blueprintJson.decodeFromString<BlueprintRequest>(file.readText())
                 blueprintIdentifiers += request.identifier
@@ -106,7 +111,8 @@ class SampleEntitiesTest {
             }
             // Two passes (phase 5, v1.27.0): a forward-referencing aggregation target (domain ->
             // system, system -> service/workload) only exists once the full set has loaded —
-            // see `sample-data/blueprints/load.sh` and `SampleData.loadBlueprints`'s KDoc.
+            // see `sample-data/port/commerce-payments/blueprints/load.sh` and
+            // `SampleData.loadBlueprints`'s KDoc.
             SampleData.loadBlueprints(admin, bpFiles)
 
             val requestsByFile = mutableListOf<List<EntityRequest>>()
@@ -163,13 +169,17 @@ class SampleEntitiesTest {
             assertTeamOwnership(requestsByFile, blueprintRequestsByIdentifier, responseByKey)
             assertComputedProperties(requestsByFile, responseByKey)
         } finally {
-            TestEntities.remove(*entityIdentifiers.toTypedArray())
-            TestBlueprints.restoreSystemBlueprints()
-            // domain <-> system form a reference cycle (domain's aggregation targets system,
-            // system's own relation targets domain back) that the plain retry-based remove()
-            // below cannot resolve on its own — see SampleData.stripAggregationsForCleanup's KDoc.
-            SampleData.stripAggregationsForCleanup(blueprintRequestsByIdentifier)
-            TestBlueprints.remove(*blueprintIdentifiers.toTypedArray())
+            try {
+                TestEntities.remove(*entityIdentifiers.toTypedArray())
+                TestBlueprints.restoreSystemBlueprints()
+                // domain <-> system form a reference cycle (domain's aggregation targets system,
+                // system's own relation targets domain back) that the plain retry-based remove()
+                // below cannot resolve on its own — see SampleData.stripAggregationsForCleanup's KDoc.
+                SampleData.stripAggregationsForCleanup(blueprintRequestsByIdentifier)
+                TestBlueprints.remove(*blueprintIdentifiers.toTypedArray())
+            } finally {
+                SampleData.restoreHierarchies(hierarchiesBefore)
+            }
         }
     }
 
@@ -197,7 +207,9 @@ class SampleEntitiesTest {
         val documents = entFiles.flatMap { file -> Json.parseToJsonElement(file.readText()).jsonArray.map { it.jsonObject } }
 
         val entityIdentifiers = mutableListOf<String>()
+        val hierarchiesBefore = SampleData.snapshotHierarchies()
         try {
+            TestHierarchies.ensure(*SampleData.requiredHierarchies)
             SampleData.loadBlueprints(admin, bpFiles)
 
             val response = admin.postJson("/api/v1/entities/import", EntityImportRequest(documents = documents))
@@ -219,10 +231,14 @@ class SampleEntitiesTest {
                 "a re-import must report EXISTS: ${second.results}",
             )
         } finally {
-            TestEntities.remove(*entityIdentifiers.toTypedArray())
-            TestBlueprints.restoreSystemBlueprints()
-            SampleData.stripAggregationsForCleanup(bpRequestsByIdentifier)
-            TestBlueprints.remove(*bpRequestsByIdentifier.keys.toTypedArray())
+            try {
+                TestEntities.remove(*entityIdentifiers.toTypedArray())
+                TestBlueprints.restoreSystemBlueprints()
+                SampleData.stripAggregationsForCleanup(bpRequestsByIdentifier)
+                TestBlueprints.remove(*bpRequestsByIdentifier.keys.toTypedArray())
+            } finally {
+                SampleData.restoreHierarchies(hierarchiesBefore)
+            }
         }
     }
 
@@ -474,7 +490,7 @@ class SampleEntitiesTest {
         val DICTIONARY_PROPERTIES = setOf("type", "lifecycle")
     }
 
-    /** Pins the coverage the set claims (`sample-data/README.md`'s table). */
+    /** Pins the coverage the set claims (`sample-data/port/commerce-payments/README.md`'s table). */
     private fun assertShowcaseCoverage(
         requestsByFile: List<List<EntityRequest>>,
         blueprintRequestsByIdentifier: Map<String, BlueprintRequest>,

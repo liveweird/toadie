@@ -21,16 +21,18 @@ import kotlinx.serialization.json.JsonElement
 import kotlin.test.assertEquals
 
 /**
- * Shared helpers for the numbered JSON sample sets under `sample-data/` — the blueprint set
+ * Shared helpers for the numbered JSON sample sets under
+ * `sample-data/port/commerce-payments/` — the blueprint set
  * (the baseline ontology, [SampleBlueprintsTest]) and its entity set ([SampleEntitiesTest]) both
  * read their fixtures this way. Test cwd is `server/` (the Gradle test task's default working
- * directory), so files are read via `../sample-data/<dir>`.
+ * directory), so files are read via `../sample-data/port/commerce-payments/<dir>`.
  */
 object SampleData {
     fun numberedFiles(dir: String): List<File> =
-        File("../sample-data/$dir").listFiles { f -> f.name.matches(Regex("[0-9]{2}-.*\\.json")) }
+        File("../sample-data/port/commerce-payments/$dir")
+            .listFiles { f -> f.name.matches(Regex("[0-9]{2}-.*\\.json")) }
             ?.sortedBy { it.name }
-            ?: error("sample-data/$dir not found relative to the test working directory")
+            ?: error("sample-data/port/commerce-payments/$dir not found relative to the test working directory")
 
     /**
      * Loads one sample blueprint file through the real API: a `_`-prefixed identifier (v1.26.0's
@@ -63,8 +65,9 @@ object SampleData {
 
     /**
      * Loads a full blueprint set through the real API in TWO PASSES, mirroring
-     * `sample-data/blueprints/load.sh` (phase 5, v1.27.0): pass 1 [loadBlueprint]s every file, in
-     * the given (dependency) order, with `aggregationProperties` STRIPPED — an aggregation's
+     * `sample-data/port/commerce-payments/blueprints/load.sh` (phase 5, v1.27.0): pass 1
+     * [loadBlueprint]s every file, in the given (dependency) order, with
+     * `aggregationProperties` STRIPPED — an aggregation's
      * `target` must already be an ACTIVE blueprint
      * (`BlueprintService.requireTargetsExist`/`.claude/docs/persistence.md` "Blueprint targets
      * under concurrency (V27)"), so a forward-referencing rollup (domain -> system, system ->
@@ -73,9 +76,6 @@ object SampleData {
      * target exists. Returns the FINAL (post-pass-2) response per identifier.
      */
     suspend fun loadBlueprints(client: HttpClient, files: List<File>): Map<String, BlueprintResponse> {
-        // `composition` is seeded by V33; `deployment` (v1.32.0, the second parallel hierarchy
-        // `11-workload.json`/`06-cluster.json` name) is shared suite state minted on demand.
-        TestHierarchies.ensure("deployment")
         val decoded = files.map { it to blueprintJson.decodeFromString<BlueprintRequest>(it.readText()) }
 
         decoded.forEach { (_, request) ->
@@ -96,6 +96,22 @@ object SampleData {
         return decoded.associate { (_, request) ->
             request.identifier to client.get("/api/v1/blueprints/${idByIdentifier.getValue(request.identifier)}").body<BlueprintResponse>()
         }
+    }
+
+    val requiredHierarchies = arrayOf("composition", "deployment")
+
+    /** Snapshots the shared hierarchy dictionary, retaining ids so referenced rows stay updates. */
+    suspend fun snapshotHierarchies(): List<ch.nokillswit.dictionaries.DictionaryEntryInput> =
+        TestHierarchies.service.read(ch.nokillswit.dictionaries.Dictionary.HIERARCHY).map {
+            ch.nokillswit.dictionaries.DictionaryEntryInput(id = it.id, value = it.value, isDefault = it.isDefault)
+        }
+
+    /** Restores the exact hierarchy values captured before a sample test changed shared state. */
+    suspend fun restoreHierarchies(snapshot: List<ch.nokillswit.dictionaries.DictionaryEntryInput>) {
+        TestHierarchies.service.replace(
+            ch.nokillswit.dictionaries.Dictionary.HIERARCHY,
+            ch.nokillswit.dictionaries.DictionaryUpdateRequest(snapshot),
+        )
     }
 
     /**

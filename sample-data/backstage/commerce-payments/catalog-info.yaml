@@ -1,9 +1,10 @@
-# Toadie sample landscape — a small e-commerce/payments software catalog.
+# Toadie Backstage demo — a small e-commerce/payments software catalog.
 #
 # Every value in this file comes from the ADMIN-curated registries seeded by V22:
 # the two namespaces, the four lifecycles, each kind's type dictionary, the eight
 # label keys with their closed value lists, the four tag categories, and the four
-# annotation keys. So the whole file passes a STRICT save — no waivers needed.
+# annotation keys. Registry values are valid, but four deliberate reference findings
+# in catalog-service and legacy-invoicing require the import waiver; see README.md.
 #
 # Between them the documents use every seeded type value bar one (the Domain type
 # `auxiliary` — there are only four Domains and two of them are genuinely `core-value`),

@@ -2046,7 +2046,7 @@ paths:
         document referencing a sibling declared later in the batch is simply written after
         it); a genuine CYCLE within the batch defers the lowest-index document's unresolved
         references on its first write (dropped from `pass1`) and restores them with a second
-        full write once every sibling exists — the `sample-data/blueprints/load.sh` two-pass
+        full write once every sibling exists — the `sample-data/port/commerce-payments/blueprints/load.sh` two-pass
         trick, generalized and automatic. A reference through a REQUIRED path
         (`hierarchyRelations`/`schema.required` have no bearing here — every blueprint field is
         optional at create) never needs this; only a genuine cycle does. A pass-2 failure

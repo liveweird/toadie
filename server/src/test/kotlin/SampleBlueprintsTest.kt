@@ -27,7 +27,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Executable documentation for `sample-data/blueprints/` — the eleven-blueprint baseline
+ * Executable documentation for `sample-data/port/commerce-payments/blueprints/` — the
+ * eleven-blueprint baseline
  * ontology the platform catalog is built on (`.claude/docs/ontology.md`, v1.25.2; the sample
  * set since v1.25.3; adopting the v1.26.0 system blueprints and real ownership since v1.26.0).
  * Loads the numbered files through the real API in dependency order (every relation target must
@@ -52,7 +53,8 @@ import kotlin.test.assertTrue
  * 4. **System blueprints stay put**: `_team`/`_user` are the seeded rows, not fresh creates.
  *
  * Test cwd is `server/` (the Gradle test task's default working directory), so the fixture
- * files are read via `../sample-data/blueprints`. The identifiers (`_team`, `domain`, …) are
+ * files are read via `../sample-data/port/commerce-payments/blueprints`. The identifiers
+ * (`_team`, `domain`, …) are
  * plain, but the shared Testcontainers database is fine: this test restores the system
  * blueprints' base shape and removes every non-system identifier in `finally`, and
  * [SampleEntitiesTest] — which loads the same set — runs in the same single-fork sequence and
@@ -73,7 +75,9 @@ class SampleBlueprintsTest {
 
         val identifiers = decoded.map { it.second.identifier }
         val requests = decoded.associate { it.second.identifier to it.second }
+        val hierarchiesBefore = SampleData.snapshotHierarchies()
         try {
+            TestHierarchies.ensure(*SampleData.requiredHierarchies)
             // Two passes (phase 5, v1.27.0): a forward-referencing aggregation target (domain ->
             // system, system -> service/workload) only exists once the FULL set has loaded, so
             // the round-trip check below runs against the post-pass-2 response, not per file.
@@ -92,12 +96,16 @@ class SampleBlueprintsTest {
             assertComputedProperties(requests)
             assertVocabulary(admin, requests)
         } finally {
-            TestBlueprints.restoreSystemBlueprints()
-            // domain <-> system form a reference cycle (domain's aggregation targets system,
-            // system's own relation targets domain back) that the plain retry-based remove()
-            // below cannot resolve on its own — see SampleData.stripAggregationsForCleanup's KDoc.
-            SampleData.stripAggregationsForCleanup(requests)
-            TestBlueprints.remove(*identifiers.toTypedArray())
+            try {
+                TestBlueprints.restoreSystemBlueprints()
+                // domain <-> system form a reference cycle (domain's aggregation targets system,
+                // system's own relation targets domain back) that the plain retry-based remove()
+                // below cannot resolve on its own — see SampleData.stripAggregationsForCleanup's KDoc.
+                SampleData.stripAggregationsForCleanup(requests)
+                TestBlueprints.remove(*identifiers.toTypedArray())
+            } finally {
+                SampleData.restoreHierarchies(hierarchiesBefore)
+            }
         }
     }
 
@@ -119,8 +127,10 @@ class SampleBlueprintsTest {
         val decoded = files.map { it to blueprintJson.decodeFromString<BlueprintRequest>(it.readText()) }
         val identifiers = decoded.map { it.second.identifier }
         val documents = files.map { Json.parseToJsonElement(it.readText()).jsonObject }
+        val hierarchiesBefore = SampleData.snapshotHierarchies()
 
         try {
+            TestHierarchies.ensure(*SampleData.requiredHierarchies)
             val response = admin.postJson(
                 "/api/v1/blueprints/import",
                 BlueprintImportRequest(documents = documents, replaceExisting = true),
@@ -145,9 +155,13 @@ class SampleBlueprintsTest {
                 )
             }
         } finally {
-            TestBlueprints.restoreSystemBlueprints()
-            SampleData.stripAggregationsForCleanup(decoded.associate { it.second.identifier to it.second })
-            TestBlueprints.remove(*identifiers.toTypedArray())
+            try {
+                TestBlueprints.restoreSystemBlueprints()
+                SampleData.stripAggregationsForCleanup(decoded.associate { it.second.identifier to it.second })
+                TestBlueprints.remove(*identifiers.toTypedArray())
+            } finally {
+                SampleData.restoreHierarchies(hierarchiesBefore)
+            }
         }
     }
 

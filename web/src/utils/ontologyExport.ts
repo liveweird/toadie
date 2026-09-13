@@ -9,7 +9,7 @@ import { computedPropertyIds } from "./computedProperties";
 import { downloadTextFile } from "./download";
 
 /** One blueprint as an importable document: identity + the Port document fields, in the
- *  order `sample-data/blueprints/*.json` uses. `undefined` members are omitted by
+ *  order `sample-data/port/commerce-payments/blueprints/*.json` uses. `undefined` members are omitted by
  *  `JSON.stringify` — never written as an explicit `null`. */
 export function blueprintExportDocument(bp: Blueprint): Record<string, unknown> {
   const out: Record<string, unknown> = { identifier: bp.identifier, title: bp.title };
