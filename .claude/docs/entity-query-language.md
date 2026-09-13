@@ -217,8 +217,9 @@ suggestion?}`, rides both the graph GET's `400` (`EntityQueryProblem` — `Probl
 Every code is an ERROR — a query is accepted whole or refused. Diagnostics are sorted by
 position. `SYNTAX` (lexical/grammatical, the parser's FIRST error only), `UNSUPPORTED` (the table
 above), `UNKNOWN_LABEL` (with a `suggestion` from `Suggestions.kt` — case-folded Levenshtein ≤
-max(2, len/3) or a prefix/substring match, alphabetical tie-break, over identifiers AND titles:
-"did you mean `service` (Service)?"), `UNKNOWN_RELATION` (direction-aware, target-aware when both
+max(2, len/3) or a prefix/substring match, alphabetical tie-break, over identifiers AND titles —
+always the IDENTIFIER, and never embedded in `message`: the SPA renders "Did you mean `x`?" once
+from the field), `UNKNOWN_RELATION` (direction-aware, target-aware when both
 ends are labelled), `UNKNOWN_PROPERTY` (the label's `schema.properties` ∪ the seven metas; the
 union when unlabelled; suppressed when the label itself is unknown), `UNKNOWN_VARIABLE`,
 `DUPLICATE_VARIABLE` (re-bound with different labels, or as a different kind),

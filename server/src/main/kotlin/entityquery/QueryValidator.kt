@@ -165,21 +165,15 @@ private class QueryValidation(private val schema: QuerySchema) {
         }
     }
 
-    private fun unknownLabelDiagnostic(label: String, span: Span): QueryDiagnostic {
-        val match = labelSuggestion(label)
-        val message = when {
-            match == null -> "Unknown blueprint `$label`"
-            match.byTitle -> "Unknown blueprint `$label` — did you mean `${match.identifier}` (${match.display})?"
-            else -> "Unknown blueprint `$label` — did you mean `${match.identifier}`?"
-        }
-        return diag(QueryDiagnosticCodes.UNKNOWN_LABEL, message, span, suggestion = match?.identifier)
-    }
+    // The message never embeds the suggestion — like every other UNKNOWN_* code it travels in
+    // the separate `suggestion` field, which the SPA renders once ("Did you mean `x`?").
+    private fun unknownLabelDiagnostic(label: String, span: Span): QueryDiagnostic =
+        diag(QueryDiagnosticCodes.UNKNOWN_LABEL, "Unknown blueprint `$label`", span, suggestion = labelSuggestion(label))
 
-    private data class LabelMatch(val identifier: String, val display: String, val byTitle: Boolean)
-
-    private fun labelSuggestion(label: String): LabelMatch? {
-        val byIdentifier = schema.blueprints.values.map { it.identifier to LabelMatch(it.identifier, it.identifier, false) }
-        val byTitle = schema.blueprints.values.map { it.title to LabelMatch(it.identifier, it.title, true) }
+    /** Matched against identifiers AND titles (`(a:Service)` → `service`), but always suggests the IDENTIFIER. */
+    private fun labelSuggestion(label: String): String? {
+        val byIdentifier = schema.blueprints.values.map { it.identifier to it.identifier }
+        val byTitle = schema.blueprints.values.map { it.title to it.identifier }
         return bestMatch(label, byIdentifier + byTitle)?.second
     }
 

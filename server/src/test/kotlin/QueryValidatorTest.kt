@@ -156,13 +156,14 @@ class QueryValidatorTest {
     }
 
     @Test
-    fun `unknown label matched by title suggests the identifier and names the title`() {
+    fun `unknown label matched by title suggests the identifier, never embedded in the message`() {
         val s = schema(blueprint("svc", title = "Service"))
         val a = node("a", listOf("servicex"), line = 3)
         val q = query(listOf(match(singlePattern(a))), returns = returnVars("a"))
         val finding = validateEntityQuery(q, s).single { it.code == QueryDiagnosticCodes.UNKNOWN_LABEL }
         assertEquals("svc", finding.suggestion)
-        assertTrue(finding.message.contains("(Service)"), finding.message)
+        // The suggestion travels in its own field only — the SPA renders it once.
+        assertEquals("Unknown blueprint `servicex`", finding.message)
     }
 
     // --- UNKNOWN_RELATION ------------------------------------------------------------------------

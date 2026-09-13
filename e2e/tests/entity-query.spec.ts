@@ -94,7 +94,8 @@ test("the entity query narrows both canvases and reports a suggestion for a mist
 
     // 3. Type a MATCH query selecting c1's `parent` edge to p1, and run it. The graph request
     // carries both the run's own `q` filter and the new `query` param.
-    const validQuery = `MATCH (a:${childBp})-[:parent]->(b:${parentBp}) RETURN a, b`;
+    // The run marker carries hyphens, so the labels are backticked (`IDENT` is `[A-Za-z_][A-Za-z0-9_]*`).
+    const validQuery = `MATCH (a:\`${childBp}\`)-[:parent]->(b:\`${parentBp}\`) RETURN a, b`;
     const queryBox = page.getByRole("textbox", { name: "Entity query" });
     await queryBox.click();
     await queryBox.pressSequentially(validQuery);
@@ -120,7 +121,7 @@ test("the entity query narrows both canvases and reports a suggestion for a mist
     await expect(page.getByText(p1Id, { exact: true })).toBeVisible();
     await expect(page.getByText(c1Id, { exact: true })).toBeVisible();
     await expect(page.getByText(c2Id, { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Applied", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Applied · \d+ /)).toBeVisible();
 
     // 5. The Entity hierarchy page shares the same draft/applied query (localStorage) — it
     // shows the identical text and the identical narrowing without re-running anything.
@@ -131,7 +132,7 @@ test("the entity query narrows both canvases and reports a suggestion for a mist
 
     const hierarchyQueryBox = page.getByRole("textbox", { name: "Entity query" });
     await expect(hierarchyQueryBox).toContainText(validQuery);
-    await expect(page.getByText("Applied", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Applied · \d+ /)).toBeVisible();
     await expect(page.getByText(p1Title, { exact: true })).toBeVisible();
     await expect(page.getByText(c1Title, { exact: true })).toBeVisible();
     await expect(page.getByText(c2Title, { exact: true })).toHaveCount(0);
@@ -140,7 +141,7 @@ test("the entity query narrows both canvases and reports a suggestion for a mist
     // debounced live check run; it must suggest the real blueprint identifier.
     await page.goto("/entity-graph");
     await expect(page.getByRole("heading", { name: "Entity graph" })).toBeVisible();
-    const mistypedQuery = `MATCH (a:${childBp}x) RETURN a`;
+    const mistypedQuery = `MATCH (a:\`${childBp}x\`) RETURN a`;
     const queryBoxAgain = page.getByRole("textbox", { name: "Entity query" });
 
     const [checkResp] = await Promise.all([
@@ -165,11 +166,11 @@ test("the entity query narrows both canvases and reports a suggestion for a mist
       page.waitForResponse(
         (r) => new URL(r.url()).pathname === "/api/v1/entities/graph" && r.request().method() === "GET",
       ),
-      page.getByRole("button", { name: "Clear" }).click(),
+      page.getByRole("button", { name: "Clear", exact: true }).click(),
     ]);
     expect(clearedGraphResp.status()).toBe(200);
     expect(new URL(clearedGraphResp.url()).searchParams.has("query")).toBe(false);
-    await expect(page.getByText("Applied", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/^Applied · \d+ /)).toHaveCount(0);
   } finally {
     // Cleanup: the children first (c1/c2 reference p1 or nothing), then p1, then the child
     // blueprint (it targets the parent), then the parent blueprint.
