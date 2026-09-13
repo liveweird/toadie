@@ -27,15 +27,16 @@ import org.jetbrains.exposed.v1.r2dbc.selectAll
  * read memory budget"), split into its own file purely to keep `EntityService.kt` under the
  * repo's `LargeClass` threshold (`config/detekt/detekt.yml`) — every declaration here is either
  * a plain top-level helper or takes its `EntityService.ActiveBlueprint`/`EntityService.Entities`
- * inputs as parameters, the SAME `entities/EntityFilter.kt` idiom (file-local `typealias`es,
+ * inputs as parameters, the SAME `entities/EntityFilter.kt` idiom (file-local `typealias`es —
+ * uniquely named, since two files of one package may not both declare a private `Entities` —,
  * no ambient `EntityService` receiver, ordinary suspend functions run inside the CALLER's
  * already-open transaction).
  */
 
-private typealias ActiveBlueprint = EntityService.ActiveBlueprint
-private typealias Entities = EntityService.Entities
+private typealias ReadActiveBlueprint = EntityService.ActiveBlueprint
+private typealias ReadEntities = EntityService.Entities
 
-private fun active(): Op<Boolean> = Entities.markedAsDeleted eq false
+private fun active(): Op<Boolean> = ReadEntities.markedAsDeleted eq false
 
 /**
  * `octet_length(column)` — the STORED byte length, read straight off PostgreSQL without ever
@@ -134,23 +135,23 @@ private class WorkspaceRowView(private val owner: WorkspaceRow) : EntityRowView 
 }
 
 private fun ResultRow.toWorkspaceRow(
-    blueprintsById: Map<UInt, ActiveBlueprint>,
+    blueprintsById: Map<UInt, ReadActiveBlueprint>,
     shownIds: Set<UInt>,
     reservation: EntityReadLedger.Reservation?,
 ): WorkspaceRow {
-    val blueprint = blueprintsById.getValue(this[Entities.blueprintId].value)
-    val id = this[Entities.id].value
+    val blueprint = blueprintsById.getValue(this[ReadEntities.blueprintId].value)
+    val id = this[ReadEntities.id].value
     val raw = RawEntityColumns(
         id = id,
         blueprintId = blueprint.id,
         blueprint = blueprint.identifier,
-        identifier = this[Entities.identifier],
-        title = this[Entities.title],
-        icon = this[Entities.icon],
-        teamRaw = this[Entities.team],
-        documentRaw = this[Entities.document],
-        createdAt = this[Entities.createdAt],
-        updatedAt = this[Entities.updatedAt],
+        identifier = this[ReadEntities.identifier],
+        title = this[ReadEntities.title],
+        icon = this[ReadEntities.icon],
+        teamRaw = this[ReadEntities.team],
+        documentRaw = this[ReadEntities.document],
+        createdAt = this[ReadEntities.createdAt],
+        updatedAt = this[ReadEntities.updatedAt],
     )
     return WorkspaceRow(raw, shown = id in shownIds, reservation = reservation)
 }
@@ -169,8 +170,8 @@ private fun ResultRow.toWorkspaceRow(
  */
 internal class EntitySnapshot(
     rows: List<WorkspaceRow>,
-    blueprintsByIdentifier: Map<String, ActiveBlueprint>,
-    private val blueprintsById: Map<UInt, ActiveBlueprint>,
+    blueprintsByIdentifier: Map<String, ReadActiveBlueprint>,
+    private val blueprintsById: Map<UInt, ReadActiveBlueprint>,
 ) : EntityIndex {
     private data class Key(val blueprintId: UInt, val identifier: String)
 
@@ -249,29 +250,29 @@ internal class ReadSet(val rows: List<WorkspaceRow>, val snapshot: EntitySnapsho
 internal suspend fun loadReadSet(
     shownPredicate: Op<Boolean>,
     targetIdentifiers: Set<String>,
-    blueprintsByIdentifier: Map<String, ActiveBlueprint>,
+    blueprintsByIdentifier: Map<String, ReadActiveBlueprint>,
     reservation: EntityReadLedger.Reservation?,
 ): ReadSet {
     val blueprintsById = blueprintsByIdentifier.values.associateBy { it.id }
     val targetIds = targetIdentifiers.mapNotNull { blueprintsByIdentifier[it]?.id }
-    val targetPredicate: Op<Boolean> = if (targetIds.isEmpty()) Op.FALSE else Entities.blueprintId inList targetIds
+    val targetPredicate: Op<Boolean> = if (targetIds.isEmpty()) Op.FALSE else ReadEntities.blueprintId inList targetIds
     val combinedPredicate = active() and (shownPredicate or targetPredicate)
 
-    val shownIds = Entities.select(Entities.id).where { active() and shownPredicate }
-        .map { it[Entities.id].value }.toList().toSet()
+    val shownIds = ReadEntities.select(ReadEntities.id).where { active() and shownPredicate }
+        .map { it[ReadEntities.id].value }.toList().toSet()
 
     reservation?.let {
-        val docLen = octetLengthOf(Entities.document)
-        val teamLen = octetLengthOf(Entities.team)
-        val total = Entities.select(docLen, teamLen).where { combinedPredicate }
+        val docLen = octetLengthOf(ReadEntities.document)
+        val teamLen = octetLengthOf(ReadEntities.team)
+        val total = ReadEntities.select(docLen, teamLen).where { combinedPredicate }
             .map { row -> (row[docLen] ?: 0L) + (row[teamLen] ?: 0L) }
             .toList()
             .sum()
         it.charge(total)
     }
 
-    val rows = Entities.selectAll().where { combinedPredicate }
-        .orderBy(Entities.id, SortOrder.ASC)
+    val rows = ReadEntities.selectAll().where { combinedPredicate }
+        .orderBy(ReadEntities.id, SortOrder.ASC)
         .map { it.toWorkspaceRow(blueprintsById, shownIds, reservation) }
         .toList()
 
