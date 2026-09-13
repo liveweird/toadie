@@ -46,29 +46,8 @@ trap 'rm -rf "$WORK"' EXIT
 HEADERS="$WORK/headers"
 BODY="$WORK/response"
 
-# Prints a friendly line instead of curl's bare exit code when the instance is unreachable.
-request() {
-  if ! curl -sS -o "$BODY" -w '%{http_code}' "$@"; then
-    echo "Cannot reach $TOADIE_URL" >&2
-    exit 1
-  fi
-}
-
-problem() { jq -c '.detail // .' "$BODY" 2>/dev/null || cat "$BODY"; }
-
-login() {
-  local status
-  status=$(jq -n --arg email "$TOADIE_EMAIL" --arg password "$TOADIE_PASSWORD" \
-      '{email: $email, password: $password}' \
-    | request -X POST "$TOADIE_URL/api/v1/login" -H 'Content-Type: application/json' --data-binary @-)
-  local token
-  token=$(jq -r '.token // empty' "$BODY" 2>/dev/null || true)
-  if [ "$status" != "200" ] || [ -z "$token" ]; then
-    echo "Login failed ($status): $(problem)" >&2
-    exit 1
-  fi
-  (umask 077; printf 'Authorization: Bearer %s\n' "$token" > "$HEADERS")
-}
+# Source the shared API helpers.
+source "$(dirname "$0")/../lib/api.sh"
 
 sample_files() { printf '%s\n' "$SCRIPT_DIR"/[0-9][0-9]-*.json | sort; }
 

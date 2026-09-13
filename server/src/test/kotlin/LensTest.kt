@@ -229,9 +229,15 @@ class LensTest {
         val alice = seededClient("lensordera")
         val bob = seededClient("lensorderb")
         val invalid = request(lensName("k"), filters = LensFilters(kind = listOf("Location")))
+        // A control character fails at the SANITIZE step (sanitizeSingleLine), a different
+        // code path than the structural `invalid` payload above (which fails at
+        // validateLensRequest, downstream of sanitize) — the sanitize step must also run
+        // AFTER the ownership verdict, not route-side ahead of it.
+        val malformed = request("ctl\u0007name")
 
         // Unknown id + invalid payload → the 404, not the 400 (the password-PUT precedent).
         assertEquals(HttpStatusCode.NotFound, alice.putJson("/api/v1/lenses/999999", invalid).status)
+        assertEquals(HttpStatusCode.NotFound, alice.putJson("/api/v1/lenses/999999", malformed).status)
 
         val publicLens = alice.postJson(
             "/api/v1/lenses",
@@ -239,8 +245,10 @@ class LensTest {
         ).body<LensResponse>()
         // Foreign public + invalid payload → the 403, not the 400.
         assertEquals(HttpStatusCode.Forbidden, bob.putJson("/api/v1/lenses/${publicLens.id}", invalid).status)
-        // The owner with the same invalid payload gets the 400.
+        assertEquals(HttpStatusCode.Forbidden, bob.putJson("/api/v1/lenses/${publicLens.id}", malformed).status)
+        // The owner with the same invalid/malformed payload gets the 400.
         assertEquals(HttpStatusCode.BadRequest, alice.putJson("/api/v1/lenses/${publicLens.id}", invalid).status)
+        assertEquals(HttpStatusCode.BadRequest, alice.putJson("/api/v1/lenses/${publicLens.id}", malformed).status)
     }
 
     @Test

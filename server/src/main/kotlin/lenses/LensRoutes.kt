@@ -71,17 +71,23 @@ fun Application.configureLensRoutes() {
             }
             put<LensesRoute.Id> { route ->
                 val caller = call.caller()
-                // No route-side validateLensRequest here: the service checks the ownership
-                // verdict FIRST so 403/404 wins over 400 (the password-PUT precedent), then
-                // validates inside the same transaction.
-                val request = sanitizedLensRequest(call.receive())
+                // No route-side sanitizedLensRequest/validateLensRequest here: the service
+                // checks the ownership verdict FIRST so 403/404 wins over 400 (the
+                // password-PUT precedent), then sanitizes AND validates inside the same
+                // transaction — sanitizing route-side could itself 400 (e.g. a control
+                // character in `name`) before the verdict ever ran.
+                val request = call.receive<LensRequest>()
                 lensService.update(route.id, request, caller.userId).orThrow()
+                // Sanitize AFTER the verdict succeeded, purely to audit the value actually
+                // stored (trimmed) rather than the raw request — safe here since the service
+                // already sanitized+validated the identical request without throwing.
+                val sanitized = sanitizedLensRequest(request)
                 audit(
                     "lens.updated",
                     "byUserId" to caller.userId.toLong(),
                     "lensId" to route.id.toLong(),
-                    "name" to request.name,
-                    "visibility" to request.visibility.name,
+                    "name" to sanitized.name,
+                    "visibility" to sanitized.visibility.name,
                 )
                 call.respond(HttpStatusCode.NoContent)
             }
