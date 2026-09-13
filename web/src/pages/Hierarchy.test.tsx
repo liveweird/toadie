@@ -45,9 +45,9 @@ function mockGraph(mockFetch: FetchMock, body: unknown = GRAPH, status = 200) {
 function renderPage() {
   return renderWithProviders(
     <Routes>
-      <Route path="/" element={<Hierarchy />} />
+      <Route path="/hierarchy" element={<Hierarchy />} />
     </Routes>,
-    { route: "/" },
+    { route: "/hierarchy" },
   );
 }
 

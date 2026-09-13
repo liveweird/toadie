@@ -8,6 +8,7 @@ import {
   pickType,
   rowOperation,
   signOut,
+  switchWorld,
   test,
   uniqueText,
   waitForApi,
@@ -24,7 +25,9 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
   await login(page);
   const key = uniqueText("e2e-ann");
 
-  // The nav leaf is visible to everyone; the admin gets the New-key action.
+  // The nav leaf is visible to everyone; the admin gets the New-key action. A fresh login
+  // lands on the Port world — Annotations lives under the Backstage world's Dictionaries.
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Annotations" }).click();
   await expect(page.getByRole("heading", { name: "Annotations" })).toBeVisible();
 
@@ -68,6 +71,7 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
   // A regular user gets the same table read-only: no create, edit, or delete affordances.
   const throwaway = await createUserViaUi(page, "E2E Ann Reader");
   await login(page, throwaway.email, throwaway.password);
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Annotations" }).click();
   await expect(page.getByRole("heading", { name: "Annotations" })).toBeVisible();
   await expect(page.getByText(key)).toBeVisible();

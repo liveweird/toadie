@@ -26,8 +26,9 @@ test("the what's-new dot leads to the changelog and clears once it is read", asy
   // parallel spec's UI. PL bodies are pinned by Changelog.test.tsx; the language journey
   // lives in i18n.spec.ts on a throwaway user.
 
-  // The dot stays cleared on later navigation.
+  // The dot stays cleared on later navigation. This spec never switches world, so "/" is
+  // deterministic: a fresh context lands on the Port world's home.
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Hierarchy" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Entity hierarchy", exact: true })).toBeVisible();
   await expect(page.getByTitle("What's new")).toHaveCount(0);
 });

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { AppShell, Box, Burger, Group, NavLink, ScrollArea, Text } from "@mantine/core";
+import { Anchor, AppShell, Box, Burger, Group, NavLink, ScrollArea, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { Link as RouterLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -7,11 +7,14 @@ import { isAdmin } from "./api/session";
 import { RedirectIfAuthed, RequireAuth } from "./auth";
 import BrandLogo from "./components/BrandLogo";
 import CommandPalette from "./components/CommandPalette";
+import HomeRedirect from "./components/HomeRedirect";
 import LoadingBlock from "./components/LoadingBlock";
 import UserMenu from "./components/UserMenu";
 import VersionStamp from "./components/VersionStamp";
+import WorldSwitch from "./components/WorldSwitch";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
-import { activeNavPath, visibleSections, type NavLeaf } from "./utils/navigation";
+import { useWorld } from "./hooks/useWorld";
+import { activeNavPath, hierarchyPath, homeOf, sectionsFor, type NavLeaf } from "./utils/navigation";
 import classes from "./theme.module.css";
 
 const Login = lazy(() => import("./pages/Login"));
@@ -59,11 +62,12 @@ function Shell() {
   const { t } = useTranslation();
   const [opened, { toggle, close }] = useDisclosure();
   const { pathname } = useLocation();
+  const { world, switchTo } = useWorld();
 
-  // The nav model lives in utils/navigation.ts (shared with the command palette): sections
-  // of always-present leaves, admin-only ones filtered per session (the routes are guarded
-  // too), an empty section disappearing with them.
-  const sections = visibleSections(isAdmin());
+  // The nav model lives in utils/navigation.ts (shared with the command palette): ONE
+  // world's sections plus the global ones, admin-only leaves filtered per session (the
+  // routes are guarded too), an empty section disappearing with them.
+  const sections = sectionsFor(world, isAdmin());
   const activeTo = activeNavPath(
     pathname,
     sections.flatMap((section) => section.items),
@@ -99,19 +103,37 @@ function Shell() {
         <Group h={48} px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <BrandLogo />
-            <Text fw={600} size="md" className={classes.brandText}>
-              {t("appShell.brand")}
-            </Text>
+            <Anchor component={RouterLink} to={homeOf(world)} underline="never" c="inherit">
+              <Group gap="sm" wrap="nowrap">
+                <BrandLogo />
+                <Text fw={600} size="md" className={classes.brandText}>
+                  {t("appShell.brand")}
+                </Text>
+              </Group>
+            </Anchor>
           </Group>
           <Group gap="sm" wrap="nowrap">
-            <CommandPalette />
+            <CommandPalette world={world} />
             <UserMenu />
           </Group>
         </Group>
       </AppShell.Header>
 
       <AppShell.Navbar p="xs">
+        {/* The world switch is always the first thing in the navbar, above the scrolling
+            sections — closing the mobile drawer is the leaf-click idiom applied to a switch. */}
+        <AppShell.Section
+          pb="xs"
+          style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
+        >
+          <WorldSwitch
+            world={world}
+            onChange={(next) => {
+              close();
+              switchTo(next);
+            }}
+          />
+        </AppShell.Section>
         {/* The link list scrolls when it outgrows the viewport; the version stamp stays pinned. */}
         <AppShell.Section grow component={ScrollArea} type="hover" scrollbarSize={6} offsetScrollbars>
           {sections.map((section) => (
@@ -160,7 +182,8 @@ export default function App() {
         <Route path="/reset-password/confirm" element={<ConfirmPasswordReset />} />
         <Route element={<RequireAuth />}>
           <Route element={<Shell />}>
-            <Route index element={<Hierarchy />} />
+            <Route index element={<HomeRedirect />} />
+            <Route path={hierarchyPath.slice(1)} element={<Hierarchy />} />
             <Route path="files" element={<CatalogFiles />} />
             <Route path="files/new" element={<CreateCatalogFile />} />
             <Route path="files/import" element={<ImportCatalogFiles />} />

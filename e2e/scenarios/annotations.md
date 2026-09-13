@@ -11,7 +11,7 @@
 
 ## Scenario: admin curates the annotation keys; a regular user reads them; the editor enforces them
 
-1. The admin signs in and opens **Annotations** from the nav.
+1. The admin signs in, switches to the Backstage world and opens **Annotations** from the nav.
    - *Expected*: the key table renders with the **New annotation key** action (ADMIN-only).
 2. They open the New-key modal and submit it empty.
    - *Expected*: the field errors render inline (the key-grammar rule, "Pick at least one
@@ -20,8 +20,8 @@
    - *Expected*: the modal POSTs and closes; the table row shows the key with its kind badge.
 4. They edit the key, adding the **API** kind, and save.
    - *Expected*: the modal PUTs to the key's id; the new kind badge appears in the row.
-5. A throwaway regular user (created via the one-time reveal flow) signs in and opens
-   **Annotations** from the nav.
+5. A throwaway regular user (created via the one-time reveal flow) signs in, switches to the
+   Backstage world and opens **Annotations** from the nav.
    - *Expected*: the same table read-only — the key visible, but no **New annotation key**,
      edit, or delete affordances (curation is ADMIN-only).
 6. Back as the admin: a new Component file is created in the editor with an annotation whose

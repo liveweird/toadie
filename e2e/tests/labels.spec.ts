@@ -8,6 +8,7 @@ import {
   pickType,
   rowOperation,
   signOut,
+  switchWorld,
   test,
   uniqueText,
   waitForApi,
@@ -24,7 +25,9 @@ test("admin curates the label registry; a regular user reads it; the editor enfo
   await login(page);
   const key = uniqueText("e2e-lbl");
 
-  // The nav leaf is visible to everyone; the admin gets the New-label action.
+  // The nav leaf is visible to everyone; the admin gets the New-label action. A fresh
+  // login lands on the Port world — Labels lives under the Backstage world's Dictionaries.
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Labels" }).click();
   await expect(page.getByRole("heading", { name: "Labels" })).toBeVisible();
 
@@ -69,6 +72,7 @@ test("admin curates the label registry; a regular user reads it; the editor enfo
   // A regular user gets the same table read-only: no create, edit, or delete affordances.
   const throwaway = await createUserViaUi(page, "E2E Lbl Reader");
   await login(page, throwaway.email, throwaway.password);
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Labels" }).click();
   await expect(page.getByRole("heading", { name: "Labels" })).toBeVisible();
   await expect(page.getByText(key)).toBeVisible();

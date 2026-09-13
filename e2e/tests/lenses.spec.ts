@@ -65,8 +65,10 @@ test("a saved lens applies the same filters on Hierarchy, Files, Graph, and Erro
   await expect(page.getByText("Modified", { exact: true })).toBeVisible();
   await expect(page.getByText(fileB, { exact: true })).toBeVisible();
 
-  // Hierarchy: the same lens applies there (selection is per-view, the lens is shared).
-  await page.goto("/");
+  // Hierarchy: the same lens applies there (selection is per-view, the lens is shared). The
+  // Lens picker is a Backstage-world affordance — go straight to /hierarchy rather than "/",
+  // which a fresh context lands on the Port world instead.
+  await page.goto("/hierarchy");
   await page.getByRole("combobox", { name: "Lens", exact: true }).click();
   await page.getByRole("option", { name: lensName }).click();
   await expect(page.getByText(fileA, { exact: true })).toBeVisible();

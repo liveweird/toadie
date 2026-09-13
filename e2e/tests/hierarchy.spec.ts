@@ -64,9 +64,11 @@ test("the hierarchy nests the containment chain and carries the file operations"
   await page.getByRole("combobox", { name: "Subcomponent of" }).fill(`component:${ns}/${core}`);
   await create();
 
-  // The tree at /, scoped to the run namespace: all three visible, nested.
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Hierarchy" })).toBeVisible();
+  // The tree at /hierarchy (the Backstage catalog Hierarchy — a fresh context's "/" lands on
+  // the Port world instead, so this navigates there directly), scoped to the run namespace:
+  // all three visible, nested.
+  await page.goto("/hierarchy");
+  await expect(page.getByRole("heading", { name: "Hierarchy", exact: true })).toBeVisible();
   // The Files list's filter panel (collapsed by default) scopes the tree to the run namespace.
   await openFilters(page);
   await pickNamespace(page, ns);

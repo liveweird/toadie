@@ -2,7 +2,7 @@ import { accountMenu, ADMIN, expect, login, signOut, test } from "./helpers";
 
 test("admin can log in and log out", async ({ page }) => {
   await login(page);
-  await expect(page.getByRole("heading", { name: "Hierarchy" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Entity hierarchy", exact: true })).toBeVisible();
 
   await signOut(page);
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();

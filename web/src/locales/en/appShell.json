@@ -24,10 +24,11 @@
     "changelog": "Changelog"
   },
   "section": {
-    "catalog": "Backstage System Model",
-    "dataModel": "Port Ontology",
+    "catalog": "Catalog",
+    "dataModel": "Ontology",
     "registries": "Dictionaries",
-    "administration": "Administration"
+    "administration": "Administration",
+    "portDictionaries": "Dictionaries"
   },
   "userMenu": {
     "open": "Account menu",
@@ -40,10 +41,18 @@
   },
   "palette": {
     "open": "Search and jump to…",
-    "placeholder": "Search files or jump to a page…",
     "groupPages": "Pages",
     "groupActions": "Actions",
     "groupFiles": "Files",
-    "nothingFound": "Nothing found"
+    "nothingFound": "Nothing found",
+    "placeholderBackstage": "Search files or jump to a page…",
+    "placeholderPort": "Search entities or jump to a page…",
+    "groupEntities": "Entities",
+    "newEntityHint": "Pick a blueprint on the Entities page"
+  },
+  "world": {
+    "backstage": "Backstage",
+    "port": "Port",
+    "switch": "Product world"
   }
 }

@@ -10,7 +10,7 @@
 
 ## Scenario: admin curates the label registry; a regular user reads it; the editor enforces it
 
-1. The admin signs in and opens **Labels** from the nav.
+1. The admin signs in, switches to the Backstage world and opens **Labels** from the nav.
    - *Expected*: the registry table renders with the **New label** action (ADMIN-only).
 2. They open the New-label modal and submit it empty.
    - *Expected*: the three field errors render inline (key grammar, "Add at least one allowed
@@ -21,8 +21,8 @@
      kind badges.
 4. They edit the label, adding a third allowed value (`edge`), and save.
    - *Expected*: the modal PUTs to the label's id; the new value badge appears in the row.
-5. A throwaway regular user (created via the one-time reveal flow) signs in and opens
-   **Labels** from the nav.
+5. A throwaway regular user (created via the one-time reveal flow) signs in, switches to the
+   Backstage world and opens **Labels** from the nav.
    - *Expected*: the same table read-only — the label visible, but no **New label**, edit, or
      delete affordances (curation is ADMIN-only).
 6. Back as the admin: a new Component file is created in the editor with a label row — the

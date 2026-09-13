@@ -11,7 +11,7 @@
 
 ## Scenario: admin curates the ordered namespaces list; a regular user reads it only
 
-1. The admin signs in and opens **Namespaces** from the nav.
+1. The admin signs in, switches to the Backstage world and opens **Namespaces** from the nav.
    - *Expected*: the document editor renders with **Save** disabled (nothing dirty yet), and
      exactly one row carries the checked **Default** radio (the flagged entry blank
      catalog-file namespaces resolve to).
@@ -22,8 +22,8 @@
    - *Expected*: the save PUTs the whole document and re-seeds from the server (Save returns
      to disabled); both entries appear, `a` before `b` — payload order is the stored order.
 4. They move the `b` row up one position and save; a fresh page load shows `b` before `a`.
-5. A throwaway regular user (created via the one-time reveal flow) signs in and opens
-   **Namespaces** from the nav.
+5. A throwaway regular user (created via the one-time reveal flow) signs in, switches to the
+   Backstage world and opens **Namespaces** from the nav.
    - *Expected*: the read-only numbered list (the `b` entry visible) with exactly one
      **Default** badge, and no **Add namespace** / **Save** — editing is ADMIN-only.
 6. Back as the admin: both throwaway entries are removed in one save, and the throwaway user

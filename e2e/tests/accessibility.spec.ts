@@ -66,7 +66,7 @@ test("the Errors loading state has no WCAG A/AA violations", async ({ page }) =>
 
 // One test per page keeps the report line-per-page.
 const AUTHED_PAGES: { path: string; heading: string }[] = [
-  { path: "/", heading: "Hierarchy" },
+  { path: "/hierarchy", heading: "Hierarchy" },
   { path: "/files", heading: "Files" },
   { path: "/files/new", heading: "New catalog file" },
   { path: "/files/import", heading: "Import catalog files" },
@@ -74,12 +74,17 @@ const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/graph", heading: "Graph" },
   { path: "/blueprints", heading: "Blueprints" },
   { path: "/blueprints/new", heading: "New blueprint" },
+  { path: "/entities", heading: "Entities" },
+  { path: "/entity-graph", heading: "Entity graph" },
+  { path: "/entity-hierarchy", heading: "Entity hierarchy" },
+  { path: "/ontology/import", heading: "Import ontology" },
   { path: "/labels", heading: "Labels" },
   { path: "/annotations", heading: "Annotations" },
   { path: "/tags", heading: "Tags" },
   { path: "/types", heading: "Types" },
   { path: "/lifecycles", heading: "Lifecycles" },
   { path: "/namespaces", heading: "Namespaces" },
+  { path: "/hierarchies", heading: "Hierarchies" },
   { path: "/users", heading: "Users" },
   { path: "/changelog", heading: "Changelog" },
 ];

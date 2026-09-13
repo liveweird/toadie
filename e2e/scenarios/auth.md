@@ -8,8 +8,8 @@
 ## Scenario: admin can log in and log out
 
 1. The admin signs in through the real login form — email, password, "Sign in".
-   - *Expected*: the app shell is up — the **Hierarchy** heading and the header account-menu button are
-     visible.
+   - *Expected*: the app shell is up — a fresh browser context lands on the Port world's
+     **Entity hierarchy** heading, and the header account-menu button is visible.
 2. The admin opens the header account menu and clicks **Sign out**.
    - *Expected*: they are back on the login screen — the **Sign in** button and the
      "You've been signed out." banner are visible.

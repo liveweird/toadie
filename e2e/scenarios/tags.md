@@ -11,7 +11,7 @@
 
 ## Scenario: admin curates the tag categories; a regular user reads them; the editor enforces them
 
-1. The admin signs in and opens **Tags** from the nav.
+1. The admin signs in, switches to the Backstage world and opens **Tags** from the nav.
    - *Expected*: the category table renders with the **New category** action (ADMIN-only).
 2. They open the New-category modal and submit it empty.
    - *Expected*: the field errors render inline ("Add at least one tag", "Pick at least one
@@ -21,8 +21,8 @@
      and kind badges.
 4. They edit the category, adding a second tag, and save.
    - *Expected*: the modal PUTs to the category's id; the new tag badge appears in the row.
-5. A throwaway regular user (created via the one-time reveal flow) signs in and opens
-   **Tags** from the nav.
+5. A throwaway regular user (created via the one-time reveal flow) signs in, switches to the
+   Backstage world and opens **Tags** from the nav.
    - *Expected*: the same table read-only — the category visible, but no **New category**,
      edit, or delete affordances (curation is ADMIN-only).
 6. Back as the admin: a new Component file is created in the editor with a tag picked from

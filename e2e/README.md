@@ -232,11 +232,12 @@ outcomes). **A new or behaviorally changed test lands with its scenario file and
 the same commit** — this list is the coverage map, the scenario file is the design.
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
-  authenticated pages (`/`, `/files`, `/files/new`, `/files/import`,
-  `/errors`, `/graph`, `/labels`, `/annotations`, `/tags`, `/types`, `/lifecycles`,
-  `/namespaces`, `/users`, `/changelog`), plus an explicitly held Errors loading state and
-  its completed report, plus reset confirmation/missing-link recovery; `color-contrast`
-  consciously waived theme-wide.
+  authenticated pages (`/hierarchy`, `/files`, `/files/new`, `/files/import`, `/errors`,
+  `/graph`, `/blueprints`, `/blueprints/new`, `/entities`, `/entity-graph`,
+  `/entity-hierarchy`, `/ontology/import`, `/labels`, `/annotations`, `/tags`, `/types`,
+  `/lifecycles`, `/namespaces`, `/hierarchies`, `/users`, `/changelog`), plus an explicitly
+  held Errors loading state and its completed report, plus reset confirmation/missing-link
+  recovery; `color-contrast` consciously waived theme-wide.
 - [`auth.spec.ts`](scenarios/auth.md) — login / logout / invalid credentials / guarded deep link.
 - [`dialog-readiness.spec.ts`](scenarios/dialog-readiness.md) — hold a real modal entering,
   prove the shared readiness helper waits despite DOM visibility, release it, and cancel.
@@ -346,7 +347,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`kinds.spec.ts`](scenarios/kinds.md) — the multi-kind editor journey: a Group (empty
   children), an API (pasted definition), and a Component whose owner/API references resolve
   live; kind badges on the list.
-- [`hierarchy.spec.ts`](scenarios/hierarchy.md) — the Hierarchy view at `/`: a
+- [`hierarchy.spec.ts`](scenarios/hierarchy.md) — the Hierarchy view at `/hierarchy` (the
+  Backstage world's Catalog section): a
   System ⊃ Component ⊃ subcomponent chain nests by most-specific placement, the Files
   filter panel selects what is SHOWN (a filtered-out container stops nesting its children,
   which fall flat to the root), a row's Pin narrows the tree to that entity and its
@@ -423,6 +425,12 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`users.spec.ts`](scenarios/users.md) — the account lifecycle: create via the one-time
   password reveal → the new user's limited view + self password change → required re-login → promotion →
   deletion → the dead login; own-row protections on the admin's row.
+- [`world-switch.spec.ts`](scenarios/world-switch.md) — the sidebar's product world switch
+  (v2.3.0): a fresh context lands on Port, checking Backstage navigates to `/hierarchy` and
+  swaps the nav leaves, a deep link into the other world flips the radio without an explicit
+  switch, a global page (`/changelog`) keeps the last-derived world, `/` redirects to the
+  remembered world's home and follows a later switch, the Toadie brand link opens the current
+  world's home, and the command palette's actions/placeholder rescope with the world; read-only.
 
 Specs log in with the seeded admin (`admin@toadie.local`, password `changeme`), and use unique
 content where they create any — so they don't depend on a clean database or absolute counts.

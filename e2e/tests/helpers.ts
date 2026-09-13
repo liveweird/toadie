@@ -66,6 +66,25 @@ export async function signOut(page: Page): Promise<void> {
 }
 
 /**
+ * Switch the sidebar's product world via its "Product world" SegmentedControl radiogroup
+ * (v2.3.0). Checking a radio navigates to that world's home — Backstage lands on the catalog
+ * Hierarchy page (`/hierarchy`), Port on the Entity hierarchy page (`/entity-hierarchy`). A
+ * fresh browser context (empty localStorage) lands on Port after `login()`, so a spec that
+ * needs a Backstage-world leaf from the sidebar must switch first.
+ *
+ * Mantine's `SegmentedControl` renders its native radio inputs visually hidden — Playwright's
+ * `.check()` refuses them as "element is not visible" — so this clicks the visible label text
+ * inside the radiogroup instead, after waiting for Mantine's own `data-initialized` readiness
+ * signal (the `readyDialog` posture: never a sleep, wait for the library's own marker).
+ */
+export async function switchWorld(page: Page, world: "Backstage" | "Port"): Promise<void> {
+  const group = page.getByRole("radiogroup", { name: "Product world" });
+  await expect(group).toHaveAttribute("data-initialized", "true");
+  await group.getByText(world, { exact: true }).click();
+  await expect(page).toHaveURL(world === "Backstage" ? /\/hierarchy$/ : /\/entity-hierarchy$/);
+}
+
+/**
  * Delete a user from the Users list through its row menu (v1.19.0: the row actions sit under
  * an "Operations for <name>" kebab) — the cleanup step every throwaway-user spec ends with.
  * Filters the list to the name first, then waits for the DELETE to land.

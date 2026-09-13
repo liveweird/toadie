@@ -24,10 +24,11 @@
     "changelog": "Historia zmian"
   },
   "section": {
-    "catalog": "Model systemowy Backstage",
-    "dataModel": "Ontologia Port",
+    "catalog": "Katalog",
+    "dataModel": "Ontologia",
     "registries": "Słowniki",
-    "administration": "Administracja"
+    "administration": "Administracja",
+    "portDictionaries": "Słowniki"
   },
   "userMenu": {
     "open": "Menu konta",
@@ -40,10 +41,18 @@
   },
   "palette": {
     "open": "Szukaj i przejdź do…",
-    "placeholder": "Szukaj plików lub przejdź do strony…",
     "groupPages": "Strony",
     "groupActions": "Akcje",
     "groupFiles": "Pliki",
-    "nothingFound": "Nic nie znaleziono"
+    "nothingFound": "Nic nie znaleziono",
+    "placeholderBackstage": "Szukaj plików lub przejdź do strony…",
+    "placeholderPort": "Szukaj encji lub przejdź do strony…",
+    "groupEntities": "Encje",
+    "newEntityHint": "Wybierz blueprint na stronie Encje"
+  },
+  "world": {
+    "backstage": "Backstage",
+    "port": "Port",
+    "switch": "Świat produktu"
   }
 }

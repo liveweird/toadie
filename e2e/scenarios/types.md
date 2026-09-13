@@ -12,7 +12,7 @@
 
 ## Scenario: admin curates the type dictionaries; a regular user reads them; the editor enforces them
 
-1. The admin signs in and opens **Types** from the nav.
+1. The admin signs in, switches to the Backstage world and opens **Types** from the nav.
    - *Expected*: the dictionary table renders the seeded per-kind rows (Component listing
      `service`, one of V22's curated values) with the **New dictionary** action (ADMIN-only).
 2. They open the New-dictionary modal and submit it empty.
@@ -21,8 +21,8 @@
 3. They edit the **Domain** dictionary, appending the unique `e2e-type-…` value, and save.
    - *Expected*: the modal PUTs to the dictionary's id; the new type badge appears in the
      Domain row.
-4. A throwaway regular user (created via the one-time reveal flow) signs in and opens
-   **Types** from the nav.
+4. A throwaway regular user (created via the one-time reveal flow) signs in, switches to the
+   Backstage world and opens **Types** from the nav.
    - *Expected*: the same table read-only — the appended type visible, but no
      **New dictionary**, edit, or delete affordances (curation is ADMIN-only).
 5. Back as the admin: a new Domain file is created in the editor with the appended value

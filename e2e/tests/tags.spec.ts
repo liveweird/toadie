@@ -8,6 +8,7 @@ import {
   pickType,
   rowOperation,
   signOut,
+  switchWorld,
   test,
   uniqueText,
   waitForApi,
@@ -27,7 +28,9 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   const tagA = uniqueText("e2e-tag-a");
   const tagB = uniqueText("e2e-tag-b");
 
-  // The nav leaf is visible to everyone; the admin gets the New-category action.
+  // The nav leaf is visible to everyone; the admin gets the New-category action. A fresh
+  // login lands on the Port world — Tags lives under the Backstage world's Dictionaries.
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Tags" }).click();
   await expect(page.getByRole("heading", { name: "Tags" })).toBeVisible();
 
@@ -72,6 +75,7 @@ test("admin curates the tag categories; a regular user reads them; the editor en
   // A regular user gets the same table read-only: no create, edit, or delete affordances.
   const throwaway = await createUserViaUi(page, "E2E Tag Reader");
   await login(page, throwaway.email, throwaway.password);
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Tags" }).click();
   await expect(page.getByRole("heading", { name: "Tags" })).toBeVisible();
   await expect(page.getByText(category)).toBeVisible();

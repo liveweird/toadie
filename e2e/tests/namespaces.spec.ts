@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createUserViaUi, deleteUserRow, expect, login, signOut, test, uniqueText } from "./helpers";
+import { createUserViaUi, deleteUserRow, expect, login, signOut, switchWorld, test, uniqueText } from "./helpers";
 
 /**
  * Every namespace input on the editor, in visible (= stored) order. `.all()` never waits,
@@ -42,7 +42,10 @@ test("admin curates the ordered namespaces list; a regular user reads it only", 
 }) => {
   await login(page);
 
-  // The nav leaf is visible to everyone; the admin lands in the document editor.
+  // The nav leaf is visible to everyone; the admin lands in the document editor. A fresh
+  // login lands on the Port world — Namespaces lives under the Backstage world's
+  // Dictionaries.
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Namespaces" }).click();
   await expect(page.getByRole("heading", { name: "Namespaces" })).toBeVisible();
   const save = page.getByRole("button", { name: "Save" });
@@ -51,7 +54,7 @@ test("admin curates the ordered namespaces list; a regular user reads it only", 
   // Exactly one row carries the DEFAULT radio; this spec never CHANGES which — the flag is
   // shared run-state that parallel specs' blank-namespace creates resolve against (flipping
   // is pinned by the server + web unit tests instead).
-  await expect(page.getByRole("radio", { checked: true })).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("radio", { checked: true })).toHaveCount(1);
 
   // A grammar violation is flagged inline and never reaches the server.
   const lastEntry = () => page.getByRole("textbox", { name: /^Namespace / }).last();
@@ -83,6 +86,7 @@ test("admin curates the ordered namespaces list; a regular user reads it only", 
   // A regular user gets the same list read-only: numbered rows, no editor controls.
   const throwaway = await createUserViaUi(page, "E2E Ns Reader");
   await login(page, throwaway.email, throwaway.password);
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Namespaces" }).click();
   await expect(page.getByRole("heading", { name: "Namespaces" })).toBeVisible();
   await expect(page.getByText(nsB)).toBeVisible();

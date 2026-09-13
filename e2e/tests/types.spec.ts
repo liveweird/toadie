@@ -7,6 +7,7 @@ import {
   pickType,
   rowOperation,
   signOut,
+  switchWorld,
   test,
   uniqueText,
   waitForApi,
@@ -26,7 +27,9 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   const extraType = uniqueText("e2e-type");
 
   // The nav leaf is visible to everyone; the admin gets the New-dictionary action, and the
-  // seeded rows are already listed (Component with its curated values).
+  // seeded rows are already listed (Component with its curated values). A fresh login lands
+  // on the Port world — Types lives under the Backstage world's Dictionaries.
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Types" }).click();
   await expect(page.getByRole("heading", { name: "Types" })).toBeVisible();
   const componentRow = page.getByRole("row").filter({ has: page.getByText("Component", { exact: true }) });
@@ -56,6 +59,7 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   // A regular user gets the same table read-only: no create, edit, or delete affordances.
   const throwaway = await createUserViaUi(page, "E2E Type Reader");
   await login(page, throwaway.email, throwaway.password);
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Types" }).click();
   await expect(page.getByRole("heading", { name: "Types" })).toBeVisible();
   await expect(page.getByText(extraType)).toBeVisible();
