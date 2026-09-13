@@ -2163,7 +2163,7 @@ export interface components {
         DocumentCheckReport: {
             findings: components["schemas"]["DocumentCheckFinding"][];
         };
-        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list — the catalog-file create/replace `400` body only (`CatalogFileInvalid` response). Other `400`s on those operations omit `findings`. */
+        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list — the catalog-file create/replace `400` body only (`CatalogFileInvalid` response). Other `400`s on those operations omit `findings`. Repeats `ProblemDetail`'s members on purpose: the runtime conformance validator injects `additionalProperties: false` into every schema and cannot compose `allOf` without dropping `nullable` (2.3.1 tried), so the base is copied rather than referenced. */
         CatalogFileInvalidProblem: {
             /**
              * @description A URI reference identifying the problem type.
@@ -2322,10 +2322,10 @@ export interface components {
             kinds: string[];
         };
         /**
-         * @description PRIVATE lenses are visible only to their creator; PUBLIC lenses are visible to every authenticated user. Both stay creator-only mutable.
+         * @description Shared by lenses and saved entity queries. PRIVATE rows are visible only to their creator; PUBLIC rows are visible to every authenticated user. Both stay creator-only mutable.
          * @enum {string}
          */
-        LensVisibility: "PRIVATE" | "PUBLIC";
+        Visibility: "PRIVATE" | "PUBLIC";
         /** @description The shared catalog filter set as a saved snapshot — the same nine slots the files/graph/errors GETs accept as query parameters. Every field is optional; absent means "not filtered on". Values are validated structurally only, never against the registries. */
         LensFilters: {
             /** @description Case- and accent-insensitive name substring. */
@@ -2347,7 +2347,7 @@ export interface components {
             id: number;
             /** @description Unique case-insensitively among the CREATOR'S active lenses. */
             name: string;
-            visibility: components["schemas"]["LensVisibility"];
+            visibility: components["schemas"]["Visibility"];
             filters: components["schemas"]["LensFilters"];
             /**
              * Format: int32
@@ -2376,20 +2376,15 @@ export interface components {
         LensRequest: {
             /** @description Trimmed; must not be blank. */
             name: string;
-            visibility: components["schemas"]["LensVisibility"];
+            visibility: components["schemas"]["Visibility"];
             filters: components["schemas"]["LensFilters"];
         };
-        /**
-         * @description PRIVATE saved queries are visible only to their creator; PUBLIC ones are visible to every authenticated user. Both stay creator-only mutable.
-         * @enum {string}
-         */
-        SavedEntityQueryVisibility: "PRIVATE" | "PUBLIC";
         SavedEntityQuery: {
             /** Format: int32 */
             id: number;
             /** @description Unique case-insensitively among the CREATOR'S active saved queries. */
             name: string;
-            visibility: components["schemas"]["SavedEntityQueryVisibility"];
+            visibility: components["schemas"]["Visibility"];
             /** @description The entity query text as saved (trimmed; may span lines). */
             query: string;
             /**
@@ -2419,7 +2414,7 @@ export interface components {
         SavedEntityQueryRequest: {
             /** @description Trimmed; must not be blank. */
             name: string;
-            visibility: components["schemas"]["SavedEntityQueryVisibility"];
+            visibility: components["schemas"]["Visibility"];
             /** @description Trimmed; must not be blank; newlines/tabs allowed, other control characters rejected; must parse (syntax + supported subset), schema validity not required. */
             query: string;
         };
@@ -2690,7 +2685,7 @@ export interface components {
             items: components["schemas"]["Blueprint"][];
         };
         /**
-         * @description Shared by the blueprint and entity bulk-import reports (phase 6, v1.28.0). CREATED — stored as a new row. UPDATED — an existing row was replaced (`replaceExisting: true`). EXISTS — an existing row was found but `replaceExisting` is off; nothing was stored (renders gray, not red — by design, not a failure). INVALID — failed shape/registry/ reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts, a concurrent-change residual).
+         * @description Shared by the blueprint and entity bulk-import reports (phase 6, v1.28.0). CREATED — stored as a new row. UPDATED — an existing row was replaced (`replaceExisting: true`). EXISTS — an existing row was found but `replaceExisting` is off; nothing was stored (renders gray, not red — by design, not a failure). INVALID — failed shape/registry/ reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts, a concurrent-change residual). Deliberately not the catalog import's vocabulary (`CREATED_WITH_FINDINGS`): a catalog import always waives soft findings and never replaces, while an ontology import can `replaceExisting` (`UPDATED`) and reports an untouched existing row (`EXISTS`).
          * @enum {string}
          */
         OntologyImportStatus: "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR";
@@ -2800,7 +2795,7 @@ export interface components {
             endColumn?: number;
             suggestion?: string;
         };
-        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the optional `diagnostics` list — the `getEntityGraph` `400` body (`EntityQueryInvalid` response). A `400` that is not about the query text itself (a repeated scalar parameter, an over-long `query`) omits `diagnostics`. */
+        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the optional `diagnostics` list — the `getEntityGraph` `400` body (`EntityQueryInvalid` response). A `400` that is not about the query text itself (a repeated scalar parameter, an over-long `query`) omits `diagnostics`. Repeats `ProblemDetail`'s members on purpose: the runtime conformance validator injects `additionalProperties: false` into every schema and cannot compose `allOf` without dropping `nullable` (2.3.1 tried), so the base is copied rather than referenced. */
         EntityQueryProblem: {
             /**
              * @description A URI reference identifying the problem type.
@@ -2825,7 +2820,7 @@ export interface components {
             /** @description In source order; empty when the query would be accepted. */
             diagnostics: components["schemas"]["QueryDiagnostic"][];
         };
-        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list — the entity create/replace `400` body only (`EntityInvalid` response). Other `400`s on those operations omit `findings`. */
+        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list — the entity create/replace `400` body only (`EntityInvalid` response). Other `400`s on those operations omit `findings`. Repeats `ProblemDetail`'s members on purpose: the runtime conformance validator injects `additionalProperties: false` into every schema and cannot compose `allOf` without dropping `nullable` (2.3.1 tried), so the base is copied rather than referenced. */
         EntityInvalidProblem: {
             /**
              * @description A URI reference identifying the problem type.
@@ -4416,6 +4411,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -4523,6 +4519,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -4630,6 +4627,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -4737,6 +4735,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -4843,6 +4842,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -4949,6 +4949,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -5028,6 +5029,7 @@ export interface operations {
                     "application/json": components["schemas"]["Blueprint"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
@@ -5081,6 +5083,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -5351,6 +5354,7 @@ export interface operations {
                     "application/json": components["schemas"]["Entity"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
@@ -5403,6 +5407,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];

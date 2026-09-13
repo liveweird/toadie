@@ -1383,6 +1383,7 @@ paths:
         re-registered or removed from the file.
       responses:
         '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1483,6 +1484,7 @@ paths:
         until the tags are re-registered or removed from the file.
       responses:
         '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1577,6 +1579,7 @@ paths:
         saved (a deliberate admin choice — the strict no-grandfathering rule).
       responses:
         '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1669,6 +1672,7 @@ paths:
         or removed from them.
       responses:
         '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1764,6 +1768,7 @@ paths:
         foreign PUBLIC → `403`.
       responses:
         '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1864,6 +1869,7 @@ paths:
         foreign PUBLIC → `403`.
       responses:
         '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1948,6 +1954,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Blueprint'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalServerError' }
@@ -1992,6 +1999,7 @@ paths:
         before the entity-count and referrer checks.
       responses:
         '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -2391,6 +2399,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Entity'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalServerError' }
@@ -2435,6 +2444,7 @@ paths:
         `team` column or a `format: team`/`format: user` property.
       responses:
         '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -3485,6 +3495,7 @@ components:
         RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list —
         the catalog-file create/replace `400` body only (`CatalogFileInvalid` response). Other
         `400`s on those operations omit `findings`.
+        Repeats `ProblemDetail`'s members on purpose: the runtime conformance validator injects `additionalProperties: false` into every schema and cannot compose `allOf` without dropping `nullable` (2.3.1 tried), so the base is copied rather than referenced.
       required: [title, status]
       properties:
         type:
@@ -3756,12 +3767,13 @@ components:
             At least one of the seven landscape kinds (case-insensitive input; stored in
             canonical casing and order); no duplicates.
 
-    LensVisibility:
+    Visibility:
       type: string
       enum: [PRIVATE, PUBLIC]
       description: >-
-        PRIVATE lenses are visible only to their creator; PUBLIC lenses are visible to every
-        authenticated user. Both stay creator-only mutable.
+        Shared by lenses and saved entity queries. PRIVATE rows are visible only to their
+        creator; PUBLIC rows are visible to every authenticated user. Both stay creator-only
+        mutable.
 
     LensFilters:
       type: object
@@ -3829,7 +3841,7 @@ components:
           maxLength: 100
           description: Unique case-insensitively among the CREATOR'S active lenses.
         visibility:
-          $ref: '#/components/schemas/LensVisibility'
+          $ref: '#/components/schemas/Visibility'
         filters:
           $ref: '#/components/schemas/LensFilters'
         createdBy:
@@ -3871,16 +3883,10 @@ components:
           maxLength: 100
           description: Trimmed; must not be blank.
         visibility:
-          $ref: '#/components/schemas/LensVisibility'
+          $ref: '#/components/schemas/Visibility'
         filters:
           $ref: '#/components/schemas/LensFilters'
 
-    SavedEntityQueryVisibility:
-      type: string
-      enum: [PRIVATE, PUBLIC]
-      description: >-
-        PRIVATE saved queries are visible only to their creator; PUBLIC ones are visible to
-        every authenticated user. Both stay creator-only mutable.
     SavedEntityQuery:
       type: object
       required: [id, name, visibility, query, createdBy, creatorName, creatorDeleted, createdAt, updatedAt]
@@ -3894,7 +3900,7 @@ components:
           maxLength: 100
           description: Unique case-insensitively among the CREATOR'S active saved queries.
         visibility:
-          $ref: '#/components/schemas/SavedEntityQueryVisibility'
+          $ref: '#/components/schemas/Visibility'
         query:
           type: string
           maxLength: 2000
@@ -3936,7 +3942,7 @@ components:
           maxLength: 100
           description: Trimmed; must not be blank.
         visibility:
-          $ref: '#/components/schemas/SavedEntityQueryVisibility'
+          $ref: '#/components/schemas/Visibility'
         query:
           type: string
           maxLength: 2000
@@ -4510,6 +4516,9 @@ components:
         reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch
         duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2
         residual (stored WITHOUT its deferred parts, a concurrent-change residual).
+        Deliberately not the catalog import's vocabulary (`CREATED_WITH_FINDINGS`): a catalog
+        import always waives soft findings and never replaces, while an ontology import can
+        `replaceExisting` (`UPDATED`) and reports an untouched existing row (`EXISTS`).
 
     BlueprintImportRequest:
       type: object
@@ -4785,6 +4794,7 @@ components:
         list — the `getEntityGraph` `400` body (`EntityQueryInvalid` response). A `400` that
         is not about the query text itself (a repeated scalar parameter, an over-long
         `query`) omits `diagnostics`.
+        Repeats `ProblemDetail`'s members on purpose: the runtime conformance validator injects `additionalProperties: false` into every schema and cannot compose `allOf` without dropping `nullable` (2.3.1 tried), so the base is copied rather than referenced.
       required: [title, status]
       properties:
         type:
@@ -4833,6 +4843,7 @@ components:
         RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list —
         the entity create/replace `400` body only (`EntityInvalid` response). Other `400`s on
         those operations omit `findings`.
+        Repeats `ProblemDetail`'s members on purpose: the runtime conformance validator injects `additionalProperties: false` into every schema and cannot compose `allOf` without dropping `nullable` (2.3.1 tried), so the base is copied rather than referenced.
       required: [title, status]
       properties:
         type:
