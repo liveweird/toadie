@@ -7,19 +7,24 @@ import { IconChevronDown, IconChevronRight, IconChevronsDown, IconChevronsUp, Ic
 import { deleteEntity, getEntityGraph, type EntityGraphNode } from "../api/entities";
 import EntityFindingsBadge from "../components/EntityFindingsBadge";
 import EntityGraphToolbar from "../components/EntityGraphToolbar";
+import EntityQueryBar from "../components/EntityQueryBar";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import HierarchyPicker from "../components/HierarchyPicker";
 import RowActionsMenu from "../components/RowActionsMenu";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
+import { useEntityQuery } from "../hooks/useEntityQuery";
+import { useQueryDiagnostics } from "../hooks/useQueryDiagnostics";
 import { useHierarchies } from "../hooks/useHierarchies";
+import { useBlueprints } from "../hooks/useBlueprints";
 import { useStoredState, isString } from "../hooks/useStoredState";
 import { buildEntityHierarchy, effectiveHierarchyId } from "../utils/entityGraph";
 import { editEntityPath } from "../utils/entityLinks";
 import { entityDeleteErrorMessage } from "../utils/entityForm";
 import { findPlacement, type HierarchyNode } from "../utils/hierarchy";
 import { loadErrorMessage } from "../utils/saveError";
+import { queryProblemDiagnostics } from "../utils/queryDiagnostics";
 import LoadingBlock from "../components/LoadingBlock";
 import PageHeader from "../components/PageHeader";
 import classes from "../theme.module.css";
@@ -141,14 +146,26 @@ export default function EntityHierarchy() {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [pinnedId, setPinnedId] = useStoredState("entityHierarchy.pinnedNodeId", "", isString);
   const { hierarchies } = useHierarchies();
+  const { blueprints } = useBlueprints();
   const [storedHierarchyId, setStoredHierarchyId] = useStoredState("entityHierarchy.hierarchy", "", isString);
   const hierarchyId = effectiveHierarchyId(storedHierarchyId, hierarchies.map((h) => h.value));
 
+  const query = useEntityQuery();
+  const { diagnostics: liveDiagnostics } = useQueryDiagnostics(query.draft);
+
   const { data, isPending, isError, error } = useQuery({
-    queryKey: ["entities", "graph", filters.values],
-    queryFn: () => getEntityGraph(filters.values),
+    queryKey: ["entities", "graph", filters.values, query.applied],
+    queryFn: () => getEntityGraph({ ...filters.values, query: query.applied || undefined }),
     placeholderData: keepPreviousData,
   });
+
+  // The last RUN query's own diagnostics win over the live typing-check ones — see EntityGraph.
+  // A failed run's diagnostics describe the APPLIED text: once the draft diverges from it they
+  // would land on the wrong characters, so the live check takes over the moment the user edits.
+  const runDiagnostics = isError && query.draft === query.applied ? queryProblemDiagnostics(error) : [];
+  const diagnostics = runDiagnostics.length > 0 ? runDiagnostics : liveDiagnostics;
+  const completionSchema = useMemo(() => ({ blueprints, hierarchies: hierarchies.map((h) => h.value) }), [blueprints, hierarchies]);
+  const appliedCount = query.applied && data ? data.nodes.length : undefined;
 
   const roots = useMemo(() => (data ? buildEntityHierarchy(data, hierarchyId) : []), [data, hierarchyId]);
   const placement = useMemo(() => (pinnedId ? findPlacement(roots, pinnedId) : null), [roots, pinnedId]);
@@ -179,7 +196,21 @@ export default function EntityHierarchy() {
       <PageHeader
         title={t("entityHierarchy.title")}
         toolbar={
-          <EntityGraphToolbar viewKey="entityHierarchy" filters={filters}>
+          <EntityGraphToolbar
+            viewKey="entityHierarchy"
+            filters={filters}
+            query={
+              <EntityQueryBar
+                value={query.draft}
+                onChange={query.setDraft}
+                onRun={query.run}
+                onClear={query.clear}
+                diagnostics={diagnostics}
+                completionSchema={completionSchema}
+                appliedCount={appliedCount}
+              />
+            }
+          >
             <HierarchyPicker value={hierarchyId} onChange={setStoredHierarchyId} />
             <Tooltip label={t("entityHierarchy.expandAll")}>
               <ActionIcon variant="default" size="md" aria-label={t("entityHierarchy.expandAll")} onClick={() => setCollapsed(new Set())}>
@@ -219,7 +250,7 @@ export default function EntityHierarchy() {
         }
       />
 
-      {isError && (
+      {isError && runDiagnostics.length === 0 && (
         <Alert color="red" variant="light" title={t("entityHierarchy.loadFailed")}>
           {loadErrorMessage(error, t)}
         </Alert>

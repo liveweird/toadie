@@ -46,6 +46,15 @@ export default defineConfig({
               test: /node_modules[\\/](?:react|react-dom|scheduler)[\\/]/,
               priority: 10,
             },
+            // The entity query bar (phase 7, v2.0.0) pulls in CodeMirror on both the Entity
+            // graph and Entity hierarchy lazy pages — one shared chunk instead of duplicating
+            // it (and its small transitive deps, style-mod for CSS-in-JS and w3c-keyname for
+            // keybinding lookup) into both.
+            {
+              name: 'codemirror',
+              test: /node_modules[\\/](?:@codemirror|@lezer|style-mod|w3c-keyname)[\\/]/,
+              priority: 10,
+            },
           ],
         },
       },

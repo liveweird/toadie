@@ -375,3 +375,29 @@
   border-radius: 50%;
   background-color: var(--mantine-color-red-6);
 }
+
+/* The entity query bar's CodeMirror host (components/QueryEditor.tsx, phase 7 v2.0.0): CM
+   ships no border of its own, so this mimics Mantine's TextInput frame and focus ring. */
+.queryEditor {
+  border: 1px solid light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-sm);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.queryEditor :global(.cm-editor) {
+  outline: none;
+}
+
+.queryEditor:focus-within {
+  border-color: var(--mantine-primary-color-filled);
+}
+
+.queryEditor :global(.cm-content) {
+  padding: 6px 8px;
+  min-height: 2.25rem;
+}
+
+.queryEditor :global(.cm-scroller) {
+  overflow-x: auto;
+}
