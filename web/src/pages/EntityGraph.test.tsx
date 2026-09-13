@@ -70,6 +70,7 @@ function mockGraph(
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: [] }));
     if (url.startsWith("/api/v1/dictionaries/hierarchies")) return Promise.resolve(jsonResponse(200, { items: hierarchies }));
+    if (url.startsWith("/api/v1/entity-queries")) return Promise.resolve(jsonResponse(200, { items: [] }));
     if (url === "/api/v1/entities/query/check")
       return Promise.resolve(jsonResponse(200, { diagnostics: checkDiagnostics }));
     if (url === "/api/v1/users/9/entity-graph-layout") {
@@ -394,12 +395,45 @@ describe("EntityGraph page", () => {
       expect(await screen.findByTestId("entityQuery-applied")).toHaveTextContent("3 entities");
     });
 
+    test("picking a saved query runs it: the graph is refetched with its text as query=", async () => {
+      mockGraph(mockFetch);
+      const base = mockFetch.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>;
+      mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+        url.startsWith("/api/v1/entity-queries")
+          ? Promise.resolve(
+              jsonResponse(200, {
+                items: [
+                  { id: 7, name: "Owners", visibility: "PUBLIC", query: "MATCH (o:_team) RETURN o", createdBy: 9, creatorName: "Me", creatorDeleted: false, createdAt: 1, updatedAt: 1 },
+                ],
+              }),
+            )
+          : base(url, init),
+      );
+      renderPage();
+
+      await screen.findByText(/platform \[team\]/);
+      fireEvent.click(screen.getByLabelText("Saved query", { selector: "input" }));
+      fireEvent.click(await screen.findByRole("option", { name: "Owners" }));
+
+      await waitFor(() => {
+        const called = mockFetch.mock.calls.some(
+          ([url]) =>
+            typeof url === "string" &&
+            url.startsWith("/api/v1/entities/graph") &&
+            url.includes("query=MATCH+%28o%3A_team%29"),
+        );
+        expect(called).toBe(true);
+      });
+      expect(screen.getByRole("textbox", { name: "Entity query" })).toHaveValue("MATCH (o:_team) RETURN o");
+    });
+
     test("a failed run carrying diagnostics is shown and suppresses the generic load-failed alert", async () => {
       mockFetch.mockImplementation((url: string) => {
         if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: [] }));
         if (url.startsWith("/api/v1/dictionaries/hierarchies"))
           return Promise.resolve(jsonResponse(200, { items: HIERARCHIES }));
         if (url === "/api/v1/entities/query/check") return Promise.resolve(jsonResponse(200, { diagnostics: [] }));
+        if (url.startsWith("/api/v1/entity-queries")) return Promise.resolve(jsonResponse(200, { items: [] }));
         if (url === "/api/v1/users/9/entity-graph-layout")
           return Promise.resolve(jsonResponse(200, { mode: "auto", positions: {} }));
         if (url.startsWith("/api/v1/entities/graph")) {

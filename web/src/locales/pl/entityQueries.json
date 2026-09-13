@@ -1,0 +1,46 @@
+{
+  "picker": {
+    "label": "Zapisane zapytanie",
+    "placeholder": "Zastosuj zapisane zapytanie…",
+    "clearAria": "Wyczyść zapisane zapytanie"
+  },
+  "group": {
+    "private": "Prywatne",
+    "public": "Publiczne"
+  },
+  "modified": "Zmienione",
+  "actionsAria": "Akcje zapisanego zapytania",
+  "action": {
+    "saveAs": "Zapisz jako nowe zapytanie…",
+    "save": "Zapisz zmiany",
+    "edit": "Zmień nazwę / widoczność…",
+    "delete": "Usuń"
+  },
+  "createTitle": "Zapisz zapytanie",
+  "editTitle": "Edytuj zapytanie",
+  "field": {
+    "name": "Nazwa",
+    "visibility": "Widoczność"
+  },
+  "visibility": {
+    "private": "Prywatne",
+    "privateHint": "Tylko Ty widzisz to zapytanie.",
+    "public": "Publiczne",
+    "publicHint": "Każdy widzi i może zastosować to zapytanie; tylko Ty możesz je zmieniać."
+  },
+  "validation": {
+    "nameRequired": "Nazwa jest wymagana",
+    "nameTooLong": "Nazwa może mieć najwyżej 100 znaków"
+  },
+  "saveConflict": "Masz już zapisane zapytanie o tej nazwie",
+  "saveForbidden": "Tylko osoba, która utworzyła publiczne zapytanie, może je zmieniać",
+  "saveGone": "To zapisane zapytanie już nie istnieje",
+  "deleteTitle": "Usunąć zapisane zapytanie?",
+  "deleteFailed": "Nie udało się usunąć zapisanego zapytania",
+  "deleteBody": "Zapisane zapytanie „{{name}}” zniknie dla wszystkich osób, które je widzą.",
+  "toast": {
+    "created": "Zapytanie zapisane",
+    "saved": "Zapytanie zaktualizowane",
+    "deleted": "Zapytanie usunięte"
+  }
+}

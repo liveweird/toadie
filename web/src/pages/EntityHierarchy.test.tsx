@@ -65,6 +65,7 @@ function mockGraph(
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: [] }));
     if (url.startsWith("/api/v1/dictionaries/hierarchies")) return Promise.resolve(jsonResponse(200, { items: hierarchies }));
+    if (url.startsWith("/api/v1/entity-queries")) return Promise.resolve(jsonResponse(200, { items: [] }));
     if (url === "/api/v1/entities/query/check")
       return Promise.resolve(jsonResponse(200, { diagnostics: checkDiagnostics }));
     if ((init?.method ?? "GET") === "DELETE" && url.startsWith("/api/v1/entities/"))
@@ -328,6 +329,7 @@ describe("EntityHierarchy page", () => {
         if (url.startsWith("/api/v1/dictionaries/hierarchies"))
           return Promise.resolve(jsonResponse(200, { items: HIERARCHIES }));
         if (url === "/api/v1/entities/query/check") return Promise.resolve(jsonResponse(200, { diagnostics: [] }));
+        if (url.startsWith("/api/v1/entity-queries")) return Promise.resolve(jsonResponse(200, { items: [] }));
         if (url.startsWith("/api/v1/entities/graph")) {
           if (url.includes("query=")) {
             return Promise.resolve(

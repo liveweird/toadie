@@ -211,6 +211,8 @@ export default function EntityHierarchy() {
                 diagnostics={diagnostics}
                 completionSchema={completionSchema}
                 appliedCount={appliedCount}
+                draft={query.draft}
+                onPick={query.runText}
               />
             }
           >

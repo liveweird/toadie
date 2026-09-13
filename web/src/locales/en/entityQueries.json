@@ -1,0 +1,46 @@
+{
+  "picker": {
+    "label": "Saved query",
+    "placeholder": "Apply a saved query…",
+    "clearAria": "Clear saved query"
+  },
+  "group": {
+    "private": "Private",
+    "public": "Public"
+  },
+  "modified": "Modified",
+  "actionsAria": "Saved query actions",
+  "action": {
+    "saveAs": "Save as new query…",
+    "save": "Save changes",
+    "edit": "Rename / visibility…",
+    "delete": "Delete"
+  },
+  "createTitle": "Save query",
+  "editTitle": "Edit query",
+  "field": {
+    "name": "Name",
+    "visibility": "Visibility"
+  },
+  "visibility": {
+    "private": "Private",
+    "privateHint": "Only you can see this query.",
+    "public": "Public",
+    "publicHint": "Everyone can see and apply this query; only you can change it."
+  },
+  "validation": {
+    "nameRequired": "Name is required",
+    "nameTooLong": "Name must be at most 100 characters"
+  },
+  "saveConflict": "You already have a saved query with this name",
+  "saveForbidden": "Only the creator can change a public query",
+  "saveGone": "This saved query no longer exists",
+  "deleteTitle": "Delete saved query?",
+  "deleteFailed": "Could not delete the saved query",
+  "deleteBody": "Saved query \"{{name}}\" will be gone for everyone who can see it.",
+  "toast": {
+    "created": "Query saved",
+    "saved": "Query updated",
+    "deleted": "Query deleted"
+  }
+}
