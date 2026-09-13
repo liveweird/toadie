@@ -107,9 +107,12 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     // ontology extension may add required properties beyond the seeded base shape).
     teamEntityId = await createTeamEntity(page.request, adminToken!, teamIdentifier, teamTitle);
 
-    // 1. Open Entities from the nav's Port Ontology section and pick the target blueprint in
-    // the toolbar Select — the URL gets ?blueprint=.
-    await page.getByRole("link", { name: "Entities" }).click();
+    // 1. Open Entities with a FULL load and pick the target blueprint in the toolbar Select —
+    // the URL gets ?blueprint=. Not the sidebar link: since v2.3.0 sign-in lands on the Entity
+    // hierarchy, which primes the SPA's five-minute blueprint cache (`useBlueprints`) BEFORE
+    // the API seeded the throwaway blueprints above, so an in-app navigation would offer a
+    // stale Select; a fresh load refetches the registry.
+    await page.goto("/entities");
     await expect(page.getByRole("heading", { name: "Entities" })).toBeVisible();
 
     const blueprintSelect = page.getByRole("combobox", { name: "Blueprint" });

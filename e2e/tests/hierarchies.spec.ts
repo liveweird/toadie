@@ -49,7 +49,7 @@ test("admin curates the global hierarchies list; a regular user reads it", async
   const save = page.getByRole("button", { name: "Save" });
   await expect(save).toBeDisabled();
   expect(await hierarchyValues(page)).toContain("composition");
-  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("radio")).toHaveCount(0);
 
   // A grammar violation is flagged inline and never reaches the server.
   const lastEntry = () => page.getByRole("textbox", { name: /^Hierarchy / }).last();

@@ -13,7 +13,8 @@
 1. The admin signs in and creates, through the editor, a System, a Component in that System,
    and a second Component that is both in the System and a subcomponent of the first.
    - *Expected*: all three saves succeed (references resolve against the just-stored files).
-2. They open **Hierarchy** (the root nav entry), expand the filter panel (the Files list's
+2. They open **Hierarchy** at `/hierarchy` (the Backstage world's Catalog section — a fresh
+   context's `/` lands on the Port world instead), expand the filter panel (the Files list's
    full filter set lives here too), and scope the namespace filter to the run namespace.
    - *Expected*: the System renders as a root with the Component nested under it and the
      subcomponent nested under the Component — most-specific placement: the subcomponent sits

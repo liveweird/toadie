@@ -18,7 +18,8 @@
 3. They change the name filter to B.
    - *Expected*: the **Modified** badge appears — the current filters have diverged from
      the selected lens — and the list now shows B.
-4. They open **Hierarchy** and pick the lens from its combo box.
+4. They open **Hierarchy** at `/hierarchy` (a fresh context's `/` lands on the Port world
+   instead) and pick the lens from its combo box.
    - *Expected*: the lens applies there too (lenses are shared between the views, the
      selection is per-view): A is visible, B is not.
 5. They open **Graph** and pick the lens.

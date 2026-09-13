@@ -9,6 +9,7 @@ import {
   pickType,
   rowOperation,
   signOut,
+  switchWorld,
   test,
   uniqueText,
   waitForApi,
@@ -57,13 +58,16 @@ test("admin curates the global lifecycles list; a regular user reads it; the edi
   const extra = uniqueText("e2e-lc");
 
   // The nav leaf is visible to everyone; the admin lands in the document editor with the
-  // seeded values present and no default radios (lifecycles have no default concept).
+  // seeded values present and no default radios (lifecycles have no default concept). A
+  // fresh login lands on the Port world — Lifecycles lives under the Backstage world's
+  // Dictionaries.
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Lifecycles" }).click();
   await expect(page.getByRole("heading", { name: "Lifecycles" })).toBeVisible();
   const save = page.getByRole("button", { name: "Save" });
   await expect(save).toBeDisabled();
   expect(await lifecycleValues(page)).toContain("production");
-  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("radio")).toHaveCount(0);
 
   // A grammar violation is flagged inline and never reaches the server.
   const lastEntry = () => page.getByRole("textbox", { name: /^Lifecycle / }).last();
@@ -80,6 +84,7 @@ test("admin curates the global lifecycles list; a regular user reads it; the edi
   // A regular user gets the same list read-only: numbered rows, no editor controls.
   const throwaway = await createUserViaUi(page, "E2E Lc Reader");
   await login(page, throwaway.email, throwaway.password);
+  await switchWorld(page, "Backstage");
   await page.getByRole("link", { name: "Lifecycles" }).click();
   await expect(page.getByRole("heading", { name: "Lifecycles" })).toBeVisible();
   await expect(page.getByText(extra)).toBeVisible();

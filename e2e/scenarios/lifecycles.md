@@ -11,15 +11,15 @@
 
 ## Scenario: admin curates the global lifecycles list; a regular user reads it; the editor enforces it
 
-1. The admin signs in and opens **Lifecycles** from the nav.
+1. The admin signs in, switches to the Backstage world and opens **Lifecycles** from the nav.
    - *Expected*: the document editor renders the seeded values (`production` among them) with
      no default radios — lifecycles have no default concept — and a disabled Save.
 2. They add a row with a grammar-violating value and try to save.
    - *Expected*: the inline grammar error renders; no request reaches the server.
 3. They correct the row to the unique `e2e-lc-…` value and save.
    - *Expected*: the PUT commits, the editor re-seeds, and the value appears in the list.
-4. A throwaway regular user (created via the one-time reveal flow) signs in and opens
-   **Lifecycles** from the nav.
+4. A throwaway regular user (created via the one-time reveal flow) signs in, switches to the
+   Backstage world and opens **Lifecycles** from the nav.
    - *Expected*: the same list read-only — numbered rows with the appended value, no add,
      save, or remove affordances (curation is ADMIN-only).
 5. Back as the admin: a new Component file is created in the editor with the appended value

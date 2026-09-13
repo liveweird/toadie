@@ -24,7 +24,7 @@
    property (`public`), and Direct ownership titled "Owned by"; a dependent blueprint with a
    single, required relation (`parent`) targeting the first; and one throwaway `_team` entity.
    - *Expected*: all three creations succeed (`201`).
-2. They open **Entities** from the nav's Port Ontology section and pick the target blueprint
+2. They open **Entities** with a fresh page load (sign-in lands on the Entity hierarchy, which caches the blueprint registry before the API seed above) and pick the target blueprint
    in the toolbar Select.
    - *Expected*: the URL carries `?blueprint=<target>`.
 3. They open **New entity** and submit it empty.

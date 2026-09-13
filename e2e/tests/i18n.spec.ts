@@ -24,11 +24,11 @@ test("a language switch persists across reload and re-login on a fresh device", 
       await page.getByRole("menuitem", { name: "Polski" }).click();
     })(),
   ]);
-  await expect(page.getByRole("heading", { name: "Hierarchia" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hierarchia encji", exact: true })).toBeVisible();
 
   // Survives a reload (the device caches the choice).
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Hierarchia" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hierarchia encji", exact: true })).toBeVisible();
 
   // The sync proof: wipe ALL device state and sign in afresh — the UI comes up Polish
   // purely from the server-stored value riding the login response.
@@ -37,7 +37,7 @@ test("a language switch persists across reload and re-login on a fresh device", 
   await page.getByRole("textbox", { name: "Email" }).fill(throwaway.email);
   await page.getByRole("textbox", { name: "Password" }).fill(throwaway.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Hierarchia" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hierarchia encji", exact: true })).toBeVisible();
 
   // Signing back in as the (English-language) seed admin flips the UI back to English the
   // same way — the sync works in both directions. Cleanup: delete the throwaway user.

@@ -17,7 +17,8 @@
 3. They look at the newest entry.
    - *Expected*: it shows a version (`vX.Y.Z`) and a release date (`YYYY-MM-DD`) — no exact
      version is asserted, so releases never break this spec.
-4. They navigate back to the Hierarchy page.
+4. They navigate back to `/` (this run never switches world, so a fresh context's `/`
+   deterministically opens the Port world's Entity hierarchy page).
    - *Expected*: the dot stays cleared.
 
 ## Not covered here (and why)

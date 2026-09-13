@@ -82,11 +82,12 @@ test("a mixed batch imports with a two-pass blueprint cycle, then round-trips th
     };
   }
 
-  // The nav's Port Ontology section — scoped explicitly because, once the Blueprints page has
-  // rendered its own per-row "Entities" link (`viewEntities`, a plain per-blueprint navigation
-  // link with the SAME bare text) and this shared registry carries many other blueprints, a
-  // bare `getByRole("link", { name: "Entities" })` matches every one of those rows too.
-  const portOntologyNav = page.getByRole("group", { name: "Port Ontology" });
+  // The nav's Ontology section (Port world) — scoped explicitly because, once the Blueprints
+  // page has rendered its own per-row "Entities" link (`viewEntities`, a plain per-blueprint
+  // navigation link with the SAME bare text) and this shared registry carries many other
+  // blueprints, a bare `getByRole("link", { name: "Entities" })` matches every one of those
+  // rows too.
+  const portOntologyNav = page.getByRole("group", { name: "Ontology" });
   const textarea = page.getByRole("textbox", { name: "JSON content" });
   const checkButton = page.getByRole("button", { name: "Check", exact: true });
   const importButton = page.getByRole("button", { name: "Import", exact: true });
