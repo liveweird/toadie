@@ -566,10 +566,13 @@ class EntityQueryRouteTest {
             val selfRelation = RelationDefinition(title = "Self", target = bp, required = false, many = false)
             client.createBlueprint(BlueprintRequest(identifier = bp, title = "T", relations = mapOf("self" to selfRelation)))
             client.postJson("/api/v1/entities", entityRequest(bp, id))
-            // Capacity 100 with 99 already held by ANOTHER reservation: this request's own charge
-            // would fit an empty ledger, so the refusal is contention (429), never own-request (400).
-            val ledger = EntityReadLedger(capacity = 100)
-            val other = ledger.open().apply { charge(99) }
+            // A generous capacity with all but one byte already held by ANOTHER reservation: this
+            // request's own charge (a few KiB even with the shared container's `_team`/`_user` rows
+            // widened in) would fit an empty ledger, so the refusal is contention (429), never the
+            // own-request 400.
+            val capacity = 8L * 1024 * 1024
+            val ledger = EntityReadLedger(capacity = capacity)
+            val other = ledger.open().apply { charge(capacity - 1) }
             try {
                 val tuned = TestEntities.tunedService(readLedger = ledger)
                 val filter = EntityFilter(blueprint = bp, q = null)
