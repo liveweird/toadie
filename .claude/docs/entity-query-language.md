@@ -261,6 +261,23 @@ draft/applied pair, `hooks/useQueryDiagnostics.ts` the 300 ms-debounced `/query/
 happens only on Run / Mod+Enter (and on load when an applied query is stored); diagnostics on
 every keystroke, debounced.
 
+## Saved queries (v2.1.0)
+
+`entityquery/SavedEntityQuery.kt` + `SavedEntityQueryService.kt` + `SavedEntityQueryRoutes.kt` are
+the Lenses feature (`lenses/`) one level over, byte-for-byte where the docs say so
+(`.claude/docs/authorization.md`, `persistence.md` V35): a row = `name` (≤100) + `visibility`
+PRIVATE/PUBLIC + the `query` TEXT; own + PUBLIC listing, creator-only mutations behind the hybrid
+404/403 verdict decided before validation, soft delete, per-owner unique name. Two rules are the
+feature's own: the text goes through `infra/validation/sanitizeMultiLine` (trim; newline, carriage
+return and tab allowed, every other control character a `400`) and must PARSE
+(`parseEntityQuery` — a `QueryException` becomes the `EntityQueryInvalid` 400 with its
+diagnostics), while SCHEMA validity is deliberately not checked at save time: blueprints change,
+and a saved query that names a since-renamed relation simply shows its diagnostics when applied.
+The SPA's `components/EntityQueryPicker.tsx` (the `LensPicker` clone) sits in the query bar's
+header row on both canvases: picking sets the draft AND runs it (`useEntityQuery.runText`), a
+"Modified" badge marks a draft that drifted from the picked text, and Save as / Save changes /
+Rename-visibility / Delete carry the lens conflict/forbidden/gone mappings.
+
 ## Performance and the snapshot-cache trigger
 
 At the caps: 10 000 rows → one `SELECT` plus 10 000 `blueprintJson` decodes (~50–150 ms; today's
