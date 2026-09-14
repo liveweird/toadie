@@ -1,4 +1,4 @@
-import { createTeamEntity, createUserViaUi, expect, login, openFilters, test, uniqueText } from "./helpers";
+import { createTeamEntity, createUserViaUi, expect, login, openFilters, openPills, test, uniqueText } from "./helpers";
 
 type EntityLayoutDocument = {
   mode: "auto" | "manual";
@@ -135,10 +135,13 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
 
     // 3. Narrow the graph to this run's own rows with the search filter — the run marker on
     // every seeded identifier/title already isolates this run without picking blueprints
-    // (the always-visible Blueprints pill row starts every blueprint shown, so nothing needs
-    // toggling to see them).
+    // (the Blueprints pill row, behind the Visibility toggle, starts every blueprint shown,
+    // so nothing needs toggling to see them).
     await openFilters(page);
     await page.getByRole("textbox", { name: "Search" }).fill(run);
+    // The Relations and Blueprints pill rows (steps 5/5b/5d) sit behind the same collapsed
+    // Visibility toggle — open it once, up front.
+    await openPills(page);
 
     // 4. Five nodes, three blueprint frames (labelled by blueprint TITLE) — the throwaway team
     // joins the run's own parent/child entities, narrowed to just this run by `q`.
@@ -186,10 +189,11 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     // query never sees it — target its aria-label attribute directly.
     await page.locator('button[aria-label="Clear team filter"]').click();
 
-    // 5d. Toggling the child blueprint's pill off (in the always-visible Blueprints group)
-    // hides its two entities without touching the parent's or the team's; toggling it back on
-    // restores them. Other parallel specs' own blueprints may appear as extra chips in this
-    // workspace-wide group, so the chip is located by its exact identifier.
+    // 5d. Toggling the child blueprint's pill off (in the Blueprints group, behind the
+    // Visibility toggle opened above) hides its two entities without touching the parent's or
+    // the team's; toggling it back on restores them. Other parallel specs' own blueprints may
+    // appear as extra chips in this workspace-wide group, so the chip is located by its exact
+    // identifier.
     const blueprintsGroup = page.getByRole("group", { name: "Blueprints" });
     const childChip = blueprintsGroup.getByText(childBp, { exact: true });
     await childChip.click();

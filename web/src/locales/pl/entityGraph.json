@@ -3,6 +3,7 @@
   "loadFailed": "Nie udało się wczytać grafu encji",
   "relationsLabel": "Relacje",
   "blueprintsLabel": "Blueprinty",
+  "visibilityToggle": "Widoczność",
   "filter": {
     "q": "Szukaj",
     "clearQ": "Wyczyść filtr wyszukiwania",

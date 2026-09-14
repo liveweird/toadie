@@ -145,6 +145,8 @@ describe("EntityHierarchy page", () => {
     renderPage();
 
     await screen.findByText("Platform");
+    // The pills sit behind the collapsed Visibility toggle (2.4.2).
+    await user.click(screen.getByRole("button", { name: /^Visibility/ }));
     const pills = screen.getByRole("group", { name: "Blueprints" });
     await user.click(within(pills).getByText("service", { exact: true }));
     await waitFor(() => {
@@ -326,6 +328,8 @@ describe("EntityHierarchy page", () => {
     renderPage();
 
     await screen.findByText("Platform");
+    // The pills sit behind the collapsed Visibility toggle (2.4.2).
+    await user.click(screen.getByRole("button", { name: /^Visibility/ }));
     const pills = screen.getByRole("group", { name: "Blueprints" });
     expect(within(pills).getByRole("checkbox", { name: "team" })).toBeChecked();
     expect(within(pills).getByRole("checkbox", { name: "service" })).toBeChecked();

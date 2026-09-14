@@ -3,15 +3,16 @@ import {
   expect,
   login,
   openFilters,
+  openPills,
   pickLifecycle,
   pickNamespace,
   pickType,
+  readyDialog,
   rowOperation,
   runNamespace,
   test,
   uniqueText,
   waitForApi,
-  readyDialog,
 } from "./helpers";
 
 type LayoutDocument = {
@@ -127,8 +128,10 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
 
     // Disabling the Depends-on relation prunes the orphaned MISSING ghost — its only edge was
     // what made it knowable — while the stored nodes stay: a relation chip governs relations,
-    // not which entities are shown. (The Chip's checkbox input is visually hidden — click its
-    // label.)
+    // not which entities are shown. The chip sits behind the title row's Visibility toggle
+    // (2.4.2), so open that section first. (The Chip's checkbox input is visually hidden —
+    // click its label.)
+    await openPills(page);
     await page.getByText("Depends on", { exact: true }).click();
     await expect(page.getByText(ghost, { exact: true })).toHaveCount(0);
     await expect(page.getByText(b, { exact: true })).toBeVisible();

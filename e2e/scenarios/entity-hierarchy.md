@@ -32,14 +32,15 @@
    `parent` relation is left unset but whose `team` names the throwaway team.
    - *Expected*: all five creations succeed (`201`).
 3. They open **Entity hierarchy** from the nav's Ontology section, expand the filter panel,
-   and set the search filter to the run's own marker (the always-visible Blueprints pill row
-   starts every blueprint shown, so the two throwaway blueprints plus `_team` need no picking —
-   the run's own search marker is what isolates this run from other specs' blueprints/entities/
-   teams running in parallel) — this page keeps its OWN filter state, independent of the Entity
-   graph page's, though both render through the same shared filter controls.
+   set the search filter to the run's own marker, and open the Visibility section from its
+   title-row toggle (the Blueprints pill row it holds starts every blueprint shown, so the two
+   throwaway blueprints plus `_team` need no picking — the run's own search marker is what
+   isolates this run from other specs' blueprints/entities/teams running in parallel) — this
+   page keeps its OWN filter state, independent of the Entity graph page's, though both render
+   through the same shared filter controls.
    - *Expected*: all four entities' titles plus the throwaway team's are visible.
-4. They toggle the child blueprint's pill off, then back on, in the always-visible Blueprints
-   group.
+4. They toggle the child blueprint's pill off, then back on, in the Blueprints group, opened
+   from the title-row Visibility toggle.
    - *Expected*: the two child entities disappear while off (the parent, the orphan, and the
      team stay), and reappear once the pill is back on.
 5. They collapse p1's branch from its row toggle, then expand it again.

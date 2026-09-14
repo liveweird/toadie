@@ -1,5 +1,6 @@
 {
   "title": "Pliki",
+  "visibilityToggle": "Widoczność",
   "createFile": "Nowy plik katalogu",
   "editFile": "Edytuj plik katalogu",
   "noFiles": "Brak plików katalogu",

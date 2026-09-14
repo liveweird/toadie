@@ -1,3 +1,4 @@
+import { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen, within } from "../test/render";
@@ -12,6 +13,28 @@ function Host({ onKinds }: { onKinds?: (kinds: string[]) => void }) {
     : filters;
   return (
     <CatalogToolbar viewKey="toolbarTest" filters={controls}>
+      <button type="button">secondary control</button>
+    </CatalogToolbar>
+  );
+}
+
+/** Header mode's own host (Graph/Hierarchy's shape — a `title` given). */
+function HeaderHost({
+  pills,
+  hiddenRelationsCount,
+}: {
+  pills?: ReactNode;
+  hiddenRelationsCount?: number;
+}) {
+  const filters = useCatalogFileFilterState("toolbarTest");
+  return (
+    <CatalogToolbar
+      title="Graph"
+      viewKey="toolbarTest"
+      filters={filters}
+      pills={pills}
+      hiddenRelationsCount={hiddenRelationsCount}
+    >
       <button type="button">secondary control</button>
     </CatalogToolbar>
   );
@@ -47,5 +70,34 @@ describe("CatalogToolbar", () => {
     renderWithProviders(<Host onKinds={(next) => seen.push(next)} />);
     await user.click(screen.getByRole("checkbox", { name: "User" }));
     expect(seen.at(-1)).toEqual(ENTITY_KINDS.filter((k) => k !== "User"));
+  });
+
+  test("header mode: title row holds Filters, Visibility, the lens picker and children; the kind pills mount only once Visibility opens; the badge counts hidden kinds plus relations", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<HeaderHost pills={<div>extra pills</div>} hiddenRelationsCount={2} />);
+
+    expect(screen.getByRole("heading", { name: "Graph" })).toBeInTheDocument();
+    const filtersToggle = screen.getByRole("button", { name: "Filters" });
+    expect(filtersToggle).toHaveAttribute("aria-expanded", "false");
+    const visibilityToggle = screen.getByRole("button", { name: /^Visibility/ });
+    expect(visibilityToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("combobox", { name: "Lens" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "secondary control" })).toBeInTheDocument();
+
+    // Collapsed: the kind pills and the caller's own `pills` are both absent.
+    expect(screen.queryByRole("group", { name: "Kind" })).not.toBeInTheDocument();
+    expect(screen.queryByText("extra pills")).not.toBeInTheDocument();
+
+    await user.click(visibilityToggle);
+    expect(screen.getByRole("group", { name: "Kind" })).toBeInTheDocument();
+    expect(screen.getByText("extra pills")).toBeInTheDocument();
+    // Every kind stays visible — the badge counts only the caller's hidden-relations count.
+    expect(within(visibilityToggle).getByText("2")).toBeInTheDocument();
+  });
+
+  test("header mode remembers Filters under the FilterPanel key", () => {
+    localStorage.setItem("toadie.viewSettings.toolbarTest.filtersOpen", "true");
+    renderWithProviders(<HeaderHost />);
+    expect(screen.getByRole("button", { name: "Filters" })).toHaveAttribute("aria-expanded", "true");
   });
 });

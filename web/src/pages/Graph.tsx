@@ -53,7 +53,6 @@ import { loadErrorMessage } from "../utils/saveError";
 import { saveErrorMessage } from "../utils/saveError";
 import { editCatalogFilePath } from "../utils/catalogFileLinks";
 import LoadingBlock from "../components/LoadingBlock";
-import PageHeader from "../components/PageHeader";
 import classes from "../theme.module.css";
 import { useGraphLayout } from "../hooks/useGraphLayout";
 import { useSessionUserId } from "../auth";
@@ -219,94 +218,97 @@ export default function Graph() {
 
   return (
     <Stack gap="md" className={classes.fillPage}>
-      <PageHeader
+      <CatalogToolbar
         title={t("graph.title")}
-        toolbar={
-          <CatalogToolbar viewKey="graph" filters={filters}>
-            {/* Which RELATIONSHIP families draw edges — the group's aria-label names it. */}
-            <Chip.Group
-              multiple
-              value={enabled}
-              onChange={(values) => setEnabled(values as RelationFamily[])}
-            >
-              <Group gap={6} role="group" aria-label={t("graph.relationsLabel")}>
-                {RELATION_FAMILIES.map((family) => (
-                  <Chip key={family} value={family} size="xs">
-                    {t(`graph.relation.${family}`)}
-                  </Chip>
-                ))}
-              </Group>
-            </Chip.Group>
-            <Group gap="xs" ml="auto" wrap="wrap">
-              <SegmentedControl
-                size="xs"
-                value={mode}
-                disabled={!layoutReady}
-                onChange={(value) => layout.update((current) => ({
-                  ...current,
-                  mode: value as LayoutMode,
-                }))}
-                data={[
-                  { value: "auto", label: t("graph.layoutMode.auto") },
-                  { value: "manual", label: t("graph.layoutMode.manual") },
-                ]}
-                aria-label={t("graph.layoutMode.label")}
-              />
-              {/* Reset layout clears POSITIONS only — the fold is its own dimension with its
-                  own reset, so straightening a dragged canvas never unfolds it. */}
-              {mode === "manual" && (
-                <Button
-                  variant="default"
-                  size="xs"
-                  disabled={!layoutReady}
-                  onClick={() => layout.update((current) => ({ ...current, positions: {} }))}
-                >
-                  {t("graph.resetLayout")}
-                </Button>
-              )}
-              {/* Expand all clears the WHOLE list, stale ids of filtered-out nodes included,
-                  so nothing resurfaces collapsed later. Shown only while a drawn node is
-                  collapsed — a list holding nothing but stale ids has no visible state. */}
-              {baseLayout.anyCollapsed && (
-                <Button
-                  variant="default"
-                  size="xs"
-                  disabled={!layoutReady}
-                  onClick={() => layout.update((current) => ({ ...current, collapsed: [] }))}
-                >
-                  {t("graph.expandAll")}
-                </Button>
-              )}
-              <Popover position="bottom-end" shadow="md" withArrow>
-                <Popover.Target>
-                  <Button variant="subtle" size="xs" color="gray" leftSection={<IconInfoCircle size={14} />}>
-                    {t("graph.legend.title")}
-                  </Button>
-                </Popover.Target>
-                <Popover.Dropdown>
-                  <Stack gap="xs">
-                    {LEGEND.map(({ key, style }) => (
-                      <Group key={key} gap={8} wrap="nowrap">
-                        <span
-                          style={{ width: 14, height: 14, borderRadius: 4, display: "inline-block", flexShrink: 0, ...style }}
-                        />
-                        <Text size="xs">{t(`graph.legend.${key}`)}</Text>
-                      </Group>
-                    ))}
-                    <Group gap={8} wrap="nowrap">
-                      {/* The folded-edge swatch draws with the edge's own dash pattern. */}
-                      <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
-                        <line x1={0} y1={4} x2={14} y2={4} stroke="currentColor" strokeWidth={1.5} style={FOLDED_EDGE_STYLE} />
-                      </svg>
-                      <Text size="xs">{t("graph.legend.folded")}</Text>
-                    </Group>
-                  </Stack>
-                </Popover.Dropdown>
-              </Popover>
+        viewKey="graph"
+        filters={filters}
+        hiddenRelationsCount={RELATION_FAMILIES.length - enabled.length}
+        pills={
+          /* Which RELATIONSHIP families draw edges — the group's aria-label names it. Gray:
+             the secondary chip group, distinct from the amber kind pills beside it. */
+          <Chip.Group
+            multiple
+            value={enabled}
+            onChange={(values) => setEnabled(values as RelationFamily[])}
+          >
+            <Group gap={6} role="group" aria-label={t("graph.relationsLabel")}>
+              {RELATION_FAMILIES.map((family) => (
+                <Chip key={family} value={family} size="xs" color="gray">
+                  {t(`graph.relation.${family}`)}
+                </Chip>
+              ))}
             </Group>
-          </CatalogToolbar>
+          </Chip.Group>
         }
-      />
+      >
+        <Group gap="xs" wrap="wrap">
+          <SegmentedControl
+            size="xs"
+            value={mode}
+            disabled={!layoutReady}
+            onChange={(value) => layout.update((current) => ({
+              ...current,
+              mode: value as LayoutMode,
+            }))}
+            data={[
+              { value: "auto", label: t("graph.layoutMode.auto") },
+              { value: "manual", label: t("graph.layoutMode.manual") },
+            ]}
+            aria-label={t("graph.layoutMode.label")}
+          />
+          {/* Reset layout clears POSITIONS only — the fold is its own dimension with its
+              own reset, so straightening a dragged canvas never unfolds it. */}
+          {mode === "manual" && (
+            <Button
+              variant="default"
+              size="xs"
+              disabled={!layoutReady}
+              onClick={() => layout.update((current) => ({ ...current, positions: {} }))}
+            >
+              {t("graph.resetLayout")}
+            </Button>
+          )}
+          {/* Expand all clears the WHOLE list, stale ids of filtered-out nodes included,
+              so nothing resurfaces collapsed later. Shown only while a drawn node is
+              collapsed — a list holding nothing but stale ids has no visible state. */}
+          {baseLayout.anyCollapsed && (
+            <Button
+              variant="default"
+              size="xs"
+              disabled={!layoutReady}
+              onClick={() => layout.update((current) => ({ ...current, collapsed: [] }))}
+            >
+              {t("graph.expandAll")}
+            </Button>
+          )}
+          <Popover position="bottom-end" shadow="md" withArrow>
+            <Popover.Target>
+              <Button variant="subtle" size="xs" color="gray" leftSection={<IconInfoCircle size={14} />}>
+                {t("graph.legend.title")}
+              </Button>
+            </Popover.Target>
+            <Popover.Dropdown>
+              <Stack gap="xs">
+                {LEGEND.map(({ key, style }) => (
+                  <Group key={key} gap={8} wrap="nowrap">
+                    <span
+                      style={{ width: 14, height: 14, borderRadius: 4, display: "inline-block", flexShrink: 0, ...style }}
+                    />
+                    <Text size="xs">{t(`graph.legend.${key}`)}</Text>
+                  </Group>
+                ))}
+                <Group gap={8} wrap="nowrap">
+                  {/* The folded-edge swatch draws with the edge's own dash pattern. */}
+                  <svg width={14} height={8} aria-hidden="true" style={{ display: "inline-block", flexShrink: 0 }}>
+                    <line x1={0} y1={4} x2={14} y2={4} stroke="currentColor" strokeWidth={1.5} style={FOLDED_EDGE_STYLE} />
+                  </svg>
+                  <Text size="xs">{t("graph.legend.folded")}</Text>
+                </Group>
+              </Stack>
+            </Popover.Dropdown>
+          </Popover>
+        </Group>
+      </CatalogToolbar>
 
       {layout.phase === "loading" && (
         <Text role="status" aria-label={t("graph.layout.loading")} size="sm" c="dimmed" style={{ flexShrink: 0 }}>

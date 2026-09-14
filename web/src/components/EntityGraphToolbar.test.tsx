@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders, screen } from "../test/render";
+import { renderWithProviders, screen, within } from "../test/render";
 import EntityGraphToolbar from "./EntityGraphToolbar";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 
@@ -9,12 +9,14 @@ function Host({
   queryForcedOpen = false,
   appliedCount,
   unstableSetter = false,
+  hiddenRelationsCount,
 }: {
   queryForcedOpen?: boolean;
   appliedCount?: number;
   /** Hand the toolbar a FRESH `onQueryOpenChange` closure on every render — the shape a
    *  `useStoredState` setter has on the real pages, not `useState`'s stable one. */
   unstableSetter?: boolean;
+  hiddenRelationsCount?: number;
 }) {
   const filters = useEntityGraphFilterState("toolbarTest", ["team", "service"]);
   const [queryOpen, setQueryOpenStable] = useState(false);
@@ -28,6 +30,7 @@ function Host({
       onQueryOpenChange={setQueryOpen}
       queryForcedOpen={queryForcedOpen}
       appliedCount={appliedCount}
+      hiddenRelationsCount={hiddenRelationsCount}
       query={<div>the query bar</div>}
     >
       <button type="button">secondary control</button>
@@ -45,21 +48,47 @@ describe("EntityGraphToolbar", () => {
     localStorage.clear();
   });
 
-  test("renders the title, both collapsed toggles, the captioned Blueprints group, and children", () => {
+  test("renders the title, all three collapsed toggles, and children; opening Visibility reveals the captioned Blueprints group", async () => {
+    const user = userEvent.setup();
     renderWithProviders(<Host />);
     expect(screen.getByRole("heading", { name: "Entity graph" })).toBeInTheDocument();
 
     const filtersToggle = screen.getByRole("button", { name: "Filters" });
     expect(filtersToggle).toHaveAttribute("aria-expanded", "false");
+    const visibilityToggle = screen.getByRole("button", { name: /^Visibility/ });
+    expect(visibilityToggle).toHaveAttribute("aria-expanded", "false");
     const queryToggle = screen.getByRole("button", { name: "Query" });
     expect(queryToggle).toHaveAttribute("aria-expanded", "false");
 
+    // Collapsed: the pills group is absent, like every other section's content.
+    expect(screen.queryByRole("group", { name: "Blueprints" })).not.toBeInTheDocument();
+
+    await user.click(visibilityToggle);
+    expect(visibilityToggle).toHaveAttribute("aria-expanded", "true");
     const group = screen.getByRole("group", { name: "Blueprints" });
     expect(screen.getByText("Blueprints")).toBeInTheDocument();
     expect(group).toBeInTheDocument();
 
     expect(screen.getByRole("button", { name: "secondary control" })).toBeInTheDocument();
     expect(screen.queryByText("the query bar")).not.toBeInTheDocument();
+  });
+
+  test("the Visibility badge counts hidden blueprints plus hidden relations, and persists per view", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderWithProviders(<Host hiddenRelationsCount={1} />);
+
+    const visibilityToggle = screen.getByRole("button", { name: /^Visibility/ });
+    await user.click(visibilityToggle);
+    await user.click(screen.getByRole("checkbox", { name: "service" }));
+    unmount();
+
+    // Reload the host: the toggle stays open (persisted under `toolbarTest.pillsOpen`) and the
+    // badge counts the one hidden blueprint plus the caller's hidden-relations count.
+    renderWithProviders(<Host hiddenRelationsCount={1} />);
+    const reopened = screen.getByRole("button", { name: /^Visibility/ });
+    expect(reopened).toHaveAttribute("aria-expanded", "true");
+    expect(within(reopened).getByText("2")).toBeInTheDocument();
+    expect(localStorage.getItem("toadie.viewSettings.toolbarTest.pillsOpen")).toBe("true");
   });
 
   test("the Filters toggle opens the drawer and persists per view", async () => {

@@ -399,14 +399,18 @@ the boot range; `ProductionHttpTest` pins that a ~6 KB request line is parsed
 (`maxInitialLineLength`). Frontend: the pure-module tests (`queryLanguage`, `queryCompletion` one
 case per context, `queryDiagnostics` offset math incl. clamping and positionless diagnostics),
 the `QueryEditor` smoke, and the page tests through a mocked editor — opening the toolbar's
-collapsible Query section first (`getByRole("button", { name: /^Query/ })`) — for typing → the
+collapsible Query section first (`getByRole("button", { name: /^Query/ })`, and since 2.4.2 the
+Visibility section first for any pill-touching case) — for typing → the
 debounced check, Run → `query=` on the graph request, a `400` with `diagnostics` rendered
 without the generic load-failed alert, Clear, blueprint-pill toggling (2.4.1: fetch/no-fetch and
 the empty state when every pill is off), and the draft shared across both canvases. E2E:
-`entity-query.spec.ts`, whose `helpers.ts` `openQuery(page)` (the `openFilters` twin, anchored
-`/^Query( |$)/` so it never matches "Saved query actions") opens the section before touching the
-"Entity query" textbox or the "Saved query" combobox; a canvas context action needs no such call,
-since running it opens the section itself. **Saved queries (v2.1.0):** `SavedEntityQueryTest` is `LensTest`'s case
+`entity-query.spec.ts`, whose `helpers.ts` `openQuery(page)` (the `openFilters`/`openPills` twin,
+anchored `/^Query( |$)/` so it never matches "Saved query actions") opens the section before
+touching the "Entity query" textbox or the "Saved query" combobox; `openPills(page)` (2.4.2, over
+`/^Visibility/`) does the same for the Blueprints/Relations pills on both Port canvases AND the
+Kind/relation pills on the Backstage Graph and Hierarchy pages, all four now folded behind one
+Visibility toggle; a canvas context action needs no such call, since running it opens the Query
+section itself. **Saved queries (v2.1.0):** `SavedEntityQueryTest` is `LensTest`'s case
 list retargeted (401; CRUD + the visibility flip; the per-owner 409 freed by delete; private
 invisible to others / public read-only; a multi-line text kept verbatim, a control character
 `400`; a syntax-invalid text → the `EntityQueryProblem` 400 with positioned diagnostics on POST

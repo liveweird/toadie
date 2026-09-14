@@ -3,6 +3,7 @@
   "loadFailed": "Failed to load the entity graph",
   "relationsLabel": "Relations",
   "blueprintsLabel": "Blueprints",
+  "visibilityToggle": "Visibility",
   "filter": {
     "q": "Search",
     "clearQ": "Clear search filter",
