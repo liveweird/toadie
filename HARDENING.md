@@ -563,3 +563,26 @@ of a silently-accepting-connections one.
 
 Do not introduce a generic registry framework or interfaces solely to satisfy a principle.
 The modular-monolith architecture remains appropriate; the work is hardening, not a rewrite.
+
+### 2026-09-14 — documentation review (Codex's DOCUMENTATION_QUALITY_REVIEW.md)
+
+Codex's untracked `DOCUMENTATION_QUALITY_REVIEW.md` (reviewed master `2ff74eb`) was re-verified
+finding by finding against master `afb75c2`. Applied: the `CLAUDE.md` template/lock-description
+corrections (DQ-01/DQ-02b) with the blueprint/entity 404-before-400 note added to
+`.claude/docs/authorization.md`; the 400-not-422 choice registered as `API-ERR-002` in
+`api-guidelines/API-GUIDELINES.md`'s known-gaps register rather than "fixed" (DQ-02a); the
+`AGENTS.md` descriptive-vs-normative disagreement split (DQ-03); the scenario checker now
+enforces the coverage-map line it already promised, with `.claude/docs/testing.md`'s "E2E
+scenarios" paragraph demonstrating the new structured rule format once (DQ-05a); Spectral's
+`security-is-declared`/`security-schemes-defined` promoted `warn` → `error` since both fire
+zero times today (DQ-05b); the "Where to read, by task" map + reference-examples table added
+to `CLAUDE.md` (DQ-06/DQ-07); and DQ-08 (the transport's caller-`signal` override) fixed in
+code via `web/src/api/http.ts`'s new `anySignal()`, composing a caller signal with the request
+deadline instead of replacing it.
+
+Declined: the color-contrast waiver (kept, e2e's `accessibility.spec.ts` documents it
+consciously) and any wholesale documentation consolidation (the docs' redundancy is a
+readability trade-off, not a defect). **DQ-04 remains open by design** — requiring the
+**Quality gate** status in GitHub repository settings is not something a YAML/doc change can
+enforce; see the unchecked box under Stage 1 above. Prescriptions 1–6 in the review already had
+canonical homes and needed no new artifact.

@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Where to read, by task:**
+
+| Task | Read |
+|---|---|
+| Server feature | this file's package layout + `.claude/docs/persistence.md` + `.claude/docs/authorization.md` |
+| API change | `api-guidelines/API-GUIDELINES.md` + the "OpenAPI contract" section below |
+| SPA (`web/`) | `web/CLAUDE.md`, the relevant section |
+| Any test | `.claude/docs/testing.md` |
+| Anything security-sensitive | `.claude/docs/security.md` |
+| E2E | `e2e/README.md` + `e2e/scenarios/README.md` |
+
+**One canonical home per rule** — link to it, never restate it (the 2026-09 lock-description drift, fixed in this change, is the precedent). New cross-cutting rules in `.claude/docs/*` use the structured shape `Applies when / Requirement / Reference / Enforcement (named gate, or "manual review") / Exception`, with `Enforcement` mandatory; apply it to NEW rules only, never retrofit an existing paragraph (`.claude/docs/testing.md`'s "E2E scenarios" paragraph demonstrates it once, since this change touches that rule's enforcement).
+
 ## Commands
 
 Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchain is required (auto-provisioned via foojay-resolver; the local dev JDK is pinned in `mise.toml`).
@@ -262,7 +275,9 @@ ch.nokillswit
 │                       .claude/docs/port-data-model.md), BlueprintReferences.kt (pure
 │                       `blueprintTargets`/`withTargetRenamed`), BlueprintService.kt (one row =
 │                       one blueprint: identity columns + one `definition` JSON; every mutation
-│                       under the tag-category table lock — relation/aggregation targets must
+│                       under the `blueprints` table lock (V27 — the tag-category lock's
+│                       PATTERN, `infra/db/Locking.kt`, see `.claude/docs/persistence.md`) —
+│                       relation/aggregation targets must
 │                       exist (self allowed), an identifier RENAME cascades into every row
 │                       targeting it in the same transaction, deleting a targeted blueprint is
 │                       409 naming the referrers, or that has active ENTITIES 409 naming the
@@ -418,7 +433,19 @@ ch.nokillswit
                         catalog-info.yaml URL (guards documented in security.md)
 ```
 
-**Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse`) with the `validateX` free function enforced by route AND service (in the DTO file, or a sibling `<Entity>Validation.kt` once the rules outgrow it — the catalog split), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_SECTIONS` entries tagged with their `world` (`web/src/utils/navigation.ts`), and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`. Extract when byte-identical (`validateAllowedKinds`, `lockingTransaction`, `requireNoDuplicates`, `useRegistryQuery`); copy when the feature differs where the docs say it does (the tag-category lock, the lens visibility verdict, the dictionary whole-document replace). A sixth registry does not warrant a CRUD base class until two of them are byte-identical end to end.
+**Feature template — copy `catalog/`**: `<feature>/<Entity>.kt` (request/response DTOs + `toResponse`) with the `validateX` free function enforced by the SERVICE always, and by the route too (in the DTO file, or a sibling `<Entity>Validation.kt` once the rules outgrow it — the catalog split), `<Entity>Routes.kt` (`@Resource` typed routes under `/api/v1/...` + `configureXRoutes()` reading services from `attributes`, `audit(...)` on every mutation), `<Entity>Service.kt` (Exposed `object` table nested inside the service, `suspendTransaction`, soft-delete via `marked_as_deleted` + partial unique indexes, list = count + rows on one predicate), a `V<n>__description.sql` migration, spec paths in `openapi/documentation.yaml`, `cd web && npm run gen:api` (same commit), lazy pages + `NAV_SECTIONS` entries tagged with their `world` (`web/src/utils/navigation.ts`), and an e2e spec + scenario doc + coverage-map line. Domain rules for catalog features come from `.claude/docs/backstage-descriptor-format.md`. Extract when byte-identical (`validateAllowedKinds`, `lockingTransaction`, `requireNoDuplicates`, `useRegistryQuery`); copy when the feature differs where the docs say it does (the tag-category lock, the lens visibility verdict, the dictionary whole-document replace). A sixth registry does not warrant a CRUD base class until two of them are byte-identical end to end. **The one exception to route-side validation**: where a verdict must resolve before any 400 can be honest — the lens and saved-entity-query PUTs skip route-side sanitize AND validate so the ownership verdict (403/404) wins (`.claude/docs/authorization.md`), and the blueprint and entity PUTs skip route-side validate so a missing id answers 404 before 400 (`blueprints/BlueprintRoutes.kt`, `entities/EntityRoutes.kt`).
+
+**Reference examples by task (pick the closest, don't invent a new shape):**
+
+| Task | Working example | Tests | When it applies |
+|---|---|---|---|
+| Paginated list | `catalog/CatalogFileService.list` + `infra/paging` | — | any list endpoint; see `.claude/docs/list-endpoints.md` |
+| Owned-resource mutation (verdict before validation) | `lenses/LensService.mutationVerdict` + `LensRoutes.kt` PUT | `LensTest` (403/404 before 400) | a per-user/creator-owned row whose PUT must not leak existence via a 400 |
+| Atomic multi-table write with history | `catalog/CatalogFileService` update/sync + `catalog/CatalogFileEventService` | `CatalogFileAtomicHistoryTest`, `CatalogFileHistoryTest` | a mutation that must commit its row and its history event together |
+| Bulk import (report-and-skip, dry-run parity) | `catalog/CatalogFileImport.kt`, `entities/EntityImport.kt` | `EntityImportPlanTest`, `EntityImportTest` | a per-document-transaction batch endpoint with a `/import/check` dry-run |
+| Frontend server state (persistence lifecycle / query keys) | `web/src/hooks/useGraphLayout.ts`, `web/src/hooks/useEntityQuery.ts` | — | a hook coalescing saves against a debounced baseline; see the `["catalogFiles", …]` prefix rule in `web/CLAUDE.md` |
+
+"Copy `catalog/`" stays the default for registry CRUD; reach for a row above only when the task matches it more closely.
 
 ### Authentication session lifecycle (V25)
 

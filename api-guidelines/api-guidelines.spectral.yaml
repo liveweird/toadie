@@ -281,7 +281,7 @@ rules:
   security-is-declared:
     description: "API-AUTH-001: authentication is declared (a top-level `security` requirement)."
     message: "Declare a top-level `security` requirement (API-AUTH-001)."
-    severity: warn
+    severity: error
     given: $
     then:
       field: security
@@ -290,7 +290,7 @@ rules:
   security-schemes-defined:
     description: "API-AUTH-001: authentication schemes are defined under components.securitySchemes."
     message: "Define `components.securitySchemes` (API-AUTH-001)."
-    severity: warn
+    severity: error
     given: $
     then:
       field: components.securitySchemes

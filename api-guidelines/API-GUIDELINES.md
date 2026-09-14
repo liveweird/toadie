@@ -660,6 +660,7 @@ prioritized. Reviewers cite these as "registered gap"; the Spectral ruleset carr
 
 | Rule | Gap | Adoption pointer |
 |---|---|---|
+| API-ERR-002 | Semantically invalid, well-formed bodies answer `400` (the findings-bearing `InvalidPayloadException` family, `CatalogFileInvalidProblem`/`EntityInvalidProblem`), never `422` | Deliberate: one "fix your request" branch for the SPA and e2e, no `422` declared anywhere in `documentation.yaml`; adopting `422` is a public-response change requiring a coordinated SPA/e2e/spec change — never a prose fix |
 | API-ERR-004 | `X-Request-Id` is read but not echoed or generated | `CallId` config in `plugins/Monitoring.kt`: add `replyToHeader(HttpHeaders.XRequestId)` + `generate { ... }`; declare the header on responses in the spec |
 | API-ERR-007 | Generic unique-violation `409`s carry no `instance` URI | `ConflictException` rides `ProblemDetail` (`plugins/ErrorHandling.kt`); no Toadie conflict site populates `instance` yet — adopt it where the service knows the conflicting row's id (the tag-claim and last-admin `409`s could; the generic 23505 handler never can, and existence-disclosure rules apply per API-ERR-006) |
 | API-RATE-001 | No `Retry-After` / `RateLimit-*` headers on `429`s | Set `Retry-After` where the wait is known (login lockout knows its window); add headers to the shared `TooManyRequests` response |

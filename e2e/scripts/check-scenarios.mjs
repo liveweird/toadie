@@ -1,6 +1,8 @@
-// The scenario-parity gate (2026-08 review round): every spec has its scenario file and every
-// test() title appears as a `## Scenario:` heading VERBATIM — and vice versa (the compiler
-// contract in scenarios/README.md, previously verified by hand at every checkup).
+// The scenario-parity gate (2026-08 review round, extended 2026-09-14): every spec has its
+// scenario file and every test() title appears as a `## Scenario:` heading VERBATIM — and vice
+// versa (the compiler contract in scenarios/README.md, previously verified by hand at every
+// checkup) — AND every spec has a coverage-map bullet in README.md (`[`<spec>.spec.ts`]
+// (scenarios/<base>.md)`), and vice versa.
 // accessibility.spec.ts is the ONE registered exception: its titles are a template literal
 // instantiated per page, so its scenario keeps a placeholder heading (see scenarios/README.md).
 import { readdirSync, readFileSync, existsSync } from "node:fs";
@@ -10,7 +12,11 @@ import { dirname, join } from "node:path";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const testsDir = join(root, "tests");
 const scenariosDir = join(root, "scenarios");
+const readmePath = join(root, "README.md");
 const SKIP = new Set(["accessibility.spec.ts"]);
+
+// Matches a coverage-map bullet's spec link, e.g. `[\`graph.spec.ts\`](scenarios/graph.md)`.
+const COVERAGE_LINK_RE = /\[`([\w-]+\.spec\.ts)`\]\(scenarios\/([\w-]+\.md)\)/g;
 
 // Matches a top-level test declaration's double-quoted title (also when the title starts on
 // the next line); `.skip`/`.fixme` calls don't match — they are preceded by a dot.
@@ -55,8 +61,20 @@ for (const orphan of scenarioFiles) {
   fail(`scenarios/${orphan}: no matching tests/${orphan.replace(/\.md$/, ".spec.ts")}`);
 }
 
+// Coverage-map parity: every spec needs a README.md bullet, and every bullet needs a live spec.
+const readme = readFileSync(readmePath, "utf8");
+const coverageEntries = new Map([...readme.matchAll(COVERAGE_LINK_RE)].map((m) => [m[1], m[2]]));
+
+for (const spec of specs) {
+  if (!coverageEntries.has(spec)) fail(`${spec}: no coverage-map entry in README.md`);
+  coverageEntries.delete(spec);
+}
+for (const orphanSpec of coverageEntries.keys()) {
+  fail(`README.md: coverage-map entry for \`${orphanSpec}\`, but tests/${orphanSpec} does not exist`);
+}
+
 if (failures === 0) {
-  console.log(`✓ scenario parity: ${specs.length} specs ↔ scenarios in sync`);
+  console.log(`✓ scenario parity: ${specs.length} specs ↔ scenarios ↔ coverage map in sync`);
 } else {
   console.error(`${failures} scenario-parity failure(s)`);
   process.exit(1);

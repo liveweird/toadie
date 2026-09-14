@@ -30,12 +30,14 @@ package's lint/knip:
 
 ```bash
 npm run typecheck             # tsc --noEmit — Playwright only TRANSPILES TS, it never checks it
-npm run check:scenarios       # spec ↔ scenario parity: files exist, test() titles == headings
+npm run check:scenarios       # spec ↔ scenario ↔ coverage-map parity
 ```
 
-`check:scenarios` enforces the same-commit rule below mechanically (both directions, orphan
-files included); `accessibility.spec.ts` is its one registered skip — the parameterized-title
-carve-out in [`scenarios/README.md`](scenarios/README.md).
+`check:scenarios` enforces the same-commit rule below mechanically: every spec has a scenario
+file and a coverage-map bullet below (both directions, orphan files/bullets included), and every
+spec's `test()` titles equal its scenario's `## Scenario:` headings verbatim; `accessibility.spec.ts`
+is its one registered skip from the title-parity check — the parameterized-title carve-out in
+[`scenarios/README.md`](scenarios/README.md).
 
 ## Automatic CI
 

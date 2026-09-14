@@ -22,13 +22,46 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * The default per-request deadline: rejects the fetch with a "TimeoutError" DOMException
- * after 30 s. Callers may override by passing their own `signal`. Feature-detected because
- * happy-dom (tests) lacks AbortSignal.timeout.
+ * after 30 s. Callers may ADD their own `signal` (via `init.signal`) — it composes with this
+ * deadline through `anySignal`, it never replaces it. Feature-detected because happy-dom
+ * (tests) lacks AbortSignal.timeout.
  */
 export function timeoutSignal(): AbortSignal | undefined {
   return typeof AbortSignal.timeout === "function"
     ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     : undefined;
+}
+
+/**
+ * Composes zero or more possibly-undefined abort signals into one: undefined entries are
+ * dropped, zero survivors yield undefined, one survivor is returned as-is, and two or more are
+ * combined via the native `AbortSignal.any` where available, else a manual fallback (happy-dom
+ * lacks `AbortSignal.any`) — a fresh `AbortController` aborted immediately if an input is
+ * already aborted, otherwise by the first `abort` listener to fire, forwarding its `reason`.
+ */
+export function anySignal(...signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
+  const present = signals.filter((s): s is AbortSignal => s != null);
+  if (present.length === 0) return undefined;
+  if (present.length === 1) return present[0];
+  if (typeof AbortSignal.any === "function") return AbortSignal.any(present);
+
+  const controller = new AbortController();
+  const already = present.find((s) => s.aborted);
+  if (already) {
+    controller.abort(already.reason);
+    return controller.signal;
+  }
+  // Every listener is removed once any input fires, so a long-lived caller signal reused across
+  // many requests never accumulates listeners from requests that already ended.
+  const listeners = new Map<AbortSignal, () => void>();
+  for (const s of present) {
+    listeners.set(s, () => {
+      for (const [other, listener] of listeners) other.removeEventListener("abort", listener);
+      controller.abort(s.reason);
+    });
+  }
+  for (const [s, listener] of listeners) s.addEventListener("abort", listener);
+  return controller.signal;
 }
 
 /** True for the transport deadline's rejection — the server did not answer in time. */
@@ -168,7 +201,7 @@ function sendWithToken(path: string, init: RequestInit, token: string | null): P
   if (token) headers.set("Authorization", `Bearer ${token}`);
   else headers.delete("Authorization");
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  return fetch(`${API_BASE}${path}`, { signal: timeoutSignal(), ...init, headers });
+  return fetch(`${API_BASE}${path}`, { ...init, headers, signal: anySignal(timeoutSignal(), init.signal ?? undefined) });
 }
 
 export class ApiError extends Error {
