@@ -1,3 +1,4 @@
+import type { Response } from "@playwright/test";
 import { createTeamEntity, expect, login, openFilters, readyDialog, test, uniqueText } from "./helpers";
 
 // Instances of a blueprint (Port migration phase 2): two throwaway blueprints are seeded via
@@ -112,7 +113,14 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     // hierarchy, which primes the SPA's five-minute blueprint cache (`useBlueprints`) BEFORE
     // the API seeded the throwaway blueprints above, so an in-app navigation would offer a
     // stale Select; a fresh load refetches the registry.
+    // Gate the pick on the registry RESPONSE, not the heading: the heading renders before
+    // `useBlueprints` resolves, and a Select opened over an empty list never shows the option
+    // typed into it (observed once under parallel-worker load; the drawer refactor of 2.5.1
+    // shifted the timing enough to expose it).
+    const isRegistryGet = (r: Response) => r.request().method() === "GET" && /\/api\/v1\/blueprints(\?|$)/.test(r.url());
+    const firstRegistry = page.waitForResponse(isRegistryGet);
     await page.goto("/entities");
+    expect((await firstRegistry).status()).toBe(200);
     await expect(page.getByRole("heading", { name: "Entities" })).toBeVisible();
 
     const blueprintSelect = page.getByRole("combobox", { name: "Blueprint" });
@@ -177,7 +185,10 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
 
     // 3b. The toolbar Team filter narrows the list to `?team=` and the owned entity still
     // shows; deleting the team it owns is refused (409) naming the referrer; unlinking it in
-    // the editor and saving lets the delete through.
+    // the editor and saving lets the delete through. Team lives in the Filters drawer since
+    // 2.5.1 (the Files/Users idiom) — open it first; the open state persists in localStorage
+    // for the rest of this test's navigations on the Entities page.
+    await openFilters(page);
     const teamFilterSelect = page.getByRole("combobox", { name: "Team", exact: true });
     await teamFilterSelect.click();
     await teamFilterSelect.fill(teamIdentifier);
@@ -223,7 +234,9 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     // always shows one blueprint at a time — proves both rows separately rather than side by
     // side. The blueprint was created through the API AFTER this page loaded its blueprint
     // list, so reload first: the Select's options come from that cached query.
+    const reloadedRegistry = page.waitForResponse(isRegistryGet);
     await page.reload();
+    expect((await reloadedRegistry).status()).toBe(200);
     await expect(page.getByRole("heading", { name: "Entities" })).toBeVisible();
     await blueprintSelect.click();
     await blueprintSelect.fill(inhIdentifier);
