@@ -96,6 +96,9 @@ from Lettuce, that any new or edited spec must satisfy:
   throwaway `e2e-eqs-*`-named saved entity query (deleted mid-journey), and one throwaway
   regular user (run as the seed admin, with a second browser context signed in as that
   throwaway user for the foreign-public-query half);
+  `entity-errors` owns one throwaway `e2e-ee-*` blueprint, its one `e2e-ee-*` entity, and its
+  one throwaway `e2e-ee-*`-named saved entity query (run as the seed admin — entities and
+  saved queries carry no admin gate);
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
@@ -152,15 +155,16 @@ from Lettuce, that any new or edited spec must satisfy:
   row**: `blueprints.spec.ts` (`e2e-bp-*`), `entities.spec.ts` (`e2e-ent-bp-*`),
   `entity-graph.spec.ts` (`e2e-eg-*`), `entity-hierarchy.spec.ts` (`e2e-eh-*`),
   `ontology-import.spec.ts` (`e2e-oi-bp-*`, `e2e-oi-ent-*` — Phase 6, v1.28.0),
-  `entity-query.spec.ts` (`e2e-eq-*` — phase 7, v2.0.0), and
-  `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries); the
+  `entity-query.spec.ts` (`e2e-eq-*` — phase 7, v2.0.0),
+  `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries), and
+  `entity-errors.spec.ts` (`e2e-ee-*` — the Ontology Errors report, v2.5.0); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
   what makes their concurrent creates safe — the same rule the other registries' single
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
-  `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-eqs-*` today) and is removed by that same spec before it
-  returns, so a future entity-creating spec can join safely as long as it never touches
-  another spec's rows.
+  `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-eqs-*`, `e2e-ee-*` today) and is removed by that same spec
+  before it returns, so a future entity-creating spec can join safely as long as it never
+  touches another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
   registry (the Blueprints page's only export mode) and re-imports it as part of its round-trip
   check — safe under concurrent writers because it always sends `replaceExisting: false` there,
@@ -336,6 +340,16 @@ the same commit** — this list is the coverage map, the scenario file is the de
   confirms it applies, and confirms the actions menu offers no Save changes/Rename/Delete for a
   foreign public query (the `LensPicker` disclosure split, restated for saved queries) → the
   admin deletes it → cleanup.
+- [`entity-errors.spec.ts`](scenarios/entity-errors.md) — the Ontology Errors report (Port
+  migration phase 8, v2.5.0): one throwaway blueprint (a `name` property plus a
+  `calculationProperties` entry whose jq expression never compiles) and one entity of it,
+  seeded clean and then made stale by a full-replace PUT requiring `name`, plus one throwaway
+  PRIVATE saved entity query naming a blueprint identifier that never exists → the report shows
+  the entity's Required-missing finding, the blueprint's Calculation-does-not-compile finding,
+  and the saved query's Unknown-blueprint finding, each with its localized label → the Stale
+  class chip hides and restores the entity's row without touching the other two → Open in graph
+  on the saved-query row hands its text to the Entity graph's shared query bar, which reports
+  the identical missing-blueprint diagnostic → cleanup.
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).

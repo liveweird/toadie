@@ -78,6 +78,7 @@ const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/entity-graph", heading: "Entity graph" },
   { path: "/entity-hierarchy", heading: "Entity hierarchy" },
   { path: "/ontology/import", heading: "Import ontology" },
+  { path: "/ontology/errors", heading: "Errors" },
   { path: "/labels", heading: "Labels" },
   { path: "/annotations", heading: "Annotations" },
   { path: "/tags", heading: "Tags" },
