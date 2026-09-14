@@ -835,18 +835,21 @@ object TestEntities {
     ): ch.nokillswit.entities.EntityService = tunedService(queryClock = queryClock, queryPermits = queryPermits)
 
     /**
-     * A private service instance with any of the four seams injected (2.4.0): the read ledger and
-     * the workspace byte budget (`EntityReadBudget.kt`, `MAX_WORKSPACE_DOCUMENT_BYTES`) beside the
-     * entity-query clock/permits — a small capacity makes the budget cases deterministic without
-     * multi-megabyte fixtures.
+     * A private service instance with any of the five seams injected (2.4.0 + 2.5.0's [jq] —
+     * `EntityErrorsTest`'s `CALCULATION_QUARANTINED` case, a latch-held private [ch.nokillswit.entities.JqEvaluator]
+     * pool): the read ledger and the workspace byte budget (`EntityReadBudget.kt`,
+     * `MAX_WORKSPACE_DOCUMENT_BYTES`) beside the entity-query clock/permits and the jq evaluator —
+     * a small capacity makes the budget cases deterministic without multi-megabyte fixtures.
      */
     fun tunedService(
         readLedger: ch.nokillswit.entities.EntityReadLedger = ch.nokillswit.entities.EntityReadLedger(),
         workspaceDocumentBytes: Long = ch.nokillswit.entities.MAX_WORKSPACE_DOCUMENT_BYTES,
         queryClock: () -> Long = System::nanoTime,
         queryPermits: Int = ch.nokillswit.entityquery.MAX_CONCURRENT_ENTITY_QUERIES,
+        jq: ch.nokillswit.entities.JqEvaluator = ch.nokillswit.entities.JqEvaluator(),
     ): ch.nokillswit.entities.EntityService = ch.nokillswit.entities.EntityService(
         sharedTestDatabase,
+        jq = jq,
         queryClock = queryClock,
         queryPermits = queryPermits,
         workspaceDocumentBytes = workspaceDocumentBytes,

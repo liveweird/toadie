@@ -112,8 +112,8 @@ private val QUERY_DISPATCHER = Executors.newFixedThreadPool(
 ).asCoroutineDispatcher()
 
 class EntityService(
-    private val database: R2dbcDatabase,
-    private val jq: JqEvaluator = JqEvaluator(),
+    internal val database: R2dbcDatabase,
+    internal val jq: JqEvaluator = JqEvaluator(),
     /** `entityQuery.deadlineMillis` (`infra/db/Database.kt`) — the per-`query` evaluation budget (`graph`). */
     private val queryDeadlineMillis: Long = DEFAULT_ENTITY_QUERY_DEADLINE_MILLIS,
     /** The evaluation budget's clock — injectable so tests pin the deadline and cancellation paths deterministically. */
@@ -169,7 +169,7 @@ class EntityService(
     private suspend fun <T> writeTransaction(block: suspend R2dbcTransaction.() -> T): T =
         lockingTransaction(database, LOCK_BLUEPRINTS_SHARE, LOCK_ENTITIES_SHARE_ROW_EXCLUSIVE, block = block)
 
-    private fun active(): Op<Boolean> = Entities.markedAsDeleted eq false
+    internal fun active(): Op<Boolean> = Entities.markedAsDeleted eq false
 
     private fun activeBlueprints(): Op<Boolean> = BlueprintService.Blueprints.markedAsDeleted eq false
 
@@ -191,7 +191,7 @@ class EntityService(
         val hierarchyRelations: Map<String, String>,
     )
 
-    private suspend fun loadActiveBlueprints(): List<ActiveBlueprint> =
+    internal suspend fun loadActiveBlueprints(): List<ActiveBlueprint> =
         BlueprintService.Blueprints.selectAll().where { activeBlueprints() }
             .map {
                 ActiveBlueprint(
@@ -228,7 +228,7 @@ class EntityService(
      * `blueprints/BlueprintService.kt` `hierarchyDictionaryPredicate`/`knownHierarchies`
      * precedent, which opens its own separate transaction — this one shares the caller's).
      */
-    private suspend fun loadActiveHierarchies(): Set<String> {
+    internal suspend fun loadActiveHierarchies(): Set<String> {
         val hierarchyDictionary = DictionaryService.Entries.dictionary eq Dictionary.HIERARCHY.name
         val active = DictionaryService.Entries.markedAsDeleted eq false
         return DictionaryService.Entries
@@ -497,33 +497,18 @@ class EntityService(
         val blueprintsById = activeBlueprints.associateBy { it.id }
         val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
         val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
-        val blueprintsByIdentifierFolded = foldedByIdentifier(activeBlueprints)
         val graphBlueprintsByIdentifier = activeBlueprints.associate {
             it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations)
         }
 
-        var predicate: Op<Boolean> = active()
-        val candidates: List<ActiveBlueprint>
-        if (filter.blueprints.isNotEmpty()) {
-            val resolved = resolveBlueprintsFilter(filter.blueprints, blueprintsByIdentifierFolded)
-            if (resolved.isEmpty()) return null
-            predicate = predicate and (Entities.blueprintId inList resolved.map { it.id })
-            candidates = resolved
-        } else {
-            candidates = activeBlueprints
-        }
-        filter.q?.let { q -> predicate = predicate and qPredicate(q) }
-        filter.team?.let { team ->
-            val inheritedIds = inheritedTeamMatches(team, candidates, blueprintsByIdentifier)
-            predicate = predicate and teamPredicate(team, blueprintsByIdentifierFolded, inheritedIds)
-        }
+        val scope = shownScope(filter, activeBlueprints) ?: return null
 
         val targets = if (parsedQuery != null) {
             blueprintsByIdentifier.keys
         } else {
-            narrowTargets(candidates.map { it.definition }, definitionsByIdentifier, computed = false)
+            narrowTargets(scope.candidates.map { it.definition }, definitionsByIdentifier, computed = false)
         }
-        val readSet = loadReadSet(predicate, targets, blueprintsByIdentifier, reservation)
+        val readSet = loadReadSet(scope.predicate, targets, blueprintsByIdentifier, reservation)
         val shownRows = readSet.rows.filter { it.shown }
 
         val sources = shownRows.map { workspaceRow ->
@@ -645,7 +630,7 @@ class EntityService(
      * budget on its own (a plain `400`); otherwise other in-flight reads hold the room (a `429`
      * naming contention, not this caller's fault).
      */
-    private fun throwReadBudgetHttp(cause: ReadBudgetExceeded): Nothing {
+    internal fun throwReadBudgetHttp(cause: ReadBudgetExceeded): Nothing {
         if (cause.ownRequest) {
             throw BadRequestException("The entity workspace exceeds the server's read budget")
         }

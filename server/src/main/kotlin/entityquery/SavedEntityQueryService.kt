@@ -31,6 +31,22 @@ val SavedEntityQueryServiceKey = AttributeKey<SavedEntityQueryService>("SavedEnt
  */
 enum class SavedEntityQueryMutationResult { OK, NOT_FOUND, FORBIDDEN_PUBLIC }
 
+/**
+ * The own-or-PUBLIC visibility predicate every saved-query reader shares — extracted from
+ * [SavedEntityQueryService.list] (2.5.0 — `entities/EntityErrors.kt`'s Errors report is the
+ * second caller, a sanctioned cross-feature table read of [SavedEntityQueryService.EntityQueries]
+ * that needs the SAME rule without going through [SavedEntityQueryService.list]'s own
+ * transaction/DTO shape). A top-level function, not a class member: it needs no service
+ * instance, only the table object itself.
+ */
+internal fun savedQueriesVisibleTo(callerId: UInt): Op<Boolean> {
+    val active = SavedEntityQueryService.EntityQueries.markedAsDeleted eq false
+    return active and (
+        (SavedEntityQueryService.EntityQueries.visibility eq SavedEntityQueryVisibility.PUBLIC.name) or
+            (SavedEntityQueryService.EntityQueries.createdBy eq callerId)
+        )
+}
+
 class SavedEntityQueryService(private val database: R2dbcDatabase) {
     object EntityQueries : UIntIdTable("entity_queries") {
         // Per-owner case-folded name uniqueness is enforced by the partial unique index
@@ -76,13 +92,7 @@ class SavedEntityQueryService(private val database: R2dbcDatabase) {
      */
     suspend fun list(callerId: UInt): List<SavedEntityQuery> = suspendTransaction(database) {
         joined().selectAll()
-            .where {
-                active() and
-                    (
-                        (EntityQueries.visibility eq SavedEntityQueryVisibility.PUBLIC.name) or
-                            (EntityQueries.createdBy eq callerId)
-                        )
-            }
+            .where { savedQueriesVisibleTo(callerId) }
             .orderBy(EntityQueries.name.lowerCase() to SortOrder.ASC, EntityQueries.id to SortOrder.ASC)
             .map { it.toResponse() }
             .toList()

@@ -424,6 +424,23 @@ and PUT; the PUT verdict before validation; the three audit events), `MigrationC
 V35; frontend `EntityQueryPicker.test.tsx` is the `LensPicker.test.tsx` clone plus one bar
 integration case; e2e `entity-queries.spec.ts`. **Canvas actions (v2.2.0):** `queryTemplates.test.ts` pins each builder's text incl. backtick/escape cases; the `EntityGraph`/`EntityHierarchy` page tests drive the node context menu (through the stub's `onNodeContextMenu`) and the row menu's Query group and assert the graph refetch's `query=` equals the builder's text; e2e `entity-query.spec.ts` gains the "canvas context actions generate and run a query on both canvases" journey.
 
+**Entity errors report (2.5.0).** `EntityErrorsCheckTest` is the pure checker suite (no
+database): one case per rule in `.claude/docs/port-data-model.md` "Computed-property health",
+including the `OWNERSHIP_UNRESOLVED`/`OWNERSHIP_PATH_STALE` suppression matrix and both
+`pathFilter` directions for `AGGREGATION_PATH_STALE`. `EntityErrorsTest` drives the route: `401`
+anonymous, a USER role served (no admin gate); a stale entity surfacing via a blueprint PUT
+adding a required property; unresolved ownership; `MIRROR_PATH_STALE`/`OWNERSHIP_PATH_STALE`
+raised by editing the TARGET blueprint (the referencing blueprint stays untouched); a
+compile-failed calculation; a quarantined calculation via `TestEntities.tunedService`'s `jq`
+seam with a latch-held executor (the `JqCalculationTest` fixture, never a real stranded
+worker); saved-query visibility (own PRIVATE, foreign PRIVATE excluded, foreign PUBLIC
+included); the `blueprint`/`q`/`team` filters; no audit event; and the read-budget `400`/`429`
+pair via a capacity-1 `EntityReadLedger` (the `EntityQueryRouteTest` idiom). `JqCalculationTest`
+gains the two `calculationVerdict` cases (`CompileFailed` cached and never submitted to a
+fail-if-touched executor; `Quarantined` after a latch-held deadline miss). `SampleBlueprintsTest`
+pins that the baseline ontology (`.claude/docs/ontology.md`) yields ZERO blueprint rows on the
+report — any row is a checker false positive.
+
 **World switch (v2.3.0).** The four unit suites: `navigation.test.ts` pins the world model (worlds, `sectionsFor` filtering per world, `worldOf` longest-prefix resolution), `hooks/useWorld.test.tsx` pins the storage key, `readStoredWorld` fallback, the route-driven sidebar flip, and `switchTo` navigation, `components/WorldSwitch.test.tsx` pins the segment control + navigation, `App.test.tsx` cases pin the route-to-world mapping and the redirects at `/`. E2E: `helpers.ts` `switchWorld(page, "Backstage" | "Port")` switches the sidebar; a fresh Playwright context after sign-in lands on Port, so a spec opening a Backstage leaf calls `switchWorld` first. `world-switch.spec.ts` journey "the world switch follows the route, remembers the last world, and scopes the command palette" pins that deep-linking to a Backstage leaf flips the sidebar, the switch's click navigates to the other world's home, and the palette's pages/actions change. `accessibility.spec.ts`'s `AUTHED_PAGES` lists `/hierarchy` (never `/`) plus the Port pages, and both suite's headings after sign-in are asserted with `exact: true` (the "Entity hierarchy" vs "Hierarchy" substring trap).
 
 **Quality-review regressions (2.3.2).** Throttle capacity/eviction cases in `LoginThrottleTest`/`PasswordResetThrottleTest` and the 255-character email 400s; the entity rename + stale self-relation case in `EntityTest` and the catalog rename + stale `subcomponentOf` case in `CatalogFileTest`; the relation-key/hierarchy-id collision cases in `QueryEvaluatorTest`; the reused-variable property case in `QueryValidatorTest`; the pure pass-2 storage-failure classifier cases for both importers; the control-character ordering cases in `LensTest`/`SavedEntityQueryTest`; the `roles: ["USER"]` 400 in `UserRoutesTest`; the held-lock label/annotation-key create cases; and on the web side the auth-boundary cache clear, the ownership-aware logout in `api.test.ts`, the world-switch write-sequence case in `useWorld.test.tsx` (spy on localStorage writes, never a sleep), and the ontology-import redefinition case. None adds a production timing hook; the world-switch e2e journey stays as the integration pin.

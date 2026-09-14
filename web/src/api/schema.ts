@@ -1625,6 +1625,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/entities/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The Port-world workspace Errors report
+         * @description Any authenticated user; no admin gate. The `catalog/Errors.kt` Errors report's Port-world
+         *     twin (2.5.0): a workspace-wide sweep over the ACTIVE entity/blueprint/saved-query
+         *     registries, unpaged, never audited (the same rule as `GET …/files/errors`,
+         *     `POST …/entities/query/check`, and export). Four finding classes, one report:
+         *
+         *     1. **Stale entities** — the same 19 `EntityFindingCode` values every strict save already
+         *        enforces (`Entity.findings`), re-evaluated against each entity's blueprint's CURRENT
+         *        definition. Reported here purely so a workspace-wide sweep does not require opening
+         *        every entity individually. HARD on the entity's next save, exactly as today.
+         *     2. **Ownership** — report-only, never blocks a save: `OWNERSHIP_UNRESOLVED` (an entity
+         *        row; field `team`) flags an Inherited-ownership entity whose effective team resolved
+         *        to nothing. `OWNERSHIP_PATH_STALE` (a blueprint row; field `ownership.path`) flags a
+         *        blueprint whose `ownership.path` can never resolve given the CURRENT blueprint graph
+         *        (an unknown/`many` hop relation, an inactive hop target, or a path that lands on a
+         *        still-Inherited blueprint). A blueprint carrying `OWNERSHIP_PATH_STALE` SUPPRESSES
+         *        every one of its entities' `OWNERSHIP_UNRESOLVED` rows — the path itself is the root
+         *        cause, not each affected entity. Direct/absent-ownership entities without a team are a
+         *        deliberate non-goal and are never reported.
+         *     3. **Computed-property health** — report-only, always on a BLUEPRINT row (one broken
+         *        mirror/aggregation/calculation affects every entity of that blueprint alike):
+         *        `MIRROR_PATH_STALE` (field `mirrorProperties.<id>`) — the mirror path's hop 2+ names an
+         *        unknown relation or an inactive target blueprint, or its terminal is neither a
+         *        supported meta-property, a genuine (non-computed) property of the landed blueprint, nor
+         *        reachable at all (a bare 1-segment path). `AGGREGATION_PATH_STALE`
+         *        (field `aggregationProperties.<id>`) — a `pathFilter` entry is malformed
+         *        (`fromBlueprint`/`path` missing, `fromBlueprint` naming neither this blueprint nor the
+         *        aggregation `target`, or exceeding 10 hops) or its forward/reverse chain breaks or
+         *        lands somewhere other than the declared `target`/this blueprint.
+         *        `AGGREGATION_PROPERTY_STALE` (same field) — `calculationSpec.property` is not a
+         *        `type: number` property of `target` when `calculationBy` is `property`, or
+         *        `calculationSpec.measureTimeBy` is neither `$createdAt`/`$updatedAt` nor a property of
+         *        `target`. `CALCULATION_COMPILE_FAILED` (field `calculationProperties.<id>`) — the jq
+         *        expression fails to compile; `message` is jackson-jq's own compile error.
+         *        `CALCULATION_QUARANTINED` (same field) — **INSTANCE-LOCAL**: this server process
+         *        quarantined the expression after an earlier evaluation missed its deadline
+         *        (`.claude/docs/security.md` "Bounded executor and per-expression deadline"); a restart
+         *        or an admin edit to the expression text clears it, and a multi-instance deployment may
+         *        show it inconsistently across instances. None of these five codes ever evaluates a jq
+         *        expression or a mirror/aggregation VALUE — only their STATIC shape against the current
+         *        blueprint graph. **Confirmed invariant**: a blueprint definition itself can never go
+         *        structurally invalid after the fact (every write re-validates the whole request, and
+         *        relation/aggregation `target`s are cascade-renamed and delete-protected under the V27
+         *        lock, `.claude/docs/persistence.md`) — what these five codes catch is exactly what no
+         *        cascade covers: a mirror path's hop 2+, an aggregation `pathFilter` chain or
+         *        `calculationSpec.property`/`measureTimeBy`, and an ownership path's hop 2+, none of
+         *        which are tracked as rename/delete targets.
+         *     4. **Saved queries** — every saved entity query the caller may see (own, both
+         *        visibilities, plus everyone's PUBLIC — the `/api/v1/entity-queries` rule, never
+         *        narrowed by `blueprint`/`q`/`team`), re-parsed and re-validated against the CURRENT
+         *        active blueprints/hierarchies; a row lists the SAME `QueryDiagnostic` codes
+         *        `POST …/entities/query/check` would answer for its text today. Query EVALUATION
+         *        diagnostics (`DEADLINE_EXCEEDED`, `BINDING_LIMIT`, `WORKSPACE_TOO_LARGE`) are
+         *        explicitly OUT of scope here — those are per-request and already inline on the query
+         *        bar; a saved query is checked for PARSE/VALIDATE health only.
+         *
+         *     Filter semantics (REPORTED vs SHOWN, the catalog Errors report's own asymmetry):
+         *     `blueprint` (any-of, case-insensitive, unknown identifiers ignored — an all-unknown list
+         *     answers empty `entities`/`blueprints` but STILL reports every visible saved query) narrows
+         *     which entity AND blueprint rows are checked/reported; `q`/`team` narrow entity rows only.
+         *     Reference/target resolution stays workspace-wide regardless of these filters (the same
+         *     `narrowTargets` widening the graph and list endpoints use), so narrowing the report never
+         *     manufactures a finding a wider view would not also show. Saved queries are never narrowed
+         *     by any of the three filters — only by the caller's own visibility.
+         *
+         *     Rows with zero findings/diagnostics are omitted; `checkedEntities`/`checkedBlueprints`/
+         *     `checkedSavedQueries` count everything considered, findings or not. Since 2.4.0 the
+         *     combined shown-plus-lookup-target row set is checked against the process-wide entity read
+         *     memory budget before any document is decoded (`.claude/docs/security.md` "Entity read
+         *     memory budget"), the same as the plain graph: a workspace too large on its own answers
+         *     `400`, contention from other in-flight reads answers `429`.
+         */
+        get: operations["getEntityErrors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/entities/import": {
         parameters: {
             query?: never;
@@ -2795,14 +2884,14 @@ export interface components {
             };
         };
         /**
-         * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint). Phase 4 ownership (field `team`, or `properties.<id>` for a `format: team|user` property): TEAM_TARGET_MISSING (a `team` value, or a `format: team` property value, does not resolve to an active `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property value does not resolve to an active `_user` entity).
+         * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint). Phase 4 ownership (field `team`, or `properties.<id>` for a `format: team|user` property): TEAM_TARGET_MISSING (a `team` value, or a `format: team` property value, does not resolve to an active `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property value does not resolve to an active `_user` entity). The remaining seven codes are **report-only — emitted only by `getEntityErrors`** (2.5.0), never by a strict save: OWNERSHIP_UNRESOLVED (an entity row; an Inherited entity's effective team resolved to nothing), OWNERSHIP_PATH_STALE (a blueprint row; its `ownership.path` can never resolve), MIRROR_PATH_STALE / AGGREGATION_PATH_STALE / AGGREGATION_PROPERTY_STALE / CALCULATION_COMPILE_FAILED / CALCULATION_QUARANTINED (all blueprint rows; a mirror/ aggregation/calculation property's STATIC health — see `getEntityErrors`'s own description for the full rule table).
          * @enum {string}
          */
-        EntityFindingCode: "UNKNOWN_PROPERTY" | "COMPUTED_PROPERTY" | "REQUIRED_MISSING" | "TYPE_MISMATCH" | "ENUM_MISMATCH" | "FORMAT_INVALID" | "LENGTH_OUT_OF_RANGE" | "PATTERN_MISMATCH" | "RANGE_OUT_OF_BOUNDS" | "ARRAY_SIZE" | "ARRAY_NOT_UNIQUE" | "OBJECT_SHAPE" | "UNKNOWN_RELATION" | "RELATION_SHAPE" | "RELATION_REQUIRED" | "RELATION_TARGET_MISSING" | "TEAM_TARGET_MISSING" | "TEAM_NOT_ALLOWED" | "USER_TARGET_MISSING";
-        /** @description One violation of the owning blueprint's current schema/relations — the same rule a strict save enforces. A non-empty `findings` list on a GET/list response means the entity is STALE (its blueprint changed since its last save) and its next save is refused until fixed. */
+        EntityFindingCode: "UNKNOWN_PROPERTY" | "COMPUTED_PROPERTY" | "REQUIRED_MISSING" | "TYPE_MISMATCH" | "ENUM_MISMATCH" | "FORMAT_INVALID" | "LENGTH_OUT_OF_RANGE" | "PATTERN_MISMATCH" | "RANGE_OUT_OF_BOUNDS" | "ARRAY_SIZE" | "ARRAY_NOT_UNIQUE" | "OBJECT_SHAPE" | "UNKNOWN_RELATION" | "RELATION_SHAPE" | "RELATION_REQUIRED" | "RELATION_TARGET_MISSING" | "TEAM_TARGET_MISSING" | "TEAM_NOT_ALLOWED" | "USER_TARGET_MISSING" | "OWNERSHIP_UNRESOLVED" | "OWNERSHIP_PATH_STALE" | "MIRROR_PATH_STALE" | "AGGREGATION_PATH_STALE" | "AGGREGATION_PROPERTY_STALE" | "CALCULATION_COMPILE_FAILED" | "CALCULATION_QUARANTINED";
+        /** @description One violation of the owning blueprint's current schema/relations — the same rule a strict save enforces. A non-empty `findings` list on a GET/list response means the entity is STALE (its blueprint changed since its last save) and its next save is refused until fixed. Since 2.5.0 `getEntityErrors` reuses this SAME shape for its report-only blueprint-health codes, on both entity AND blueprint rows. */
         EntityFinding: {
             code: components["schemas"]["EntityFindingCode"];
-            /** @description `properties.<id>` or `relations.<id>` naming the offending key, or `team` (Phase 4 ownership). */
+            /** @description `properties.<id>` or `relations.<id>` naming the offending key, `team` (Phase 4 ownership), or — for `getEntityErrors`'s blueprint rows (2.5.0) — `ownership.path`, `mirrorProperties.<id>`, `aggregationProperties.<id>`, or `calculationProperties.<id>`. */
             field: string;
             message: string;
         };
@@ -2976,6 +3065,64 @@ export interface components {
         EntityGraph: {
             nodes: components["schemas"]["EntityGraphNode"][];
             edges: components["schemas"]["EntityGraphEdge"][];
+        };
+        /** @description One entity flagged by `getEntityErrors` (2.5.0) — the same `findings` shape a strict save would reject, plus any report-only ownership finding. */
+        EntityErrorRow: {
+            /** Format: int32 */
+            id: number;
+            /** Format: int32 */
+            blueprintId: number;
+            /** @description The owning blueprint's identifier. */
+            blueprint: string;
+            blueprintTitle: string;
+            identifier: string;
+            title: string;
+            /** @description The entity's EFFECTIVE team (Direct/absent stored, or Inherited computed) — empty when unowned. */
+            team: string[];
+            findings: components["schemas"]["EntityFinding"][];
+        };
+        /** @description One blueprint flagged by `getEntityErrors` (2.5.0): its `ownership.path` and/or one or more mirror/aggregation/calculation properties are stale or unhealthy against the CURRENT blueprint graph — see `getEntityErrors`'s own description for the rule table. */
+        BlueprintErrorRow: {
+            /** Format: int32 */
+            id: number;
+            identifier: string;
+            title: string;
+            findings: components["schemas"]["EntityFinding"][];
+        };
+        /** @description One saved entity query (visible to the caller) flagged by `getEntityErrors` (2.5.0): it no longer parses or validates against the current active blueprints/hierarchies. Evaluation-time diagnostics never appear here — parse/validate health only. */
+        SavedQueryErrorRow: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            visibility: components["schemas"]["Visibility"];
+            /**
+             * Format: int32
+             * @description The creator's user id.
+             */
+            createdBy: number;
+            query: string;
+            diagnostics: components["schemas"]["QueryDiagnostic"][];
+        };
+        /** @description The Port-world Errors report (2.5.0) — see `getEntityErrors` for the full class/code rule table. Rows with zero findings/diagnostics are omitted from every array. */
+        EntityErrorsReport: {
+            entities: components["schemas"]["EntityErrorRow"][];
+            blueprints: components["schemas"]["BlueprintErrorRow"][];
+            savedQueries: components["schemas"]["SavedQueryErrorRow"][];
+            /**
+             * Format: int32
+             * @description Every SHOWN entity considered, findings or not.
+             */
+            checkedEntities: number;
+            /**
+             * Format: int32
+             * @description Every SHOWN blueprint considered, findings or not.
+             */
+            checkedBlueprints: number;
+            /**
+             * Format: int32
+             * @description Every saved query visible to the caller, findings or not.
+             */
+            checkedSavedQueries: number;
         };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
@@ -5270,6 +5417,37 @@ export interface operations {
                 };
             };
             400: components["responses"]["EntityQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getEntityErrors: {
+        parameters: {
+            query?: {
+                /** @description Any-of (IN) match over blueprint identifiers, case-insensitive — repetition is the documented IN idiom on this parameter (alongside `kind` and `labelValue`). Unknown identifiers are ignored; if every supplied identifier is unknown the graph is empty. */
+                blueprint?: components["parameters"]["EntityBlueprintFilter"];
+                /** @description Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the matched fields are declared per endpoint. */
+                q?: components["parameters"]["Q"];
+                /** @description Case-insensitive match against the entity's EFFECTIVE team — the stored value for Direct/absent ownership, the value computed along `ownership.path` for Inherited ownership, i.e. exactly what the response's `team` field carries — OR the row itself being the `_team` entity named by this value, so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose path does not resolve has no team and never matches. */
+                team?: components["parameters"]["EntityTeamFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Errors report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityErrorsReport"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];

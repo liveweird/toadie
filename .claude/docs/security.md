@@ -252,6 +252,18 @@ rejection — "jq worker pool saturated, calculation absent ({})" — or the fir
 timeout — "jq calculation timed out while queued, calculation absent ({})" — logs WARN, later
 ones in the same episode DEBUG, reset by the next accepted submission).
 
+**The read-only `calculationVerdict` seam (2.5.0).** The Port-world Errors report
+(`.claude/docs/port-data-model.md` "Computed-property health") needs to say whether a
+`calculationProperties` expression compiles and whether it is currently quarantined, WITHOUT
+evaluating it — the report never runs a jq expression against entity data. `JqEvaluator.
+calculationVerdict` answers this by checking quarantine-set membership, then compiling (and
+caching) the expression on the CALLER's own coroutine — never submitted to the `entity-jq`
+executor, so a report read never occupies a worker or risks stranding one. Because the
+quarantine set is process-lifetime and INSTANCE-local (the same caveat as the deadline
+quarantine above), the report's `CALCULATION_QUARANTINED` finding describes only what happened
+on the instance serving that request; a second instance not yet handed the same expression
+would see `Ok` or `CompileFailed` for a text this one already gave up on.
+
 ### Entity query evaluation (phase 7, v2.0.0)
 
 `GET /api/v1/entities/graph?query=` and `POST /api/v1/entities/query/check` evaluate USER-TYPED
@@ -306,7 +318,7 @@ in the worst case exceed the 256 MB heap budget when a single graph/query read m
 large documents at once. `entities/EntityReadBudget.kt` bounds this with a process-wide,
 in-flight-bytes ledger (`ENTITY_READ_BUDGET_BYTES` = 64 MiB, derived from `-Xmx256m`
 — `server/build.gradle.kts`'s JVM-args comment cross-references this constant; change the two
-together) every `list`/`read`/`create`/`update`/`graph` read charges through ONE consolidated
+together) every `list`/`read`/`create`/`update`/`graph`/`errors` read charges through ONE consolidated
 read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persistence.md`
 "Entity read memory budget and the consolidated read set"):
 
@@ -334,8 +346,9 @@ read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persi
   `query` present, since the plain graph is itself an unpaged, workspace-scale read.
 - **Writers are exempt.** `create`/`update` pass `reservation = null` through `loadReadSet` —
   already serialized one-at-a-time by the V28 two-table lock (`.claude/docs/persistence.md`), so
-  admission control adds nothing there; only the five READ paths listed above open a
-  `readLedger.open()` reservation.
+  admission control adds nothing there; only the six READ paths listed above (2.5.0 adds
+  `errors`, the Port-world Errors report — `.claude/docs/port-data-model.md` "Computed-property
+  health") open a `readLedger.open()` reservation.
 - **Documented residuals.** (1) A single `WorkspaceRow.full()` decode is charged transiently but
   its memoized field lives for the reservation's whole lifetime (the request), so a graph read's
   peak charge can include EVERY shown row's `properties` even though only one is "in scope" at
