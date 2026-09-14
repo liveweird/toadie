@@ -12,6 +12,7 @@ import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import EntityComputedValue from "../components/EntityComputedValue";
 import EntityFindingsBadge from "../components/EntityFindingsBadge";
+import FilterPanel from "../components/FilterPanel";
 import PageHeader from "../components/PageHeader";
 import PaginationBar from "../components/PaginationBar";
 import RowEditDelete from "../components/RowEditDelete";
@@ -187,17 +188,22 @@ export default function Entities() {
           </Group>
         }
         toolbar={
-          <Stack gap="sm">
-            <Select
-              label={t("entities.field.blueprint")}
-              placeholder={t("entities.pickBlueprint")}
-              data={blueprints.map((b) => ({ value: b.identifier, label: b.identifier }))}
-              value={blueprint}
-              onChange={setBlueprint}
-              searchable
-              clearable
-              w={280}
-            />
+          <FilterPanel
+            storageKey="entities"
+            activeFilterCount={(team ? 1 : 0) + (q ? 1 : 0)}
+            aside={
+              <Select
+                aria-label={t("entities.field.blueprint")}
+                placeholder={t("entities.pickBlueprint")}
+                data={blueprints.map((b) => ({ value: b.identifier, label: b.identifier }))}
+                value={blueprint}
+                onChange={setBlueprint}
+                searchable
+                clearable
+                w={280}
+              />
+            }
+          >
             <Select
               label={t("entities.filter.team")}
               placeholder={t("entities.filter.anyTeam")}
@@ -210,7 +216,7 @@ export default function Entities() {
               w={240}
             />
             <ClearableTextInput label={t("entities.filter.q")} value={q} onChange={setQ} clearLabel={t("entities.filter.clearQ")} />
-          </Stack>
+          </FilterPanel>
         }
       />
 

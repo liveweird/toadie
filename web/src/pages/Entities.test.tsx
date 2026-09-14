@@ -238,6 +238,7 @@ describe("Entities page", () => {
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
     await screen.findByRole("link", { name: "Edit checkout" });
+    await user.click(screen.getByRole("button", { name: /^Filters/ }));
     const teamSelect = screen.getByLabelText("Team", { selector: "input" });
     await user.click(teamSelect);
     await user.click(await screen.findByRole("option", { name: "checkout — Checkout" }));
@@ -257,6 +258,7 @@ describe("Entities page", () => {
     renderWithProviders(<EntitiesWithSearchProbe />, { route: "/entities?blueprint=service" });
 
     await screen.findByRole("link", { name: "Edit checkout" });
+    await user.click(screen.getByRole("button", { name: /^Filters/ }));
     await user.type(screen.getByLabelText("Search", { selector: "input" }), "check");
 
     await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("q=check"));
@@ -264,9 +266,11 @@ describe("Entities page", () => {
 
   test("a mounted ?q=x prefills the input and the query", async () => {
     mockRoutes(mockFetch);
+    const user = userEvent.setup();
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service&q=check" });
 
     await screen.findByRole("link", { name: "Edit checkout" });
+    await user.click(screen.getByRole("button", { name: /^Filters/ }));
     expect(screen.getByLabelText("Search", { selector: "input" })).toHaveValue("check");
     expect(
       mockFetch.mock.calls.some(
@@ -380,5 +384,35 @@ describe("Entities page", () => {
     // The colorized calculation column ("Risk") renders its value as a badge.
     const riskBadge = within(row).getByText("high");
     expect(riskBadge.closest(".mantine-Badge-root")).not.toBeNull();
+  });
+
+  test("the Filters drawer is closed by default: Blueprint stays visible while Team and Search are hidden", async () => {
+    mockRoutes(mockFetch);
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    expect(screen.getByLabelText("Blueprint", { selector: "input" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Team", { selector: "input" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Search", { selector: "input" })).not.toBeInTheDocument();
+  });
+
+  test("the Filters badge counts active Team/Search filters, and the picked Blueprint never counts", async () => {
+    mockRoutes(mockFetch);
+    const user = userEvent.setup();
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    // Blueprint is already picked (via the URL) but Team/Search are empty: no count badge yet.
+    expect(screen.getByRole("button", { name: /^Filters/ }).textContent).toBe("Filters");
+
+    await user.click(screen.getByRole("button", { name: /^Filters/ }));
+    const teamSelect = screen.getByLabelText("Team", { selector: "input" });
+    await user.click(teamSelect);
+    await user.click(await screen.findByRole("option", { name: "checkout — Checkout" }));
+    await user.type(screen.getByLabelText("Search", { selector: "input" }), "check");
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Filters/ }).textContent).toBe("Filters2"),
+    );
   });
 });
