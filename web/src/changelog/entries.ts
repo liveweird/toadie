@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.5.1",
+    date: "2026-09-15",
+    en: `**Entities toolbar, one row.** The Port Entities list now uses the shared Filters drawer: the required Blueprint selector stays beside the Filters toggle, while Team and Search fold into the drawer with an active-filter badge, the same layout as the Files and Users pages.`,
+    pl: `**Pasek narzędzi Encji w jednym wierszu.** Lista Encji w świecie Port korzysta teraz ze wspólnej szuflady Filtrów: wymagany wybór blueprintu pozostaje obok przełącznika Filtry, a Zespół i Szukaj chowają się w szufladzie ze znacznikiem liczby aktywnych filtrów, tak samo jak na stronach Plików i Użytkowników.`,
+  },
+  {
     version: "2.5.0",
     date: "2026-09-14",
     en: `**A Port-world Errors report.** The Ontology section gains an Errors page at \`/ontology/errors\`: every entity whose stored document no longer satisfies its blueprint and would be refused on its next save, every entity with inherited ownership whose team cannot be resolved, every saved query the current blueprints refuse, and every blueprint whose calculation does not compile or is quarantined, whose mirror or aggregation path a later blueprint edit broke, or whose ownership path no longer leads to a team. The same blueprint, team and search filters as the Entity graph narrow what is reported, class pills (Stale, Ownership, Saved queries, Computed properties) focus the list, and a broken saved query opens straight in the Entity graph with its diagnostics.`,

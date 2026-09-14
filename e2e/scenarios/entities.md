@@ -35,7 +35,8 @@
    - *Expected*: the JSON preview shows `"replicas": 3` before saving; the POST succeeds; the
      list shows the new row with its `tier`/`replicas`/`public` columns, a Team chip naming the
      picked team, and no findings badge.
-5. They pick the team in the toolbar's Team filter, then try to delete it via the API.
+5. They open the toolbar's Filters drawer, pick the team in the Team filter, then try to
+   delete it via the API.
    - *Expected*: the URL carries `?team=<team>`; the owned entity still shows; the DELETE is
      refused (`409`) with a detail naming the referring entity as `<target>/<entity>`.
 6. Via the API (Inherited ownership, v1.30.0), they seed a throwaway blueprint carrying an
@@ -61,7 +62,7 @@
 11. Back on the target blueprint's list, they try to delete the first entity.
     - *Expected*: the confirm modal's DELETE is refused (`409`) with the "still targeted by
       another entity's relation" message; the row stays.
-12. They type the first entity's identifier into the toolbar's free-text Search filter.
+12. They type the first entity's identifier into the Filters drawer's free-text Search filter.
     - *Expected*: after the debounce, the URL carries `?q=`; the matching row stays visible —
       the filter is a deep-link URL slot too (D2), like `?blueprint=`/`?team=` above.
 13. They edit the target blueprint via the API to add a required string property (`owner`) to
