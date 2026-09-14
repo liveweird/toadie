@@ -9,6 +9,7 @@ import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.blueprints.isSystemIdentifier
 import ch.nokillswit.dictionaries.DictionaryEntryList
+import ch.nokillswit.entities.EntityErrorsReport
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.labels.LabelList
 import ch.nokillswit.tags.TagCategoryList
@@ -101,6 +102,42 @@ class SampleBlueprintsTest {
                 // domain <-> system form a reference cycle (domain's aggregation targets system,
                 // system's own relation targets domain back) that the plain retry-based remove()
                 // below cannot resolve on its own — see SampleData.stripAggregationsForCleanup's KDoc.
+                SampleData.stripAggregationsForCleanup(requests)
+                TestBlueprints.remove(*identifiers.toTypedArray())
+            } finally {
+                SampleData.restoreHierarchies(hierarchiesBefore)
+            }
+        }
+    }
+
+    /**
+     * 2.5.0 (`entities/EntityErrors.kt`): the Errors report's static checkers (mirror/aggregation/
+     * ownership path health, calculation compile verdicts) must never flag the baseline ontology —
+     * every one of its computed paths and expressions resolves cleanly at runtime
+     * (`SampleEntitiesTest` pins that with real entities), so a blueprint row here would be a
+     * CHECKER false positive to fix, never a reason to change the sample.
+     */
+    @Test
+    fun `the sample ontology yields zero blueprint rows from the Errors report`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("bpsample-errors", UserRole.ADMIN)
+        val files = SampleData.numberedFiles("blueprints")
+        val decoded = files.map { it to blueprintJson.decodeFromString<BlueprintRequest>(it.readText()) }
+        val identifiers = decoded.map { it.second.identifier }
+        val requests = decoded.associate { it.second.identifier to it.second }
+        val hierarchiesBefore = SampleData.snapshotHierarchies()
+        try {
+            TestHierarchies.ensure(*SampleData.requiredHierarchies)
+            SampleData.loadBlueprints(admin, files)
+
+            val report = admin.get("/api/v1/entities/errors").body<EntityErrorsReport>()
+            assertTrue(report.blueprints.isEmpty(), "false-positive blueprint rows: ${report.blueprints}")
+        } finally {
+            try {
+                TestBlueprints.restoreSystemBlueprints()
+                // domain <-> system form a reference cycle the plain retry-based remove() cannot
+                // resolve on its own — the [restoreSystemBlueprints]/`stripAggregationsForCleanup`
+                // idiom from the first test in this file.
                 SampleData.stripAggregationsForCleanup(requests)
                 TestBlueprints.remove(*identifiers.toTypedArray())
             } finally {

@@ -225,6 +225,13 @@ ownership constraint. **Ownership is informational only — it never gates permi
 authenticated user may read/modify any entity regardless of its ownership. The entity list/graph
 `team` filter (v1.30.0) follows this SAME `path` walk to match against the effective team it
 displays — an Inherited entity whose path does not resolve has no team and never matches.
+Phase 8's Errors report (v2.5.0, see "Computed-property health" below) names the two ways this
+can go silently wrong: `OWNERSHIP_UNRESOLVED` (entity, report-only) when an Inherited entity's
+effective team comes back empty, and `OWNERSHIP_PATH_STALE` (blueprint, report-only) when the
+`path` itself no longer walks — a hop naming a relation the blueprint has since lost or turned
+`many`, or a target that went inactive. `OWNERSHIP_PATH_STALE` on a blueprint suppresses that
+blueprint's own `OWNERSHIP_UNRESOLVED` entity rows: a broken path is reported once, at its
+source, not once per orphaned entity.
 
 ## Entities (phase 2, v1.24.0)
 
@@ -400,6 +407,50 @@ and they never appear on Entity graph nodes (`GET …/entities/graph` — a grap
 `findings` as a count, never `properties`; the snapshot behind `update`/`graph` never widens for
 or evaluates computed properties at all, see `.claude/docs/persistence.md`).
 
+### Computed-property health (2.5.0)
+
+- **Applies when**: a blueprint's `mirrorProperties`, `aggregationProperties`,
+  `calculationProperties`, or `ownership.path` references another blueprint's relation/property
+  keys, or a `calculationProperties` expression — none of which the write path re-checks once
+  the OTHER blueprint changes (`.claude/docs/persistence.md` "Blueprint targets under
+  concurrency (V27)" only guarantees a relation/aggregation `target` blueprint still EXISTS,
+  never that the keys a definition reaches INTO it still do).
+- **Requirement**: the Errors report (`GET /api/v1/entities/errors`, phase 8, v2.5.0) statically
+  re-walks every blueprint's computed-property definitions and reports five report-only codes,
+  each `blueprint · <field>`:
+  - `MIRROR_PATH_STALE` (`mirrorProperties.<id>`) — split like `mirrorValue`'s own read-time
+    walk: a hop's relation unknown or its target inactive, a terminal `$meta` outside the seven
+    `mirrorValue` handles, a terminal naming a COMPUTED id of the landed blueprint, a terminal
+    not a `schema.properties` key of the landed blueprint (a 1-segment path walks no hop, so its terminal is checked against the blueprint's OWN schema — a relation and a same-named property make a working self-mirror, never a finding).
+  - `AGGREGATION_PATH_STALE` (`aggregationProperties.<id>`) — per `pathFilter` entry: a missing
+    `fromBlueprint`/`path`, a `fromBlueprint` that is neither the blueprint's own nor `target`, a
+    chain over `MAX_COMPUTED_HOPS`, a broken forward chain or one whose last hop does not reach
+    `target`, or a broken reverse chain or one that does not end back at the blueprint itself.
+    `target`'s own existence is deliberately NOT reported — V27 already guarantees it at write
+    time.
+  - `AGGREGATION_PROPERTY_STALE` (`aggregationProperties.<id>`) — `calculationBy: "property"`
+    naming a `property` that is not a `type: number` property of `target`, or a `measureTimeBy`
+    that is neither `$createdAt`/`$updatedAt` nor a property of `target`. `query.rules` is
+    deliberately NOT checked — it is open JSON, the same storage-only posture the blueprint
+    write path already takes on it.
+  - `CALCULATION_COMPILE_FAILED` (`calculationProperties.<id>`) — the expression fails
+    `JsonQuery.compile`; the finding's message is jackson-jq's own compile message.
+  - `CALCULATION_QUARANTINED` (`calculationProperties.<id>`) — the expression text is a member
+    of THIS instance's jq quarantine set (`.claude/docs/security.md` "Computed-property
+    evaluation (jq)"); mutually exclusive with `CALCULATION_COMPILE_FAILED` (a quarantined
+    expression already compiled once, or it would never have been submitted for evaluation).
+
+  A blueprint landing early on `ownership: { type: Direct }` is fine — the walk simply stops
+  there; see "Ownership" above for `OWNERSHIP_UNRESOLVED`/`OWNERSHIP_PATH_STALE`, the two
+  report-only codes covering ownership's own drift.
+- **Reference**: `entities/EntityErrors.kt` (the checkers), `EntityErrorsCheckTest` (one case
+  per rule above).
+- **Enforcement**: `SampleBlueprintsTest`'s zero-blueprint-rows pin (the baseline ontology must
+  report NOTHING — any row is a checker false positive) plus `EntityErrorsCheckTest`;
+  report-only — never blocks a blueprint write.
+- **Exception**: `CALCULATION_QUARANTINED` is instance-local (the deadline quarantine's own
+  caveat, `.claude/docs/security.md`) — a second instance may not agree.
+
 ### Lifecycle rules
 
 - **Blueprint delete with active entities is `409`**, naming the count — checked under the same
@@ -409,7 +460,10 @@ or evaluates computed properties at all, see `.claude/docs/persistence.md`).
   `EntityService.list`/`read` re-runs `entityFindings` against the blueprint's CURRENT
   definition on every read, so an entity a blueprint edit left non-conformant shows up STALE —
   non-empty `findings` in its GET/list response — without any background job. Its next save
-  (PUT) re-validates and is refused (`400`) until the findings clear.
+  (PUT) re-validates and is refused (`400`) until the findings clear. Phase 8's Errors report
+  (`GET /api/v1/entities/errors`, `entities/EntityErrors.kt`, v2.5.0) surfaces this same
+  staleness workspace-wide in one read, without paging through every entity's GET/list response
+  — see "Computed-property health" below.
 - **A relation target must exist** at write time (`RELATION_TARGET_MISSING`, `400`); an entity
   that is the TARGET of another active entity's relation cannot be deleted (`409`, naming the
   referrers as `blueprint/identifier` — the phase-1 blueprint-target idiom, one level down).

@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.5.0",
+    date: "2026-09-14",
+    en: `**A Port-world Errors report.** The Ontology section gains an Errors page at \`/ontology/errors\`: every entity whose stored document no longer satisfies its blueprint and would be refused on its next save, every entity with inherited ownership whose team cannot be resolved, every saved query the current blueprints refuse, and every blueprint whose calculation does not compile or is quarantined, whose mirror or aggregation path a later blueprint edit broke, or whose ownership path no longer leads to a team. The same blueprint, team and search filters as the Entity graph narrow what is reported, class pills (Stale, Ownership, Saved queries, Computed properties) focus the list, and a broken saved query opens straight in the Entity graph with its diagnostics.`,
+    pl: `**Raport błędów w świecie Port.** Sekcja Ontologia zyskuje stronę Błędy pod \`/ontology/errors\`: każda encja, której zapisany dokument nie spełnia już swojego blueprintu i zostałaby odrzucona przy następnym zapisie, każda encja z dziedziczoną własnością, której zespołu nie da się ustalić, każde zapisane zapytanie odrzucane przez bieżące blueprinty oraz każdy blueprint, którego kalkulacja się nie kompiluje lub jest w kwarantannie, którego ścieżka lustrzana lub agregacji została przerwana późniejszą edycją blueprintu, albo którego ścieżka własności nie prowadzi już do zespołu. Te same filtry blueprintu, zespołu i wyszukiwania co w Grafie encji zawężają raport, pigułki klas (Nieaktualne, Własność, Zapisane zapytania, Właściwości obliczane) skupiają listę, a uszkodzone zapisane zapytanie otwiera się od razu w Grafie encji ze swoją diagnostyką.`,
+  },
+  {
     version: "2.4.2",
     date: "2026-09-14",
     en: `**A collapsible Visibility toggle for every canvas's pills, and one merged title row for Graph and Hierarchy.**

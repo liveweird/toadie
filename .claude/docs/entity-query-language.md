@@ -294,6 +294,14 @@ section's header row on both canvases (inside the collapsible section, 2.4.1): p
 "Modified" badge marks a draft that drifted from the picked text, and Save as / Save changes /
 Rename-visibility / Delete carry the lens conflict/forbidden/gone mappings.
 
+**Errors report visibility (phase 8, v2.5.0).** `GET /api/v1/entities/errors`
+(`.claude/docs/port-data-model.md` "Computed-property health") parses and validates every saved
+query VISIBLE TO THE CALLER — their own PRIVATE and PUBLIC rows plus everyone else's PUBLIC rows,
+the same visibility rule as `GET /api/v1/entity-queries` — against the CURRENT blueprints and
+`hierarchies` dictionary, and reports the resulting diagnostics. Only the 14 parse/validate
+codes above can appear this way; the report never evaluates a query, so `DEADLINE_EXCEEDED`,
+`BINDING_LIMIT`, and `WORKSPACE_TOO_LARGE` never do.
+
 ## Canvas actions (v2.2.0)
 
 Four client-side template generators produce queries from a clicked node or row. The Entity graph's `onNodeContextMenu` and the Entity hierarchy's `RowActionsMenu` both surface them under "Query": **Expand 1/2/3** (`expandQuery(node, hops)` where hops ∈ 1..3 — `MATCH (n:L {$identifier: 'x'}) OPTIONAL MATCH (n)-[*1..H]-(m) RETURN n, m`), **Ancestors** (`ancestorsQuery(node, hierarchyId)` — `MATCH (n:L {$identifier: 'x'}) OPTIONAL MATCH (n)-[:HIER*1..10]->(a) RETURN n, a` using the canvas's SELECTED hierarchy id) and **Descendants** (`descendantsQuery(node, hierarchyId)` — `MATCH (n:L {$identifier: 'x'}) OPTIONAL MATCH (n)<-[:HIER*1..10]-(d) RETURN n, d`), and **Owned by this team** (`ownedByQuery(teamIdentifier)` on `_team` nodes only — `MATCH (t:_team {$identifier: 'x'}) OPTIONAL MATCH (e)-[:$team]->(t) RETURN t, e`). Every template preserves the anchor in the returned set — `OPTIONAL MATCH` keeps it shown even when nothing extends — and uses the hop ceiling (the Expand's explicit range, Ancestors/Descendants' 10 hardcoded). Calling `useEntityQuery().runText(text)` lands the generated text in the shared bar (both draft AND applied) and runs it at once; saving stores nothing, and the editor sees it as a draft drifted from a picked saved query if one is active. Pure client-side: `web/src/utils/queryTemplates.ts`.

@@ -32,7 +32,7 @@
 `BINDING_LIMIT`) and the query's LENGTH, never its text, which may carry business data — is an
 operational signal, not an audit event (the text still rides the GET request line into access/
 proxy logs, like `q`; the server itself never writes it); the graph GET's `query` and `POST …/entities/query/check`
-are pure reads and audit nothing (`.claude/docs/authorization.md`). The bounded jq executor's (v1.29.0) two WARN events on
+are pure reads and audit nothing (`.claude/docs/authorization.md`). `GET …/entities/errors` (Phase 8, v2.5.0 — the Port-world Errors report) is the same rule: a pure read, the `/check`/`/errors`/export idiom, and audits nothing. The bounded jq executor's (v1.29.0) two WARN events on
 `ch.nokillswit.entities.computed` — one per calculation quarantine, one per pool-saturation
 episode (see `.claude/docs/security.md` "Computed-property evaluation (jq)") — ride the same
 Logback→OTel pipeline as everything above but are deliberately NOT `audit(...)` events: neither

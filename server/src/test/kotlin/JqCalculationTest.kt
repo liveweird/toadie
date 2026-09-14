@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.entities.CalculationVerdict
 import ch.nokillswit.entities.JqEvaluator
 import java.time.Duration
 import java.util.concurrent.ArrayBlockingQueue
@@ -350,6 +351,43 @@ class JqCalculationTest {
         assertEquals(3, evaluator.cacheSize)
         assertEquals(JsonPrimitive(4), evaluator.evaluate(".d", buildJsonObject { put("d", 4) }))
         assertEquals(1, evaluator.cacheSize)
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // calculationVerdict (2.5.0, `entities/EntityErrors.kt`): the Errors report's read-only
+    // compile check — never touches the executor, never evaluates.
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    fun `calculationVerdict caches a CompileFailed verdict and never submits to the executor`() {
+        val executor = Executor { fail("calculationVerdict must never submit to the executor") }
+        val evaluator = JqEvaluator(executor = executor)
+        val first = evaluator.calculationVerdict("not valid jq ((", "ctx")
+        assertTrue(first is CalculationVerdict.CompileFailed)
+        // Second call: served from the compile cache, the executor is STILL never touched.
+        val second = evaluator.calculationVerdict("not valid jq ((", "ctx")
+        assertTrue(second is CalculationVerdict.CompileFailed)
+        assertEquals((first as CalculationVerdict.CompileFailed).message, (second as CalculationVerdict.CompileFailed).message)
+    }
+
+    @Test
+    fun `calculationVerdict reports Quarantined after evaluateBounded's latch-held deadline miss`() = runBlocking {
+        val releaseWorker = CountDownLatch(1)
+        val executor = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(4))
+        val evaluator = JqEvaluator(
+            deadline = Duration.ofMillis(50),
+            executor = executor,
+            beforeEvaluate = { awaitIgnoringInterrupts(releaseWorker) },
+        )
+        try {
+            assertEquals(CalculationVerdict.Ok, evaluator.calculationVerdict(".a"))
+            assertNull(evaluator.evaluateBounded(".a", buildJsonObject { put("a", 1) }, "ctx"))
+            assertEquals(1, evaluator.quarantinedCount)
+            assertEquals(CalculationVerdict.Quarantined, evaluator.calculationVerdict(".a"))
+        } finally {
+            releaseWorker.countDown()
+            executor.shutdownNow()
+        }
     }
 }
 

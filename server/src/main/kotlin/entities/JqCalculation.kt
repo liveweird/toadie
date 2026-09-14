@@ -141,8 +141,25 @@ private class FirstOutputCollector : Output {
     }
 }
 
-/** One compiled expression, or a cached compile FAILURE (`query == null`) — [ConcurrentHashMap] rejects null values directly. */
-private class CompiledExpression(val query: JsonQuery?)
+/**
+ * One compiled expression, or a cached compile FAILURE (`query == null`, [failure] its message) —
+ * [ConcurrentHashMap] rejects null values directly.
+ */
+private class CompiledExpression(val query: JsonQuery?, val failure: String? = null)
+
+/**
+ * The Errors report's (2.5.0 — `entities/EntityErrors.kt`) read-only verdict for one
+ * `calculationProperties` expression, WITHOUT evaluating it: [Ok] compiles cleanly, [Quarantined]
+ * is this INSTANCE's quarantine set (cleared only by a restart or an admin edit — the same
+ * instance-local caveat as [evaluateBounded]'s own quarantine), [CompileFailed] carries
+ * jackson-jq's own compile message. [JqEvaluator.calculationVerdict] never touches [executor] —
+ * a stale/broken expression is never handed to the bounded pool just to be checked.
+ */
+sealed interface CalculationVerdict {
+    data object Ok : CalculationVerdict
+    data object Quarantined : CalculationVerdict
+    data class CompileFailed(val message: String) : CalculationVerdict
+}
 
 /** The [evaluateBounded] worker's result, wrapped so a legitimate `null` (absent) is never confused with a timeout's `null`. */
 private class Outcome(val value: JsonElement?)
@@ -322,22 +339,41 @@ class JqEvaluator internal constructor(
         return blueprintJson.parseToJsonElement(serialized)
     }
 
-    private fun compileCached(expression: String, context: String): JsonQuery? {
-        cache[expression]?.let { return it.query }
+    private fun compileCached(expression: String, context: String): JsonQuery? = compiledExpression(expression, context).query
+
+    private fun compiledExpression(expression: String, context: String): CompiledExpression {
+        cache[expression]?.let { return it }
         val compiled = try {
-            JsonQuery.compile(expression, Versions.JQ_1_6)
+            CompiledExpression(JsonQuery.compile(expression, Versions.JQ_1_6))
         } catch (e: JsonProcessingException) {
             logFailure(context, e)
-            null
+            CompiledExpression(query = null, failure = e.message ?: e.toString())
         }
         // Clear-wholesale-on-overflow, not LRU: a bounded admin-authored registry rarely churns
         // past this ceiling, and per-entry eviction bookkeeping would outweigh the benefit.
         if (cache.size >= maxCachedExpressions) cache.clear()
-        cache.putIfAbsent(expression, CompiledExpression(compiled))
+        cache.putIfAbsent(expression, compiled)
         return compiled
     }
 
     private fun logFailure(context: String, e: Throwable) {
         log.debug("jq evaluation failed ({}): {}", context, e.toString())
+    }
+
+    /**
+     * The Errors report's read-only verdict for [expression] (`entities/EntityErrors.kt`'s
+     * `calculationFindings`): quarantine-set membership FIRST (never re-compiles a text already
+     * known to hang the pool), then [compiledExpression] on the CALLER — this NEVER submits to
+     * [executor]/[evaluateBounded], so checking every blueprint's calculations costs no worker
+     * time and cannot itself get stuck.
+     */
+    internal fun calculationVerdict(expression: String, context: String = ""): CalculationVerdict {
+        if (expression in quarantined) return CalculationVerdict.Quarantined
+        val compiled = compiledExpression(expression, context)
+        return if (compiled.query != null) {
+            CalculationVerdict.Ok
+        } else {
+            CalculationVerdict.CompileFailed(compiled.failure ?: "compile failed")
+        }
     }
 }

@@ -46,6 +46,11 @@ class EntitiesRoute {
     @Resource("graph")
     class Graph(val parent: EntitiesRoute = EntitiesRoute())
 
+    // 2.5.0: the Port-world Errors report — a second literal segment beating {id}, same idiom.
+    @Serializable
+    @Resource("errors")
+    class Errors(val parent: EntitiesRoute = EntitiesRoute())
+
     @Serializable
     @Resource("import")
     class Import(val parent: EntitiesRoute = EntitiesRoute()) {
@@ -104,13 +109,15 @@ fun Application.configureEntityRoutes() {
                 call.caller()
                 val query = call.request.queryParameters.optionalString("query")
                 requireQueryLength(query)
-                val filter = EntityGraphFilter(
-                    blueprints = call.request.queryParameters.repeatedValues("blueprint"),
-                    q = call.request.queryParameters.optionalString("q"),
-                    team = call.request.queryParameters.optionalString("team"),
-                    query = query,
-                )
-                call.respondEntity(HttpStatusCode.OK, entityService.graph(filter))
+                call.respondEntity(HttpStatusCode.OK, entityService.graph(call.entityGraphFilter(query)))
+            }
+            // 2.5.0: the Port-world Errors report — a pure read, never audited (the
+            // `/check`/`/errors`/export rule, `.claude/docs/authorization.md`). The `query`
+            // filter is deliberately absent here (the report is a workspace sweep, not a
+            // traversal); [entityGraphFilter] simply reads `null` for it.
+            get<EntitiesRoute.Errors> {
+                val caller = call.caller()
+                call.respondEntity(HttpStatusCode.OK, entityService.errors(call.entityGraphFilter(), caller.userId))
             }
             post<EntitiesRoute> {
                 val caller = call.caller()
@@ -197,6 +204,19 @@ fun Application.configureEntityRoutes() {
         }
     }
 }
+
+/**
+ * `blueprint`/`q`/`team` (the [EntityGraphFilter] shared filter set) shared by
+ * `GET …/entities/graph` and 2.5.0's `GET …/entities/errors` (the `catalog/CatalogFileFilter.kt`
+ * `catalogFileFilter()` precedent). [query] is the graph route's already-length-checked `query`
+ * param — the Errors report has no such param and always passes the default `null`.
+ */
+private fun ApplicationCall.entityGraphFilter(query: String? = null): EntityGraphFilter = EntityGraphFilter(
+    blueprints = request.queryParameters.repeatedValues("blueprint"),
+    q = request.queryParameters.optionalString("q"),
+    team = request.queryParameters.optionalString("team"),
+    query = query,
+)
 
 /** The route-level `query` length gate, shared by the graph filter and the check body — a plain 400 before the service ever sees it. */
 private fun requireQueryLength(query: String?) {

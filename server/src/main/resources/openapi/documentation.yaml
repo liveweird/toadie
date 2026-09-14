@@ -2288,6 +2288,98 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/entities/errors:
+    get:
+      tags: [entities]
+      operationId: getEntityErrors
+      summary: The Port-world workspace Errors report
+      description: |
+        Any authenticated user; no admin gate. The `catalog/Errors.kt` Errors report's Port-world
+        twin (2.5.0): a workspace-wide sweep over the ACTIVE entity/blueprint/saved-query
+        registries, unpaged, never audited (the same rule as `GET …/files/errors`,
+        `POST …/entities/query/check`, and export). Four finding classes, one report:
+
+        1. **Stale entities** — the same 19 `EntityFindingCode` values every strict save already
+           enforces (`Entity.findings`), re-evaluated against each entity's blueprint's CURRENT
+           definition. Reported here purely so a workspace-wide sweep does not require opening
+           every entity individually. HARD on the entity's next save, exactly as today.
+        2. **Ownership** — report-only, never blocks a save: `OWNERSHIP_UNRESOLVED` (an entity
+           row; field `team`) flags an Inherited-ownership entity whose effective team resolved
+           to nothing. `OWNERSHIP_PATH_STALE` (a blueprint row; field `ownership.path`) flags a
+           blueprint whose `ownership.path` can never resolve given the CURRENT blueprint graph
+           (an unknown/`many` hop relation, an inactive hop target, or a path that lands on a
+           still-Inherited blueprint). A blueprint carrying `OWNERSHIP_PATH_STALE` SUPPRESSES
+           every one of its entities' `OWNERSHIP_UNRESOLVED` rows — the path itself is the root
+           cause, not each affected entity. Direct/absent-ownership entities without a team are a
+           deliberate non-goal and are never reported.
+        3. **Computed-property health** — report-only, always on a BLUEPRINT row (one broken
+           mirror/aggregation/calculation affects every entity of that blueprint alike):
+           `MIRROR_PATH_STALE` (field `mirrorProperties.<id>`) — the mirror path's hop 2+ names an
+           unknown relation or an inactive target blueprint, or its terminal is neither a
+           supported meta-property, a genuine (non-computed) property of the landed blueprint, nor
+           reachable at all (a bare 1-segment path). `AGGREGATION_PATH_STALE`
+           (field `aggregationProperties.<id>`) — a `pathFilter` entry is malformed
+           (`fromBlueprint`/`path` missing, `fromBlueprint` naming neither this blueprint nor the
+           aggregation `target`, or exceeding 10 hops) or its forward/reverse chain breaks or
+           lands somewhere other than the declared `target`/this blueprint.
+           `AGGREGATION_PROPERTY_STALE` (same field) — `calculationSpec.property` is not a
+           `type: number` property of `target` when `calculationBy` is `property`, or
+           `calculationSpec.measureTimeBy` is neither `$createdAt`/`$updatedAt` nor a property of
+           `target`. `CALCULATION_COMPILE_FAILED` (field `calculationProperties.<id>`) — the jq
+           expression fails to compile; `message` is jackson-jq's own compile error.
+           `CALCULATION_QUARANTINED` (same field) — **INSTANCE-LOCAL**: this server process
+           quarantined the expression after an earlier evaluation missed its deadline
+           (`.claude/docs/security.md` "Bounded executor and per-expression deadline"); a restart
+           or an admin edit to the expression text clears it, and a multi-instance deployment may
+           show it inconsistently across instances. None of these five codes ever evaluates a jq
+           expression or a mirror/aggregation VALUE — only their STATIC shape against the current
+           blueprint graph. **Confirmed invariant**: a blueprint definition itself can never go
+           structurally invalid after the fact (every write re-validates the whole request, and
+           relation/aggregation `target`s are cascade-renamed and delete-protected under the V27
+           lock, `.claude/docs/persistence.md`) — what these five codes catch is exactly what no
+           cascade covers: a mirror path's hop 2+, an aggregation `pathFilter` chain or
+           `calculationSpec.property`/`measureTimeBy`, and an ownership path's hop 2+, none of
+           which are tracked as rename/delete targets.
+        4. **Saved queries** — every saved entity query the caller may see (own, both
+           visibilities, plus everyone's PUBLIC — the `/api/v1/entity-queries` rule, never
+           narrowed by `blueprint`/`q`/`team`), re-parsed and re-validated against the CURRENT
+           active blueprints/hierarchies; a row lists the SAME `QueryDiagnostic` codes
+           `POST …/entities/query/check` would answer for its text today. Query EVALUATION
+           diagnostics (`DEADLINE_EXCEEDED`, `BINDING_LIMIT`, `WORKSPACE_TOO_LARGE`) are
+           explicitly OUT of scope here — those are per-request and already inline on the query
+           bar; a saved query is checked for PARSE/VALIDATE health only.
+
+        Filter semantics (REPORTED vs SHOWN, the catalog Errors report's own asymmetry):
+        `blueprint` (any-of, case-insensitive, unknown identifiers ignored — an all-unknown list
+        answers empty `entities`/`blueprints` but STILL reports every visible saved query) narrows
+        which entity AND blueprint rows are checked/reported; `q`/`team` narrow entity rows only.
+        Reference/target resolution stays workspace-wide regardless of these filters (the same
+        `narrowTargets` widening the graph and list endpoints use), so narrowing the report never
+        manufactures a finding a wider view would not also show. Saved queries are never narrowed
+        by any of the three filters — only by the caller's own visibility.
+
+        Rows with zero findings/diagnostics are omitted; `checkedEntities`/`checkedBlueprints`/
+        `checkedSavedQueries` count everything considered, findings or not. Since 2.4.0 the
+        combined shown-plus-lookup-target row set is checked against the process-wide entity read
+        memory budget before any document is decoded (`.claude/docs/security.md` "Entity read
+        memory budget"), the same as the plain graph: a workspace too large on its own answers
+        `400`, contention from other in-flight reads answers `429`.
+      parameters:
+        - $ref: '#/components/parameters/EntityBlueprintFilter'
+        - $ref: '#/components/parameters/Q'
+        - $ref: '#/components/parameters/EntityTeamFilter'
+      responses:
+        '200':
+          description: The Errors report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityErrorsReport'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/entities/import:
     post:
       tags: [entities]
@@ -4751,6 +4843,13 @@ components:
         - TEAM_TARGET_MISSING
         - TEAM_NOT_ALLOWED
         - USER_TARGET_MISSING
+        - OWNERSHIP_UNRESOLVED
+        - OWNERSHIP_PATH_STALE
+        - MIRROR_PATH_STALE
+        - AGGREGATION_PATH_STALE
+        - AGGREGATION_PROPERTY_STALE
+        - CALCULATION_COMPILE_FAILED
+        - CALCULATION_QUARANTINED
       description: >-
         Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY
         (key is a mirror/calculation/aggregation id — never accepted as input),
@@ -4764,7 +4863,14 @@ components:
         `team` value, or a `format: team` property value, does not resolve to an active
         `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an
         Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property
-        value does not resolve to an active `_user` entity).
+        value does not resolve to an active `_user` entity). The remaining seven codes are
+        **report-only — emitted only by `getEntityErrors`** (2.5.0), never by a strict save:
+        OWNERSHIP_UNRESOLVED (an entity row; an Inherited entity's effective team resolved to
+        nothing), OWNERSHIP_PATH_STALE (a blueprint row; its `ownership.path` can never
+        resolve), MIRROR_PATH_STALE / AGGREGATION_PATH_STALE / AGGREGATION_PROPERTY_STALE /
+        CALCULATION_COMPILE_FAILED / CALCULATION_QUARANTINED (all blueprint rows; a mirror/
+        aggregation/calculation property's STATIC health — see `getEntityErrors`'s own
+        description for the full rule table).
 
     EntityFinding:
       type: object
@@ -4773,12 +4879,17 @@ components:
         One violation of the owning blueprint's current schema/relations — the same rule a
         strict save enforces. A non-empty `findings` list on a GET/list response means the
         entity is STALE (its blueprint changed since its last save) and its next save is
-        refused until fixed.
+        refused until fixed. Since 2.5.0 `getEntityErrors` reuses this SAME shape for its
+        report-only blueprint-health codes, on both entity AND blueprint rows.
       properties:
         code: { $ref: '#/components/schemas/EntityFindingCode' }
         field:
           type: string
-          description: '`properties.<id>` or `relations.<id>` naming the offending key, or `team` (Phase 4 ownership).'
+          description: >-
+            `properties.<id>` or `relations.<id>` naming the offending key, `team` (Phase 4
+            ownership), or — for `getEntityErrors`'s blueprint rows (2.5.0) —
+            `ownership.path`, `mirrorProperties.<id>`, `aggregationProperties.<id>`, or
+            `calculationProperties.<id>`.
         message: { type: string }
 
     QueryDiagnostic:
@@ -5136,6 +5247,77 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EntityGraphEdge'
+
+    EntityErrorRow:
+      type: object
+      required: [id, blueprintId, blueprint, blueprintTitle, identifier, title, team, findings]
+      description: One entity flagged by `getEntityErrors` (2.5.0) — the same `findings` shape a strict save would reject, plus any report-only ownership finding.
+      properties:
+        id: { type: integer, format: int32, minimum: 0 }
+        blueprintId: { type: integer, format: int32, minimum: 0 }
+        blueprint: { type: string, maxLength: 100, description: The owning blueprint's identifier. }
+        blueprintTitle: { type: string, maxLength: 100 }
+        identifier: { type: string, maxLength: 200 }
+        title: { type: string, maxLength: 200 }
+        team:
+          type: array
+          items: { type: string }
+          description: The entity's EFFECTIVE team (Direct/absent stored, or Inherited computed) — empty when unowned.
+        findings:
+          type: array
+          items: { $ref: '#/components/schemas/EntityFinding' }
+
+    BlueprintErrorRow:
+      type: object
+      required: [id, identifier, title, findings]
+      description: >-
+        One blueprint flagged by `getEntityErrors` (2.5.0): its `ownership.path` and/or one or
+        more mirror/aggregation/calculation properties are stale or unhealthy against the
+        CURRENT blueprint graph — see `getEntityErrors`'s own description for the rule table.
+      properties:
+        id: { type: integer, format: int32, minimum: 0 }
+        identifier: { type: string, maxLength: 100 }
+        title: { type: string, maxLength: 100 }
+        findings:
+          type: array
+          items: { $ref: '#/components/schemas/EntityFinding' }
+
+    SavedQueryErrorRow:
+      type: object
+      required: [id, name, visibility, createdBy, query, diagnostics]
+      description: >-
+        One saved entity query (visible to the caller) flagged by `getEntityErrors` (2.5.0):
+        it no longer parses or validates against the current active blueprints/hierarchies.
+        Evaluation-time diagnostics never appear here — parse/validate health only.
+      properties:
+        id: { type: integer, format: int32, minimum: 0 }
+        name: { type: string, maxLength: 100 }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        createdBy: { type: integer, format: int32, minimum: 0, description: The creator's user id. }
+        query: { type: string, maxLength: 2000 }
+        diagnostics:
+          type: array
+          items: { $ref: '#/components/schemas/QueryDiagnostic' }
+
+    EntityErrorsReport:
+      type: object
+      required: [entities, blueprints, savedQueries, checkedEntities, checkedBlueprints, checkedSavedQueries]
+      description: >-
+        The Port-world Errors report (2.5.0) — see `getEntityErrors` for the full class/code
+        rule table. Rows with zero findings/diagnostics are omitted from every array.
+      properties:
+        entities:
+          type: array
+          items: { $ref: '#/components/schemas/EntityErrorRow' }
+        blueprints:
+          type: array
+          items: { $ref: '#/components/schemas/BlueprintErrorRow' }
+        savedQueries:
+          type: array
+          items: { $ref: '#/components/schemas/SavedQueryErrorRow' }
+        checkedEntities: { type: integer, format: int32, description: "Every SHOWN entity considered, findings or not." }
+        checkedBlueprints: { type: integer, format: int32, description: "Every SHOWN blueprint considered, findings or not." }
+        checkedSavedQueries: { type: integer, format: int32, description: "Every saved query visible to the caller, findings or not." }
 
     ProblemDetail:
       type: object
