@@ -3,6 +3,7 @@ import {
   expect,
   login,
   openFilters,
+  openPills,
   readyDialog,
   rowOperation,
   runHierarchy,
@@ -126,14 +127,15 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
 
     // 3. Open the Entity hierarchy and narrow it to this run's own rows with the search filter
     // (the run marker on every seeded identifier/title already isolates this run — the
-    // always-visible Blueprints pill row starts every blueprint shown, so nothing needs
-    // toggling to see the two throwaway blueprints plus `_team`). This page persists its OWN
-    // filter state (`toadie.viewSettings.entityHierarchy.*`), independent of the Entity graph
-    // page's, though both render through the same shared filter controls.
+    // Blueprints pill row, behind the Visibility toggle, starts every blueprint shown, so
+    // nothing needs toggling to see the two throwaway blueprints plus `_team`). This page
+    // persists its OWN filter state (`toadie.viewSettings.entityHierarchy.*`), independent of
+    // the Entity graph page's, though both render through the same shared filter controls.
     await page.goto("/entity-hierarchy");
     await expect(page.getByRole("heading", { name: "Entity hierarchy" })).toBeVisible();
     await openFilters(page);
     await page.getByRole("textbox", { name: "Search" }).fill(run);
+    await openPills(page);
 
     await expect(page.getByText(p1Title, { exact: true })).toBeVisible();
     await expect(page.getByText(c1Title, { exact: true })).toBeVisible();
@@ -141,10 +143,11 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
     await expect(page.getByText(c3Title, { exact: true })).toBeVisible();
     await expect(page.getByText(teamTitle, { exact: true })).toBeVisible();
 
-    // 3b. Toggling the child blueprint's pill off (the always-visible Blueprints group) hides
-    // its children without touching the parent, the orphan, or the team; toggling it back on
-    // restores them. Other parallel specs' own blueprints may appear as extra chips in this
-    // workspace-wide group, so the chip is located by its exact identifier.
+    // 3b. Toggling the child blueprint's pill off (the Blueprints group, behind the Visibility
+    // toggle opened above) hides its children without touching the parent, the orphan, or the
+    // team; toggling it back on restores them. Other parallel specs' own blueprints may appear
+    // as extra chips in this workspace-wide group, so the chip is located by its exact
+    // identifier.
     const blueprintsGroup = page.getByRole("group", { name: "Blueprints" });
     const childChip = blueprintsGroup.getByText(childBp, { exact: true });
     await childChip.click();

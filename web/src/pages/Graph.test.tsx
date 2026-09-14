@@ -151,6 +151,8 @@ describe("Graph page", () => {
     renderPage();
 
     await screen.findByText(/team-x \[MISSING\]/);
+    // The kind/relation pills now sit behind the Visibility toggle (2.4.2).
+    await user.click(screen.getByRole("button", { name: /^Visibility/ }));
     await user.click(screen.getByRole("checkbox", { name: "Owned by" }));
 
     expect(screen.queryByText(/team-x/)).not.toBeInTheDocument();
@@ -482,5 +484,18 @@ describe("Graph page", () => {
     await user.click(await screen.findByRole("button", { name: "Legend" }));
     expect(await screen.findByText("Stored file")).toBeInTheDocument();
     expect(screen.getByText("Relation of a hidden entity")).toBeInTheDocument();
+  });
+
+  test("the layout controls sit on the title row, outside any collapsible section", async () => {
+    mockGraph(mockFetch);
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Graph" })).toBeInTheDocument();
+    // Filters and Visibility both start collapsed — a first visit is exactly the title row.
+    expect(screen.queryByRole("group", { name: "Kind" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Relations" })).not.toBeInTheDocument();
+    // The layout controls and Legend are the view's own `children` — rendered regardless.
+    expect(screen.getByRole("radio", { name: "Auto" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Legend" })).toBeInTheDocument();
   });
 });

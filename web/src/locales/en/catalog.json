@@ -1,5 +1,6 @@
 {
   "title": "Files",
+  "visibilityToggle": "Visibility",
   "createFile": "New catalog file",
   "editFile": "Edit catalog file",
   "noFiles": "No catalog files",

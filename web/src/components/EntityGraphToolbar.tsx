@@ -1,26 +1,28 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge, Group, Paper, Stack } from "@mantine/core";
-import { IconCode, IconFilter } from "@tabler/icons-react";
+import { Badge, Group } from "@mantine/core";
+import { IconCode, IconEye, IconFilter } from "@tabler/icons-react";
 import type { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 import { isBoolean, useStoredState } from "../hooks/useStoredState";
 import BlueprintPills from "./BlueprintPills";
+import CollapsibleHeader, { type HeaderSection } from "./CollapsibleHeader";
 import EntityGraphFilterControls from "./EntityGraphFilterControls";
-import PageHeader from "./PageHeader";
-import ToolbarToggle from "./ToolbarToggle";
 
 /**
- * The Entity graph/hierarchy pages' WHOLE header (2.4.1 — replacing the previous filter-panel-
- * plus-query-row-plus-children stack): renders `PageHeader` itself, so a canvas gets exactly two
- * rows on a first visit — the title row (Filters/Query toggles + the view's own secondary
- * controls, e.g. the hierarchy picker and layout controls, as `children`) and the always-visible
- * blueprint-pills row — with the Filters drawer and the Query section appearing as a THIRD row
- * only once opened. Collapsed state persists per-view for Filters (`${viewKey}.filtersOpen`,
- * `FilterPanel`'s own key, reused rather than duplicated) and globally for Query (the SHARED
- * `entityQuery.open` flag `useEntityQuery` owns, since the draft/applied pair it gates is itself
- * shared across both canvases). `queryForcedOpen` (a refused run's diagnostics) opens the Query
- * section through the same persisted flag — the effect only ever turns it ON, never off, so an
- * explicit user Close is never fought (it holds until the next refusal).
+ * The Entity graph/hierarchy pages' WHOLE header (2.4.2 — a thin composer over
+ * `CollapsibleHeader`): three collapsible title-row sections, Filters, Visibility, and Query,
+ * plus the view's own secondary controls as `children`. **Visibility (new since 2.4.2)** folds
+ * the blueprint/relation pills — an always-visible second row through 2.4.1 — behind its own
+ * toggle (`${viewKey}.pillsOpen`, the `filtersOpen` idiom, collapsed by default like every
+ * other section); its badge counts hidden ACTIVE blueprints (`filters.blueprintPills.hidden`,
+ * already narrowed to active ids) plus the caller's own `hiddenRelationsCount` (the Graph's
+ * relation-family chips, a separate unpersisted dimension), so a collapsed section never hides
+ * state silently. Filters stays keyed by `${viewKey}.filtersOpen` (`FilterPanel`'s own key,
+ * reused rather than duplicated); Query stays keyed by the SHARED `entityQuery.open` flag
+ * `useEntityQuery` owns, since the draft/applied pair it gates is itself shared across both
+ * canvases. `queryForcedOpen` (a refused run's diagnostics) opens the Query section through
+ * that same persisted flag — the effect only ever turns it ON, never off, so an explicit user
+ * Close is never fought (it holds until the next refusal).
  */
 export default function EntityGraphToolbar({
   title,
@@ -32,6 +34,7 @@ export default function EntityGraphToolbar({
   appliedCount,
   query,
   pills,
+  hiddenRelationsCount,
   children,
 }: {
   title: string;
@@ -48,11 +51,15 @@ export default function EntityGraphToolbar({
   query: ReactNode;
   /** An extra captioned chip group beside the blueprint pills (the graph's Relations group). */
   pills?: ReactNode;
+  /** Hidden relation-chip count (the graph's own dimension), folded into the Visibility badge
+   *  alongside hidden blueprints. */
+  hiddenRelationsCount?: number;
   /** The view's own secondary controls (hierarchy picker, layout controls, expand/collapse). */
   children?: ReactNode;
 }) {
   const { t } = useTranslation();
   const [filtersOpen, setFiltersOpen] = useStoredState(`${viewKey}.filtersOpen`, false, isBoolean);
+  const [pillsOpen, setPillsOpen] = useStoredState(`${viewKey}.pillsOpen`, false, isBoolean);
 
   // Fires on the RISING edge of `queryForcedOpen` only. The setter is a fresh closure on every
   // render of the owning page (a `useStoredState` setter is not memoized), so the effect re-runs
@@ -65,70 +72,69 @@ export default function EntityGraphToolbar({
     if (rising) onQueryOpenChange(true);
   }, [queryForcedOpen, onQueryOpenChange]);
 
-  const filtersPanelId = `${viewKey}-entity-filters`;
-  const queryPanelId = `${viewKey}-entity-query`;
+  const hiddenCount = filters.blueprintPills.hidden.length + (hiddenRelationsCount ?? 0);
+
+  const sections: HeaderSection[] = [
+    {
+      id: `${viewKey}-entity-filters`,
+      icon: <IconFilter size={16} />,
+      label: t("common.filter.title"),
+      open: filtersOpen,
+      onOpenChange: setFiltersOpen,
+      count: filters.activeFilterCount,
+      frame: "paper",
+      content: (
+        <Group align="flex-end" gap="sm">
+          <EntityGraphFilterControls controls={filters.controls} />
+        </Group>
+      ),
+    },
+    {
+      id: `${viewKey}-entity-visibility`,
+      icon: <IconEye size={16} />,
+      label: t("entityGraph.visibilityToggle"),
+      open: pillsOpen,
+      onOpenChange: setPillsOpen,
+      count: hiddenCount,
+      frame: "plain",
+      content: (
+        <>
+          <BlueprintPills
+            active={filters.blueprintPills.active}
+            hidden={filters.blueprintPills.hidden}
+            onChange={filters.blueprintPills.setHidden}
+          />
+          {pills}
+        </>
+      ),
+    },
+    {
+      id: `${viewKey}-entity-query`,
+      icon: <IconCode size={16} />,
+      label: t("entityQuery.toggle"),
+      open: queryOpen,
+      onOpenChange: onQueryOpenChange,
+      extra:
+        appliedCount != null ? (
+          <Badge
+            data-testid="entityQuery-applied"
+            variant="light"
+            color="gray"
+            size="sm"
+            tt="none"
+            style={{ flexShrink: 0 }}
+          >
+            {t("entityQuery.applied")} · {t("entityQuery.appliedCount", { count: appliedCount })}
+          </Badge>
+        ) : undefined,
+      frame: "paper",
+      content: query,
+    },
+  ];
 
   return (
-    <PageHeader
-      title={title}
-      actions={
-        <Group gap="xs" wrap="wrap" align="center">
-          <ToolbarToggle
-            icon={<IconFilter size={16} />}
-            label={t("common.filter.title")}
-            open={filtersOpen}
-            onClick={() => setFiltersOpen(!filtersOpen)}
-            count={filters.activeFilterCount}
-            controlsId={filtersOpen ? filtersPanelId : undefined}
-          />
-          <ToolbarToggle
-            icon={<IconCode size={16} />}
-            label={t("entityQuery.toggle")}
-            open={queryOpen}
-            onClick={() => onQueryOpenChange(!queryOpen)}
-            controlsId={queryOpen ? queryPanelId : undefined}
-            extra={
-              appliedCount != null ? (
-                <Badge
-                  data-testid="entityQuery-applied"
-                  variant="light"
-                  color="gray"
-                  size="sm"
-                  tt="none"
-                  style={{ flexShrink: 0 }}
-                >
-                  {t("entityQuery.applied")} · {t("entityQuery.appliedCount", { count: appliedCount })}
-                </Badge>
-              ) : undefined
-            }
-          />
-          {children}
-        </Group>
-      }
-      toolbar={
-        <Stack gap="sm">
-          <Group gap="md" wrap="wrap" align="center">
-            <BlueprintPills
-              active={filters.blueprintPills.active}
-              hidden={filters.blueprintPills.hidden}
-              onChange={filters.blueprintPills.setHidden}
-            />
-            {pills}
-          </Group>
-          {filtersOpen && (
-            <Paper id={filtersPanelId} withBorder radius="md" p="sm" bg="var(--mantine-color-default-hover)">
-              <Group align="flex-end" gap="sm">
-                <EntityGraphFilterControls controls={filters.controls} />
-              </Group>
-            </Paper>
-          )}
-          {queryOpen && (
-            <Paper id={queryPanelId} withBorder radius="md" p="sm" bg="var(--mantine-color-default-hover)">
-              {query}
-            </Paper>
-          )}
-        </Stack>
-      }
-    />
+    <CollapsibleHeader title={title} sections={sections}>
+      {children}
+    </CollapsibleHeader>
   );
 }

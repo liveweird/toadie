@@ -31,7 +31,6 @@ import { buildHierarchy, findPlacement, type HierarchyNode } from "../utils/hier
 import { loadErrorMessage } from "../utils/saveError";
 import LoadingBlock from "../components/LoadingBlock";
 import KindBadge from "../components/KindBadge";
-import PageHeader from "../components/PageHeader";
 import classes from "../theme.module.css";
 
 /** The delete confirm's target — the tree row's identity, shaped like a list row. */
@@ -229,10 +228,7 @@ export default function Hierarchy() {
 
   return (
     <Stack gap="md">
-      <PageHeader
-        title={t("hierarchy.title")}
-        toolbar={
-      <CatalogToolbar viewKey="hierarchy" filters={filters}>
+      <CatalogToolbar title={t("hierarchy.title")} viewKey="hierarchy" filters={filters}>
         <Tooltip label={t("hierarchy.expandAll")}>
           <ActionIcon
             variant="default"
@@ -277,8 +273,6 @@ export default function Hierarchy() {
           </Badge>
         )}
       </CatalogToolbar>
-        }
-      />
 
       {isError && (
         <Alert color="red" variant="light" title={t("hierarchy.loadFailed")}>

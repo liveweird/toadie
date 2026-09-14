@@ -17,6 +17,20 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.4.2",
+    date: "2026-09-14",
+    en: `**A collapsible Visibility toggle for every canvas's pills, and one merged title row for Graph and Hierarchy.**
+
+- The Blueprints/Relations pills on the Entity graph and Entity hierarchy now fold behind a new Visibility toggle, collapsed on a first visit — its badge counts what is hidden, so nothing hides silently.
+- The Backstage Graph and Hierarchy pages get the same treatment: Filters, the new Visibility toggle, and the lens picker now share the title row, next to the layout controls or Expand/Collapse all.
+- Relation chips are gray so they read apart from the amber blueprint and kind pills next to them.`,
+    pl: `**Zwijany przełącznik Widoczności dla chipów na każdym widoku, oraz jeden połączony wiersz tytułu dla Grafu i Hierarchii.**
+
+- Chipy Blueprintów/Relacji na Grafie encji i Hierarchii encji zwijają się teraz za nowym przełącznikiem Widoczności, domyślnie zwiniętym przy pierwszej wizycie — jego odznaka liczy to, co jest ukryte, więc nic nie znika po cichu.
+- Strony Graf i Hierarchia w świecie Backstage otrzymują to samo traktowanie: Filtry, nowy przełącznik Widoczności i wybór soczewki dzielą teraz wiersz tytułu obok sterowania układem lub przycisków Rozwiń/Zwiń wszystko.
+- Chipy relacji są szare, dzięki czemu odróżniają się od bursztynowych chipów blueprintów i rodzajów obok nich.`,
+  },
+  {
     version: "2.4.1",
     date: "2026-09-13",
     en: `**A more compact Entity graph and Entity hierarchy toolbar.**

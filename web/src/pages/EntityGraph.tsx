@@ -312,6 +312,7 @@ export default function EntityGraph() {
             onPick={query.runText}
           />
         }
+        hiddenRelationsCount={disabled.size}
         pills={
           <Chip.Group
             multiple
@@ -320,7 +321,7 @@ export default function EntityGraph() {
           >
             <CaptionedChipGroup label={t("entityGraph.relationsLabel")}>
               {relations.map((relation) => (
-                <Chip key={relation} value={relation} size="xs">
+                <Chip key={relation} value={relation} size="xs" color="gray">
                   {relation}
                 </Chip>
               ))}

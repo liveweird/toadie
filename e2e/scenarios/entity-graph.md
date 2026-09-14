@@ -29,15 +29,16 @@
 3. A throwaway user is created and signs in, then opens **Entity graph** from the nav's Port
    Ontology section.
    - *Expected*: the page renders its own heading.
-4. They expand the filter panel and set the search filter to the run's own marker (the
-   always-visible Blueprints pill row starts every blueprint shown, so the two throwaway
-   blueprints plus `_team` need no picking — the run's own search marker is what isolates this
-   run from other specs' blueprints/entities/teams running in parallel).
+4. They expand the filter panel, set the search filter to the run's own marker, and open the
+   Visibility section from its title-row toggle (the Blueprints pill row it holds starts every
+   blueprint shown, so the two throwaway blueprints plus `_team` need no picking — the run's
+   own search marker is what isolates this run from other specs' blueprints/entities/teams
+   running in parallel).
    - *Expected*: exactly the four seeded entities' identifiers plus the throwaway team's are
      visible, and three blueprint frames appear, labelled by each blueprint's TITLE (the third
      reading "Team").
-5. They toggle the child blueprint's pill off, then back on, in the always-visible Blueprints
-   group.
+5. They toggle the child blueprint's pill off, then back on, in the Blueprints group, opened
+   from the title-row Visibility toggle.
    - *Expected*: the two child entities disappear while off (the parent and team stay), and
      reappear once the pill is back on.
 6. They toggle the `peer` relation chip off, then back on.

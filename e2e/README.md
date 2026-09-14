@@ -293,8 +293,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   relation is flagged as the `composition` entry of its `hierarchyRelations`), four entities,
   and one throwaway `_team` entity owning one of the parents — all seeded via the API under
   one shared run marker → a throwaway user narrows the graph to this run with the search
-  filter (the always-visible Blueprints pill row starts every blueprint shown), toggles the
-  child blueprint's pill off and back on, toggles the `peer` AND `$team` relation chips to
+  filter and opens the Visibility section (the Blueprints pill row it holds starts every
+  blueprint shown), toggles the child blueprint's pill off and back on, toggles the `peer` AND
+  `$team` relation chips to
   prune and restore an edge each, narrows further with the toolbar's Team filter,
   folds/unfolds the `composition`-hierarchy parent (the owning team unaffected — it never
   nests), and drags it in Manual mode, whose PUT is awaited by exact node id and confirmed
@@ -303,8 +304,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   migration phase 3; + Phase 4 ownership, v1.26.0; parallel hierarchies, v1.32.0): the same
   throwaway blueprint pair with one parent, two children, one orphan child Direct-owned by a
   throwaway `_team` entity, all under one shared run marker → narrowed to this run with the
-  search filter (the always-visible Blueprints pill row starts every blueprint shown; the
-  child blueprint's pill is also toggled off and back on), the tree nests the children under
+  search filter and the Visibility section opened (the Blueprints pill row it holds starts
+  every blueprint shown; the child blueprint's pill is also toggled off and back on), the
+  tree nests the children under
   the parent via the `composition` hierarchy while the orphan AND the owning team both stay
   roots beside it (ownership never nests), Pin narrows the tree to the parent's subtree,
   deleting the parent
@@ -401,7 +403,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`graph.spec.ts`](scenarios/graph.md) — the relationship graph draws stored and
   (deletion-orphaned) missing nodes for one per-attempt name stem, faced name + type, with the
   two-namespace canvas clustered inside labelled namespace frames and the unmatched shared
-  owner group left out; toggling a relation family prunes the missing nodes it strands;
+  owner group left out; toggling a relation family (behind the title row's Visibility toggle
+  since 2.4.2) prunes the missing nodes it strands;
   collapsing the System hides its component and re-attributes the component's relations to
   the System as dashed edges, survives a reload (server-side per user), and Expand all undoes
   it; a throwaway user's Manual layout mode drags a node, separately acknowledges the mode-only

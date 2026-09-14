@@ -142,13 +142,14 @@ describe("Hierarchy page", () => {
     expect(screen.queryByRole("link", { name: "Edit gone-sys" })).not.toBeInTheDocument();
   });
 
-  test("the always-visible Kind pills drive the graph query as a visible set", async () => {
+  test("the Kind pills behind the Visibility toggle drive the graph query as a visible set", async () => {
     mockGraph(mockFetch);
     renderPage();
 
     await screen.findByText("core");
-    // The pills sit above the tree, outside the collapsed FilterPanel — hiding Component
-    // sends the six kinds that stay visible.
+    // The pills sit behind the collapsed Visibility toggle (2.4.2) — hiding Component sends
+    // the six kinds that stay visible.
+    fireEvent.click(screen.getByRole("button", { name: /^Visibility/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Component" }));
 
     await waitFor(() => {
@@ -258,5 +259,17 @@ describe("Hierarchy page", () => {
     await user.click(await screen.findByRole("button", { name: "Operations for billing" }));
     await user.click(await screen.findByRole("menuitem", { name: "Quick view" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  test("Expand/Collapse all sit on the title row, outside any collapsible section", async () => {
+    mockGraph(mockFetch);
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Hierarchy" })).toBeInTheDocument();
+    // Filters and Visibility both start collapsed — a first visit is exactly the title row.
+    expect(screen.queryByRole("group", { name: "Kind" })).not.toBeInTheDocument();
+    // The view's own controls are the `children` — rendered regardless.
+    expect(screen.getByRole("button", { name: "Expand all" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse all" })).toBeInTheDocument();
   });
 });

@@ -231,6 +231,22 @@ export async function openQuery(page: Page): Promise<void> {
 }
 
 /**
+ * Ensure the collapsible Visibility section is expanded (2.4.2) — the `openFilters`/`openQuery`
+ * twin, over the toggle labelled "Visibility". Reveals the blueprint/relation pills on the Port
+ * canvases and the kind/relation pills on the Backstage Graph and Hierarchy pages, all of which
+ * moved behind this one toggle from their previous always-visible row. Idempotent: the open
+ * state persists per view under `<viewKey>.pillsOpen`, so a revisited page is left alone.
+ */
+export async function openPills(page: Page): Promise<void> {
+  const toggle = page.getByRole("button", { name: /^Visibility/ });
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
+
+/**
  * The per-run namespaces registered in the namespaces dictionary by global-setup (and
  * removed by global-teardown). Catalog writes accept only defined namespaces, and the
  * dictionary PUT is a whole-document replace — parallel workers must never write it

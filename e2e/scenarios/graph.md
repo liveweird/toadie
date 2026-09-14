@@ -31,7 +31,8 @@
      `service`) — the namespace is NOT on the node face; it moved into the name's hover
      tooltip. Because two namespaces are on screen (the System, A and the ghost in one, B in
      the other), each is drawn inside its own labelled frame.
-4. They toggle the **Depends on** relation chip off.
+4. They open the toolbar's **Visibility** section from its title-row toggle and toggle the
+   **Depends on** relation chip off.
    - *Expected*: the orphaned missing ghost node disappears — its only edge was what made it
      knowable — while the stored nodes A and B remain: a relation chip governs which relations
      are drawn, never which entities are shown.

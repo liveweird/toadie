@@ -181,6 +181,8 @@ describe("EntityGraph page", () => {
 
     await screen.findByText(/checkout \[service\]/);
     expect(screen.getByTestId("edge:service|checkout->service|solo:peer")).toBeInTheDocument();
+    // The Blueprints/Relations pills sit behind the collapsed Visibility toggle (2.4.2).
+    await user.click(screen.getByRole("button", { name: /^Visibility/ }));
     await user.click(screen.getByRole("checkbox", { name: "peer" }));
 
     expect(screen.queryByTestId("edge:service|checkout->service|solo:peer")).not.toBeInTheDocument();
@@ -298,6 +300,8 @@ describe("EntityGraph page", () => {
     renderPage();
 
     await screen.findByText(/platform \[team\]/);
+    // The pills sit behind the collapsed Visibility toggle (2.4.2).
+    await user.click(screen.getByRole("button", { name: /^Visibility/ }));
     const pills = screen.getByRole("group", { name: "Blueprints" });
     expect(within(pills).getByRole("checkbox", { name: "team" })).toBeChecked();
     expect(within(pills).getByRole("checkbox", { name: "service" })).toBeChecked();
