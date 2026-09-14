@@ -5,12 +5,20 @@ import i18n from "../i18n";
 
 // Every Mantine Transition is SYNCHRONOUS under test: `useTransition` skips its rAF→rAF→setTimeout
 // chain and sets the status directly when the theme respects reduced motion AND the hook reports
-// it (use-transition.mjs: `newTransitionDuration === 0`). `env="test"` alone does NOT do this — it
-// only drops the transition STYLES — so a Button loader's 150 ms Transition, or a Modal's, kept
-// firing a state update after RTL's afterEach cleanup had torn down the happy-dom window
-// ("ReferenceError: window is not defined" as a vitest Unhandled Error: CI on PRs #26, #40, #38,
-// each in a different test file). `renderWithProviders` and every file-local MantineProvider set
-// `respectReducedMotion: true`; this mock supplies the other half.
+// it (use-transition.mjs: `newTransitionDuration === 0`). `env="test"` alone does NOT do this — the
+// `Transition` COMPONENT short-circuits its render under `env="test"`, but it calls `useTransition`
+// unconditionally first, so the hook's timer chain still runs — and a Button loader's 150 ms
+// Transition, or a Modal's, kept firing a state update after RTL's afterEach cleanup had torn
+// down the happy-dom window ("ReferenceError: window is not defined" as a vitest Unhandled Error:
+// CI on PRs #26, #40, #38, #63, each in a different test file). `renderWithProviders` and every
+// file-local MantineProvider set `respectReducedMotion: true`; the OTHER half — the hook reporting
+// reduced motion — is the `window.matchMedia` wrapper below, NOT the `vi.mock` of `@mantine/hooks`:
+// vitest applies `vi.mock` to the test module graph it transforms, and `@mantine/core` is an
+// EXTERNAL dependency that imports the real `@mantine/hooks` natively, so the mock never reached
+// Mantine's own `useTransition` (2026-09-14 — pinned by `reducedMotion.test.tsx`). The real
+// `useReducedMotion` is `useMediaQuery("(prefers-reduced-motion: reduce)")`, read from
+// `window.matchMedia` in an effect, which the wrapper answers `matches: true`. The mock stays for
+// app code that calls `useReducedMotion` directly (none today) — it is cheap and never wrong.
 vi.mock("@mantine/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@mantine/hooks")>()),
   useReducedMotion: () => true,
@@ -50,10 +58,17 @@ if (typeof globalThis.localStorage === "undefined") {
   }
 }
 
-if (typeof window !== "undefined" && !window.matchMedia) {
-  window.matchMedia = (query: string) =>
+// `matchMedia`: answer "reduced motion" so Mantine's REAL `useReducedMotion` (inside the external
+// `@mantine/core`, see the note above) reports true and every Transition completes synchronously;
+// every other query delegates to happy-dom's own implementation (the colour-scheme manager's
+// `prefers-color-scheme` keeps behaving as before). A missing implementation falls back to a
+// never-matching stub, the pre-2026-09-14 shape.
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+if (typeof window !== "undefined") {
+  const original = typeof window.matchMedia === "function" ? window.matchMedia.bind(window) : undefined;
+  const stub = (query: string, matches: boolean): MediaQueryList =>
     ({
-      matches: false,
+      matches,
       media: query,
       onchange: null,
       addListener: () => {},
@@ -62,6 +77,8 @@ if (typeof window !== "undefined" && !window.matchMedia) {
       removeEventListener: () => {},
       dispatchEvent: () => false,
     }) as MediaQueryList;
+  window.matchMedia = (query: string) =>
+    query === REDUCED_MOTION_QUERY ? stub(query, true) : original ? original(query) : stub(query, false);
 }
 
 // happy-dom does not implement the FontFaceSet API. Mantine's autosize Textarea
