@@ -34,6 +34,7 @@ describe("sectionsFor", () => {
       "/entities",
       "/entity-graph",
       "/entity-hierarchy",
+      "/ontology/errors",
       "/ontology/import",
     ]);
     const dictionaries = sections.find((s) => s.label === "appShell.section.portDictionaries");
@@ -88,7 +89,13 @@ describe("worldOf", () => {
   });
 
   test("Port routes", () => {
-    for (const path of ["/hierarchies", "/entities/new", "/ontology/import", "/blueprints/4/edit"]) {
+    for (const path of [
+      "/hierarchies",
+      "/entities/new",
+      "/ontology/import",
+      "/ontology/errors",
+      "/blueprints/4/edit",
+    ]) {
       expect(worldOf(path)).toBe("port");
     }
   });

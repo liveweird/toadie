@@ -126,6 +126,27 @@ export async function getEntityGraph(query: GetEntityGraphQuery = {}): Promise<E
   return jsonRequest<EntityGraph>(`/api/v1/entities/graph${params ? `?${params}` : ""}`);
 }
 
+// -- Entity errors report (Port migration phase 8, v2.5.0 — `catalog/Errors.kt`'s Port-world
+// twin) --------------------------------------------------------------------------------------
+// GET /api/v1/entities/errors: a workspace-wide sweep over the active entity/blueprint/saved-
+// query registries — stale entities, unresolved ownership, broken saved queries, and
+// computed-property health, unpaged and never audited. `blueprint`/`q`/`team` narrow entity
+// AND blueprint rows the same way the graph's filters narrow SHOWN nodes; saved queries are
+// never narrowed (the caller's own + everyone's PUBLIC).
+
+export type EntityErrorsReport =
+  paths["/api/v1/entities/errors"]["get"]["responses"]["200"]["content"]["application/json"];
+export type EntityErrorRow = EntityErrorsReport["entities"][number];
+export type BlueprintErrorRow = EntityErrorsReport["blueprints"][number];
+export type SavedQueryErrorRow = EntityErrorsReport["savedQueries"][number];
+
+export type EntityErrorsQuery = Pick<GetEntityGraphQuery, "blueprints" | "team" | "q">;
+
+export async function getEntityErrors(query: EntityErrorsQuery = {}): Promise<EntityErrorsReport> {
+  const params = buildQuery({ blueprint: query.blueprints, team: query.team, q: query.q });
+  return jsonRequest<EntityErrorsReport>(`/api/v1/entities/errors${params ? `?${params}` : ""}`);
+}
+
 // -- Entity query check (phase 7, v2.0.0 — `.claude/docs/entity-query-language.md`) ----------
 // POST /api/v1/entities/query/check: the editor's live diagnostics — parse + validate `query`
 // against the current active blueprints/hierarchies without evaluating it, so the two

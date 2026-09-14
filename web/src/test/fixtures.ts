@@ -5,6 +5,7 @@
 
 import type { CatalogFileListItem, CatalogFileResponse } from "../api/catalogFiles";
 import type { Blueprint } from "../api/blueprints";
+import type { EntityErrorsReport } from "../api/entities";
 
 const EPOCH = 1_700_000_000_000;
 
@@ -39,6 +40,21 @@ export function blueprintResponse(overrides: Partial<Blueprint> = {}): Blueprint
     createdAt: EPOCH,
     updatedAt: EPOCH,
     system: false,
+    ...overrides,
+  };
+}
+
+/** An `EntityErrorsReport` — the Port-world Errors report's `GET /api/v1/entities/errors`
+ *  shape (v2.5.0). Defaults to an all-clear report; pass `overrides` for the rows a test
+ *  cares about. */
+export function entityErrorsReport(overrides: Partial<EntityErrorsReport> = {}): EntityErrorsReport {
+  return {
+    entities: [],
+    blueprints: [],
+    savedQueries: [],
+    checkedEntities: 0,
+    checkedBlueprints: 0,
+    checkedSavedQueries: 0,
     ...overrides,
   };
 }

@@ -23,7 +23,7 @@ import {
 import { blueprintsPath } from "./blueprintLinks";
 import { catalogFilesPath } from "./catalogFileLinks";
 import { entitiesBasePath, entityGraphPath, entityHierarchyPath } from "./entityLinks";
-import { ontologyImportPath } from "./ontologyLinks";
+import { ontologyErrorsPath, ontologyImportPath } from "./ontologyLinks";
 
 /**
  * The two product worlds (v2.3.0): Backstage's catalog files and Port's ontology. The sidebar
@@ -101,6 +101,7 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
       { to: entitiesBasePath, label: "appShell.nav.entities", icon: IconBox },
       { to: entityGraphPath, label: "appShell.nav.entityGraph", icon: IconTopologyStar3 },
       { to: entityHierarchyPath, label: "appShell.nav.entityHierarchy", icon: IconSitemap },
+      { to: ontologyErrorsPath, label: "appShell.nav.ontologyErrors", icon: IconListCheck },
       { to: ontologyImportPath, label: "appShell.nav.ontologyImport", icon: IconFileImport },
     ],
   },

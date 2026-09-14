@@ -15,6 +15,7 @@ import enBlueprints from "./locales/en/blueprints.json";
 import enCatalog from "./locales/en/catalog.json";
 import enChangelog from "./locales/en/changelog.json";
 import enEntities from "./locales/en/entities.json";
+import enEntityErrors from "./locales/en/entityErrors.json";
 import enEntityGraph from "./locales/en/entityGraph.json";
 import enEntityHierarchy from "./locales/en/entityHierarchy.json";
 import enEntityQueries from "./locales/en/entityQueries.json";
@@ -75,6 +76,7 @@ export const en = {
   catalog: enCatalog,
   changelog: enChangelog,
   entities: enEntities,
+  entityErrors: enEntityErrors,
   entityGraph: enEntityGraph,
   entityHierarchy: enEntityHierarchy,
   entityQueries: enEntityQueries,

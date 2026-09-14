@@ -328,6 +328,77 @@ forgets the pick; it never clears the bar (that is the bar's own Clear).
 
 **Canvas context actions (v2.2.0).** `utils/queryTemplates.ts` holds the pure query builders (`expandQuery(node, hops)`, `ancestorsQuery`/`descendantsQuery(node, hierarchyId)`, `ownedByQuery(teamIdentifier)` — every name through `quoteIfNeeded`/`stringLiteral`), and `components/EntityQueryActionItems.tsx` renders them as the "Query" group of Mantine `Menu.Item`s shared by two surfaces: the Entity graph's node context menu (`components/EntityNodeContextMenu.tsx` — a controlled `Menu` anchored to an invisible target at the pointer, opened by React Flow's `onNodeContextMenu`, surfaced in `src/test/reactFlowStub.tsx`) and the Entity hierarchy's `RowActionsMenu` after a divider. Ancestors/Descendants address the canvas's SELECTED hierarchy and are omitted when the dictionary is empty; "Owned by this team" appears on `_team` nodes only. Each item calls `useEntityQuery().runText(text)`, so the generated query lands in the shared bar (draft AND applied) and runs at once — nothing new is stored, and the saved-query picker sees it as an ordinary modified draft.
 
+## Entity errors (`pages/EntityErrors.tsx`, v2.5.0)
+
+The Port world's workspace-wide Errors report at `/ontology/errors` — `pages/Errors.tsx`'s twin
+one level over, `GET /api/v1/entities/errors` in place of `GET /files/errors`, nav leaf right
+after Entity hierarchy in `appShell.section.dataModel` (`utils/ontologyLinks.ts#ontologyErrorsPath`).
+Four finding classes in ONE table, `utils/entityErrorClasses.ts#ENTITY_ERROR_CLASSES`: `stale`
+(the same `EntityFindingCode`s a strict entity save already enforces — red, HARD on the
+entity's next save), `ownership` (an Inherited entity's unresolved effective team, or a
+blueprint whose `ownership.path` can never resolve — orange, report-only), `computed` (a
+blueprint's mirror/aggregation/calculation property gone stale or uncompilable — orange,
+report-only), and `queries` (a visible saved entity query that no longer parses/validates —
+orange, report-only). `classOfEntityCode` classifies every `EntityFinding.code` on entity AND
+blueprint rows (they share ONE code vocabulary); every saved-query row's diagnostics count as
+`queries` regardless of their own disjoint `QueryDiagnostic` code.
+
+**REPORTED vs SHOWN, restated one level over.** The row-mode toolbar composes
+`FilterPanel storageKey="entityErrors"` directly (no `CatalogToolbar`/`EntityGraphToolbar`
+wrapper — this page needs neither header mode nor a Query section) with
+`EntityGraphFilterControls` (Search + Team) inside and `BlueprintPills` as `trailing`, exactly
+the Files/Errors row-mode shape one level down. `blueprint`/`q`/`team` narrow which entity AND
+blueprint rows are REPORTED; reference/target resolution stays workspace-wide (`narrowTargets`),
+so narrowing the report never manufactures a finding a wider view wouldn't also show. Saved
+queries are NEVER narrowed by these three filters — only by the caller's own visibility (own +
+everyone's PUBLIC) — so hiding every blueprint pill still reports every visible broken saved
+query; `noBlueprints` (the shared blueprint-pills rule) only stops the entity/blueprint fetch,
+never the saved-query set, since both ride the SAME response. The class chips
+(`components/EntityErrorsSummaryStrip.tsx`) filter individual findings/diagnostics
+client-side, exactly like the Backstage Errors report's own class chips — a row with zero
+findings left after the class filter is omitted entirely, mirroring the server's own
+zero-findings-are-omitted rule.
+
+**One shared summary-strip shape, two adapters.** `components/ReportSummaryStrip.tsx`
+(extracted from `ErrorsSummaryStrip.tsx`, JSX verbatim so the Backstage Errors page's DOM and
+tests stay unchanged) renders the stat tiles + class-chip row generically over a class type
+parameter; `EntityErrorsSummaryStrip` is its Port adapter (tiles: entities checked, blueprints
+checked, errors shown).
+
+**Localized codes, not raw server text.** Every finding/diagnostic renders a colored `Badge`
+carrying the LOCALIZED code label (`entityErrors.code.<CODE>`, `colorOfEntityClass` for the
+color), a dimmed `field`, and a localized one-sentence explanation
+(`entityErrors.explain.<CODE>`) — the server's own `message` rides the badge's native `title`
+(hover) instead of the visible text, the REVERSE of the Backstage Errors report's convention
+(there the STATIC explanation is the hover text and only `STRUCTURE_INVALID` shows the
+server's message inline), since here the localized explanation is always worth showing and the
+server message is often a raw jq compile error better kept as a tooltip. `entityErrors.json`
+carries `code.`/`explain.` entries for the UNION of `EntityFindingCode` (26 values) and
+`QueryDiagnostic`'s parse/validate-and-evaluation codes (17 values) — two codes
+(`UNKNOWN_PROPERTY`, `UNKNOWN_RELATION`) exist in BOTH vocabularies and deliberately share one
+generic entry, since the wording ("isn't declared where it's used") reads correctly in either
+context. `locales/entityErrorsCodes.test.ts` extracts both unions straight from `schema.ts`'s
+raw text (the `locales/unusedKeys.test.ts` `import.meta.glob` idiom) and asserts every code has
+both keys — a spec change that adds a code fails this test before it ever reaches review.
+
+**Saved-query diagnostics reuse the query bar's own keys.** A saved-query row's diagnostics
+render through the SAME `entityQuery.position`/`entityQuery.didYouMean` i18n keys the
+`EntityQueryBar`'s CodeMirror gutter uses — one vocabulary for "line L, column C" and "Did you
+mean `x`?" across both surfaces.
+
+**Open in graph** (`entityErrors.openInGraph`) hands a broken saved query to the canvas the
+way `components/EntityQueryPicker.tsx` does: it writes `entityQuery.picked` (so the picker
+shows it selected), calls `useEntityQuery().runText(row.query)` (setting the shared draft AND
+applied text, opening the Query section), and navigates to the Entity graph — the graph then
+answers its own `EntityQueryInvalid` `400` with the same diagnostics the report already showed,
+and the bar becomes the live editing surface for fixing them.
+
+**Query key.** `["entities", "errors", filters.values]`, the `useEntityGraphFilterState`
+shape one level down from the Entity graph's `["entities", "graph", filters.values, ...]` — no
+shared invalidation prefix with the entity list/graph queries exists yet (a future entity
+mutation that should refresh this report invalidates `["entities"]` broadly, same as any other
+`["entities", ...]`-keyed query).
+
 ## Ontology import & export (v1.28.0)
 
 Phase 6 of the Port data-model move: a thin Import page under the Port world's Ontology section (`pages/ImportOntology.tsx`, route `/ontology/import`, nav leaf LAST in `appShell.section.dataModel`) accepting pasted or uploaded JSON — including a Port API export verbatim — over the new bulk endpoints `POST /api/v1/blueprints/import(/check)` (ADMIN) and `POST /api/v1/entities/import(/check)` (any authenticated), plus client-side JSON export from the Blueprints and Entities pages whose output the import accepts back unchanged.

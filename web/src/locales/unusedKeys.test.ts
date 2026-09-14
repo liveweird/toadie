@@ -106,6 +106,12 @@ const DYNAMIC_KEY_PREFIXES: ReadonlyArray<string> = [
   // t(`graph.relation.${family}`) / t(`graph.legend.${key}`) — pages/Graph.tsx.
   "graph.relation.",
   "graph.legend.",
+  // t(`entityErrors.class.${entityClass}`) — components/EntityErrorsSummaryStrip.tsx.
+  "entityErrors.class.",
+  // t(`entityErrors.code.${code}`) / t(`entityErrors.explain.${code}`) — pages/EntityErrors.tsx
+  // (an `EntityFindingCode` or `QueryDiagnostic` code driven).
+  "entityErrors.code.",
+  "entityErrors.explain.",
 ];
 
 function usedDynamically(key: string): boolean {
