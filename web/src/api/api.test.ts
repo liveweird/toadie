@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { jsonResponse } from "../test/http";
 import {
+  anySignal,
   ApiError,
   authedFetch,
   buildQuery,
@@ -156,6 +157,65 @@ describe("ApiError and helpers", () => {
     if (typeof AbortSignal.timeout === "function") expect(signal).toBeInstanceOf(AbortSignal);
     else expect(signal).toBeUndefined();
   });
+
+  test("anySignal drops undefined entries: none, one, and an already-aborted input", () => {
+    expect(anySignal(undefined, undefined)).toBeUndefined();
+
+    const solo = new AbortController();
+    expect(anySignal(undefined, solo.signal)).toBe(solo.signal);
+
+    const already = new AbortController();
+    already.abort("stale");
+    const fresh = new AbortController();
+    const combined = anySignal(already.signal, fresh.signal);
+    expect(combined?.aborted).toBe(true);
+    expect(combined?.reason).toBe("stale");
+  });
+
+  test("anySignal combines two live signals: aborting either aborts the result with that reason", () => {
+    const a = new AbortController();
+    const b = new AbortController();
+    const combined = anySignal(a.signal, b.signal);
+    expect(combined?.aborted).toBe(false);
+
+    b.abort("b-reason");
+    expect(combined?.aborted).toBe(true);
+    expect(combined?.reason).toBe("b-reason");
+  });
+
+  test("anySignal falls back to a manual composition when AbortSignal.any is unavailable", () => {
+    const nativeAny = AbortSignal.any;
+    // @ts-expect-error -- simulating happy-dom, which lacks AbortSignal.any
+    delete AbortSignal.any;
+    try {
+      const a = new AbortController();
+      const b = new AbortController();
+      const combined = anySignal(a.signal, b.signal);
+      expect(combined?.aborted).toBe(false);
+
+      a.abort("a-reason");
+      expect(combined?.aborted).toBe(true);
+      expect(combined?.reason).toBe("a-reason");
+    } finally {
+      AbortSignal.any = nativeAny;
+    }
+  });
+
+  test("anySignal fallback aborts synchronously when an input is already aborted", () => {
+    const nativeAny = AbortSignal.any;
+    // @ts-expect-error -- simulating happy-dom, which lacks AbortSignal.any
+    delete AbortSignal.any;
+    try {
+      const already = new AbortController();
+      already.abort("already-gone");
+      const live = new AbortController();
+      const combined = anySignal(already.signal, live.signal);
+      expect(combined?.aborted).toBe(true);
+      expect(combined?.reason).toBe("already-gone");
+    } finally {
+      AbortSignal.any = nativeAny;
+    }
+  });
 });
 
 describe("authedFetch", () => {
@@ -179,6 +239,33 @@ describe("authedFetch", () => {
     const [url, init] = fetchMock().mock.calls[0];
     expect(url).toBe("/api/v1/thing");
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer access-1");
+  });
+
+  test("a caller signal composes with the timeout deadline rather than replacing it", async () => {
+    persistSession(SESSION);
+    fetchMock().mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+    const deadline = new AbortController();
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
+    const caller = new AbortController();
+
+    await authedFetch("/api/v1/thing", { signal: caller.signal });
+
+    const [, init] = fetchMock().mock.calls[0];
+    const sent: AbortSignal = init.signal;
+    expect(sent.aborted).toBe(false);
+
+    caller.abort("caller-cancelled");
+    expect(sent.aborted).toBe(true);
+    expect(sent.reason).toBe("caller-cancelled");
+
+    // A fresh request proves the stubbed deadline ALSO still aborts the sent signal.
+    fetchMock().mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+    const secondCaller = new AbortController();
+    await authedFetch("/api/v1/thing", { signal: secondCaller.signal });
+    const [, secondInit] = fetchMock().mock.calls[1];
+    const secondSent: AbortSignal = secondInit.signal;
+    deadline.abort("timed-out");
+    expect(secondSent.aborted).toBe(true);
   });
 
   test("a 401 triggers one silent refresh and a retry with the new token", async () => {

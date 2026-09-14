@@ -9,8 +9,14 @@ list endpoints, security, authorization, observability, testing); Codex must ope
 files directly. Together those files contain the detailed, actively maintained domain, security,
 persistence, UI, and testing conventions shared by the project. For API work,
 `api-guidelines/API-GUIDELINES.md` is authoritative and its stable rule IDs should be cited in
-reviews. If documentation and executable configuration disagree, the configuration and code win;
-update the affected guidance in the same change.
+reviews. `CLAUDE.md`'s "Where to read, by task" table near its top is the map into all of this;
+consult it before searching by hand. If documentation and executable configuration disagree, the
+resolution depends on what kind of claim is wrong: for DESCRIPTIVE facts (versions, ports,
+registered modules, which file does what), the configuration and code win — update the affected
+guidance in the same change; for NORMATIVE guarantees (security/authorization invariants,
+persistence rules, the API contract/guidelines), the disagreement is a FINDING, not a typo —
+investigate, decide which artifact is actually wrong, add a regression where the code was wrong,
+and never edit a doc or test merely to bless the code's current behavior.
 
 Toadie has two product worlds: the Backstage catalog and the Port-style ontology. Both share
 authentication/session handling, admin-managed users and feature flags, synced language, email
@@ -382,8 +388,9 @@ latency guarantee. Run `:server:koverXmlReport` when measuring current backend c
 `check` runs the verification gate without refreshing that report.
 
 A new or behaviorally changed e2e test lands with its scenario file in `e2e/scenarios/` and its
-coverage-map line in `e2e/README.md` in the same commit (`npm run check:scenarios` enforces the
-parity); scenario headings and Playwright test titles must match exactly. For nontrivial cross-stack
+coverage-map line in `e2e/README.md` in the same commit; `npm run check:scenarios` enforces all
+three mechanically (spec ↔ scenario file existence, `## Scenario:` headings == `test()` titles,
+and spec ↔ coverage-map bullet, both directions). For nontrivial cross-stack
 behavior, verify through the SPA using the workflow in `.claude/skills/verify/SKILL.md`, and clean
 up any records created in the development database.
 
@@ -393,6 +400,10 @@ Use Conventional Commit subjects such as `feat:`, `fix:`, `fix(e2e):`, and `docs
 explain behavior and risk, list verification commands, link issues, and include screenshots for UI
 changes. Keep migrations, API contract, generated schema, tests, and both translations
 synchronized when applicable.
+
+The repository is a shared workspace: before committing, verify the current worktree/branch and
+review the staged diff, stage task-owned files by name rather than a blanket `add`, and use
+separate worktrees for concurrent independent changes rather than interleaving them in one.
 
 Never commit production JWT or database secrets. Committed `changeme` values and development keys
 are burned demo credentials; production mode deliberately refuses them (the JWT fail-closed check
