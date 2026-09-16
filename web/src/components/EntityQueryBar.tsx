@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Box, Button, Group, Stack, Text, Tooltip } from "@mantine/core";
-import { IconPlayerPlay, IconX } from "@tabler/icons-react";
+import { IconGitBranch, IconPlayerPlay, IconX } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import type { EntityQueryDiagnostic } from "../api/entities";
 import type { QueryCompletionSchema } from "../utils/queryCompletion";
 import EntityQueryPicker from "./EntityQueryPicker";
+import EntityQueryBuilderModal from "./EntityQueryBuilderModal";
 import QueryEditor from "./QueryEditor";
 import classes from "../theme.module.css";
 
@@ -52,11 +54,20 @@ export default function EntityQueryBar({
   onPick: (text: string) => void;
 }) {
   const { t } = useTranslation();
+  const [builderOpened, setBuilderOpened] = useState(false);
 
   return (
     <Stack gap={4}>
-      <Group gap="xs" wrap="nowrap">
+      <Group gap="xs" wrap="wrap">
         <EntityQueryPicker draft={draft} onPick={onPick} />
+        <Button
+          size="xs"
+          variant="default"
+          leftSection={<IconGitBranch size={14} />}
+          onClick={() => setBuilderOpened(true)}
+        >
+          {t("entityQuery.builder.open")}
+        </Button>
       </Group>
       <Group gap="xs" align="flex-start" wrap="nowrap">
         <Box className={classes.queryEditor} style={{ flex: 1, minWidth: 0 }}>
@@ -114,6 +125,12 @@ export default function EntityQueryBar({
           ))}
         </Stack>
       )}
+      <EntityQueryBuilderModal
+        opened={builderOpened}
+        schema={completionSchema}
+        onClose={() => setBuilderOpened(false)}
+        onUse={onChange}
+      />
     </Stack>
   );
 }

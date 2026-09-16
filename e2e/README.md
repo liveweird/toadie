@@ -148,7 +148,7 @@ from Lettuce, that any new or edited spec must satisfy:
   deletes its own unique `e2e-lbl-*` key. No other spec may apply labels to files without
   first moving label registration into global-setup (the run-namespace pattern). V22 seeds
   eight curated keys — no spec may edit or delete those either.
-- **The blueprint registry is single-writer state the same way, now with SEVEN writers.**
+- **The blueprint registry also requires exclusive ownership of each fixture.**
   Blueprint identifiers are unique and relation targets name other blueprints, so a
   concurrently deleted or renamed blueprint breaks a parallel spec's saves — **each spec
   owns its own uniquely named blueprints and entities and never edits or deletes a foreign
@@ -156,13 +156,14 @@ from Lettuce, that any new or edited spec must satisfy:
   `entity-graph.spec.ts` (`e2e-eg-*`), `entity-hierarchy.spec.ts` (`e2e-eh-*`),
   `ontology-import.spec.ts` (`e2e-oi-bp-*`, `e2e-oi-ent-*` — Phase 6, v1.28.0),
   `entity-query.spec.ts` (`e2e-eq-*` — phase 7, v2.0.0),
+  `entity-query-builder.spec.ts` (`e2e-query-builder-*`),
   `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries), and
   `entity-errors.spec.ts` (`e2e-ee-*` — the Ontology Errors report, v2.5.0); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
   what makes their concurrent creates safe — the same rule the other registries' single
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
-  `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-eqs-*`, `e2e-ee-*` today) and is removed by that same spec
+  `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-query-builder-*`, `e2e-eqs-*`, `e2e-ee-*` today) and is removed by that same spec
   before it returns, so a future entity-creating spec can join safely as long as it never
   touches another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
@@ -319,6 +320,11 @@ the same commit** — this list is the coverage map, the scenario file is the de
   is refused (`409`) naming the referring children, and switching the toolbar's Hierarchy
   picker to global-setup's own second hierarchy value — flagged on the SAME `parent` relation
   — reproduces the identical nesting before switching back → cleanup.
+- [`entity-query-builder.spec.ts`](scenarios/entity-query-builder.md) — guided schema-aware
+  query creation: cancelling preserves hand-written text, Use query changes only the draft,
+  Run evaluates a generated relation/property query through the real server, reserved names
+  are quoted, and the applied query/results carry to Entity hierarchy. Owns two uniquely
+  marked blueprints and three entities, removed in dependency order.
 - [`entity-query.spec.ts`](scenarios/entity-query.md) — the entity query bar (Port migration
   phase 7, entity query language; + canvas context actions, v2.2.0): two throwaway blueprints
   (a parent, a child with a `parent` relation flagged as `composition`) and three entities (p1,

@@ -175,6 +175,13 @@ describe("quoteIfNeeded", () => {
     expect(quoteIfNeeded("2fast")).toBe("`2fast`");
   });
 
+  test("backticks accepted and rejected reserved words case-insensitively", () => {
+    expect(quoteIfNeeded("match")).toBe("`match`");
+    expect(quoteIfNeeded("NULL")).toBe("`NULL`");
+    expect(quoteIfNeeded("Order")).toBe("`Order`");
+    expect(quoteIfNeeded("as")).toBe("`as`");
+  });
+
   test("doubles an embedded backtick", () => {
     expect(quoteIfNeeded("a`b")).toBe("`a``b`");
   });

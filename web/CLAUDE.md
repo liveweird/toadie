@@ -313,6 +313,13 @@ shims (`document.createRange` + `ResizeObserver`); page and bar tests mock it as
 i18n namespace `entityQuery` (EN/PL, Polish plurals on `appliedCount`); the diagnostics list
 renders the server's `message` verbatim plus "Did you mean `x`?" and "line L, column C".
 
+**Guided query builder.** `components/EntityQueryBuilderModal.tsx`, opened from the shared bar,
+uses the pure model/generator in `utils/queryBuilder.ts`. Its draft ownership, supported
+subset, and required/optional connection semantics are defined in
+`.claude/docs/entity-query-language.md` under "Guided query builder". Preserve the explicit
+Use query → editor draft → Run sequence; do not parse hand-written text heuristically or
+silently apply form edits. Keep EN/PL copy and the builder's focused tests synchronized.
+
 **Saved queries (v2.1.0, `components/EntityQueryPicker.tsx`).** The `LensPicker` clone in the
 bar's header row, on both canvases: `api/entityQueries.ts` + `hooks/useSavedEntityQueries.ts`
 (`useRegistryQuery`, key `["entityQueries"]`) over `/api/v1/entity-queries`; the picker takes the
