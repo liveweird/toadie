@@ -44,10 +44,36 @@ export const METAS = [
 const ALL_KEYWORDS = new Set<string>([...CLAUSE_KEYWORDS.flatMap((k) => k.split(" ")), ...OPERATOR_KEYWORDS]);
 const ALL_LITERALS = new Set<string>(LITERAL_KEYWORDS);
 
+/** Unsupported Cypher clause words are reserved by the server parser too. Names matching any
+ *  accepted or rejected keyword must therefore be backticked even though they are plain lexical
+ *  identifiers. */
+const REJECTED_KEYWORDS = [
+  "CREATE",
+  "MERGE",
+  "SET",
+  "DELETE",
+  "DETACH",
+  "REMOVE",
+  "CALL",
+  "UNWIND",
+  "FOREACH",
+  "LOAD",
+  "UNION",
+  "ORDER",
+  "SKIP",
+  "CASE",
+  "XOR",
+  "AS",
+] as const;
+
+const RESERVED_NAMES = new Set<string>([...ALL_KEYWORDS, ...ALL_LITERALS, ...REJECTED_KEYWORDS]);
+
 /** Backtick a name that is not a plain `[A-Za-z_][A-Za-z0-9_]*` identifier, doubling an
  *  embedded backtick (the lexer's own escape — see `.claude/docs/entity-query-language.md`). */
 export function quoteIfNeeded(name: string): string {
-  return /^[A-Za-z_]\w*$/.test(name) ? name : `\`${name.replace(/`/g, "``")}\``;
+  return /^[A-Za-z_]\w*$/.test(name) && !RESERVED_NAMES.has(name.toUpperCase())
+    ? name
+    : `\`${name.replace(/`/g, "``")}\``;
 }
 
 /** A single-quoted string literal with `\\`/`\'` escaped — the value's wire form in a query. */

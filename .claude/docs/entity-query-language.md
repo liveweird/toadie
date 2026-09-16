@@ -277,6 +277,46 @@ keystroke, debounced. A BLANK draft means NO query: erasing the editor's text cl
 query too (the stored pair is normalized on load), and Clear stays enabled while a query is still
 applied — the canvas can never silently show a stale query's result behind an empty bar.
 
+## Guided query builder
+
+The shared query bar offers **Build query** on both Entity graph and Entity hierarchy.
+The dialog constructs a new query from the current blueprint and hierarchy registry;
+it does not parse or convert the text already in the editor. Opening, editing, or
+cancelling the dialog leaves that text and the applied query unchanged. **Use query**
+replaces only the editor draft; the existing **Run** action applies it to the canvas.
+The generated text uses the existing live validation, execution, and saved-query APIs.
+No builder document is stored on the server. Form state is local to the mounted bar;
+closing the query section, switching pages, or reloading can discard that form state,
+while an accepted text draft retains the existing shared query-state behavior.
+
+The first version supports one starting blueprint, up to eight AND-combined conditions on stored
+primitive properties or supported scalar metadata, one optional connection step,
+result selection, and an optional entity limit. Available operators follow the selected
+property's primitive type; enum choices preserve their actual primitive values, and
+boolean values are emitted as booleans rather than quoted strings. Computed properties
+are not offered. Connections cover a declared outgoing
+relation, effective ownership, or a named hierarchy in the parent/child direction.
+Hierarchy traversal is bounded by the language's existing ten-hop ceiling. A connected
+entity identifier is qualified by its blueprint. Ambiguous relation/hierarchy edge names
+are refused rather than presenting their union as a traversal of only one kind. For
+multi-hop hierarchies this check conservatively considers every blueprint, including
+possible intermediate types. Arbitrary text queries retain the language's normal union
+semantics.
+
+Required connections filter out unmatched starting entities. Optional connections keep
+them: source conditions belong to the initial MATCH, while connected-entity constraints
+belong to the connection match. Result selection controls RETURN; traversing through an
+entity does not automatically include every intermediate entity in the result. The
+ordinary canvas filters still intersect the result, and LIMIT counts deduplicated entities,
+not match rows or paths. Generated queries remain subject to all existing server budgets.
+
+`web/src/utils/queryBuilder.ts` owns the structured model and pure text generation;
+`web/src/components/EntityQueryBuilderModal.tsx` owns the dialog. Invalid or stale schema
+selections must block generation instead of silently dropping a constraint. The shared
+quoting helpers protect names and literal values, including names that are reserved
+query keywords. The builder deliberately does not duplicate the server's grammar parser
+or promise arbitrary text-to-form conversion.
+
 ## Saved queries (v2.1.0)
 
 `entityquery/SavedEntityQuery.kt` + `SavedEntityQueryService.kt` + `SavedEntityQueryRoutes.kt` are

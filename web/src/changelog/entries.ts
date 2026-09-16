@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.6.0",
+    date: "2026-09-16",
+    en: `**Build entity queries without memorizing syntax.** Entity graph and Entity hierarchy now offer a guided query builder: choose an entity type, add typed property conditions, and follow a relation, ownership link, or named hierarchy. Select which entities to display, preview the generated query, and use it as an editable draft before running or saving it. The builder preserves hand-written queries until you choose Use query and supports narrow screens.`,
+    pl: `**Twórz zapytania o encje bez zapamiętywania składni.** Graf encji i Hierarchia encji oferują teraz kreator zapytań: wybierz typ encji, dodaj warunki właściwości dopasowane do ich typów i przejdź przez relację, powiązanie własności lub nazwaną hierarchię. Wybierz encje do wyświetlenia, sprawdź podgląd wygenerowanego zapytania i przenieś je do edytora przed uruchomieniem lub zapisaniem. Kreator zachowuje ręcznie wpisane zapytanie do chwili wybrania przycisku Użyj zapytania i obsługuje wąskie ekrany.`,
+  },
+  {
     version: "2.5.1",
     date: "2026-09-15",
     en: `**Entities toolbar, one row.** The Port Entities list now uses the shared Filters drawer: the required Blueprint selector stays beside the Filters toggle, while Team and Search fold into the drawer with an active-filter badge, the same layout as the Files and Users pages.`,
