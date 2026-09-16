@@ -85,22 +85,25 @@ function TreeItem({
         ) : (
           <Box w={18} style={{ flexShrink: 0 }} />
         )}
-        <Badge variant="light" color="gray" size="xs">
-          {node.blueprintTitle}
-        </Badge>
-        <Text size="sm" fw={500}>
-          {node.title}
-        </Text>
-        <Anchor
-          component={RouterLink}
-          to={editEntityPath(node.entityId)}
-          size="xs"
-          ff="monospace"
-          aria-label={t("common.action.editAria", { name: node.identifier })}
-        >
-          {node.identifier}
-        </Anchor>
-        <EntityFindingsBadge findings={node.findings} />
+        <Group gap="xs" wrap="wrap" className={classes.treeIdentity}>
+          <Badge variant="light" color="gray" size="xs">
+            {node.blueprintTitle}
+          </Badge>
+          <Text size="sm" fw={500} className={classes.treeIdentityText}>
+            {node.title}
+          </Text>
+          <Anchor
+            component={RouterLink}
+            to={editEntityPath(node.entityId)}
+            size="xs"
+            ff="monospace"
+            aria-label={t("common.action.editAria", { name: node.identifier })}
+            className={classes.treeIdentityText}
+          >
+            {node.identifier}
+          </Anchor>
+          <EntityFindingsBadge findings={node.findings} />
+        </Group>
         <Box ml="auto" style={{ flexShrink: 0 }}>
           <RowActionsMenu label={t("common.table.operationsAria", { name: node.title })}>
             <Menu.Item leftSection={<IconPin size={14} />} onClick={() => onPin(node.id)}>
@@ -122,7 +125,7 @@ function TreeItem({
         </Box>
       </Group>
       {children.length > 0 && !isCollapsed && (
-        <Box pl={22} ml={13} className={classes.treeBranch}>
+        <Box className={classes.treeBranch}>
           {children.map((child) => (
             <TreeItem
               key={pathKey(key, child.node)}
@@ -280,7 +283,7 @@ export default function EntityHierarchy() {
         </Alert>
       )}
 
-      <Paper withBorder p="md">
+      <Paper withBorder p="md" className={classes.treeSurface}>
         {!filters.ready || (isLoading && !graph) ? (
           <LoadingBlock py="md" />
         ) : visible.length > 0 ? (

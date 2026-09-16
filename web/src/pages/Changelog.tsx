@@ -6,6 +6,7 @@ import { markChangelogSeen } from "../hooks/useChangelogSeen";
 import MarkdownView from "../components/MarkdownView";
 import PageHeader from "../components/PageHeader";
 import { CONTENT_MAX_WIDTH } from "../utils/layout";
+import classes from "../theme.module.css";
 
 // Changelog bodies are authored release CONTENT, deliberately not tied to the UI language
 // set: entries carry hand-written EN + PL only, and any other shipped UI language reads the
@@ -23,7 +24,7 @@ export default function Changelog() {
   return (
     <Stack gap="md">
       <PageHeader title={t("changelog.title")} />
-      <Box maw={CONTENT_MAX_WIDTH}>
+      <Box maw={CONTENT_MAX_WIDTH} w="100%" className={classes.changelog}>
         <Stack>
           <Timeline bulletSize={12} lineWidth={2}>
             {CHANGELOG.map((entry) => (

@@ -321,6 +321,9 @@ but evaluation occurs on Run/Mod+Enter, saved-query selection, or a canvas query
 `queryTemplates.ts` for Expand/Ancestors/Descendants/Owned-by actions; preserve the anchor via
 OPTIONAL MATCH and use the selected hierarchy for ancestor/descendant traversal.
 
+Follow `web/CLAUDE.md`'s "Responsive data layouts" rules for full-width tables, locally
+contained scrolling, readable dynamic columns, and narrow-screen controls.
+
 Pages are lazy and use shared `PageHeader` chrome; navigation is defined once in
 `utils/navigation.ts` for the sidebar, user menu, and command palette. `NavSection.world` assigns
 sections to Backstage, Port, or global; derive the active world from the route and remember it

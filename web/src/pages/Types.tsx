@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Badge, Box, Button, Group, Modal, Select, Stack, Table, TagsInput } from "@mantine/core";
+import { Alert, Badge, Button, Group, Modal, Select, Stack, Table, TagsInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -32,7 +32,6 @@ import { showSuccessToast } from "../utils/toast";
 import LoadingBlock from "../components/LoadingBlock";
 import KindBadge from "../components/KindBadge";
 import PageHeader from "../components/PageHeader";
-import { CONTENT_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The per-kind type dictionaries (`/types`) — an internal Toadie constraint on the open
@@ -66,20 +65,20 @@ export default function Types() {
           )
         }
       />
-      <Box maw={CONTENT_MAX_WIDTH}>
-        <Stack>
-          {error ? (
-            <Alert color="red" variant="light" title={t("types.loadFailed")}>
-              {loadErrorMessage(loadError, t)}
-            </Alert>
-          ) : loading ? (
-            <LoadingBlock />
-          ) : dictionaries.length === 0 ? (
-            <EmptyState
-              icon={IconCategory}
-              label={t("types.empty")}
-            />
-          ) : (
+      <Stack>
+        {error ? (
+          <Alert color="red" variant="light" title={t("types.loadFailed")}>
+            {loadErrorMessage(loadError, t)}
+          </Alert>
+        ) : loading ? (
+          <LoadingBlock />
+        ) : dictionaries.length === 0 ? (
+          <EmptyState
+            icon={IconCategory}
+            label={t("types.empty")}
+          />
+        ) : (
+          <Table.ScrollContainer minWidth={520}>
             <Table>
               <Table.Thead>
                 <Table.Tr>
@@ -116,9 +115,9 @@ export default function Types() {
                 ))}
               </Table.Tbody>
             </Table>
-          )}
-        </Stack>
-      </Box>
+          </Table.ScrollContainer>
+        )}
+      </Stack>
 
       {editorTarget !== null && (
         <EntityTypesEditorModal

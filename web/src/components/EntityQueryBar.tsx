@@ -69,8 +69,8 @@ export default function EntityQueryBar({
           {t("entityQuery.builder.open")}
         </Button>
       </Group>
-      <Group gap="xs" align="flex-start" wrap="nowrap">
-        <Box className={classes.queryEditor} style={{ flex: 1, minWidth: 0 }}>
+      <Group gap="xs" align="flex-start" wrap="nowrap" className={classes.queryEditorRow}>
+        <Box className={classes.queryEditor}>
           <QueryEditor
             value={value}
             onChange={onChange}

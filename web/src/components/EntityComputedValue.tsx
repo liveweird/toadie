@@ -15,9 +15,11 @@ import { portColor } from "../utils/portColors";
 export default function EntityComputedValue({
   value,
   definition,
+  preview = false,
 }: {
   value: unknown;
   definition: ComputedDefinition;
+  preview?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -35,31 +37,64 @@ export default function EntityComputedValue({
 
   if (Array.isArray(value)) {
     return (
-      <Group gap={4}>
-        {value.map((item, index) =>
-          typeof item === "object" && item !== null ? (
-            <Code key={index}>{JSON.stringify(item)}</Code>
+      <Group gap={4} style={preview ? { minWidth: 0 } : undefined}>
+        {value.map((item, index) => {
+          const rendered = typeof item === "object" && item !== null ? JSON.stringify(item) : String(item);
+          return typeof item === "object" && item !== null ? (
+            <Code
+              key={index}
+              title={preview ? rendered : undefined}
+              style={preview ? { display: "block", maxWidth: "100%", overflowX: "auto", whiteSpace: "nowrap" } : undefined}
+            >
+              {rendered}
+            </Code>
           ) : (
-            <Badge key={index} variant="light" color="gray">
-              {String(item)}
+            <Badge
+              key={index}
+              variant="light"
+              color="gray"
+              title={preview ? rendered : undefined}
+              style={preview ? { maxWidth: "100%" } : undefined}
+            >
+              {rendered}
             </Badge>
-          ),
-        )}
+          );
+        })}
       </Group>
     );
   }
 
   if (typeof value === "object") {
-    return <Code block>{JSON.stringify(value, null, 2)}</Code>;
+    const rendered = JSON.stringify(value, null, 2);
+    return (
+      <Code
+        block
+        title={preview ? rendered : undefined}
+        style={preview ? { maxWidth: "100%", overflowX: "auto" } : undefined}
+      >
+        {rendered}
+      </Code>
+    );
   }
 
   if (definition.colorized) {
+    const rendered = String(value);
     return (
-      <Badge variant="light" color={portColor(definition.colors?.[String(value)])}>
-        {String(value)}
+      <Badge
+        variant="light"
+        color={portColor(definition.colors?.[rendered])}
+        title={preview ? rendered : undefined}
+        style={preview ? { maxWidth: "100%" } : undefined}
+      >
+        {rendered}
       </Badge>
     );
   }
 
-  return <Text size="sm">{String(value)}</Text>;
+  const rendered = String(value);
+  return (
+    <Text size="sm" truncate={preview ? "end" : undefined} title={preview ? rendered : undefined}>
+      {rendered}
+    </Text>
+  );
 }

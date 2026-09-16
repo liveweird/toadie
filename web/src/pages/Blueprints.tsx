@@ -1,4 +1,4 @@
-import { Alert, Anchor, Badge, Box, Button, Group, Stack, Table, Text } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Group, Stack, Table, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
@@ -15,7 +15,6 @@ import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { blueprintDeleteErrorMessage } from "../utils/blueprintForm";
 import { editBlueprintPath, newBlueprintPath } from "../utils/blueprintLinks";
 import { entitiesPath } from "../utils/entityLinks";
-import { CONTENT_MAX_WIDTH } from "../utils/layout";
 import { blueprintsExportJson, downloadJson } from "../utils/ontologyExport";
 import { ontologyImportPath } from "../utils/ontologyLinks";
 import { loadErrorMessage } from "../utils/saveError";
@@ -64,17 +63,17 @@ export default function Blueprints() {
           </Group>
         }
       />
-      <Box maw={CONTENT_MAX_WIDTH}>
-        <Stack>
-          {error ? (
-            <Alert color="red" variant="light" title={t("blueprints.loadFailed")}>
-              {loadErrorMessage(loadError, t)}
-            </Alert>
-          ) : loading ? (
-            <LoadingBlock />
-          ) : blueprints.length === 0 ? (
-            <EmptyState icon={IconSchema} label={t("blueprints.empty")} />
-          ) : (
+      <Stack>
+        {error ? (
+          <Alert color="red" variant="light" title={t("blueprints.loadFailed")}>
+            {loadErrorMessage(loadError, t)}
+          </Alert>
+        ) : loading ? (
+          <LoadingBlock />
+        ) : blueprints.length === 0 ? (
+          <EmptyState icon={IconSchema} label={t("blueprints.empty")} />
+        ) : (
+          <Table.ScrollContainer minWidth={760}>
             <Table>
               <Table.Thead>
                 <Table.Tr>
@@ -132,9 +131,9 @@ export default function Blueprints() {
                 ))}
               </Table.Tbody>
             </Table>
-          )}
-        </Stack>
-      </Box>
+          </Table.ScrollContainer>
+        )}
+      </Stack>
 
       <ConfirmDeleteModal
         confirm={remove}

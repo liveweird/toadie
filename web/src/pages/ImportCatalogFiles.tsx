@@ -228,55 +228,57 @@ export default function ImportCatalogFiles() {
               { created: createdCount, total: results.rows.length },
             )}
           </Text>
-          <Table>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>{t("catalog.field.kind")}</Table.Th>
-                <Table.Th>{t("catalog.field.namespace")}</Table.Th>
-                <Table.Th>{t("common.field.name")}</Table.Th>
-                <Table.Th>{t("catalog.import.statusHeader")}</Table.Th>
-                <Table.Th>{t("catalog.import.messageHeader")}</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {results.rows.map((result) => (
-                <Table.Tr key={result.index}>
-                  <Table.Td>
-                    <KindBadge kind={result.kind} />
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{result.namespace}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    {/* A stored row links straight to its editor — the WITH_FINDINGS ones are
-                        exactly the files the reader goes on to fix. Dry-run rows and skipped
-                        rows have no fileId (nothing was stored). */}
-                    {result.fileId != null ? (
-                      <CatalogFileNameLink id={result.fileId} name={result.name} />
-                    ) : (
-                      <Text size="sm" fw={500}>
-                        {result.name}
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge variant="light" size="sm" color={STATUS_COLOR[result.status]}>
-                      {t(
-                        results.mode === "check"
-                          ? `catalog.import.checkStatus.${result.status}`
-                          : `catalog.import.status.${result.status}`,
-                      )}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c="dimmed">
-                      {result.message ?? ""}
-                    </Text>
-                  </Table.Td>
+          <Table.ScrollContainer minWidth={760}>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>{t("catalog.field.kind")}</Table.Th>
+                  <Table.Th>{t("catalog.field.namespace")}</Table.Th>
+                  <Table.Th>{t("common.field.name")}</Table.Th>
+                  <Table.Th>{t("catalog.import.statusHeader")}</Table.Th>
+                  <Table.Th>{t("catalog.import.messageHeader")}</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {results.rows.map((result) => (
+                  <Table.Tr key={result.index}>
+                    <Table.Td>
+                      <KindBadge kind={result.kind} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{result.namespace}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {/* A stored row links straight to its editor — the WITH_FINDINGS ones are
+                          exactly the files the reader goes on to fix. Dry-run rows and skipped
+                          rows have no fileId (nothing was stored). */}
+                      {result.fileId != null ? (
+                        <CatalogFileNameLink id={result.fileId} name={result.name} />
+                      ) : (
+                        <Text size="sm" fw={500}>
+                          {result.name}
+                        </Text>
+                      )}
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge variant="light" size="sm" color={STATUS_COLOR[result.status]}>
+                        {t(
+                          results.mode === "check"
+                            ? `catalog.import.checkStatus.${result.status}`
+                            : `catalog.import.status.${result.status}`,
+                        )}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" c="dimmed">
+                        {result.message ?? ""}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         </Stack>
       )}
 

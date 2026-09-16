@@ -34,6 +34,14 @@ describe("EntityComputedValue", () => {
     expect(screen.getByText("checkout-service")).toBeInTheDocument();
   });
 
+  test("a long scalar preview truncates visually and exposes its full value", () => {
+    const value = "a-very-long-computed-value-without-break-opportunities";
+    renderWithProviders(<EntityComputedValue value={value} definition={definition()} preview />);
+    const text = screen.getByText(value);
+    expect(text).toHaveAttribute("title", value);
+    expect(text).toHaveAttribute("data-truncate", "end");
+  });
+
   test("a plain number renders as text", () => {
     renderWithProviders(<EntityComputedValue value={16} definition={definition({ type: "number" })} />);
     expect(screen.getByText("16")).toBeInTheDocument();
@@ -66,6 +74,20 @@ describe("EntityComputedValue", () => {
       <EntityComputedValue value={[{ url: "https://example.com" }]} definition={definition({ kind: "mirror" })} />,
     );
     expect(screen.getByText('{"url":"https://example.com"}')).toBeInTheDocument();
+  });
+
+  test("a long inline JSON preview is locally scrollable and exposes the serialized value", () => {
+    const rendered = '{"token":"an-unbroken-value-that-is-longer-than-the-preview-column"}';
+    renderWithProviders(
+      <EntityComputedValue
+        value={[{ token: "an-unbroken-value-that-is-longer-than-the-preview-column" }]}
+        definition={definition({ kind: "mirror" })}
+        preview
+      />,
+    );
+    const code = screen.getByText(rendered);
+    expect(code).toHaveAttribute("title", rendered);
+    expect(code).toHaveStyle({ overflowX: "auto", whiteSpace: "nowrap" });
   });
 
   test("an empty array renders no pills at all", () => {

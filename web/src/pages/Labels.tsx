@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Alert,
   Badge,
-  Box,
   Button,
   Group,
   Modal,
@@ -41,7 +40,6 @@ import { showSuccessToast } from "../utils/toast";
 import LoadingBlock from "../components/LoadingBlock";
 import KindBadge from "../components/KindBadge";
 import PageHeader from "../components/PageHeader";
-import { CONTENT_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The label registry (`/labels`): everyone gets the read-only list; an ADMIN additionally
@@ -74,20 +72,20 @@ export default function Labels() {
           )
         }
       />
-      <Box maw={CONTENT_MAX_WIDTH}>
-        <Stack>
-          {error ? (
-            <Alert color="red" variant="light" title={t("labels.loadFailed")}>
-              {loadErrorMessage(loadError, t)}
-            </Alert>
-          ) : loading ? (
-            <LoadingBlock />
-          ) : labels.length === 0 ? (
-            <EmptyState
-              icon={IconTag}
-              label={t("labels.empty")}
-            />
-          ) : (
+      <Stack>
+        {error ? (
+          <Alert color="red" variant="light" title={t("labels.loadFailed")}>
+            {loadErrorMessage(loadError, t)}
+          </Alert>
+        ) : loading ? (
+          <LoadingBlock />
+        ) : labels.length === 0 ? (
+          <EmptyState
+            icon={IconTag}
+            label={t("labels.empty")}
+          />
+        ) : (
+          <Table.ScrollContainer minWidth={680}>
             <Table>
               <Table.Thead>
                 <Table.Tr>
@@ -134,9 +132,9 @@ export default function Labels() {
                 ))}
               </Table.Tbody>
             </Table>
-          )}
-        </Stack>
-      </Box>
+          </Table.ScrollContainer>
+        )}
+      </Stack>
 
       {editorTarget !== null && (
         <LabelEditorModal

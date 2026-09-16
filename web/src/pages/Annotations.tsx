@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Box, Button, Group, Modal, MultiSelect, Stack, Table, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Group, Modal, MultiSelect, Stack, Table, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -33,7 +33,6 @@ import { showSuccessToast } from "../utils/toast";
 import LoadingBlock from "../components/LoadingBlock";
 import KindBadge from "../components/KindBadge";
 import PageHeader from "../components/PageHeader";
-import { CONTENT_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The annotation-key registry (`/annotations`) — the Labels page's sibling with the value
@@ -67,20 +66,20 @@ export default function Annotations() {
           )
         }
       />
-      <Box maw={CONTENT_MAX_WIDTH}>
-        <Stack>
-          {error ? (
-            <Alert color="red" variant="light" title={t("annotations.loadFailed")}>
-              {loadErrorMessage(loadError, t)}
-            </Alert>
-          ) : loading ? (
-            <LoadingBlock />
-          ) : annotationKeys.length === 0 ? (
-            <EmptyState
-              icon={IconNote}
-              label={t("annotations.empty")}
-            />
-          ) : (
+      <Stack>
+        {error ? (
+          <Alert color="red" variant="light" title={t("annotations.loadFailed")}>
+            {loadErrorMessage(loadError, t)}
+          </Alert>
+        ) : loading ? (
+          <LoadingBlock />
+        ) : annotationKeys.length === 0 ? (
+          <EmptyState
+            icon={IconNote}
+            label={t("annotations.empty")}
+          />
+        ) : (
+          <Table.ScrollContainer minWidth={520}>
             <Table>
               <Table.Thead>
                 <Table.Tr>
@@ -117,9 +116,9 @@ export default function Annotations() {
                 ))}
               </Table.Tbody>
             </Table>
-          )}
-        </Stack>
-      </Box>
+          </Table.ScrollContainer>
+        )}
+      </Stack>
 
       {editorTarget !== null && (
         <AnnotationKeyEditorModal

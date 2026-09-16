@@ -263,7 +263,26 @@
 }
 
 .treeBranch {
+  margin-left: 13px;
+  padding-left: 22px;
   border-left: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+}
+
+/* Keep the action trigger visible while the title and identifier share the available row.
+   Deep trees get a bounded local scroller as a last resort instead of widening the page. */
+.treeSurface {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.treeIdentity {
+  flex: 1;
+  min-width: 0;
+}
+
+.treeIdentityText {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* A count riding a filter chip (the Errors class chips): tabular, dimmed, and NOT part of
@@ -379,6 +398,8 @@
 /* The entity query bar's CodeMirror host (components/QueryEditor.tsx, phase 7 v2.0.0): CM
    ships no border of its own, so this mimics Mantine's TextInput frame and focus ring. */
 .queryEditor {
+  flex: 1;
+  min-width: 0;
   border: 1px solid light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-4));
   border-radius: var(--mantine-radius-sm);
   font-family: var(--mantine-font-family-monospace);
@@ -400,4 +421,47 @@
 
 .queryEditor :global(.cm-scroller) {
   overflow-x: auto;
+}
+
+/* Release prose and inline code from their min-content width without changing the
+   whitespace contract of fenced code blocks, which remain locally scrollable. */
+.changelog {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.changelog :global(.mantine-Timeline-itemBody),
+.changelog :global(.mantine-Typography-root) {
+  min-width: 0;
+}
+
+.changelog code {
+  white-space: normal;
+}
+
+.changelog pre {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+
+.changelog pre code {
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+@media (max-width: 48em) {
+  .treeBranch {
+    margin-left: 5px;
+    padding-left: 8px;
+  }
+
+  .queryEditorRow {
+    flex-wrap: wrap;
+  }
+
+  .queryEditor {
+    flex-basis: 100%;
+  }
 }

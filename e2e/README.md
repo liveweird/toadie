@@ -96,6 +96,8 @@ from Lettuce, that any new or edited spec must satisfy:
   throwaway `e2e-eqs-*`-named saved entity query (deleted mid-journey), and one throwaway
   regular user (run as the seed admin, with a second browser context signed in as that
   throwaway user for the foreign-public-query half);
+  `responsive-layout` owns one throwaway `e2e-layout-*` blueprint and six entities in a parent
+  chain; its other screen checks are read-only;
   `entity-errors` owns one throwaway `e2e-ee-*` blueprint, its one `e2e-ee-*` entity, and its
   one throwaway `e2e-ee-*`-named saved entity query (run as the seed admin — entities and
   saved queries carry no admin gate);
@@ -157,13 +159,14 @@ from Lettuce, that any new or edited spec must satisfy:
   `ontology-import.spec.ts` (`e2e-oi-bp-*`, `e2e-oi-ent-*` — Phase 6, v1.28.0),
   `entity-query.spec.ts` (`e2e-eq-*` — phase 7, v2.0.0),
   `entity-query-builder.spec.ts` (`e2e-query-builder-*`),
+  `responsive-layout.spec.ts` (`e2e-layout-*`; one self-related blueprint and six entities),
   `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries), and
   `entity-errors.spec.ts` (`e2e-ee-*` — the Ontology Errors report, v2.5.0); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
   what makes their concurrent creates safe — the same rule the other registries' single
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
-  `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-query-builder-*`, `e2e-eqs-*`, `e2e-ee-*` today) and is removed by that same spec
+  `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-query-builder-*`, `e2e-layout-*`, `e2e-eqs-*`, `e2e-ee-*` today) and is removed by that same spec
   before it returns, so a future entity-creating spec can join safely as long as it never
   touches another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
@@ -320,6 +323,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   is refused (`409`) naming the referring children, and switching the toolbar's Hierarchy
   picker to global-setup's own second hierarchy value — flagged on the SAME `parent` relation
   — reproduces the identical nesting before switching back → cleanup.
+- [`responsive-layout.spec.ts`](scenarios/responsive-layout.md) — full-width desktop registries,
+  locally scrolling mobile tables, readable dynamic entity columns, deep hierarchy actions,
+  query-editor space, and changelog wrapping.
 - [`entity-query-builder.spec.ts`](scenarios/entity-query-builder.md) — guided schema-aware
   query creation: cancelling preserves hand-written text, Use query changes only the draft,
   Run evaluates a generated relation/property query through the real server, reserved names

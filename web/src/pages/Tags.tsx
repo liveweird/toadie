@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Alert,
   Badge,
-  Box,
   Button,
   Group,
   Modal,
@@ -45,7 +44,6 @@ import { showSuccessToast } from "../utils/toast";
 import LoadingBlock from "../components/LoadingBlock";
 import KindBadge from "../components/KindBadge";
 import PageHeader from "../components/PageHeader";
-import { CONTENT_MAX_WIDTH } from "../utils/layout";
 
 /**
  * The tag categories (`/tags`) — an internal Toadie concept, not part of the Backstage
@@ -79,20 +77,20 @@ export default function Tags() {
           )
         }
       />
-      <Box maw={CONTENT_MAX_WIDTH}>
-        <Stack>
-          {error ? (
-            <Alert color="red" variant="light" title={t("tags.loadFailed")}>
-              {loadErrorMessage(loadError, t)}
-            </Alert>
-          ) : loading ? (
-            <LoadingBlock />
-          ) : categories.length === 0 ? (
-            <EmptyState
-              icon={IconHash}
-              label={t("tags.empty")}
-            />
-          ) : (
+      <Stack>
+        {error ? (
+          <Alert color="red" variant="light" title={t("tags.loadFailed")}>
+            {loadErrorMessage(loadError, t)}
+          </Alert>
+        ) : loading ? (
+          <LoadingBlock />
+        ) : categories.length === 0 ? (
+          <EmptyState
+            icon={IconHash}
+            label={t("tags.empty")}
+          />
+        ) : (
+          <Table.ScrollContainer minWidth={680}>
             <Table>
               <Table.Thead>
                 <Table.Tr>
@@ -139,9 +137,9 @@ export default function Tags() {
                 ))}
               </Table.Tbody>
             </Table>
-          )}
-        </Stack>
-      </Box>
+          </Table.ScrollContainer>
+        )}
+      </Stack>
 
       {editorTarget !== null && (
         <TagCategoryEditorModal
