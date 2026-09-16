@@ -38,6 +38,13 @@ type SortField = (typeof SORT_FIELDS)[number];
 
 const SETTINGS_KEY = "entities";
 const MAX_COLUMN_PROPERTIES = 4;
+const IDENTIFIER_COLUMN_WIDTH = 180;
+const TITLE_COLUMN_WIDTH = 200;
+const TEAM_COLUMN_WIDTH = 180;
+const PREVIEW_COLUMN_WIDTH = 180;
+const FINDINGS_COLUMN_WIDTH = 100;
+const UPDATED_COLUMN_WIDTH = 150;
+const OPERATIONS_COLUMN_WIDTH = 80;
 
 // One preview column is either a plain schema property (string/number/boolean, rendered
 // inline below) or a computed one (v1.27.0 — rendered through the shared `EntityComputedValue`,
@@ -151,6 +158,14 @@ export default function Entities() {
 
   const total = data?.total ?? 0;
   const columnCount = 4 + previewColumns.length + 2;
+  const tableMinWidth =
+    IDENTIFIER_COLUMN_WIDTH +
+    TITLE_COLUMN_WIDTH +
+    TEAM_COLUMN_WIDTH +
+    previewColumns.length * PREVIEW_COLUMN_WIDTH +
+    FINDINGS_COLUMN_WIDTH +
+    UPDATED_COLUMN_WIDTH +
+    OPERATIONS_COLUMN_WIDTH;
 
   const knownTeams = new Set(teamOptions.map((e) => e.identifier));
   const teamSelectData = [
@@ -232,19 +247,46 @@ export default function Entities() {
         </Alert>
       )}
 
-      <Table.ScrollContainer minWidth={640}>
+      <Table.ScrollContainer minWidth={tableMinWidth}>
         <Table layout="fixed">
           <Table.Thead>
             <Table.Tr>
-              <SortHeader field="identifier" label={t("entities.field.identifier")} activeField={sortField} activeDir={sortDir} onToggle={toggleSort} />
-              <SortHeader field="title" label={t("entities.field.title")} activeField={sortField} activeDir={sortDir} onToggle={toggleSort} />
-              <Table.Th>{t("entities.column.team")}</Table.Th>
+              <SortHeader
+                field="identifier"
+                label={t("entities.field.identifier")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+                width={IDENTIFIER_COLUMN_WIDTH}
+              />
+              <SortHeader
+                field="title"
+                label={t("entities.field.title")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+                width={TITLE_COLUMN_WIDTH}
+              />
+              <Table.Th w={TEAM_COLUMN_WIDTH}>{t("entities.column.team")}</Table.Th>
               {previewColumns.map((column) => (
-                <Table.Th key={previewColumnKey(column)}>{previewColumnLabel(column)}</Table.Th>
+                <Table.Th
+                  key={previewColumnKey(column)}
+                  w={PREVIEW_COLUMN_WIDTH}
+                  style={{ overflowWrap: "anywhere", whiteSpace: "normal" }}
+                >
+                  {previewColumnLabel(column)}
+                </Table.Th>
               ))}
-              <Table.Th>{t("entities.column.findings")}</Table.Th>
-              <SortHeader field="updatedAt" label={t("entities.field.updated")} activeField={sortField} activeDir={sortDir} onToggle={toggleSort} width={150} />
-              <Table.Th aria-label={t("common.table.operations")} w={80} />
+              <Table.Th w={FINDINGS_COLUMN_WIDTH}>{t("entities.column.findings")}</Table.Th>
+              <SortHeader
+                field="updatedAt"
+                label={t("entities.field.updated")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+                width={UPDATED_COLUMN_WIDTH}
+              />
+              <Table.Th aria-label={t("common.table.operations")} w={OPERATIONS_COLUMN_WIDTH} />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -266,16 +308,27 @@ export default function Entities() {
                       size="sm"
                       ff="monospace"
                       aria-label={t("common.action.editAria", { name: entity.identifier })}
+                      style={{ overflowWrap: "anywhere" }}
                     >
                       {entity.identifier}
                     </Anchor>
                   </Table.Td>
-                  <Table.Td>{entity.title}</Table.Td>
+                  <Table.Td>
+                    <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+                      {entity.title}
+                    </Text>
+                  </Table.Td>
                   <Table.Td>
                     {teamValuesOf(entity.team).length > 0 ? (
-                      <Group gap={4}>
+                      <Group gap={4} style={{ minWidth: 0 }}>
                         {teamValuesOf(entity.team).map((value) => (
-                          <Badge key={value} variant="light" color="gray">
+                          <Badge
+                            key={value}
+                            variant="light"
+                            color="gray"
+                            title={value}
+                            style={{ maxWidth: "100%" }}
+                          >
                             {value}
                           </Badge>
                         ))}
@@ -289,7 +342,11 @@ export default function Entities() {
                       {column.kind === "schema" ? (
                         schemaPreviewCell(entity.properties[column.id], column.type, t)
                       ) : (
-                        <EntityComputedValue value={entity.properties[column.definition.id]} definition={column.definition} />
+                        <EntityComputedValue
+                          value={entity.properties[column.definition.id]}
+                          definition={column.definition}
+                          preview
+                        />
                       )}
                     </Table.Td>
                   ))}

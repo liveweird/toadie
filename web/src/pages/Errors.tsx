@@ -77,73 +77,75 @@ export default function Errors() {
         </Alert>
       )}
 
-      <Table>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>{t("errors.field.file")}</Table.Th>
-            <Table.Th>{t("errors.field.kind")}</Table.Th>
-            <Table.Th>{t("errors.field.namespace")}</Table.Th>
-            <Table.Th>{t("errors.field.findings")}</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {/* A disabled (noKinds) query stays pending forever — fall through to the empty state. */}
-          {isPending && !data && !noKinds ? (
-            <TableLoadingRow colSpan={columnCount} />
-          ) : rows.length > 0 ? (
-            rows.map((row) => (
-              <Table.Tr key={row.fileId}>
-                <Table.Td style={{ verticalAlign: "top" }}>
-                  <CatalogFileNameLink id={row.fileId} name={row.fileName} />
-                </Table.Td>
-                <Table.Td style={{ verticalAlign: "top", width: 130 }}>
-                  <KindBadge kind={row.fileKind} />
-                </Table.Td>
-                <Table.Td style={{ verticalAlign: "top", width: 160 }}>
-                  <Text size="sm">{row.fileNamespace}</Text>
-                </Table.Td>
-                <Table.Td>
-                  <Stack gap={4}>
-                    {row.findings.map((f, index) => (
-                      <Group gap={6} wrap="nowrap" key={`${f.field}-${f.reference}-${index}`}>
-                        <Badge
-                          variant="light"
-                          size="xs"
-                          color={colorOfStatus(f.status)}
-                          title={f.message ?? t(`errors.message.${f.status}`)}
-                          style={{ flexShrink: 0 }}
-                        >
-                          {t(`errors.status.${f.status}`)}
-                        </Badge>
-                        {f.field !== "document" && f.field !== "source" && (
-                          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
-                            {f.field}
-                          </Text>
-                        )}
-                        {f.reference !== "" && <Code>{f.reference}</Code>}
-                        {f.status === "STRUCTURE_INVALID" && f.message && (
-                          <Text size="xs" truncate>
-                            {f.message}
-                          </Text>
-                        )}
-                      </Group>
-                    ))}
-                  </Stack>
+      <Table.ScrollContainer minWidth={760}>
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>{t("errors.field.file")}</Table.Th>
+              <Table.Th>{t("errors.field.kind")}</Table.Th>
+              <Table.Th>{t("errors.field.namespace")}</Table.Th>
+              <Table.Th>{t("errors.field.findings")}</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {/* A disabled (noKinds) query stays pending forever — fall through to the empty state. */}
+            {isPending && !data && !noKinds ? (
+              <TableLoadingRow colSpan={columnCount} />
+            ) : rows.length > 0 ? (
+              rows.map((row) => (
+                <Table.Tr key={row.fileId}>
+                  <Table.Td style={{ verticalAlign: "top" }}>
+                    <CatalogFileNameLink id={row.fileId} name={row.fileName} />
+                  </Table.Td>
+                  <Table.Td style={{ verticalAlign: "top", width: 130 }}>
+                    <KindBadge kind={row.fileKind} />
+                  </Table.Td>
+                  <Table.Td style={{ verticalAlign: "top", width: 160 }}>
+                    <Text size="sm">{row.fileNamespace}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Stack gap={4}>
+                      {row.findings.map((f, index) => (
+                        <Group gap={6} wrap="nowrap" key={`${f.field}-${f.reference}-${index}`}>
+                          <Badge
+                            variant="light"
+                            size="xs"
+                            color={colorOfStatus(f.status)}
+                            title={f.message ?? t(`errors.message.${f.status}`)}
+                            style={{ flexShrink: 0 }}
+                          >
+                            {t(`errors.status.${f.status}`)}
+                          </Badge>
+                          {f.field !== "document" && f.field !== "source" && (
+                            <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                              {f.field}
+                            </Text>
+                          )}
+                          {f.reference !== "" && <Code>{f.reference}</Code>}
+                          {f.status === "STRUCTURE_INVALID" && f.message && (
+                            <Text size="xs" truncate>
+                              {f.message}
+                            </Text>
+                          )}
+                        </Group>
+                      ))}
+                    </Stack>
+                  </Table.Td>
+                </Table.Tr>
+              ))
+            ) : !isError ? (
+              <Table.Tr>
+                <Table.Td colSpan={columnCount}>
+                  <EmptyState
+                    icon={IconListCheck}
+                    label={t("errors.noFindings")}
+                  />
                 </Table.Td>
               </Table.Tr>
-            ))
-          ) : !isError ? (
-            <Table.Tr>
-              <Table.Td colSpan={columnCount}>
-                <EmptyState
-                  icon={IconListCheck}
-                  label={t("errors.noFindings")}
-                />
-              </Table.Td>
-            </Table.Tr>
-          ) : null}
-        </Table.Tbody>
-      </Table>
+            ) : null}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
     </Stack>
   );
 }

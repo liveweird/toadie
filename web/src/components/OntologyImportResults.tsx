@@ -145,73 +145,75 @@ export default function OntologyImportResults({
           unchanged: counts.unchanged,
         })}
       </Text>
-      <Table>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>{t("ontology.import.column.kind")}</Table.Th>
-            <Table.Th>{t("ontology.import.column.identifier")}</Table.Th>
-            {showSource && <Table.Th>{t("ontology.import.column.source")}</Table.Th>}
-            <Table.Th>{t("ontology.import.column.result")}</Table.Th>
-            <Table.Th>{t("ontology.import.column.detail")}</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {rows.map((row) => {
-            const isExpanded = expanded.has(row.index);
-            return (
-              <Fragment key={row.index}>
-                <Table.Tr>
-                  <Table.Td>
-                    <Badge variant="light" size="sm">
-                      {t(`ontology.import.kind.${row.kind}`)}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <IdentifierCell row={row} t={t} />
-                  </Table.Td>
-                  {showSource && (
-                    <Table.Td>
-                      <Text size="sm" c="dimmed">
-                        {row.source}
-                      </Text>
-                    </Table.Td>
-                  )}
-                  <Table.Td>
-                    <Badge variant="light" size="sm" color={STATUS_COLOR[row.status]}>
-                      {t(
-                        mode === "check"
-                          ? `ontology.import.checkStatus.${row.status}`
-                          : `ontology.import.status.${row.status}`,
-                      )}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <FindingsCell row={row} expanded={isExpanded} onToggle={() => toggle(row.index)} t={t} />
-                  </Table.Td>
-                </Table.Tr>
-                {isExpanded && row.findings && row.findings.length > 0 && (
+      <Table.ScrollContainer minWidth={760}>
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>{t("ontology.import.column.kind")}</Table.Th>
+              <Table.Th>{t("ontology.import.column.identifier")}</Table.Th>
+              {showSource && <Table.Th>{t("ontology.import.column.source")}</Table.Th>}
+              <Table.Th>{t("ontology.import.column.result")}</Table.Th>
+              <Table.Th>{t("ontology.import.column.detail")}</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {rows.map((row) => {
+              const isExpanded = expanded.has(row.index);
+              return (
+                <Fragment key={row.index}>
                   <Table.Tr>
-                    <Table.Td colSpan={columnCount}>
-                      <Stack gap={4} pl="md">
-                        {row.findings.map((finding, i) => (
-                          <Group key={`${finding.field}-${i}`} gap={4} wrap="nowrap">
-                            <Text size="xs" ff="monospace" c="dimmed">
-                              {finding.field}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              — {finding.message}
-                            </Text>
-                          </Group>
-                        ))}
-                      </Stack>
+                    <Table.Td>
+                      <Badge variant="light" size="sm">
+                        {t(`ontology.import.kind.${row.kind}`)}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <IdentifierCell row={row} t={t} />
+                    </Table.Td>
+                    {showSource && (
+                      <Table.Td>
+                        <Text size="sm" c="dimmed">
+                          {row.source}
+                        </Text>
+                      </Table.Td>
+                    )}
+                    <Table.Td>
+                      <Badge variant="light" size="sm" color={STATUS_COLOR[row.status]}>
+                        {t(
+                          mode === "check"
+                            ? `ontology.import.checkStatus.${row.status}`
+                            : `ontology.import.status.${row.status}`,
+                        )}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <FindingsCell row={row} expanded={isExpanded} onToggle={() => toggle(row.index)} t={t} />
                     </Table.Td>
                   </Table.Tr>
-                )}
-              </Fragment>
-            );
-          })}
-        </Table.Tbody>
-      </Table>
+                  {isExpanded && row.findings && row.findings.length > 0 && (
+                    <Table.Tr>
+                      <Table.Td colSpan={columnCount}>
+                        <Stack gap={4} pl="md">
+                          {row.findings.map((finding, i) => (
+                            <Group key={`${finding.field}-${i}`} gap={4} wrap="nowrap">
+                              <Text size="xs" ff="monospace" c="dimmed">
+                                {finding.field}
+                              </Text>
+                              <Text size="xs" c="dimmed">
+                                — {finding.message}
+                              </Text>
+                            </Group>
+                          ))}
+                        </Stack>
+                      </Table.Td>
+                    </Table.Tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
     </Stack>
   );
 }

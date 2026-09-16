@@ -266,78 +266,80 @@ export default function FeatureFlags() {
         </Alert>
       )}
 
-      <Table>
-        <Table.Thead>
-          <Table.Tr>
-            <SortHeader
-              field="name"
-              label={t("common.field.name")}
-              activeField={sortField}
-              activeDir={sortDir}
-              onToggle={toggleSort}
-            />
-            <SortHeader
-              field="email"
-              label={t("common.field.email")}
-              activeField={sortField}
-              activeDir={sortDir}
-              onToggle={toggleSort}
-            />
-            <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>
-              {t("users.featureFlags.enabledHeader")}
-            </Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {isLoading && !data ? (
-            <TableLoadingRow colSpan={columnCount} />
-          ) : data && data.items.length > 0 ? (
-            data.items.map((u) => (
-              <Table.Tr key={u.id}>
-                <Table.Td>
-                  {/* The name opens the user's per-user features editor — the row names a
-                      user this screen otherwise gives no way into (the Users list links the
-                      same rows). */}
-                  <Anchor
-                    component={RouterLink}
-                    to={`/users/${u.id}/features`}
-                    size="sm"
-                    fw={500}
-                    aria-label={t("users.featuresAria", { name: u.name })}
-                  >
-                    {u.name}
-                  </Anchor>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm">{u.email}</Text>
-                </Table.Td>
-                <Table.Td>
-                  <Group justify="center">
-                    <Switch
-                      checked={!u.disabledFeatures.includes(feature)}
-                      disabled={pendingId === u.id}
-                      onChange={() => void toggle(u)}
-                      aria-label={t("users.featureFlags.toggleAria", {
-                        feature: featureLabel,
-                        name: u.name,
-                      })}
-                    />
-                  </Group>
+      <Table.ScrollContainer minWidth={640}>
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <SortHeader
+                field="name"
+                label={t("common.field.name")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+              />
+              <SortHeader
+                field="email"
+                label={t("common.field.email")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+              />
+              <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>
+                {t("users.featureFlags.enabledHeader")}
+              </Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {isLoading && !data ? (
+              <TableLoadingRow colSpan={columnCount} />
+            ) : data && data.items.length > 0 ? (
+              data.items.map((u) => (
+                <Table.Tr key={u.id}>
+                  <Table.Td>
+                    {/* The name opens the user's per-user features editor — the row names a
+                        user this screen otherwise gives no way into (the Users list links the
+                        same rows). */}
+                    <Anchor
+                      component={RouterLink}
+                      to={`/users/${u.id}/features`}
+                      size="sm"
+                      fw={500}
+                      aria-label={t("users.featuresAria", { name: u.name })}
+                    >
+                      {u.name}
+                    </Anchor>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm">{u.email}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group justify="center">
+                      <Switch
+                        checked={!u.disabledFeatures.includes(feature)}
+                        disabled={pendingId === u.id}
+                        onChange={() => void toggle(u)}
+                        aria-label={t("users.featureFlags.toggleAria", {
+                          feature: featureLabel,
+                          name: u.name,
+                        })}
+                      />
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))
+            ) : !isError ? (
+              <Table.Tr>
+                <Table.Td colSpan={columnCount}>
+                  <EmptyState
+                    icon={IconUsers}
+                    label={t("users.noUsers")}
+                  />
                 </Table.Td>
               </Table.Tr>
-            ))
-          ) : !isError ? (
-            <Table.Tr>
-              <Table.Td colSpan={columnCount}>
-                <EmptyState
-                  icon={IconUsers}
-                  label={t("users.noUsers")}
-                />
-              </Table.Td>
-            </Table.Tr>
-          ) : null}
-        </Table.Tbody>
-      </Table>
+            ) : null}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
 
       <PaginationBar
         total={total}

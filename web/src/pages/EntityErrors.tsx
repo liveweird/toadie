@@ -131,40 +131,42 @@ export default function EntityErrors() {
         </Alert>
       )}
 
-      <Table>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>{t("entityErrors.field.subject")}</Table.Th>
-            <Table.Th>{t("entityErrors.field.blueprint")}</Table.Th>
-            <Table.Th>{t("entityErrors.field.team")}</Table.Th>
-            <Table.Th>{t("entityErrors.field.findings")}</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {/* A disabled (noBlueprints) query stays pending forever — fall through to the empty state. */}
-          {isPending && !data && !noBlueprints ? (
-            <TableLoadingRow colSpan={COLUMN_COUNT} />
-          ) : rowCount > 0 ? (
-            <>
-              {entityRows.map((row) => (
-                <EntityRow key={`entity-${row.id}`} row={row} />
-              ))}
-              {blueprintRows.map((row) => (
-                <BlueprintRow key={`blueprint-${row.id}`} row={row} />
-              ))}
-              {savedQueryRows.map((row) => (
-                <SavedQueryRow key={`savedQuery-${row.id}`} row={row} onOpenInGraph={openInGraph} />
-              ))}
-            </>
-          ) : !isError ? (
+      <Table.ScrollContainer minWidth={860}>
+        <Table>
+          <Table.Thead>
             <Table.Tr>
-              <Table.Td colSpan={COLUMN_COUNT}>
-                <EmptyState icon={IconListCheck} label={t("entityErrors.noFindings")} />
-              </Table.Td>
+              <Table.Th>{t("entityErrors.field.subject")}</Table.Th>
+              <Table.Th>{t("entityErrors.field.blueprint")}</Table.Th>
+              <Table.Th>{t("entityErrors.field.team")}</Table.Th>
+              <Table.Th>{t("entityErrors.field.findings")}</Table.Th>
             </Table.Tr>
-          ) : null}
-        </Table.Tbody>
-      </Table>
+          </Table.Thead>
+          <Table.Tbody>
+            {/* A disabled (noBlueprints) query stays pending forever — fall through to the empty state. */}
+            {isPending && !data && !noBlueprints ? (
+              <TableLoadingRow colSpan={COLUMN_COUNT} />
+            ) : rowCount > 0 ? (
+              <>
+                {entityRows.map((row) => (
+                  <EntityRow key={`entity-${row.id}`} row={row} />
+                ))}
+                {blueprintRows.map((row) => (
+                  <BlueprintRow key={`blueprint-${row.id}`} row={row} />
+                ))}
+                {savedQueryRows.map((row) => (
+                  <SavedQueryRow key={`savedQuery-${row.id}`} row={row} onOpenInGraph={openInGraph} />
+                ))}
+              </>
+            ) : !isError ? (
+              <Table.Tr>
+                <Table.Td colSpan={COLUMN_COUNT}>
+                  <EmptyState icon={IconListCheck} label={t("entityErrors.noFindings")} />
+                </Table.Td>
+              </Table.Tr>
+            ) : null}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
     </Stack>
   );
 }

@@ -121,118 +121,120 @@ export default function Users() {
         </Alert>
       )}
 
-      <Table>
-        <Table.Thead>
-          <Table.Tr>
-            <SortHeader
-              field="name"
-              label={t("common.field.name")}
-              activeField={sortField}
-              activeDir={sortDir}
-              onToggle={toggleSort}
-            />
-            <SortHeader
-              field="email"
-              label={t("common.field.email")}
-              activeField={sortField}
-              activeDir={sortDir}
-              onToggle={toggleSort}
-            />
-            <Table.Th>{t("common.field.role")}</Table.Th>
-            <Table.Th aria-label={t("common.table.operations")} style={{ width: 1 }} />
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {isLoading && !data ? (
-            <TableLoadingRow colSpan={columnCount} />
-          ) : data && data.items.length > 0 ? (
-            data.items.map((user) => {
-              const self = user.id === currentUserId;
-              return (
-                <Table.Tr key={user.id}>
-                  <Table.Td>
-                    <Group gap={6} wrap="nowrap">
-                      <Text size="sm" fw={500}>
-                        {user.name}
-                      </Text>
-                      {self && (
-                        <Badge size="xs" variant="light">
-                          {t("users.youBadge")}
-                        </Badge>
-                      )}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{user.email}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    {user.roles.includes("ADMIN") ? (
-                      <Badge variant="outline" color="gray" size="sm">
-                        {t("common.role.ADMIN")}
-                      </Badge>
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        —
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td style={{ width: 1 }} ta="right">
-                    <RowActionsMenu label={t("common.table.operationsAria", { name: user.name })}>
-                      <Menu.Item
-                        component={RouterLink}
-                        to={`/users/${user.id}/edit`}
-                        leftSection={<IconPencil size={14} />}
-                        aria-label={t("common.action.editAria", { name: user.name })}
-                      >
-                        {t("common.action.edit")}
-                      </Menu.Item>
-                      <Menu.Item
-                        component={RouterLink}
-                        to={`/users/${user.id}/features`}
-                        leftSection={<IconToggleLeft size={14} />}
-                        aria-label={t("users.featuresAria", { name: user.name })}
-                      >
-                        {t("users.featuresAction")}
-                      </Menu.Item>
-                      {/* Own row: no reset (self-change needs the current password — the
-                          Change password page) and no delete (the server 403s it anyway). */}
-                      {!self && (
-                        <>
-                          <Menu.Divider />
-                          <Menu.Item
-                            leftSection={<IconKey size={14} />}
-                            onClick={() => reset.request(user)}
-                            aria-label={t("users.resetPasswordAria", { name: user.name })}
-                          >
-                            {t("users.resetPassword")}
-                          </Menu.Item>
-                          <Menu.Item
-                            color="red"
-                            leftSection={<IconTrash size={14} />}
-                            onClick={() => deleteConfirm.requestDelete(user)}
-                            aria-label={t("common.action.deleteAria", { name: user.name })}
-                          >
-                            {t("common.action.delete")}
-                          </Menu.Item>
-                        </>
-                      )}
-                    </RowActionsMenu>
-                  </Table.Td>
-                </Table.Tr>
-              );
-            })
-          ) : !isError ? (
+      <Table.ScrollContainer minWidth={700}>
+        <Table>
+          <Table.Thead>
             <Table.Tr>
-              <Table.Td colSpan={columnCount}>
-                <EmptyState
-                  icon={IconUsers}
-                  label={t("users.noUsers")}
-                />
-              </Table.Td>
+              <SortHeader
+                field="name"
+                label={t("common.field.name")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+              />
+              <SortHeader
+                field="email"
+                label={t("common.field.email")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+              />
+              <Table.Th>{t("common.field.role")}</Table.Th>
+              <Table.Th aria-label={t("common.table.operations")} style={{ width: 1 }} />
             </Table.Tr>
-          ) : null}
-        </Table.Tbody>
-      </Table>
+          </Table.Thead>
+          <Table.Tbody>
+            {isLoading && !data ? (
+              <TableLoadingRow colSpan={columnCount} />
+            ) : data && data.items.length > 0 ? (
+              data.items.map((user) => {
+                const self = user.id === currentUserId;
+                return (
+                  <Table.Tr key={user.id}>
+                    <Table.Td>
+                      <Group gap={6} wrap="nowrap">
+                        <Text size="sm" fw={500}>
+                          {user.name}
+                        </Text>
+                        {self && (
+                          <Badge size="xs" variant="light">
+                            {t("users.youBadge")}
+                          </Badge>
+                        )}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{user.email}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {user.roles.includes("ADMIN") ? (
+                        <Badge variant="outline" color="gray" size="sm">
+                          {t("common.role.ADMIN")}
+                        </Badge>
+                      ) : (
+                        <Text size="sm" c="dimmed">
+                          —
+                        </Text>
+                      )}
+                    </Table.Td>
+                    <Table.Td style={{ width: 1 }} ta="right">
+                      <RowActionsMenu label={t("common.table.operationsAria", { name: user.name })}>
+                        <Menu.Item
+                          component={RouterLink}
+                          to={`/users/${user.id}/edit`}
+                          leftSection={<IconPencil size={14} />}
+                          aria-label={t("common.action.editAria", { name: user.name })}
+                        >
+                          {t("common.action.edit")}
+                        </Menu.Item>
+                        <Menu.Item
+                          component={RouterLink}
+                          to={`/users/${user.id}/features`}
+                          leftSection={<IconToggleLeft size={14} />}
+                          aria-label={t("users.featuresAria", { name: user.name })}
+                        >
+                          {t("users.featuresAction")}
+                        </Menu.Item>
+                        {/* Own row: no reset (self-change needs the current password — the
+                            Change password page) and no delete (the server 403s it anyway). */}
+                        {!self && (
+                          <>
+                            <Menu.Divider />
+                            <Menu.Item
+                              leftSection={<IconKey size={14} />}
+                              onClick={() => reset.request(user)}
+                              aria-label={t("users.resetPasswordAria", { name: user.name })}
+                            >
+                              {t("users.resetPassword")}
+                            </Menu.Item>
+                            <Menu.Item
+                              color="red"
+                              leftSection={<IconTrash size={14} />}
+                              onClick={() => deleteConfirm.requestDelete(user)}
+                              aria-label={t("common.action.deleteAria", { name: user.name })}
+                            >
+                              {t("common.action.delete")}
+                            </Menu.Item>
+                          </>
+                        )}
+                      </RowActionsMenu>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })
+            ) : !isError ? (
+              <Table.Tr>
+                <Table.Td colSpan={columnCount}>
+                  <EmptyState
+                    icon={IconUsers}
+                    label={t("users.noUsers")}
+                  />
+                </Table.Td>
+              </Table.Tr>
+            ) : null}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
 
       <PaginationBar
         total={total}

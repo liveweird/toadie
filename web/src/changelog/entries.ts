@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.6.1",
+    date: "2026-09-16",
+    en: `**More room for data, usable layouts on small screens.** Blueprint and registry tables now fill the available desktop width. Wide tables scroll within their own area on smaller screens, and entity columns keep enough room for their contents. Deep entity hierarchies keep row actions reachable, query buttons move below the editor on narrow screens, and long changelog text wraps without widening the page.`,
+    pl: `**Więcej miejsca na dane i wygodniejsze układy na małych ekranach.** Tabele blueprintów i rejestrów wykorzystują teraz całą dostępną szerokość na komputerze. Na mniejszych ekranach szerokie tabele przewijają się we własnym obszarze, a kolumny encji zachowują miejsce na swoją zawartość. Akcje wierszy pozostają dostępne w głębokich hierarchiach encji, przyciski zapytań trafiają pod edytor na wąskich ekranach, a długie teksty historii zmian zawijają się bez poszerzania strony.`,
+  },
+  {
     version: "2.6.0",
     date: "2026-09-16",
     en: `**Build entity queries without memorizing syntax.** Entity graph and Entity hierarchy now offer a guided query builder: choose an entity type, add typed property conditions, and follow a relation, ownership link, or named hierarchy. Select which entities to display, preview the generated query, and use it as an editable draft before running or saving it. The builder preserves hand-written queries until you choose Use query and supports narrow screens.`,
