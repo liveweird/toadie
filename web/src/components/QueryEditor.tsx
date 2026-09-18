@@ -17,8 +17,8 @@ import { toLintDiagnostics } from "../utils/queryDiagnostics";
  * `StreamLanguage.define(cypherStream)` for highlighting, `autocompletion` wired to
  * `queryCompletions`, and `@codemirror/lint`'s diagnostic markers driven by the `diagnostics`
  * prop. Every prop that can change on every render (`onChange`/`onRun`/`completionSchema`)
- * travels through a ref so the view is never torn down and rebuilt — only `value`,
- * `diagnostics`, and the computed colour scheme resync an existing view via effects.
+ * travels through a ref so the view is never torn down and rebuilt. Value, diagnostics,
+ * theme, accessible name, and placeholder resync the existing view via effects.
  */
 export default function QueryEditor({
   value,
@@ -43,6 +43,8 @@ export default function QueryEditor({
   const onRunRef = useRef(onRun);
   const schemaRef = useRef(completionSchema);
   const themeCompartmentRef = useRef(new Compartment());
+  const placeholderCompartmentRef = useRef(new Compartment());
+  const attributesCompartmentRef = useRef(new Compartment());
   const colorScheme = useComputedColorScheme("light");
 
   // Refs are synced via an effect (never assigned during render) so the always-current
@@ -72,8 +74,10 @@ export default function QueryEditor({
           autocompletion({
             override: [(context) => queryCompletions(context.state.sliceDoc(0, context.pos), schemaRef.current)],
           }),
-          placeholderExtension(placeholder ?? ""),
-          EditorView.contentAttributes.of({ "aria-label": ariaLabel, "aria-multiline": "true" }),
+          placeholderCompartmentRef.current.of(placeholderExtension(placeholder ?? "")),
+          attributesCompartmentRef.current.of(
+            EditorView.contentAttributes.of({ "aria-label": ariaLabel, "aria-multiline": "true" }),
+          ),
           themeCompartment.of(EditorView.theme({}, { dark: colorScheme === "dark" })),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
@@ -113,6 +117,20 @@ export default function QueryEditor({
       });
     }
   }, [colorScheme]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view) {
+      view.dispatch({
+        effects: [
+          placeholderCompartmentRef.current.reconfigure(placeholderExtension(placeholder ?? "")),
+          attributesCompartmentRef.current.reconfigure(
+            EditorView.contentAttributes.of({ "aria-label": ariaLabel, "aria-multiline": "true" }),
+          ),
+        ],
+      });
+    }
+  }, [ariaLabel, placeholder]);
 
   return <div ref={containerRef} />;
 }

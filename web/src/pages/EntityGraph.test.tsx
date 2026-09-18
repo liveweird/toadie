@@ -609,7 +609,7 @@ describe("EntityGraph page", () => {
       fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
 
-      await waitFor(() => expect(localStorage.getItem("toadie.viewSettings.entityQuery.text")).toBe('"MATCH (a)"'));
+      await waitFor(() => expect(localStorage.getItem("toadie.viewSettings.entityQuery.account.9.text")).toBe('"MATCH (a)"'));
     });
   });
 

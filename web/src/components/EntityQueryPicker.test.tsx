@@ -106,7 +106,7 @@ describe("EntityQueryPicker", () => {
 
   test("re-picking the already-picked query keeps it selected (never deselects)", async () => {
     // The pick is shared across canvases: a page usually opens with it already selected.
-    localStorage.setItem("toadie.viewSettings.entityQuery.picked", JSON.stringify("1"));
+    localStorage.setItem("toadie.viewSettings.entityQuery.account.5.picked", JSON.stringify("1"));
     renderWithProviders(<Harness />);
     await waitFor(() => expect(screen.getByLabelText("Saved query", { selector: "input" })).toHaveValue("My private"));
     await openPicker();

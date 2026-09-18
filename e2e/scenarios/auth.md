@@ -21,10 +21,10 @@
 
 ## Scenario: a deep link is guarded and lands back after signing in
 
-1. An anonymous visitor opens a deep app URL.
+1. An anonymous visitor opens a deep app URL carrying a query string and fragment.
    - *Expected*: they are bounced to the sign-in form.
 2. They sign in with the admin's credentials.
-   - *Expected*: the app returns to the requested path inside the shell — for an unknown path
+   - *Expected*: the app returns to the complete requested path, query string, and fragment inside the shell — for an unknown path
      that is the **Page not found** page, with the header account-menu button visible (never a blank
      document).
 

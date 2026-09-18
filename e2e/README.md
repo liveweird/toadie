@@ -90,8 +90,10 @@ from Lettuce, that any new or edited spec must satisfy:
   its two throwaway `e2e-eh-*` blueprints and entities plus one throwaway `e2e-eh-*`-marked
   `_team` entity (run as the seed admin — entities carry no admin gate); `entity-query` owns
   its two throwaway `e2e-eq-*` blueprints and three entities (run as the seed admin; the
-  shared `entityQuery.*` draft/applied state lives in the browser context's own localStorage,
-  never on the server);
+  shared, account-scoped `entityQuery.*` draft/applied state lives in the browser context's own
+  localStorage, never on the server);
+  `query-account-boundary` owns its two throwaway regular users and user A's private saved query,
+  and deliberately changes accounts in one browser without the login helper's localStorage cleanup;
   `entity-queries` owns its two throwaway `e2e-eqs-*` blueprints and three entities, its one
   throwaway `e2e-eqs-*`-named saved entity query (deleted mid-journey), and one throwaway
   regular user (run as the seed admin, with a second browser context signed in as that
@@ -336,13 +338,18 @@ the same commit** — this list is the coverage map, the scenario file is the de
   (a parent, a child with a `parent` relation flagged as `composition`) and three entities (p1,
   c1 -> p1, orphan c2) seeded via the API → a MATCH query typed into the shared "Entity query"
   editor and run on the Entity graph narrows it to c1/p1 with an "Applied" badge → the Entity
-  hierarchy page shows the same draft/applied query and nesting from its own localStorage-shared
-  state → a mistyped label's debounced live check on the graph page suggests the real blueprint
-  identifier → Clear drops the badge and the `query` param → cleanup; a second, independently
+  hierarchy page shows the same account-scoped draft/applied query and nesting from its own
+  localStorage-shared state → a mistyped label's debounced live check on the graph page suggests
+  the real blueprint identifier → Clear drops the badge and the `query` param → cleanup; a second, independently
   fixtured journey right-clicks Entity graph nodes to run "Ancestors in composition" and
   "Descendants in composition" from the node context menu, then opens the Entity hierarchy row
   menu's own "Query" group to run "Expand 1 hop", each narrowing the graph via a generated
   `query` param → cleanup.
+- [`query-account-boundary.spec.ts`](scenarios/query-account-boundary.md) — account-partitioned
+  entity-query draft/applied/picked state: user A selects their real PRIVATE saved query, user B's
+  same-browser login excludes it from the backend list and sends a graph request without that query,
+  then returning to A restores A's editor/picker/request state; ownerless legacy keys are discarded
+  → query and two-user cleanup.
 - [`entity-queries.spec.ts`](scenarios/entity-queries.md) — saved entity queries (Port migration
   phase 7, v2.1.0): the same throwaway blueprint pair and three entities as `entity-query.spec.ts`
   under their own `e2e-eqs-*` marker → a MATCH query run on the Entity graph is saved as a new

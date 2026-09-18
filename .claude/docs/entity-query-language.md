@@ -36,8 +36,8 @@ Decisions, all taken 2026-09-12 and pinned here:
   evaluated per response (phase 5) and never stored, exactly as the list's `q`/sort/filter never
   see them (`.claude/docs/list-endpoints.md`).
 - **Surfaces**: the Entity graph and Entity hierarchy canvases share ONE query bar (one stored
-  draft, one applied query, one open state — `entityQuery.text`/`entityQuery.applied`/
-  `entityQuery.open`); the Entities list keeps its pills only.
+  draft, one applied query, one open state per account — stored under
+  `entityQuery.account.<userId>.{text,applied,open}`); the Entities list keeps its pills only.
 - **Transport**: `GET /api/v1/entities/graph?query=…` (`maxLength` 2000) — the query is one more
   filter on the graph read, cacheable by the SPA like the others; the request line is raised to
   16 KiB (`ktor.deployment.maxInitialLineLength`, `.claude/docs/security.md`) because a
@@ -266,7 +266,7 @@ keys ∪ hierarchy ids ∪ `$team` in an edge body, properties + metas after `v.
 queryDiagnostics.ts` the server-diagnostic → lint-marker mapping; `components/QueryEditor.tsx`
 wraps the `EditorView`, `components/EntityQueryBar.tsx` adds Run (Mod+Enter), Clear and the
 diagnostics list; `hooks/useEntityQuery.ts` holds the ONE shared draft/applied pair plus the
-section's open state (`entityQuery.open`), `hooks/useQueryDiagnostics.ts` the 300 ms-debounced
+section's open state (the account-scoped `open` leaf), `hooks/useQueryDiagnostics.ts` the 300 ms-debounced
 `/query/check`. Since 2.4.1 the bar is a COLLAPSIBLE section of `components/EntityGraphToolbar.tsx`
 (collapsed on a first visit, the open state remembered like the Filters drawer): its "Query"
 toggle on the title row carries the "Applied · N entities" badge while a query narrows the canvas,
@@ -332,7 +332,11 @@ and a saved query that names a since-renamed relation simply shows its diagnosti
 The SPA's `components/EntityQueryPicker.tsx` (the `LensPicker` clone) sits in the query
 section's header row on both canvases (inside the collapsible section, 2.4.1): picking sets the draft AND runs it (`useEntityQuery.runText`), a
 "Modified" badge marks a draft that drifted from the picked text, and Save as / Save changes /
-Rename-visibility / Delete carry the lens conflict/forbidden/gone mappings.
+Rename-visibility / Delete carry the lens conflict/forbidden/gone mappings. Draft, applied
+text, open state, and the picked id are stored per authenticated account, shared across that
+account's two canvases. Ownerless legacy global state is discarded. Account switches must
+never render or automatically evaluate another user's query; see `web/CLAUDE.md` for the
+synchronous storage-partition boundary.
 
 **Errors report visibility (phase 8, v2.5.0).** `GET /api/v1/entities/errors`
 (`.claude/docs/port-data-model.md` "Computed-property health") parses and validates every saved

@@ -87,7 +87,25 @@ export function useSessionUserId(): number | null {
   return useSyncExternalStore(subscribeAuthChanges, getSessionUserId, () => null);
 }
 
-type LocationStateWithFrom = { from?: { pathname?: string } } | null;
+type LocationStateWithFrom = {
+  from?: { pathname?: unknown; search?: unknown; hash?: unknown };
+} | null;
+
+/** Restore only a router-created, root-relative app location. */
+export function internalReturnLocation(state: unknown): string {
+  const from = (state as LocationStateWithFrom)?.from;
+  const pathname = from?.pathname;
+  if (typeof pathname !== "string" || !pathname.startsWith("/") || pathname.startsWith("//") || pathname.includes("\\")) {
+    return "/";
+  }
+  const search = typeof from?.search === "string" && (from.search === "" || from.search.startsWith("?"))
+    ? from.search
+    : "";
+  const hash = typeof from?.hash === "string" && (from.hash === "" || from.hash.startsWith("#"))
+    ? from.hash
+    : "";
+  return `${pathname}${search}${hash}`;
+}
 
 export function RequireAuth(): ReactElement {
   const { isAuthenticated } = useAuth();
@@ -102,8 +120,7 @@ export function RedirectIfAuthed({ children }: { children: ReactElement }): Reac
   const { isAuthenticated } = useAuth();
   const location = useLocation();
   if (isAuthenticated) {
-    const from = (location.state as LocationStateWithFrom)?.from?.pathname;
-    return <Navigate to={from ?? "/"} replace />;
+    return <Navigate to={internalReturnLocation(location.state)} replace />;
   }
   return children;
 }

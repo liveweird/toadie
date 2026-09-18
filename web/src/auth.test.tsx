@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { Route, Routes } from "react-router-dom";
+import { act } from "@testing-library/react";
+import { Route, Routes, useLocation } from "react-router-dom";
 import { QueryClient } from "@tanstack/react-query";
 import { renderWithProviders, screen } from "./test/render";
 import {
@@ -13,12 +14,17 @@ import {
 
 const TOKEN_KEY = "toadie.auth.token";
 
+function Secret() {
+  const location = useLocation();
+  return <div>secret page <output>{location.pathname + location.search + location.hash}</output></div>;
+}
+
 function TestRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<RedirectIfAuthed><div>login page</div></RedirectIfAuthed>} />
       <Route element={<RequireAuth />}>
-        <Route path="/secret" element={<div>secret page</div>} />
+        <Route path="/secret" element={<Secret />} />
       </Route>
     </Routes>
   );
@@ -28,6 +34,19 @@ describe("route guards", () => {
   test("RequireAuth redirects an anonymous visitor to /login", () => {
     renderWithProviders(<TestRoutes />, { route: "/secret" });
     expect(screen.getByText("login page")).toBeInTheDocument();
+  });
+
+  test("restores the complete internal deep link after authentication", () => {
+    renderWithProviders(<TestRoutes />, { route: "/secret?blueprint=_team#quality-probe" });
+    expect(screen.getByText("login page")).toBeInTheDocument();
+
+    act(() => {
+      localStorage.setItem(TOKEN_KEY, "token");
+      notifyAuthChange();
+    });
+
+    expect(screen.getByText("secret page")).toBeInTheDocument();
+    expect(screen.getByText("/secret?blueprint=_team#quality-probe")).toBeInTheDocument();
   });
 
   test("RequireAuth renders the outlet for an authenticated visitor", () => {

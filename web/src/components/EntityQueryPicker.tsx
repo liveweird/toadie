@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStoredState } from "../hooks/useStoredState";
+import { useEntityQueryStoredState } from "../hooks/useEntityQueryStoredState";
 import { ActionIcon, Alert, Badge, Button, Group, Menu, Modal, Radio, Select, Stack, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconDeviceFloppy, IconDots, IconPencil, IconTrash } from "@tabler/icons-react";
@@ -38,9 +38,9 @@ function entityQuerySaveErrorMessage(err: unknown, t: TFunction): string {
  * The saved entity-query combo + its actions menu — the `LensPicker` shape one level down,
  * operating on the entity query bar's DRAFT text instead of the shared catalog filter set.
  * Picking an option runs the saved text immediately (`onPick`, wired to `useEntityQuery`'s
- * `runText`); the picked query is transient UI state (deliberately unpersisted, exactly like
- * the lens picker's selection), and the "Modified" badge appears when the current draft has
- * diverged from the picked query's stored text.
+ * `runText`); the picked query follows the same account-scoped persistence as that text, and
+ * the "Modified" badge appears when the current draft has diverged from the picked query's
+ * stored text.
  */
 export default function EntityQueryPicker({
   draft,
@@ -55,8 +55,8 @@ export default function EntityQueryPicker({
   const userId = getUserId();
   // Shared with the other canvas, like the bar's draft/applied pair (`useEntityQuery`): the
   // picked query follows the user from the Entity graph to the Entity hierarchy and back.
-  const [selectedId, setSelectedId] = useStoredState<string | null>(
-    "entityQuery.picked",
+  const [selectedId, setSelectedId] = useEntityQueryStoredState<string | null>(
+    "picked",
     null,
     (v) => v === null || typeof v === "string",
   );
