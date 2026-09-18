@@ -643,4 +643,8 @@ Integrated verification (2026-09-18):
   container-image vulnerability assessment.
 
 Verification used disposable test data; the development stack and its data were preserved.
-These results are local checks; remote CI has not run for this unpushed batch.
+These results are the local pre-push baseline. During PR #70 verification, CI exposed a
+login-test synchronization race: the location probe already existed before navigation completed.
+The destination assertions now wait for the expected route (including MFA and rejected external
+destinations), rather than only waiting for the probe element. No application behavior, timeout,
+or coverage threshold changed.

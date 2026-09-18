@@ -60,7 +60,7 @@ describe("Login", () => {
       { route: { pathname: "/login", state: { from: { pathname: "/entities", search: "?blueprint=_team", hash: "#quality" } } } },
     );
     await submit();
-    expect(await screen.findByTestId("location")).toHaveTextContent("/entities?blueprint=_team#quality");
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/entities?blueprint=_team#quality"));
   });
 
   test("a successful login refuses an external return location", async () => {
@@ -70,7 +70,7 @@ describe("Login", () => {
       { route: { pathname: "/login", state: { from: { pathname: "//example.invalid/steal" } } } },
     );
     await submit();
-    expect(await screen.findByTestId("location")).toHaveTextContent(/^\/$/);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/));
   });
 
   test("401 shows the invalid-credentials message", async () => {
@@ -130,7 +130,7 @@ describe("Login", () => {
     await user.click(screen.getByRole("button", { name: "Verify code" }));
 
     await waitFor(() => expect(localStorage.getItem("toadie.auth.token")).toBe("t"));
-    expect(screen.getByTestId("location")).toHaveTextContent("/files?file=123#yaml");
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/files?file=123#yaml"));
     const [url, init] = fetchMock().mock.calls.at(-1)!;
     expect(url).toBe("/api/v1/login/mfa");
     expect(JSON.parse((init as { body: string }).body)).toEqual({
