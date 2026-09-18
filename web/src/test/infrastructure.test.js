@@ -53,6 +53,19 @@ describe("deployment and verification safety defaults", () => {
     }
   });
 
+  it("supplies the pre-change GraphQL schema baseline with full Git history", () => {
+    const backend = parse(ciSource).jobs.backend;
+    const checkout = backend.steps.find((step) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkout.with["fetch-depth"]).toBe(0);
+    const baseline = backend.env.GRAPHQL_BASELINE_REVISION;
+    for (const eventBase of ["pull_request.base.sha", "merge_group.base_sha", "event.before"]) {
+      expect(baseline).toContain(eventBase);
+    }
+    expect(baseline).not.toContain("github.sha");
+    const smokeSteps = parse(e2eSource).jobs.e2e.steps;
+    expect(smokeSteps.some((step) => step.run === "npm run smoke:graphql -- compose")).toBe(true);
+  });
+
   it("cleans only the explicit disposable CI project even after setup failure", () => {
     const workflow = parse(e2eSource);
     expect(workflow.on).toHaveProperty("workflow_call");

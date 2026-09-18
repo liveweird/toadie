@@ -491,4 +491,17 @@ The committed SDL is checked independently of REST OpenAPI. Integration client m
 still uses the ordinary conformance-checked HTTP clients. See
 [integration-api.md](integration-api.md#required-regression-boundaries) for the required
 authentication, revocation-race, scope, cost, cancellation, and one-time-reveal regressions.
-Browser coverage lives in `e2e/scenarios/integration-clients.md`.
+Browser coverage lives in `e2e/scenarios/integration-clients.md`. The Docker-free
+`:server:checkGraphqlCompatibility` gate compares SDL against the relevant Git baseline and
+runs in `check`; see `api-guidelines/GRAPHQL-GUIDELINES.md` for selection and failure policy.
+
+**Seeded GraphQL deployment checks.**
+
+- **Applies when:** changing integration deployment, service adapters, schema, or sample data.
+- **Requirement:** preserve sample parity through the packaged app and actual PostgreSQL, with
+  isolated run-owned resources; never accept the developer's existing database as a test target.
+- **Reference:** `e2e/scripts/graphql-smoke/` and the commands in `e2e/README.md`.
+- **Enforcement:** runner unit tests and the Compose smoke step in reusable E2E CI; Kubernetes
+  is a manual local check against the explicit OrbStack context.
+- **Exception:** pod-direct checks do not exercise ingress/TLS or make instance-local MFA and
+  throttling suitable for a multi-replica production deployment.

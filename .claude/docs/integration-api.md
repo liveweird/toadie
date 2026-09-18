@@ -170,3 +170,11 @@ post-operation log, not a transactional outbox.
   generated-client drift/Spectral, frontend coverage, E2E spec/scenario/map parity and browser suite.
 - **Exception:** ontology error pagination still requires a bounded workspace sweep; limits may
   refuse a large workspace. Already-authorized reads may finish after revocation.
+
+## Repeatable deployment verification
+
+The [seeded deployment smoke runner](../../e2e/README.md#seeded-graphql-deployment-smoke-test)
+creates isolated Compose or local OrbStack deployments and tests the existing Port sample,
+REST/GraphQL parity, schema discovery, real findings, replica sharing, restart persistence, and
+key revocation. It never seeds the development workspace. Compose runs in CI; Kubernetes is an
+explicit local verification command and does not replace ingress or authentication scaling work.

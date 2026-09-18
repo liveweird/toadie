@@ -13,7 +13,8 @@ regression tests synchronized with each stage; do not lower coverage thresholds.
 - [x] Honest OpenAPI 3.0.3; no validator-only relabeling; nullability regression test.
 - [x] Pinned Spectral CLI, schema validation, and read-only generated-type drift check.
 - [x] Push the workflow to master.
-- [ ] Require **Quality gate** in GitHub repository settings (not changed by this implementation).
+- [x] Require **Quality gate** in GitHub repository settings (enabled 2026-09-18; see the
+  GraphQL quality guardrails follow-up below).
 - [x] Observe a successful hosted CI run: [master at 6e0962b](https://github.com/liveweird/toadie/actions/runs/33988678078),
   backend, frontend/contracts, browser journeys, and aggregate gate all passed.
 
@@ -582,10 +583,11 @@ deadline instead of replacing it.
 
 Declined: the color-contrast waiver (kept, e2e's `accessibility.spec.ts` documents it
 consciously) and any wholesale documentation consolidation (the docs' redundancy is a
-readability trade-off, not a defect). **DQ-04 remains open by design** — requiring the
-**Quality gate** status in GitHub repository settings is not something a YAML/doc change can
-enforce; see the unchecked box under Stage 1 above. Prescriptions 1–6 in the review already had
-canonical homes and needed no new artifact.
+readability trade-off, not a defect). **DQ-04 remained open at this review checkpoint** —
+requiring the **Quality gate** status in GitHub repository settings is not something a YAML/doc
+change can enforce. The 2026-09-18 GraphQL quality guardrails follow-up below closes it through
+the live ruleset. Prescriptions 1–6 in the review already had canonical homes and needed no new
+artifact.
 
 ### 2026-09-18 — full quality review follow-up (2.6.2)
 
@@ -714,3 +716,49 @@ Deployment/data verification follow-up:
   app-replica sharing inside a deployment, not database sharing between the two deployments.
 
 These are local verification results, not a pushed CI or production deployment claim.
+
+### 2026-09-18 — v2.7.0 release completion
+
+[PR #71](https://github.com/liveweird/toadie/pull/71) merged into `master` at
+`e5b9f557b77ba94c1806a0d45b1219db0ae03499`. The
+[master CI run](https://github.com/liveweird/toadie/actions/runs/35395215468) passed all gates.
+The development Compose stack was rebuilt and verified healthy with v2.7.0 and V36 applied;
+the original database volume and development content were preserved. Live GraphQL and UI
+checks passed. This records the release after the local verification checkpoint above.
+
+### 2026-09-18 — GraphQL quality guardrails follow-up
+
+- [x] Enable the required **Quality gate** check in active default-branch ruleset `22261697`,
+  bound to GitHub Actions app `15368`, with up-to-date branches required. Preserve the existing
+  PR, deletion, and non-fast-forward rules and empty bypass list. Effective `master` rules
+  were read back after the change. This closes Stage 1 / DQ-04; earlier entries describe
+  their historical checkpoints.
+- [x] Preserve seeded deployment verification in `e2e/scripts/graphql-smoke/`. Each run owns
+  its image, deployment and database; it checks eleven blueprints / 59 entities, complete
+  REST/GraphQL parity, fixed computed/ownership expectations, exact SDL, induced findings,
+  persistence across app restart, and key revocation. The Compose target is wired into the
+  reusable E2E workflow; the two-replica Kubernetes target requires explicit local OrbStack.
+- [x] Add `:server:checkGraphqlCompatibility` to `check`. Compare against the pre-change Git
+  revision in CI and fail on missing history/schema. Guard member removal, type/nullability,
+  inputs/defaults, unused types, extensions and directive definitions. Keep the baseline and
+  intentional-major-break policy in `api-guidelines/GRAPHQL-GUIDELINES.md`.
+- [x] Remove `feat/port-graphql` locally and remotely after verifying its tip `cbaedf8` is
+  an ancestor of freshly fetched `origin/master`. Remote deletion used an exact-tip lease.
+
+Verification of this follow-up:
+
+- Full Gradle build, Detekt, coverage gates and refreshed Kover report passed. After the final
+  directive comparison was added, all seven focused compatibility tests, the compatibility
+  task and Detekt passed again. A missing-baseline negative control failed with the expected
+  actionable diagnostic. Independent review has no remaining actionable findings.
+- All eight smoke-runner tests passed. Final live Compose and Kubernetes smoke runs passed,
+  including restart and cross-replica revocation checks. Disposable resources were removed;
+  the development stack and database were not modified by these runs.
+- E2E type checking and all 42 scenario mappings passed; frontend infrastructure regressions
+  (ten tests), frontend lint and whitespace checks passed. No production API behavior, SDL,
+  dependency or coverage floor changed in this follow-up.
+
+At this checkpoint the guardrail code, workflow and documentation changes are local and
+uncommitted on `chore/graphql-quality-guardrails`; hosted CI has not run them yet. The GitHub
+ruleset and merged-branch deletion are already applied. Kubernetes ingress/TLS, restore drills,
+immutable release images, authentication scaling and other parked items above remain separate.

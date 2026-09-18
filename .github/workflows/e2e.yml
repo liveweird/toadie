@@ -35,7 +35,7 @@ jobs:
 
       - name: Check TypeScript and scenario parity
         working-directory: e2e
-        run: npm run typecheck && npm run check:scenarios
+        run: npm run typecheck && npm run check:scenarios && npm run test:smoke
 
       - name: Install Playwright browser
         working-directory: e2e
@@ -59,6 +59,11 @@ jobs:
       - name: Run E2E
         working-directory: e2e
         run: npx playwright test
+
+      # Owns a second, uniquely named project/volume. Never seeds the browser or dev database.
+      - name: Verify seeded GraphQL deployment
+        working-directory: e2e
+        run: npm run smoke:graphql -- compose
 
       - name: Collect stack diagnostics
         if: ${{ always() }}

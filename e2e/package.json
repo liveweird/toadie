@@ -11,7 +11,9 @@
     "test:ui": "playwright test --ui",
     "install:browsers": "playwright install chromium",
     "typecheck": "tsc --noEmit",
-    "check:scenarios": "node scripts/check-scenarios.mjs"
+    "check:scenarios": "node scripts/check-scenarios.mjs",
+    "smoke:graphql": "node scripts/graphql-smoke/run.mjs",
+    "test:smoke": "node --test scripts/graphql-smoke/*.test.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
