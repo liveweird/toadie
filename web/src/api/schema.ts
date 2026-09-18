@@ -4,6 +4,85 @@
  */
 
 export interface paths {
+    "/api/v1/integration-clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List integration clients
+         * @description Lists a page of integration clients — the technical identities holding API keys for the
+         *     read-only integration GraphQL API at `/integration/graphql` (whose own contract is the
+         *     committed SDL, not this document). ADMIN only, reads included. Uses the standard page envelope, ordered by id
+         *     ascending by default (only `id` is sortable; `-id` reverses the order). Revoked clients stay listed (`revoked: true`) as the audit
+         *     trail; keys themselves are never returned (only the one-time create response carries
+         *     the plaintext key).
+         */
+        get: operations["listIntegrationClients"];
+        put?: never;
+        /**
+         * Create an integration client
+         * @description ADMIN only. Generates the client's API key server-side (`toadie_int_` + 43 URL-safe
+         *     characters, 256 bits) and returns it EXACTLY ONCE in this response — only its SHA-256
+         *     digest is stored, so the key cannot be retrieved again (the key is returned only here). The name is a trimmed single-line label (≤ 100
+         *     characters, control characters rejected).
+         */
+        post: operations["createIntegrationClient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integration-clients/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get one integration client
+         * @description ADMIN only. The key is never included — see the create response.
+         */
+        get: operations["getIntegrationClient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integration-clients/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke an integration client's key
+         * @description ADMIN only. Terminal: the key stops authenticating immediately and can never be
+         *     re-enabled (create a new client instead) — keys are immutable, so there is no
+         *     PUT or DELETE on this resource; revocation IS the removal (the row stays listed
+         *     as the audit trail). Repeating the action on an already-revoked client is `409`.
+         */
+        post: operations["revokeIntegrationClient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/login": {
         parameters: {
             query?: never;
@@ -1886,6 +1965,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        IntegrationClientRequest: {
+            /** @description Single-line display label for the client (trimmed; control characters rejected; blank rejected). */
+            name: string;
+        };
+        IntegrationClientResponse: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            /** Format: int64 */
+            createdAt: number;
+            /** @description Display name of the admin who created the client. */
+            createdByName: string;
+            /**
+             * Format: int64
+             * @description Stamped on every authenticated integration request; null = never used.
+             */
+            lastUsedAt?: number | null;
+            revoked: boolean;
+            /** Format: int64 */
+            revokedAt?: number | null;
+        };
+        IntegrationClientCreateResponse: {
+            client: components["schemas"]["IntegrationClientResponse"];
+            /** @description The full API key (`toadie_int_…`) — returned exactly once; only its SHA-256 digest is stored, so it cannot be retrieved again. */
+            apiKey: string;
+        };
+        IntegrationClientList: {
+            items: components["schemas"]["IntegrationClientResponse"][];
+            page: number;
+            pageSize: number;
+            /** Format: int64 */
+            total: number;
+        };
         PasswordResetConfirmRequest: {
             /** @description Single-use 256-bit reset credential from the email; never logged or returned. */
             token: string;
@@ -3316,6 +3428,173 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listIntegrationClients: {
+        parameters: {
+            query?: {
+                /** @description 1-based page index. Defaults to 1. */
+                page?: components["parameters"]["Page"];
+                /** @description Rows per page. Defaults to 20, maximum 100. */
+                pageSize?: components["parameters"]["PageSize"];
+                /**
+                 * @description Sort spec. Format: `field` (ascending) or `-field` (descending). Multiple fields are
+                 *     comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
+                 *     sortable-field whitelist; unknown fields are rejected with `400`. `id` ascending is
+                 *     always appended as a deterministic tiebreaker.
+                 */
+                sort?: components["parameters"]["Sort"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of integration clients, including revoked rows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationClientList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createIntegrationClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationClientRequest"];
+            };
+        };
+        responses: {
+            /** @description Created — the ONLY response ever carrying the plaintext API key */
+            201: {
+                headers: {
+                    /** @description URL of the new integration-client resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationClientCreateResponse"];
+                };
+            };
+            /** @description Validation error (blank or over-long name, control characters) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getIntegrationClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The integration client */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationClientResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    revokeIntegrationClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not ADMIN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description Client is already revoked */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     login: {
         parameters: {
             query?: never;

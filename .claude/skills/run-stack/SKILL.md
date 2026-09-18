@@ -27,6 +27,15 @@ Two ways to run, sharing the same `docker-compose.yaml`. All ports deliberately 
 
 The root `Dockerfile` is a 3-stage build: (1) `node` builds `web/dist` (`npm ci --legacy-peer-deps`), (2) `eclipse-temurin:21-jdk` runs `:server:installDist` (the committed `gradle.lockfile`s are copied in beside the build scripts — dependency locking is on, so a missing lockfile fails the image build), (3) `eclipse-temurin:21-jre` runtime (one JDK line across the build stage, `mise.toml` and `jvmToolchain(21)`) bundles the install image **and** the built SPA, sets `WEB_STATIC_DIR=/app/web` and `KTOR_DEVELOPMENT=false`, and runs `bin/server`. The `app` Compose service points the `POSTGRES_*` env vars at the `postgres` service host (`postgres:5432` in-network) and waits on its healthcheck. `.dockerignore` keeps build outputs / `node_modules` out of the build context; `.git` is **included** on purpose — the SPA build stage reads the commit sha/timestamp from it for the version stamp (see "Build version stamp" in `web/CLAUDE.md`). Note the volume mount: postgres 18+ images keep data in a versioned subdir of `/var/lib/postgresql`, so the compose volume mounts that path (the pre-18 `/var/lib/postgresql/data` path makes the container unhealthy).
 
+## GraphQL deployment opt-in
+
+Compose enables the machine API for its local demo. Kubernetes leaves it disabled unless the
+`toadie-config` ConfigMap contains `INTEGRATION_ENABLED: "true"`; the deployment reads this
+optional key. Patch that key without replacing `MAIL_APP_URL`, then restart the app (commands
+in `.claude/docs/integration-api.md`). Reapplying `k8s/` preserves the opt-in. REST and GraphQL
+share PostgreSQL within each deployment; separate Compose and Kubernetes volumes do not share
+sample data automatically.
+
 ## Reproducibility — what is pinned, and what deliberately is not
 
 Pinned: direct dependency versions (`gradle/libs.versions.toml`, `web/package.json` + `package-lock.json` installed with `npm ci`), the transitive Gradle graph (dependency locking, `gradle.lockfile` in `core/` and `server/` + the root `settings-gradle.lockfile` and `buildscript-gradle.lockfile` — `./gradlew build --write-locks` after a dependency change, commit the result), the Gradle distribution checksum (`distributionSha256Sum` in `gradle-wrapper.properties`), the toolchains (`mise.toml`: Temurin 21 + Node 24, matching the Dockerfile and the e2e workflow), and base images by minor tag (`node:24-alpine`, `eclipse-temurin:21-jdk/-jre`, `postgres:18-alpine`, `axllent/mailpit:v1.30`).

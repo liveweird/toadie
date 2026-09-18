@@ -49,8 +49,135 @@ tags:
     description: Saved entity queries — named, shareable query-bar texts (phase 7, v2.1.0)
   - name: blueprints
   - name: entities
+  - name: integration-clients
+    description: Administrator-managed technical clients for the separate read-only GraphQL API.
 
 paths:
+  /api/v1/integration-clients:
+    get:
+      tags: [integration-clients]
+      operationId: listIntegrationClients
+      summary: List integration clients
+      description: |
+        Lists a page of integration clients — the technical identities holding API keys for the
+        read-only integration GraphQL API at `/integration/graphql` (whose own contract is the
+        committed SDL, not this document). ADMIN only, reads included. Uses the standard page envelope, ordered by id
+        ascending by default (only `id` is sortable; `-id` reverses the order). Revoked clients stay listed (`revoked: true`) as the audit
+        trail; keys themselves are never returned (only the one-time create response carries
+        the plaintext key).
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: A page of integration clients, including revoked rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationClientList'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Caller is not ADMIN
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    post:
+      tags: [integration-clients]
+      operationId: createIntegrationClient
+      summary: Create an integration client
+      description: |
+        ADMIN only. Generates the client's API key server-side (`toadie_int_` + 43 URL-safe
+        characters, 256 bits) and returns it EXACTLY ONCE in this response — only its SHA-256
+        digest is stored, so the key cannot be retrieved again (the key is returned only here). The name is a trimmed single-line label (≤ 100
+        characters, control characters rejected).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationClientRequest'
+      responses:
+        '201':
+          description: Created — the ONLY response ever carrying the plaintext API key
+          headers:
+            Location:
+              schema: { type: string }
+              description: URL of the new integration-client resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationClientCreateResponse'
+        '400':
+          description: Validation error (blank or over-long name, control characters)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Caller is not ADMIN
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/integration-clients/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [integration-clients]
+      operationId: getIntegrationClient
+      summary: Get one integration client
+      description: ADMIN only. The key is never included — see the create response.
+      responses:
+        '200':
+          description: The integration client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationClientResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Caller is not ADMIN
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/integration-clients/{id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [integration-clients]
+      operationId: revokeIntegrationClient
+      summary: Revoke an integration client's key
+      description: |
+        ADMIN only. Terminal: the key stops authenticating immediately and can never be
+        re-enabled (create a new client instead) — keys are immutable, so there is no
+        PUT or DELETE on this resource; revocation IS the removal (the row stays listed
+        as the audit trail). Repeating the action on an already-revoked client is `409`.
+      responses:
+        '204':
+          description: Revoked
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Caller is not ADMIN
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Client is already revoked
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/login:
     post:
       tags: [auth]
@@ -2856,6 +2983,60 @@ components:
           schema: { $ref: '#/components/schemas/CatalogFileInvalidProblem' }
 
   schemas:
+    IntegrationClientRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Single-line display label for the client (trimmed; control characters rejected; blank rejected).
+
+    IntegrationClientResponse:
+      type: object
+      required: [id, name, createdAt, createdByName, revoked]
+      properties:
+        id: { type: integer, format: int32, minimum: 0 }
+        name: { type: string }
+        createdAt: { type: integer, format: int64 }
+        createdByName:
+          type: string
+          description: Display name of the admin who created the client.
+        lastUsedAt:
+          type: integer
+          format: int64
+          nullable: true
+          description: Stamped on every authenticated integration request; null = never used.
+        revoked: { type: boolean }
+        revokedAt: { type: integer, format: int64, nullable: true }
+
+    IntegrationClientCreateResponse:
+      type: object
+      required: [client, apiKey]
+      properties:
+        client:
+          $ref: '#/components/schemas/IntegrationClientResponse'
+        apiKey:
+          type: string
+          pattern: "^toadie_int_[A-Za-z0-9_-]{43}$"
+          description: >
+            The full API key (`toadie_int_…`) — returned exactly once; only its SHA-256
+            digest is stored, so it cannot be retrieved again.
+
+    IntegrationClientList:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationClientResponse'
+
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, format: int64, minimum: 0 }
+
     PasswordResetConfirmRequest:
       type: object
       required: [token, password]

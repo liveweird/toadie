@@ -24,6 +24,7 @@ import enErrors from "./locales/en/errors.json";
 import enGraph from "./locales/en/graph.json";
 import enHierarchy from "./locales/en/hierarchy.json";
 import enHierarchies from "./locales/en/hierarchies.json";
+import enIntegration from "./locales/en/integration.json";
 import enLabels from "./locales/en/labels.json";
 import enLenses from "./locales/en/lenses.json";
 import enLifecycles from "./locales/en/lifecycles.json";
@@ -85,6 +86,7 @@ export const en = {
   graph: enGraph,
   hierarchy: enHierarchy,
   hierarchies: enHierarchies,
+  integration: enIntegration,
   labels: enLabels,
   lenses: enLenses,
   lifecycles: enLifecycles,

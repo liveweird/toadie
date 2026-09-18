@@ -1,5 +1,8 @@
 package ch.nokillswit.infra.db
 
+import ch.nokillswit.integration.IntegrationClientService
+import ch.nokillswit.integration.IntegrationClientServiceKey
+
 import ch.nokillswit.annotations.AnnotationKeyService
 import ch.nokillswit.annotations.AnnotationKeyServiceKey
 import ch.nokillswit.blueprints.BlueprintService
@@ -51,6 +54,7 @@ suspend fun Application.configureDatabase() {
         password = environment.config.property("postgres.password").getString(),
     )
     attributes.put(UserServiceKey, UserService(database))
+    attributes.put(IntegrationClientServiceKey, IntegrationClientService(database))
     attributes.put(GraphLayoutServiceKey, GraphLayoutService(database, GraphLayoutService.GraphLayouts))
     attributes.put(EntityGraphLayoutServiceKey, GraphLayoutService(database, GraphLayoutService.EntityGraphLayouts))
     val catalogFileEventService = CatalogFileEventService(database)

@@ -25,7 +25,11 @@
 - `blueprint.created` (byUserId/blueprintId/identifier/properties count/relations count) / `blueprint.updated` (same fields, plus `system` true for the two V31 rows, `renamedFrom` and the `cascaded` count of other blueprints whose relation/aggregation targets were rewritten when the identifier changed) / `blueprint.deleted` (byUserId/blueprintId/identifier) — every blueprint mutation; a rejected save (400/409) emits nothing. Every committed pass-one write of `POST /api/v1/blueprints/import` (phase 6, v1.28.0) emits the SAME two events with `import: true` added (plus `system: true` on an updated system row, the `blueprint.updated` shape) — reduced to `byUserId`/`blueprintId`/`identifier`/`import` only, no `properties`/`relations`/`cascaded` counts; the event is emitted before further writes, even if pass two later returns `ERROR` or the batch is cancelled; pass two does not duplicate it. Rows with no committed write emit nothing, and the `/import/check` dry-run never audits,
 - `entity.created` (byUserId/entityId/blueprint/identifier/properties count/relations count — the STORED `properties` count, i.e. the request's, never the larger response `properties` phase 5's (v1.27.0) computed mirror/calculation/aggregation values inflate) / `entity.updated` (same fields, plus `cascaded` — the count of rewrites of `relations`, `team` field, and `format: team|user` property values across all entities when the identifier changed (v1.26.0, phase 4) — and `renamedFrom`; its own `properties` count is likewise the STORED count) / `entity.deleted` (byUserId/entityId/blueprint/identifier) — every entity mutation (Phase 2 of the Port data-model move); a rejected save (400/409) emits nothing. Every committed pass-one write of `POST /api/v1/entities/import` (phase 6, v1.28.0) emits the SAME two events with `import: true` added, reduced to `byUserId`/`entityId`/`blueprint`/`identifier`/`import` only; the event is emitted before further writes, even if pass two later returns `ERROR` or the batch is cancelled; pass two does not duplicate it. Rows with no committed write emit nothing, and the `/import/check` dry-run never audits,
 - `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
-- `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail).
+- `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail),
+- `integration_client.created` (byUserId/clientId/name) / `integration_client.revoked` (byUserId/clientId),
+- `integration.auth_failed` (reason: missing_or_malformed/unknown_or_revoked; no credential text),
+- `integration.rate_limited` (clientId/clientName),
+- `integration.request` (clientId/clientName/operationName/rootFields; bounded operation metadata, no query, variables or result data).
 
 **Not audit events.** The entity query engine's (phase 7, v2.0.0) ONE DEBUG line on
 `ch.nokillswit.entityquery` per evaluation-budget miss — the refusal code (`DEADLINE_EXCEEDED`/
@@ -50,3 +54,10 @@ administrator/target lock ordering and `UserAuditConcurrencyTest` for the held-w
 Field-naming convention: the acting caller is `byUserId` everywhere except the auth lifecycle events (`login.*`, `logout`, `refresh.rejected`, `session.rejected`, `password_reset.*`), where `userId` identifies the account being authenticated (or, on the public password-reset routes, acted upon).
 
 Never log secrets (passwords, tokens); emails/ids are fine. When adding a security-relevant mutation or denial path, emit an `audit(...)` event alongside it and extend this list in the same change (the one sanctioned exception: the graph-layout PUT and its V30 `entity-graph-layout` twin — both pure per-user view state written on every drag stop, documented in `.claude/docs/authorization.md`) — in Lettuce this catalog grows to every user/team/content mutation, and the convention transfers wholesale. Tested in `AuditTest` via a Logback `ListAppender` on the audit logger (the shared `LogCapture` helper in `TestEnvironment.kt`).
+
+### Integration audit
+
+The machine API additionally audits reads as `integration.request`, with bounded client and
+operation/root metadata only. Client create/revoke, authentication refusal and throttling are
+audited; keys, query text, variables and returned data are never logged. See
+[integration-api.md](integration-api.md) for the exact scope and delivery limitations.

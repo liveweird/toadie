@@ -116,6 +116,7 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
     items: [
       { to: "/users", label: "appShell.nav.users", icon: IconUsers, adminOnly: true },
       { to: "/feature-flags", label: "appShell.nav.featureFlags", icon: IconToggleLeft, adminOnly: true },
+      { to: "/integration-clients", label: "appShell.nav.integrationClients", icon: IconKey, adminOnly: true },
     ],
   },
 ];

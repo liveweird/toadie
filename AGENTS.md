@@ -7,7 +7,7 @@ This file is the Codex entry point. Before changing code, also read the relevant
 `@...` import syntax to reference the cross-cutting conventions in `.claude/docs/` (persistence,
 list endpoints, security, authorization, observability, testing); Codex must open the applicable
 files directly. Together those files contain the detailed, actively maintained domain, security,
-persistence, UI, and testing conventions shared by the project. For API work,
+persistence, UI, and testing conventions shared by the project. For REST API work,
 `api-guidelines/API-GUIDELINES.md` is authoritative and its stable rule IDs should be cited in
 reviews. `CLAUDE.md`'s "Where to read, by task" table near its top is the map into all of this;
 consult it before searching by hand. If documentation and executable configuration disagree, the
@@ -42,7 +42,10 @@ ownership, computed properties, lifecycle, import/export, and Toadie extensions)
 `.claude/docs/ontology.md` (the eleven-blueprint baseline and Backstage round-trip decisions).
 For query work, also read `.claude/docs/entity-query-language.md`: it defines the implemented
 subset, semantics, budgets, diagnostics, saved queries, and canvas actions. Update the relevant
-reference in the same change. `HARDENING.md` contains completed work and outstanding follow-ups;
+reference in the same change. `api-guidelines/GRAPHQL-GUIDELINES.md` and
+`.claude/docs/integration-api.md` govern the separate
+read-only Port GraphQL API, its SDL contract, machine keys, limits, and admin management.
+`HARDENING.md` contains completed work and outstanding follow-ups;
 it is a historical implementation tracker, not a list of only unfinished tasks.
 
 The playbooks in `.claude/skills/` are useful repository-local references even outside Claude:
@@ -57,13 +60,14 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
   bootstrap.
 - `server/` is the Kotlin/JVM Ktor application. Feature packages live directly under
   `server/src/main/kotlin/`: `auth`, `users`, `catalog`, `dictionaries`, `labels`, `annotations`,
-  `tags`, `types`, `lenses`, `blueprints`, `entities`, and `entityquery`. `catalog` is the feature
+  `tags`, `types`, `lenses`, `blueprints`, `entities`, `entityquery`, and `integration`. `catalog` is the feature
   reference implementation: seven Backstage kinds (Component, API, System, Domain, Resource,
   Group, User), full CRUD + paginated
   list, validation/checking, the workspace Errors report, graph, import/export and dry-run import,
   SSRF-guarded URL fetch/repo sync, and immutable per-file events. `blueprints` owns the schema
   registry; `entities` owns instances, ownership/computation, graph data, and entity import;
-  `entityquery` owns the pure query engine and persisted saved queries. `dictionaries` also
+  `entityquery` owns the pure query engine and persisted saved queries. `integration` owns
+  the read-only Port GraphQL adapter and separate admin-managed machine clients. `dictionaries` also
   owns the Port `HIERARCHY` dictionary. `users` owns synced language and separate per-user
   Backstage/Port graph layouts. Cross-cutting wiring and policy live in `plugins/`,
   `audit/`, and `authz/`; database, mail, paging, and shared validation infrastructure live in
@@ -140,21 +144,25 @@ service descriptors breaks plugin discovery at runtime. JVM runtime flags are in
 
 ## API and Backend Conventions
 
-Follow `api-guidelines/API-GUIDELINES.md` for resource naming, pagination, filtering, sorting,
-errors, statuses, auth, and conformance. All error bodies are RFC 7807
+Follow `api-guidelines/API-GUIDELINES.md` for REST resource naming, pagination, filtering, sorting,
+errors, statuses, auth, and conformance. REST error bodies are RFC 7807
 `application/problem+json`. Keep authorization checks before resource-dependent validation so
 callers cannot infer inaccessible state (403 wins over 400). List endpoints use the
 `{items, page, pageSize, total}` envelope and the already-ported `infra/paging` machinery; copy
 the catalog-file list implementation rather than parsing pagination, filters, or sorting again
 (see `.claude/docs/list-endpoints.md`).
 
-When an API changes, update all of the following in the same change:
+When a REST API changes, update all of the following in the same change:
 
 1. Route/service behavior and focused tests.
 2. `server/src/main/resources/openapi/documentation.yaml`.
 3. The generated `web/src/api/schema.ts` via `npm run gen:api`.
 4. API guideline conformance, using the Spectral ruleset and review checklist described in
    `.claude/skills/api-review/SKILL.md`.
+
+GraphQL changes update the committed SDL, resolver/transport regressions, and integration
+reference instead; follow `api-guidelines/GRAPHQL-GUIDELINES.md`. GraphQL execution errors use
+the documented `data`/`errors` envelope; transport failures retain ProblemDetail.
 
 Use `V<number>__description.sql` for migrations. Business entities follow the established
 soft-delete convention (`marked_as_deleted`, active-row filtering on every read/count/mutation,

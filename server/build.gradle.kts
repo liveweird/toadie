@@ -125,6 +125,7 @@ detekt {
     config.setFrom(rootProject.file("config/detekt/detekt.yml"))
 }
 dependencies {
+    implementation(libs.graphql.java)
     implementation(project(":core"))
     implementation(ktorLibs.serialization.kotlinx.json)
     implementation(ktorLibs.server.auth)

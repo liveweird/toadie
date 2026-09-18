@@ -59,6 +59,14 @@ spec:
               value: "true"
             - name: HTTP_PROXY_HOPS
               value: "1"
+            # Machine GraphQL is opt-in. Missing ConfigMap/key preserves the server's false
+            # default; set INTEGRATION_ENABLED="true" in toadie-config and restart to enable.
+            - name: INTEGRATION_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: toadie-config
+                  key: INTEGRATION_ENABLED
+                  optional: true
             # Outbound email (password reset, email MFA). Ships disabled — set "smtp" plus real
             # SMTP_HOST/MAIL_FROM to enable (production refuses the `log` transport). SMTP
             # credentials come from the Secret, the public URL from the ConfigMap below.

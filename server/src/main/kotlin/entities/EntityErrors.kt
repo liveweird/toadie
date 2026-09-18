@@ -158,7 +158,7 @@ internal data class EntityErrorSubjects(
     /** EVERY active blueprint's definition (never narrowed by the `blueprint` filter) — resolution stays workspace-wide. */
     val definitionsByIdentifier: Map<String, BlueprintDefinition>,
     val savedQueries: List<SavedQueryCandidate>,
-    val querySchema: QuerySchema,
+    val querySchema: QuerySchema?,
 )
 
 /**
@@ -174,6 +174,7 @@ internal fun materializeEntityErrorSubjects(
     candidates: List<ErrorsActiveBlueprint>,
     blueprintsById: Map<UInt, ErrorsActiveBlueprint>,
     definitionsByIdentifier: Map<String, BlueprintDefinition>,
+    budget: OntologyReadBudget? = null,
 ): Pair<List<EntityErrorEntitySubject>, List<EntityErrorBlueprintCandidate>> {
     val entities = readSet.rows.filter { it.shown }.map { row ->
         val blueprint = blueprintsById.getValue(row.blueprintId)
@@ -188,7 +189,8 @@ internal fun materializeEntityErrorSubjects(
             identifier = row.identifier,
             title = row.title,
             team = teamValues(effective),
-            findings = entityFindings(decoded.document, blueprint.definition, readSet.snapshot.targetExists, decoded.team),
+            findings = entityFindings(decoded.document, blueprint.definition, readSet.snapshot.targetExists, decoded.team)
+                .also { budget?.retainFindings(it) },
         )
     }
     val blueprintCandidates = candidates.map { EntityErrorBlueprintCandidate(it.id, it.identifier, it.title, it.definition) }
@@ -234,7 +236,11 @@ internal data class ShownScope(val predicate: Op<Boolean>, val candidates: List<
  * extension — defined here, not as a member, purely to keep `EntityService.kt` under detekt's
  * `LargeClass` threshold (the `EntityWorkspaceRead.kt` idiom, one file up).
  */
-internal suspend fun EntityService.shownScope(filter: EntityGraphFilter, activeBlueprints: List<ErrorsActiveBlueprint>): ShownScope? {
+internal suspend fun EntityService.shownScope(
+    filter: EntityGraphFilter,
+    activeBlueprints: List<ErrorsActiveBlueprint>,
+    reservation: EntityReadLedger.Reservation? = null,
+): ShownScope? {
     val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
     val blueprintsByIdentifierFolded = foldedByIdentifier(activeBlueprints)
 
@@ -250,7 +256,7 @@ internal suspend fun EntityService.shownScope(filter: EntityGraphFilter, activeB
     }
     filter.q?.let { q -> predicate = predicate and qPredicate(q) }
     filter.team?.let { team ->
-        val inheritedIds = inheritedTeamMatches(team, candidates, blueprintsByIdentifier)
+        val inheritedIds = inheritedTeamMatches(team, candidates, blueprintsByIdentifier, reservation)
         predicate = predicate and teamPredicate(team, blueprintsByIdentifierFolded, inheritedIds)
     }
     return ShownScope(predicate, candidates)
@@ -267,30 +273,56 @@ internal suspend fun EntityService.shownScope(filter: EntityGraphFilter, activeB
  * phase-5 posture), with [JqEvaluator.calculationVerdict] as `check` — never
  * [JqEvaluator.evaluateBounded], so this endpoint never touches the jq worker pool.
  */
-suspend fun EntityService.errors(filter: EntityGraphFilter, callerId: UInt): EntityErrorsReport {
+suspend fun EntityService.errors(filter: EntityGraphFilter, callerId: UInt): EntityErrorsReport =
+    readErrorReport(filter, callerId)
+
+/** Ontology-only findings: machine clients never read or validate users' saved queries. */
+@Serializable
+data class OntologyErrorsReport(
+    val entities: List<EntityErrorRow>,
+    val blueprints: List<BlueprintErrorRow>,
+    val checkedEntities: Int,
+    val checkedBlueprints: Int,
+)
+
+suspend fun EntityService.ontologyErrors(
+    filter: EntityGraphFilter,
+    budget: OntologyReadBudget? = null,
+): OntologyErrorsReport {
+    val report = readErrorReport(filter, callerId = null, budget)
+    return OntologyErrorsReport(report.entities, report.blueprints, report.checkedEntities, report.checkedBlueprints)
+}
+
+private suspend fun EntityService.readErrorReport(
+    filter: EntityGraphFilter,
+    callerId: UInt?,
+    budget: OntologyReadBudget? = null,
+): EntityErrorsReport {
     readLedger.open().use { reservation ->
         try {
             val subjects = suspendTransaction(database) {
-                val activeBlueprints = loadActiveBlueprints()
+                val activeBlueprints = loadActiveBlueprints(budget)
                 val blueprintsById = activeBlueprints.associateBy { it.id }
                 val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
                 val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
-                val scope = shownScope(filter, activeBlueprints)
+                val scope = shownScope(filter, activeBlueprints, reservation.takeIf { budget != null })
                 val (entitySubjects, blueprintCandidates) = if (scope != null) {
                     val targets = narrowTargets(scope.candidates.map { it.definition }, definitionsByIdentifier, computed = false)
                     val readSet = loadReadSet(scope.predicate, targets, blueprintsByIdentifier, reservation)
-                    materializeEntityErrorSubjects(readSet, scope.candidates, blueprintsById, definitionsByIdentifier)
+                    materializeEntityErrorSubjects(readSet, scope.candidates, blueprintsById, definitionsByIdentifier, budget)
                 } else {
                     emptyList<EntityErrorEntitySubject>() to emptyList()
                 }
-                val graphBlueprintsByIdentifier = activeBlueprints.associate {
-                    it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations)
-                }
-                val querySchema = QuerySchema(graphBlueprintsByIdentifier, loadActiveHierarchies())
-                val savedQueries = loadVisibleSavedQueries(callerId)
+                val querySchema = if (callerId == null) null else QuerySchema(
+                    activeBlueprints.associate {
+                        it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations)
+                    },
+                    loadActiveHierarchies(),
+                )
+                val savedQueries = callerId?.let { loadVisibleSavedQueries(it) }.orEmpty()
                 EntityErrorSubjects(entitySubjects, blueprintCandidates, definitionsByIdentifier, savedQueries, querySchema)
             }
-            return entityErrorsReport(subjects, jq::calculationVerdict)
+            return entityErrorsReport(subjects, budget, jq::calculationVerdict)
         } catch (cause: ReadBudgetExceeded) {
             throwReadBudgetHttp(cause)
         }
@@ -626,9 +658,14 @@ internal fun savedQueryDiagnostics(text: String, schema: QuerySchema): List<Quer
  * its ownership verdict), saved-query rows over [EntityErrorSubjects.savedQueries] (sorted by
  * name, case-insensitively) — every row with zero findings/diagnostics omitted.
  */
-internal fun entityErrorsReport(subjects: EntityErrorSubjects, check: (String, String) -> CalculationVerdict): EntityErrorsReport {
+internal fun entityErrorsReport(
+    subjects: EntityErrorSubjects,
+    budget: OntologyReadBudget? = null,
+    check: (String, String) -> CalculationVerdict,
+): EntityErrorsReport {
     val blueprintFindingsById = subjects.blueprintCandidates.associate { candidate ->
         candidate.identifier to blueprintFindings(candidate.identifier, candidate.definition, subjects.definitionsByIdentifier, check)
+            .also { budget?.retainFindings(it) }
     }
     val staleOwnershipBlueprints = blueprintFindingsById.filterValues { findings -> findings.any { it.code == OWNERSHIP_PATH_STALE } }.keys
 
@@ -642,6 +679,7 @@ internal fun entityErrorsReport(subjects: EntityErrorSubjects, check: (String, S
     val entityRows = subjects.entities.mapNotNull { subject ->
         val definition = subjects.definitionsByIdentifier[subject.blueprint]
         val ownership = definition?.let { ownershipFinding(it, subject.team, subject.blueprint in staleOwnershipBlueprints) }
+        if (ownership != null) budget?.retainFindings(listOf(ownership))
         val findings = subject.findings + listOfNotNull(ownership)
         if (findings.isEmpty()) {
             null
@@ -656,7 +694,7 @@ internal fun entityErrorsReport(subjects: EntityErrorSubjects, check: (String, S
     val savedQueryRows = subjects.savedQueries
         .sortedWith(compareBy({ it.name.lowercase() }, { it.id }))
         .mapNotNull { saved ->
-            val diagnostics = savedQueryDiagnostics(saved.query, subjects.querySchema)
+            val diagnostics = savedQueryDiagnostics(saved.query, checkNotNull(subjects.querySchema))
             if (diagnostics.isEmpty()) {
                 null
             } else {

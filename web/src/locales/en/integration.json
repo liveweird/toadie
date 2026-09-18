@@ -1,0 +1,39 @@
+{
+  "title": "Integration clients",
+  "hint": "Create keys that grant external systems read access to the entire Port ontology through GraphQL.",
+  "name": "Client name",
+  "addClient": "Add client",
+  "copyKey": "Copy API key",
+  "keyPanelTitle": "API key for “{{name}}” — shown only once",
+  "keyPanelWarning": "Copy this key now. It cannot be shown again after you close this panel.",
+  "loadFailed": "Failed to load integration clients",
+  "empty": "No integration clients",
+  "neverUsed": "Never used",
+  "column": {
+    "status": "Status",
+    "createdBy": "Created by",
+    "lastUsed": "Last used"
+  },
+  "status": {
+    "active": "Active",
+    "revoked": "Revoked"
+  },
+  "revoke": "Revoke",
+  "revokeAria": "Revoke API key for {{name}}",
+  "revokeTitle": "Revoke this API key?",
+  "revokeMessage": "The API key for “{{name}}” will stop working immediately. This cannot be undone.",
+  "revokeFailed": "Failed to revoke API key",
+  "toast": {
+    "revoked": "API key revoked"
+  },
+  "error": {
+    "permission": "You do not have permission to manage integration clients.",
+    "invalidName": "Enter a non-empty, single-line client name of at most 100 characters.",
+    "gone": "This integration client no longer exists.",
+    "alreadyRevoked": "This API key has already been revoked.",
+    "createFailedStatus": "Client creation failed ({{status}})",
+    "createFailed": "Client creation failed. Check your connection and try again.",
+    "revokeFailedStatus": "API key revocation failed ({{status}})",
+    "revokeFailed": "API key revocation failed. Check your connection and try again."
+  }
+}

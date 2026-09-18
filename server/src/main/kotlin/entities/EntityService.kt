@@ -191,14 +191,14 @@ class EntityService(
         val hierarchyRelations: Map<String, String>,
     )
 
-    internal suspend fun loadActiveBlueprints(): List<ActiveBlueprint> =
+    internal suspend fun loadActiveBlueprints(budget: OntologyReadBudget? = null): List<ActiveBlueprint> =
         BlueprintService.Blueprints.selectAll().where { activeBlueprints() }
             .map {
                 ActiveBlueprint(
                     it[BlueprintService.Blueprints.id].value,
                     it[BlueprintService.Blueprints.identifier],
                     it[BlueprintService.Blueprints.title],
-                    blueprintJson.decodeFromString<BlueprintDefinition>(it[BlueprintService.Blueprints.definition]),
+                    decodeForRead<BlueprintDefinition>(it[BlueprintService.Blueprints.definition], budget),
                     blueprintJson.decodeFromString<Map<String, String>>(it[BlueprintService.Blueprints.hierarchyRelations]),
                 )
             }
@@ -244,17 +244,18 @@ class EntityService(
      * read-set machinery — it only ever needs the resulting [RowLookup] to walk an Inherited
      * ownership path, never [EntitySnapshot]/[WorkspaceRow] themselves, so this ONE narrow
      * accessor is internal rather than [loadReadSet] (or its private return type) directly.
-     * `reservation = null`: this transient, ids-only resolution is exempt from the read budget
-     * (`.claude/docs/persistence.md`) — it discards every decoded document immediately, keeping
-     * only the matching entity ids.
+     * A null reservation preserves REST's existing filter-resolution exemption. Integration
+     * reads pass their reservation because the lookup retains decoded target skeletons while
+     * matching candidates, even though candidate full documents are transient.
      */
     internal suspend fun rowLookupFor(
         definitions: Collection<BlueprintDefinition>,
         blueprintsByIdentifier: Map<String, ActiveBlueprint>,
+        reservation: EntityReadLedger.Reservation? = null,
     ): RowLookup {
         val definitionsByIdentifier = blueprintsByIdentifier.mapValues { it.value.definition }
         val targets = narrowTargets(definitions, definitionsByIdentifier, computed = false)
-        return loadReadSet(Op.FALSE, targets, blueprintsByIdentifier, reservation = null).snapshot.rowLookup
+        return loadReadSet(Op.FALSE, targets, blueprintsByIdentifier, reservation).snapshot.rowLookup
     }
 
     /** One entity row as [toResponse] needs it — decoded ONCE, before computed-property evaluation runs OUTSIDE the transaction. */
@@ -273,13 +274,13 @@ class EntityService(
         val updatedAt: Long,
     )
 
-    private fun ResultRow.toRawEntity(): RawEntity = RawEntity(
+    private fun ResultRow.toRawEntity(budget: OntologyReadBudget? = null): RawEntity = RawEntity(
         id = this[Entities.id].value,
         blueprintId = this[Entities.blueprintId].value,
         identifier = this[Entities.identifier],
         title = this[Entities.title],
         icon = this[Entities.icon],
-        document = blueprintJson.decodeFromString(this[Entities.document]),
+        document = decodeForRead(this[Entities.document], budget),
         storedTeam = this[Entities.team]?.let { blueprintJson.decodeFromString<JsonElement>(it) },
         createdBy = this[Entities.createdBy].value,
         creatorName = this[UserService.Users.name],
@@ -299,7 +300,7 @@ class EntityService(
      * `suspend` since v1.28.1: computed-property evaluation now runs on [JqEvaluator]'s bounded
      * pool ([JqEvaluator.evaluateBounded]) rather than blocking this coroutine's own thread.
      */
-    private suspend fun toResponse(raw: RawEntity, context: EntityContext): EntityResponse {
+    private suspend fun toResponse(raw: RawEntity, context: EntityContext, budget: OntologyReadBudget? = null): EntityResponse {
         // A blueprint can only be deleted once its active entity count is 0 (BlueprintService.
         // delete), so any active entity's blueprint is guaranteed active here.
         val blueprint = context.blueprintsById[raw.blueprintId]
@@ -317,7 +318,7 @@ class EntityService(
             updatedAt = raw.updatedAt,
         )
         val computed = computedProperties(
-            subject, blueprint.definition, context.definitionsByIdentifier, context.snapshot, context.jq, context.now,
+            subject, blueprint.definition, context.definitionsByIdentifier, context.snapshot, context.jq, context.now, budget,
         )
         return EntityResponse(
             id = raw.id,
@@ -329,7 +330,8 @@ class EntityService(
             team = effectiveTeamValue,
             properties = JsonObject(raw.document.properties + computed),
             relations = raw.document.relations,
-            findings = entityFindings(raw.document, blueprint.definition, context.snapshot.targetExists, raw.storedTeam),
+            findings = entityFindings(raw.document, blueprint.definition, context.snapshot.targetExists, raw.storedTeam)
+                .also { budget?.retainFindings(it) },
             createdBy = raw.createdBy,
             creatorName = raw.creatorName,
             creatorDeleted = raw.creatorDeleted,
@@ -353,12 +355,16 @@ class EntityService(
      * SQL [predicate] via [teamPredicate] — `count()` and the page rows stay one shared
      * predicate, so `total`/paging never disagree with the Inherited half of the match.
      */
-    suspend fun list(filter: EntityFilter, paging: PageRequest): EntityListResult {
+    suspend fun list(
+        filter: EntityFilter,
+        paging: PageRequest,
+        budget: OntologyReadBudget? = null,
+    ): EntityListResult {
         val now = System.currentTimeMillis()
         readLedger.open().use { reservation ->
             try {
                 val materialized = suspendTransaction(database) {
-                    val activeBlueprints = loadActiveBlueprints()
+                    val activeBlueprints = loadActiveBlueprints(budget)
                     val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
                     val blueprintsById = activeBlueprints.associateBy { it.id }
                     val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
@@ -374,7 +380,9 @@ class EntityService(
                     filter.q?.let { q -> predicate = predicate and qPredicate(q) }
                     if (filter.team != null && !unknownBlueprint) {
                         val candidates = filterBlueprint?.let { listOf(it) } ?: activeBlueprints
-                        val inheritedIds = inheritedTeamMatches(filter.team, candidates, blueprintsByIdentifier)
+                        val inheritedIds = inheritedTeamMatches(
+                            filter.team, candidates, blueprintsByIdentifier, reservation.takeIf { budget != null },
+                        )
                         predicate = predicate and teamPredicate(filter.team, blueprintsByIdentifierFolded, inheritedIds)
                     }
 
@@ -382,9 +390,11 @@ class EntityService(
                     val rows = if (unknownBlueprint) {
                         emptyList()
                     } else {
-                        joined().selectAll().where { predicate }.applyPaging(paging, SORTABLE_COLUMNS).map { it.toRawEntity() }.toList()
+                        joined().selectAll().where { predicate }.applyPaging(paging, SORTABLE_COLUMNS)
+                            .map { it.toRawEntity(budget) }.toList()
                     }
-                    // The PAGE itself is already bounded by pagination (<=100 rows); the read
+                    // REST bounds the page by row count; integration additionally caps decoded
+                    // page documents with budget. The shared read
                     // budget's ledger charge here covers the TARGET rows a computed property might
                     // widen to, which is what can scale unboundedly across the workspace.
                     val definitions = rows.mapNotNull { blueprintsById[it.blueprintId]?.definition }
@@ -394,7 +404,7 @@ class EntityService(
                     Materialized(rows to total, context)
                 }
                 val (rows, total) = materialized.payload
-                return EntityListResult(rows.map { toResponse(it, materialized.context) }, total)
+                return EntityListResult(rows.map { toResponse(it, materialized.context, budget) }, total)
             } catch (cause: ReadBudgetExceeded) {
                 throwReadBudgetHttp(cause)
             }
@@ -669,14 +679,14 @@ class EntityService(
         }
     }
 
-    suspend fun read(id: UInt): EntityResponse? {
+    suspend fun read(id: UInt, budget: OntologyReadBudget? = null): EntityResponse? {
         val now = System.currentTimeMillis()
         readLedger.open().use { reservation ->
             try {
                 val materialized = suspendTransaction(database) {
                     val row = joined().selectAll().where { (Entities.id eq id) and active() }.singleOrNull()
                         ?: return@suspendTransaction null
-                    val activeBlueprints = loadActiveBlueprints()
+                    val activeBlueprints = loadActiveBlueprints(budget)
                     val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
                     val blueprintsById = activeBlueprints.associateBy { it.id }
                     val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
@@ -684,9 +694,9 @@ class EntityService(
                     val targets = narrowTargets(listOfNotNull(definition), definitionsByIdentifier, computed = true)
                     val readSet = loadReadSet(Op.FALSE, targets, blueprintsByIdentifier, reservation)
                     val context = EntityContext(blueprintsById, definitionsByIdentifier, readSet.snapshot, jq, now)
-                    Materialized(row.toRawEntity(), context)
+                    Materialized(row.toRawEntity(budget), context)
                 } ?: return null
-                return toResponse(materialized.payload, materialized.context)
+                return toResponse(materialized.payload, materialized.context, budget)
             } catch (cause: ReadBudgetExceeded) {
                 throwReadBudgetHttp(cause)
             }

@@ -1,0 +1,238 @@
+"Arbitrary JSON preserved exactly as stored, including integer and decimal number text."
+scalar JSON
+
+"A signed 64-bit integer used for epoch-millisecond timestamps and page totals."
+scalar Long
+
+"Read-only access to Port blueprints, entities, and ontology findings."
+type Query {
+  "Lists active blueprints in stable database identifier order."
+  blueprints(
+    "One-based page number."
+    page: Int = 1
+    "Rows per page, from 1 through 100."
+    pageSize: Int = 20
+  ): BlueprintPage
+
+  "Reads one active blueprint by its numeric identifier."
+  blueprint(
+    "The full unsigned blueprint identifier, encoded as a decimal string."
+    id: ID!
+  ): Blueprint
+
+  "Lists active entities using the REST entity filters in stable numeric identifier order."
+  entities(
+    "One-based page number."
+    page: Int = 1
+    "Rows per page, from 1 through 100."
+    pageSize: Int = 20
+    "Case-insensitive blueprint identifier equality filter."
+    blueprint: String
+    "Case-insensitive identifier or title substring filter."
+    q: String
+    "Case-insensitive effective-team filter."
+    team: String
+  ): EntityPage
+
+  "Reads one active entity by its numeric identifier."
+  entity(
+    "The full unsigned entity identifier, encoded as a decimal string."
+    id: ID!
+  ): Entity
+
+  "Checks ontology health without evaluating or disclosing saved queries."
+  errors(
+    "Blueprint identifiers to include; omitted or empty means every blueprint."
+    blueprints: [String!]
+    "Case-insensitive entity identifier or title substring filter."
+    q: String
+    "Case-insensitive effective-team filter."
+    team: String
+  ): OntologyErrors
+}
+
+"One page of active blueprints."
+type BlueprintPage {
+  "Blueprints in this page."
+  items: [Blueprint!]!
+  "The requested one-based page number."
+  page: Int!
+  "The requested page size."
+  pageSize: Int!
+  "Total matching blueprints across all pages."
+  total: Long!
+}
+
+"A Port blueprint definition and its audit identity."
+type Blueprint {
+  "Numeric database identifier encoded as a decimal string."
+  id: ID!
+  "Stable Port blueprint identifier."
+  identifier: String!
+  "Human-readable title."
+  title: String!
+  "Optional description."
+  description: String
+  "Optional Port icon name."
+  icon: String
+  "Open Port property schema."
+  schema: JSON!
+  "Relation definitions keyed by relation identifier."
+  relations: JSON!
+  "Mirror-property definitions keyed by property identifier."
+  mirrorProperties: JSON!
+  "Calculation-property definitions keyed by property identifier."
+  calculationProperties: JSON!
+  "Aggregation-property definitions keyed by property identifier."
+  aggregationProperties: JSON!
+  "Optional ownership definition."
+  ownership: JSON
+  "Optional hierarchy identifier to relation-key mapping."
+  hierarchyRelations: JSON
+  "Identifier of the account that created the blueprint, encoded as a decimal string."
+  createdBy: ID!
+  "Current or retained display name of the creating account."
+  creatorName: String!
+  "Whether the creating account has since been deleted."
+  creatorDeleted: Boolean!
+  "Creation time as epoch milliseconds."
+  createdAt: Long!
+  "Last update time as epoch milliseconds."
+  updatedAt: Long!
+  "Whether this is a protected system blueprint."
+  system: Boolean!
+}
+
+"One page of active entities."
+type EntityPage {
+  "Entities in this page."
+  items: [Entity!]!
+  "The requested one-based page number."
+  page: Int!
+  "The requested page size."
+  pageSize: Int!
+  "Total matching entities across all pages."
+  total: Long!
+}
+
+"A Port entity including computed read-time properties."
+type Entity {
+  "Numeric database identifier encoded as a decimal string."
+  id: ID!
+  "Identifier of the entity's blueprint."
+  blueprint: String!
+  "Numeric blueprint identifier encoded as a decimal string."
+  blueprintId: ID!
+  "Identifier unique within the blueprint."
+  identifier: String!
+  "Human-readable title."
+  title: String!
+  "Optional Port icon name."
+  icon: String
+  "Optional direct or effective team value."
+  team: JSON
+  "Stored properties plus computed values available at read time."
+  properties: JSON!
+  "Relations keyed by relation identifier."
+  relations: JSON!
+  "Current validation findings for this entity."
+  findings: [Finding!]!
+  "Identifier of the account that created the entity, encoded as a decimal string."
+  createdBy: ID!
+  "Current or retained display name of the creating account."
+  creatorName: String!
+  "Whether the creating account has since been deleted."
+  creatorDeleted: Boolean!
+  "Creation time as epoch milliseconds."
+  createdAt: Long!
+  "Last update time as epoch milliseconds."
+  updatedAt: Long!
+}
+
+"One ontology validation finding."
+type Finding {
+  "Stable machine-readable finding code."
+  code: String!
+  "Entity or blueprint field associated with the finding."
+  field: String!
+  "Human-readable diagnostic message."
+  message: String!
+}
+
+"Ontology health counters and independently pageable finding rows."
+type OntologyErrors {
+  "Pages entity finding rows by numeric id ascending from the report snapshot."
+  entities(
+    "One-based page number."
+    page: Int = 1
+    "Rows per page, from 1 through 100."
+    pageSize: Int = 20
+  ): EntityErrorPage!
+  "Pages blueprint finding rows by case-insensitive identifier ascending from the report snapshot."
+  blueprints(
+    "One-based page number."
+    page: Int = 1
+    "Rows per page, from 1 through 100."
+    pageSize: Int = 20
+  ): BlueprintErrorPage!
+  "Number of entities checked in the report snapshot."
+  checkedEntities: Int!
+  "Number of blueprints checked in the report snapshot."
+  checkedBlueprints: Int!
+}
+
+"One page of entity finding rows."
+type EntityErrorPage {
+  "Entity finding rows in this page."
+  items: [EntityError!]!
+  "The requested one-based page number."
+  page: Int!
+  "The requested page size."
+  pageSize: Int!
+  "Total entity finding rows in the report."
+  total: Long!
+}
+
+"An entity with one or more current ontology findings."
+type EntityError {
+  "Numeric entity identifier encoded as a decimal string."
+  id: ID!
+  "Numeric blueprint identifier encoded as a decimal string."
+  blueprintId: ID!
+  "Blueprint identifier."
+  blueprint: String!
+  "Blueprint title."
+  blueprintTitle: String!
+  "Entity identifier."
+  identifier: String!
+  "Entity title."
+  title: String!
+  "Resolved effective teams; empty means none."
+  team: [String!]!
+  "Current ontology findings."
+  findings: [Finding!]!
+}
+
+"One page of blueprint finding rows."
+type BlueprintErrorPage {
+  "Blueprint finding rows in this page."
+  items: [BlueprintError!]!
+  "The requested one-based page number."
+  page: Int!
+  "The requested page size."
+  pageSize: Int!
+  "Total blueprint finding rows in the report."
+  total: Long!
+}
+
+"A blueprint with one or more current ontology findings."
+type BlueprintError {
+  "Numeric blueprint identifier encoded as a decimal string."
+  id: ID!
+  "Blueprint identifier."
+  identifier: String!
+  "Blueprint title."
+  title: String!
+  "Current ontology findings."
+  findings: [Finding!]!
+}
