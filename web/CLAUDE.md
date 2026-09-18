@@ -62,6 +62,9 @@ identifier, never authentication validation. Regression expectations live in
 `.claude/docs/testing.md`; server authentication and revocation rules are unchanged.
 
 Every auth boundary — explicit sign-out, the transport's definitive refresh rejection, a new login, a cross-tab session change — clears the shared `QueryClient` through `bindQueryCacheToAuthBoundary` (`auth.tsx`, bound once in `main.tsx`, 2.3.2), so one account's cached private lenses or saved queries can never be served to the next.
+Protected-route login restoration carries the complete root-relative internal location
+(`pathname + search + hash`) through both password-only and MFA completion; reject protocol-relative
+or otherwise non-internal return targets.
 
 **Session revocation (V25):** password, email, and role changes invalidate
 all existing sessions of the affected account; logout invalidates every refresh generation
@@ -285,15 +288,18 @@ Port migration phase 3 (v1.25.0): the entity counterparts of the Graph/Hierarchy
 
 ## Entity query bar (v2.0.0, `components/EntityQueryBar.tsx`)
 
-**One bar, two canvases, one stored pair, collapsible since 2.4.1.** The Entity graph and Entity
+**One bar, two canvases, one account-scoped stored pair, collapsible since 2.4.1.** The Entity graph and Entity
 hierarchy pages render the same `EntityQueryBar` inside `EntityGraphToolbar`'s Query SECTION — a
 third toolbar row mounted only while `useEntityQuery().open` is true (persisted, shared, like the
 draft/applied pair below), toggled from the title row's Query `ToolbarToggle`. `hooks/
-useEntityQuery.ts` is deliberately NOT per view: `useStoredState("entityQuery.text")` is the
-draft, `useStoredState("entityQuery.applied")` the query that actually narrows the graph request
+useEntityQuery.ts` is deliberately NOT per view: `useEntityQueryStoredState("text")` is the
+draft, `useEntityQueryStoredState("applied")` the query that actually narrows the graph request
 (`getEntityGraph({...filters, query: applied || undefined})`, `applied` in the react-query key),
-`useStoredState("entityQuery.open")` the section's own open flag — all three survive a page
-switch and hit the cache. **Invariant: a blank draft always derives an empty applied query** —
+`useEntityQueryStoredState("open")` the section's own open flag — all three survive a page
+switch and hit the cache for the same authenticated account. The picked saved-query id uses the
+same account partition. Logout/account switches synchronously expose the new account's partition;
+ownerless pre-partition `entityQuery.*` keys are discarded rather than guessed at or migrated.
+**Invariant: a blank draft always derives an empty applied query** —
 `applied` is `draft.trim() === "" ? "" : storedApplied`, an effect normalizes a legacy stale pair
 on mount, and `setDraft("")` clears the stored value eagerly too — so erasing the editor text by
 hand shows the full graph again immediately, with no Run/Clear needed. Running happens ONLY on
@@ -327,7 +333,8 @@ clause keywords at clause starts, every name through `quoteIfNeeded` (bracket sc
 quoted runs, so a `(` inside a string is text); `toLintDiagnostics` maps 1-based/end-exclusive
 server positions to clamped offsets (positionless → the whole doc). External `value` changes are
 dispatched only when they differ from the doc; `onChange`/`onRun` live in refs so the view is
-built once; a `Compartment` follows `useComputedColorScheme`. The content element carries
+built once; compartments follow `useComputedColorScheme`, the localized placeholder, and localized
+content attributes without replacing the document, selection, or undo state. The content element carries
 `aria-label` (the `entityQuery.label` string — e2e's `getByRole("textbox", { name: "Entity query" })`)
 and `aria-multiline`. `QueryEditor.test.tsx` mounts the REAL editor under happy-dom with two
 shims (`document.createRange` + `ResizeObserver`); page and bar tests mock it as a `<textarea>`.
@@ -350,7 +357,7 @@ Rename-visibility / Delete are the lens actions with the same conflict (409) / f
 a foreign public query) / gone (404) mappings, plus a `400` carrying `diagnostics` (the text no
 longer parses) surfaced under the dialog's name field — the dialog always saves the CURRENT
 draft, never a copy of its own. i18n namespace `entityQueries` (EN/PL). The picked id is stored under
-`entityQuery.picked` — shared by both canvases like the draft/applied pair, so the pick (and its
+`entityQuery.account.<userId>.picked` — shared by both canvases like the draft/applied pair, so the pick (and its
 owner-only actions) survives the Entity graph ↔ Entity hierarchy switch. Clearing the select only
 forgets the pick; it never clears the bar (that is the bar's own Clear).
 
@@ -415,7 +422,7 @@ render through the SAME `entityQuery.position`/`entityQuery.didYouMean` i18n key
 mean `x`?" across both surfaces.
 
 **Open in graph** (`entityErrors.openInGraph`) hands a broken saved query to the canvas the
-way `components/EntityQueryPicker.tsx` does: it writes `entityQuery.picked` (so the picker
+way `components/EntityQueryPicker.tsx` does: it writes `entityQuery.account.<userId>.picked` (so the picker
 shows it selected), calls `useEntityQuery().runText(row.query)` (setting the shared draft AND
 applied text, opening the Query section), and navigates to the Entity graph — the graph then
 answers its own `EntityQueryInvalid` `400` with the same diagnostics the report already showed,

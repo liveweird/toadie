@@ -114,14 +114,16 @@ class UserService(private val database: R2dbcDatabase) {
     }
 
     /**
-     * Set the per-user language (V18). Returns 1, or 0 when the id is unknown or
-     * soft-deleted (the route 404s). Idempotent.
+     * Set the per-user language (V18), returning its locked predecessor for truthful audit
+     * deltas, or null when the row is absent. Same-value writes remain idempotent.
      */
-    suspend fun setLanguage(id: UInt, language: String): Int = suspendTransaction(database) {
+    suspend fun setLanguage(id: UInt, language: String): User? = suspendTransaction(database) {
         validateLanguage(language) // re-checked service-side so direct callers stay guarded
+        val previous = lockedUser(id) ?: return@suspendTransaction null
         Users.update({ (Users.id eq id) and active() }) {
             it[Users.language] = language
         }
+        previous
     }
 
     suspend fun list(filter: UserListFilter, paging: PageRequest): UserListResult =
@@ -142,19 +144,12 @@ class UserService(private val database: R2dbcDatabase) {
         }
 
     /**
-     * Wholesale-replace the user's disabled-feature set (V12). Returns 1, or 0 when the id is
-     * unknown or soft-deleted (the route 404s). Idempotent — a same-set re-PUT is a no-op
-     * replace, not a transition. Upserted row-by-row (rather than delete-then-insert) so two
-     * overlapping PUTs for the same user under READ COMMITTED never race a delete against an
-     * insert on the `(user_id, feature)` PK into an undeclared generic `23505` → 409 — one
-     * writer's set simply wins, matching the wholesale-replace contract.
+     * Wholesale-replace the disabled-feature set under its owning user row's lock. Every
+     * cooperating writer locks that row before reading flags, so the returned predecessor
+     * and the replacement are one transition even when requests overlap. Null means absent.
      */
-    suspend fun setDisabledFeatures(id: UInt, features: Set<Feature>): Int = suspendTransaction(database) {
-        val exists = Users.select(Users.id)
-            .where { (Users.id eq id) and active() }
-            .toList()
-            .isNotEmpty()
-        if (!exists) return@suspendTransaction 0
+    suspend fun setDisabledFeatures(id: UInt, features: Set<Feature>): User? = suspendTransaction(database) {
+        val previous = lockedUser(id) ?: return@suspendTransaction null
         features.forEach { f ->
             UserDisabledFeatures.upsert {
                 it[userId] = id
@@ -167,78 +162,77 @@ class UserService(private val database: R2dbcDatabase) {
         } else {
             UserDisabledFeatures.deleteWhere { (UserDisabledFeatures.userId eq id) and (UserDisabledFeatures.feature notInList keep) }
         }
-        1
+        previous
     }
 
-    /** Outcome of a last-admin-guarded mutation (see [updateGuarded]/[deleteGuarded]). */
+    /** Outcome of a last-admin-guarded deletion (see [deleteGuarded]). */
     enum class GuardedMutation { DONE, NOT_FOUND, LAST_ADMIN }
 
+    /** Identity updates return the actual predecessor from the same locked transaction. */
+    sealed interface GuardedUpdate {
+        data class Updated(val previous: User) : GuardedUpdate
+        data object NotFound : GuardedUpdate
+        data object LastAdmin : GuardedUpdate
+    }
+
     /**
-     * Updates the identity fields + role inside ONE transaction with the last-admin check —
-     * password and passwordChangedAt stay untouched. The check and the mutation share the
-     * transaction (admin rows locked via [lockedActiveAdminCount]), so two concurrent demotes
-     * cannot both observe "two admins left" and demote both — the read-then-count-then-update
-     * split across separate transactions was a TOCTOU.
+     * Lock administrators in ID order BEFORE the target when a write can remove an admin.
+     * Taking the target first would deadlock two concurrent demotions. Promotion/name-only
+     * ADMIN writes need only the target: they never reduce the active administrator count.
      */
-    suspend fun updateGuarded(id: UInt, name: String, email: String, role: UserRole): GuardedMutation =
+    suspend fun updateGuarded(id: UInt, name: String, email: String, role: UserRole): GuardedUpdate =
         suspendTransaction(database) {
-            validateNameAndEmail(name, email) // re-checked service-side so direct callers stay guarded
-            val existingRole = activeRole(id) ?: return@suspendTransaction GuardedMutation.NOT_FOUND
-            if (existingRole == UserRole.ADMIN && role != UserRole.ADMIN && lockedActiveAdminCount() <= 1) {
-                return@suspendTransaction GuardedMutation.LAST_ADMIN
+            validateNameAndEmail(name, email)
+            val otherAdminExists = role == UserRole.ADMIN || lockedOtherAdminExists(id)
+            val previous = lockedUser(id) ?: return@suspendTransaction GuardedUpdate.NotFound
+            if (previous.role == UserRole.ADMIN && !otherAdminExists) {
+                return@suspendTransaction GuardedUpdate.LastAdmin
             }
-            val rows = Users.update({ (Users.id eq id) and active() }) {
+            Users.update({ (Users.id eq id) and active() }) {
                 it[Users.name] = name
-                // Canonical identity, folded here too (defense-in-depth like findWithIdByEmail).
                 it[Users.email] = canonicalEmail(email)
                 it[Users.role] = role.name
-                // Evaluate against the locked UPDATE row, not the earlier validation snapshot.
-                // Cosmetic/no-op writes stay idempotent; restoring a role cannot revive old tokens.
+                // Preserve the database-side epoch comparison as defense in depth.
                 it[Users.authVersion] = Case().When(
                     (Users.email neq canonicalEmail(email)) or (Users.role neq role.name),
                     Users.authVersion + 1,
                 ).Else(Users.authVersion)
             }
-            if (rows == 0) GuardedMutation.NOT_FOUND else GuardedMutation.DONE
+            GuardedUpdate.Updated(previous)
         }
 
-    /**
-     * Soft delete with the last-admin check in the SAME transaction (see [updateGuarded]):
-     * blocks login, refresh rejects `user_gone`, the V1 partial index frees the email.
-     */
+    /** Soft delete uses the same admin-before-target lock order as a demotion. */
     suspend fun deleteGuarded(id: UInt): GuardedMutation = suspendTransaction(database) {
-        val existingRole = activeRole(id) ?: return@suspendTransaction GuardedMutation.NOT_FOUND
-        if (existingRole == UserRole.ADMIN && lockedActiveAdminCount() <= 1) {
+        val otherAdminExists = lockedOtherAdminExists(id)
+        val previous = lockedUser(id) ?: return@suspendTransaction GuardedMutation.NOT_FOUND
+        if (previous.role == UserRole.ADMIN && !otherAdminExists) {
             return@suspendTransaction GuardedMutation.LAST_ADMIN
         }
-        val rows = Users.update({ (Users.id eq id) and active() }) {
+        Users.update({ (Users.id eq id) and active() }) {
             it[markedAsDeleted] = true
         }
-        if (rows == 0) GuardedMutation.NOT_FOUND else GuardedMutation.DONE
+        GuardedMutation.DONE
     }
 
-    /** Backs the routes' fast-path 409 pre-checks (the ordering gate; correctness lives in
-     *  the guarded mutations above). */
-    suspend fun countActiveAdmins(): Long = suspendTransaction(database) {
-        Users.selectAll().where { (Users.role eq UserRole.ADMIN.name) and active() }.count()
-    }
-
-    private suspend fun activeRole(id: UInt): UserRole? =
-        Users.select(Users.role)
-            .where { (Users.id eq id) and active() }
-            .toList()
-            .singleOrNull()
-            ?.let { UserRole.valueOf(it[Users.role]) }
-
-    // FOR UPDATE on the active-admin rows serializes concurrent admin mutations: the second
-    // transaction blocks on the first's locks and re-evaluates the predicate after its commit,
-    // so a demoted/deleted row no longer counts. Admins are few — counting in memory is fine.
-    private suspend fun lockedActiveAdminCount(): Int =
+    private suspend fun lockedUser(id: UInt): User? =
         Users.selectAll()
-            .where { (Users.role eq UserRole.ADMIN.name) and active() }
+            .where { (Users.id eq id) and active() }
             .forUpdate()
             .toList()
-            .size
+            .singleOrNull()
+            ?.let { it.toUser(featuresOf(id)) }
+
+    // FOR UPDATE on the active-admin rows serializes concurrent admin mutations: the second
+    // transaction blocks on the first's locks and re-evaluates the predicate after its commit.
+    // Record a surviving OTHER admin, not a count that assumes the target was in this snapshot:
+    // a concurrent promotion can turn a formerly excluded target into an admin before we lock it.
+    private suspend fun lockedOtherAdminExists(targetId: UInt): Boolean =
+        Users.selectAll()
+            .where { (Users.role eq UserRole.ADMIN.name) and active() }
+            .orderBy(Users.id)
+            .forUpdate()
+            .toList()
+            .any { it[Users.id].value != targetId }
 
     private fun buildPredicate(filter: UserListFilter): Op<Boolean> {
         var op: Op<Boolean> = Op.TRUE

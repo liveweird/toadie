@@ -6,6 +6,8 @@ import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
+import ch.nokillswit.infra.importing.ImportMutation
+import ch.nokillswit.infra.importing.ImportMutationKind
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.infra.importing.decodeDocument
 import ch.nokillswit.infra.importing.orderWithDeferral
@@ -450,8 +452,8 @@ fun planEntityImport(
 private const val ENTITY_STORAGE_FAILED = "Storage failed"
 
 // Per-document isolation, shared by both writer passes: rethrow cancellation, classify a
-// unique-violation race as EXISTS, anything else as a safe-message ERROR — never let an
-// unexpected storage failure escape as a 500 and fail the whole batch (report & skip).
+// pass-1 unique-violation race (no committed id) as EXISTS, and every pass-2 failure as an
+// ERROR retaining its committed id — never let an unexpected failure escape the batch.
 @Suppress("TooGenericExceptionCaught")
 internal fun storageFailureRow(
     e: Exception,
@@ -460,7 +462,7 @@ internal fun storageFailureRow(
     identifier: String?,
     id: UInt? = null,
     messageFor: (String) -> String = { it },
-): EntityImportRow = if (e.isUniqueViolation()) {
+): EntityImportRow = if (id == null && e.isUniqueViolation()) {
     EntityImportRow(index, blueprint, identifier, OntologyImportStatus.EXISTS, id = id, message = messageFor("created concurrently"))
 } else {
     EntityImportRow(index, blueprint, identifier, OntologyImportStatus.ERROR, id = id, message = messageFor(ENTITY_STORAGE_FAILED))
@@ -471,7 +473,12 @@ internal fun storageFailureRow(
  * [EntityService.create]/[EntityService.update] per row, so every write still runs under the
  * ordinary two-table V28 lock) → pass 2 for rows with deferred references.
  */
-suspend fun EntityService.import(documents: List<JsonObject>, callerId: UInt, replaceExisting: Boolean): List<EntityImportRow> {
+suspend fun EntityService.import(
+    documents: List<JsonObject>,
+    callerId: UInt,
+    replaceExisting: Boolean,
+    onCommitted: (ImportMutation) -> Unit,
+): List<EntityImportRow> {
     val plan = planEntityImport(documents, importSnapshot(), replaceExisting, workspaceDocumentBytes)
     val rows = arrayOfNulls<EntityImportRow>(documents.size)
     plan.verdicts.forEachIndexed { idx, verdict -> if (verdict is EntityPlanVerdict.Rejected) rows[idx] = verdict.row }
@@ -479,7 +486,11 @@ suspend fun EntityService.import(documents: List<JsonObject>, callerId: UInt, re
     val storedIds = mutableMapOf<Int, UInt>()
     for (idx in plan.order) {
         val verdict = plan.verdicts[idx] as? EntityPlanVerdict.Store ?: continue
-        rows[idx] = writeEntityRow(idx, verdict, callerId, storedIds)
+        val write = writeEntityRow(idx, verdict, callerId, storedIds)
+        rows[idx] = write.row
+        // Keep committed mutation facts separate from pass 2's final verdict. The callback is
+        // deliberately outside storage classification and runs exactly once per pass-1 write.
+        write.mutation?.let(onCommitted)
     }
     for (idx in plan.order) {
         val verdict = plan.verdicts[idx] as? EntityPlanVerdict.Store ?: continue
@@ -490,6 +501,8 @@ suspend fun EntityService.import(documents: List<JsonObject>, callerId: UInt, re
     return rows.map { it ?: error("entity import row left unset") }
 }
 
+private data class EntityPass1Write(val row: EntityImportRow, val mutation: ImportMutation? = null)
+
 // Per-document isolation: one row's unexpected failure is reported as ERROR and never fails siblings (report & skip).
 @Suppress("TooGenericExceptionCaught")
 private suspend fun EntityService.writeEntityRow(
@@ -497,31 +510,39 @@ private suspend fun EntityService.writeEntityRow(
     verdict: EntityPlanVerdict.Store,
     callerId: UInt,
     storedIds: MutableMap<Int, UInt>,
-): EntityImportRow {
+): EntityPass1Write {
     val blueprint = verdict.request.blueprint
     val identifier = verdict.request.identifier
     return try {
         if (verdict.existingId == null) {
             val created = create(verdict.pass1, callerId)
             storedIds[index] = created.id
-            EntityImportRow(index, blueprint, identifier, OntologyImportStatus.CREATED, id = created.id)
+            EntityPass1Write(
+                EntityImportRow(index, blueprint, identifier, OntologyImportStatus.CREATED, id = created.id),
+                ImportMutation(ImportMutationKind.CREATED, created.id, identifier, blueprint = blueprint),
+            )
         } else {
             val result = update(verdict.existingId, verdict.pass1)
             if (result.affected == 0) {
-                EntityImportRow(index, blueprint, identifier, OntologyImportStatus.ERROR, message = "Entity vanished")
+                EntityPass1Write(EntityImportRow(index, blueprint, identifier, OntologyImportStatus.ERROR, message = "Entity vanished"))
             } else {
                 storedIds[index] = verdict.existingId
-                EntityImportRow(index, blueprint, identifier, OntologyImportStatus.UPDATED, id = verdict.existingId)
+                EntityPass1Write(
+                    EntityImportRow(index, blueprint, identifier, OntologyImportStatus.UPDATED, id = verdict.existingId),
+                    ImportMutation(ImportMutationKind.UPDATED, verdict.existingId, identifier, blueprint = blueprint),
+                )
             }
         }
     } catch (e: CancellationException) {
         throw e
     } catch (e: EntityInvalidException) {
-        EntityImportRow(index, blueprint, identifier, OntologyImportStatus.INVALID, message = e.message, findings = e.findings)
+        EntityPass1Write(
+            EntityImportRow(index, blueprint, identifier, OntologyImportStatus.INVALID, message = e.message, findings = e.findings),
+        )
     } catch (e: BadRequestException) {
-        EntityImportRow(index, blueprint, identifier, OntologyImportStatus.INVALID, message = e.message)
+        EntityPass1Write(EntityImportRow(index, blueprint, identifier, OntologyImportStatus.INVALID, message = e.message))
     } catch (e: Exception) {
-        storageFailureRow(e, index, blueprint, identifier)
+        EntityPass1Write(storageFailureRow(e, index, blueprint, identifier))
     }
 }
 
@@ -530,8 +551,16 @@ private suspend fun EntityService.writeEntityRow(
 @Suppress("TooGenericExceptionCaught")
 private suspend fun EntityService.pass2Entity(id: UInt, verdict: EntityPlanVerdict.Store, previousRow: EntityImportRow): EntityImportRow =
     try {
-        update(id, verdict.request)
-        previousRow
+        val result = update(id, verdict.request)
+        if (result.affected == 0) {
+            previousRow.copy(
+                status = OntologyImportStatus.ERROR,
+                id = id,
+                message = "Stored without its deferred references: Entity vanished",
+            )
+        } else {
+            previousRow
+        }
     } catch (e: CancellationException) {
         throw e
     } catch (e: EntityInvalidException) {

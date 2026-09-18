@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.6.2",
+    date: "2026-09-18",
+    en: `**Safer account switching and more reliable changes.** Entity query drafts and saved-query selections now stay with their account, and signing in preserves the full destination link. The query editor updates its accessible label and placeholder when you change language. Bootstrap passwords and pending MFA challenges have stronger safeguards. Concurrent user changes record accurate audit details, and ontology imports report failed restoration and retain audits for changes already stored. The import documentation now states which metadata must be removed.`,
+    pl: `**Bezpieczniejsze przełączanie kont i bardziej niezawodne zmiany.** Szkice zapytań o encje i wybór zapisanych zapytań pozostają teraz przypisane do konta, a logowanie zachowuje pełny link docelowy. Edytor zapytań aktualizuje etykietę dostępności i tekst podpowiedzi po zmianie języka. Hasła początkowe i oczekujące wyzwania MFA mają dodatkowe zabezpieczenia. Równoczesne zmiany użytkowników zapisują poprawne szczegóły audytu, a import ontologii zgłasza nieudane odtworzenie odroczonych powiązań i zachowuje audyt już zapisanych zmian. Dokumentacja importu wyjaśnia teraz, które metadane należy usunąć.`,
+  },
+  {
     version: "2.6.1",
     date: "2026-09-16",
     en: `**More room for data, usable layouts on small screens.** Blueprint and registry tables now fill the available desktop width. Wide tables scroll within their own area on smaller screens, and entity columns keep enough room for their contents. Deep entity hierarchies keep row actions reachable, query buttons move below the editor on narrow screens, and long changelog text wraps without widening the page.`,

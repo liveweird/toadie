@@ -13,15 +13,18 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * In-memory and per-instance by design (the LoginThrottle posture): the deployment runs a
  * single replica, and a restart only invalidates pending challenges — the user simply signs
- * in again. Multiple live challenges per account (repeated logins) are accepted: the short
- * TTL, the attempt cap, and the login rate bucket bound the guessing surface
- * (≤ maxAttempts·10⁻⁶ per challenge).
+ * in again. Multiple live challenges per account (repeated logins) are accepted up to one
+ * global hard ceiling: the short TTL, attempt cap, login rate bucket, and atomic admission
+ * bound the guessing and memory surfaces (≤ maxAttempts·10⁻⁶ per admitted challenge).
  */
 class MfaChallenges(
     private val ttlMillis: Long,
     private val maxAttempts: Int,
+    private val maxTracked: Int = MAX_TRACKED,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    class CapacityExceededException : RuntimeException("MFA challenge capacity is exhausted")
+
     data class IssuedChallenge(val challengeId: String, val code: String, val expiresAt: Long)
 
     sealed interface Outcome {
@@ -40,27 +43,34 @@ class MfaChallenges(
     )
 
     private val challenges = ConcurrentHashMap<String, Challenge>()
+    private val admissionLock = Any()
 
     fun issue(userId: UInt, authVersion: Long = 0): IssuedChallenge {
-        pruneIfOversized()
-        val id = generateChallengeId()
-        val code = generateMfaCode()
-        val expiresAt = clock() + ttlMillis
-        challenges[id] = Challenge(userId, authVersion, code, expiresAt, attempts = 0)
-        return IssuedChallenge(id, code, expiresAt)
+        synchronized(admissionLock) {
+            pruneExpired()
+            if (challenges.size >= maxTracked) throw CapacityExceededException()
+            var id: String
+            do {
+                id = generateChallengeId()
+            } while (challenges.containsKey(id))
+            val code = generateMfaCode()
+            val expiresAt = clock() + ttlMillis
+            challenges[id] = Challenge(userId, authVersion, code, expiresAt, attempts = 0)
+            return IssuedChallenge(id, code, expiresAt)
+        }
     }
 
-    fun verify(challengeId: String, code: String): Outcome {
+    fun verify(challengeId: String, code: String): Outcome = synchronized(admissionLock) {
         val challenge = challenges[challengeId]
-            ?: return Outcome.Failure("unknown_challenge")
+            ?: return@synchronized Outcome.Failure("unknown_challenge")
         if (challenge.expiresAt <= clock()) {
             challenges.remove(challengeId, challenge)
-            return Outcome.Failure("expired")
+            return@synchronized Outcome.Failure("expired")
         }
         if (MessageDigest.isEqual(challenge.code.toByteArray(), code.toByteArray())) {
             // Single-use is a CAS, not a courtesy: only the submission that actually removes
             // the entry wins — a concurrent duplicate with the same correct code loses.
-            return if (challenges.remove(challengeId, challenge)) {
+            return@synchronized if (challenges.remove(challengeId, challenge)) {
                 Outcome.Success(challenge.userId, challenge.authVersion)
             } else {
                 Outcome.Failure("unknown_challenge")
@@ -78,13 +88,12 @@ class MfaChallenges(
                 current.copy(attempts = attempts)
             }
         }
-        return Outcome.Failure(if (capped) "too_many_attempts" else "wrong_code")
+        Outcome.Failure(if (capped) "too_many_attempts" else "wrong_code")
     }
 
-    // Memory bound: unauthenticated logins mint challenges, so the map must not grow without
-    // limit. Cheap opportunistic prune of expired entries once it gets large.
-    private fun pruneIfOversized() {
-        if (challenges.size <= MAX_TRACKED) return
+    // Admission is serialized: expiry cleanup, the capacity decision, and insertion form one
+    // atomic operation, so concurrent correct-password logins cannot overshoot the live cap.
+    private fun pruneExpired() {
         val now = clock()
         challenges.entries.removeIf { it.value.expiresAt <= now }
     }

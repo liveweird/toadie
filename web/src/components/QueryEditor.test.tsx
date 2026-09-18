@@ -126,6 +126,38 @@ describe("QueryEditor", () => {
     expect(content.textContent).toContain("MATCH (b)");
   });
 
+  test("reconfigures the accessible label and placeholder without replacing the document", () => {
+    const { rerender } = renderWithProviders(
+      <QueryEditor
+        value=""
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+        diagnostics={[]}
+        completionSchema={schema}
+        ariaLabel="Entity query"
+        placeholder="Enter a query"
+      />,
+    );
+    expect(screen.getByRole("textbox", { name: "Entity query" })).toBeInTheDocument();
+    expect(screen.getByText("Enter a query")).toHaveClass("cm-placeholder");
+
+    rerender(
+      <QueryEditor
+        value=""
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+        diagnostics={[]}
+        completionSchema={schema}
+        ariaLabel="Zapytanie encji"
+        placeholder="Wpisz zapytanie"
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Zapytanie encji" })).toBeInTheDocument();
+    expect(screen.getByText("Wpisz zapytanie")).toHaveClass("cm-placeholder");
+    expect(screen.queryByText("Enter a query")).not.toBeInTheDocument();
+  });
+
   test("dispatches lint markers for the given diagnostics without crashing, and unmounts cleanly", () => {
     const { rerender, unmount } = renderWithProviders(
       <QueryEditor

@@ -582,7 +582,9 @@ Bulk import lands server-side for both registries: `POST /api/v1/blueprints/impo
 `catalog/CatalogFileImport.kt` report-and-skip precedent, one level up. A request carries
 `documents: List<JsonObject>` (up to 200) plus `replaceExisting: Boolean` (default `false`);
 each document is decoded and classified INDEPENDENTLY — the strict `blueprintJson` decode
-(`explicitNulls = false`, `ignoreUnknownKeys = false`) — so one malformed document is that row's
+(`explicitNulls = false`, `ignoreUnknownKeys = false`). Unknown members, including upstream
+read-only metadata such as `createdAt` or `organization`, are rejected, not silently ignored.
+Toadie's own exports omit response metadata and remain importable unchanged. Thus one malformed document is that row's
 `INVALID` with a fixed message (`Document does not match the expected schema`, never the raw
 kotlinx exception text), never a whole-request `400`; only a non-`JsonObject` array element (a
 string, a number, `null`) fails to decode into `JsonObject` at all and IS a request-level `400`,
@@ -652,13 +654,15 @@ rejects nothing further — this is what makes the dry-run's prediction match th
 eventual pass-2 outcome: both compute their verdicts against the SAME "what the batch will look
 like once it all resolves" snapshot, never against submission order alone.
 
-**The pass-2 residual.** A pass-2 write can still fail — only from a CONCURRENT change during
-the batch (a sibling deleted or edited by another caller between the pre-flight fixpoint and the
-second write), since the fixpoint already proved the full document resolves against the batch as
-planned. That failure reports `ERROR` WITH the row's `id` (and, for an entity, its `findings`)
-and a message naming what happened ("Stored without its deferred targets/references: …") —
-never silently left `CREATED`/`UPDATED`, so a caller always knows the row is missing its deferred
-parts and needs re-import or a manual fix.
+**The pass-2 residual.** A restoration can fail because a sibling or the stored row itself
+was changed/deleted after planning, or because of a storage failure. A zero-row update or
+restoration exception reports `ERROR` with the pass-one committed `id`; entity validation
+failures also carry `findings`. The message starts "Stored without its deferred
+targets/references: …". The id identifies the earlier write, not a guarantee that the row
+still exists. Inspect current state before re-importing or repairing. Every successful
+pass-one write is audited immediately after the service returns, independently of its final
+verdict; pass two emits no duplicate audit. See `persistence.md` for the transaction and
+post-commit logging boundary.
 
 **Reads are plain, uncoordinated snapshots.** `BlueprintService.list()` (already used by the
 registry GET) and the new `EntityService.importSnapshot()` (active blueprint definitions plus

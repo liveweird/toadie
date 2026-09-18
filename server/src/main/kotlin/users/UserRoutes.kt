@@ -1,9 +1,8 @@
 package ch.nokillswit.users
 
 import ch.nokillswit.audit.audit
-import ch.nokillswit.auth.MAX_PASSWORD_BYTES
-import ch.nokillswit.auth.exceedsBcryptLimit
 import ch.nokillswit.auth.hashPassword
+import ch.nokillswit.auth.validatePassword
 import ch.nokillswit.auth.verifyPassword
 import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.authz.ForbiddenException
@@ -36,20 +35,6 @@ import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
-
-/** Minimum accepted password length for create and change. */
-const val MIN_PASSWORD_LENGTH = 10
-
-/** Shared password rule for create and change: the minimum plus bcrypt's byte ceiling. */
-internal fun validatePassword(password: String) {
-    if (password.length < MIN_PASSWORD_LENGTH) {
-        throw BadRequestException("Password must be at least $MIN_PASSWORD_LENGTH characters")
-    }
-    // Longer input would make bcrypt throw (a 500) — see MAX_PASSWORD_BYTES in auth/Passwords.kt.
-    if (exceedsBcryptLimit(password)) {
-        throw BadRequestException("Password must be at most $MAX_PASSWORD_BYTES bytes in UTF-8")
-    }
-}
 
 /** Audit format for a roles/features set: comma-joined sorted names, "" = empty set. */
 private fun <T : Enum<T>> Set<T>.joinedNames(): String = map { it.name }.sorted().joinToString(",")
@@ -193,20 +178,11 @@ fun Application.configureUserRoutes() {
                 validateNameAndEmail(name, email)
                 validateRoles(req.roles)
                 val requestedRole = rolesToStored(req.roles)
-                val existing = userService.read(route.id).orNotFound("User")
-                // Last-admin protection: demoting the final active administrator would lock
-                // everyone out of the management surface. The race-proof check runs inside
-                // updateGuarded's transaction; this pre-check only exists for the audit read.
-                if (existing.role == UserRole.ADMIN && requestedRole != UserRole.ADMIN &&
-                    userService.countActiveAdmins() <= 1
-                ) {
-                    throw ConflictException("The last administrator cannot be demoted")
-                }
-                when (userService.updateGuarded(route.id, name, email, requestedRole)) {
-                    UserService.GuardedMutation.NOT_FOUND -> throw NotFoundException("User not found")
-                    UserService.GuardedMutation.LAST_ADMIN ->
+                val existing = when (val result = userService.updateGuarded(route.id, name, email, requestedRole)) {
+                    UserService.GuardedUpdate.NotFound -> throw NotFoundException("User not found")
+                    UserService.GuardedUpdate.LastAdmin ->
                         throw ConflictException("The last administrator cannot be demoted")
-                    UserService.GuardedMutation.DONE -> Unit
+                    is UserService.GuardedUpdate.Updated -> result.previous
                 }
                 auditUserUpdated(caller.userId, route.id, existing, name = name, email = email)
                 if (requestedRole != existing.role) {
@@ -288,11 +264,8 @@ fun Application.configureUserRoutes() {
                 // decoding -> BadRequestException -> 400.
                 requireAdmin(caller)
                 val req = call.receive<UserFeaturesUpdateRequest>()
-                val existing = userService.read(route.parent.id).orNotFound("User")
                 val requested = req.disabledFeatures.toSet()
-                if (userService.setDisabledFeatures(route.parent.id, requested) == 0) {
-                    throw NotFoundException("User not found")
-                }
+                val existing = userService.setDisabledFeatures(route.parent.id, requested).orNotFound("User")
                 if (requested != existing.disabledFeatures) {
                     audit(
                         "user.features_changed",
@@ -314,10 +287,7 @@ fun Application.configureUserRoutes() {
                 requireSelfOrAdmin(caller, route.parent.id)
                 val req = call.receive<UserLanguageUpdateRequest>()
                 validateLanguage(req.language)
-                val existing = userService.read(route.parent.id).orNotFound("User")
-                if (userService.setLanguage(route.parent.id, req.language) == 0) {
-                    throw NotFoundException("User not found")
-                }
+                val existing = userService.setLanguage(route.parent.id, req.language).orNotFound("User")
                 if (req.language != existing.language) {
                     audit(
                         "user.language_changed",

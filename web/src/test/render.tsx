@@ -3,7 +3,7 @@
 import { type ReactElement } from "react";
 import { render, type RenderOptions } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, type MemoryRouterProps } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { theme } from "../theme";
 
@@ -11,7 +11,7 @@ import { theme } from "../theme";
 const TEST_THEME = { ...theme, respectReducedMotion: true };
 
 interface Options extends Omit<RenderOptions, "wrapper"> {
-  route?: string;
+  route?: NonNullable<MemoryRouterProps["initialEntries"]>[number];
 }
 
 export function renderWithProviders(ui: ReactElement, options: Options = {}) {
@@ -32,4 +32,3 @@ export function renderWithProviders(ui: ReactElement, options: Options = {}) {
 }
 
 export * from "@testing-library/react";
-

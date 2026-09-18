@@ -586,3 +586,65 @@ readability trade-off, not a defect). **DQ-04 remains open by design** — requi
 **Quality gate** status in GitHub repository settings is not something a YAML/doc change can
 enforce; see the unchecked box under Stage 1 above. Prescriptions 1–6 in the review already had
 canonical homes and needed no new artifact.
+
+### 2026-09-18 — full quality review follow-up (2.6.2)
+
+Reviewed baseline: `68914e1` / v2.6.1. This batch addresses the ten newly confirmed findings;
+previously parked branch-rule, optimistic-concurrency, API-guideline, and contrast work stays
+outstanding. Historical review documents above remain snapshots of their reviewed revisions.
+
+- [x] Q01 — Partition entity-query draft/applied/open/picked state by authenticated account;
+  discard ownerless legacy keys. A real PRIVATE-query browser journey switches between two
+  users without clearing storage and verifies API visibility, blank foreign state, outgoing
+  graph parameters, and restoration of the original user's state.
+- [x] Q02 — Share password length/UTF-8 byte validation with bootstrap and explicitly reject
+  burned seed/template passwords before an applicable rotation. Preserve existing passwords
+  and allow restarts with obsolete unused bootstrap configuration.
+- [x] Q03 — Derive identity/role, feature, and language audit deltas from the locked mutation
+  transaction. Lock administrators before the target for demotion/deletion and check for a
+  surviving other administrator. Held PostgreSQL writes reproduce stale audit snapshots and
+  promotion races; the three audit regressions fail against the original implementation.
+- [x] Q04 — Check restoration update counts and retain committed IDs on ERROR, including
+  pass-two unique conflicts. Audit each successful pass-one write before subsequent work,
+  independently of the final verdict, without duplicate pass-two events. Scoped database
+  faults pin residual state and exact-once create/update audits. Logging remains post-commit,
+  not a transactional outbox or process-crash delivery guarantee.
+- [x] Q05 — Enforce an atomic 10,000-live-challenge MFA ceiling. Refuse excess admission with
+  conformant 429 and an audit event before queuing mail; preserve existing challenges and
+  recover capacity after expiry/consumption. Login throttling copy remains accurate in EN/PL.
+- [x] Q06 — Restore pathname, query parameters, and fragment after password or MFA login,
+  with internal-only return destinations.
+- [x] Q07 — Update the compatible Redocly patch to 1.34.20 / js-yaml 4.3.2. Fresh npm audit
+  reports zero vulnerabilities; API generation and drift checks pass without a major upgrade.
+- [x] Q08 — Document strict import decoding consistently in OpenAPI and the Port reference;
+  unknown/export-only metadata is INVALID for that row. Pin real/dry-run behavior with tests,
+  regenerate the typed client, and clarify ERROR-row IDs and import audit timing.
+- [x] Q09 — Refresh the README around both current product worlds, strict/waivable validation,
+  entity queries, and database-backed session families. Keep AGENTS/Claude guidance aligned.
+- [x] Q10 — Reconfigure the query editor's localized accessible label and placeholder without
+  rebuilding its document; add localized-prop regressions.
+
+Independent review found and corrected two issues before integration: validating an unused
+legacy bootstrap setting could have blocked an upgrade restart; counting administrators before
+a concurrent promotion could have falsely rejected a later safe demotion/deletion.
+
+Integrated verification (2026-09-18):
+
+- `./gradlew build :server:koverXmlReport --no-daemon` passed, including Detekt and
+  coverage verification: 1,113 backend tests; 97.67% lines / 80.38% branches. API conformance
+  exercised 76/76 operations and 318/407 operation/status pairs.
+- Frontend build, lint, Knip, generated API drift, Spectral, and coverage gates passed:
+  2,893 tests; 97.64% lines / 95.42% statements / 94.65% functions / 91.15% branches.
+  Spectral retained only registered warnings/hints; no errors or lowered coverage floors.
+- E2E type checking and scenario/coverage-map parity passed for 41 specs. The final full
+  Playwright run passed all 71 journeys against an isolated Compose project. Additional
+  browser probes verified deep-link search/fragment restoration and live Polish editor labels.
+- The frontend npm dependency audit reported zero vulnerabilities. This is not a JVM or
+  container-image vulnerability assessment.
+
+Verification used disposable test data; the development stack and its data were preserved.
+These results are the local pre-push baseline. During PR #70 verification, CI exposed a
+login-test synchronization race: the location probe already existed before navigation completed.
+The destination assertions now wait for the expected route (including MFA and rejected external
+destinations), rather than only waiting for the probe element. No application behavior, timeout,
+or coverage threshold changed.

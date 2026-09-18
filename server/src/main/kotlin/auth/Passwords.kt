@@ -1,6 +1,7 @@
 package ch.nokillswit.auth
 
 import at.favre.lib.crypto.bcrypt.BCrypt
+import io.ktor.server.plugins.BadRequestException
 import java.security.SecureRandom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -9,13 +10,29 @@ import kotlinx.coroutines.withContext
  * bcrypt hashes at most 72 bytes including a null terminator, so a password may be at most
  * 71 UTF-8 bytes — longer input makes at.favre's strict strategy throw (a 500, and on login
  * an account-enumeration oracle: unknown emails short-circuit to 401 before hashing).
- * Enforced as 400 at the API boundary (see `validatePassword` in users/UserRoutes.kt) and
- * treated as never-matching in [verifyPassword].
+ * Enforced as 400 at API boundaries by [validatePassword], applied to bootstrap before hashing,
+ * and treated as never-matching in [verifyPassword].
  */
 const val MAX_PASSWORD_BYTES = 71
 
+/** Minimum accepted password length for account creation, change, reset, and bootstrap. */
+const val MIN_PASSWORD_LENGTH = 10
+
 internal fun exceedsBcryptLimit(plain: String): Boolean =
     plain.toByteArray(Charsets.UTF_8).size > MAX_PASSWORD_BYTES
+
+/** Shared password rule for every path that persists a bcrypt hash. */
+internal fun passwordValidationError(password: String): String? = when {
+    password.length < MIN_PASSWORD_LENGTH -> "Password must be at least $MIN_PASSWORD_LENGTH characters"
+    // Longer input would make bcrypt throw (a 500) — see MAX_PASSWORD_BYTES above.
+    exceedsBcryptLimit(password) -> "Password must be at most $MAX_PASSWORD_BYTES bytes in UTF-8"
+    else -> null
+}
+
+/** HTTP-boundary form of [passwordValidationError]. */
+internal fun validatePassword(password: String) {
+    passwordValidationError(password)?.let { throw BadRequestException(it) }
+}
 
 // Both bcrypt entry points hop to Dispatchers.Default: at cost 12 a hash/verify is hundreds
 // of milliseconds of pure CPU, which must not occupy a request-dispatcher thread.

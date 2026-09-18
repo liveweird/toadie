@@ -254,9 +254,7 @@ class BlueprintService(private val database: R2dbcDatabase) {
         }
         requireTargetsExist(definition, self = request.identifier, known = others.map { it.identifier }.toSet())
 
-        val cascaded = if (renamed) cascadeRename(others, current.identifier, request.identifier) else emptyList()
-
-        Blueprints.update({ (Blueprints.id eq id) and active() }) {
+        val affected = Blueprints.update({ (Blueprints.id eq id) and active() }) {
             it[identifier] = request.identifier
             it[title] = request.title
             it[description] = request.description
@@ -265,7 +263,10 @@ class BlueprintService(private val database: R2dbcDatabase) {
             it[hierarchyRelations] = encodeHierarchyRelations(request.hierarchyRelations)
             it[updatedAt] = System.currentTimeMillis()
         }
-        BlueprintUpdateResult(1, cascaded, if (renamed) current.identifier else null, current.isSystem)
+        if (affected == 0) return@writeTransaction BlueprintUpdateResult(0, emptyList(), null, current.isSystem)
+
+        val cascaded = if (renamed) cascadeRename(others, current.identifier, request.identifier) else emptyList()
+        BlueprintUpdateResult(affected, cascaded, if (renamed) current.identifier else null, current.isSystem)
     }
 
     /** Rewrites every OTHER active row targeting [oldIdentifier], returning the rewritten identifiers. */

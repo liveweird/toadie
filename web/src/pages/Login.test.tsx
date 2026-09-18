@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen, waitFor } from "../test/render";
+import { useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import Login from "./Login";
 
@@ -31,6 +32,11 @@ describe("Login", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
   }
 
+  function LocationProbe() {
+    const location = useLocation();
+    return <output data-testid="location">{location.pathname + location.search + location.hash}</output>;
+  }
+
   test("client-side validation blocks an empty submit without a request", async () => {
     renderWithProviders(<Login />, { route: "/login" });
     const user = userEvent.setup();
@@ -47,6 +53,26 @@ describe("Login", () => {
     await waitFor(() => expect(localStorage.getItem("toadie.auth.token")).toBe("access-1"));
   });
 
+  test("a successful login restores pathname, search, and hash", async () => {
+    fetchMock().mockResolvedValueOnce(jsonResponse(200, SESSION));
+    renderWithProviders(
+      <><Login /><LocationProbe /></>,
+      { route: { pathname: "/login", state: { from: { pathname: "/entities", search: "?blueprint=_team", hash: "#quality" } } } },
+    );
+    await submit();
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/entities?blueprint=_team#quality"));
+  });
+
+  test("a successful login refuses an external return location", async () => {
+    fetchMock().mockResolvedValueOnce(jsonResponse(200, SESSION));
+    renderWithProviders(
+      <><Login /><LocationProbe /></>,
+      { route: { pathname: "/login", state: { from: { pathname: "//example.invalid/steal" } } } },
+    );
+    await submit();
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/));
+  });
+
   test("401 shows the invalid-credentials message", async () => {
     fetchMock().mockResolvedValueOnce(jsonResponse(401, { title: "Unauthorized", status: 401 }));
     renderWithProviders(<Login />, { route: "/login" });
@@ -58,7 +84,7 @@ describe("Login", () => {
     fetchMock().mockResolvedValueOnce(jsonResponse(429, { title: "Too Many Requests", status: 429 }));
     renderWithProviders(<Login />, { route: "/login" });
     await submit();
-    expect(await screen.findByText(/Too many failed login attempts/)).toBeInTheDocument();
+    expect(await screen.findByText("Too many sign-in attempts. Try again shortly.")).toBeInTheDocument();
   });
 
   test("an unexpected status shows the generic status message", async () => {
@@ -89,7 +115,10 @@ describe("Login", () => {
         }),
       );
     const user = userEvent.setup();
-    renderWithProviders(<Login />, { route: "/login" });
+    renderWithProviders(
+      <><Login /><LocationProbe /></>,
+      { route: { pathname: "/login", state: { from: { pathname: "/files", search: "?file=123", hash: "#yaml" } } } },
+    );
     await submit();
 
     // The card switched to the PIN step — no session yet.
@@ -101,6 +130,7 @@ describe("Login", () => {
     await user.click(screen.getByRole("button", { name: "Verify code" }));
 
     await waitFor(() => expect(localStorage.getItem("toadie.auth.token")).toBe("t"));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/files?file=123#yaml"));
     const [url, init] = fetchMock().mock.calls.at(-1)!;
     expect(url).toBe("/api/v1/login/mfa");
     expect(JSON.parse((init as { body: string }).body)).toEqual({

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { isBoolean, isString, useStoredState } from "./useStoredState";
+import { isBoolean, isString } from "./useStoredState";
+import { useEntityQueryStoredState } from "./useEntityQueryStoredState";
 
 /**
  * The ONE shared entity-query state for BOTH the Entity graph and Entity hierarchy canvases
@@ -20,7 +21,7 @@ import { isBoolean, isString, useStoredState } from "./useStoredState";
  * it, and `run()` no-ops on a blank draft (Run/Mod+Enter's existing guard, restated here so
  * every caller gets it for free).
  *
- * **The collapsible Query section (2.4.1).** `open`/`setOpen` persist under `entityQuery.open`
+ * **The collapsible Query section (2.4.1).** `open`/`setOpen` persist under the account-scoped `open` key
  * (default `false`, shared like the draft/applied pair — collapsed on a first visit, remembered
  * across the two canvases and reloads); `runText` — the saved-query pick and every canvas
  * context action — also opens the section, since landing a query nobody can see would be worse
@@ -42,21 +43,18 @@ export function useEntityQuery(): {
   open: boolean;
   setOpen: (open: boolean) => void;
 } {
-  const [draft, setDraftRaw] = useStoredState("entityQuery.text", "", isString);
-  const [storedApplied, setStoredApplied] = useStoredState("entityQuery.applied", "", isString);
-  const [open, setOpen] = useStoredState("entityQuery.open", false, isBoolean);
+  const [draft, setDraftRaw] = useEntityQueryStoredState("text", "", isString);
+  const [storedApplied, setStoredApplied] = useEntityQueryStoredState("applied", "", isString);
+  const [open, setOpen] = useEntityQueryStoredState("open", false, isBoolean);
 
   const applied = draft.trim() === "" ? "" : storedApplied;
 
-  // Normalize a legacy stale pair (a blank draft with a leftover non-blank `applied`, possible
-  // before this invariant existed) on mount, so the FIRST request already omits `query` rather
-  // than waiting for a `run()`/`setDraft` round trip that may never come.
+  // Normalize a stale pair (a blank draft with a leftover non-blank `applied`) on mount and
+  // after an account partition changes. The render-time derivation above already keeps it out
+  // of the first request; this also prevents a later edit from resurrecting the stale value.
   useEffect(() => {
     if (draft.trim() === "" && storedApplied !== "") setStoredApplied("");
-    // Runs once per mount by design — a later draft edit is handled by the `applied` derivation
-    // above and by `setDraft` below, not by re-running this effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [draft, storedApplied, setStoredApplied]);
 
   function setDraft(value: string) {
     setDraftRaw(value);

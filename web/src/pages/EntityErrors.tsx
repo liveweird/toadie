@@ -22,6 +22,7 @@ import TableLoadingRow from "../components/TableLoadingRow";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 import { useEntityQuery } from "../hooks/useEntityQuery";
+import { useEntityQueryStoredState } from "../hooks/useEntityQueryStoredState";
 import { isStringArray, useStoredState } from "../hooks/useStoredState";
 import { editBlueprintPath } from "../utils/blueprintLinks";
 import { classOfEntityCode, colorOfEntityClass, ENTITY_ERROR_CLASSES } from "../utils/entityErrorClasses";
@@ -55,8 +56,8 @@ export default function EntityErrors() {
     isStringArray,
   );
   const query = useEntityQuery();
-  const [, setPickedQuery] = useStoredState<string | null>(
-    "entityQuery.picked",
+  const [, setPickedQuery] = useEntityQueryStoredState<string | null>(
+    "picked",
     null,
     (v) => v === null || typeof v === "string",
   );

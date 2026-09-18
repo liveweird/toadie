@@ -4,7 +4,8 @@ import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
-import ch.nokillswit.infra.importing.OntologyImportStatus
+import ch.nokillswit.infra.importing.ImportMutation
+import ch.nokillswit.infra.importing.ImportMutationKind
 import ch.nokillswit.infra.importing.requireBatchSize
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -138,8 +139,9 @@ fun Application.configureBlueprintRoutes() {
                 requireAdmin(caller)
                 val request = call.receive<BlueprintImportRequest>()
                 requireBatchSize(request.documents.size)
-                val rows = blueprintService.import(request.documents, caller.userId, request.replaceExisting)
-                rows.forEach { row -> auditImportedBlueprintRow(caller.userId, row) }
+                val rows = blueprintService.import(request.documents, caller.userId, request.replaceExisting) { mutation ->
+                    auditImportedBlueprintMutation(caller.userId, mutation)
+                }
                 call.respondBlueprint(HttpStatusCode.OK, BlueprintImportResponse(rows))
             }
         }
@@ -148,27 +150,24 @@ fun Application.configureBlueprintRoutes() {
 
 /**
  * `blueprint.created`/`blueprint.updated`, `import: true`, `system: true` on an updated system
- * row — the plain create/update audit shape, reduced.
+ * row — the plain create/update audit shape, emitted from the committed pass-1 mutation.
  */
-private fun auditImportedBlueprintRow(callerId: UInt, row: BlueprintImportRow) {
-    val id = row.id ?: return
-    val identifier = row.identifier
-    when (row.status) {
-        OntologyImportStatus.CREATED -> audit(
+private fun auditImportedBlueprintMutation(callerId: UInt, mutation: ImportMutation) {
+    when (mutation.kind) {
+        ImportMutationKind.CREATED -> audit(
             "blueprint.created",
             "byUserId" to callerId.toLong(),
-            "blueprintId" to id.toLong(),
-            "identifier" to identifier,
+            "blueprintId" to mutation.id.toLong(),
+            "identifier" to mutation.identifier,
             "import" to true,
         )
-        OntologyImportStatus.UPDATED -> audit(
+        ImportMutationKind.UPDATED -> audit(
             "blueprint.updated",
             "byUserId" to callerId.toLong(),
-            "blueprintId" to id.toLong(),
-            "identifier" to identifier,
+            "blueprintId" to mutation.id.toLong(),
+            "identifier" to mutation.identifier,
             "import" to true,
-            "system" to (identifier?.let { isSystemIdentifier(it) } == true),
+            "system" to mutation.system,
         )
-        else -> Unit
     }
 }

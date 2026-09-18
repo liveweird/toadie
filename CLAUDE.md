@@ -34,6 +34,12 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 
 ## Automated verification
 
+User audit deltas come from the locked mutation transaction, including overlapping reversals.
+Ontology imports audit committed pass-one writes independently of final restoration verdicts.
+Keep bootstrap validation conditional on an applicable seed rotation, bound live MFA challenges,
+and partition private query browser state per account. The exact invariants and regression
+checks live in `.claude/docs/{persistence,security,testing}.md` and `web/CLAUDE.md`.
+
 Catalog mutations and their structural history events commit in one transaction. Keep event
 insertion inside the service write, with a required actor; routes emit security audit logs only
 after success. Imports retain one transaction per document. Fault-injection tests must prove

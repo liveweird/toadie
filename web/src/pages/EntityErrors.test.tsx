@@ -194,13 +194,13 @@ describe("EntityErrors page", () => {
     await user.click(await screen.findByRole("button", { name: "Open in graph" }));
 
     expect(await screen.findByTestId("probe")).toHaveTextContent("/entity-graph");
-    expect(localStorage.getItem("toadie.viewSettings.entityQuery.text")).toBe(
+    expect(localStorage.getItem("toadie.viewSettings.entityQuery.account.1.text")).toBe(
       JSON.stringify("MATCH (n:nope) RETURN n"),
     );
-    expect(localStorage.getItem("toadie.viewSettings.entityQuery.applied")).toBe(
+    expect(localStorage.getItem("toadie.viewSettings.entityQuery.account.1.applied")).toBe(
       JSON.stringify("MATCH (n:nope) RETURN n"),
     );
-    expect(localStorage.getItem("toadie.viewSettings.entityQuery.picked")).toBe(JSON.stringify("5"));
+    expect(localStorage.getItem("toadie.viewSettings.entityQuery.account.1.picked")).toBe(JSON.stringify("5"));
   });
 
   test("toggling the Stale chip filters rows client-side", async () => {

@@ -7,7 +7,8 @@ import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.entityquery.EntityQueryCheckRequest
 import ch.nokillswit.entityquery.EntityQueryCheckResponse
 import ch.nokillswit.entityquery.MAX_QUERY_LENGTH
-import ch.nokillswit.infra.importing.OntologyImportStatus
+import ch.nokillswit.infra.importing.ImportMutation
+import ch.nokillswit.infra.importing.ImportMutationKind
 import ch.nokillswit.infra.importing.requireBatchSize
 import ch.nokillswit.infra.paging.SortField
 import ch.nokillswit.infra.paging.optionalString
@@ -188,8 +189,9 @@ fun Application.configureEntityRoutes() {
                 val caller = call.caller()
                 val request = call.receive<EntityImportRequest>()
                 requireBatchSize(request.documents.size)
-                val rows = entityService.import(request.documents, caller.userId, request.replaceExisting)
-                rows.forEach { row -> auditImportedEntityRow(caller.userId, row) }
+                val rows = entityService.import(request.documents, caller.userId, request.replaceExisting) { mutation ->
+                    auditImportedEntityMutation(caller.userId, mutation)
+                }
                 call.respondEntity(HttpStatusCode.OK, EntityImportResponse(rows))
             }
             // Phase 7 (2.0.0, entity query bar): the editor's live-diagnostics call — a pure
@@ -225,26 +227,24 @@ private fun requireQueryLength(query: String?) {
     }
 }
 
-/** `entity.created`/`entity.updated`, `import: true` — the plain create/update audit shape, reduced. */
-private fun auditImportedEntityRow(callerId: UInt, row: EntityImportRow) {
-    val id = row.id ?: return
-    when (row.status) {
-        OntologyImportStatus.CREATED -> audit(
+/** `entity.created`/`entity.updated`, `import: true` — emitted from the committed pass-1 mutation. */
+private fun auditImportedEntityMutation(callerId: UInt, mutation: ImportMutation) {
+    when (mutation.kind) {
+        ImportMutationKind.CREATED -> audit(
             "entity.created",
             "byUserId" to callerId.toLong(),
-            "entityId" to id.toLong(),
-            "blueprint" to row.blueprint,
-            "identifier" to row.identifier,
+            "entityId" to mutation.id.toLong(),
+            "blueprint" to mutation.blueprint,
+            "identifier" to mutation.identifier,
             "import" to true,
         )
-        OntologyImportStatus.UPDATED -> audit(
+        ImportMutationKind.UPDATED -> audit(
             "entity.updated",
             "byUserId" to callerId.toLong(),
-            "entityId" to id.toLong(),
-            "blueprint" to row.blueprint,
-            "identifier" to row.identifier,
+            "entityId" to mutation.id.toLong(),
+            "blueprint" to mutation.blueprint,
+            "identifier" to mutation.identifier,
             "import" to true,
         )
-        else -> Unit
     }
 }

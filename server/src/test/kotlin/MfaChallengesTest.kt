@@ -1,8 +1,12 @@
 package ch.nokillswit
 
 import ch.nokillswit.auth.MfaChallenges
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -11,8 +15,8 @@ import kotlin.test.assertTrue
 class MfaChallengesTest {
 
     private var now = 1_000_000L
-    private fun store(ttlMillis: Long = 300_000, maxAttempts: Int = 5) =
-        MfaChallenges(ttlMillis, maxAttempts) { now }
+    private fun store(ttlMillis: Long = 300_000, maxAttempts: Int = 5, maxTracked: Int = 10_000) =
+        MfaChallenges(ttlMillis, maxAttempts, maxTracked) { now }
 
     @Test
     fun `a correct code succeeds exactly once - the challenge is single-use`() {
@@ -85,16 +89,49 @@ class MfaChallengesTest {
     }
 
     @Test
-    fun `the store prunes expired entries once oversized instead of growing without bound`() {
-        val s = store(ttlMillis = 1_000)
-        val stale = (1..10_001).map { s.issue(it.toUInt()) }
+    fun `capacity is a hard live-entry ceiling and expiry reopens admission`() {
+        val s = store(ttlMillis = 1_000, maxTracked = 2)
+        val stale = listOf(s.issue(1u), s.issue(2u))
+        assertFailsWith<MfaChallenges.CapacityExceededException> { s.issue(3u) }
+
         now += 2_000
-        // The next issue triggers the prune; every stale entry is now unknown.
+        // Admission deterministically prunes expiry before checking capacity.
         val fresh = s.issue(99u)
-        assertEquals(
-            "unknown_challenge",
-            (s.verify(stale.first().challengeId, stale.first().code) as MfaChallenges.Outcome.Failure).reason,
-        )
+        stale.forEach {
+            assertEquals(
+                "unknown_challenge",
+                (s.verify(it.challengeId, it.code) as MfaChallenges.Outcome.Failure).reason,
+            )
+        }
         assertIs<MfaChallenges.Outcome.Success>(s.verify(fresh.challengeId, fresh.code))
+    }
+
+    @Test
+    fun `concurrent admissions cannot overshoot capacity`() {
+        val capacity = 7
+        val contenders = 32
+        val s = store(maxTracked = capacity)
+        val ready = CountDownLatch(contenders)
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(contenders)
+        try {
+            val futures = (1..contenders).map { userId ->
+                executor.submit<Result<MfaChallenges.IssuedChallenge>> {
+                    ready.countDown()
+                    start.await()
+                    runCatching { s.issue(userId.toUInt()) }
+                }
+            }
+            assertTrue(ready.await(5, TimeUnit.SECONDS), "all contenders should reach the admission gate")
+            start.countDown()
+            val results = futures.map { it.get(5, TimeUnit.SECONDS) }
+            assertEquals(capacity, results.count { it.isSuccess })
+            assertEquals(
+                contenders - capacity,
+                results.count { it.exceptionOrNull() is MfaChallenges.CapacityExceededException },
+            )
+        } finally {
+            executor.shutdownNow()
+        }
     }
 }

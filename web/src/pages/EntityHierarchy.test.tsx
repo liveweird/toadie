@@ -106,6 +106,7 @@ describe("EntityHierarchy page", () => {
     mockFetch = vi.fn();
     vi.stubGlobal("fetch", mockFetch);
     localStorage.setItem(TOKEN_KEY, "fake-token");
+    localStorage.setItem("toadie.auth.userId", "9");
   });
 
   afterEach(() => {
@@ -466,7 +467,7 @@ describe("EntityHierarchy page", () => {
       fireEvent.click(screen.getByRole("button", { name: /^Query/ }));
       await user.type(screen.getByRole("textbox", { name: "Entity query" }), "MATCH (a)");
 
-      await waitFor(() => expect(localStorage.getItem("toadie.viewSettings.entityQuery.text")).toBe('"MATCH (a)"'));
+      await waitFor(() => expect(localStorage.getItem("toadie.viewSettings.entityQuery.account.9.text")).toBe('"MATCH (a)"'));
     });
   });
 

@@ -7,6 +7,7 @@ import io.ktor.client.call.body
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import java.util.UUID
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -18,6 +19,18 @@ import kotlin.test.assertTrue
  * seed state afterwards (TestSeedState).
  */
 class BootstrapTest {
+
+    private fun assertProductionRejectsBootstrapPassword(password: String, messagePart: String) = testApplication {
+        configureApp(
+            "bootstrap.adminInitialPassword" to password,
+            "jwt.secret" to "strong-${UUID.randomUUID()}",
+            "mail.transport" to "disabled",
+        )
+        serverConfig { developmentMode = false }
+        withSeedRestored {
+            assertStartupFails(messagePart) { startApplication() }
+        }
+    }
 
     @Test
     fun `ADMIN_INITIAL_PASSWORD rotates the seed admin so changeme stops working`() = testApplication {
@@ -85,4 +98,49 @@ class BootstrapTest {
             startApplication() // must not throw: rotation happens before the fail-closed check
         }
     }
+
+    @Test
+    fun `production mode rejects the public seed password before hashing`() {
+        assertProductionRejectsBootstrapPassword("changeme", "well-known seed or template")
+    }
+
+    @Test
+    fun `production mode rejects the deployment template password before hashing`() {
+        assertProductionRejectsBootstrapPassword("CHANGE-ME", "well-known seed or template")
+    }
+
+    @Test
+    fun `production mode applies the normal minimum length to the bootstrap password`() {
+        assertProductionRejectsBootstrapPassword("short", "at least 10 characters")
+    }
+
+    @Test
+    fun `production mode applies the bcrypt UTF-8 byte ceiling to the bootstrap password`() {
+        assertProductionRejectsBootstrapPassword("🐸".repeat(18), "at most 71 bytes in UTF-8")
+    }
+    @Test
+    fun `production restart ignores obsolete invalid bootstrap values after rotation`() = runBlocking {
+        withSeedRestored {
+            var chosenHash: String? = null
+            testApplication {
+                configureApp("bootstrap.adminInitialPassword" to "chosen-${UUID.randomUUID()}")
+                startApplication()
+                chosenHash = TestUsers.service.findWithIdByEmail(SEED_ADMIN_EMAIL)?.second?.passwordHash
+                assertTrue(!chosenHash.isNullOrEmpty())
+            }
+            for (obsolete in listOf("CHANGE-ME", "short", "🐸".repeat(18))) {
+                testApplication {
+                    configureApp(
+                        "bootstrap.adminInitialPassword" to obsolete,
+                        "jwt.secret" to "strong-${UUID.randomUUID()}",
+                        "mail.transport" to "disabled",
+                    )
+                    serverConfig { developmentMode = false }
+                    startApplication()
+                    assertEquals(chosenHash, TestUsers.service.findWithIdByEmail(SEED_ADMIN_EMAIL)?.second?.passwordHash)
+                }
+            }
+        }
+    }
+
 }

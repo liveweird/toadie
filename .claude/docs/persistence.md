@@ -1,3 +1,16 @@
+### User mutation snapshots and administrator locks
+
+- **Applies when:** changing user identity/role, language, disabled features, or deleting a user.
+- **Requirement:** read the active target under `FOR UPDATE` and return the mutation's actual
+  predecessor from the same transaction. Build audit deltas from that result after success.
+  A demotion or deletion first locks active administrators in ID order, then the target;
+  promotion and other writes lock only their target. Decide last-admin protection by whether
+  a locked **other** administrator survives, not a count that assumes the target was already
+  an administrator in the earlier snapshot. Feature writers share the user-row lock.
+- **Reference:** `users/UserService.kt`, `users/UserRoutes.kt`.
+- **Enforcement:** `UserAuditConcurrencyTest`, `UserRoutesTest`, `FeatureFlagsTest`, `AuditTest`.
+- **Exception:** test-only fixture writes may bypass these paths; production callers may not.
+
 ### Persistence
 
 PostgreSQL is the only database. Connection settings come from the `postgres:` block in `application.yaml` (env-overridable via `POSTGRES_JDBC_URL`, `POSTGRES_R2DBC_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`); defaults match the `docker compose up postgres` service (host port **5433** — Lettuce may occupy 5432 on the same machine; in-network consumers use `postgres:5432`). There is one persistence stack:
@@ -219,10 +232,13 @@ and is reported `ERROR` naming the row's `id` rather than silently left `CREATED
 concurrent-change residual, not a bug in the ordering. `planBlueprintImport`/`planEntityImport`
 themselves touch no table at all: pure functions over the snapshot and the batch, so the two
 planner test files run without Docker. Pass-2 writes share the SAME per-document
-storage-failure classification as pass-1 (rethrow cancellation, a unique-violation race as
-EXISTS, anything else as a safe-message ERROR) via one extracted `storageFailureRow` helper
-per file, so an unexpected pass-2 failure keeps the row's already-committed id and reports
-report-and-skip instead of failing the whole batch with a 500.
+storage-failure helper as pass one, but retain the committed id and report ERROR for any
+restoration failure, including zero affected rows and unique conflicts. Only a pass-one
+unique race with no committed id is EXISTS. Cancellation propagates. Immediately after each
+successful pass-one service return, a required synchronous committed-mutation callback emits
+that row's create/update audit before another row or pass two begins. Final ERROR verdicts or
+later cancellation cannot erase this event; pass two emits no duplicate. Audit logs remain
+post-commit external output, not an atomic database outbox or a process-crash delivery guarantee.
 
 Current migrations are `V1`–`V35` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 

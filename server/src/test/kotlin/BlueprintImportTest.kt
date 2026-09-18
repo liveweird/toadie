@@ -12,6 +12,7 @@ import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.infra.importing.OntologyImportStatus
+import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -23,7 +24,12 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.util.UUID
+import java.sql.DriverManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
@@ -55,6 +61,71 @@ class BlueprintImportTest {
 
     private suspend fun HttpClient.importCheck(request: BlueprintImportRequest) =
         postJson("/api/v1/blueprints/import/check", request)
+
+    private fun sqlLiteral(value: String): String = "'${value.replace("'", "''")}'"
+
+    /** Suppresses only the pass-2 UPDATE that restores this fixture's `peer` relation. */
+    private suspend fun <T> withSuppressedRestoration(identifier: String, block: suspend () -> T): T {
+        val suffix = UUID.randomUUID().toString().replace("-", "")
+        val function = "suppress_blueprint_import_$suffix"
+        val trigger = "suppress_blueprint_import_trigger_$suffix"
+        var installed = false
+        return try {
+            withContext(NonCancellable + Dispatchers.IO) {
+                DriverManager.getConnection(
+                    PostgresTestSupport.jdbcUrl,
+                    PostgresTestSupport.user,
+                    PostgresTestSupport.password,
+                ).use { connection ->
+                    connection.createStatement().use { statement ->
+                        statement.execute(
+                            """
+                                CREATE FUNCTION $function() RETURNS trigger LANGUAGE plpgsql AS ${'$'}body${'$'}
+                                BEGIN
+                                    IF NEW.identifier = ${sqlLiteral(identifier)}
+                                       AND NOT COALESCE((OLD.definition::jsonb -> 'relations') ? 'peer', FALSE)
+                                       AND COALESCE((NEW.definition::jsonb -> 'relations') ? 'peer', FALSE) THEN
+                                        RETURN NULL;
+                                    END IF;
+                                    RETURN NEW;
+                                END
+                                ${'$'}body${'$'}
+                            """.trimIndent(),
+                        )
+                        try {
+                            statement.execute(
+                                "CREATE TRIGGER $trigger BEFORE UPDATE ON blueprints " +
+                                    "FOR EACH ROW EXECUTE FUNCTION $function()",
+                            )
+                            installed = true
+                        } catch (failure: Exception) {
+                            runCatching { statement.execute("DROP FUNCTION IF EXISTS $function()") }
+                            throw failure
+                        }
+                    }
+                }
+            }
+            block()
+        } finally {
+            if (installed) {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    DriverManager.getConnection(
+                        PostgresTestSupport.jdbcUrl,
+                        PostgresTestSupport.user,
+                        PostgresTestSupport.password,
+                    ).use { connection ->
+                        connection.createStatement().use { statement ->
+                            try {
+                                statement.execute("DROP TRIGGER IF EXISTS $trigger ON blueprints")
+                            } finally {
+                                statement.execute("DROP FUNCTION IF EXISTS $function()")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     @Test
     fun `anonymous is 401 and a regular user is 403`() = testApplication {
@@ -121,6 +192,46 @@ class BlueprintImportTest {
     }
 
     @Test
+    fun `a suppressed pass-2 update reports ERROR but audits the committed create once`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("bp-import-admin"), UserRole.ADMIN)
+        val a = identifier("bp-residual-a")
+        val b = identifier("bp-residual-b")
+        val peerToB = RelationDefinition(title = "Peer", target = b, required = false, many = false)
+        val peerToA = RelationDefinition(title = "Peer", target = a, required = false, many = false)
+        val request = BlueprintImportRequest(
+            documents = listOf(
+                doc(BlueprintRequest(identifier = a, title = "A", schema = BlueprintSchema(), relations = mapOf("peer" to peerToB))),
+                doc(BlueprintRequest(identifier = b, title = "B", schema = BlueprintSchema(), relations = mapOf("peer" to peerToA))),
+            ),
+        )
+        try {
+            withAuditCapture { capture ->
+                val response = withSuppressedRestoration(a) { admin.import(request).body<BlueprintImportResponse>() }
+                val residual = response.results[0]
+                assertEquals(OntologyImportStatus.ERROR, residual.status)
+                assertNotNull(residual.id)
+                assertTrue(residual.message!!.contains("Blueprint vanished"))
+
+                assertNotNull(
+                    capture.awaitEvent {
+                        it.message == "blueprint.created" && it.hasKeyValue("identifier", a) && it.hasKeyValue("import", true)
+                    },
+                )
+                assertEquals(
+                    1,
+                    capture.events.count { it.message == "blueprint.created" && it.hasKeyValue("identifier", a) },
+                )
+
+                val stored: BlueprintResponse = admin.get("/api/v1/blueprints/${residual.id}").body()
+                assertTrue(stored.relations.isEmpty(), "pass 1 remains committed without the deferred relation")
+            }
+        } finally {
+            TestBlueprints.remove(a, b)
+        }
+    }
+
+    @Test
     fun `an existing blueprint reports EXISTS then UPDATED, extending the system blueprint`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient(identifier("bp-import-admin"), UserRole.ADMIN)
@@ -166,6 +277,26 @@ class BlueprintImportTest {
         val response = admin.import(BlueprintImportRequest(documents = listOf(bad))).body<BlueprintImportResponse>()
         assertEquals(OntologyImportStatus.INVALID, response.results[0].status)
         assertNull(response.results[0].id)
+    }
+
+    @Test
+    fun `read-only export metadata is rejected per row by import and dry-run`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("bp-import-admin"), UserRole.ADMIN)
+        val id = identifier("bp-metadata")
+        val document = JsonObject(doc(simple(id)) + ("organization" to JsonPrimitive("acme")))
+        val request = BlueprintImportRequest(documents = listOf(document))
+        try {
+            val check = admin.importCheck(request).body<BlueprintImportResponse>().results.single()
+            val real = admin.import(request).body<BlueprintImportResponse>().results.single()
+            assertEquals(OntologyImportStatus.INVALID, check.status)
+            assertEquals(OntologyImportStatus.INVALID, real.status)
+            assertEquals(IMPORT_SCHEMA_MESSAGE, check.message)
+            assertEquals(IMPORT_SCHEMA_MESSAGE, real.message)
+            assertTrue(TestBlueprints.rawRows().none { !it.markedAsDeleted && it.identifier.equals(id, ignoreCase = true) })
+        } finally {
+            TestBlueprints.remove(id)
+        }
     }
 
     @Test
