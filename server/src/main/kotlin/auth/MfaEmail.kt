@@ -1,6 +1,7 @@
 package ch.nokillswit.auth
 
 import ch.nokillswit.audit.audit
+import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.infra.mail.LocalizedText
 import ch.nokillswit.infra.mail.Mailer
 import ch.nokillswit.infra.mail.respondMailUnavailable
@@ -47,7 +48,7 @@ internal fun mfaEmailBody(name: String, code: String, ttlMinutes: Long, language
  * The MFA half of the login handler — the issuance WORKER, extracted from the route
  * registrar (route files stay declarative; the detekt exemption covers registration, not
  * workers): correct credentials answered with a challenge instead of tokens. Responds
- * itself (503 fail-closed on a mail-less deployment, else the challenge); the login
+ * itself (503 without mail, 429 at challenge capacity, otherwise the challenge); the login
  * handler returns right after calling it.
  */
 // Mail-send boundary: any provider failure is classified and audited without its text (security.md), cancellation is rethrown above.
@@ -68,7 +69,12 @@ internal suspend fun issueMfaChallenge(
         call.respondMailUnavailable("multi-factor login")
         return
     }
-    val challenge = challenges.issue(userId, user.authVersion)
+    val challenge = try {
+        challenges.issue(userId, user.authVersion)
+    } catch (_: MfaChallenges.CapacityExceededException) {
+        audit("login.mfa_capacity_rejected", "email" to user.email, "userId" to userId.toLong())
+        throw TooManyRequestsException("Too many pending sign-in challenges — try again shortly")
+    }
     audit("login.mfa_challenge", "email" to user.email, "userId" to userId.toLong())
     // Challenge stored BEFORE responding (the user submits the code right away);
     // only the delivery is fire-and-forget, like the password-reset email.

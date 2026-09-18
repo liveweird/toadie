@@ -1,6 +1,8 @@
 package ch.nokillswit.blueprints
 
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
+import ch.nokillswit.infra.importing.ImportMutation
+import ch.nokillswit.infra.importing.ImportMutationKind
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.infra.importing.decodeDocument
 import ch.nokillswit.infra.importing.orderWithDeferral
@@ -289,8 +291,8 @@ fun planBlueprintImport(
 private const val BLUEPRINT_STORAGE_FAILED = "Storage failed"
 
 // Per-document isolation, shared by both writer passes: rethrow cancellation, classify a
-// unique-violation race as EXISTS, anything else as a safe-message ERROR — never let an
-// unexpected storage failure escape as a 500 and fail the whole batch (report & skip).
+// pass-1 unique-violation race (no committed id) as EXISTS, and every pass-2 failure as an
+// ERROR retaining its committed id — never let an unexpected failure escape the batch.
 @Suppress("TooGenericExceptionCaught")
 internal fun storageFailureRow(
     e: Exception,
@@ -298,7 +300,7 @@ internal fun storageFailureRow(
     identifier: String?,
     id: UInt? = null,
     messageFor: (String) -> String = { it },
-): BlueprintImportRow = if (e.isUniqueViolation()) {
+): BlueprintImportRow = if (id == null && e.isUniqueViolation()) {
     BlueprintImportRow(index, identifier, OntologyImportStatus.EXISTS, id = id, message = messageFor("created concurrently"))
 } else {
     BlueprintImportRow(index, identifier, OntologyImportStatus.ERROR, id = id, message = messageFor(BLUEPRINT_STORAGE_FAILED))
@@ -310,7 +312,12 @@ internal fun storageFailureRow(
  * the ordinary V27 table lock) → pass 2 for every stored row with deferred parts. Cancellation
  * always rethrows — a gone client must stop the batch, the `catalog/CatalogFileImport.kt` rule.
  */
-suspend fun BlueprintService.import(documents: List<JsonObject>, callerId: UInt, replaceExisting: Boolean): List<BlueprintImportRow> {
+suspend fun BlueprintService.import(
+    documents: List<JsonObject>,
+    callerId: UInt,
+    replaceExisting: Boolean,
+    onCommitted: (ImportMutation) -> Unit,
+): List<BlueprintImportRow> {
     val registry = list().map { RegistryBlueprint(it.id, it.identifier, it.system) }
     val plan = planBlueprintImport(documents, registry, replaceExisting, knownHierarchies())
     val rows = arrayOfNulls<BlueprintImportRow>(documents.size)
@@ -319,7 +326,11 @@ suspend fun BlueprintService.import(documents: List<JsonObject>, callerId: UInt,
     val storedIds = mutableMapOf<Int, UInt>()
     for (idx in plan.order) {
         val verdict = plan.verdicts[idx] as? BlueprintPlanVerdict.Store ?: continue
-        rows[idx] = writeBlueprintRow(idx, verdict, callerId, storedIds)
+        val write = writeBlueprintRow(idx, verdict, callerId, storedIds)
+        rows[idx] = write.row
+        // Outside writeBlueprintRow's storage-failure classifier: audit/log failures and
+        // cancellation are never mislabeled as a database ERROR after the mutation committed.
+        write.mutation?.let(onCommitted)
     }
     for (idx in plan.order) {
         val verdict = plan.verdicts[idx] as? BlueprintPlanVerdict.Store ?: continue
@@ -330,6 +341,8 @@ suspend fun BlueprintService.import(documents: List<JsonObject>, callerId: UInt,
     return rows.map { it ?: error("blueprint import row left unset") }
 }
 
+private data class BlueprintPass1Write(val row: BlueprintImportRow, val mutation: ImportMutation? = null)
+
 // Per-document isolation: one row's unexpected failure is reported as ERROR and never fails siblings (report & skip).
 @Suppress("TooGenericExceptionCaught")
 private suspend fun BlueprintService.writeBlueprintRow(
@@ -337,28 +350,34 @@ private suspend fun BlueprintService.writeBlueprintRow(
     verdict: BlueprintPlanVerdict.Store,
     callerId: UInt,
     storedIds: MutableMap<Int, UInt>,
-): BlueprintImportRow {
+): BlueprintPass1Write {
     val identifier = verdict.request.identifier
     return try {
         if (verdict.existingId == null) {
             val created = create(verdict.pass1, callerId)
             storedIds[index] = created.id
-            BlueprintImportRow(index, identifier, OntologyImportStatus.CREATED, id = created.id)
+            BlueprintPass1Write(
+                BlueprintImportRow(index, identifier, OntologyImportStatus.CREATED, id = created.id),
+                ImportMutation(ImportMutationKind.CREATED, created.id, identifier, system = created.system),
+            )
         } else {
             val result = update(verdict.existingId, verdict.pass1)
             if (result.affected == 0) {
-                BlueprintImportRow(index, identifier, OntologyImportStatus.ERROR, message = "Blueprint vanished")
+                BlueprintPass1Write(BlueprintImportRow(index, identifier, OntologyImportStatus.ERROR, message = "Blueprint vanished"))
             } else {
                 storedIds[index] = verdict.existingId
-                BlueprintImportRow(index, identifier, OntologyImportStatus.UPDATED, id = verdict.existingId)
+                BlueprintPass1Write(
+                    BlueprintImportRow(index, identifier, OntologyImportStatus.UPDATED, id = verdict.existingId),
+                    ImportMutation(ImportMutationKind.UPDATED, verdict.existingId, identifier, system = result.system),
+                )
             }
         }
     } catch (e: CancellationException) {
         throw e
     } catch (e: BadRequestException) {
-        BlueprintImportRow(index, identifier, OntologyImportStatus.INVALID, message = e.message)
+        BlueprintPass1Write(BlueprintImportRow(index, identifier, OntologyImportStatus.INVALID, message = e.message))
     } catch (e: Exception) {
-        storageFailureRow(e, index, identifier)
+        BlueprintPass1Write(storageFailureRow(e, index, identifier))
     }
 }
 
@@ -376,8 +395,16 @@ private suspend fun BlueprintService.pass2Blueprint(
     previousRow: BlueprintImportRow,
 ): BlueprintImportRow =
     try {
-        update(id, verdict.request)
-        previousRow
+        val result = update(id, verdict.request)
+        if (result.affected == 0) {
+            previousRow.copy(
+                status = OntologyImportStatus.ERROR,
+                id = id,
+                message = "Stored without its deferred targets: Blueprint vanished",
+            )
+        } else {
+            previousRow
+        }
     } catch (e: CancellationException) {
         throw e
     } catch (e: BadRequestException) {

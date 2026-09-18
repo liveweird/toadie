@@ -42,6 +42,21 @@ enum class OntologyImportStatus {
     ERROR,
 }
 
+/** A pass-1 write that committed, independent of the row's eventual pass-2 import verdict. */
+enum class ImportMutationKind { CREATED, UPDATED }
+
+/**
+ * Stable audit facts captured immediately after an ontology import write commits. Pass 2 may
+ * later turn the response row into ERROR, but it must neither erase nor emit this mutation.
+ */
+data class ImportMutation(
+    val kind: ImportMutationKind,
+    val id: UInt,
+    val identifier: String,
+    val blueprint: String? = null,
+    val system: Boolean = false,
+)
+
 /**
  * Every decode failure reports this FIXED message rather than the real exception text — the
  * kotlinx/`SerializationException` message carries internal structure (FQCNs, field paths),

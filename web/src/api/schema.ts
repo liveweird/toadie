@@ -26,7 +26,9 @@ export interface paths {
          *     6-digit code is emailed to the account, and the client exchanges it together with the
          *     `challengeId` at `POST /api/v1/login/mfa` for the ordinary `LoginResponse`. On a
          *     deployment without outbound email (`MAIL_TRANSPORT=disabled`) an MFA-enabled login
-         *     fails closed with `503`.
+         *     fails closed with `503`. Pending MFA challenges have an atomic per-instance ceiling
+         *     of 10,000 live entries. At capacity, login returns `429` without issuing a challenge
+         *     or queuing email; existing challenges remain usable and expiry/consumption frees space.
          */
         post: operations["login"];
         delete?: never;
@@ -1421,10 +1423,11 @@ export interface paths {
          * Bulk-import blueprints (report & skip)
          * @description ADMIN only. Phase 6 of Toadie's move from Backstage's fixed System Model to Port.io's
          *     data model (see `.claude/docs/port-data-model.md` "Import and export") — accepts up to
-         *     200 blueprint documents (a Port export, verbatim or with its usual
-         *     `createdAt`/`organization`/… keys still present — an unknown top-level key is that
-         *     row's `INVALID`, never a whole-request `400`) and imports each independently, decoded
-         *     PER DOCUMENT so one malformed entry never fails its siblings.
+         *     200 blueprint documents in the supported Port-shaped request format and imports each
+         *     independently. Unknown members, including upstream read-only metadata such as
+         *     `createdAt` or `organization`, make that row `INVALID`; they are not silently ignored.
+         *     Toadie's own exports omit response metadata and can be imported unchanged. Decoding
+         *     happens PER DOCUMENT so one malformed entry never fails its siblings.
          *
          *     Statuses: `CREATED` (stored clean, `id` set), `UPDATED` (an existing blueprint was
          *     replaced in place — only when `replaceExisting: true`; a system blueprint
@@ -1446,12 +1449,14 @@ export interface paths {
          *     trick, generalized and automatic. A reference through a REQUIRED path
          *     (`hierarchyRelations`/`schema.required` have no bearing here — every blueprint field is
          *     optional at create) never needs this; only a genuine cycle does. A pass-2 failure
-         *     (only possible from a concurrent change during the batch) reports `ERROR` WITH the
-         *     row's `id` and "Stored without its deferred targets: …" — never silently `CREATED`.
+         *     (a concurrent change, zero-row restoration, or storage error) reports `ERROR` WITH
+         *     the pass-one committed `id` and "Stored without its deferred targets: …" — never
+         *     silently `CREATED`/`UPDATED`. The id does not guarantee the row still exists.
          *
-         *     Every stored row audits `blueprint.created`/`blueprint.updated` with `import: true`
-         *     (plus `system: true` on an updated system row) — the same events an ordinary
-         *     create/replace emits, reduced to the identifying fields.
+         *     Each successful pass-one write audits `blueprint.created`/`blueprint.updated` with
+         *     `import: true` (plus `system: true` on an updated system row), reduced to identifying
+         *     fields, before the next write. A later pass-2 `ERROR` or cancellation does not erase
+         *     that event; pass two emits no duplicate. Rows without committed writes do not audit.
          */
         post: operations["importBlueprints"];
         delete?: never;
@@ -1728,7 +1733,10 @@ export interface paths {
          * @description Any authenticated user — entities are a shared workspace, no admin gate (Phase 6 of
          *     Toadie's move from Backstage's fixed System Model to Port.io's data model, see
          *     `.claude/docs/port-data-model.md` "Import and export"). Accepts up to 200 entity
-         *     documents (a Port export, verbatim) and imports each independently, decoded PER
+         *     documents in the supported Port-shaped request format and imports each independently.
+         *     Unknown members, including upstream read-only metadata such as `createdAt` or
+         *     `organization`, make that row `INVALID`; they are not silently ignored. Toadie's own
+         *     exports omit response metadata and can be imported unchanged. Decoding happens PER
          *     DOCUMENT so one malformed entry never fails its siblings.
          *
          *     Statuses: `CREATED` (stored clean, `id` set), `UPDATED` (an existing entity was
@@ -1756,12 +1764,15 @@ export interface paths {
          *     it; a genuine CYCLE defers the lowest-index document's unresolved OPTIONAL references
          *     on its first write and restores them with a second full write once every sibling
          *     exists. A cycle running through a MANDATORY reference cannot be deferred and is
-         *     `INVALID` instead. A pass-2 failure (only possible from a concurrent change during the
-         *     batch) reports `ERROR` WITH the row's `id`, its `findings`, and "Stored without its
-         *     deferred references: …" — never silently `CREATED`.
+         *     `INVALID` instead. A pass-2 failure (a concurrent change, zero-row restoration, or
+         *     storage error) reports `ERROR` WITH the pass-one committed `id` and "Stored without
+         *     its deferred references: …" — never silently `CREATED`/`UPDATED`. Entity validation
+         *     failures also include `findings`; the id does not guarantee the row still exists.
          *
-         *     Every stored row audits `entity.created`/`entity.updated` with `import: true` — the
-         *     same events an ordinary create/replace emits, reduced to the identifying fields.
+         *     Each successful pass-one write audits `entity.created`/`entity.updated` with
+         *     `import: true`, reduced to identifying fields, before the next write. A later pass-2
+         *     `ERROR` or cancellation does not erase that event; pass two emits no duplicate.
+         *     Rows without committed writes do not audit.
          */
         post: operations["importEntities"];
         delete?: never;
@@ -2801,7 +2812,7 @@ export interface components {
          */
         OntologyImportStatus: "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR";
         BlueprintImportRequest: {
-            /** @description The blueprint documents to import (Port's native shape, one per entry — a Port export's usual read-only keys are ignored, not rejected). Each is decoded and classified INDEPENDENTLY, so one malformed document never fails the batch. */
+            /** @description The blueprint documents to import (the supported Port-shaped request, one per entry). Unknown members, including upstream read-only metadata, are rejected as INVALID for that row. Toadie's exports omit response metadata. Each document is decoded and classified INDEPENDENTLY, so one malformed document never fails the batch. */
             documents: {
                 [key: string]: unknown;
             }[];
@@ -2819,7 +2830,7 @@ export interface components {
             status: components["schemas"]["OntologyImportStatus"];
             /**
              * Format: int32
-             * @description The blueprint's id — present for a stored row, for `EXISTS` (the row that already holds this identifier), and for a dry-run's `UPDATED` prediction. Absent (never `null`) for `CREATED`'s prediction and every rejection.
+             * @description The blueprint's id — present for a stored row, for `EXISTS` (the row that already holds this identifier), and for a dry-run's `UPDATED` prediction. A pass-two ERROR retains the earlier committed id, even if the row was subsequently deleted. Absent (never `null`) for a dry-run CREATED prediction or a rejection before storage.
              */
             id?: number;
             /** @description Present on every status except a clean `CREATED`/`UPDATED`. */
@@ -3004,7 +3015,7 @@ export interface components {
             total: number;
         };
         EntityImportRequest: {
-            /** @description The entity documents to import (Port's native shape, one per entry — a Port export's usual read-only keys are ignored, not rejected). Each is decoded and classified INDEPENDENTLY, so one malformed document never fails the batch. */
+            /** @description The entity documents to import (the supported Port-shaped request, one per entry). Unknown members, including upstream read-only metadata, are rejected as INVALID for that row. Toadie's exports omit response metadata. Each document is decoded and classified INDEPENDENTLY, so one malformed document never fails the batch. */
             documents: {
                 [key: string]: unknown;
             }[];
@@ -3024,7 +3035,7 @@ export interface components {
             status: components["schemas"]["OntologyImportStatus"];
             /**
              * Format: int32
-             * @description The entity's id — present for a stored row, for `EXISTS` (the row that already holds this identity), and for a dry-run's `UPDATED` prediction. Absent (never `null`) for `CREATED`'s prediction and every rejection.
+             * @description The entity's id — present for a stored row, for `EXISTS` (the row that already holds this identity), and for a dry-run's `UPDATED` prediction. A pass-two ERROR retains the earlier committed id, even if the row was subsequently deleted. Absent (never `null`) for a dry-run CREATED prediction or a rejection before storage.
              */
             id?: number;
             /** @description Present on every status except a clean `CREATED`/`UPDATED`. */

@@ -862,12 +862,7 @@ class EntityService(
         }
         requireNoFindings(entityFindings(document, currentBlueprint.definition, targetExists, team))
 
-        val cascaded = if (renamed) {
-            cascadeRename(activeBlueprints, currentBlueprint.identifier, currentIdentifier, request.identifier, excludingId = id)
-        } else {
-            emptyList()
-        }
-        Entities.update({ (Entities.id eq id) and active() }) {
+        val affected = Entities.update({ (Entities.id eq id) and active() }) {
             it[identifier] = request.identifier
             it[title] = request.title
             it[icon] = request.icon
@@ -875,7 +870,14 @@ class EntityService(
             it[Entities.document] = blueprintJson.encodeToString(document)
             it[updatedAt] = System.currentTimeMillis()
         }
-        EntityUpdateResult(1, cascaded, if (renamed) currentIdentifier else null)
+        if (affected == 0) return@writeTransaction EntityUpdateResult(0, emptyList(), null)
+
+        val cascaded = if (renamed) {
+            cascadeRename(activeBlueprints, currentBlueprint.identifier, currentIdentifier, request.identifier, excludingId = id)
+        } else {
+            emptyList()
+        }
+        EntityUpdateResult(affected, cascaded, if (renamed) currentIdentifier else null)
     }
 
     /**

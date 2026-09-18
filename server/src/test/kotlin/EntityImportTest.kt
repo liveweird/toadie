@@ -12,6 +12,7 @@ import ch.nokillswit.entities.EntityResponse
 import ch.nokillswit.entities.import
 import ch.nokillswit.entities.importCheck
 import ch.nokillswit.infra.importing.OntologyImportStatus
+import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -19,7 +20,12 @@ import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import java.util.UUID
+import java.sql.DriverManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -47,9 +53,77 @@ class EntityImportTest {
     private suspend fun HttpClient.createBlueprint(request: BlueprintRequest) =
         postJson("/api/v1/blueprints", request).body<ch.nokillswit.blueprints.BlueprintResponse>()
 
+    private suspend fun HttpClient.createEntity(request: EntityRequest) =
+        postJson("/api/v1/entities", request).body<EntityResponse>()
+
     private suspend fun HttpClient.import(request: EntityImportRequest) = postJson("/api/v1/entities/import", request)
 
     private suspend fun HttpClient.importCheck(request: EntityImportRequest) = postJson("/api/v1/entities/import/check", request)
+
+    private fun sqlLiteral(value: String): String = "'${value.replace("'", "''")}'"
+
+    /** Fails only the pass-2 UPDATE that restores this fixture's `peer` relation. */
+    private suspend fun <T> withFailingRestoration(identifier: String, block: suspend () -> T): T {
+        val suffix = UUID.randomUUID().toString().replace("-", "")
+        val function = "fail_entity_import_$suffix"
+        val trigger = "fail_entity_import_trigger_$suffix"
+        var installed = false
+        return try {
+            withContext(NonCancellable + Dispatchers.IO) {
+                DriverManager.getConnection(
+                    PostgresTestSupport.jdbcUrl,
+                    PostgresTestSupport.user,
+                    PostgresTestSupport.password,
+                ).use { connection ->
+                    connection.createStatement().use { statement ->
+                        statement.execute(
+                            """
+                                CREATE FUNCTION $function() RETURNS trigger LANGUAGE plpgsql AS ${'$'}body${'$'}
+                                BEGIN
+                                    IF NEW.identifier = ${sqlLiteral(identifier)}
+                                       AND NOT COALESCE((OLD.document::jsonb -> 'relations') ? 'peer', FALSE)
+                                       AND COALESCE((NEW.document::jsonb -> 'relations') ? 'peer', FALSE) THEN
+                                        RAISE EXCEPTION 'forced entity import restoration failure';
+                                    END IF;
+                                    RETURN NEW;
+                                END
+                                ${'$'}body${'$'}
+                            """.trimIndent(),
+                        )
+                        try {
+                            statement.execute(
+                                "CREATE TRIGGER $trigger BEFORE UPDATE ON entities " +
+                                    "FOR EACH ROW EXECUTE FUNCTION $function()",
+                            )
+                            installed = true
+                        } catch (failure: Exception) {
+                            runCatching { statement.execute("DROP FUNCTION IF EXISTS $function()") }
+                            throw failure
+                        }
+                    }
+                }
+            }
+            block()
+        } finally {
+            if (installed) {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    DriverManager.getConnection(
+                        PostgresTestSupport.jdbcUrl,
+                        PostgresTestSupport.user,
+                        PostgresTestSupport.password,
+                    ).use { connection ->
+                        connection.createStatement().use { statement ->
+                            try {
+                                statement.execute("DROP TRIGGER IF EXISTS $trigger ON entities")
+                            } finally {
+                                statement.execute("DROP FUNCTION IF EXISTS $function()")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     @Test
     fun `anonymous is 401`() = testApplication {
@@ -101,6 +175,60 @@ class EntityImportTest {
             assertEquals(a, bRead.relations["peer"]?.jsonPrimitive?.content)
         } finally {
             TestEntities.remove(a, b)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `a failed pass-2 update reports ERROR while committed creates and replacement are audited once`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("ent-import-admin"), UserRole.ADMIN)
+        val bpId = identifier("bp-residual")
+        val a = identifier("ent-residual-a")
+        val b = identifier("ent-residual-b")
+        val replaced = identifier("ent-replaced")
+        try {
+            admin.createBlueprint(
+                BlueprintRequest(
+                    identifier = bpId,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("peer" to RelationDefinition(title = "Peer", target = bpId, required = false, many = false)),
+                ),
+            )
+            admin.createEntity(EntityRequest(blueprint = bpId, identifier = replaced, title = "Before"))
+            val request = EntityImportRequest(
+                replaceExisting = true,
+                documents = listOf(
+                    doc(EntityRequest(blueprint = bpId, identifier = a, title = "A", relations = buildJsonObject { put("peer", b) })),
+                    doc(EntityRequest(blueprint = bpId, identifier = b, title = "B", relations = buildJsonObject { put("peer", a) })),
+                    doc(EntityRequest(blueprint = bpId, identifier = replaced, title = "After")),
+                ),
+            )
+
+            withAuditCapture { capture ->
+                val response = withFailingRestoration(a) { admin.import(request).body<EntityImportResponse>() }
+                assertEquals(
+                    listOf(OntologyImportStatus.ERROR, OntologyImportStatus.CREATED, OntologyImportStatus.UPDATED),
+                    response.results.map { it.status },
+                )
+                val residual = response.results[0]
+                assertNotNull(residual.id)
+                assertTrue(residual.message!!.contains("Stored without its deferred references"))
+
+                assertNotNull(capture.awaitEvent { it.message == "entity.created" && it.hasKeyValue("identifier", a) })
+                assertNotNull(capture.awaitEvent { it.message == "entity.updated" && it.hasKeyValue("identifier", replaced) })
+                assertEquals(1, capture.events.count { it.message == "entity.created" && it.hasKeyValue("identifier", a) })
+                assertEquals(1, capture.events.count { it.message == "entity.updated" && it.hasKeyValue("identifier", replaced) })
+
+                val residualRead: EntityResponse = admin.get("/api/v1/entities/${residual.id}").body()
+                assertTrue(residualRead.relations.isEmpty(), "pass 1 remains committed without the deferred relation")
+                val replacedRow = TestEntities.rawRows().first { it.identifier == replaced }
+                val replacedRead: EntityResponse = admin.get("/api/v1/entities/${replacedRow.id}").body()
+                assertEquals("After", replacedRead.title)
+            }
+        } finally {
+            TestEntities.remove(a, b, replaced)
             TestBlueprints.remove(bpId)
         }
     }
@@ -181,6 +309,29 @@ class EntityImportTest {
         }
     }
 
+    @Test
+    fun `read-only export metadata is rejected per row by import and dry-run`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("ent-import-admin"), UserRole.ADMIN)
+        val bpId = identifier("bp-metadata")
+        val id = identifier("ent-metadata")
+        try {
+            admin.createBlueprint(BlueprintRequest(identifier = bpId, title = "T", schema = BlueprintSchema()))
+            val base = doc(EntityRequest(blueprint = bpId, identifier = id, title = "T"))
+            val request = EntityImportRequest(documents = listOf(JsonObject(base + ("createdAt" to JsonPrimitive(123L)))))
+            val check = admin.importCheck(request).body<EntityImportResponse>().results.single()
+            val real = admin.import(request).body<EntityImportResponse>().results.single()
+            assertEquals(OntologyImportStatus.INVALID, check.status)
+            assertEquals(OntologyImportStatus.INVALID, real.status)
+            assertEquals(IMPORT_SCHEMA_MESSAGE, check.message)
+            assertEquals(IMPORT_SCHEMA_MESSAGE, real.message)
+            assertTrue(TestEntities.rawRows().none { !it.markedAsDeleted && it.identifier == id })
+        } finally {
+            TestEntities.remove(id)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
     // 2.4.0: the workspace document byte budget must reject the SAME row on the real run and its
     // dry-run — service-level via `TestEntities.tunedService` so a tiny budget makes the single
     // document overflow deterministically without a multi-megabyte fixture.
@@ -208,7 +359,7 @@ class EntityImportTest {
                 ),
             )
             val checkRow = tuned.importCheck(listOf(big), replaceExisting = false).single()
-            val realRow = tuned.import(listOf(big), userId, replaceExisting = false).single()
+            val realRow = tuned.import(listOf(big), userId, replaceExisting = false) {}.single()
             assertEquals(OntologyImportStatus.INVALID, checkRow.status)
             assertEquals(checkRow.status, realRow.status)
             assertEquals(checkRow.message, realRow.message)

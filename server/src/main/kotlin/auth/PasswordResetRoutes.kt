@@ -10,7 +10,6 @@ import ch.nokillswit.users.MAX_EMAIL_LENGTH
 import ch.nokillswit.users.UserServiceKey
 import ch.nokillswit.users.canonicalEmail
 import ch.nokillswit.users.validateEmail
-import ch.nokillswit.users.validatePassword
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.*
 import io.ktor.server.plugins.BadRequestException

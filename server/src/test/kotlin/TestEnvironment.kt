@@ -240,7 +240,7 @@ object TestUsers {
      * Runs [block] while the users in [soloAdminIds] are the ONLY active admins — every other
      * active ADMIN row (the seed admin and other tests' fixtures included) is temporarily
      * soft-deleted and restored in a finally. Backs the last-admin-protection tests, which
-     * need `countActiveAdmins()` to be exact in the shared container.
+     * need the active-administrator count to be exact in the shared container.
      */
     suspend fun withSoloAdmins(soloAdminIds: Set<UInt>, block: suspend () -> Unit) {
         val parked: List<UInt> = suspendTransaction(sharedTestDatabase) {

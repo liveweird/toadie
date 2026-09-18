@@ -241,7 +241,7 @@ class BlueprintImportPlanTest {
     // isUniqueViolation walks the exception's cause chain for an R2dbcException sqlState).
 
     @Test
-    fun `storageFailureRow classifies a unique-violation-shaped exception as EXISTS`() {
+    fun `storageFailureRow classifies a pass-1 unique violation as EXISTS`() {
         val row = storageFailureRow(R2dbcDataIntegrityViolationException("duplicate key", "23505"), 0, "a")
         assertEquals(OntologyImportStatus.EXISTS, row.status)
         assertEquals("created concurrently", row.message)
@@ -256,12 +256,14 @@ class BlueprintImportPlanTest {
     }
 
     @Test
-    fun `storageFailureRow applies the messageFor transform, the pass-2 prefix shape`() {
-        val existsRow = storageFailureRow(R2dbcDataIntegrityViolationException("dup", "23505"), 0, "a", id = 7u) { "prefix: $it" }
-        assertEquals("prefix: created concurrently", existsRow.message)
-        assertEquals(7u, existsRow.id)
+    fun `storageFailureRow keeps pass-2 failures ERROR with the committed id and safe prefix`() {
+        val uniqueRow = storageFailureRow(R2dbcDataIntegrityViolationException("dup", "23505"), 0, "a", id = 7u) { "prefix: $it" }
+        assertEquals(OntologyImportStatus.ERROR, uniqueRow.status)
+        assertEquals("prefix: Storage failed", uniqueRow.message)
+        assertEquals(7u, uniqueRow.id)
 
         val errorRow = storageFailureRow(RuntimeException("boom"), 0, "a", id = 7u) { "prefix: $it" }
+        assertEquals(OntologyImportStatus.ERROR, errorRow.status)
         assertEquals("prefix: Storage failed", errorRow.message)
         assertEquals(7u, errorRow.id)
     }

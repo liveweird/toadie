@@ -23,10 +23,15 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.post
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -271,6 +276,38 @@ class MfaLoginTest {
         } finally {
             auditEvents.detach()
         }
+    }
+
+    @Test
+    fun `a full challenge store answers 429 without queuing another email`() = testApplication {
+        val sends = AtomicInteger()
+        val firstDelivery = CompletableDeferred<Unit>()
+        val unexpectedDelivery = CompletableDeferred<Unit>()
+        val countingMailer = object : Mailer {
+            override suspend fun send(to: String, subject: String, body: String) {
+                if (sends.incrementAndGet() == 1) {
+                    firstDelivery.complete(Unit)
+                } else {
+                    unexpectedDelivery.complete(Unit)
+                }
+            }
+        }
+        val challenges = MfaChallenges(ttlMillis = 5 * 60_000L, maxAttempts = 5, maxTracked = 1)
+        val email = uniqueEmail("mfa-capacity")
+        val user = User(name = "Capacity Test", email = email, passwordHash = "unused")
+        routing {
+            post("/test/mfa-capacity") {
+                issueMfaChallenge(call, challenges, countingMailer, codeTtlMinutes = 5, userId = 1u, user = user)
+            }
+        }
+        usePostgresTestcontainer()
+        val client = jsonClient()
+
+        assertEquals(HttpStatusCode.OK, client.post("/test/mfa-capacity").status)
+        withTimeout(2_000) { firstDelivery.await() }
+        assertEquals(HttpStatusCode.TooManyRequests, client.post("/test/mfa-capacity").status)
+        assertNull(withTimeoutOrNull(200) { unexpectedDelivery.await() })
+        assertEquals(1, sends.get())
     }
 
     @Test

@@ -1,6 +1,7 @@
 package ch.nokillswit.infra.db
 
 import ch.nokillswit.auth.hashPassword
+import ch.nokillswit.auth.passwordValidationError
 import ch.nokillswit.users.UserServiceKey
 import io.ktor.server.application.*
 
@@ -8,6 +9,15 @@ import io.ktor.server.application.*
 internal const val SEED_PASSWORD_HASH = "\$2y\$12\$VD60LjzPo00G5MtaWE3h9OrqYUid.MVxc5D7oHsM8oErnD9wuIvya"
 
 internal const val SEED_ADMIN_EMAIL = "admin@toadie.local"
+
+private val BURNED_BOOTSTRAP_PASSWORDS = setOf("changeme", "CHANGE-ME")
+
+private fun validateBootstrapPassword(password: String) {
+    if (password in BURNED_BOOTSTRAP_PASSWORDS) {
+        error("ADMIN_INITIAL_PASSWORD must not use a well-known seed or template password")
+    }
+    passwordValidationError(password)?.let { error("ADMIN_INITIAL_PASSWORD is invalid: $it") }
+}
 
 /**
  * Post-migration bootstrap that neutralizes the template seed credentials outside development.
@@ -25,7 +35,12 @@ suspend fun Application.configureBootstrap() {
 
     val adminInitialPassword = environment.config
         .propertyOrNull("bootstrap.adminInitialPassword")?.getString()?.takeIf { it.isNotBlank() }
-    if (adminInitialPassword != null) {
+    val seedNeedsRotation = userService.findWithIdByEmail(SEED_ADMIN_EMAIL)?.second?.passwordHash == SEED_PASSWORD_HASH
+    if (adminInitialPassword != null && seedNeedsRotation) {
+        // Ignore obsolete bootstrap configuration once the seed has already been rotated.
+        // Validate applicable plaintext before spending bcrypt work or attempting the compare-and-set.
+        // In particular, a fresh salted hash must not disguise the public seed/template value.
+        validateBootstrapPassword(adminInitialPassword)
         val rotated = userService.rotatePasswordIfHashMatches(
             email = SEED_ADMIN_EMAIL,
             expectedHash = SEED_PASSWORD_HASH,
