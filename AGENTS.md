@@ -119,6 +119,8 @@ Packages declare `ch.nokillswit.<area>` while files stay directly under `<area>/
 - `./gradlew test` or `./gradlew :server:test`: run Kotlin tests; Docker is required for
   Testcontainers.
 - `./gradlew :server:test --tests "<fully-qualified test name>"`: run one backend test.
+- `./gradlew :server:checkGraphqlCompatibility`: compare SDL against its Git baseline; included
+  in `check`. See `api-guidelines/GRAPHQL-GUIDELINES.md` for baseline selection and break policy.
 - `./gradlew detekt`: static analysis over `core` + `server` — zero-findings gate, no baseline.
 - After a Gradle dependency change, run `./gradlew build --write-locks` and include the updated
   module/root lockfiles. Never delete a lockfile to bypass a stale-lock resolution failure.
@@ -128,6 +130,8 @@ Packages declare `ch.nokillswit.<area>` while files stay directly under `<area>/
 - `cd web && npm run gen:api`: regenerate `web/src/api/schema.ts` from the OpenAPI contract.
 - `cd web && npm run check:api && npm run lint:api`: read-only generated-type drift check and
   lockfile-pinned Spectral lint of the published contract and reference fixture.
+- `cd e2e && npm run smoke:graphql -- compose`: build and verify an isolated seeded GraphQL
+  deployment; see `e2e/README.md` for the explicit local Kubernetes target.
 - `cd e2e && npm test`: run Playwright against the full stack on port 8081;
   `npm run typecheck` and `npm run check:scenarios` are the Docker-free static gates.
 

@@ -57,6 +57,34 @@ For a separate local verification stack, set both `E2E_BASE_URL` (the SPA/API or
 must match `E2E_BASE_URL` so the email journey stays on that isolated stack. Use a distinct
 Compose project, container names, ports, and database volume; never reuse the user's volume.
 
+## Seeded GraphQL deployment smoke test
+
+```bash
+cd e2e
+npm run test:smoke
+npm run smoke:graphql -- compose
+npm run smoke:graphql -- kubernetes --context orbstack
+```
+
+The smoke runner builds the current checkout and creates its own randomly named deployment and
+PostgreSQL volume. It never accepts an existing application URL, project, or namespace. Compose
+uses loopback ports chosen at runtime. The Kubernetes target is explicitly limited to OrbStack,
+whose cluster shares Docker's local image store; it uses two production-mode app replicas in a
+new namespace. Requirements: Node 24, Docker/Compose, bash, curl, jq; Kubernetes also needs kubectl
+and the running OrbStack cluster.
+
+It loads the existing Port sample with the normal loaders (eleven blueprints, 59 entities),
+compares REST and GraphQL values including computed properties and ownership, checks the SDL and
+ontology findings, and verifies that writes and revocation are visible across replicas. It
+restarts the app without reseeding and repeats the persistence checks. Only resources created
+by this run are cleaned up, including its disposable database, on success or failure. Interrupted
+runs attempt the same cleanup; an uncatchable process/host termination may need manual cleanup
+of the exact run name printed at startup.
+
+The Compose target runs in the reusable E2E workflow and contributes to **Quality gate**.
+Kubernetes remains an explicit local check; this test does not certify external ingress/TLS or
+multi-replica MFA/throttling support. Browser journeys and their scenario map remain separate.
+
 ## Parallel execution
 
 The suite runs on **4 workers by default** (`E2E_WORKERS` overrides; `E2E_WORKERS=1` restores

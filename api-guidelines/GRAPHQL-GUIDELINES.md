@@ -9,7 +9,7 @@ remains governed by the REST guidelines. Domain and operational details live in
 |---|---|---|
 | GQL-CON-001 | Load the committed `server/src/main/resources/graphql/schema.graphqls` as the executable contract; never generate a second schema from code. | SDL contract tests and boot wiring review |
 | GQL-CON-002 | No Mutation or Subscription. Root scope is blueprints, blueprint, entities, entity, errors. | SDL root/type assertions |
-| GQL-CON-003 | Evolve additively. Deprecate a member in a minor release, naming its removal major version; remove/rename/tighten nullability only in that major release. | Schema diff review and release notes |
+| GQL-CON-003 | Evolve additively. Deprecate a member in a minor release, naming its removal major version; remove/rename/tighten nullability only in that major release. | `:server:checkGraphqlCompatibility` in `check`; explicit major-version policy review and release notes |
 | GQL-CON-004 | Describe every type, field, argument and enum value; authenticated SDL discovery and standard introspection must work. | Schema documentation walk and introspection tests |
 | GQL-NAME-001 | Preserve REST field names. IDs use ID decimal strings, timestamps/totals Long, dynamic Port maps JSON with exact numeric values. | Contract and numeric round-trip tests |
 | GQL-LIST-001 | Page collections with items/page/pageSize/total, one-based/default20/max100; document filtering, ordering, and full checked counts versus finding-row totals. | Paging and Errors parity regressions |
@@ -33,3 +33,23 @@ It does not advertise `application/graphql-response+json` or claim complete comp
 that evolving transport draft. See the primary references:
 [GraphQL over HTTP](https://http-spec.graphql.org/draft/) and
 [graphql-java limits](https://www.graphql-java.com/documentation/limits/).
+
+## Schema compatibility gate
+
+`./gradlew :server:checkGraphqlCompatibility` compares the current SDL with its Git baseline,
+without starting PostgreSQL. It runs as part of `:server:check` and therefore the backend CI
+job and required **Quality gate**. It executes on every invocation rather than reusing an
+up-to-date result for a moving Git reference.
+
+Baseline precedence is `-PgraphqlBaselineRef=<ref>`, then `GRAPHQL_BASELINE_REVISION`, then
+`origin/master`. Empty/all-zero CI before revisions fall back to `origin/master`. The CI job
+fetches full history and supplies the PR target SHA, merge-group base SHA, or pre-push SHA.
+A missing baseline revision or schema fails with an actionable error; it never silently skips
+compatibility. Fetch the relevant history before running against a shallow local checkout.
+
+The gate rejects removal/renaming of existing members, type/nullability changes, newly required
+inputs, and changes to existing defaults. This is deliberately stricter than client-side
+GraphQL compatibility alone: adding an output non-null guarantee is also a contract change under
+GQL-CON-003. Additive optional fields/types/arguments and documentation/order-only edits pass.
+An intentional major-version break needs explicit review of the baseline/gate policy alongside
+consumer migration and release notes; changing the displayed version does not bypass this gate.

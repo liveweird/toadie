@@ -25,12 +25,14 @@ Gradle wrapper is at `./gradlew` (use `gradlew.bat` on Windows). JDK 21 toolchai
 - Run all tests: `./gradlew test`
 - Run server tests only: `./gradlew :server:test` (needs a Docker daemon — Testcontainers)
 - Run a single test: `./gradlew :server:test --tests "ch.nokillswit.ServerTest.security headers are set on responses"`
+- GraphQL compatibility: `./gradlew :server:checkGraphqlCompatibility` (also in `check`); baseline selection and breaking-change rules live in `api-guidelines/GRAPHQL-GUIDELINES.md`.
 - Static analysis (detekt, both Kotlin modules): `./gradlew detekt` — rides `check`/`build`, zero-findings gate (no baseline file). Rule tuning lives in `config/detekt/detekt.yml` ONLY, one commented override per deliberate repo idiom; never add an uncommented `@Suppress`.
 - Dependency locking is ON (root `build.gradle.kts`): after ANY dependency change run `./gradlew build --write-locks` and commit the updated lockfiles (`core/gradle.lockfile`, `server/gradle.lockfile`, the root `settings-gradle.lockfile` + `buildscript-gradle.lockfile`); a "lock state" resolution error means the lock is stale — regenerate it, never delete the file.
 - Package the server for deployment: `./gradlew :server:installDist`. **Never use `:server:buildFatJar`** — the fat JAR breaks Flyway's `ServiceLoader` discovery and NPEs at startup.
 - JVM memory flags are pre-tuned in `server/build.gradle.kts` (`applicationDefaultJvmArgs`) — the rationale is commented in place.
 - **Run the whole stack with one command: `docker compose up --build`** (only Docker required). See "Running the full stack" below.
 - Frontend: `cd web && npm install --legacy-peer-deps`, then `npm run dev|build|lint|test|test:watch|test:coverage|knip|gen:api|preview` (details in `web/CLAUDE.md`).
+- Seeded GraphQL deployment smoke: see `e2e/README.md`; `cd e2e && npm run smoke:graphql -- compose` creates and cleans an isolated stack.
 - E2E: `cd e2e && npm ci && npx playwright install chromium && npm test` (plus `npm run typecheck` and `npm run check:scenarios`).
 
 ## Automated verification

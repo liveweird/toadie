@@ -114,8 +114,22 @@ kover {
     }
 }
 
+// GQL-CON-003 compares the working SDL with an immutable Git baseline. The implementation
+// lives in the test source set so this build-time gate adds nothing to the application runtime.
+val checkGraphqlCompatibility = tasks.register<JavaExec>("checkGraphqlCompatibility") {
+    group = "verification"
+    description = "Rejects breaking changes to the committed GraphQL schema"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("ch.nokillswit.GraphqlCompatibilityCli")
+    args(rootProject.layout.projectDirectory.asFile.absolutePath)
+    providers.gradleProperty("graphqlBaselineRef").orNull?.let { args(it) }
+    doNotTrackState("The result depends on the working tree and Git baseline history")
+}
+
 tasks.named("check") {
     dependsOn(tasks.named("koverVerify"))
+    dependsOn(checkGraphqlCompatibility)
 }
 
 // Static analysis (plain rule sets only — no type resolution). Rule tuning lives in
