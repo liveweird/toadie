@@ -458,3 +458,29 @@ no token persistence, inline validation/errors, and success-only local session c
 The Mailpit journey uses a throwaway account with cleanup in `finally`; isolated stacks can
 set `E2E_MAILPIT_URL` alongside `E2E_BASE_URL`. Never apply V26 to a user's running database
 merely to verify a changeset: use Testcontainers and a disposable Compose project/volume.
+
+**Quality-review regression boundaries (2.6.2).**
+
+- **Applies when:** changing account-bound browser state, login redirects, bootstrap/MFA
+  admission, user audits, or ontology import restoration.
+- **Requirement:** cover the actual boundary, not only a successful sequential call. Query
+  account-switch journeys must use two real users and a PRIVATE saved query, sign out/in
+  without clearing localStorage, verify server-side visibility and outgoing graph parameters,
+  and preserve the original account's state. Pin full pathname/search/hash for password and
+  MFA sign-in. Rerender localized editor props without replacing its document.
+  Bootstrap tests reject burned/short/overlong values before an applicable seed rotation,
+  but allow restarts with obsolete unused bootstrap configuration after rotation. MFA tests
+  hold a fixed clock, fill live capacity, race admissions, recover after expiry, and assert
+  capacity refusal queues no email. User audit tests hold real PostgreSQL writes and observe
+  blocked contenders before release; assert actual predecessor deltas and promotion followed
+  by demotion/deletion without false last-admin conflicts. Import tests use identifier-scoped
+  database fault injection for zero-row/error restoration, retain committed IDs, inspect
+  residual documents, and require exactly one pass-one audit. No production timing hooks.
+- **Reference:** `UserAuditConcurrencyTest`, `BootstrapTest`, `MfaChallengesTest`, `MfaLoginTest`,
+  `BlueprintImportTest`, `EntityImportTest`, both `*ImportPlanTest` classifiers,
+  `useEntityQuery.test.tsx`, `Login.test.tsx`, `QueryEditor.test.tsx`, and
+  `e2e/tests/query-account-boundary.spec.ts`.
+- **Enforcement:** backend test/conformance gate, frontend coverage gate, E2E suite and
+  spec/scenario/coverage-map parity check.
+- **Exception:** the log audit sink is post-commit external output; these tests do not promise
+  atomic delivery across a process crash or the database-commit/coroutine-return boundary.

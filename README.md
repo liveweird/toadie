@@ -1,76 +1,51 @@
 # Toadie
 
-Toadie will help with Backstage `catalog-info.yaml` files:
+Toadie is a shared workspace for two catalog models: **Backstage** descriptors and a
+**Port-style ontology**. Switch between the two worlds in the sidebar. A fresh session opens
+Port's Entity hierarchy; later visits remember your last world.
 
-- **create them visually** — the only allowed format, with automatic validation,
-- **cross-check them** — one file can reference another,
-- **render them altogether** — a combined view built from the content of several files.
+- **Backstage catalog:** visually create, validate, import, export, and cross-reference the
+  seven `catalog-info.yaml` kinds (Component, API, System, Domain, Resource, Group, User).
+  Files, Hierarchy, Graph, and Errors share filters and private/public saved lenses.
+  Structural and namespace errors block saves. Registry/reference findings normally block
+  saves too, but an explicit **Save anyway** can waive those soft findings; catalog import
+  reports them while storing structurally valid documents.
+- **Source synchronization and history:** an optional credential-free HTTPS `sourceUrl`
+  enables SSRF-guarded, one-way repository-to-database synchronization. Review the YAML diff
+  and confirm before overwriting. Every catalog mutation maintains immutable per-file
+  structural history; no-op saves do not add events, while syncs always do.
+- **Port blueprints and entities:** administrators define typed schemas, relations, and
+  computed properties; any authenticated user can manage entity instances. Entity saves
+  must satisfy the current blueprint and have no catalog-style validation waiver. The
+  protected `_team` and `_user` blueprints support direct and inherited ownership, which is
+  informational and does not grant permissions.
+- **Parallel hierarchies and graphs:** name hierarchies such as composition, ownership, or
+  cost center, then map each to a blueprint's single-valued parent relation. Entity Graph
+  and Entity hierarchy support filtering, folding, and per-user graph layouts. Mirror,
+  jq calculation, and aggregation properties are computed on reads.
+- **Entity queries:** use the bounded, read-only openCypher-shaped subset or its guided
+  builder to select entities without memorizing syntax. Queries support saved PRIVATE/PUBLIC
+  definitions and canvas actions such as expansion, ancestors, and descendants. This is
+  an entity-set query language, not full Cypher or a projected-row reporting engine; see the
+  [language reference](.claude/docs/entity-query-language.md).
+- **Ontology import/export:** import up to 200 blueprint or entity JSON documents, preview
+  a dry-run report, and optionally replace existing records. Dependency ordering and
+  supported optional cycles are handled automatically. Exports produced by Toadie can be
+  imported again; arbitrary upstream metadata must be removed before import. See the
+  [Port model reference](.claude/docs/port-data-model.md) and [sample-data guide](sample-data/README.md).
+- **Shared application services:** administrator-managed login accounts and feature flags,
+  one-time generated password reveals, self-service password changes and reset links,
+  opt-in email MFA, synchronized English/Polish language, and the shared application shell.
+  Administrator privileges govern management features, not ownership of shared catalog data.
 
-All three pillars are implemented, on top of the full stack, tooling, quality gates, and a
-working authentication surface with admin-managed accounts (user CRUD with a one-time
-generated-password reveal, self-service password change):
-
-- **visual creation** of `catalog-info.yaml` files across the seven landscape kinds
-  (Component, API, System, Domain, Resource, Group, User) — validated per kind against the
-  Backstage descriptor format, stored server-side with full CRUD and a paginated list, live
-  YAML preview, one-click download, and reference pickers suggesting the stored entities,
-- **cross-checking**: the **Errors** report — every error class in the stored files
-  (unresolved/wrong-kind/self references — owners, systems, APIs, domains, groups and users
-  included — registry violations, structurally drifted legacy rows, removed namespaces),
-  filterable like the Files list plus error-type pills — plus a live reference panel in the
-  editor; findings never block saving,
-- **source references & repo sync** (v1.11.0): tag a file with an optional `sourceUrl` — its
-  canonical copy's https address in a GitLab/GitHub repo — set by hand or stamped
-  automatically by a fetch-from-URL import, tracked by the Files list's sortable Last-sync
-  column, and reconciled through the Sync-from-repo modal's fetch-diff-confirm overwrite;
-  a missing reference is a report-only Errors finding, and DB→repo sync does not exist,
-- **per-file change history** (v1.15.0): every catalog mutation appends an immutable,
-  field-level event to the file's own trail, read back paged and rendered in the viewer's
-  language as the editor's History section — a no-op save records nothing, a sync always
-  records something, and a deleted file's history outlives it,
-- **blueprints** (the first step toward [Port.io](https://docs.port.io/context-lake/data-model/configure-data-model/)
-  compatibility): define your own entity kinds at `/blueprints` — typed properties with
-  formats, enums and colours, relations between blueprints, mirror/calculation/aggregation
-  properties and ownership — in a full-page editor with a live preview of the Port-native
-  JSON; ADMIN-curated, readable by everyone,
-- **entities** (Port migration phase 2): instances of a blueprint at `/entities` — properties
-  typed by the owning blueprint's schema, relations naming other entities, and live validation
-  findings on every read so an entity a later blueprint edit made stale is visibly flagged;
-  any authenticated user may create, edit, and delete them, the same shared-workspace rule as
-  catalog files. Phase 3 renders them together: the `/entity-graph` relationship graph and the
-  `/entity-hierarchy` containment tree, reusing the catalog's own dagre layout, folding, and
-  per-user manual-layout persistence, with each blueprint able to name one of its own
-  single relations per hierarchy in its `hierarchyRelations` map — the Toadie-only extension that decides an
-  entity's parent for the tree/fold,
-- **users and teams** (Port migration phase 4, v1.26.0): the seeded `_team`/`_user` system
-  blueprints give every entity real `$team` ownership — Direct or computed Inherited along a
-  blueprint-defined path — with a team filter on the entity list and graph; ownership is
-  informational and never gates permissions,
-- **computed properties** (Port migration phase 5, v1.27.0): mirror, calculation (real jq),
-  and aggregation properties are evaluated at entity read time and merged into every
-  GET/list/create response, never stored and never accepted back as write input,
-- **ontology import and export** (Port migration phase 6, v1.28.0): bulk-import up to 200
-  raw Port-shaped JSON documents for blueprints or entities with one shared dry-run/real-run
-  classification and automatic dependency ordering, plus a client-side JSON export that the
-  same importer accepts back unchanged,
-- **lenses**: save the current filter set under a name and re-apply it from a combo box on
-  any of the Hierarchy, Files, Graph, and Errors views — each lens private (only you) or
-  public (visible to everyone, changeable only by its creator),
-  and
-- **rendering together**: the `/graph` relationship graph — every stored file and the
-  reference edges between them (missing and external targets drawn as virtual nodes), with a
-  namespace filter and per-relation toggles, and
-- **the YAML round-trip**: import existing (multi-document) `catalog-info.yaml` files —
-  pasted, picked, or **fetched from a URL** (server-side and SSRF-guarded, so GitHub, GitLab,
-  and self-hosted Git all work; blob links are converted to raw automatically) — parsed
-  client-side, each document imported independently with a per-row result report
-  (created / invalid / already-exists; nothing overwritten) — and export the workspace (or
-  one namespace) back as a single `---`-separated `catalog-info.yaml`.
+For contributor conventions and the task-specific documentation map, start with
+[AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md). [HARDENING.md](HARDENING.md) records completed
+hardening work as well as explicitly outstanding items.
 
 ## The stack
 
-- **Backend**: Kotlin + [Ktor](https://ktor.io) (Netty), JWT auth with refresh tokens and a
-  server-side revocation blocklist, PostgreSQL with [Flyway](https://flywaydb.org) migrations
+- **Backend**: Kotlin + [Ktor](https://ktor.io) (Netty), JWT auth with refresh tokens, database-backed
+  session-family revocation and per-user credential epochs (plus token blocklist checks), PostgreSQL with [Flyway](https://flywaydb.org) migrations
   and [Exposed](https://github.com/JetBrains/Exposed) (R2DBC), OpenTelemetry, RFC 7807
   problem-detail errors, Swagger UI at `/openapi` (development mode).
 - **Frontend**: [Vite](https://vite.dev) + React 19 + TypeScript + [Mantine](https://mantine.dev),

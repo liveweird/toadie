@@ -316,7 +316,7 @@ Hierarchy selection is stored per view; an obsolete selection falls back to the 
 value, or no hierarchy when empty. Only the selected hierarchy controls folding and hierarchy
 edge styling. The entity graph's persisted collapsed-node list is intentionally shared across
 hierarchy selections, not a separate layout per hierarchy. Relation chips remain unpersisted.
-`useEntityQuery` shares one draft/applied query between both canvases; validation is debounced,
+`useEntityQuery` shares one account-scoped draft/applied query between both canvases; validation is debounced,
 but evaluation occurs on Run/Mod+Enter, saved-query selection, or a canvas query action. Reuse
 `queryTemplates.ts` for Expand/Ancestors/Descendants/Owned-by actions; preserve the anchor via
 OPTIONAL MATCH and use the selected hierarchy for ancestor/descendant traversal.
