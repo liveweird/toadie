@@ -372,3 +372,10 @@ more than the heap can actually hold.
 Each of these is a fully worked-out Lettuce subsystem (implementation + tests + docs); port it rather than redesigning, and restore its section of Lettuce's security doc alongside:
 
 - **Field encryption at rest** (`infra/crypto/FieldCipher.kt`, `DATA_ENCRYPTION_KEY` + fail-closed burned-key check, the `EncryptedAtRest` rotation-backfill registry, never filter/sort encrypted columns in SQL).
+
+### Port GraphQL integration (2.7.0)
+
+The separate machine API is disabled by default and uses dedicated revocable keys. Its
+limits apply in addition to existing entity read/computation budgets; it never loads private
+saved queries. Exact credential, admission, parser, execution, and response rules and their
+regression boundaries live in [integration-api.md](integration-api.md).

@@ -14,8 +14,8 @@ export default function RevealablePassword({
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   return (
-    <Group gap="xs" wrap="nowrap">
-      <Code fz="md" px="sm" py={6} style={{ flex: 1 }}>
+    <Group gap="xs" wrap="wrap">
+      <Code fz="md" px="sm" py={6} style={{ flex: "1 1 12rem", minWidth: 0, overflowWrap: "anywhere" }}>
         {visible ? password : "*".repeat(password.length)}
       </Code>
       <ActionIcon

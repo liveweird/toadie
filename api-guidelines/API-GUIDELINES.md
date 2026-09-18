@@ -1,5 +1,8 @@
 # HTTP API Guidelines
 
+The separate Port GraphQL transport follows [GRAPHQL-GUIDELINES.md](GRAPHQL-GUIDELINES.md);
+its integration-client management REST endpoints remain subject to this rulebook.
+
 The authoritative standard for this project's JSON HTTP APIs — and a portable one: everything
 except the [known-gaps register](#appendix-known-gaps-register) is stack-agnostic. It merges a
 general API rulebook with the conventions the codebase already implements (bespoke JSON DTOs,

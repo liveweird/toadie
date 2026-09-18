@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.7.0",
+    date: "2026-09-18",
+    en: `**A dedicated GraphQL API for integrations.** Other applications can read Port blueprints, entities, and ontology findings through a separate, bounded GraphQL API. Administrators manage integration clients with keys revealed once and revocable at any time. The API includes computed properties and inherited ownership, publishes its schema, and keeps private saved queries outside its scope.`,
+    pl: `**Osobne API GraphQL dla integracji.** Inne aplikacje mogą odczytywać blueprinty Port, encje i ustalenia dotyczące ontologii przez osobne API GraphQL z limitami zapytań. Administratorzy i administratorki zarządzają klientami integracji za pomocą kluczy ujawnianych tylko raz, które można odwołać w dowolnej chwili. API uwzględnia obliczane właściwości i dziedziczone właścicielstwo, udostępnia schemat i nie ujawnia prywatnych zapisanych zapytań.`,
+  },
+  {
     version: "2.6.2",
     date: "2026-09-18",
     en: `**Safer account switching and more reliable changes.** Entity query drafts and saved-query selections now stay with their account, and signing in preserves the full destination link. The query editor updates its accessible label and placeholder when you change language. Bootstrap passwords and pending MFA challenges have stronger safeguards. Concurrent user changes record accurate audit details, and ontology imports report failed restoration and retain audits for changes already stored. The import documentation now states which metadata must be removed.`,

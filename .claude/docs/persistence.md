@@ -491,3 +491,10 @@ This whole-feature convention deliberately supersedes Lettuce's split mutation/e
 ### Not yet ported from Lettuce
 
 - **Notifications**: port Lettuce's feature when it arrives, while retaining the atomic catalog mutation/history boundary above. External notification delivery needs its own explicit consistency decision.
+
+### Integration identities (V36)
+
+`integration_clients` stores separate machine identities and SHA-256 key digests.
+Terminal `revoked_at` is the documented removal exception to `marked_as_deleted`: rows remain
+for administrator inspection and cannot be re-enabled. No ontology columns or data change.
+See [integration-api.md](integration-api.md) for transaction/authentication invariants.

@@ -484,3 +484,11 @@ merely to verify a changeset: use Testcontainers and a disposable Compose projec
   spec/scenario/coverage-map parity check.
 - **Exception:** the log audit sink is post-commit external output; these tests do not promise
   atomic delivery across a process crash or the database-commit/coroutine-return boundary.
+
+### GraphQL integration checks
+
+The committed SDL is checked independently of REST OpenAPI. Integration client management
+still uses the ordinary conformance-checked HTTP clients. See
+[integration-api.md](integration-api.md#required-regression-boundaries) for the required
+authentication, revocation-race, scope, cost, cancellation, and one-time-reveal regressions.
+Browser coverage lives in `e2e/scenarios/integration-clients.md`.

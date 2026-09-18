@@ -445,6 +445,11 @@ the same commit** — this list is the coverage map, the scenario file is the de
   it; a throwaway user's Manual layout mode drags a node, separately acknowledges the mode-only
   and exact position-bearing saves, then verifies the position survives a reload; Reset + Auto
   restore the pristine layout document before the user is deleted.
+- [`integration-clients.spec.ts`](scenarios/integration-clients.md) — an administrator creates an
+  integration client and captures its one-time API key, with full key/reveal/copy access on
+  a narrow screen; the key reads the paged blueprint
+  collection through GraphQL, a regular user cannot see or open the management page, and revoking
+  the key makes the same GraphQL request return 401; disposable user and client are cleaned up.
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   dry-run as Would-be-created (the Check button, nothing stored), import as Created, export
   downloads them as one `---`-separated file, and re-importing the export reports every row

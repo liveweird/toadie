@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Task | Read |
 |---|---|
 | Server feature | this file's package layout + `.claude/docs/persistence.md` + `.claude/docs/authorization.md` |
-| API change | `api-guidelines/API-GUIDELINES.md` + the "OpenAPI contract" section below |
+| GraphQL integration | `.claude/docs/integration-api.md` + `api-guidelines/GRAPHQL-GUIDELINES.md` + committed `graphql/schema.graphqls` |
+| REST API change | `api-guidelines/API-GUIDELINES.md` + the "OpenAPI contract" section below |
 | SPA (`web/`) | `web/CLAUDE.md`, the relevant section |
 | Any test | `.claude/docs/testing.md` |
 | Anything security-sensitive | `.claude/docs/security.md` |
@@ -407,6 +408,10 @@ ch.nokillswit
 │                       SavedEntityQueryService.kt (the lenses/ clone over V35's `entity_queries`:
 │                       own + PUBLIC list, creator-only mutations via the hybrid 404/403 verdict),
 │                       SavedEntityQueryRoutes.kt (`/api/v1/entity-queries`, any authenticated)
+├── integration/        read-only Port GraphQL adapter (v2.7.0): committed SDL, service-backed
+│                       resolvers, bounded execution and separate machine authentication;
+│                       IntegrationClientService/Routes manage revocable keys under ADMIN-only
+│                       `/api/v1/integration-clients` (V36). See `.claude/docs/integration-api.md`.
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),
                         CatalogFileValidation.kt (the sanitizer + per-kind required/forbidden

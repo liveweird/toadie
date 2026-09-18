@@ -151,8 +151,8 @@ fun effectiveTeamOf(
  * Every computed value for [subject] under its OWN [definition] — mirror, then calculation, then
  * aggregation, each family in its OWN declaration order (a stale stored key never fails HERE:
  * that is [entityFindings]'s job, run over the STORED document). Never throws its OWN failures
- * (jq's are absorbed by [JqEvaluator.evaluateBounded]) — the one exception is the caller's own
- * cancellation, which propagates unchanged.
+ * (jq's are absorbed by [JqEvaluator.evaluateBounded]); caller cancellation and an optional
+ * integration read-budget refusal propagate unchanged.
  */
 suspend fun computedProperties(
     subject: ComputedSubject,
@@ -161,16 +161,17 @@ suspend fun computedProperties(
     index: EntityIndex,
     jq: JqEvaluator,
     now: Long,
+    budget: OntologyReadBudget? = null,
 ): JsonObject {
     val result = LinkedHashMap<String, JsonElement>()
     definition.mirrorProperties.forEach { (id, def) ->
-        mirrorValue(def.path, subject, blueprintsByIdentifier, index)?.let { result[id] = it }
+        mirrorValue(def.path, subject, blueprintsByIdentifier, index)?.let { budget?.retain(it); result[id] = it }
     }
     definition.calculationProperties.forEach { (id, def) ->
-        calculationValue(id, def, subject, jq)?.let { result[id] = it }
+        calculationValue(id, def, subject, jq)?.let { budget?.retain(it); result[id] = it }
     }
     definition.aggregationProperties.forEach { (id, def) ->
-        aggregationValue(def, subject, blueprintsByIdentifier, index, now)?.let { result[id] = it }
+        aggregationValue(def, subject, blueprintsByIdentifier, index, now)?.let { budget?.retain(it); result[id] = it }
     }
     return JsonObject(result)
 }

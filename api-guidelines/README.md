@@ -1,6 +1,6 @@
 # API Guidelines
 
-The **single authoritative standard** for this project's JSON HTTP APIs — merged from a
+The **single authoritative standard** for this project's REST JSON HTTP APIs — merged from a
 general, validatable API rulebook and the conventions the codebase already implements. It
 covers document shape (bespoke flat JSON DTOs), resource & URL design (updates via `PUT`
 full replace), URL versioning (`/api/v1/`) & compatibility, collections (offset pagination
@@ -9,6 +9,9 @@ data-format conventions, success codes, RFC 7807 errors, authentication & author
 caching & concurrency, rate limiting, idempotency, input & transport security, HTTP
 protocol, machine-readable SLA/legal terms, OpenAPI-as-contract, and spec ↔ implementation
 conformance. Everything except the known-gaps register is stack-agnostic and portable.
+
+The separate machine GraphQL API follows [GRAPHQL-GUIDELINES.md](GRAPHQL-GUIDELINES.md) and
+uses committed SDL as its contract. Client/key management remains REST and follows this guide.
 
 ## Contents
 

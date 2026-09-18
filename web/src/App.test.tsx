@@ -89,6 +89,10 @@ describe("App shell", () => {
       const admin = await screen.findByRole("group", { name: "Administration" });
       expect(within(admin).getByRole("link", { name: "Users" })).toHaveAttribute("href", "/users");
       expect(within(admin).getByRole("link", { name: "Feature flags" })).toHaveAttribute("href", "/feature-flags");
+      expect(within(admin).getByRole("link", { name: "Integration clients" })).toHaveAttribute(
+        "href",
+        "/integration-clients",
+      );
     });
 
     test("the account menu holds the Changelog link; the stamp links there and the trigger carries the dot", async () => {

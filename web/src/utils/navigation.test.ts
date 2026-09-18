@@ -44,7 +44,11 @@ describe("sectionsFor", () => {
   test("an admin session gets the Administration section in BOTH worlds", () => {
     for (const world of ["backstage", "port"] as const) {
       const admin = sectionsFor(world, true).find((s) => s.label === "appShell.section.administration");
-      expect(admin?.items.map((l) => l.to)).toEqual(["/users", "/feature-flags"]);
+      expect(admin?.items.map((l) => l.to)).toEqual([
+        "/users",
+        "/feature-flags",
+        "/integration-clients",
+      ]);
     }
     for (const world of ["backstage", "port"] as const) {
       expect(
@@ -101,7 +105,7 @@ describe("worldOf", () => {
   });
 
   test("global/unknown routes have no world", () => {
-    for (const path of ["/", "/users/new", "/changelog", "/change-password", "/nowhere"]) {
+    for (const path of ["/", "/users/new", "/integration-clients", "/changelog", "/change-password", "/nowhere"]) {
       expect(worldOf(path)).toBeNull();
     }
   });

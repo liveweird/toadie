@@ -1,0 +1,39 @@
+{
+  "title": "Klienci integracyjni",
+  "hint": "Twórz klucze dające zewnętrznym systemom dostęp do odczytu całej ontologii Port przez GraphQL.",
+  "name": "Nazwa klienta",
+  "addClient": "Dodaj klienta",
+  "copyKey": "Kopiuj klucz API",
+  "keyPanelTitle": "Klucz API dla „{{name}}” — wyświetlany tylko raz",
+  "keyPanelWarning": "Skopiuj ten klucz teraz. Po zamknięciu tego panelu nie będzie można go ponownie wyświetlić.",
+  "loadFailed": "Nie udało się wczytać klientów integracyjnych",
+  "empty": "Brak klientów integracyjnych",
+  "neverUsed": "Nigdy nieużyty",
+  "column": {
+    "status": "Status",
+    "createdBy": "Utworzony przez",
+    "lastUsed": "Ostatnio użyty"
+  },
+  "status": {
+    "active": "Aktywny",
+    "revoked": "Unieważniony"
+  },
+  "revoke": "Unieważnij",
+  "revokeAria": "Unieważnij klucz API klienta {{name}}",
+  "revokeTitle": "Unieważnić ten klucz API?",
+  "revokeMessage": "Klucz API klienta „{{name}}” natychmiast przestanie działać. Tej operacji nie można cofnąć.",
+  "revokeFailed": "Nie udało się unieważnić klucza API",
+  "toast": {
+    "revoked": "Klucz API został unieważniony"
+  },
+  "error": {
+    "permission": "Nie masz uprawnień do zarządzania klientami integracyjnymi.",
+    "invalidName": "Wpisz niepustą, jednowierszową nazwę klienta o długości do 100 znaków.",
+    "gone": "Ten klient integracyjny już nie istnieje.",
+    "alreadyRevoked": "Ten klucz API został już unieważniony.",
+    "createFailedStatus": "Nie udało się utworzyć klienta ({{status}})",
+    "createFailed": "Nie udało się utworzyć klienta. Sprawdź połączenie i spróbuj ponownie.",
+    "revokeFailedStatus": "Nie udało się unieważnić klucza API ({{status}})",
+    "revokeFailed": "Nie udało się unieważnić klucza API. Sprawdź połączenie i spróbuj ponownie."
+  }
+}

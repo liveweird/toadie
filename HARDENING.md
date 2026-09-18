@@ -648,3 +648,69 @@ login-test synchronization race: the location probe already existed before navig
 The destination assertions now wait for the expected route (including MFA and rejected external
 destinations), rather than only waiting for the probe element. No application behavior, timeout,
 or coverage threshold changed.
+
+### 2026-09-18 — read-only Port GraphQL integration (2.7.0, locally verified)
+
+Reference: Lettuce's committed `8fbe241` snapshot; its live working directory was not modified.
+Implementation details and future changes belong in `.claude/docs/integration-api.md` and
+`api-guidelines/GRAPHQL-GUIDELINES.md`; the committed SDL is the executable GraphQL contract.
+
+- [x] Add separately authenticated `/integration/graphql` and `/integration/graphql/schema`,
+  disabled by default and enabled explicitly in the Compose demo. Expose only Port blueprints,
+  entities, and ontology findings through existing domain services, including computed values
+  and effective ownership. Saved queries, login accounts, Backstage, and mutations stay outside
+  the schema. Disabled integration paths cannot fall through to SPA HTML.
+- [x] Add ADMIN-only client management, one-time random API-key reveal, SHA-256 storage,
+  race-safe terminal revocation, audits, and V36's dedicated client table. Ontology persistence
+  is unchanged. Keep machine identities independent of their creating login account.
+- [x] Bound authenticated body reading and JSON structure before decoding, parsing, query
+  depth/cost, findings expansion, concurrent/rate admission, deadlines, retained values, and
+  encoded responses. Preserve caller cancellation and sanitize unexpected failures.
+- [x] Charge eager definitions/page documents, generated computed values/findings, and inherited
+  team-filter snapshots before they accumulate. Ordinary REST reads retain their existing policy.
+- [x] Add the full-width bilingual management screen, clear secrets on login-family replacement,
+  reject stale mutation completions, and reveal a new key without waiting for list refresh.
+  Long secrets and reveal/copy controls remain usable at a 390px viewport.
+- [x] Update REST OpenAPI/generated types, SDL documentation, AGENTS/Claude references,
+  README examples, and bilingual changelog together.
+
+Independent review findings were resolved before completion: alias-driven result amplification,
+pre-resolver allocation gaps, deep-JSON recursion, body-admission timeouts, raw decode failures,
+nullable timestamps, stale-session key exposure, and an exact-Long floating-point boundary.
+
+Integrated verification:
+
+- `./gradlew build --write-locks :server:koverXmlReport --continue --no-daemon`: passed,
+  including Detekt and coverage gates; 1,150 backend tests, 97.38% lines / 79.17% branches.
+  REST conformance exercised 80/80 operations and 334/430 operation/status pairs.
+- Frontend build, lint, Knip, API generation/drift, Spectral, and coverage gates: passed;
+  2,940 tests, 97.62% lines / 95.36% statements / 94.46% functions / 91.09% branches.
+  Spectral retained only registered warnings/hints. No coverage floor was lowered.
+- E2E type checking and scenario/map parity passed for 42 specs. The final full browser run
+  passed all 72 journeys with flaky tests treated as failures, including mobile key controls.
+  Additional desktop/mobile inspection found no document-width overflow or browser exceptions.
+- Distribution packaging and the Docker build passed. Verification used an isolated Compose
+  project, separate ports/image/volume, and disposable data; the development stack was preserved.
+
+Deployment/data verification follow-up:
+
+- Added an optional `toadie-config.INTEGRATION_ENABLED` mapping to the Kubernetes deployment,
+  preserving default-off behavior and documenting enable/disable/restart commands.
+- Loaded the Port demo through its existing REST loaders into separate disposable Compose and
+  Kubernetes databases: eleven blueprints and 59 entities in each. Compared all selected
+  blueprint/entity fields against REST, including computed properties, inherited teams,
+  relations, and findings. Both reports checked 59 entities / eleven blueprints with no findings;
+  authenticated schema downloads exactly matched the committed SDL.
+- Verified REST create/update visibility through GraphQL and introduced a required property on
+  a temporary blueprint to produce real entity findings. GraphQL entity findings and the
+  ontology errors root matched REST. Temporary entities/blueprints were removed and keys revoked.
+- Ran the Kubernetes checks against each of two production-mode app replicas sharing the same
+  dedicated PostgreSQL PVC. Both saw the same data mutations/findings and rejected a key revoked
+  through the first replica. Repeated these checks after rolling both app pods, without reloading
+  the sample, confirming persistence across pod replacement. Tests used pod-specific loopback
+  port-forwards with the documented trusted proxy header; external ingress/TLS and a full
+  Kubernetes browser suite were not tested.
+- Compose and Kubernetes databases remain independent by default. This proves REST/GraphQL and
+  app-replica sharing inside a deployment, not database sharing between the two deployments.
+
+These are local verification results, not a pushed CI or production deployment claim.

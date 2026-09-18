@@ -689,3 +689,10 @@ Added 2026-09-09 (phase 2, entities):
 - <https://docs.port.io/api-reference/create-an-entity/>
 - <https://api.getport.io/swagger/json> — Port's public OpenAPI document; the source of the
   entity wire shape above.
+
+### External GraphQL reads (2.7.0)
+
+The separate [integration API](integration-api.md) exposes active blueprint/entity responses
+and ontology-only findings through existing services. No Port storage format changes.
+GraphQL IDs are decimal strings; dynamic JSON retains Port value/absence semantics and exact
+numbers, while explicitly selected absent GraphQL fields return null. Saved queries are excluded.

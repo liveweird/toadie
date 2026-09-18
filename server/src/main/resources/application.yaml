@@ -46,6 +46,8 @@ ktor:
       - ch.nokillswit.auth.AuthRoutesKt.configureAuthRoutes
       - ch.nokillswit.auth.PasswordResetRoutesKt.configurePasswordResetRoutes
       # — catch-all router
+      - ch.nokillswit.integration.IntegrationClientRoutesKt.configureIntegrationClientRoutes
+      - ch.nokillswit.integration.IntegrationKt.configureIntegration
       - ch.nokillswit.plugins.RoutingKt.configureRouting
 
 security:
@@ -179,3 +181,7 @@ postgres:
   r2dbcUrl: "$POSTGRES_R2DBC_URL:r2dbc:postgresql://localhost:5433/toadie"
   user: "$POSTGRES_USER:toadie"
   password: "$POSTGRES_PASSWORD:toadie"
+
+# Read-only Port integration API; admin key management remains available when disabled.
+integration:
+  enabled: "$INTEGRATION_ENABLED:false"

@@ -97,7 +97,11 @@ sed "s#toadie.example.com#$HOST#g" k8s/templates/app-ingress.yaml | kubectl appl
 ```
 
 The app runs in production mode behind the TLS-terminating Ingress; its probes hit the dedicated
-`/healthz` (liveness) and `/readyz` (readiness) endpoints.
+`/healthz` (liveness) and `/readyz` (readiness) endpoints. GraphQL defaults to disabled in
+Kubernetes; opt in through `toadie-config` as described in the
+[integration deployment guide](.claude/docs/integration-api.md#deployment-and-limits).
+REST and GraphQL share the deployment's database; the Compose and Kubernetes databases are
+independent by default.
 
 Self-service password reset requires outbound SMTP and `MAIL_APP_URL` set to the external
 origin (HTTPS in production; HTTP also allowed in development; no subpath/query/fragment).
@@ -136,6 +140,32 @@ followed by `npm run check:api`, `npm run lint:api`, `npm run build`, `npm run l
 
 The published API contract is **OpenAPI 3.0.3**, validated without rewriting its version.
 See [HARDENING.md](HARDENING.md) for the remaining staged work.
+
+## Integration API (read-only, for other apps)
+
+Toadie also exposes Port blueprints, entities, and ontology errors through a separate GraphQL
+API, following Lettuce's machine-client architecture. It is disabled by default; set
+`INTEGRATION_ENABLED=true` to enable it (the local Compose demo already does). An administrator
+creates a client under **Integration clients**, copies the key from its one-time reveal,
+and can revoke it there later. Treat the key as read access to the entire Port workspace.
+
+```sh
+curl http://localhost:8081/integration/graphql \
+  -H "Authorization: Bearer $TOADIE_INTEGRATION_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{"query":"{ blueprints(pageSize: 10) { items { id identifier title } total } entities(pageSize: 10) { items { id identifier properties } total } errors { checkedEntities checkedBlueprints } }"}'
+```
+
+Use the same key for `GET /integration/graphql/schema` or GraphQL introspection. Lists use
+one-based pages (default 20, maximum 100). Entity reads include computed properties and effective
+ownership. Errors expose entity/blueprint findings; login accounts, Backstage data, saved queries,
+mutations and subscriptions are outside this API. IDs are GraphQL decimal strings and dynamic
+Port fields are JSON values. Query/response budgets may refuse expensive reads; request smaller
+pages. Key administration is JWT-authenticated REST and remains available while GraphQL is disabled.
+
+See the [integration reference](.claude/docs/integration-api.md),
+[GraphQL rules](api-guidelines/GRAPHQL-GUIDELINES.md), and
+[committed schema](server/src/main/resources/graphql/schema.graphqls) for the full contract.
 
 ## Useful Gradle tasks
 

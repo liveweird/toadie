@@ -1,8 +1,12 @@
 package ch.nokillswit.blueprints
 
+import ch.nokillswit.entities.OntologyReadBudget
+import ch.nokillswit.entities.decodeForRead
 import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.dictionaries.Dictionary
 import ch.nokillswit.dictionaries.DictionaryService
+import ch.nokillswit.infra.paging.PageRequest
+import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.entities.EntityService
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.users.UserService
@@ -42,6 +46,8 @@ private fun decodeHierarchyRelations(raw: String): Map<String, String> = bluepri
 
 private fun encodeHierarchyRelations(hierarchyRelations: Map<String, String>?): String =
     blueprintJson.encodeToString(hierarchyRelations ?: emptyMap())
+
+data class BlueprintPageResult(val items: List<BlueprintResponse>, val total: Long)
 
 class BlueprintService(private val database: R2dbcDatabase) {
     object Blueprints : UIntIdTable("blueprints") {
@@ -90,8 +96,9 @@ class BlueprintService(private val database: R2dbcDatabase) {
         otherColumn = UserService.Users.id,
     )
 
-    private fun ResultRow.toResponse(): BlueprintResponse {
-        val definition = blueprintJson.decodeFromString<BlueprintDefinition>(this[Blueprints.definition])
+    private fun ResultRow.toResponse(
+        definition: BlueprintDefinition = blueprintJson.decodeFromString(this[Blueprints.definition]),
+    ): BlueprintResponse {
         return BlueprintResponse(
             id = this[Blueprints.id].value,
             identifier = this[Blueprints.identifier],
@@ -123,8 +130,21 @@ class BlueprintService(private val database: R2dbcDatabase) {
             .toList()
     }
 
-    suspend fun read(id: UInt): BlueprintResponse? = suspendTransaction(database) {
-        joined().selectAll().where { (Blueprints.id eq id) and active() }.map { it.toResponse() }.singleOrNull()
+    /** SQL-paged integration read: decode only this page, never the complete registry. */
+    suspend fun listPage(paging: PageRequest): BlueprintPageResult = suspendTransaction(database) {
+        val total = Blueprints.selectAll().where { active() }.count()
+        val budget = OntologyReadBudget()
+        val items = joined().selectAll().where { active() }
+            .applyPaging(paging, mapOf("id" to Blueprints.id))
+            .map { row ->
+                row.toResponse(decodeForRead(row[Blueprints.definition], budget))
+            }.toList()
+        BlueprintPageResult(items, total)
+    }
+
+    suspend fun read(id: UInt, budget: OntologyReadBudget? = null): BlueprintResponse? = suspendTransaction(database) {
+        joined().selectAll().where { (Blueprints.id eq id) and active() }
+            .map { it.toResponse(decodeForRead(it[Blueprints.definition], budget)) }.singleOrNull()
     }
 
     /** One row's id, identifier, decoded definition, and hierarchy relations map — the snapshot every mutation loads once. */

@@ -46,6 +46,7 @@ const Annotations = lazy(() => import("./pages/Annotations"));
 const Users = lazy(() => import("./pages/Users"));
 const UserFeatures = lazy(() => import("./pages/UserFeatures"));
 const FeatureFlags = lazy(() => import("./pages/FeatureFlags"));
+const IntegrationClients = lazy(() => import("./pages/IntegrationClients"));
 const CreateUser = lazy(() => import("./pages/CreateUser"));
 const EditUser = lazy(() => import("./pages/EditUser"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
@@ -213,6 +214,7 @@ export default function App() {
             <Route path="users/:id/edit" element={<EditUser />} />
             <Route path="users/:id/features" element={<UserFeatures />} />
             <Route path="feature-flags" element={<FeatureFlags />} />
+            <Route path="integration-clients" element={<IntegrationClients />} />
             <Route path="change-password" element={<ChangePassword />} />
             <Route path="changelog" element={<Changelog />} />
             {/* The authenticated catch-all — LAST child, never feature-gated. */}

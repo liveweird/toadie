@@ -47,6 +47,8 @@ class AuditCatalogTest {
         "entity.",
         "entity_types.",
         "authz.",
+        "integration.",
+        "integration_client.",
     )
 
     private fun codeEvents(): Set<String> {

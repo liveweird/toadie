@@ -100,12 +100,13 @@ internal suspend fun EntityService.inheritedTeamMatches(
     team: String,
     candidates: List<ActiveBlueprint>,
     blueprintsByIdentifier: Map<String, ActiveBlueprint>,
+    reservation: EntityReadLedger.Reservation? = null,
 ): List<UInt> {
     val inherited = candidates.filter { isInherited(it.definition) }
     if (inherited.isEmpty()) return emptyList()
     val inheritedById = inherited.associateBy { it.id }
     val definitionsByIdentifier = blueprintsByIdentifier.mapValues { it.value.definition }
-    val rowLookup = rowLookupFor(inherited.map { it.definition }, blueprintsByIdentifier)
+    val rowLookup = rowLookupFor(inherited.map { it.definition }, blueprintsByIdentifier, reservation)
     return Entities.selectAll()
         .where { (Entities.blueprintId inList inherited.map { it.id }) and (Entities.markedAsDeleted eq false) }
         .map { row ->

@@ -1,4 +1,5 @@
 [versions]
+graphql-java = "26.1"
 angus-mail = "2.0.5"
 bcrypt = "0.10.2"
 # detekt 1.23.x embeds a pre-2.x Kotlin compiler — fine for the plain rule sets we run
@@ -25,6 +26,7 @@ swagger-request-validator = "3.0.0"
 testcontainers = "2.0.5"
 
 [libraries]
+graphql-java = { module = "com.graphql-java:graphql-java", version.ref = "graphql-java" }
 angus-mail = { module = "org.eclipse.angus:angus-mail", version.ref = "angus-mail" }
 bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }

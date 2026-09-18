@@ -208,6 +208,12 @@ private val sharedTestDatabase: R2dbcDatabase by lazy {
     )
 }
 
+object TestIntegrationClients {
+    val service: ch.nokillswit.integration.IntegrationClientService by lazy {
+        ch.nokillswit.integration.IntegrationClientService(sharedTestDatabase)
+    }
+}
+
 object TestUsers {
     val service: UserService by lazy { UserService(sharedTestDatabase) }
 

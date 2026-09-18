@@ -49,6 +49,8 @@ services:
       # below. Any real deployment runs the image as shipped (KTOR_DEVELOPMENT=false), which
       # fail-closes on this JWT key and on the seeded 'changeme' password.
       KTOR_DEVELOPMENT: "true"
+      # Local demo enables the API; other deployments must opt in explicitly.
+      INTEGRATION_ENABLED: "true"
       # Bundled-demo signing key so tokens can't be forged with the placeholder "secret".
       # It is committed to the repo and therefore BURNED: production mode refuses to start
       # with it. Set your own (e.g. `openssl rand -hex 32`) for any real deployment.
