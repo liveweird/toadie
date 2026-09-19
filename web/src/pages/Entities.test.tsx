@@ -42,6 +42,7 @@ const ENTITY = {
   creatorDeleted: false,
   createdAt: 0,
   updatedAt: 0,
+  lastSyncedAt: 0,
 };
 
 const ENTITY_NO_PREVIEW_VALUES = {
@@ -55,8 +56,9 @@ const ENTITY_NO_PREVIEW_VALUES = {
 };
 
 // v1.27.0 — computed (mirror/calculation/aggregation) preview columns: two schema scalar
-// columns plus three computed ones, so the combined list (5) exceeds MAX_COLUMN_PROPERTIES
-// (4) and the cap must drop the LAST one (aggregation), preserving schema-then-computed order.
+// columns plus one computed one, so the combined list (5) exceeds MAX_COLUMN_PROPERTIES (3,
+// since 2.9.0's Last-sync column) and the cap must drop the LAST two (calculation, aggregation),
+// preserving schema-then-computed order.
 const BLUEPRINT_COMPUTED = {
   id: 2,
   identifier: "workload",
@@ -99,6 +101,18 @@ const ENTITY_COMPUTED = {
   creatorDeleted: false,
   createdAt: 0,
   updatedAt: 0,
+  lastSyncedAt: 0,
+};
+
+// Sourced + synced entity (2.9.0) — a distinct row for the Last-sync column/kebab cases.
+const ENTITY_SYNCED = {
+  ...ENTITY,
+  id: 8,
+  identifier: "billing-synced",
+  title: "Billing synced",
+  sourceUrl: "https://raw.githubusercontent.com/acme/service/main/billing.json",
+  updatedAt: 0,
+  lastSyncedAt: 1_700_000_000_000,
 };
 
 // D2 — `?q=` is a URL-carried filter now, debounced-written; this sibling exposes the
@@ -395,7 +409,7 @@ describe("Entities page", () => {
     await waitFor(() => expect(mockFetch).toHaveBeenCalledWith("/api/v1/entities/5", expect.objectContaining({ method: "DELETE" })));
   });
 
-  test("preview columns are schema-then-computed, capped at 4, with array and colorized computed cells", async () => {
+  test("preview columns are schema-then-computed, capped at 3 (2.9.0, room for Last sync), with array computed cells", async () => {
     mockFetch.mockImplementation((url: string) => {
       if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: [BLUEPRINT_COMPUTED] }));
       if (url.startsWith("/api/v1/entities?")) {
@@ -408,19 +422,17 @@ describe("Entities page", () => {
     await screen.findByRole("link", { name: "Edit checkout-staging" });
 
     // Cap + ordering: the two schema columns come first, then computed columns in mirror ->
-    // calculation -> aggregation order, cut at MAX_COLUMN_PROPERTIES (4) — "Dependents" (the
-    // aggregation, 5th column) never appears.
+    // calculation -> aggregation order, cut at MAX_COLUMN_PROPERTIES (3, since 2.9.0) — "Risk"
+    // (the calculation) and "Dependents" (the aggregation) never appear.
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(expect.arrayContaining(["Env", "Replicas", "Langs", "Risk"]));
+    expect(headers).toEqual(expect.arrayContaining(["Env", "Replicas", "Langs"]));
+    expect(headers).not.toEqual(expect.arrayContaining(["Risk"]));
     expect(headers).not.toEqual(expect.arrayContaining(["Dependents"]));
 
     const row = screen.getByRole("link", { name: "Edit checkout-staging" }).closest("tr")!;
     // The mirror column ("Langs") renders its array value as pills.
     expect(within(row).getByText("java")).toBeInTheDocument();
     expect(within(row).getByText("kotlin")).toBeInTheDocument();
-    // The colorized calculation column ("Risk") renders its value as a badge.
-    const riskBadge = within(row).getByText("high");
-    expect(riskBadge.closest(".mantine-Badge-root")).not.toBeNull();
   });
 
   test("the Filters drawer is closed by default: Blueprint stays visible while Team and Search are hidden", async () => {
@@ -451,5 +463,69 @@ describe("Entities page", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^Filters/ }).textContent).toBe("Filters2"),
     );
+  });
+
+  test("the Last-sync column shows No source, Never synced, and relative time + Local changes", async () => {
+    const NEVER_SYNCED = { ...ENTITY, id: 9, identifier: "checkout-linked", sourceUrl: "https://example.com/a.json", lastSyncedAt: 0 };
+    const LOCAL_CHANGES = { ...ENTITY_SYNCED, updatedAt: ENTITY_SYNCED.lastSyncedAt + 1000 };
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (url.startsWith("/api/v1/entities?")) {
+        return Promise.resolve(
+          jsonResponse(200, { items: [ENTITY, NEVER_SYNCED, LOCAL_CHANGES], page: 1, pageSize: 20, total: 3 }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    expect(screen.getByText("No source")).toBeInTheDocument();
+    expect(screen.getByText("Never synced")).toBeInTheDocument();
+    expect(screen.getByText("Local changes")).toBeInTheDocument();
+  });
+
+  test("header sort on Last sync refetches with sort=lastSyncedAt", async () => {
+    mockRoutes(mockFetch);
+    const user = userEvent.setup();
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    mockFetch.mockClear();
+    await user.click(screen.getByRole("button", { name: "Last sync" }));
+
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(
+          ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities?") && url.includes("sort=lastSyncedAt"),
+        ),
+      ).toBe(true),
+    );
+  });
+
+  test("the kebab's Sync from source item is disabled without a source and opens the modal with one", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (url.startsWith("/api/v1/entities?")) {
+        return Promise.resolve(
+          jsonResponse(200, { items: [ENTITY, ENTITY_SYNCED], page: 1, pageSize: 20, total: 2 }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    expect(await screen.findByRole("menuitem", { name: "Sync checkout from source" })).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: "Operations for billing-synced" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Sync billing-synced from source" }));
+    expect(await screen.findByRole("dialog", { name: "Sync from source — billing-synced" })).toBeInTheDocument();
   });
 });

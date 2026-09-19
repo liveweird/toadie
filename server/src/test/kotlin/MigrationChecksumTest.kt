@@ -56,6 +56,7 @@ class MigrationChecksumTest {
         "V34__blueprint_hierarchy_relations.sql" to -1251230367,
         "V35__create_entity_queries.sql" to 1945661794,
         "V36__create_integration_clients.sql" to 727059242,
+        "V37__entity_source.sql" to -153945127,
     )
 
     @Test

@@ -5,6 +5,7 @@ import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.infra.importing.ImportMutation
 import ch.nokillswit.infra.importing.ImportMutationKind
@@ -39,6 +40,14 @@ import kotlinx.serialization.json.JsonPrimitive
 data class EntityImportRequest(
     val documents: List<JsonObject>,
     val replaceExisting: Boolean = false,
+    /**
+     * The URL the batch was fetched from (2.9.0, the `catalog/ImportRequest.sourceUrl` twin, one
+     * level down) — every CREATED/UPDATED entity row gets it as its source reference AND starts
+     * synced (the document IS the remote copy at import time); blueprints never carry it. Omit
+     * for pasted batches. A per-document `sourceUrl` is `INVALID` ([requireNoDocumentSourceUrl]) —
+     * row state belongs to the whole request, not one document.
+     */
+    val sourceUrl: String? = null,
 )
 
 @Serializable
@@ -142,6 +151,12 @@ private fun classifyDocuments(
         val decoded = decodeDocument<EntityRequest>(obj)
         if (decoded == null) {
             verdicts[index] = rejected(index, rawString(obj, "blueprint"), rawString(obj, "identifier"), IMPORT_SCHEMA_MESSAGE)
+            return@forEachIndexed
+        }
+        try {
+            requireNoDocumentSourceUrl(decoded)
+        } catch (e: BadRequestException) {
+            verdicts[index] = rejected(index, decoded.blueprint, decoded.identifier, e.message)
             return@forEachIndexed
         }
         val sanitized = sanitizedEntityRequest(decoded)
@@ -477,16 +492,21 @@ suspend fun EntityService.import(
     documents: List<JsonObject>,
     callerId: UInt,
     replaceExisting: Boolean,
+    sourceUrl: String? = null,
     onCommitted: (ImportMutation) -> Unit,
 ): List<EntityImportRow> {
     val plan = planEntityImport(documents, importSnapshot(), replaceExisting, workspaceDocumentBytes)
+    // D3 (`.claude/docs/persistence.md` "V37"): a batch WITH a `sourceUrl` moves/re-stamps every
+    // stored row; without one, `replaceExisting` keeps a row's existing reference untouched.
+    val source: SourceWrite = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
+        ?.let { SourceWrite.Synced(it) } ?: SourceWrite.Keep
     val rows = arrayOfNulls<EntityImportRow>(documents.size)
     plan.verdicts.forEachIndexed { idx, verdict -> if (verdict is EntityPlanVerdict.Rejected) rows[idx] = verdict.row }
 
     val storedIds = mutableMapOf<Int, UInt>()
     for (idx in plan.order) {
         val verdict = plan.verdicts[idx] as? EntityPlanVerdict.Store ?: continue
-        val write = writeEntityRow(idx, verdict, callerId, storedIds)
+        val write = writeEntityRow(idx, verdict, callerId, storedIds, source)
         rows[idx] = write.row
         // Keep committed mutation facts separate from pass 2's final verdict. The callback is
         // deliberately outside storage classification and runs exactly once per pass-1 write.
@@ -496,7 +516,7 @@ suspend fun EntityService.import(
         val verdict = plan.verdicts[idx] as? EntityPlanVerdict.Store ?: continue
         if (verdict.deferred.isEmpty()) continue
         val id = storedIds[idx] ?: continue
-        rows[idx] = pass2Entity(id, verdict, rows[idx] ?: error("entity import row $idx missing after pass 1"))
+        rows[idx] = pass2Entity(id, verdict, rows[idx] ?: error("entity import row $idx missing after pass 1"), source)
     }
     return rows.map { it ?: error("entity import row left unset") }
 }
@@ -510,19 +530,20 @@ private suspend fun EntityService.writeEntityRow(
     verdict: EntityPlanVerdict.Store,
     callerId: UInt,
     storedIds: MutableMap<Int, UInt>,
+    source: SourceWrite,
 ): EntityPass1Write {
     val blueprint = verdict.request.blueprint
     val identifier = verdict.request.identifier
     return try {
         if (verdict.existingId == null) {
-            val created = create(verdict.pass1, callerId)
+            val created = create(verdict.pass1, callerId, source)
             storedIds[index] = created.id
             EntityPass1Write(
                 EntityImportRow(index, blueprint, identifier, OntologyImportStatus.CREATED, id = created.id),
                 ImportMutation(ImportMutationKind.CREATED, created.id, identifier, blueprint = blueprint),
             )
         } else {
-            val result = update(verdict.existingId, verdict.pass1)
+            val result = update(verdict.existingId, verdict.pass1, source)
             if (result.affected == 0) {
                 EntityPass1Write(EntityImportRow(index, blueprint, identifier, OntologyImportStatus.ERROR, message = "Entity vanished"))
             } else {
@@ -549,9 +570,14 @@ private suspend fun EntityService.writeEntityRow(
 // Per-document isolation, the writeEntityRow precedent: an unexpected pass-2 storage failure is
 // reported as ERROR (via storageFailureRow) rather than escaping and failing the whole batch.
 @Suppress("TooGenericExceptionCaught")
-private suspend fun EntityService.pass2Entity(id: UInt, verdict: EntityPlanVerdict.Store, previousRow: EntityImportRow): EntityImportRow =
+private suspend fun EntityService.pass2Entity(
+    id: UInt,
+    verdict: EntityPlanVerdict.Store,
+    previousRow: EntityImportRow,
+    source: SourceWrite,
+): EntityImportRow =
     try {
-        val result = update(id, verdict.request)
+        val result = update(id, verdict.request, source)
         if (result.affected == 0) {
             previousRow.copy(
                 status = OntologyImportStatus.ERROR,

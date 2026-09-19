@@ -45,6 +45,7 @@ const DIRECT_ENTITY: Entity = {
   creatorDeleted: false,
   createdAt: 1,
   updatedAt: 1,
+  lastSyncedAt: 0,
 };
 
 describe("blueprintExportDocument", () => {

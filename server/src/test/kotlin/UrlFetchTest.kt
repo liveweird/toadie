@@ -1,18 +1,18 @@
 package ch.nokillswit
 
 import ch.nokillswit.authz.BadGatewayException
-import ch.nokillswit.catalog.BlockedUrlException
-import ch.nokillswit.catalog.CatalogUrlFetcher
-import ch.nokillswit.catalog.CatalogUrlFetcherKey
-import ch.nokillswit.catalog.FetchUrlResponse
-import ch.nokillswit.catalog.FetchUrlRequest
-import ch.nokillswit.catalog.FETCH_URL_INVALID_DETAIL
-import ch.nokillswit.catalog.MAX_FETCH_BYTES
-import ch.nokillswit.catalog.ValidatedFetchTarget
-import ch.nokillswit.catalog.isBlockedAddress
-import ch.nokillswit.catalog.parseFetchUrl
-import ch.nokillswit.catalog.requirePublicHost
-import ch.nokillswit.catalog.resolveFetchTarget
+import ch.nokillswit.infra.fetch.BlockedUrlException
+import ch.nokillswit.infra.fetch.UrlFetcher
+import ch.nokillswit.infra.fetch.UrlFetcherKey
+import ch.nokillswit.infra.fetch.FetchUrlResponse
+import ch.nokillswit.infra.fetch.FetchUrlRequest
+import ch.nokillswit.infra.fetch.FETCH_URL_INVALID_DETAIL
+import ch.nokillswit.infra.fetch.MAX_FETCH_BYTES
+import ch.nokillswit.infra.fetch.ValidatedFetchTarget
+import ch.nokillswit.infra.fetch.isBlockedAddress
+import ch.nokillswit.infra.fetch.parseFetchUrl
+import ch.nokillswit.infra.fetch.requirePublicHost
+import ch.nokillswit.infra.fetch.resolveFetchTarget
 import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserRole
 import com.sun.net.httpserver.HttpServer
@@ -156,7 +156,7 @@ class UrlFetchTest {
     // ---- response handling against the 127.0.0.1 fixture server ------------------------
 
     private fun fixtureFetcher(timeout: Duration = Duration.ofSeconds(10)) =
-        CatalogUrlFetcher(targetResolver = ::fixtureTarget, timeout = timeout)
+        UrlFetcher(targetResolver = ::fixtureTarget, timeout = timeout)
 
     private fun fixtureTarget(raw: String) = ValidatedFetchTarget(
         uri = URI(raw),
@@ -304,7 +304,7 @@ class UrlFetchTest {
                 addresses = listOf(InetAddress.getByName("127.0.0.1")),
             )
             val trustedLookups = AtomicInteger()
-            val trusted = CatalogUrlFetcher(
+            val trusted = UrlFetcher(
                 targetResolver = {
                     trustedLookups.incrementAndGet()
                     target
@@ -322,7 +322,7 @@ class UrlFetchTest {
             val wrongHost = target.copy(uri = URI(wrongHostUrl), url = wrongHostUrl.toHttpUrl())
             assertFailsWith<BadGatewayException> {
                 runBlocking {
-                    CatalogUrlFetcher(
+                    UrlFetcher(
                         targetResolver = { wrongHost },
                         customizeClient = { builder ->
                             builder.sslSocketFactory(
@@ -334,7 +334,7 @@ class UrlFetchTest {
                 }
             }
             assertFailsWith<BadGatewayException> {
-                runBlocking { CatalogUrlFetcher(targetResolver = { target }).fetch(url) }
+                runBlocking { UrlFetcher(targetResolver = { target }).fetch(url) }
             }
         } finally {
             server.stop(0)
@@ -357,7 +357,7 @@ class UrlFetchTest {
             val validationStarted = CountDownLatch(2)
             val releaseValidation = CountDownLatch(1)
             val validationFinished = CountDownLatch(2)
-            val fetcher = CatalogUrlFetcher(
+            val fetcher = UrlFetcher(
                 targetResolver = { raw ->
                     validationStarted.countDown()
                     // Model native DNS that ignores Thread.interrupt().
@@ -396,7 +396,7 @@ class UrlFetchTest {
     fun `a parent coroutine timeout remains cancellation`() {
         val validationStarted = CountDownLatch(1)
         val releaseValidation = CountDownLatch(1)
-        val fetcher = CatalogUrlFetcher(
+        val fetcher = UrlFetcher(
             targetResolver = { raw ->
                 validationStarted.countDown()
                 while (releaseValidation.count > 0) {
@@ -434,7 +434,7 @@ class UrlFetchTest {
             TimeUnit.MILLISECONDS,
             ArrayBlockingQueue(1),
         )
-        val fetcher = CatalogUrlFetcher(
+        val fetcher = UrlFetcher(
             targetResolver = { raw ->
                 validationStarted.countDown()
                 while (releaseValidation.count > 0) {
@@ -499,7 +499,7 @@ class UrlFetchTest {
         }
         executor.occupyWorker()
         gate.set(true)
-        val fetcher = CatalogUrlFetcher(targetResolver = ::fixtureTarget, fetchExecutor = executor)
+        val fetcher = UrlFetcher(targetResolver = ::fixtureTarget, fetchExecutor = executor)
         try {
             runBlocking {
                 val queued = async(Dispatchers.Default) { fetcher.fetch("http://127.0.0.1/queued") }
@@ -544,7 +544,7 @@ class UrlFetchTest {
                 }
             },
         ) { base ->
-            val fetcher = CatalogUrlFetcher(
+            val fetcher = UrlFetcher(
                 targetResolver = ::fixtureTarget,
                 timeout = Duration.ofSeconds(5),
                 fetchExecutor = executor,
@@ -611,7 +611,7 @@ class UrlFetchTest {
         try {
             val failure = assertFailsWith<BadGatewayException> {
                 runBlocking {
-                    CatalogUrlFetcher(
+                    UrlFetcher(
                         targetResolver = { target },
                         timeout = Duration.ofMillis(300),
                     ).fetch(url)
@@ -923,7 +923,7 @@ class UrlFetchTest {
                     // The test seam: a lenient-validator fetcher so the ROUTE can reach the
                     // 127.0.0.1 fixture; production wiring never sets this attribute.
                     application {
-                        attributes.put(CatalogUrlFetcherKey, fixtureFetcher(Duration.ofMillis(500)))
+                        attributes.put(UrlFetcherKey, fixtureFetcher(Duration.ofMillis(500)))
                     }
                     startApplication()
                     val client = seededClient("fetchroute")
@@ -951,6 +951,60 @@ class UrlFetchTest {
             } finally {
                 releaseSlow.countDown()
             }
+        }
+    }
+
+    // ---- the entity twin, POST /api/v1/entities/fetch (2.9.0) --------------------------------
+
+    @Test
+    fun `the entity fetch route returns the fetched text and audits it, and maps a missing upstream to 502`() =
+        withFixtureServer(
+            configure = { server ->
+                server.respond("/ok", 200, "{\"blueprint\":\"bp\",\"identifier\":\"e1\",\"title\":\"T\"}".toByteArray())
+                server.respond("/missing", 404, "not here".toByteArray())
+            },
+        ) { base ->
+            testApplication {
+                configureApp()
+                // The test seam: a lenient-validator fetcher so the ROUTE can reach the
+                // 127.0.0.1 fixture; production wiring never sets this attribute.
+                application {
+                    attributes.put(UrlFetcherKey, fixtureFetcher(Duration.ofMillis(500)))
+                }
+                startApplication()
+                val client = seededClient("entityfetchroute")
+
+                withAuditCapture { capture ->
+                    val ok = client.postJson("/api/v1/entities/fetch", FetchUrlRequest(url = "$base/ok"))
+                    assertEquals(HttpStatusCode.OK, ok.status)
+                    assertTrue(ok.body<FetchUrlResponse>().content.contains("\"identifier\":\"e1\""))
+                    // A successful outbound fetch leaves its own trail — scheme/host only, never
+                    // the full URL (it may embed query-string tokens).
+                    val fetched = capture.events.firstOrNull { it.message == "entity.fetched" }
+                    assertNotNull(fetched)
+                    assertTrue(fetched.hasKeyValue("host", "127.0.0.1"))
+                }
+
+                val bad = client.postJson("/api/v1/entities/fetch", FetchUrlRequest(url = "$base/missing"))
+                assertEquals(HttpStatusCode.BadGateway, bad.status)
+                assertTrue(bad.body<ProblemDetail>().detail!!.contains("HTTP 404"))
+            }
+        }
+
+    @Test
+    fun `the entity fetch route answers a uniform 400 for a blocked URL and audits the attempt`() = testApplication {
+        usePostgresTestcontainer()
+        withAuditCapture { capture ->
+            val email = uniqueEmail("entityurlfetch")
+            TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
+            val client = authedClient(email, "pw")
+
+            val response = client.postJson("/api/v1/entities/fetch", FetchUrlRequest(url = "https://127.0.0.1/x.yaml"))
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals(FETCH_URL_INVALID_DETAIL, response.body<ProblemDetail>().detail)
+
+            val event = capture.awaitEvent { it.message == "entity.fetch_blocked" && it.hasKeyValue("host", "127.0.0.1") }
+            assertNotNull(event)
         }
     }
 }

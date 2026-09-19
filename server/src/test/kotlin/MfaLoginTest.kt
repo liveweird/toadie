@@ -314,7 +314,7 @@ class MfaLoginTest {
     fun `a mail-provider exception's message never reaches the audit trail or the application log`() = testApplication {
         // configureAuthRoutes captures its Mailer once at module-load time (`val mailer =
         // mailer()`), so overriding the MailerKey attribute after startApplication() cannot
-        // reach the real /login route (the CatalogUrlFetcherKey test-seam idiom doesn't apply
+        // reach the real /login route (the UrlFetcherKey test-seam idiom doesn't apply
         // here). Instead, call the worker under test — issueMfaChallenge — directly, through a
         // throwaway test-only route, with a mailer whose send() throws an exception carrying
         // the sign-in code in its message (the leak this test pins never happening again).

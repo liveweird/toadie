@@ -240,7 +240,7 @@ that row's create/update audit before another row or pass two begins. Final ERRO
 later cancellation cannot erase this event; pass two emits no duplicate. Audit logs remain
 post-commit external output, not an atomic database outbox or a process-crash delivery guarantee.
 
-Current migrations are `V1`–`V35` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V37` — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -498,3 +498,36 @@ This whole-feature convention deliberately supersedes Lettuce's split mutation/e
 Terminal `revoked_at` is the documented removal exception to `marked_as_deleted`: rows remain
 for administrator inspection and cannot be re-enabled. No ontology columns or data change.
 See [integration-api.md](integration-api.md) for transaction/authentication invariants.
+
+### Entity source references (V37)
+
+`ALTER TABLE entities ADD COLUMN source_url VARCHAR(2048) NULL, ADD COLUMN last_synced_at BIGINT
+NOT NULL DEFAULT 0, ADD COLUMN synced_content TEXT NULL` — the `V21` (`catalog_files`) twin, one
+level up the Port migration: the same three-column envelope (an optional https reference, an
+epoch-millis "last re-synced" stamp, 0 = never, and the request-shaped JSON snapshot at sync
+time), stored BESIDE `document`, never inside it, so the Port document itself stays untouched
+and a future export never needs to strip anything out. `syncFromSource` (`entities/
+EntityService.kt`) is an ORDINARY replace under the entity's existing V28 two-table lock — it
+takes no new lock — that stamps `updated_at = last_synced_at` from one clock read, so a
+successful sync always leaves `updatedAt == lastSyncedAt` byte-exact. `synced_content` is the
+baseline an entity's sync diffs against: the SUBMITTED request re-encoded through
+`blueprintJson` (request-shaped, null-dropped fields absent, `sourceUrl` itself never inside
+it) — never the server's response shape, which may carry computed properties the stored
+document does not. A changed or cleared `sourceUrl` on an ordinary PUT resets `last_synced_at`
+to `0` and `synced_content` to `null` (the reference and its sync history travel together);
+`updatedAt` bumps on every entity PUT REGARDLESS of whether the document changed (D2 — unlike
+the catalog, which only bumps on an actual content change), so the SPA's "Local changes" badge
+means "saved in Toadie since the sync", not "the document differs from the baseline". Import-
+from-URL (a batch `sourceUrl` on `POST …/entities/import`) stamps the reference and the sync
+baseline on BOTH the pass-one write and, for a row deferred through the two-pass ontology-import
+protocol (`.claude/docs/port-data-model.md` "Import and export"), the pass-two restoration —
+the row's FINAL baseline is always the complete, fully-resolved document, never the
+pass-one-stripped intermediate one. A `replaceExisting` import batch submitted WITHOUT a
+`sourceUrl` KEEPS an existing row's reference untouched (D3) — only a batch that itself carries
+a URL moves or re-stamps one; a per-document `sourceUrl` inside an individual entity document is
+refused `400` (`requireNoDocumentSourceUrl`) on both create and sync, since the reference is row
+state for the whole request, never a document member. There is no waiver for entities: a sync
+whose fetched copy fails `entityFindings` is refused `400` with the findings, exactly like an
+ordinary strict save — entities have no `allowInvalid` escape hatch (unlike the catalog's
+sync, which always waives). Migration checksums, including V37, are pinned in
+`MigrationChecksumTest`.

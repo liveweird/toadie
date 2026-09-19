@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.9.0",
+    date: "2026-09-19",
+    en: `**Link entities to their source and re-sync them.** An entity can now carry the https address of its canonical copy in Port's JSON format — set it in the editor's Source section, or fetch a file from a URL on the Import page so every imported entity starts linked and synced. Sync from source, on the Entities list and in the editor, shows what changed at the source and in Toadie side by side before overwriting the stored copy; a copy that no longer satisfies the blueprint is refused, never stored. The new Last sync column shows how long ago each entity was synced and flags local changes since.`,
+    pl: `**Powiąż encje z ich źródłem i synchronizuj je ponownie.** Encja może teraz mieć adres https swojej kanonicznej kopii w formacie JSON Port — ustaw go w sekcji Źródło w edytorze albo pobierz plik z adresu URL na stronie Import, aby każda zaimportowana encja od razu była powiązana i zsynchronizowana. Synchronizuj ze źródła, na liście Encje i w edytorze, pokazuje obok siebie, co zmieniło się w źródle i w Toadie, zanim nadpisze zapisaną kopię; kopia, która nie spełnia już reguł blueprintu, jest odrzucana i nigdy nie zapisywana. Nowa kolumna Ostatnia synchronizacja pokazuje, jak dawno zsynchronizowano każdą encję, i oznacza lokalne zmiany wprowadzone od tego czasu.`,
+  },
+  {
     version: "2.8.1",
     date: "2026-09-19",
     en: `**Entities fit the screen.** The Entities list is about a third narrower: each row shows the title under the identifier with its findings badge beside it, property columns take only the width their type needs, and the Team, Updated and actions columns are trimmed — so a laptop screen shows the whole row without sideways scrolling. Title stays sortable from the identifier header.`,
