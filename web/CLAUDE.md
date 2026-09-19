@@ -411,15 +411,18 @@ forgets the pick; it never clears the bar (that is the bar's own Clear).
 The Port world's workspace-wide Errors report at `/ontology/errors` — `pages/Errors.tsx`'s twin
 one level over, `GET /api/v1/entities/errors` in place of `GET /files/errors`, nav leaf right
 after Entity hierarchy in `appShell.section.dataModel` (`utils/ontologyLinks.ts#ontologyErrorsPath`).
-Four finding classes in ONE table, `utils/entityErrorClasses.ts#ENTITY_ERROR_CLASSES`: `stale`
+Five finding classes in ONE table, `utils/entityErrorClasses.ts#ENTITY_ERROR_CLASSES`: `stale`
 (the same `EntityFindingCode`s a strict entity save already enforces — red, HARD on the
 entity's next save), `ownership` (an Inherited entity's unresolved effective team, or a
 blueprint whose `ownership.path` can never resolve — orange, report-only), `computed` (a
 blueprint's mirror/aggregation/calculation property gone stale or uncompilable — orange,
-report-only), and `queries` (a visible saved entity query that no longer parses/validates —
-orange, report-only). `classOfEntityCode` classifies every `EntityFinding.code` on entity AND
-blueprint rows (they share ONE code vocabulary); every saved-query row's diagnostics count as
-`queries` regardless of their own disjoint `QueryDiagnostic` code.
+report-only), `queries` (a visible saved entity query that no longer parses/validates —
+orange, report-only), and `source` (2.9.1 — an entity with no `sourceUrl` reference — gray, the
+catalog Errors report's own `source` class one level down: an optional reference's absence, not
+a defect, badged "No source"). `classOfEntityCode` classifies every `EntityFinding.code` on
+entity AND blueprint rows (they share ONE code vocabulary; `SOURCE_MISSING` is entity-only);
+every saved-query row's diagnostics count as `queries` regardless of their own disjoint
+`QueryDiagnostic` code.
 
 **REPORTED vs SHOWN, restated one level over.** The row-mode toolbar composes
 `FilterPanel storageKey="entityErrors"` directly (no `CatalogToolbar`/`EntityGraphToolbar`
@@ -451,7 +454,7 @@ color), a dimmed `field`, and a localized one-sentence explanation
 (there the STATIC explanation is the hover text and only `STRUCTURE_INVALID` shows the
 server's message inline), since here the localized explanation is always worth showing and the
 server message is often a raw jq compile error better kept as a tooltip. `entityErrors.json`
-carries `code.`/`explain.` entries for the UNION of `EntityFindingCode` (26 values) and
+carries `code.`/`explain.` entries for the UNION of `EntityFindingCode` (27 values, since 2.9.1's `SOURCE_MISSING`) and
 `QueryDiagnostic`'s parse/validate-and-evaluation codes (17 values) — two codes
 (`UNKNOWN_PROPERTY`, `UNKNOWN_RELATION`) exist in BOTH vocabularies and deliberately share one
 generic entry, since the wording ("isn't declared where it's used") reads correctly in either

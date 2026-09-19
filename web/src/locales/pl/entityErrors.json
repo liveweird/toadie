@@ -12,7 +12,8 @@
     "stale": "Nieaktualne",
     "ownership": "Własność",
     "queries": "Zapisane zapytania",
-    "computed": "Właściwości obliczane"
+    "computed": "Właściwości obliczane",
+    "source": "Źródło"
   },
   "subject": {
     "entity": "Encja",
@@ -54,6 +55,7 @@
     "AGGREGATION_PROPERTY_STALE": "Nieprawidłowa właściwość agregacji",
     "CALCULATION_COMPILE_FAILED": "Wyrażenie nie kompiluje się",
     "CALCULATION_QUARANTINED": "Wyrażenie objęte kwarantanną",
+    "SOURCE_MISSING": "Brak źródła",
     "SYNTAX": "Błąd składni",
     "UNSUPPORTED": "Nieobsługiwana funkcja",
     "UNKNOWN_LABEL": "Nieznany blueprint",
@@ -97,6 +99,7 @@
     "AGGREGATION_PROPERTY_STALE": "Właściwość obliczeniowa lub pole czasu tej agregacji już nie wskazuje prawidłowej właściwości blueprintu docelowego — popraw obliczenie.",
     "CALCULATION_COMPILE_FAILED": "To wyrażenie jq nie kompiluje się — komunikat pochodzi bezpośrednio z jq. Popraw wyrażenie.",
     "CALCULATION_QUARANTINED": "Ta instancja serwera objęła wyrażenie kwarantanną po tym, jak wcześniejsze uruchomienie przekroczyło limit czasu — edytuj wyrażenie albo poczekaj na restart, aby ją zniesiono.",
+    "SOURCE_MISSING": "Ta encja nie ma odwołania do źródła — jest ono opcjonalne, ale bez niego encji nie można ponownie zsynchronizować.",
     "SYNTAX": "Tekst zapytania się nie parsuje — sprawdź, czy nie brakuje słowa kluczowego, nawiasu albo cudzysłowu.",
     "UNSUPPORTED": "Zapytanie używa funkcji spoza obsługiwanego podzbioru Cyphera — sprawdź, co jest dozwolone, w dokumentacji języka zapytań.",
     "UNKNOWN_LABEL": "Zapytanie wskazuje identyfikator blueprintu, który nie istnieje — sprawdź pisownię albo podpowiedź.",
