@@ -1722,7 +1722,7 @@ export interface paths {
          * @description Any authenticated user; no admin gate. The `catalog/Errors.kt` Errors report's Port-world
          *     twin (2.5.0): a workspace-wide sweep over the ACTIVE entity/blueprint/saved-query
          *     registries, unpaged, never audited (the same rule as `GET …/files/errors`,
-         *     `POST …/entities/query/check`, and export). Four finding classes, one report:
+         *     `POST …/entities/query/check`, and export). Five finding classes, one report:
          *
          *     1. **Stale entities** — the same 19 `EntityFindingCode` values every strict save already
          *        enforces (`Entity.findings`), re-evaluated against each entity's blueprint's CURRENT
@@ -1773,6 +1773,12 @@ export interface paths {
          *        diagnostics (`DEADLINE_EXCEEDED`, `BINDING_LIMIT`, `WORKSPACE_TOO_LARGE`) are
          *        explicitly OUT of scope here — those are per-request and already inline on the query
          *        bar; a saved query is checked for PARSE/VALIDATE health only.
+         *     5. **Source references** (2.9.1) — report-only, never blocks a save: `SOURCE_MISSING`
+         *        (an entity row; field `source`) flags an entity with no `sourceUrl` reference — the
+         *        `catalog/Errors.kt` `SOURCE_MISSING` twin one level over, and the OPPOSITE kind of
+         *        report-only finding from classes 2-3 above: the reference is optional on writes, so
+         *        this is never a save blocker, just a standing report entry. Never emitted on
+         *        blueprint or saved-query rows.
          *
          *     Filter semantics (REPORTED vs SHOWN, the catalog Errors report's own asymmetry):
          *     `blueprint` (any-of, case-insensitive, unknown identifiers ignored — an all-unknown list
@@ -3090,14 +3096,14 @@ export interface components {
             sourceUrl?: string;
         };
         /**
-         * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint). Phase 4 ownership (field `team`, or `properties.<id>` for a `format: team|user` property): TEAM_TARGET_MISSING (a `team` value, or a `format: team` property value, does not resolve to an active `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property value does not resolve to an active `_user` entity). The remaining seven codes are **report-only — emitted only by `getEntityErrors`** (2.5.0), never by a strict save: OWNERSHIP_UNRESOLVED (an entity row; an Inherited entity's effective team resolved to nothing), OWNERSHIP_PATH_STALE (a blueprint row; its `ownership.path` can never resolve), MIRROR_PATH_STALE / AGGREGATION_PATH_STALE / AGGREGATION_PROPERTY_STALE / CALCULATION_COMPILE_FAILED / CALCULATION_QUARANTINED (all blueprint rows; a mirror/ aggregation/calculation property's STATIC health — see `getEntityErrors`'s own description for the full rule table).
+         * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint). Phase 4 ownership (field `team`, or `properties.<id>` for a `format: team|user` property): TEAM_TARGET_MISSING (a `team` value, or a `format: team` property value, does not resolve to an active `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property value does not resolve to an active `_user` entity). The remaining eight codes are **report-only — emitted only by `getEntityErrors`** (2.5.0), never by a strict save: OWNERSHIP_UNRESOLVED (an entity row; an Inherited entity's effective team resolved to nothing), OWNERSHIP_PATH_STALE (a blueprint row; its `ownership.path` can never resolve), MIRROR_PATH_STALE / AGGREGATION_PATH_STALE / AGGREGATION_PROPERTY_STALE / CALCULATION_COMPILE_FAILED / CALCULATION_QUARANTINED (all blueprint rows; a mirror/ aggregation/calculation property's STATIC health — see `getEntityErrors`'s own description for the full rule table), and SOURCE_MISSING (2.9.1, an entity row; field `source` — the entity carries no `sourceUrl` reference; the OPPOSITE kind of report-only code, since the reference is optional on writes and this never blocks a save; never emitted on blueprint rows).
          * @enum {string}
          */
-        EntityFindingCode: "UNKNOWN_PROPERTY" | "COMPUTED_PROPERTY" | "REQUIRED_MISSING" | "TYPE_MISMATCH" | "ENUM_MISMATCH" | "FORMAT_INVALID" | "LENGTH_OUT_OF_RANGE" | "PATTERN_MISMATCH" | "RANGE_OUT_OF_BOUNDS" | "ARRAY_SIZE" | "ARRAY_NOT_UNIQUE" | "OBJECT_SHAPE" | "UNKNOWN_RELATION" | "RELATION_SHAPE" | "RELATION_REQUIRED" | "RELATION_TARGET_MISSING" | "TEAM_TARGET_MISSING" | "TEAM_NOT_ALLOWED" | "USER_TARGET_MISSING" | "OWNERSHIP_UNRESOLVED" | "OWNERSHIP_PATH_STALE" | "MIRROR_PATH_STALE" | "AGGREGATION_PATH_STALE" | "AGGREGATION_PROPERTY_STALE" | "CALCULATION_COMPILE_FAILED" | "CALCULATION_QUARANTINED";
+        EntityFindingCode: "UNKNOWN_PROPERTY" | "COMPUTED_PROPERTY" | "REQUIRED_MISSING" | "TYPE_MISMATCH" | "ENUM_MISMATCH" | "FORMAT_INVALID" | "LENGTH_OUT_OF_RANGE" | "PATTERN_MISMATCH" | "RANGE_OUT_OF_BOUNDS" | "ARRAY_SIZE" | "ARRAY_NOT_UNIQUE" | "OBJECT_SHAPE" | "UNKNOWN_RELATION" | "RELATION_SHAPE" | "RELATION_REQUIRED" | "RELATION_TARGET_MISSING" | "TEAM_TARGET_MISSING" | "TEAM_NOT_ALLOWED" | "USER_TARGET_MISSING" | "OWNERSHIP_UNRESOLVED" | "OWNERSHIP_PATH_STALE" | "MIRROR_PATH_STALE" | "AGGREGATION_PATH_STALE" | "AGGREGATION_PROPERTY_STALE" | "CALCULATION_COMPILE_FAILED" | "CALCULATION_QUARANTINED" | "SOURCE_MISSING";
         /** @description One violation of the owning blueprint's current schema/relations — the same rule a strict save enforces. A non-empty `findings` list on a GET/list response means the entity is STALE (its blueprint changed since its last save) and its next save is refused until fixed. Since 2.5.0 `getEntityErrors` reuses this SAME shape for its report-only blueprint-health codes, on both entity AND blueprint rows. */
         EntityFinding: {
             code: components["schemas"]["EntityFindingCode"];
-            /** @description `properties.<id>` or `relations.<id>` naming the offending key, `team` (Phase 4 ownership), or — for `getEntityErrors`'s blueprint rows (2.5.0) — `ownership.path`, `mirrorProperties.<id>`, `aggregationProperties.<id>`, or `calculationProperties.<id>`. */
+            /** @description `properties.<id>` or `relations.<id>` naming the offending key, `team` (Phase 4 ownership), `source` (2.9.1, `getEntityErrors`'s entity rows only), or — for `getEntityErrors`'s blueprint rows (2.5.0) — `ownership.path`, `mirrorProperties.<id>`, `aggregationProperties.<id>`, or `calculationProperties.<id>`. */
             field: string;
             message: string;
         };
@@ -3296,7 +3302,7 @@ export interface components {
             nodes: components["schemas"]["EntityGraphNode"][];
             edges: components["schemas"]["EntityGraphEdge"][];
         };
-        /** @description One entity flagged by `getEntityErrors` (2.5.0) — the same `findings` shape a strict save would reject, plus any report-only ownership finding. */
+        /** @description One entity flagged by `getEntityErrors` (2.5.0) — the same `findings` shape a strict save would reject, plus any report-only ownership or source-missing finding. */
         EntityErrorRow: {
             /** Format: int32 */
             id: number;

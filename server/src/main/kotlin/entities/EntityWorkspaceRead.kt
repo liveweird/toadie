@@ -69,6 +69,7 @@ internal data class RawEntityColumns(
     val documentRaw: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val sourceUrl: String?,
 )
 
 /**
@@ -94,6 +95,8 @@ internal class WorkspaceRow(
     val icon: String? get() = raw.icon
     val createdAt: Long get() = raw.createdAt
     val updatedAt: Long get() = raw.updatedAt
+    /** The `source_url` column, for [SOURCE_MISSING] (`EntityErrors.kt`) — a bare column read, no sync/baseline state. */
+    val sourceUrl: String? get() = raw.sourceUrl
 
     private var skeletonRow: IndexedRow? = null
     private var fullRow: IndexedRow? = null
@@ -152,6 +155,7 @@ private fun ResultRow.toWorkspaceRow(
         documentRaw = this[ReadEntities.document],
         createdAt = this[ReadEntities.createdAt],
         updatedAt = this[ReadEntities.updatedAt],
+        sourceUrl = this[ReadEntities.sourceUrl],
     )
     return WorkspaceRow(raw, shown = id in shownIds, reservation = reservation)
 }
