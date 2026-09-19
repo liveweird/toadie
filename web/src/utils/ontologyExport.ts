@@ -63,12 +63,15 @@ export function entityExportJson(entity: Entity, blueprint: Blueprint): string {
   return JSON.stringify(entityExportDocument(entity, blueprint), null, 2);
 }
 
-/** `toadie-entity-<blueprint>-<identifier>.json`, with every character outside Port's safe
- *  filename charset (`[A-Za-z0-9._-]`) — the entity identifier grammar additionally allows
- *  `@ + : \ / = '` — replaced by `_`. */
+/** `toadie-entity-<blueprint>-<identifier>.json`, with every character outside the safe
+ *  filename charset (`[A-Za-z0-9._-]`) replaced by `_` in BOTH halves — the blueprint
+ *  identifier grammar also allows `@ : / =`, the entity identifier grammar `@ + : \ / = '`. */
 export function entityExportFileName(entity: Entity): string {
-  const safeIdentifier = entity.identifier.replace(/[^A-Za-z0-9._-]/g, "_");
-  return `toadie-entity-${entity.blueprint}-${safeIdentifier}.json`;
+  return `toadie-entity-${fileNameSafe(entity.blueprint)}-${fileNameSafe(entity.identifier)}.json`;
+}
+
+function fileNameSafe(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
 export function downloadJson(text: string, filename: string) {

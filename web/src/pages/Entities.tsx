@@ -339,6 +339,9 @@ export default function Entities() {
                       <Menu.Item
                         leftSection={<IconDownload size={14} />}
                         aria-label={t("entities.exportAria", { name: entity.identifier })}
+                        // Rows can land before the blueprint registry does (the two queries are
+                        // independent); the export needs the definition to strip computed ids.
+                        disabled={!selectedBlueprint}
                         onClick={() => {
                           if (selectedBlueprint) {
                             downloadJson(entityExportJson(entity, selectedBlueprint), entityExportFileName(entity));

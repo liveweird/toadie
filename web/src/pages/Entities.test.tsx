@@ -191,6 +191,22 @@ describe("Entities page", () => {
     click.mockRestore();
   });
 
+  test("the row menu's Export JSON is disabled while the blueprint registry is still loading", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return new Promise<Response>(() => {});
+      if (url.startsWith("/api/v1/entities?")) {
+        return Promise.resolve(jsonResponse(200, { items: [ENTITY], page: 1, pageSize: 20, total: 1 }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    expect(await screen.findByRole("menuitem", { name: "Export checkout as JSON" })).toHaveAttribute("data-disabled", "true");
+  });
+
   test("picking a blueprint via the URL lists its entities with identifier link and findings badge", async () => {
     mockRoutes(mockFetch);
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });

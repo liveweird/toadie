@@ -128,6 +128,11 @@ describe("entityExportFileName", () => {
     const entity: Entity = { ...DIRECT_ENTITY, identifier: "a/b:c@d" };
     expect(entityExportFileName(entity)).toBe("toadie-entity-service-a_b_c_d.json");
   });
+
+  test("sanitizes the blueprint half too (its grammar allows @ : / =)", () => {
+    const entity: Entity = { ...DIRECT_ENTITY, blueprint: "payments/core:v2" };
+    expect(entityExportFileName(entity)).toBe("toadie-entity-payments_core_v2-checkout.json");
+  });
 });
 
 describe("the export round trip", () => {
