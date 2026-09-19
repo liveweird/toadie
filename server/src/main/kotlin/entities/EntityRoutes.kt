@@ -7,6 +7,13 @@ import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.entityquery.EntityQueryCheckRequest
 import ch.nokillswit.entityquery.EntityQueryCheckResponse
 import ch.nokillswit.entityquery.MAX_QUERY_LENGTH
+import ch.nokillswit.infra.fetch.BlockedUrlException
+import ch.nokillswit.infra.fetch.FETCH_URL_INVALID_DETAIL
+import ch.nokillswit.infra.fetch.FetchUrlRequest
+import ch.nokillswit.infra.fetch.FetchUrlResponse
+import ch.nokillswit.infra.fetch.UrlFetcher
+import ch.nokillswit.infra.fetch.UrlFetcherKey
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.importing.ImportMutation
 import ch.nokillswit.infra.importing.ImportMutationKind
 import ch.nokillswit.infra.importing.requireBatchSize
@@ -40,12 +47,22 @@ import kotlinx.serialization.Serializable
 class EntitiesRoute {
     @Serializable
     @Resource("{id}")
-    class Id(val parent: EntitiesRoute = EntitiesRoute(), val id: UInt)
+    class Id(val parent: EntitiesRoute = EntitiesRoute(), val id: UInt) {
+        @Serializable
+        @Resource("sync")
+        class Sync(val parent: Id)
+    }
 
     // A literal segment beats {id} in Ktor's route resolution (the CatalogFiles.Graph idiom).
     @Serializable
     @Resource("graph")
     class Graph(val parent: EntitiesRoute = EntitiesRoute())
+
+    // 2.9.0: source references & HTTP re-sync — the `catalog/CatalogFiles.Fetch` twin, one
+    // level down; a literal segment beats {id}, the same idiom.
+    @Serializable
+    @Resource("fetch")
+    class Fetch(val parent: EntitiesRoute = EntitiesRoute())
 
     // 2.5.0: the Port-world Errors report — a second literal segment beating {id}, same idiom.
     @Serializable
@@ -81,6 +98,9 @@ private suspend inline fun <reified T> ApplicationCall.respondEntity(status: Htt
 
 fun Application.configureEntityRoutes() {
     val entityService = attributes[EntityServiceKey]
+    // Stateless, no DB — constructed here rather than in the composition root, the
+    // `catalog/CatalogFileRoutes.kt` idiom (same shared `UrlFetcherKey` test seam).
+    val urlFetcher by lazy { attributes.getOrNull(UrlFetcherKey) ?: UrlFetcher() }
 
     routing {
         authenticate {
@@ -119,6 +139,34 @@ fun Application.configureEntityRoutes() {
             get<EntitiesRoute.Errors> {
                 val caller = call.caller()
                 call.respondEntity(HttpStatusCode.OK, entityService.errors(call.entityGraphFilter(), caller.userId))
+            }
+            // 2.9.0: source references & HTTP re-sync — the SSRF-guarded fetch, verbatim from
+            // `catalog/CatalogFileRoutes.kt` (`.claude/docs/security.md` "Outbound URL fetch").
+            post<EntitiesRoute.Fetch> {
+                val caller = call.caller()
+                val request = call.receive<FetchUrlRequest>()
+                val fetched = try {
+                    urlFetcher.fetch(request.url)
+                } catch (blocked: BlockedUrlException) {
+                    // A blocked fetch attempt is a probe signal worth keeping; the response
+                    // itself stays uniform so nothing about the internal network leaks.
+                    audit(
+                        "entity.fetch_blocked",
+                        "byUserId" to caller.userId.toLong(),
+                        "scheme" to blocked.scheme,
+                        "host" to blocked.host,
+                    )
+                    throw BadRequestException(FETCH_URL_INVALID_DETAIL)
+                }
+                // The success trail: the server pulled a body from a public host on user
+                // command — record who and from where (scheme/host ONLY, never the full URL).
+                audit(
+                    "entity.fetched",
+                    "byUserId" to caller.userId.toLong(),
+                    "scheme" to fetched.uri.scheme,
+                    "host" to fetched.uri.host,
+                )
+                call.respond(HttpStatusCode.OK, FetchUrlResponse(content = fetched.content))
             }
             post<EntitiesRoute> {
                 val caller = call.caller()
@@ -162,6 +210,36 @@ fun Application.configureEntityRoutes() {
                 audit("entity.updated", *fields.toTypedArray())
                 call.respond(HttpStatusCode.NoContent)
             }
+            get<EntitiesRoute.Id.Sync> { route ->
+                call.caller()
+                val state = entityService.syncState(route.parent.id).orNotFound("Entity")
+                call.respondEntity(HttpStatusCode.OK, state)
+            }
+            post<EntitiesRoute.Id.Sync> { route ->
+                val caller = call.caller()
+                // The remote->DB sync: the client fetched the source URL (POST …/entities/fetch)
+                // and parsed/decoded it (a client concern); strict, no waiver exists for
+                // entities (unlike the catalog's repo sync) — a fetched copy failing
+                // `entityFindings` is refused outright.
+                val request = call.receive<SyncEntityRequest>()
+                requireNoDocumentSourceUrl(request.document)
+                val document = sanitizedEntityRequest(request.document)
+                validateEntityRequest(document)
+                val result = entityService.syncFromSource(route.parent.id, document)
+                result.affected.orNotFound("Entity")
+                val fields = buildList<Pair<String, Any?>> {
+                    add("byUserId" to caller.userId.toLong())
+                    add("entityId" to route.parent.id.toLong())
+                    add("blueprint" to document.blueprint)
+                    add("identifier" to document.identifier)
+                    add("properties" to document.properties.size)
+                    add("relations" to document.relations.size)
+                    add("cascaded" to result.cascaded.size)
+                    result.renamedFrom?.let { add("renamedFrom" to it) }
+                }
+                audit("entity.synced", *fields.toTypedArray())
+                call.respond(HttpStatusCode.NoContent)
+            }
             delete<EntitiesRoute.Id> { route ->
                 val caller = call.caller()
                 val result = entityService.delete(route.id)
@@ -189,7 +267,12 @@ fun Application.configureEntityRoutes() {
                 val caller = call.caller()
                 val request = call.receive<EntityImportRequest>()
                 requireBatchSize(request.documents.size)
-                val rows = entityService.import(request.documents, caller.userId, request.replaceExisting) { mutation ->
+                val rows = entityService.import(
+                    request.documents,
+                    caller.userId,
+                    request.replaceExisting,
+                    sourceUrl = sanitizedSourceUrl(request.sourceUrl),
+                ) { mutation ->
                     auditImportedEntityMutation(caller.userId, mutation)
                 }
                 call.respondEntity(HttpStatusCode.OK, EntityImportResponse(rows))

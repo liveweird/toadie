@@ -1587,8 +1587,9 @@ export interface paths {
          *
          *     Supports offset pagination, sorting and filtering.
          *
-         *     - Sortable fields: `identifier`, `title`, `updatedAt`. Default sort is `identifier`
-         *       ascending; `id` ascending is always appended as a deterministic tiebreaker.
+         *     - Sortable fields: `identifier`, `title`, `updatedAt`, `lastSyncedAt`. Default sort is
+         *       `identifier` ascending; `id` ascending is always appended as a deterministic
+         *       tiebreaker.
          *     - Filters (optional): `blueprint` — exact (case-insensitive) match against the
          *       blueprint identifier (an unknown identifier answers an empty page, not `404`);
          *       `q` — case- and accent-insensitive substring match against `identifier` OR
@@ -1956,6 +1957,86 @@ export interface paths {
          *     `team` column or a `format: team`/`format: user` property.
          */
         delete: operations["deleteEntity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entities/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch an entity document from a URL (server-side)
+         * @description Any authenticated user. Source references & HTTP re-sync (2.9.0): retrieves the raw
+         *     text at the given URL — a catalog-info.yaml or a Port entity JSON document — so the
+         *     SPA can drop it into the ontology import flow or the entity sync modal. Server-side so
+         *     any reachable host works, not only CORS-friendly ones; parsing stays a client concern,
+         *     this returns TEXT. Identical SSRF posture and guard chain to `POST /files/fetch`
+         *     (`.claude/docs/security.md` "Outbound URL fetch") — the same shared fetcher, one shared
+         *     connection pool.
+         *
+         *     SSRF posture: the URL must be an absolute `https` address without credentials whose
+         *     host resolves ONLY to public addresses — anything else (http, userinfo, loopback,
+         *     private/link-local/unique-local ranges, unresolvable hosts) is a uniform `400` that
+         *     never echoes what was probed. Redirects are not followed (`502` — use the final URL),
+         *     the response body is capped at 1 MB, and one 10-second deadline covers validation,
+         *     DNS resolution, connection/headers, and the complete response body. Upstream
+         *     failures (non-200, deadline expiry, body-read failure, oversize) answer `502`.
+         */
+        post: operations["fetchEntityUrl"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entities/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read an entity's sync state
+         * @description Any authenticated user. The entity's source reference, last-sync stamp, and the
+         *     BASELINE document stored at the last sync — what the sync modal compares the current
+         *     DB document and the freshly fetched remote copy against to attribute changes to a
+         *     side. A never-synced entity answers `lastSyncedAt: 0` with `syncedDocument` absent.
+         *     A pure read, not audited.
+         */
+        get: operations["getEntitySyncState"];
+        put?: never;
+        /**
+         * Overwrite the entity with its remote copy (HTTP→DB sync)
+         * @description The remote→DB sync: overwrites the stored document with the submitted one — the copy
+         *     the client fetched via `POST /entities/fetch` and parsed/decoded client-side — and
+         *     stamps the sync state (`lastSyncedAt` = `updatedAt` = now, the submitted document
+         *     becomes the new baseline).
+         *
+         *     **No waiver exists for entities** (unlike the catalog's repo sync, which always
+         *     waives): the submitted document is validated STRICTLY against the owning blueprint's
+         *     current `schema`/`relations`/`ownership`, exactly as a strict create/replace would — a
+         *     fetched copy failing `entityFindings` is refused outright (`400`, full `findings`
+         *     list). `blueprint` must equal the entity's stored blueprint (`400` otherwise — moving
+         *     an entity between blueprints is not supported, sync included). The document's own
+         *     `sourceUrl` member must be absent (`400` — it is row state for the whole entity, set
+         *     once via PUT or import, never resubmitted through the sync body). The entity must hold
+         *     a source reference (`400` otherwise — set one first, e.g. via the editor's Source
+         *     field). Renaming the identifier CASCADES exactly as a PUT would (audited `cascaded`/
+         *     `renamedFrom`); a repo-side rename landing on an identity another active entity holds
+         *     is a `409`.
+         */
+        post: operations["syncEntity"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3005,6 +3086,8 @@ export interface components {
             relations?: {
                 [key: string]: unknown;
             };
+            /** @description The entity's source reference (2.9.0) — the https URL of its canonical remote copy. Row state for the WHOLE request, not a Port document member: a bulk-import document carrying this is `INVALID` (see `EntityImportRequest.sourceUrl`), and the sync body's own `document.sourceUrl` is refused (`400`). Absent when unset. On PUT, full-replace semantics: omitted or blank CLEARS the stored reference; any change resets the sync state. */
+            sourceUrl?: string;
         };
         /**
          * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint). Phase 4 ownership (field `team`, or `properties.<id>` for a `format: team|user` property): TEAM_TARGET_MISSING (a `team` value, or a `format: team` property value, does not resolve to an active `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property value does not resolve to an active `_user` entity). The remaining seven codes are **report-only — emitted only by `getEntityErrors`** (2.5.0), never by a strict save: OWNERSHIP_UNRESOLVED (an entity row; an Inherited entity's effective team resolved to nothing), OWNERSHIP_PATH_STALE (a blueprint row; its `ownership.path` can never resolve), MIRROR_PATH_STALE / AGGREGATION_PATH_STALE / AGGREGATION_PROPERTY_STALE / CALCULATION_COMPILE_FAILED / CALCULATION_QUARANTINED (all blueprint rows; a mirror/ aggregation/calculation property's STATIC health — see `getEntityErrors`'s own description for the full rule table).
@@ -3115,6 +3198,28 @@ export interface components {
              * @description Epoch millis.
              */
             updatedAt: number;
+            /** @description The entity's source reference (2.9.0); absent = none set. */
+            sourceUrl?: string;
+            /**
+             * Format: int64
+             * @description Epoch millis of the last HTTP→DB sync; 0 = never. A sync stamps `updatedAt` equal, so `updatedAt > lastSyncedAt` means "modified in Toadie since the sync".
+             */
+            lastSyncedAt: number;
+        };
+        /** @description GET …/entities/{id}/sync's body — the `SyncStateResponse` shape one level down, with the entity DTOs' ABSENT-not-null convention (never `nullable`). */
+        EntitySyncStateResponse: {
+            /** @description The entity's source reference; absent = none set (syncing is refused). */
+            sourceUrl?: string;
+            /**
+             * Format: int64
+             * @description Epoch millis of the last HTTP→DB sync; 0 = never.
+             */
+            lastSyncedAt: number;
+            /** @description The document as stored at the last sync — the baseline the sync modal compares the current DB document and the fetched remote copy against; absent = never synced. */
+            syncedDocument?: components["schemas"]["EntityRequest"];
+        };
+        SyncEntityRequest: {
+            document: components["schemas"]["EntityRequest"];
         };
         EntityPage: {
             items: components["schemas"]["Entity"][];
@@ -3136,6 +3241,8 @@ export interface components {
              * @default false
              */
             replaceExisting: boolean;
+            /** @description The URL the batch was fetched from (2.9.0, the `ImportRequest.sourceUrl` twin, one level down) — every CREATED/UPDATED entity row gets it as its source reference AND starts synced (the document IS the remote copy at import time); blueprints never carry it. Omit for pasted batches. A per-document `sourceUrl` member is `INVALID` for that row — it is row state for the whole request, not one document. */
+            sourceUrl?: string | null;
         };
         EntityImportRow: {
             /** @description The document's 0-based position in the submitted batch. */
@@ -5900,6 +6007,89 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    fetchEntityUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FetchUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description The raw text at the URL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FetchUrlResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    getEntitySyncState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sync state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntitySyncStateResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    syncEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncEntityRequest"];
+            };
+        };
+        responses: {
+            /** @description Synced — the DB copy now equals the submitted remote copy */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["EntityInvalid"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];

@@ -395,7 +395,7 @@ deployment was performed as part of local verification.
 
 ### Outbound-fetch deadline batch (2026-09-06)
 
-`CatalogUrlFetcher` now uses one ten-second caller deadline spanning validation, DNS guard,
+`UrlFetcher` (then `CatalogUrlFetcher`, `catalog/UrlFetch.kt`) now uses one ten-second caller deadline spanning validation, DNS guard,
 connection/headers, and complete body consumption. A bounded asynchronous subscriber keeps the
 one-megabyte ceiling; failed HTTP statuses do not wait for their bodies. Timeout, connection/body
 failure, and validation-capacity exhaustion preserve the safe 502 contract. Parent cancellation

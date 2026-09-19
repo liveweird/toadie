@@ -1,5 +1,7 @@
 package ch.nokillswit
 
+import ch.nokillswit.entities.EntityRequest
+import ch.nokillswit.entities.SyncEntityRequest
 import ch.nokillswit.plugins.ProblemDetail
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -31,6 +33,13 @@ class NegativeIdTest {
         // exercising the interceptor under test.
         assertNegative400(client.get("/api/v1/blueprints/-1"))
         assertNegative400(client.get("/api/v1/entities/-1"))
+        assertNegative400(client.get("/api/v1/entities/-1/sync"))
+        assertNegative400(
+            client.postJson(
+                "/api/v1/entities/-1/sync",
+                SyncEntityRequest(document = EntityRequest(blueprint = "bp", identifier = "x", title = "T")),
+            ),
+        )
 
         assertNegative400(client.delete("/api/v1/blueprints/-1"))
         assertNegative400(client.delete("/api/v1/entities/-1"))

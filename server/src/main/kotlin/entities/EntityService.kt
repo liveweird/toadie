@@ -30,6 +30,7 @@ import ch.nokillswit.entityquery.validateAndBind
 import ch.nokillswit.entityquery.validateEntityQuery
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.infra.db.octetLength
+import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.users.UserService
@@ -80,6 +81,7 @@ private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "identifier" to EntityService.Entities.identifier,
     "title" to EntityService.Entities.title,
     "updatedAt" to EntityService.Entities.updatedAt,
+    "lastSyncedAt" to EntityService.Entities.lastSyncedAt,
 )
 
 /** The ONE sortable whitelist — mirrors `catalog/CatalogFileService.kt`'s `CATALOG_FILE_SORT_FIELDS`. */
@@ -155,6 +157,13 @@ class EntityService(
         val createdAt = long("created_at")
         val updatedAt = long("updated_at")
         val markedAsDeleted = bool("marked_as_deleted").default(false)
+        // Source references & HTTP re-sync (2.9.0, V37 — the `catalog_files` envelope one level
+        // down): the https URL of the entity's canonical remote copy; NULL = none set.
+        val sourceUrl = varchar("source_url", length = MAX_FETCH_URL_LENGTH).nullable()
+        // Epoch millis of the last HTTP->DB sync; 0 = never (the catalog_files.last_synced_at idiom).
+        val lastSyncedAt = long("last_synced_at").default(0)
+        // The request-shaped document snapshot taken at sync time — the sync modal's baseline. NULL = never synced.
+        val syncedContent = text("synced_content").nullable()
     }
 
     /**
@@ -166,7 +175,7 @@ class EntityService(
      * executes [LOCK_BLUEPRINTS_SHARE] then [LOCK_ENTITIES_SHARE_ROW_EXCLUSIVE] in that fixed
      * order.
      */
-    private suspend fun <T> writeTransaction(block: suspend R2dbcTransaction.() -> T): T =
+    internal suspend fun <T> writeTransaction(block: suspend R2dbcTransaction.() -> T): T =
         lockingTransaction(database, LOCK_BLUEPRINTS_SHARE, LOCK_ENTITIES_SHARE_ROW_EXCLUSIVE, block = block)
 
     internal fun active(): Op<Boolean> = Entities.markedAsDeleted eq false
@@ -272,6 +281,8 @@ class EntityService(
         val creatorDeleted: Boolean,
         val createdAt: Long,
         val updatedAt: Long,
+        val sourceUrl: String?,
+        val lastSyncedAt: Long,
     )
 
     private fun ResultRow.toRawEntity(budget: OntologyReadBudget? = null): RawEntity = RawEntity(
@@ -287,6 +298,8 @@ class EntityService(
         creatorDeleted = this[UserService.Users.markedAsDeleted],
         createdAt = this[Entities.createdAt],
         updatedAt = this[Entities.updatedAt],
+        sourceUrl = this[Entities.sourceUrl],
+        lastSyncedAt = this[Entities.lastSyncedAt],
     )
 
     /**
@@ -337,6 +350,8 @@ class EntityService(
             creatorDeleted = raw.creatorDeleted,
             createdAt = raw.createdAt,
             updatedAt = raw.updatedAt,
+            sourceUrl = raw.sourceUrl,
+            lastSyncedAt = raw.lastSyncedAt,
         )
     }
 
@@ -739,7 +754,11 @@ class EntityService(
     /** One [importSnapshot] row's identity plus its stored document+team byte size — never the text (`.claude/docs/persistence.md`). */
     private data class ImportSnapshotRow(val blueprintId: UInt, val identifier: String, val id: UInt, val bytes: Long)
 
-    suspend fun create(request: EntityRequest, callerId: UInt): EntityResponse {
+    suspend fun create(
+        request: EntityRequest,
+        callerId: UInt,
+        source: SourceWrite = SourceWrite.FromRequest,
+    ): EntityResponse {
         validateEntityRequest(request) // re-checked service-side so direct callers stay guarded
         val now = System.currentTimeMillis()
         val materialized = writeTransaction {
@@ -756,7 +775,7 @@ class EntityService(
             val readSet = loadReadSet(Op.FALSE, targets, blueprintsByIdentifier, reservation = null)
             val findings = entityFindings(document, blueprint.definition, readSet.snapshot.targetExists, request.team)
             requireNoFindings(findings)
-            val id = insertRow(request, blueprint.id, document, callerId, now)
+            val id = insertRow(request, blueprint.id, document, callerId, now, source)
             val row = joined().selectAll().where { Entities.id eq id }.singleOrNull()
                 ?: error("entity $id vanished between insert and read-back")
             val blueprintsById = activeBlueprints.associateBy { it.id } + (blueprint.id to blueprint)
@@ -801,8 +820,20 @@ class EntityService(
         }
     }
 
-    private suspend fun insertRow(request: EntityRequest, blueprintId: UInt, document: EntityDocument, callerId: UInt, now: Long): UInt =
-        Entities.insert {
+    private suspend fun insertRow(
+        request: EntityRequest,
+        blueprintId: UInt,
+        document: EntityDocument,
+        callerId: UInt,
+        now: Long,
+        source: SourceWrite,
+    ): UInt {
+        val (sourceUrlValue, lastSyncedAtValue, syncedContentValue) = when (source) {
+            SourceWrite.FromRequest -> Triple(request.sourceUrl, 0L, null)
+            SourceWrite.Keep -> Triple(null, 0L, null)
+            is SourceWrite.Synced -> Triple(source.sourceUrl, now, baselineJson(request, document))
+        }
+        return Entities.insert {
             it[Entities.blueprintId] = blueprintId
             it[identifier] = request.identifier
             it[title] = request.title
@@ -812,7 +843,11 @@ class EntityService(
             it[createdBy] = callerId
             it[createdAt] = now
             it[updatedAt] = now
+            it[Entities.sourceUrl] = sourceUrlValue
+            it[Entities.lastSyncedAt] = lastSyncedAtValue
+            it[Entities.syncedContent] = syncedContentValue
         }[Entities.id].value
+    }
 
     /**
      * Row missing → affected 0 (the route's 404), decided BEFORE validation — the `LensService`/
@@ -823,9 +858,23 @@ class EntityService(
      * when this entity's OWN blueprint is `_team`/`_user`, every OTHER active entity's `team`
      * column / `format: team|user` property values naming the old identifier (Phase 4).
      */
-    suspend fun update(id: UInt, request: EntityRequest): EntityUpdateResult = writeTransaction {
+    suspend fun update(
+        id: UInt,
+        request: EntityRequest,
+        source: SourceWrite = SourceWrite.FromRequest,
+    ): EntityUpdateResult = writeTransaction {
         val row = Entities.selectAll().where { (Entities.id eq id) and active() }.singleOrNull()
             ?: return@writeTransaction EntityUpdateResult(0, emptyList(), null)
+        applyUpdate(id, row, request, source)
+    }
+
+    /**
+     * The shared body of [update] and `entities/EntitySync.kt`'s `syncFromSource`, once the row
+     * is known to exist: validation, the blueprint-immutability rule, the self-reference rename
+     * rewrite, findings, and the rename cascade — parameterized only by [source] (the
+     * `sourceUrl`/sync-stamp write policy, `.claude/docs/persistence.md` "V37").
+     */
+    internal suspend fun applyUpdate(id: UInt, row: ResultRow, request: EntityRequest, source: SourceWrite): EntityUpdateResult {
         validateEntityRequest(request) // re-checked service-side so direct callers stay guarded
         val activeBlueprints = loadActiveBlueprints()
         val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
@@ -857,6 +906,7 @@ class EntityService(
                 }
             }
         }
+        val now = System.currentTimeMillis()
         // Budgeted on the bytes that will actually be stored — AFTER the self-reference rewrite,
         // so a rename never drifts from what `octet_length` reports on the next write.
         checkDocumentByteBudget(documentByteSize(document, team).toLong(), replacingBytes)
@@ -872,22 +922,16 @@ class EntityService(
         }
         requireNoFindings(entityFindings(document, currentBlueprint.definition, targetExists, team))
 
-        val affected = Entities.update({ (Entities.id eq id) and active() }) {
-            it[identifier] = request.identifier
-            it[title] = request.title
-            it[icon] = request.icon
-            it[Entities.team] = team?.let { t -> blueprintJson.encodeToString(t) }
-            it[Entities.document] = blueprintJson.encodeToString(document)
-            it[updatedAt] = System.currentTimeMillis()
-        }
-        if (affected == 0) return@writeTransaction EntityUpdateResult(0, emptyList(), null)
+        val finalRequest = request.copy(team = team, properties = document.properties, relations = document.relations)
+        val affected = replaceRow(id, row, finalRequest, source, now)
+        if (affected == 0) return EntityUpdateResult(0, emptyList(), null)
 
         val cascaded = if (renamed) {
             cascadeRename(activeBlueprints, currentBlueprint.identifier, currentIdentifier, request.identifier, excludingId = id)
         } else {
             emptyList()
         }
-        EntityUpdateResult(affected, cascaded, if (renamed) currentIdentifier else null)
+        return EntityUpdateResult(affected, cascaded, if (renamed) currentIdentifier else null)
     }
 
     /**

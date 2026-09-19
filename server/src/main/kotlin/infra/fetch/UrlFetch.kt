@@ -1,4 +1,4 @@
-package ch.nokillswit.catalog
+package ch.nokillswit.infra.fetch
 
 import ch.nokillswit.authz.BadGatewayException
 import ch.nokillswit.infra.concurrency.awaitBounded
@@ -60,7 +60,7 @@ private val URL_FETCH_EXECUTOR: Executor = ThreadPoolExecutor(
     0L,
     TimeUnit.MILLISECONDS,
     ArrayBlockingQueue(FETCH_QUEUE_CAPACITY),
-    ThreadFactory { runnable -> Thread(runnable, "catalog-url-fetch").apply { isDaemon = true } },
+    ThreadFactory { runnable -> Thread(runnable, "url-fetch").apply { isDaemon = true } },
     ThreadPoolExecutor.AbortPolicy(),
 )
 
@@ -180,10 +180,10 @@ fun sanitizedSourceUrl(raw: String?): String? {
     return trimmed
 }
 
-val CatalogUrlFetcherKey = AttributeKey<CatalogUrlFetcher>("CatalogUrlFetcher")
+val UrlFetcherKey = AttributeKey<UrlFetcher>("UrlFetcher")
 
 /** Internal constructor parameters are test seams; production always uses the guarded defaults. */
-class CatalogUrlFetcher internal constructor(
+class UrlFetcher internal constructor(
     private val targetResolver: (String) -> ValidatedFetchTarget = ::resolveFetchTarget,
     private val timeout: Duration = DEFAULT_FETCH_TIMEOUT,
     private val fetchExecutor: Executor = URL_FETCH_EXECUTOR,
