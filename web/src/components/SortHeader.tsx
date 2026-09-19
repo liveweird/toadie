@@ -9,7 +9,9 @@ export type SortDir = "asc" | "desc";
  * cell — the icon alone is mouse-eyes-only. An optional `secondary` field (2.8.1 — the
  * Entities identifier/title header) renders a second, smaller sort button in the SAME
  * header cell; `aria-sort` then reflects whichever of the two fields is the active one
- * (`none` when neither is).
+ * (`none` when neither is), and — since one cell-level `aria-sort` cannot say WHICH of the
+ * two fields it describes — each button additionally exposes `aria-pressed` (only when a
+ * secondary is present; a single-field header stays a plain button, so no locator changes).
  */
 export default function SortHeader<F extends string>({
   field,
@@ -39,6 +41,7 @@ export default function SortHeader<F extends string>({
     <Table.Th aria-sort={ariaSort} w={width}>
       <UnstyledButton
         onClick={() => onToggle(field)}
+        aria-pressed={secondary ? isActive : undefined}
         style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 600 }}
       >
         <span>{label}</span>
@@ -51,6 +54,7 @@ export default function SortHeader<F extends string>({
           </Text>
           <UnstyledButton
             onClick={() => onToggle(secondary.field)}
+            aria-pressed={isSecondaryActive}
             c={isSecondaryActive ? undefined : "dimmed"}
             style={{
               display: "inline-flex",

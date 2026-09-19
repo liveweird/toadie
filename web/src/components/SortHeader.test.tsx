@@ -64,6 +64,10 @@ describe("SortHeader", () => {
       secondary: { field: "title", label: "Title" },
     });
     expect(screen.getByRole("columnheader")).toHaveAttribute("aria-sort", "descending");
+    // One cell-level aria-sort cannot say WHICH of the two fields it describes, so each
+    // button exposes its own state.
+    expect(screen.getByRole("button", { name: "Title" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Identifier" })).toHaveAttribute("aria-pressed", "false");
   });
 
   test("aria-sort is none when neither the primary nor the secondary field is active", () => {

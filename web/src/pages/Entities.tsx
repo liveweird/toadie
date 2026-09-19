@@ -39,7 +39,7 @@ const SETTINGS_KEY = "entities";
 const MAX_COLUMN_PROPERTIES = 4;
 const IDENTITY_COLUMN_WIDTH = 260;
 const TEAM_COLUMN_WIDTH = 170;
-const UPDATED_COLUMN_WIDTH = 120;
+const UPDATED_COLUMN_WIDTH = 140;
 const OPERATIONS_COLUMN_WIDTH = 48;
 
 // One preview column is either a plain schema property (string/number/boolean, rendered
