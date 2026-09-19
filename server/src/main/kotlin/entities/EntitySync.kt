@@ -20,7 +20,7 @@ import org.jetbrains.exposed.v1.r2dbc.update
  * `writeTransaction`/`applyUpdate` widened to `internal` so this file can reach them.
  */
 
-private typealias Entities = EntityService.Entities
+private typealias EntityRows = EntityService.Entities
 
 /**
  * `POST …/entities/{id}/sync`: overwrites the stored document with the submitted [request] —
@@ -31,24 +31,24 @@ private typealias Entities = EntityService.Entities
  * BEFORE that heavier blueprint/findings work.
  */
 internal suspend fun EntityService.syncFromSource(id: UInt, request: EntityRequest): EntityUpdateResult = writeTransaction {
-    val row = Entities.selectAll().where { (Entities.id eq id) and active() }.singleOrNull()
+    val row = EntityRows.selectAll().where { (EntityRows.id eq id) and active() }.singleOrNull()
         ?: return@writeTransaction EntityUpdateResult(0, emptyList(), null)
-    val sourceUrl = row[Entities.sourceUrl]
+    val sourceUrl = row[EntityRows.sourceUrl]
         ?: throw BadRequestException("This entity has no source reference — set one before syncing")
     applyUpdate(id, row, request, SourceWrite.Synced(sourceUrl))
 }
 
 /** The sync state of one active entity (null = no such entity — the route's 404). Plain read, not audited. */
 internal suspend fun EntityService.syncState(id: UInt): EntitySyncStateResponse? = suspendTransaction(database) {
-    Entities.select(Entities.sourceUrl, Entities.lastSyncedAt, Entities.syncedContent)
-        .where { (Entities.id eq id) and active() }
+    EntityRows.select(EntityRows.sourceUrl, EntityRows.lastSyncedAt, EntityRows.syncedContent)
+        .where { (EntityRows.id eq id) and active() }
         .toList()
         .singleOrNull()
         ?.let { row ->
             EntitySyncStateResponse(
-                sourceUrl = row[Entities.sourceUrl],
-                lastSyncedAt = row[Entities.lastSyncedAt],
-                syncedDocument = row[Entities.syncedContent]?.let { blueprintJson.decodeFromString<EntityRequest>(it) },
+                sourceUrl = row[EntityRows.sourceUrl],
+                lastSyncedAt = row[EntityRows.lastSyncedAt],
+                syncedDocument = row[EntityRows.syncedContent]?.let { blueprintJson.decodeFromString<EntityRequest>(it) },
             )
         }
 }
@@ -61,7 +61,7 @@ internal suspend fun EntityService.syncState(id: UInt): EntitySyncStateResponse?
  * FINAL values to persist, i.e. after any rename rewriting.
  */
 internal suspend fun EntityService.replaceRow(id: UInt, row: ResultRow, request: EntityRequest, source: SourceWrite, now: Long): Int {
-    val currentSourceUrl = row[Entities.sourceUrl]
+    val currentSourceUrl = row[EntityRows.sourceUrl]
     val sourceUrlValue: String?
     val lastSyncedAtValue: Long
     val syncedContentValue: String?
@@ -72,14 +72,14 @@ internal suspend fun EntityService.replaceRow(id: UInt, row: ResultRow, request:
                 lastSyncedAtValue = 0L
                 syncedContentValue = null
             } else {
-                lastSyncedAtValue = row[Entities.lastSyncedAt]
-                syncedContentValue = row[Entities.syncedContent]
+                lastSyncedAtValue = row[EntityRows.lastSyncedAt]
+                syncedContentValue = row[EntityRows.syncedContent]
             }
         }
         SourceWrite.Keep -> {
             sourceUrlValue = currentSourceUrl
-            lastSyncedAtValue = row[Entities.lastSyncedAt]
-            syncedContentValue = row[Entities.syncedContent]
+            lastSyncedAtValue = row[EntityRows.lastSyncedAt]
+            syncedContentValue = row[EntityRows.syncedContent]
         }
         is SourceWrite.Synced -> {
             sourceUrlValue = source.sourceUrl
@@ -87,16 +87,16 @@ internal suspend fun EntityService.replaceRow(id: UInt, row: ResultRow, request:
             syncedContentValue = baselineJson(request, EntityDocument(request.properties, request.relations))
         }
     }
-    return Entities.update({ (Entities.id eq id) and active() }) {
+    return EntityRows.update({ (EntityRows.id eq id) and active() }) {
         it[identifier] = request.identifier
         it[title] = request.title
         it[icon] = request.icon
-        it[Entities.team] = request.team?.let { t -> blueprintJson.encodeToString(t) }
-        it[Entities.document] = blueprintJson.encodeToString(EntityDocument(request.properties, request.relations))
+        it[EntityRows.team] = request.team?.let { t -> blueprintJson.encodeToString(t) }
+        it[EntityRows.document] = blueprintJson.encodeToString(EntityDocument(request.properties, request.relations))
         it[updatedAt] = now
-        it[Entities.sourceUrl] = sourceUrlValue
-        it[Entities.lastSyncedAt] = lastSyncedAtValue
-        it[Entities.syncedContent] = syncedContentValue
+        it[EntityRows.sourceUrl] = sourceUrlValue
+        it[EntityRows.lastSyncedAt] = lastSyncedAtValue
+        it[EntityRows.syncedContent] = syncedContentValue
     }
 }
 
