@@ -40,7 +40,7 @@ export function useEntitySave({
     setFindings([]);
     setSubmitting(true);
     try {
-      await saveRequest(toEntityRequest(values, blueprint));
+      await saveRequest({ ...toEntityRequest(values, blueprint), sourceUrl: values.sourceUrl.trim() || undefined });
       await queryClient.invalidateQueries({ queryKey: ["entities"] });
       showSuccessToast(t(toastKey));
       navigate(entitiesPath(values.blueprint), { replace: true });

@@ -56,14 +56,18 @@ describe("EntityFormFields — Computed section (v1.27.0)", () => {
     expect(screen.queryByRole("group", { name: "Computed" })).not.toBeInTheDocument();
   });
 
-  test("a computed prop with declared computed properties renders the group LAST, with its value", () => {
+  test("a computed prop with declared computed properties renders the group right before Source (2.9.0's trailing fieldset), with its value", () => {
     renderWithProviders(<Harness blueprint={BLUEPRINT_WITH_COMPUTED} computed={{ domain_title: "Commerce" }} />);
 
     const computedGroup = screen.getByRole("group", { name: "Computed" });
     expect(screen.getByText("Domain title")).toBeInTheDocument();
     expect(screen.getByText("Commerce")).toBeInTheDocument();
 
+    // Source (the entity source-sync fieldset) always renders last; Computed is the LAST
+    // section before it — the "Computed" test's original intent restated one release over.
     const groups = screen.getAllByRole("group");
-    expect(groups[groups.length - 1]).toBe(computedGroup);
+    const sourceGroup = screen.getByRole("group", { name: "Source" });
+    expect(groups[groups.length - 1]).toBe(sourceGroup);
+    expect(groups[groups.length - 2]).toBe(computedGroup);
   });
 });

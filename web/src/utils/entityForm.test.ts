@@ -238,6 +238,23 @@ describe("toEntityRequest / fromEntityResponse round trip", () => {
 
     expect(toEntityRequest(form, blueprintWithComputed).properties).toEqual({ name: "Checkout" });
   });
+
+  test("sourceUrl: empty by default, seeded from the response, and never sent by toEntityRequest", () => {
+    expect(emptyEntityForm(BLUEPRINT).sourceUrl).toBe("");
+    const entity = {
+      blueprint: "service",
+      identifier: "checkout",
+      title: "Checkout",
+      properties: {},
+      relations: {},
+      sourceUrl: "https://raw.githubusercontent.com/acme/service/main/checkout.json",
+    } as unknown as Entity;
+    expect(fromEntityResponse(entity, BLUEPRINT).sourceUrl).toBe(entity.sourceUrl);
+    expect(fromEntityResponse({ ...entity, sourceUrl: undefined } as unknown as Entity, BLUEPRINT).sourceUrl).toBe("");
+    // sourceUrl is envelope state, sent by useEntitySave alongside the pure request — never
+    // a member of the request itself (mirrors the catalog form's toCatalogFileRequest rule).
+    expect(toEntityRequest(fromEntityResponse(entity, BLUEPRINT), BLUEPRINT)).not.toHaveProperty("sourceUrl");
+  });
 });
 
 describe("entityFormValidation", () => {
@@ -251,6 +268,13 @@ describe("entityFormValidation", () => {
     expect(validate.team(Array.from({ length: 51 }, () => "x"))).toBe("entities.validation.teamCount");
     expect(validate.team(["a".repeat(101)])).toBe("entities.validation.teamEntryLength");
     expect(validate.team(["payments"])).toBeNull();
+  });
+
+  test("sourceUrl grammar: blank is fine, non-https or credentials are rejected", () => {
+    expect(validate.sourceUrl("")).toBeNull();
+    expect(validate.sourceUrl("https://example.com/entity.json")).toBeNull();
+    expect(validate.sourceUrl("http://example.com/entity.json")).toBe("entities.validation.sourceUrl");
+    expect(validate.sourceUrl("https://user:pass@example.com/entity.json")).toBe("entities.validation.sourceUrl");
   });
 
   test("a required string property left blank is REQUIRED_MISSING", () => {

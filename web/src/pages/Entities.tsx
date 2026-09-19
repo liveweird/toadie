@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { Alert, Anchor, Badge, Button, Group, Menu, Select, Stack, Table, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
-import { IconBox, IconDownload, IconFileImport, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconBox, IconDownload, IconFileImport, IconPencil, IconPlus, IconRefresh, IconTrash } from "@tabler/icons-react";
 import type { Blueprint } from "../api/blueprints";
 import { deleteEntity, type Entity } from "../api/entities";
 import ClearableTextInput from "../components/ClearableTextInput";
@@ -16,6 +17,8 @@ import PageHeader from "../components/PageHeader";
 import PaginationBar from "../components/PaginationBar";
 import RowActionsMenu from "../components/RowActionsMenu";
 import SortHeader from "../components/SortHeader";
+import SyncEntityModal from "../components/SyncEntityModal";
+import SyncStateText from "../components/SyncStateText";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useBlueprintParam, useQParam, useTeamParam } from "../hooks/useBlueprintParam";
 import { useBlueprints } from "../hooks/useBlueprints";
@@ -25,6 +28,7 @@ import { useEntityOptions } from "../hooks/useEntityOptions";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { previewComputedColumns, type ComputedDefinition } from "../utils/computedProperties";
 import { entityDeleteErrorMessage, teamValuesOf } from "../utils/entityForm";
+import { entitySyncSource, toSyncTarget, type EntitySyncTarget } from "../utils/entitySync";
 import { editEntityPath, newEntityPath } from "../utils/entityLinks";
 import { entityExportFileName, entityExportJson, downloadJson } from "../utils/ontologyExport";
 import { ontologyImportPath } from "../utils/ontologyLinks";
@@ -32,14 +36,15 @@ import { formatDateTime, relativeTimeAgo } from "../utils/relativeTime";
 import { loadErrorMessage } from "../utils/saveError";
 import { TEAM_BLUEPRINT } from "../utils/systemBlueprints";
 
-const SORT_FIELDS = ["identifier", "title", "updatedAt"] as const;
+const SORT_FIELDS = ["identifier", "title", "updatedAt", "lastSyncedAt"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
 
 const SETTINGS_KEY = "entities";
-const MAX_COLUMN_PROPERTIES = 4;
+const MAX_COLUMN_PROPERTIES = 3;
 const IDENTITY_COLUMN_WIDTH = 260;
 const TEAM_COLUMN_WIDTH = 170;
 const UPDATED_COLUMN_WIDTH = 140;
+const LAST_SYNC_COLUMN_WIDTH = 140;
 const OPERATIONS_COLUMN_WIDTH = 48;
 
 // One preview column is either a plain schema property (string/number/boolean, rendered
@@ -124,12 +129,13 @@ function schemaPreviewColumns(blueprint: Blueprint): PreviewColumn[] {
  * Operations kebab (`RowActionsMenu`) — entities are a shared workspace like catalog files,
  * with no admin gate anywhere in this feature.
  *
- * Columns (2.8.1, compacted to fit a 1440-wide viewport without horizontal scroll): identifier
- * (a mono `Anchor` straight to the editor) with the title as a dimmed second line and the
- * findings badge beside it — the Files name-cell idiom — Team, the selected blueprint's first
- * four string/number/boolean/computed previews at type-aware widths, Updated, and the row's
- * Operations kebab. The identifier header's `SortHeader` carries a `secondary` slot so Title
- * stays sortable from the same cell.
+ * Columns (2.9.0, three previews after 2.8.1's compaction made room for the Last-sync column
+ * below): identifier (a mono `Anchor` straight to the editor) with the title as a dimmed
+ * second line and the findings badge beside it — the Files name-cell idiom — Team, the
+ * selected blueprint's first three string/number/boolean/computed previews at type-aware
+ * widths, Updated, Last sync (source references & HTTP re-sync, 2.9.0 — `SyncStateText`, the
+ * catalog files' own column one level down), and the row's Operations kebab. The identifier
+ * header's `SortHeader` carries a `secondary` slot so Title stays sortable from the same cell.
  */
 export default function Entities() {
   const { t, i18n } = useTranslation();
@@ -140,6 +146,7 @@ export default function Entities() {
   const { options: teamOptions } = useEntityOptions(TEAM_BLUEPRINT);
   const selectedBlueprint = blueprint ? blueprints.find((b) => b.identifier === blueprint) : undefined;
   const { q, setQ } = useQParam();
+  const [syncTarget, setSyncTarget] = useState<EntitySyncTarget | null>(null);
 
   const { page, setPage, pageSize, setPageSize, sortField, sortDir, sortParam, toggleSort } =
     usePagedSort<SortField>("identifier", [blueprint, team, q], {
@@ -171,12 +178,13 @@ export default function Entities() {
     : [];
 
   const total = data?.total ?? 0;
-  const columnCount = 2 + previewColumns.length + 2;
+  const columnCount = 2 + previewColumns.length + 3;
   const tableMinWidth =
     IDENTITY_COLUMN_WIDTH +
     TEAM_COLUMN_WIDTH +
     previewColumns.reduce((sum, column) => sum + previewColumnWidth(column), 0) +
     UPDATED_COLUMN_WIDTH +
+    LAST_SYNC_COLUMN_WIDTH +
     OPERATIONS_COLUMN_WIDTH;
 
   const knownTeams = new Set(teamOptions.map((e) => e.identifier));
@@ -275,6 +283,14 @@ export default function Entities() {
                 onToggle={toggleSort}
                 width={UPDATED_COLUMN_WIDTH}
               />
+              <SortHeader
+                field="lastSyncedAt"
+                label={t("entities.field.lastSync")}
+                activeField={sortField}
+                activeDir={sortDir}
+                onToggle={toggleSort}
+                width={LAST_SYNC_COLUMN_WIDTH}
+              />
               <Table.Th aria-label={t("common.table.operations")} w={OPERATIONS_COLUMN_WIDTH} />
             </Table.Tr>
           </Table.Thead>
@@ -345,6 +361,9 @@ export default function Entities() {
                       {relativeTimeAgo(entity.updatedAt, i18n.language)}
                     </Text>
                   </Table.Td>
+                  <Table.Td>
+                    <SyncStateText file={entitySyncSource(entity)} />
+                  </Table.Td>
                   <Table.Td style={{ width: 1 }} ta="right">
                     <RowActionsMenu label={t("common.table.operationsAria", { name: entity.identifier })}>
                       <Menu.Item
@@ -368,6 +387,14 @@ export default function Entities() {
                         }}
                       >
                         {t("ontology.export.button")}
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={<IconRefresh size={14} />}
+                        aria-label={t("entities.sync.actionAria", { name: entity.identifier })}
+                        disabled={entity.sourceUrl == null}
+                        onClick={() => setSyncTarget(toSyncTarget(entity))}
+                      >
+                        {t("entities.sync.action")}
                       </Menu.Item>
                       <Menu.Divider />
                       <Menu.Item
@@ -402,6 +429,7 @@ export default function Entities() {
         body={(target) => t("entities.deleteBody", { identifier: target.identifier })}
         errorMessage={(err) => entityDeleteErrorMessage(err, t)}
       />
+      <SyncEntityModal target={syncTarget} onClose={() => setSyncTarget(null)} />
     </Stack>
   );
 }

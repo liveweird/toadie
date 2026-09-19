@@ -2,6 +2,10 @@
   "import": {
     "title": "Import ontology",
     "intro": "Paste Port-style blueprint and entity JSON — including Port API exports — or pick files. Blueprints import first; references between documents are ordered automatically and, where needed, deferred and restored in a second pass.",
+    "urlLabel": "Fetch from URL",
+    "fetchButton": "Fetch",
+    "urlFailedTitle": "Fetch failed",
+    "sourceHint": "Fetched entities will carry {{url}} as their source and start synced; blueprints import without a reference.",
     "textareaLabel": "JSON content",
     "placeholder": "{ \"blueprints\": [...], \"entities\": [...] }",
     "pickFiles": "Choose files…",
