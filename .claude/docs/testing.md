@@ -458,8 +458,11 @@ raised by editing the TARGET blueprint (the referencing blueprint stays untouche
 compile-failed calculation; a quarantined calculation via `TestEntities.tunedService`'s `jq`
 seam with a latch-held executor (the `JqCalculationTest` fixture, never a real stranded
 worker); saved-query visibility (own PRIVATE, foreign PRIVATE excluded, foreign PUBLIC
-included); the `blueprint`/`q`/`team` filters; no audit event; and the read-budget `400`/`429`
-pair via a capacity-1 `EntityReadLedger` (the `EntityQueryRouteTest` idiom). `JqCalculationTest`
+included); the `blueprint`/`q`/`team` filters; no audit event; the read-budget `400`/`429`
+pair via a capacity-1 `EntityReadLedger` (the `EntityQueryRouteTest` idiom); and (2.9.1) a
+source-less entity reporting `SOURCE_MISSING` as its last finding, cleared once a `sourceUrl`
+is set (`EntityErrorsCheckTest` additionally pins the ordering against a stale finding).
+`JqCalculationTest`
 gains the two `calculationVerdict` cases (`CompileFailed` cached and never submitted to a
 fail-if-touched executor; `Quarantined` after a latch-held deadline miss). `SampleBlueprintsTest`
 pins that the baseline ontology (`.claude/docs/ontology.md`) yields ZERO blueprint rows on the

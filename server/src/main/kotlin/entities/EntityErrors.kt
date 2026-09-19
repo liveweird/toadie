@@ -30,7 +30,7 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
  * template one level over: pure checkers over a snapshot the service already loaded, no audit
  * event (the `/check`/`/errors`/export rule), any authenticated user.
  *
- * Four finding classes, one report:
+ * Five finding classes, one report:
  *
  * 1. **Stale entities** — the 19 existing [entityFindings] codes (`EntityValidation.kt`),
  *    unchanged and HARD on the entity's next save. Reported here purely so a workspace-wide
@@ -59,6 +59,11 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
  *    the `entityquery/SavedEntityQueryService.kt` rule), re-parsed/re-validated against the
  *    CURRENT blueprints/hierarchies. Query EVALUATION diagnostics are explicitly OUT of scope —
  *    those are per-request and already inline on the query bar.
+ * 5. **Source references** (2.9.1) — [SOURCE_MISSING] (an entity row; field `source`) flags an
+ *    entity with no `sourceUrl` reference — the `catalog/Errors.kt` `SOURCE_MISSING` twin, one
+ *    level over: the OPPOSITE kind of report-only finding from classes 2-3 above, since the
+ *    reference is OPTIONAL on writes and this never blocks a save, just a standing report entry.
+ *    Never emitted on blueprint or saved-query rows.
  *
  * Blueprint rows exist because classes 2 and 3 are properties of the BLUEPRINT's definition, not
  * of any one entity — one broken mirror path affects every entity of that blueprint alike, so
@@ -73,6 +78,7 @@ const val AGGREGATION_PATH_STALE = "AGGREGATION_PATH_STALE"
 const val AGGREGATION_PROPERTY_STALE = "AGGREGATION_PROPERTY_STALE"
 const val CALCULATION_COMPILE_FAILED = "CALCULATION_COMPILE_FAILED"
 const val CALCULATION_QUARANTINED = "CALCULATION_QUARANTINED"
+const val SOURCE_MISSING = "SOURCE_MISSING"
 
 @Serializable
 data class EntityErrorRow(
@@ -132,6 +138,8 @@ internal data class EntityErrorEntitySubject(
     val title: String,
     val team: List<String>,
     val findings: List<EntityFinding>,
+    /** The entity's `sourceUrl` — threaded through so [entityErrorsReport] (pure) can decide [SOURCE_MISSING]. */
+    val sourceUrl: String?,
 )
 
 /** One blueprint checked/reported for the report (the SHOWN — filter-narrowed — candidate set). */
@@ -191,6 +199,7 @@ internal fun materializeEntityErrorSubjects(
             team = teamValues(effective),
             findings = entityFindings(decoded.document, blueprint.definition, readSet.snapshot.targetExists, decoded.team)
                 .also { budget?.retainFindings(it) },
+            sourceUrl = row.sourceUrl,
         )
     }
     val blueprintCandidates = candidates.map { EntityErrorBlueprintCandidate(it.id, it.identifier, it.title, it.definition) }
@@ -644,6 +653,15 @@ internal fun ownershipFinding(definition: BlueprintDefinition, team: List<String
     return EntityFinding(OWNERSHIP_UNRESOLVED, "team", "This entity's Inherited ownership path did not resolve to a team")
 }
 
+/**
+ * [SOURCE_MISSING] — the `catalog/Errors.kt` twin, one level over: the opposite kind of
+ * report-only finding (the reference is OPTIONAL on writes, never a save blocker), entity rows
+ * only. `null`/blank [sourceUrl] both mean "no reference" — the write path already folds a blank
+ * submission to `null` (`sanitizedSourceUrl`), but a defensive blank check costs nothing here.
+ */
+internal fun sourceMissingFinding(sourceUrl: String?): EntityFinding? =
+    if (sourceUrl.isNullOrBlank()) EntityFinding(SOURCE_MISSING, "source", "This entity has no source reference") else null
+
 /** [text]'s parse+validate diagnostics against [schema] — [EntityService.checkQuery]'s posture, never evaluated. */
 internal fun savedQueryDiagnostics(text: String, schema: QuerySchema): List<QueryDiagnostic> = try {
     validateEntityQuery(parseEntityQuery(text), schema)
@@ -680,7 +698,9 @@ internal fun entityErrorsReport(
         val definition = subjects.definitionsByIdentifier[subject.blueprint]
         val ownership = definition?.let { ownershipFinding(it, subject.team, subject.blueprint in staleOwnershipBlueprints) }
         if (ownership != null) budget?.retainFindings(listOf(ownership))
-        val findings = subject.findings + listOfNotNull(ownership)
+        val sourceMissing = sourceMissingFinding(subject.sourceUrl)
+        if (sourceMissing != null) budget?.retainFindings(listOf(sourceMissing))
+        val findings = subject.findings + listOfNotNull(ownership, sourceMissing)
         if (findings.isEmpty()) {
             null
         } else {

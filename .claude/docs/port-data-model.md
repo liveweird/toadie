@@ -443,6 +443,11 @@ or evaluates computed properties at all, see `.claude/docs/persistence.md`).
   A blueprint landing early on `ownership: { type: Direct }` is fine — the walk simply stops
   there; see "Ownership" above for `OWNERSHIP_UNRESOLVED`/`OWNERSHIP_PATH_STALE`, the two
   report-only codes covering ownership's own drift.
+
+  A fifth report-only class joined in 2.9.1: `SOURCE_MISSING` (field `source`) — an entity row
+  only, never a blueprint row — flags an entity whose `sourceUrl` is unset, the
+  `catalog/Errors.kt` `SOURCE_MISSING` twin one level over (2.9.0 gave entities the same source
+  reference/re-sync machinery the catalog already had).
 - **Reference**: `entities/EntityErrors.kt` (the checkers), `EntityErrorsCheckTest` (one case
   per rule above).
 - **Enforcement**: `SampleBlueprintsTest`'s zero-blueprint-rows pin (the baseline ontology must

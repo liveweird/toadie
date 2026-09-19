@@ -34,11 +34,13 @@ const COLUMN_COUNT = 4;
 /**
  * The Port-world Errors report at /ontology/errors (v2.5.0) — `pages/Errors.tsx`'s twin one
  * level over: a workspace-wide sweep over the active entity/blueprint/saved-query registries
- * (`GET /api/v1/entities/errors`) instead of the catalog's stored files. Four classes in ONE
+ * (`GET /api/v1/entities/errors`) instead of the catalog's stored files. Five classes in ONE
  * table: stale entities (the same `EntityFindingCode`s a strict save already enforces),
  * unresolved ownership, computed-property health (both report-only, always on a BLUEPRINT
- * row), and broken saved queries (the caller's own + everyone's PUBLIC, re-parsed against the
- * CURRENT active blueprints/hierarchies). `blueprint`/`q`/`team` narrow which entity AND
+ * row), broken saved queries (the caller's own + everyone's PUBLIC, re-parsed against the
+ * CURRENT active blueprints/hierarchies), and missing source references (2.9.1, report-only,
+ * always on an ENTITY row — gray, an optional reference's absence rather than a defect).
+ * `blueprint`/`q`/`team` narrow which entity AND
  * blueprint rows are REPORTED — reference resolution stays workspace-wide, so narrowing never
  * manufactures a finding a wider view wouldn't also show (the catalog Errors report's own
  * REPORTED-vs-SHOWN asymmetry); saved queries are never narrowed by these filters. The

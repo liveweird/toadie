@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.9.1",
+    date: "2026-09-20",
+    en: `**Source-less entities on the Errors report.** The Port Errors report now lists entities that have no source reference under a new gray Source class — report-only, like the Backstage report's own: a source is optional, but without one an entity cannot be re-synced. Switch the Source chip off to hide these rows.`,
+    pl: `**Encje bez źródła w raporcie Błędy.** Raport Błędy w świecie Port wymienia teraz encje bez odwołania do źródła w nowej szarej klasie Źródło — tylko informacyjnie, tak jak w raporcie Backstage: źródło jest opcjonalne, ale bez niego encji nie da się ponownie zsynchronizować. Wyłącz odznakę Źródło, aby ukryć te wiersze.`,
+  },
+  {
     version: "2.9.0",
     date: "2026-09-19",
     en: `**Link entities to their source and re-sync them.** An entity can now carry the https address of its canonical copy in Port's JSON format — set it in the editor's Source section, or fetch a file from a URL on the Import page so every imported entity starts linked and synced. Sync from source, on the Entities list and in the editor, shows what changed at the source and in Toadie side by side before overwriting the stored copy; a copy that no longer satisfies the blueprint is refused, never stored. The new Last sync column shows how long ago each entity was synced and flags local changes since.`,
