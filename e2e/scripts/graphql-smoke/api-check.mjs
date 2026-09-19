@@ -114,16 +114,22 @@ export async function assertSeedParity(baseUrls, jwt, apiKey, schemaPath) {
 
     const report = (await graphql(baseUrl, apiKey,
       '{ errors { checkedEntities checkedBlueprints entities { total } blueprints { total } } }')).errors
+    // The sample carries no source references, so since 2.9.1 every entity row is exactly the
+    // report-only SOURCE_MISSING finding — and nothing else; blueprint rows stay empty.
     assert.deepEqual(report, {
       checkedEntities: 59,
       checkedBlueprints: 11,
-      entities: { total: 0 },
+      entities: { total: 59 },
       blueprints: { total: 0 },
     })
     const restReport = await request(baseUrl, '/api/v1/entities/errors', { token: jwt })
     assert.equal(restReport.checkedEntities, 59)
     assert.equal(restReport.checkedBlueprints, 11)
-    assert.deepEqual(restReport.entities, [])
+    assert.equal(restReport.entities.length, 59)
+    for (const row of restReport.entities) {
+      assert.deepEqual(row.findings.map((f) => [f.code, f.field]), [['SOURCE_MISSING', 'source']],
+        `unexpected findings on ${row.blueprint}/${row.identifier}`)
+    }
     assert.deepEqual(restReport.blueprints, [])
     const actualSdl = await request(baseUrl, '/integration/graphql/schema', {
       token: { kind: 'Bearer', value: apiKey }, json: false,
