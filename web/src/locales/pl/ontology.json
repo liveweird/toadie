@@ -64,8 +64,7 @@
     "failedNetwork": "Import nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
   },
   "export": {
-    "button": "Eksportuj JSON",
-    "failed": "Nie udało się wyeksportować encji. Sprawdź połączenie i spróbuj ponownie."
+    "button": "Eksportuj JSON"
   },
   "importLink": "Import"
 }

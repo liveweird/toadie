@@ -200,10 +200,12 @@ from Lettuce, that any new or edited spec must satisfy:
   before it returns, so a future entity-creating spec can join safely as long as it never
   touches another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
-  registry (the Blueprints page's only export mode) and re-imports it as part of its round-trip
-  check — safe under concurrent writers because it always sends `replaceExisting: false` there,
-  so every foreign row it did not create reports Already Exists, untouched, and its own
-  assertions only ever check its own two identifiers.
+  registry (the Blueprints page's only export mode, unchanged) and, since 2.8.0, ONE entity via
+  its row's Operations menu on the Entities page (the whole-blueprint `{entities: [...]}` export
+  retired that release), re-importing both as part of its round-trip check — safe under
+  concurrent writers because it always sends `replaceExisting: false` there, so every foreign row
+  it did not create reports Already Exists, untouched, and its own assertions only ever check its
+  own two identifiers.
 - **`_team`/`_user` (Phase 4, v1.26.0) are SEEDED, PROTECTED system blueprints — no spec ever
   edits or deletes either row** (the server itself refuses both: rename/base-shape changes are
   `400`, delete is `409`). A spec needing ownership fixtures creates only its OWN uniquely

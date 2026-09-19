@@ -1,12 +1,11 @@
-import { useState } from "react";
-import { Alert, Anchor, Badge, Button, Group, Select, Stack, Table, Text } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Group, Menu, Select, Stack, Table, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { IconBox, IconDownload, IconFileImport, IconPlus } from "@tabler/icons-react";
+import { Link as RouterLink } from "react-router-dom";
+import { IconBox, IconDownload, IconFileImport, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import type { Blueprint } from "../api/blueprints";
-import { deleteEntity, listAllEntities, type Entity } from "../api/entities";
+import { deleteEntity, type Entity } from "../api/entities";
 import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
@@ -15,7 +14,7 @@ import EntityFindingsBadge from "../components/EntityFindingsBadge";
 import FilterPanel from "../components/FilterPanel";
 import PageHeader from "../components/PageHeader";
 import PaginationBar from "../components/PaginationBar";
-import RowEditDelete from "../components/RowEditDelete";
+import RowActionsMenu from "../components/RowActionsMenu";
 import SortHeader from "../components/SortHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useBlueprintParam, useQParam, useTeamParam } from "../hooks/useBlueprintParam";
@@ -27,7 +26,7 @@ import { usePagedSort } from "../hooks/usePagedSort";
 import { previewComputedColumns, type ComputedDefinition } from "../utils/computedProperties";
 import { entityDeleteErrorMessage, teamValuesOf } from "../utils/entityForm";
 import { editEntityPath, newEntityPath } from "../utils/entityLinks";
-import { entitiesExportJson, downloadJson } from "../utils/ontologyExport";
+import { entityExportFileName, entityExportJson, downloadJson } from "../utils/ontologyExport";
 import { ontologyImportPath } from "../utils/ontologyLinks";
 import { formatDateTime, relativeTimeAgo } from "../utils/relativeTime";
 import { loadErrorMessage } from "../utils/saveError";
@@ -97,12 +96,12 @@ function schemaPreviewColumns(blueprint: Blueprint): PreviewColumn[] {
  * (`?blueprint=`, `hooks/useBlueprintParam.ts`) to see its instances — no blueprint means
  * nothing is fetched, matching the CatalogFiles `noKinds` idiom (the page renders its own
  * "pick a blueprint" empty state instead of an unfiltered, meaningless page). Every
- * authenticated user gets New/Edit/Delete (`RowEditDelete`) — entities are a shared workspace
- * like catalog files, with no admin gate anywhere in this feature.
+ * authenticated user gets New entity plus, per row, Edit/Export JSON/Delete through the row's
+ * Operations kebab (`RowActionsMenu`) — entities are a shared workspace like catalog files,
+ * with no admin gate anywhere in this feature.
  */
 export default function Entities() {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { blueprint, setBlueprint } = useBlueprintParam();
   const { team, setTeam } = useTeamParam();
@@ -110,8 +109,6 @@ export default function Entities() {
   const { options: teamOptions } = useEntityOptions(TEAM_BLUEPRINT);
   const selectedBlueprint = blueprint ? blueprints.find((b) => b.identifier === blueprint) : undefined;
   const { q, setQ } = useQParam();
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
 
   const { page, setPage, pageSize, setPageSize, sortField, sortDir, sortParam, toggleSort } =
     usePagedSort<SortField>("identifier", [blueprint, team, q], {
@@ -134,20 +131,6 @@ export default function Entities() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["entities"] }),
     successMessage: t("entities.toast.deleted"),
   });
-
-  async function handleExport() {
-    if (!blueprint || !selectedBlueprint) return;
-    setExporting(true);
-    setExportError(null);
-    try {
-      const rows = await listAllEntities({ blueprint, team: team ?? undefined, q: q || undefined });
-      downloadJson(entitiesExportJson(rows, selectedBlueprint), `toadie-entities-${blueprint}.json`);
-    } catch {
-      setExportError(t("ontology.export.failed"));
-    } finally {
-      setExporting(false);
-    }
-  }
 
   const previewColumns: PreviewColumn[] = selectedBlueprint
     ? [
@@ -182,15 +165,6 @@ export default function Entities() {
           <Group gap="sm">
             <Button component={RouterLink} to={ontologyImportPath} variant="default" leftSection={<IconFileImport size={16} />}>
               {t("ontology.importLink")}
-            </Button>
-            <Button
-              variant="default"
-              leftSection={<IconDownload size={16} />}
-              disabled={!blueprint}
-              loading={exporting}
-              onClick={() => void handleExport()}
-            >
-              {t("ontology.export.button")}
             </Button>
             <Button
               component={RouterLink}
@@ -238,12 +212,6 @@ export default function Entities() {
       {isError && (
         <Alert color="red" variant="light" title={t("entities.loadFailed")}>
           {loadErrorMessage(error, t)}
-        </Alert>
-      )}
-
-      {exportError && (
-        <Alert color="red" variant="light">
-          {exportError}
         </Alert>
       )}
 
@@ -358,12 +326,40 @@ export default function Entities() {
                       {relativeTimeAgo(entity.updatedAt, i18n.language)}
                     </Text>
                   </Table.Td>
-                  <Table.Td ta="right">
-                    <RowEditDelete
-                      name={entity.identifier}
-                      onEdit={() => navigate(editEntityPath(entity.id))}
-                      onDelete={() => deleteConfirm.requestDelete(entity)}
-                    />
+                  <Table.Td style={{ width: 1 }} ta="right">
+                    <RowActionsMenu label={t("common.table.operationsAria", { name: entity.identifier })}>
+                      <Menu.Item
+                        component={RouterLink}
+                        to={editEntityPath(entity.id)}
+                        leftSection={<IconPencil size={14} />}
+                        aria-label={t("common.action.editAria", { name: entity.identifier })}
+                      >
+                        {t("common.action.edit")}
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={<IconDownload size={14} />}
+                        aria-label={t("entities.exportAria", { name: entity.identifier })}
+                        // Rows can land before the blueprint registry does (the two queries are
+                        // independent); the export needs the definition to strip computed ids.
+                        disabled={!selectedBlueprint}
+                        onClick={() => {
+                          if (selectedBlueprint) {
+                            downloadJson(entityExportJson(entity, selectedBlueprint), entityExportFileName(entity));
+                          }
+                        }}
+                      >
+                        {t("ontology.export.button")}
+                      </Menu.Item>
+                      <Menu.Divider />
+                      <Menu.Item
+                        color="red"
+                        leftSection={<IconTrash size={14} />}
+                        onClick={() => deleteConfirm.requestDelete(entity)}
+                        aria-label={t("common.action.deleteAria", { name: entity.identifier })}
+                      >
+                        {t("common.action.delete")}
+                      </Menu.Item>
+                    </RowActionsMenu>
                   </Table.Td>
                 </Table.Tr>
               ))

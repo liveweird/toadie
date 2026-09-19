@@ -1,7 +1,13 @@
 import { describe, expect, test } from "vitest";
 import type { Blueprint } from "../api/blueprints";
 import type { Entity } from "../api/entities";
-import { blueprintExportDocument, blueprintsExportJson, entitiesExportJson, entityExportDocument } from "./ontologyExport";
+import {
+  blueprintExportDocument,
+  blueprintsExportJson,
+  entityExportDocument,
+  entityExportFileName,
+  entityExportJson,
+} from "./ontologyExport";
 import { parseOntologySources } from "./ontologyImport";
 
 const BLUEPRINT: Blueprint = {
@@ -106,6 +112,27 @@ describe("entityExportDocument", () => {
     const doc = entityExportDocument(DIRECT_ENTITY, inherited);
     expect(doc).not.toHaveProperty("team");
   });
+
+  test("carries exactly the wire fields, in order, for a Direct-ownership entity with an icon", () => {
+    const doc = entityExportDocument(DIRECT_ENTITY, BLUEPRINT);
+    expect(Object.keys(doc)).toEqual(["blueprint", "identifier", "title", "icon", "team", "properties", "relations"]);
+  });
+});
+
+describe("entityExportFileName", () => {
+  test("names the file after the blueprint and identifier", () => {
+    expect(entityExportFileName(DIRECT_ENTITY)).toBe("toadie-entity-service-checkout.json");
+  });
+
+  test("replaces every identifier character outside the safe filename charset with an underscore", () => {
+    const entity: Entity = { ...DIRECT_ENTITY, identifier: "a/b:c@d" };
+    expect(entityExportFileName(entity)).toBe("toadie-entity-service-a_b_c_d.json");
+  });
+
+  test("sanitizes the blueprint half too (its grammar allows @ : / =)", () => {
+    const entity: Entity = { ...DIRECT_ENTITY, blueprint: "payments/core:v2" };
+    expect(entityExportFileName(entity)).toBe("toadie-entity-payments_core_v2-checkout.json");
+  });
 });
 
 describe("the export round trip", () => {
@@ -118,8 +145,8 @@ describe("the export round trip", () => {
     expect(documents[0].body).toEqual(blueprintExportDocument(BLUEPRINT));
   });
 
-  test("entitiesExportJson parses back with zero stripped keys, including zero computed strip", () => {
-    const json = entitiesExportJson([DIRECT_ENTITY], BLUEPRINT);
+  test("entityExportJson parses back as one bare entity document, with zero stripped keys", () => {
+    const json = entityExportJson(DIRECT_ENTITY, BLUEPRINT);
     const { documents, errors } = parseOntologySources([{ label: "export", text: json }], [BLUEPRINT]);
     expect(errors).toEqual([]);
     expect(documents).toHaveLength(1);
