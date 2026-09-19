@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.8.1",
+    date: "2026-09-19",
+    en: `**Entities fit the screen.** The Entities list is about a third narrower: each row shows the title under the identifier with its findings badge beside it, property columns take only the width their type needs, and the Team, Updated and actions columns are trimmed — so a laptop screen shows the whole row without sideways scrolling. Title stays sortable from the identifier header.`,
+    pl: `**Encje mieszczą się na ekranie.** Lista Encje jest o około jedną trzecią węższa: każdy wiersz pokazuje tytuł pod identyfikatorem, a obok niego odznakę ustaleń, kolumny właściwości zajmują tylko tyle miejsca, ile wymaga ich typ, a kolumny Zespół, Zaktualizowano i akcji zostały zwężone — dzięki temu ekran laptopa pokazuje cały wiersz bez przewijania w bok. Tytuł nadal można sortować z nagłówka identyfikatora.`,
+  },
+  {
     version: "2.8.0",
     date: "2026-09-19",
     en: `**Export one entity for Port.** The Entities list's row menu now exports a single chosen entity as a JSON document that Port's create-entity API accepts as-is, and that Toadie's Import accepts back unchanged. The previous export of every entity of a blueprint is gone; the Blueprints export is unchanged.`,

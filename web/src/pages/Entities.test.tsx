@@ -211,8 +211,13 @@ describe("Entities page", () => {
     mockRoutes(mockFetch);
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
-    expect(await screen.findByRole("link", { name: "Edit checkout" })).toBeInTheDocument();
-    expect(screen.getByText("1 finding")).toBeInTheDocument();
+    const editLink = await screen.findByRole("link", { name: "Edit checkout" });
+    expect(editLink).toBeInTheDocument();
+    const findingsBadge = screen.getByText("1 finding");
+    expect(findingsBadge).toBeInTheDocument();
+    // The findings badge rides the same identity cell as the identifier link (2.8.1 —
+    // the Files name-cell idiom: identifier, dimmed title, and the findings badge together).
+    expect(findingsBadge.closest("td")).toBe(editLink.closest("td"));
     // The Team column renders the entity's own team as a badge.
     expect(screen.getByText("platform")).toBeInTheDocument();
     // The boolean preview column renders a badge for its true value.
@@ -222,6 +227,27 @@ describe("Entities page", () => {
     expect(screen.getByRole("link", { name: "New entity" })).toHaveAttribute(
       "href",
       "/entities/new?blueprint=service",
+    );
+  });
+
+  test("the identifier header sorts by title too and the Title/Findings columns are gone", async () => {
+    mockRoutes(mockFetch);
+    const user = userEvent.setup();
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    expect(screen.queryByRole("columnheader", { name: "Title" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Findings" })).not.toBeInTheDocument();
+
+    mockFetch.mockClear();
+    await user.click(screen.getByRole("button", { name: "Title" }));
+
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(
+          ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities?") && url.includes("sort=title"),
+        ),
+      ).toBe(true),
     );
   });
 
