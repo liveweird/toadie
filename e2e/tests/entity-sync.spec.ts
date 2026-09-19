@@ -60,7 +60,7 @@ test("a source set in the entity editor turns on the Last sync column and the sy
 
     const trigger = page.getByRole("button", { name: `Operations for ${entityIdentifier}` });
     await trigger.click();
-    await expect(page.getByRole("menuitem", { name: "Sync from source" })).toBeDisabled();
+    await expect(page.getByRole("menuitem", { name: `Sync ${entityIdentifier} from source` })).toBeDisabled();
     await page.keyboard.press("Escape");
 
     // 2. Set the reference in the editor's Source fieldset (statically valid — absolute
@@ -82,7 +82,7 @@ test("a source set in the entity editor turns on the Last sync column and the sy
     // 4. The sync modal opens from the kebab; fetching the loopback URL is refused by the
     // SSRF guard, so the modal shows the fixed public-https error and keeps the overwrite
     // disabled — the flow stops safely at the guard.
-    await rowOperation(page, entityIdentifier, "Sync from source");
+    await rowOperation(page, entityIdentifier, `Sync ${entityIdentifier} from source`);
     const modal = await readyDialog(page, `Sync from source — ${entityIdentifier}`);
     await expect(modal.getByText(/The URL must be a public https address/)).toBeVisible();
     await expect(modal.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
