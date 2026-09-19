@@ -98,7 +98,7 @@ test("populated entity lists, deep hierarchy rows and query controls remain usab
     await page.goto(`/entities?blueprint=${marker}`);
     const row = page.getByRole("row").filter({ has: page.getByRole("link", { name: `Edit ${identifiers[1]}`, exact: true }) });
     await expect(row).toBeVisible();
-    await expect(page.getByRole("columnheader")).toHaveCount(10);
+    await expect(page.getByRole("columnheader")).toHaveCount(8);
     // Text must fit each cell even when the table scrolls: containment alone missed the
     // old fixed 640px table's overlapping identifier/title and nowrap header text.
     for (const cells of [page.getByRole("columnheader"), row.getByRole("cell")]) {

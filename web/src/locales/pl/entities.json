@@ -15,7 +15,6 @@
   "staleTitle": "Ta encja jest nieaktualna względem swojego blueprintu",
   "staleBody": "Blueprint zmienił się od czasu ostatniego zapisu tej encji. Popraw poniższe właściwości/relacje, aby móc zapisać ponownie.",
   "column": {
-    "findings": "Ustalenia",
     "team": "Zespół"
   },
   "field": {

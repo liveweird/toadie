@@ -15,7 +15,6 @@
   "staleTitle": "This entity is out of date with its blueprint",
   "staleBody": "The blueprint changed since this entity was last saved. Fix the properties/relations below before you can save again.",
   "column": {
-    "findings": "Findings",
     "team": "Team"
   },
   "field": {

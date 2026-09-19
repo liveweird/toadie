@@ -37,20 +37,43 @@ type SortField = (typeof SORT_FIELDS)[number];
 
 const SETTINGS_KEY = "entities";
 const MAX_COLUMN_PROPERTIES = 4;
-const IDENTIFIER_COLUMN_WIDTH = 180;
-const TITLE_COLUMN_WIDTH = 200;
-const TEAM_COLUMN_WIDTH = 180;
-const PREVIEW_COLUMN_WIDTH = 180;
-const FINDINGS_COLUMN_WIDTH = 100;
-const UPDATED_COLUMN_WIDTH = 150;
-const OPERATIONS_COLUMN_WIDTH = 80;
+const IDENTITY_COLUMN_WIDTH = 260;
+const TEAM_COLUMN_WIDTH = 170;
+const UPDATED_COLUMN_WIDTH = 140;
+const OPERATIONS_COLUMN_WIDTH = 48;
 
 // One preview column is either a plain schema property (string/number/boolean, rendered
 // inline below) or a computed one (v1.27.0 — rendered through the shared `EntityComputedValue`,
-// since its output shape isn't limited to the three schema scalar types).
+// since its output shape isn't limited to the three schema scalar types). `enum` (schema only)
+// drives the type-aware preview width below (2.8.1).
 type PreviewColumn =
-  | { kind: "schema"; id: string; label: string; type: "string" | "number" | "boolean" }
+  | { kind: "schema"; id: string; label: string; type: "string" | "number" | "boolean"; enum: boolean }
   | { kind: "computed"; definition: ComputedDefinition };
+
+/** Type-aware preview column width (2.8.1 — the compact-table pass): booleans and numbers are
+ *  narrow regardless of source, a closed string enum is a bit wider, and any other string or
+ *  untyped computed value (mirror/aggregation results aren't statically typed) gets the widest
+ *  slot. */
+function previewColumnWidth(column: PreviewColumn): number {
+  if (column.kind === "schema") {
+    switch (column.type) {
+      case "boolean":
+        return 110;
+      case "number":
+        return 120;
+      default:
+        return column.enum ? 130 : 170;
+    }
+  }
+  switch (column.definition.type) {
+    case "boolean":
+      return 110;
+    case "number":
+      return 120;
+    default:
+      return 170;
+  }
+}
 
 function previewColumnKey(column: PreviewColumn): string {
   return column.kind === "schema" ? `schema-${column.id}` : `computed-${column.definition.id}`;
@@ -74,7 +97,7 @@ function schemaPreviewCell(value: unknown, type: "string" | "number" | "boolean"
     );
   }
   return (
-    <Text size="sm" truncate="end" maw={220} title={String(value)}>
+    <Text size="sm" truncate="end" maw="100%" title={String(value)}>
       {String(value)}
     </Text>
   );
@@ -88,6 +111,7 @@ function schemaPreviewColumns(blueprint: Blueprint): PreviewColumn[] {
       id,
       label: def.title ?? id,
       type: def.type as "string" | "number" | "boolean",
+      enum: Array.isArray(def.enum),
     }));
 }
 
@@ -99,6 +123,13 @@ function schemaPreviewColumns(blueprint: Blueprint): PreviewColumn[] {
  * authenticated user gets New entity plus, per row, Edit/Export JSON/Delete through the row's
  * Operations kebab (`RowActionsMenu`) — entities are a shared workspace like catalog files,
  * with no admin gate anywhere in this feature.
+ *
+ * Columns (2.8.1, compacted to fit a 1440-wide viewport without horizontal scroll): identifier
+ * (a mono `Anchor` straight to the editor) with the title as a dimmed second line and the
+ * findings badge beside it — the Files name-cell idiom — Team, the selected blueprint's first
+ * four string/number/boolean/computed previews at type-aware widths, Updated, and the row's
+ * Operations kebab. The identifier header's `SortHeader` carries a `secondary` slot so Title
+ * stays sortable from the same cell.
  */
 export default function Entities() {
   const { t, i18n } = useTranslation();
@@ -140,13 +171,11 @@ export default function Entities() {
     : [];
 
   const total = data?.total ?? 0;
-  const columnCount = 4 + previewColumns.length + 2;
+  const columnCount = 2 + previewColumns.length + 2;
   const tableMinWidth =
-    IDENTIFIER_COLUMN_WIDTH +
-    TITLE_COLUMN_WIDTH +
+    IDENTITY_COLUMN_WIDTH +
     TEAM_COLUMN_WIDTH +
-    previewColumns.length * PREVIEW_COLUMN_WIDTH +
-    FINDINGS_COLUMN_WIDTH +
+    previewColumns.reduce((sum, column) => sum + previewColumnWidth(column), 0) +
     UPDATED_COLUMN_WIDTH +
     OPERATIONS_COLUMN_WIDTH;
 
@@ -222,30 +251,22 @@ export default function Entities() {
               <SortHeader
                 field="identifier"
                 label={t("entities.field.identifier")}
+                secondary={{ field: "title", label: t("entities.field.title") }}
                 activeField={sortField}
                 activeDir={sortDir}
                 onToggle={toggleSort}
-                width={IDENTIFIER_COLUMN_WIDTH}
-              />
-              <SortHeader
-                field="title"
-                label={t("entities.field.title")}
-                activeField={sortField}
-                activeDir={sortDir}
-                onToggle={toggleSort}
-                width={TITLE_COLUMN_WIDTH}
+                width={IDENTITY_COLUMN_WIDTH}
               />
               <Table.Th w={TEAM_COLUMN_WIDTH}>{t("entities.column.team")}</Table.Th>
               {previewColumns.map((column) => (
                 <Table.Th
                   key={previewColumnKey(column)}
-                  w={PREVIEW_COLUMN_WIDTH}
+                  w={previewColumnWidth(column)}
                   style={{ overflowWrap: "anywhere", whiteSpace: "normal" }}
                 >
                   {previewColumnLabel(column)}
                 </Table.Th>
               ))}
-              <Table.Th w={FINDINGS_COLUMN_WIDTH}>{t("entities.column.findings")}</Table.Th>
               <SortHeader
                 field="updatedAt"
                 label={t("entities.field.updated")}
@@ -280,11 +301,12 @@ export default function Entities() {
                     >
                       {entity.identifier}
                     </Anchor>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" style={{ overflowWrap: "anywhere" }}>
-                      {entity.title}
-                    </Text>
+                    <Group gap="xs" wrap="nowrap">
+                      <Text size="xs" c="dimmed" truncate style={{ minWidth: 0 }} title={entity.title}>
+                        {entity.title}
+                      </Text>
+                      <EntityFindingsBadge findings={entity.findings} />
+                    </Group>
                   </Table.Td>
                   <Table.Td>
                     {teamValuesOf(entity.team).length > 0 ? (
@@ -318,9 +340,6 @@ export default function Entities() {
                       )}
                     </Table.Td>
                   ))}
-                  <Table.Td>
-                    <EntityFindingsBadge findings={entity.findings} />
-                  </Table.Td>
                   <Table.Td>
                     <Text size="sm" title={formatDateTime(entity.updatedAt, i18n.language)}>
                       {relativeTimeAgo(entity.updatedAt, i18n.language)}
