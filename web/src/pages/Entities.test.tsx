@@ -21,7 +21,7 @@ const BLUEPRINTS = [
       required: [],
     },
     relations: {},
-    mirrorProperties: {},
+    mirrorProperties: { siblingTitle: { title: "Sibling title", path: "language.$title" } },
     calculationProperties: {},
     aggregationProperties: {},
   },
@@ -34,7 +34,7 @@ const ENTITY = {
   identifier: "checkout",
   title: "Checkout",
   team: ["platform"],
-  properties: { language: "kotlin", active: true },
+  properties: { language: "kotlin", active: true, siblingTitle: "Billing" },
   relations: {},
   findings: [{ code: "REQUIRED_MISSING", field: "properties.tier", message: "Required" }],
   createdBy: 1,
@@ -145,7 +145,6 @@ describe("Entities page", () => {
 
     expect(await screen.findByText("Pick a blueprint above to see its entities")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "New entity" })).toHaveAttribute("data-disabled", "true");
-    expect(screen.getByRole("button", { name: "Export JSON" })).toBeDisabled();
     // The Team filter's own options pool (`_team`) loads independently of the picked
     // blueprint — only the primary, blueprint-scoped list must stay unfetched.
     expect(
@@ -161,7 +160,7 @@ describe("Entities page", () => {
     expect(await screen.findByRole("link", { name: "Import" })).toHaveAttribute("href", "/ontology/import");
   });
 
-  test("Export JSON downloads the picked blueprint's entities as a Blob", async () => {
+  test("the row menu's Export JSON downloads that one entity as a Port-shaped document", async () => {
     const createObjectURL = vi.fn().mockReturnValue("blob:fake");
     const revokeObjectURL = vi.fn();
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL }));
@@ -176,29 +175,20 @@ describe("Entities page", () => {
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
     await screen.findByRole("link", { name: "Edit checkout" });
-    await user.click(screen.getByRole("button", { name: "Export JSON" }));
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Export checkout as JSON" }));
 
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce());
     const blob = createObjectURL.mock.calls[0][0] as Blob;
-    const parsed = JSON.parse(await blob.text()) as { entities: { identifier: string }[] };
-    expect(parsed.entities.map((e) => e.identifier)).toEqual(["checkout"]);
-    expect(downloadedName).toBe("toadie-entities-service.json");
+    const parsed = JSON.parse(await blob.text()) as Record<string, unknown>;
+    expect(parsed.identifier).toBe("checkout");
+    expect(parsed.blueprint).toBe("service");
+    for (const key of ["entities", "id", "findings", "blueprintId", "createdBy"]) {
+      expect(parsed).not.toHaveProperty(key);
+    }
+    expect(parsed.properties).not.toHaveProperty("siblingTitle");
+    expect(downloadedName).toBe("toadie-entity-service-checkout.json");
     click.mockRestore();
-  });
-
-  test("a failed export shows an inline alert", async () => {
-    mockFetch.mockImplementation((url: string) => {
-      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
-      if (url.startsWith("/api/v1/entities?")) return Promise.resolve(jsonResponse(500, {}));
-      return Promise.resolve(jsonResponse(404, {}));
-    });
-    const user = userEvent.setup();
-    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "Export JSON" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Export JSON" }));
-
-    expect(await screen.findByText("Couldn't export entities. Check your connection and try again.")).toBeInTheDocument();
   });
 
   test("picking a blueprint via the URL lists its entities with identifier link and findings badge", async () => {
@@ -322,7 +312,10 @@ describe("Entities page", () => {
     );
 
     await screen.findByRole("link", { name: "Edit checkout" });
-    await user.click(screen.getByRole("button", { name: "Edit checkout" }));
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    const editItem = await screen.findByRole("menuitem", { name: "Edit checkout" });
+    expect(editItem).toHaveAttribute("href", "/entities/5/edit");
+    await user.click(editItem);
     expect(await screen.findByTestId("probe")).toHaveTextContent("/entities/5/edit");
   });
 
@@ -340,7 +333,8 @@ describe("Entities page", () => {
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
     await screen.findByRole("link", { name: "Edit checkout" });
-    await user.click(screen.getByRole("button", { name: "Delete checkout" }));
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete checkout" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(await screen.findByText("This entity is still targeted by another entity's relation.")).toBeInTheDocument();
@@ -352,7 +346,8 @@ describe("Entities page", () => {
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
     await screen.findByRole("link", { name: "Edit checkout" });
-    await user.click(screen.getByRole("button", { name: "Delete checkout" }));
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete checkout" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledWith("/api/v1/entities/5", expect.objectContaining({ method: "DELETE" })));

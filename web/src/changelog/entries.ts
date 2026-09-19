@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.8.0",
+    date: "2026-09-19",
+    en: `**Export one entity for Port.** The Entities list's row menu now exports a single chosen entity as a JSON document that Port's create-entity API accepts as-is, and that Toadie's Import accepts back unchanged. The previous export of every entity of a blueprint is gone; the Blueprints export is unchanged.`,
+    pl: `**Eksport pojedynczej encji do Port.** Menu wiersza na liście Encje eksportuje teraz jedną wybraną encję jako dokument JSON, który API Port do tworzenia encji przyjmuje bez zmian i który import w Toadie przyjmuje z powrotem w niezmienionej postaci. Poprzedni eksport wszystkich encji blueprintu został usunięty; eksport blueprintów pozostaje bez zmian.`,
+  },
+  {
     version: "2.7.0",
     date: "2026-09-18",
     en: `**A dedicated GraphQL API for integrations.** Other applications can read Port blueprints, entities, and ontology findings through a separate, bounded GraphQL API. Administrators manage integration clients with keys revealed once and revocable at any time. The API includes computed properties and inherited ownership, publishes its schema, and keeps private saved queries outside its scope.`,

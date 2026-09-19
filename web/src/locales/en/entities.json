@@ -1,5 +1,6 @@
 {
   "title": "Entities",
+  "exportAria": "Export {{name}} as JSON",
   "intro": "Instances of a blueprint — pick one below to see, create, and edit its entities. Any authenticated user may create, edit, and delete entities, the same shared-workspace rule as catalog files.",
   "empty": "No entities for this blueprint yet",
   "pickBlueprintEmpty": "Pick a blueprint above to see its entities",

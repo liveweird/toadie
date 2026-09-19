@@ -1,5 +1,6 @@
 {
   "title": "Encje",
+  "exportAria": "Eksportuj {{name}} jako JSON",
   "intro": "Instancje blueprintu — wybierz jeden poniżej, aby zobaczyć, tworzyć i edytować jego encje. Każdy zalogowany użytkownik/każda zalogowana użytkowniczka może tworzyć, edytować i usuwać encje — ta sama zasada współdzielonego obszaru roboczego co w przypadku plików katalogu.",
   "empty": "Brak encji dla tego blueprintu",
   "pickBlueprintEmpty": "Wybierz blueprint powyżej, aby zobaczyć jego encje",

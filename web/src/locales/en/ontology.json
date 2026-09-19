@@ -60,8 +60,7 @@
     "failedNetwork": "Import failed. Check your connection and try again."
   },
   "export": {
-    "button": "Export JSON",
-    "failed": "Couldn't export entities. Check your connection and try again."
+    "button": "Export JSON"
   },
   "importLink": "Import"
 }
