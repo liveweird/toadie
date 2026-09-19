@@ -30,7 +30,10 @@ current findings, soft deletion, and existing read budgets have the same meaning
 `_team` and `_user` are ontology blueprints/entities and are included. Login accounts,
 Backstage catalog data, saved queries, and the entity query-language evaluator are excluded.
 Dynamic JSON can contain sensitive workspace content: a key grants read access to the whole
-Port ontology, not ownership-based row permissions. Ownership remains informational.
+Port ontology, not ownership-based row permissions. Ownership remains informational. The
+REST-only `sourceUrl`/`lastSyncedAt` source-sync envelope members (2.9.0,
+`.claude/docs/persistence.md` "V37") are deliberately NOT exposed on the GraphQL `Entity` type —
+Toadie provenance, not Port model.
 
 `errors` is ontology health, separate from GraphQL's top-level execution `errors` array.
 It reports entity and blueprint findings, with paginated finding-row collections and full

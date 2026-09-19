@@ -557,6 +557,20 @@ Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's ow
   stored Port document or the wire shapes changes: a query is a filter over instances, not a model
   feature, and Port has no equivalent.
 
+- **Source reference & HTTP re-sync (2.9.0)** — the catalog file's own `sourceUrl`/re-sync
+  feature, one level up: three envelope columns beside `document` (`.claude/docs/persistence.md`
+  "V37") — `sourceUrl` (an optional https URL, absent on the wire when unset), `lastSyncedAt`
+  (epoch millis, `0` = never), and a private `syncedContent` baseline never exposed on the wire.
+  Wire members: `EntityRequest.sourceUrl` (optional, row state for the whole request — never a
+  document member, `document.sourceUrl` is `400`) and `EntityResponse.sourceUrl`/`lastSyncedAt`.
+  Accepted remote shapes are exactly the ontology import's own envelopes (a bare entity document
+  or `{ok, entity}`/`{ok, entities:[…]}`/`{entities:[…]}`/an array) — the same
+  `unwrapEnvelope`/`sanitizeDocument`/computed-property-stripping pipeline the ontology import
+  page already runs, since a synced copy is validated exactly like an imported or PUT one. The
+  export (`entityExportDocument`) never carries `sourceUrl`/`lastSyncedAt` — Toadie provenance,
+  not a Port field, and reimporting an export must not accidentally graft someone else's
+  reference onto a fresh row.
+
 ## System blueprints (V31)
 
 Toadie seeds exactly two system blueprints — `_team` and `_user` — flagged `system: true` on the
@@ -610,6 +624,18 @@ validation failure, an unresolvable target, a registry cap, or a cycle through a
 reference — see below), `CONFLICT` (an in-batch duplicate identifier, case-insensitive; the
 later document loses), `ERROR` (an unexpected storage failure, or a pass-2 residual — see
 below). The response is `200` even when every document failed. The status vocabulary is deliberately NOT the catalog import's (`CREATED`/`CREATED_WITH_FINDINGS`/`INVALID`/`CONFLICT`/`ERROR`): a catalog import always waives soft findings and never replaces, while an ontology import can `replaceExisting` (`UPDATED`) and reports an untouched existing row (`EXISTS`).
+
+**Entity import source references (2.9.0).** `EntityImportRequest.sourceUrl` is an optional
+batch-level https URL — the catalog import's own fetch-from-URL rule, one level up: every
+`CREATED`/`UPDATED` row this batch produces is stamped referenced-and-synced (the pass-2
+restoration of a deferred row is stamped too, so a row's FINAL baseline is always its complete,
+fully-resolved document — see `.claude/docs/persistence.md` "V37"). A `replaceExisting` batch
+submitted WITHOUT a `sourceUrl` KEEPS an existing row's own reference untouched rather than
+clearing it — only a batch that itself carries a URL moves or re-stamps one. A per-document
+`sourceUrl` inside an individual entity document is always `INVALID` (`requireNoDocumentSourceUrl`
+— the same rule the ordinary create/sync routes enforce): the reference is a property of the
+BATCH REQUEST, never a document member, so it cannot ride inside one row while a sibling row
+gets a different value. Blueprint import documents carry no `sourceUrl` concept at all.
 
 **Ordering and deferral, one mechanism for forward references and cycles.** Both planners
 topologically order the batch (Kahn's algorithm, ties broken by the document's 0-based batch
