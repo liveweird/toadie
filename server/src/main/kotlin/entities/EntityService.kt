@@ -830,6 +830,8 @@ class EntityService(
     ): UInt {
         val (sourceUrlValue, lastSyncedAtValue, syncedContentValue) = when (source) {
             SourceWrite.FromRequest -> Triple(request.sourceUrl, 0L, null)
+            // Keep only ever reaches create via an import row with NO batch sourceUrl:
+            // requireNoDocumentSourceUrl guarantees request.sourceUrl == null on every such path.
             SourceWrite.Keep -> Triple(null, 0L, null)
             is SourceWrite.Synced -> Triple(source.sourceUrl, now, baselineJson(request, document))
         }

@@ -5,6 +5,7 @@ import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.infra.importing.ImportMutation
 import ch.nokillswit.infra.importing.ImportMutationKind
@@ -497,7 +498,8 @@ suspend fun EntityService.import(
     val plan = planEntityImport(documents, importSnapshot(), replaceExisting, workspaceDocumentBytes)
     // D3 (`.claude/docs/persistence.md` "V37"): a batch WITH a `sourceUrl` moves/re-stamps every
     // stored row; without one, `replaceExisting` keeps a row's existing reference untouched.
-    val source: SourceWrite = sourceUrl?.let { SourceWrite.Synced(it) } ?: SourceWrite.Keep
+    val source: SourceWrite = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
+        ?.let { SourceWrite.Synced(it) } ?: SourceWrite.Keep
     val rows = arrayOfNulls<EntityImportRow>(documents.size)
     plan.verdicts.forEachIndexed { idx, verdict -> if (verdict is EntityPlanVerdict.Rejected) rows[idx] = verdict.row }
 

@@ -165,6 +165,7 @@ class EntitySyncTest {
                 "/api/v1/entities",
                 entityRequest(bpId, entId, sourceUrl(entId)).copy(properties = buildJsonObject { put("language", "kotlin") }),
             ).body<EntityResponse>()
+            val before = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
 
             // The remote copy is missing the required "language" property.
             val badRemote = entityRequest(bpId, entId)
@@ -172,10 +173,10 @@ class EntitySyncTest {
             assertEquals(HttpStatusCode.BadRequest, response.status)
             assertTrue(response.body<EntityInvalidProblem>().findings.isNotEmpty())
 
-            // The row is untouched, including its sync stamp.
+            // The row is untouched — the FULL response, not just properties/lastSyncedAt: title,
+            // identifier, sourceUrl, properties, relations, updatedAt, lastSyncedAt all included.
             val after = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
-            assertEquals("kotlin", after.properties.getValue("language").jsonPrimitive.content)
-            assertEquals(0L, after.lastSyncedAt)
+            assertEquals(before, after)
         } finally {
             TestEntities.remove(entId)
             TestBlueprints.remove(bpId)
@@ -200,6 +201,9 @@ class EntitySyncTest {
             client.putJson("/api/v1/entities/${created.id}", entityRequest(bpId, entId, url))
             val kept = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
             assertEquals(synced.lastSyncedAt, kept.lastSyncedAt)
+            // D2: an entity PUT bumps updatedAt regardless of whether the document changed —
+            // unlike the catalog, which only bumps on an actual content change (`SyncTest.kt`).
+            assertTrue(kept.updatedAt > kept.lastSyncedAt)
 
             // A changed reference resets the stamp and drops the baseline.
             val other = sourceUrl(unique("moved"))
@@ -261,6 +265,97 @@ class EntitySyncTest {
                 TestBlueprints.remove(bpId)
             }
         }
+
+    @Test
+    fun `a replaceExisting import without a batch sourceUrl keeps the row's existing reference and stamp - D3 Keep`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("esync-keep", UserRole.ADMIN)
+            val bpId = unique("bp-esync-keep")
+            val entId = unique("ent-esync-keep")
+            val originalUrl = sourceUrl(entId)
+            try {
+                client.createBlueprint(simpleBlueprint(bpId))
+                val created = client.postJson("/api/v1/entities", entityRequest(bpId, entId, originalUrl)).body<EntityResponse>()
+                // Sync it once so there is a real baseline to prove D3 leaves untouched, not just nulls.
+                client.postJson("/api/v1/entities/${created.id}/sync", SyncEntityRequest(document = entityRequest(bpId, entId)))
+                val synced = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
+                assertTrue(synced.lastSyncedAt > 0)
+                val syncedState = client.get("/api/v1/entities/${created.id}/sync").body<EntitySyncStateResponse>()
+
+                // D3: replaceExisting WITHOUT a batch sourceUrl keeps the existing reference/stamp/baseline.
+                val keepDoc = blueprintJson.encodeToJsonElement(entityRequest(bpId, entId).copy(title = "Changed via import")).jsonObject
+                val kept = client.postJson(
+                    "/api/v1/entities/import",
+                    EntityImportRequest(documents = listOf(keepDoc), replaceExisting = true),
+                ).body<EntityImportResponse>().results.single()
+                assertEquals(OntologyImportStatus.UPDATED, kept.status)
+                val afterKeep = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
+                assertEquals("Changed via import", afterKeep.title)
+                assertEquals(originalUrl, afterKeep.sourceUrl)
+                assertEquals(synced.lastSyncedAt, afterKeep.lastSyncedAt)
+                val stateAfterKeep = client.get("/api/v1/entities/${created.id}/sync").body<EntitySyncStateResponse>()
+                assertEquals(syncedState.syncedDocument, stateAfterKeep.syncedDocument)
+
+                // A batch WITH a sourceUrl moves the reference and re-stamps, even under the same replaceExisting import.
+                val movedUrl = sourceUrl(unique("moved"))
+                val movedDoc = blueprintJson.encodeToJsonElement(entityRequest(bpId, entId).copy(title = "Moved via import")).jsonObject
+                val moved = client.postJson(
+                    "/api/v1/entities/import",
+                    EntityImportRequest(documents = listOf(movedDoc), replaceExisting = true, sourceUrl = movedUrl),
+                ).body<EntityImportResponse>().results.single()
+                assertEquals(OntologyImportStatus.UPDATED, moved.status)
+                val afterMove = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
+                assertEquals(movedUrl, afterMove.sourceUrl)
+                assertTrue(afterMove.lastSyncedAt > 0)
+                assertEquals(afterMove.updatedAt, afterMove.lastSyncedAt)
+                val stateAfterMove = client.get("/api/v1/entities/${created.id}/sync").body<EntitySyncStateResponse>()
+                assertEquals("Moved via import", stateAfterMove.syncedDocument!!.title)
+            } finally {
+                TestEntities.remove(entId)
+                TestBlueprints.remove(bpId)
+            }
+        }
+
+    @Test
+    fun `a pass-2 restored row's sync baseline is the final document, not the pass-1 partial`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("esync-pass2", UserRole.ADMIN)
+        val bpId = unique("bp-esync-pass2")
+        val a = unique("ent-esync-pass2-a")
+        val b = unique("ent-esync-pass2-b")
+        val url = sourceUrl(a)
+        try {
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = bpId, title = "T", schema = BlueprintSchema(),
+                    relations = mapOf("peer" to RelationDefinition(title = "Peer", target = bpId, required = false, many = false)),
+                ),
+            )
+            // The EntityImportTest.kt "optional relation cycle lands via pass 2" fixture — the
+            // mutual reference forces both rows through the deferred-back-edge, two-pass write.
+            val aDoc = blueprintJson.encodeToJsonElement(
+                entityRequest(bpId, a).copy(relations = buildJsonObject { put("peer", b) }),
+            ).jsonObject
+            val bDoc = blueprintJson.encodeToJsonElement(
+                entityRequest(bpId, b).copy(relations = buildJsonObject { put("peer", a) }),
+            ).jsonObject
+
+            val result = client.postJson(
+                "/api/v1/entities/import",
+                EntityImportRequest(documents = listOf(aDoc, bDoc), sourceUrl = url),
+            ).body<EntityImportResponse>()
+            assertEquals(listOf(OntologyImportStatus.CREATED, OntologyImportStatus.CREATED), result.results.map { it.status })
+            val aId = result.results[0].id!!
+
+            val state = client.get("/api/v1/entities/$aId/sync").body<EntitySyncStateResponse>()
+            // The FINAL restored document, not pass 1's stripped-relation intermediate.
+            assertEquals(b, state.syncedDocument!!.relations.getValue("peer").jsonPrimitive.content)
+        } finally {
+            TestEntities.remove(a, b)
+            TestBlueprints.remove(bpId)
+        }
+    }
 
     @Test
     fun `the list sorts by lastSyncedAt with never-synced entities first ascending`() = testApplication {
@@ -423,6 +518,19 @@ class EntitySyncTest {
             SyncEntityRequest(document = EntityRequest(blueprint = "bp", identifier = "x", title = "T")),
         )
         assertEquals(HttpStatusCode.NotFound, missing.status)
+    }
+
+    @Test
+    fun `sync on an unknown id 404s even with a structurally invalid document`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("esync-404-invalid", UserRole.ADMIN)
+        // A blank identifier fails requireEntityIdentifier — a missing id must still 404 FIRST
+        // (the PUT precedent: the service checks existence before it validates).
+        val invalid = client.postJson(
+            "/api/v1/entities/999999999/sync",
+            SyncEntityRequest(document = EntityRequest(blueprint = "bp", identifier = "", title = "T")),
+        )
+        assertEquals(HttpStatusCode.NotFound, invalid.status)
     }
 
     @Test
