@@ -386,8 +386,9 @@ ch.nokillswit
 │                       per row under the same two-table V28 lock; since 2.9.0 a batch `sourceUrl`
 │                       stamps every stored row synced, EntityErrors.kt (Phase 8,
 │                       v2.5.0 — the Port twin of `catalog/Errors.kt`: pure checkers + DTOs behind
-│                       GET …/entities/errors, reporting all four classes — stale entities,
-│                       unresolved ownership, broken saved queries, computed-property health — as
+│                       GET …/entities/errors, reporting all five classes — stale entities,
+│                       unresolved ownership, broken saved queries, computed-property health, source-less
+│                       entities (`SOURCE_MISSING`, 2.9.1) — as
 │                       report-only findings/diagnostics, no audit)
 ├── entityquery/        the entity query language (phase 7, v2.0.0 — Toadie-first, Lettuce has
 │                       none; `.claude/docs/entity-query-language.md`): EntityQuery.kt (the caps —
