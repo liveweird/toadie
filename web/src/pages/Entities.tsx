@@ -38,7 +38,7 @@ type SortField = (typeof SORT_FIELDS)[number];
 const SETTINGS_KEY = "entities";
 const MAX_COLUMN_PROPERTIES = 4;
 const IDENTITY_COLUMN_WIDTH = 260;
-const TEAM_COLUMN_WIDTH = 150;
+const TEAM_COLUMN_WIDTH = 170;
 const UPDATED_COLUMN_WIDTH = 120;
 const OPERATIONS_COLUMN_WIDTH = 48;
 
@@ -62,7 +62,7 @@ function previewColumnWidth(column: PreviewColumn): number {
       case "number":
         return 120;
       default:
-        return column.enum ? 140 : 170;
+        return column.enum ? 130 : 170;
     }
   }
   switch (column.definition.type) {
