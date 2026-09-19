@@ -122,6 +122,15 @@ describe("sanitizeDocument", () => {
     expect(body).toEqual({ blueprint: "b", teamInheritance: {} });
     expect(stripped).toEqual([]);
   });
+
+  test("drops the 2.9.0 sourceUrl/lastSyncedAt envelope members from an entity document", () => {
+    const { body, stripped } = sanitizeDocument(
+      { blueprint: "b", identifier: "checkout", sourceUrl: "https://example.com/x.json", lastSyncedAt: 1000 },
+      "entity",
+    );
+    expect(body).toEqual({ blueprint: "b", identifier: "checkout" });
+    expect(stripped.sort()).toEqual(["lastSyncedAt", "sourceUrl"]);
+  });
 });
 
 describe("stripComputedProperties", () => {

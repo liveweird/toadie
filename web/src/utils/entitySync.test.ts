@@ -188,6 +188,36 @@ describe("pickSourceEntityDocument", () => {
     });
   });
 
+  test("a null icon/team reads as unset, the same as an omitted key", () => {
+    const result = pickSourceEntityDocument(
+      JSON.stringify({ identifier: "svc-a", blueprint: "service", icon: null, team: null }),
+      TARGET,
+      [],
+    );
+    expect(result.error).toBeNull();
+    expect(result.document).toEqual({ identifier: "svc-a", blueprint: "service" });
+  });
+
+  test("a null icon reads as in-sync (canonically equal) against a stored copy that never had one", () => {
+    const remote = pickSourceEntityDocument(
+      JSON.stringify({ identifier: "svc-a", blueprint: "service", title: "Service A", icon: null }),
+      TARGET,
+      [],
+    );
+    const stored = { identifier: "svc-a", blueprint: "service", title: "Service A" };
+    expect(canonicalEntityDocumentJson(remote.document!)).toBe(canonicalEntityDocumentJson(stored));
+  });
+
+  test("a null relation value is left alone (an explicit relation value, not an unset field)", () => {
+    const result = pickSourceEntityDocument(
+      JSON.stringify({ identifier: "svc-a", blueprint: "service", relations: { owner: null } }),
+      TARGET,
+      [],
+    );
+    expect(result.error).toBeNull();
+    expect(result.document).toEqual({ identifier: "svc-a", blueprint: "service", relations: { owner: null } });
+  });
+
   test("id/createdAt and other read-only keys are sanitized away", () => {
     const result = pickSourceEntityDocument(
       JSON.stringify({

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { screen, waitFor } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 import SyncEntityModal from "./SyncEntityModal";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
@@ -66,11 +67,12 @@ function remoteDoc(title: string) {
 
 function mockRoutes(
   mockFetch: FetchMock,
-  overrides: Partial<Record<"fetch" | "check" | "state" | "detail" | "sync", Response>> = {},
+  overrides: Partial<Record<"fetch" | "check" | "state" | "detail" | "sync" | "blueprints", Response>> = {},
 ) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
-    if (url === "/api/v1/blueprints" && method === "GET") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+    if (url === "/api/v1/blueprints" && method === "GET")
+      return Promise.resolve(overrides.blueprints ?? jsonResponse(200, { items: BLUEPRINTS }));
     if (url === "/api/v1/entities/fetch" && method === "POST") {
       return Promise.resolve(overrides.fetch ?? jsonResponse(200, { content: JSON.stringify(remoteDoc("New title")) }));
     }
@@ -118,6 +120,7 @@ describe("SyncEntityModal", () => {
   }
 
   test("shows both changed-side badges, the diff, and syncs the picked document on confirm", async () => {
+    const invalidateQueriesSpy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
     mockRoutes(mockFetch);
     const user = userEvent.setup();
     renderModal();
@@ -137,9 +140,48 @@ describe("SyncEntityModal", () => {
     );
     expect(syncCall).toBeDefined();
     const body = JSON.parse((syncCall![1] as RequestInit).body as string) as { document: Record<string, unknown> };
-    expect(body.document.title).toBe("New title");
-    expect(body.document.identifier).toBe("checkout");
+    // The whole picked document — properties and relations included, not just identity fields.
+    expect(body.document).toEqual(remoteDoc("New title"));
+    await waitFor(() => expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ["entities"] }));
     expect(onCompleted).toHaveBeenCalled();
+
+    invalidateQueriesSpy.mockRestore();
+  });
+
+  test("computed values in the remote document are stripped and the note renders", async () => {
+    const blueprintsWithMirror = [
+      { ...BLUEPRINTS[0], mirrorProperties: { region: { title: "Region", path: "owner.region" } } },
+    ];
+    mockRoutes(mockFetch, {
+      blueprints: jsonResponse(200, { items: blueprintsWithMirror }),
+      fetch: jsonResponse(200, {
+        content: JSON.stringify({ ...remoteDoc("New title"), properties: { language: "java", region: "eu-west" } }),
+      }),
+    });
+    renderModal();
+
+    expect(
+      await screen.findByText("Computed property values removed from 1 entities: region"),
+    ).toBeInTheDocument();
+  });
+
+  test("a post-confirm 400 with findings renders them under the Sync failed title", async () => {
+    mockRoutes(mockFetch, {
+      sync: jsonResponse(400, {
+        title: "Bad Request",
+        status: 400,
+        detail: "invalid",
+        findings: [{ field: "properties.language", code: "REQUIRED_MISSING", message: "Required" }],
+      }),
+    });
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("button", { name: "Overwrite stored copy" }));
+
+    expect(await screen.findByText("Sync failed")).toBeInTheDocument();
+    expect(screen.getByText("properties.language: Required")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   test("identical current and source copies read as in sync and disable the overwrite", async () => {

@@ -95,6 +95,31 @@ export function canonicalEntityDocumentJson(doc: Record<string, unknown>): strin
   return JSON.stringify(ordered, null, 2);
 }
 
+/**
+ * Optional TOP-LEVEL entity fields whose "unset" spelling is an explicit `null` on the wire
+ * (a Port GET response never omits a field it once had a value for) rather than absence —
+ * `entityExportDocument`/`toEntityRequest` (`utils/entityForm.ts`, the "blank-is-absent" write
+ * convention) never write `null` themselves, so a stored copy shows these keys OMITTED. Without
+ * this normalization a remote `{"icon": null}` would forever read as "changed" against a
+ * stored copy that never had the key at all. Deliberately NARROW to these two identity fields:
+ * a `null` inside `properties`/`relations` is a meaningful explicit relation value (Port's
+ * relation grammar — see `.claude/docs/port-data-model.md`), never normalized away.
+ */
+const NULLABLE_TOP_LEVEL_KEYS = ["icon", "team"] as const;
+
+/** Drops the keys above when their value is `null` — applied once, right after sanitizing a
+ *  picked source document and before it is compared (canonicalized) or sent back on sync. */
+function dropNullTopLevelKeys(doc: Record<string, unknown>): Record<string, unknown> {
+  let result = doc;
+  for (const key of NULLABLE_TOP_LEVEL_KEYS) {
+    if (result[key] === null) {
+      if (result === doc) result = { ...doc };
+      delete result[key];
+    }
+  }
+  return result;
+}
+
 export type PickedSourceDocumentError = "parse" | "noMatch" | "blueprintMismatch";
 
 export type PickedSourceDocument = {
@@ -146,6 +171,9 @@ export function pickSourceEntityDocument(
 
   let picked: Record<string, unknown>;
   if (candidates.length === 1) {
+    // A single-element envelope/array takes this branch too (`unwrapEnvelope` already
+    // flattened it to one candidate) — the `pickRepoDocument` idiom: one document is taken
+    // as-is, source-side identifier rename permitted.
     const { body } = sanitizeDocument(candidates[0], "entity");
     const blueprint = typeof body.blueprint === "string" ? body.blueprint : undefined;
     if (blueprint !== undefined && blueprint !== target.blueprint) return failure("blueprintMismatch");
@@ -158,6 +186,6 @@ export function pickSourceEntityDocument(
   }
 
   const computedIdsByBlueprint = buildComputedIdsByBlueprint([], registryBlueprints);
-  const { body, strippedComputed } = stripComputedProperties(picked, computedIdsByBlueprint);
+  const { body, strippedComputed } = stripComputedProperties(dropNullTopLevelKeys(picked), computedIdsByBlueprint);
   return { document: body, error: null, strippedComputed };
 }

@@ -94,6 +94,11 @@ const COMMON_STRIP_KEYS = [
   "findings",
   "blueprintId",
   "scorecards",
+  // 2.9.0's entity source-sync envelope members (`sourceUrl`/`lastSyncedAt` on `Entity`) —
+  // response-only, never part of the stored document; a raw GET used as a sync source (or a
+  // whole-entity export re-imported) must lose them the same way it loses `id`/`createdAt`.
+  "sourceUrl",
+  "lastSyncedAt",
 ] as const;
 
 /** Port's own definition-export additionally carries these two blueprint-only keys. */
