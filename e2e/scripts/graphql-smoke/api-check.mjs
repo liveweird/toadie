@@ -138,6 +138,8 @@ export async function assertSeedParity(baseUrls, jwt, apiKey, schemaPath) {
   }
 }
 
+const PROBE_SOURCE = 'https://example.com/graphql-smoke/probe.json'
+
 export async function assertLiveFindings(baseUrls, jwt, apiKey, marker) {
   const identifier = `smoke_${marker.replaceAll('-', '_')}`
   const blueprint = { identifier, title: 'GraphQL smoke probe', schema: { properties: {} }, relations: {} }
@@ -146,13 +148,15 @@ export async function assertLiveFindings(baseUrls, jwt, apiKey, marker) {
   })
   const createdEntity = await request(baseUrls[0], '/api/v1/entities', {
     token: jwt,
-    body: { blueprint: identifier, identifier: 'probe', title: 'Before', properties: {}, relations: {} },
+    // A source reference keeps the errors-report row equal to the entity's own findings (since
+    // 2.9.1 a source-less entity would additionally carry the report-only SOURCE_MISSING).
+    body: { blueprint: identifier, identifier: 'probe', title: 'Before', properties: {}, relations: {}, sourceUrl: PROBE_SOURCE },
     expected: 201,
   })
   try {
     await request(baseUrls[0], `/api/v1/entities/${createdEntity.id}`, {
       token: jwt, method: 'PUT',
-      body: { blueprint: identifier, identifier: 'probe', title: 'After REST update', properties: {}, relations: {} },
+      body: { blueprint: identifier, identifier: 'probe', title: 'After REST update', properties: {}, relations: {}, sourceUrl: PROBE_SOURCE },
       expected: 204,
     })
     blueprint.schema = {
