@@ -584,7 +584,11 @@ Bulk import lands server-side for both registries: `POST /api/v1/blueprints/impo
 each document is decoded and classified INDEPENDENTLY — the strict `blueprintJson` decode
 (`explicitNulls = false`, `ignoreUnknownKeys = false`). Unknown members, including upstream
 read-only metadata such as `createdAt` or `organization`, are rejected, not silently ignored.
-Toadie's own exports omit response metadata and remain importable unchanged. Thus one malformed document is that row's
+Toadie's own exports omit response metadata and remain importable unchanged. Since 2.8.0 the
+Entities page's client-side export is a single entity's bare document — Port's own
+`POST /v1/blueprints/{blueprint}/entities` create-entity body plus `blueprint` (Port declares
+`additionalProperties: true` on that request, so the extra key round-trips through Port
+unchanged too) — which this bare-document import shape accepts back verbatim. Thus one malformed document is that row's
 `INVALID` with a fixed message (`Document does not match the expected schema`, never the raw
 kotlinx exception text), never a whole-request `400`; only a non-`JsonObject` array element (a
 string, a number, `null`) fails to decode into `JsonObject` at all and IS a request-level `400`,

@@ -331,6 +331,7 @@ export async function rowOperation(
   operation:
     | "Edit"
     | "Export as YAML"
+    | "Export JSON"
     | "Overwrite with YAML"
     | "Delete"
     | "Sync from source"

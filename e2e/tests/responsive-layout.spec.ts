@@ -107,7 +107,7 @@ test("populated entity lists, deep hierarchy rows and query controls remain usab
         .map((cell) => ({ text: cell.textContent, width: cell.clientWidth, contentWidth: cell.scrollWidth })),
       )).toEqual([]);
     }
-    const edit = row.getByRole("button", { name: `Edit ${identifiers[1]}`, exact: true });
+    const edit = row.getByRole("button", { name: `Operations for ${identifiers[1]}`, exact: true });
     await edit.scrollIntoViewIfNeeded();
     await expect(edit).toBeInViewport();
     await expectContainedPage(page);
