@@ -94,6 +94,11 @@ const COMMON_STRIP_KEYS = [
   "findings",
   "blueprintId",
   "scorecards",
+  // 2.9.0's entity source-sync envelope members (`sourceUrl`/`lastSyncedAt` on `Entity`) —
+  // response-only, never part of the stored document; a raw GET used as a sync source (or a
+  // whole-entity export re-imported) must lose them the same way it loses `id`/`createdAt`.
+  "sourceUrl",
+  "lastSyncedAt",
 ] as const;
 
 /** Port's own definition-export additionally carries these two blueprint-only keys. */
@@ -328,6 +333,7 @@ type BlueprintImportCaller = (
 type EntityImportCaller = (
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
+  sourceUrl?: string,
 ) => Promise<{ results: EntityRowResult[] }>;
 
 type RunImportBatchDeps = {
@@ -339,6 +345,10 @@ type RunImportBatchDeps = {
   admin: boolean;
   importBlueprintsChunk: BlueprintImportCaller;
   importEntitiesChunk: EntityImportCaller;
+  /** The URL the batch was FETCHED from (2.9.0, the `ImportCatalogFiles.tsx` `sourceUrl`
+   *  twin) — forwarded to ENTITY chunks only (blueprints never carry a source reference).
+   *  Omit for pasted/uploaded batches. */
+  sourceUrl?: string;
   onProgress?: (sentChunks: number, totalChunks: number) => void;
   /** Called with the FULL accumulated row set after every completed chunk, so the page can
    *  show partial results even if a LATER chunk's call rejects (the final promise then
@@ -434,7 +444,14 @@ export async function runImportBatch(deps: RunImportBatchDeps): Promise<Ontology
   }
 
   for (const chunk of chunked(entityDocs, IMPORT_CHUNK_SIZE)) {
-    reportChunk(await runOneChunk(chunk, deps.importEntitiesChunk, deps.replaceExisting, entityRow));
+    // Forward `sourceUrl` only when the caller actually supplied one — an omitted argument,
+    // never an explicit `undefined`, so a pasted/uploaded batch's call shape is unchanged.
+    const callEntities =
+      deps.sourceUrl !== undefined
+        ? (documents: Record<string, unknown>[], replaceExisting: boolean) =>
+            deps.importEntitiesChunk(documents, replaceExisting, deps.sourceUrl)
+        : deps.importEntitiesChunk;
+    reportChunk(await runOneChunk(chunk, callEntities, deps.replaceExisting, entityRow));
   }
 
   return sortedByIndex(rows);

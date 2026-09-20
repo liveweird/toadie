@@ -2,6 +2,10 @@
   "import": {
     "title": "Import ontologii",
     "intro": "Wklej JSON blueprintów i encji w formacie Port — w tym eksporty z API Port — albo wybierz pliki. Blueprinty importują się jako pierwsze; odwołania między dokumentami są porządkowane automatycznie, a tam, gdzie to potrzebne, odraczane i uzupełniane w drugim przebiegu.",
+    "urlLabel": "Pobierz z adresu URL",
+    "fetchButton": "Pobierz",
+    "urlFailedTitle": "Pobieranie nie powiodło się",
+    "sourceHint": "Pobrane encje będą mieć {{url}} jako źródło i zaczną jako zsynchronizowane; blueprinty importują się bez odwołania.",
     "textareaLabel": "Zawartość JSON",
     "placeholder": "{ \"blueprints\": [...], \"entities\": [...] }",
     "pickFiles": "Wybierz pliki…",
@@ -64,8 +68,7 @@
     "failedNetwork": "Import nie powiódł się. Sprawdź połączenie i spróbuj ponownie."
   },
   "export": {
-    "button": "Eksportuj JSON",
-    "failed": "Nie udało się wyeksportować encji. Sprawdź połączenie i spróbuj ponownie."
+    "button": "Eksportuj JSON"
   },
   "importLink": "Import"
 }

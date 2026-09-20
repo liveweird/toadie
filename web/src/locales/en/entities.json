@@ -1,5 +1,6 @@
 {
   "title": "Entities",
+  "exportAria": "Export {{name}} as JSON",
   "intro": "Instances of a blueprint — pick one below to see, create, and edit its entities. Any authenticated user may create, edit, and delete entities, the same shared-workspace rule as catalog files.",
   "empty": "No entities for this blueprint yet",
   "pickBlueprintEmpty": "Pick a blueprint above to see its entities",
@@ -14,7 +15,6 @@
   "staleTitle": "This entity is out of date with its blueprint",
   "staleBody": "The blueprint changed since this entity was last saved. Fix the properties/relations below before you can save again.",
   "column": {
-    "findings": "Findings",
     "team": "Team"
   },
   "field": {
@@ -24,6 +24,8 @@
     "icon": "Icon",
     "team": "Team",
     "updated": "Updated",
+    "lastSync": "Last sync",
+    "sourceUrl": "Source URL",
     "unset": "Unset",
     "true": "True",
     "false": "False",
@@ -40,7 +42,8 @@
     "identity": "Identity",
     "properties": "Properties",
     "relations": "Relations",
-    "computed": "Computed"
+    "computed": "Computed",
+    "source": "Source"
   },
   "computed": {
     "kind": {
@@ -58,7 +61,8 @@
   "hint": {
     "team": "Every value must resolve to an active team (a \"_team\" entity).",
     "teamInherited": "Computed automatically from the \"{{path}}\" relation chain — not editable here.",
-    "computed": "Computed automatically on the server — not editable here."
+    "computed": "Computed automatically on the server — not editable here.",
+    "sourceUrl": "The https address of this entity's copy at its source (a Port export or catalog-info.yaml) — enables Sync from source."
   },
   "finding": {
     "teamTargetMissing": "This team no longer exists."
@@ -86,7 +90,33 @@
   "toast": {
     "created": "Entity created",
     "saved": "Entity saved",
-    "deleted": "Entity deleted"
+    "deleted": "Entity deleted",
+    "synced": "Entity synced"
+  },
+  "sync": {
+    "action": "Sync from source",
+    "actionAria": "Sync {{name}} from source",
+    "title": "Sync from source — {{identifier}}",
+    "sourceLabel": "Source:",
+    "lastSynced": "Last synced {{ago}}",
+    "neverSynced": "Never synced",
+    "changedAtSource": "Changed at source",
+    "changedInDb": "Changed in Toadie",
+    "inSync": "Toadie and the source are in sync",
+    "diffLabel": "Changes between the stored copy and the source copy",
+    "diffTooLarge": "These documents are too large for a detailed comparison. Review the complete stored and source JSON below.",
+    "diffStoredLabel": "Complete stored JSON",
+    "diffReplacementLabel": "Complete source JSON",
+    "loadingAria": "Loading the source copy",
+    "loadFailed": "Could not prepare the comparison",
+    "parseFailed": "The source document is not valid JSON.",
+    "noMatch": "The source document no longer contains this entity.",
+    "blueprintMismatch": "The source document names a different blueprint than \"{{blueprint}}\".",
+    "refusedTitle": "The source copy was refused",
+    "refusedBody": "Syncing would fail — the source copy no longer satisfies the blueprint's current rules. Fix it at the source before syncing again.",
+    "overwriteWarning": "Syncing overwrites the stored copy with the source version shown above. Changes made only in Toadie will be lost.",
+    "confirm": "Overwrite stored copy",
+    "failed": "Sync failed"
   },
   "validation": {
     "required": "Required",
@@ -113,6 +143,7 @@
     "maxItems": "Needs at most {{max}} items",
     "uniqueItems": "Items must be unique",
     "jsonInvalid": "Enter valid JSON",
-    "objectShape": "Enter a URL and, optionally, a display text — nothing else"
+    "objectShape": "Enter a URL and, optionally, a display text — nothing else",
+    "sourceUrl": "Must be an absolute https URL without credentials"
   }
 }

@@ -122,6 +122,15 @@ describe("sanitizeDocument", () => {
     expect(body).toEqual({ blueprint: "b", teamInheritance: {} });
     expect(stripped).toEqual([]);
   });
+
+  test("drops the 2.9.0 sourceUrl/lastSyncedAt envelope members from an entity document", () => {
+    const { body, stripped } = sanitizeDocument(
+      { blueprint: "b", identifier: "checkout", sourceUrl: "https://example.com/x.json", lastSyncedAt: 1000 },
+      "entity",
+    );
+    expect(body).toEqual({ blueprint: "b", identifier: "checkout" });
+    expect(stripped.sort()).toEqual(["lastSyncedAt", "sourceUrl"]);
+  });
 });
 
 describe("stripComputedProperties", () => {
@@ -337,6 +346,28 @@ describe("runImportBatch", () => {
     ]);
     expect(importBlueprintsChunk).toHaveBeenCalledWith([{ identifier: "b1" }], false);
     expect(importEntitiesChunk).toHaveBeenCalledWith([{ identifier: "e1" }], false);
+  });
+
+  test("a batch sourceUrl reaches entity chunks only, never blueprint chunks", async () => {
+    const documents = [makeDoc("blueprint", 0, "b1"), makeDoc("entity", 1, "e1")];
+    const importBlueprintsChunk = vi.fn().mockResolvedValue({ results: [{ index: 0, identifier: "b1", status: "CREATED", id: 10 }] });
+    const importEntitiesChunk = vi.fn().mockResolvedValue({ results: [{ index: 0, blueprint: "service", identifier: "e1", status: "CREATED", id: 20 }] });
+
+    await runImportBatch({
+      documents,
+      replaceExisting: false,
+      admin: true,
+      importBlueprintsChunk,
+      importEntitiesChunk,
+      sourceUrl: "https://raw.githubusercontent.com/acme/service/main/entity.json",
+    });
+
+    expect(importBlueprintsChunk).toHaveBeenCalledWith([{ identifier: "b1" }], false);
+    expect(importEntitiesChunk).toHaveBeenCalledWith(
+      [{ identifier: "e1" }],
+      false,
+      "https://raw.githubusercontent.com/acme/service/main/entity.json",
+    );
   });
 
   test("a non-admin caller marks every blueprint document FORBIDDEN client-side and never calls the blueprint endpoint; entities still import", async () => {

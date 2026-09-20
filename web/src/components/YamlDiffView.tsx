@@ -43,21 +43,37 @@ function CompleteYaml({ yaml, label }: { yaml: string; label: string }) {
   );
 }
 
+/** Overrides for the over-budget fallback's three fixed texts — a consumer outside the
+ *  catalog's own `catalog.diff.*` keys (e.g. the entity source-sync flow) supplies its own
+ *  localized copy; every existing consumer is unchanged since this prop is optional. */
+export type YamlDiffFallbackLabels = { tooLarge: string; stored: string; replacement: string };
+
 /**
  * A bounded line diff, or two complete documents when detailed comparison would be too costly.
  * Add/remove prefixes keep the detailed signal non-color-only; every scroll region is named and
  * focusable for keyboard users.
  */
-export default function YamlDiffView({ diff, label }: { diff: YamlDiff; label: string }) {
+export default function YamlDiffView({
+  diff,
+  label,
+  fallbackLabels,
+}: {
+  diff: YamlDiff;
+  label: string;
+  fallbackLabels?: YamlDiffFallbackLabels;
+}) {
   const { t } = useTranslation();
   if (diff.kind === "fallback") {
+    const tooLarge = fallbackLabels?.tooLarge ?? t("catalog.diff.tooLarge");
+    const stored = fallbackLabels?.stored ?? t("catalog.diff.storedLabel");
+    const replacement = fallbackLabels?.replacement ?? t("catalog.diff.replacementLabel");
     return (
       <Stack gap="xs">
         <Alert color="orange" variant="light">
-          {t("catalog.diff.tooLarge")}
+          {tooLarge}
         </Alert>
-        <CompleteYaml yaml={diff.before} label={t("catalog.diff.storedLabel")} />
-        <CompleteYaml yaml={diff.after} label={t("catalog.diff.replacementLabel")} />
+        <CompleteYaml yaml={diff.before} label={stored} />
+        <CompleteYaml yaml={diff.after} label={replacement} />
       </Stack>
     );
   }

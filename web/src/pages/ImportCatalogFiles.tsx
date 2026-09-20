@@ -23,8 +23,9 @@ import {
   type ImportFileResult,
 } from "../api/catalogFiles";
 import CatalogFileNameLink from "../components/CatalogFileNameLink";
-import { normalizeCatalogUrl, parseCatalogYaml } from "../utils/catalogImport";
+import { parseCatalogYaml } from "../utils/catalogImport";
 import { FETCH_URL_ERROR_KEYS, saveErrorMessage } from "../utils/saveError";
+import { normalizeSourceUrl } from "../utils/sourceUrl";
 import { catalogFilesPath } from "../utils/catalogFileLinks";
 import KindBadge from "../components/KindBadge";
 import PageHeader from "../components/PageHeader";
@@ -77,7 +78,7 @@ export default function ImportCatalogFiles() {
     setFetching(true);
     setFetchError(null);
     try {
-      const normalized = normalizeCatalogUrl(url);
+      const normalized = normalizeSourceUrl(url);
       const fetched = await fetchCatalogUrl(normalized);
       setText(fetched.content);
       setFetchedFrom(normalized);

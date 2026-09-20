@@ -1,9 +1,11 @@
 package ch.nokillswit.entities
 
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.paging.PageResponse
 import ch.nokillswit.infra.validation.InvalidPayloadException
 import ch.nokillswit.infra.validation.invalidPayloadJson
 import ch.nokillswit.infra.validation.sanitizeSingleLine
+import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -52,6 +54,16 @@ data class EntityRequest(
     val team: JsonElement? = null,
     val properties: JsonObject = JsonObject(emptyMap()),
     val relations: JsonObject = JsonObject(emptyMap()),
+    /**
+     * The entity's source reference (2.9.0, the `catalog_files.source_url` twin, one level
+     * down) — the https URL of its canonical remote copy. Flat on the request body: unlike
+     * `catalog/CatalogFileWriteRequest`, an entity body IS the Port document plus `blueprint`,
+     * so there is no separate envelope wrapper. Row state, never part of a bulk-import
+     * DOCUMENT ([requireNoDocumentSourceUrl]) — set via the editor's Source fieldset, PUT
+     * full-replace semantics (omitted/blank clears it), or stamped by [EntityService.import]'s
+     * batch `sourceUrl`/`POST …/entities/{id}/sync`.
+     */
+    val sourceUrl: String? = null,
 )
 
 /** The non-identity fields as the stored document (`entities.document`). */
@@ -109,9 +121,56 @@ data class EntityResponse(
     val creatorDeleted: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
+    /** The entity's source reference; absent = none set. */
+    val sourceUrl: String? = null,
+    /** Epoch millis of the last HTTP→DB sync; 0 = never. */
+    val lastSyncedAt: Long,
 )
 
 typealias EntityPageResponse = PageResponse<EntityResponse>
+
+/** GET …/entities/{id}/sync — the sync state incl. the baseline document stored at the last sync. */
+@Serializable
+data class EntitySyncStateResponse(
+    val sourceUrl: String? = null,
+    /** Epoch millis; 0 = never synced. */
+    val lastSyncedAt: Long,
+    /** The document as stored at the last sync — the DB-vs-remote comparison baseline; absent = never. */
+    val syncedDocument: EntityRequest? = null,
+)
+
+/** POST …/entities/{id}/sync — the remote copy, parsed/decoded client-side. */
+@Serializable
+data class SyncEntityRequest(val document: EntityRequest)
+
+/**
+ * The entity write path's column-write policy for the `sourceUrl`/`lastSyncedAt`/`synced_content`
+ * envelope (2.9.0, the `catalog/CatalogFileService.kt` create/update precedent, one level down):
+ * [FromRequest] is the ordinary create/PUT posture (the submitted `sourceUrl`, resetting the sync
+ * stamp when it differs from the stored one); [Keep] leaves all three columns untouched (an
+ * import row replaced without a batch `sourceUrl`, D3); [Synced] is a fetch-backed write (a
+ * batch import with a `sourceUrl`, or `POST …/entities/{id}/sync`) — stamps the reference, the
+ * sync timestamp, and the baseline document together.
+ */
+sealed interface SourceWrite {
+    data object FromRequest : SourceWrite
+
+    data object Keep : SourceWrite
+
+    data class Synced(val sourceUrl: String) : SourceWrite
+}
+
+/**
+ * A bulk-import DOCUMENT never carries `sourceUrl` itself — it is row state for the WHOLE
+ * request ([EntityImportRequest.sourceUrl]), not a per-document member (`.claude/docs/
+ * port-data-model.md` "Import and export"). Thrown before the row's ordinary validation so the
+ * message is specific rather than a generic unknown-member decode failure.
+ */
+fun requireNoDocumentSourceUrl(request: EntityRequest) {
+    if (request.sourceUrl != null) {
+        throw BadRequestException("sourceUrl is row state set for the whole request, not a document member")
+    }
+}
 
 /**
  * The request's `properties`/`relations` as the stored document: an explicit JSON `null` value
@@ -124,9 +183,10 @@ fun EntityRequest.toDocument(): EntityDocument = EntityDocument(
     relations = JsonObject(relations.filterValues { it != JsonNull }),
 )
 
-/** Trims identifier/title/icon (control characters -> 400); never rewrites keys or values. */
+/** Trims identifier/title/icon (control characters -> 400) and the source reference; never rewrites keys or values. */
 fun sanitizedEntityRequest(request: EntityRequest): EntityRequest = request.copy(
     identifier = sanitizeSingleLine(request.identifier, "identifier"),
     title = sanitizeSingleLine(request.title, "title"),
     icon = request.icon?.trim(),
+    sourceUrl = sanitizedSourceUrl(request.sourceUrl),
 )

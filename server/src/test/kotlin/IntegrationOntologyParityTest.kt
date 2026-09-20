@@ -78,8 +78,11 @@ class IntegrationOntologyParityTest {
             assertEquals("1", entities.getValue("checkedEntities").jsonPrimitive.content)
             val row = entities.getValue("entities").jsonObject.getValue("items").jsonArray.single().jsonObject
             assertEquals(entity.id.toString(), row.getValue("id").jsonPrimitive.content)
-            assertEquals("REQUIRED_MISSING", row.getValue("findings").jsonArray.single()
-                .jsonObject.getValue("code").jsonPrimitive.content)
+            // The stale finding plus the report-only SOURCE_MISSING (2.9.1 — the entity has no source).
+            assertEquals(
+                setOf("REQUIRED_MISSING", "SOURCE_MISSING"),
+                row.getValue("findings").jsonArray.map { it.jsonObject.getValue("code").jsonPrimitive.content }.toSet(),
+            )
             val blueprints = read("""{ errors(blueprints:["$marker"]) {
                 blueprints { items { id identifier title findings { code field message } } total }
             } }""").getValue("errors").jsonObject.getValue("blueprints").jsonObject

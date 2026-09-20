@@ -30,7 +30,16 @@ function Harness({
   findings?: EntityFinding[];
 }) {
   const form = useForm<EntityFormValues>({
-    initialValues: { blueprint: "bp", identifier: "", title: "", icon: "", team: [], properties: [], relations: [] },
+    initialValues: {
+      blueprint: "bp",
+      identifier: "",
+      title: "",
+      icon: "",
+      team: [],
+      properties: [],
+      relations: [],
+      sourceUrl: "",
+    },
   });
   return (
     <EntityTeamField

@@ -22,7 +22,7 @@
    heading, a single parent relation, and
    six nested entities with long identifiers and titles.
 2. At 390px, open that blueprint's Entities list.
-   - Expected: all ten headers and populated cells fit within their columns; horizontal
+   - Expected: all eight headers and populated cells fit within their columns; horizontal
      table scrolling reveals the edit action without making the document overflow.
 3. Filter Entity hierarchy to the owned records and select composition.
    - Expected: the deepest entity's action menu can be reached and opened without document

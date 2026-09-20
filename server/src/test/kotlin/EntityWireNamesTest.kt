@@ -36,7 +36,7 @@ class EntityWireNamesTest {
     private val emptyRelations = buildJsonObject { }
 
     @Test
-    fun `EntityRequest wire names - icon and team are the only genuinely optional fields`() {
+    fun `EntityRequest wire names - icon, team and sourceUrl are the only genuinely optional fields`() {
         // properties/relations default to an empty (never absent) JsonObject, so they show up
         // in every case below alongside the three required identity fields.
         val alwaysPresent = setOf("blueprint", "identifier", "title", "properties", "relations")
@@ -52,6 +52,12 @@ class EntityWireNamesTest {
             alwaysPresent,
             "team",
             eq(JsonPrimitive("payments")),
+        )
+        assertOnlyOptional(
+            EntityRequest(blueprint = "bp", identifier = "e1", title = "T", sourceUrl = "https://example.com/e1.json"),
+            alwaysPresent,
+            "sourceUrl",
+            eq(JsonPrimitive("https://example.com/e1.json")),
         )
 
         val withProperties = EntityRequest(blueprint = "bp", identifier = "e1", title = "T", properties = buildJsonObject { put("p", "v") })
@@ -76,13 +82,14 @@ class EntityWireNamesTest {
     }
 
     @Test
-    fun `EntityResponse wire names - icon and team are the only genuinely optional fields`() {
+    fun `EntityResponse wire names - icon, team and sourceUrl are the only genuinely optional fields`() {
         val requiredKeys = setOf(
             "id", "blueprint", "blueprintId", "identifier", "title", "properties", "relations",
             "findings", "createdBy", "creatorName", "creatorDeleted", "createdAt", "updatedAt",
+            "lastSyncedAt",
         )
 
-        fun base(icon: String? = null, team: JsonElement? = null) = EntityResponse(
+        fun base(icon: String? = null, team: JsonElement? = null, sourceUrl: String? = null) = EntityResponse(
             id = 1u,
             blueprint = "bp",
             blueprintId = 2u,
@@ -98,13 +105,21 @@ class EntityWireNamesTest {
             creatorDeleted = false,
             createdAt = 1L,
             updatedAt = 2L,
+            sourceUrl = sourceUrl,
+            lastSyncedAt = 0L,
         )
 
         assertOnlyOptional(base(icon = "I"), requiredKeys, "icon", eq(JsonPrimitive("I")))
         assertOnlyOptional(base(team = JsonPrimitive("payments")), requiredKeys, "team", eq(JsonPrimitive("payments")))
+        assertOnlyOptional(
+            base(sourceUrl = "https://example.com/e1.json"),
+            requiredKeys,
+            "sourceUrl",
+            eq(JsonPrimitive("https://example.com/e1.json")),
+        )
 
         val neither = Json.parseToJsonElement(blueprintJson.encodeToString(base())).jsonObject
-        assertEquals(requiredKeys, neither.keys, "unset icon/team must be ABSENT, never explicit null")
+        assertEquals(requiredKeys, neither.keys, "unset icon/team/sourceUrl must be ABSENT, never explicit null")
         assertEquals(emptyProperties, neither.getValue("properties"))
         assertEquals(emptyRelations, neither.getValue("relations"))
     }

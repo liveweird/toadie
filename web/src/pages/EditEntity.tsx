@@ -1,18 +1,23 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router-dom";
-import { Paper, Stack } from "@mantine/core";
+import { Button, Paper, Stack } from "@mantine/core";
+import { IconRefresh } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Blueprint } from "../api/blueprints";
 import { getEntity, updateEntity, type Entity } from "../api/entities";
 import { ApiError } from "../api/http";
 import EditPageLoadState from "../components/EditPageLoadState";
 import EntityEditor from "../components/EntityEditor";
 import PageHeader from "../components/PageHeader";
+import SyncEntityModal from "../components/SyncEntityModal";
+import SyncStateText from "../components/SyncStateText";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useEntitySave } from "../hooks/useEntitySave";
 import { computedValuesOf } from "../utils/computedProperties";
 import { entityFormValidation, fromEntityResponse, teamValuesOf, type EntityFormValues } from "../utils/entityForm";
+import { entitySyncSource, toSyncTarget, type EntitySyncTarget } from "../utils/entitySync";
 import { entitiesPath } from "../utils/entityLinks";
 import { FORM_MAX_WIDTH } from "../utils/layout";
 import { loadErrorMessage } from "../utils/saveError";
@@ -20,6 +25,7 @@ import { loadErrorMessage } from "../utils/saveError";
 /** Mounted only once the entity AND its blueprint are both resolved — the CreateEntity split. */
 function EditEntityForm({ entity, blueprint }: { entity: Entity; blueprint: Blueprint }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const form = useForm<EntityFormValues>({
     initialValues: fromEntityResponse(entity, blueprint),
     validate: entityFormValidation(t, blueprint),
@@ -30,20 +36,71 @@ function EditEntityForm({ entity, blueprint }: { entity: Entity; blueprint: Blue
     saveRequest: (body) => updateEntity(entity.id, body),
     toastKey: "entities.toast.saved",
   });
+  const [syncTarget, setSyncTarget] = useState<EntitySyncTarget | null>(null);
+
+  /**
+   * Re-seed the form after a sync replaced the stored document underneath it — the
+   * `EditCatalogFile.tsx#reseedFromServer` idiom verbatim, one level over: Mantine's
+   * `initialize` is a one-shot latch, so without this the fields (and their dirty baseline)
+   * would keep showing the pre-sync document and a later Save would silently revert the sync.
+   */
+  async function reseedFromServer() {
+    try {
+      const values = fromEntityResponse(
+        await queryClient.fetchQuery({
+          queryKey: ["entities", "detail", entity.id],
+          queryFn: () => getEntity(entity.id),
+          retry: false,
+          staleTime: 0,
+        }),
+        blueprint,
+      );
+      form.setInitialValues(values);
+      form.setValues(values);
+      form.resetDirty();
+    } catch {
+      // Nothing to add — a failed re-read simply leaves the (now possibly stale) form as is;
+      // the next load of this page will show the real state.
+    }
+  }
+
+  const actions = (
+    <>
+      <SyncStateText file={entitySyncSource(entity)} />
+      <Button
+        variant="default"
+        size="sm"
+        leftSection={<IconRefresh size={14} />}
+        onClick={() => setSyncTarget(toSyncTarget(entity))}
+        disabled={entity.sourceUrl == null}
+      >
+        {t("entities.sync.action")}
+      </Button>
+    </>
+  );
+
   return (
-    <EntityEditor
-      title={t("entities.editEntity")}
-      submitLabel={t("common.action.save")}
-      blueprint={blueprint}
-      form={form}
-      onSubmit={save.onSubmit}
-      error={save.error}
-      submitting={save.submitting}
-      staleFindings={entity.findings}
-      saveFindings={save.findings}
-      computedTeam={teamValuesOf(entity.team)}
-      computed={computedValuesOf(entity, blueprint)}
-    />
+    <>
+      <EntityEditor
+        title={t("entities.editEntity")}
+        submitLabel={t("common.action.save")}
+        blueprint={blueprint}
+        form={form}
+        onSubmit={save.onSubmit}
+        error={save.error}
+        submitting={save.submitting}
+        staleFindings={entity.findings}
+        saveFindings={save.findings}
+        computedTeam={teamValuesOf(entity.team)}
+        computed={computedValuesOf(entity, blueprint)}
+        actions={actions}
+      />
+      <SyncEntityModal
+        target={syncTarget}
+        onClose={() => setSyncTarget(null)}
+        onCompleted={() => void reseedFromServer()}
+      />
+    </>
   );
 }
 

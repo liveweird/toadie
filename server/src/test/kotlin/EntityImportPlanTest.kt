@@ -84,6 +84,18 @@ class EntityImportPlanTest {
     }
 
     @Test
+    fun `a per-document sourceUrl is INVALID - it is row state for the whole request`() {
+        val plan = planEntityImport(
+            listOf(doc(request("nope", "x").copy(sourceUrl = "https://example.com/x.json"))),
+            snapshot(emptyList()),
+            false,
+        )
+        val row = (plan.verdicts[0] as EntityPlanVerdict.Rejected).row
+        assertEquals(OntologyImportStatus.INVALID, row.status)
+        assertTrue(row.message!!.contains("sourceUrl"), row.message!!)
+    }
+
+    @Test
     fun `an unknown blueprint is INVALID`() {
         val plan = planEntityImport(listOf(doc(request("nope", "x"))), snapshot(emptyList()), false)
         val row = (plan.verdicts[0] as EntityPlanVerdict.Rejected).row

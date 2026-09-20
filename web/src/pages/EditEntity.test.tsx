@@ -192,4 +192,85 @@ describe("EditEntity page", () => {
       ),
     );
   });
+
+  const ENTITY_WITH_SOURCE = {
+    id: 5,
+    blueprint: "service",
+    blueprintId: 1,
+    identifier: "checkout",
+    title: "Checkout",
+    properties: { language: "kotlin" },
+    relations: {},
+    findings: [],
+    createdBy: 1,
+    creatorName: "Alice",
+    creatorDeleted: false,
+    createdAt: 0,
+    updatedAt: 0,
+    sourceUrl: "https://raw.githubusercontent.com/acme/service/main/checkout.json",
+    lastSyncedAt: 0,
+  };
+
+  test("the Source URL field is seeded from the stored entity, the save body carries it, and the preview does not", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (method === "GET" && url === "/api/v1/entities/5") return Promise.resolve(jsonResponse(200, ENTITY_WITH_SOURCE));
+      if (method === "GET" && url.startsWith("/api/v1/entities?")) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, pageSize: 100, total: 0 }));
+      }
+      if (method === "PUT" && url === "/api/v1/entities/5") return Promise.resolve(new Response(null, { status: 204 }));
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+
+    const user = userEvent.setup();
+    renderEdit();
+
+    const sourceInput = await screen.findByLabelText("Source URL");
+    expect(sourceInput).toHaveValue(ENTITY_WITH_SOURCE.sourceUrl);
+    // The live JSON preview mirrors the pure request document — it never shows sourceUrl.
+    expect(screen.queryByText(/sourceUrl/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(mockFetch).toHaveBeenCalledWith("/api/v1/entities/5", expect.objectContaining({ method: "PUT" })),
+    );
+    const putCall = mockFetch.mock.calls.find(
+      ([url, init]) => url === "/api/v1/entities/5" && (init as RequestInit)?.method === "PUT",
+    );
+    const body = JSON.parse((putCall![1] as RequestInit).body as string) as { sourceUrl?: string };
+    expect(body.sourceUrl).toBe(ENTITY_WITH_SOURCE.sourceUrl);
+  });
+
+  test("the header Sync button is disabled without a source and shows the sync state", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (url === "/api/v1/entities/5") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            id: 5,
+            blueprint: "service",
+            blueprintId: 1,
+            identifier: "checkout",
+            title: "Checkout",
+            properties: {},
+            relations: {},
+            findings: [],
+            createdBy: 1,
+            creatorName: "Alice",
+            creatorDeleted: false,
+            createdAt: 0,
+            updatedAt: 0,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+
+    renderEdit();
+
+    expect(await screen.findByText("No source")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sync from source" })).toBeDisabled();
+  });
 });

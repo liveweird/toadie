@@ -29,6 +29,7 @@ import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
 import { NO_FINDINGS, type FieldFindings } from "../utils/fieldFindings";
 import { findingProps } from "../utils/findingProps";
 import { refSuggestions, type RefField } from "../utils/refSuggestions";
+import { MAX_SOURCE_URL_LENGTH } from "../utils/sourceUrl";
 import {
   ENTITY_KINDS,
   fieldApplies,
@@ -39,7 +40,6 @@ import {
   MAX_DESCRIPTION_LENGTH,
   MAX_ENTITY_PART_LENGTH,
   MAX_LINK_TITLE_LENGTH,
-  MAX_SOURCE_URL_LENGTH,
   MAX_TITLE_LENGTH,
   RELATION_FIELDS,
   type CatalogFileFormValues,

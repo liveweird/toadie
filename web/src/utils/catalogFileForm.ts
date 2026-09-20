@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 import type { CatalogFileRequest, CatalogFileResponse } from "../api/catalogFiles";
+import { sourceUrlProblem } from "./sourceUrl";
 
 // Server limits (catalog/CatalogFile.kt) mirrored client-side.
 export const MAX_ENTITY_PART_LENGTH = 63;
@@ -8,7 +9,6 @@ export const MAX_DESCRIPTION_LENGTH = 2000;
 const MAX_ANNOTATION_VALUE_LENGTH = 5000;
 export const MAX_LINK_TITLE_LENGTH = 100;
 export const MAX_DEFINITION_LENGTH = 100000;
-export const MAX_SOURCE_URL_LENGTH = 2048;
 const MAX_PROFILE_EMAIL_LENGTH = 254;
 
 export const ENTITY_KINDS = ["Component", "API", "System", "Domain", "Resource", "Group", "User"] as const;
@@ -347,21 +347,11 @@ export function catalogFileFormValidation(t: TFunction) {
       const v = value.trim();
       return !v || isAbsoluteUri(v) ? null : t("catalog.validation.url");
     },
-    // The server's static sourceUrl guards (sanitizedSourceUrl): absolute https, no
-    // credentials, sane length — the public-host check stays a fetch-time concern.
-    sourceUrl: (value: string) => {
-      const v = value.trim();
-      if (!v) return null;
-      if (v.length > MAX_SOURCE_URL_LENGTH) return t("catalog.validation.sourceUrl");
-      try {
-        const url = new URL(v);
-        return url.protocol === "https:" && !url.username && !url.password
-          ? null
-          : t("catalog.validation.sourceUrl");
-      } catch {
-        return t("catalog.validation.sourceUrl");
-      }
-    },
+    // The server's static sourceUrl guards, extracted to `utils/sourceUrl.ts` (shared with the
+    // entity source-sync flow): absolute https, no credentials, sane length — the public-host
+    // check stays a fetch-time concern.
+    sourceUrl: (value: string) =>
+      sourceUrlProblem(value) ? t("catalog.validation.sourceUrl") : null,
     parent: refRule("parent", t),
     children: refArrayRule("children", t),
     members: refArrayRule("members", t),

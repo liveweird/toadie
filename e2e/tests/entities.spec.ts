@@ -1,5 +1,5 @@
 import type { Response } from "@playwright/test";
-import { createTeamEntity, expect, login, openFilters, readyDialog, test, uniqueText } from "./helpers";
+import { createTeamEntity, expect, login, openFilters, readyDialog, rowOperation, test, uniqueText } from "./helpers";
 
 // Instances of a blueprint (Port migration phase 2): two throwaway blueprints are seeded via
 // the API (a target carrying typed properties AND Direct ownership, a dependent carrying a
@@ -280,7 +280,7 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     const blockedTeamBody = await blockedTeamDelete.json();
     expect(blockedTeamBody.detail).toContain(`${targetIdentifier}/${entityAIdentifier}`);
 
-    await page.getByRole("button", { name: `Edit ${entityAIdentifier}` }).click();
+    await rowOperation(page, entityAIdentifier, "Edit");
     const ownedByEditSelect = page.getByRole("combobox", { name: "Owned by" });
     await ownedByEditSelect.click();
     await ownedByEditSelect.fill(teamIdentifier);
@@ -333,7 +333,7 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     // 409 naming the referrer.
     await page.goto(`/entities?blueprint=${encodeURIComponent(targetIdentifier)}`);
     await expect(entityARow).toBeVisible();
-    await page.getByRole("button", { name: `Delete ${entityAIdentifier}` }).click();
+    await rowOperation(page, entityAIdentifier, "Delete");
     await readyDialog(page, "Delete entity?");
     const [blockedDelete] = await Promise.all([
       page.waitForResponse(
@@ -374,7 +374,7 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     await expect(entityARow.getByText("1 finding")).toBeVisible();
 
     // 8. Edit it: the stale alert names the missing field; fill it and save; the badge clears.
-    await page.getByRole("button", { name: `Edit ${entityAIdentifier}` }).click();
+    await rowOperation(page, entityAIdentifier, "Edit");
     await expect(page.getByText("This entity is out of date with its blueprint")).toBeVisible();
     await expect(page.getByText("properties.owner", { exact: false })).toBeVisible();
     await page.getByRole("textbox", { name: "owner" }).fill("platform-team");
@@ -448,7 +448,7 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     const entityBRow = page.getByRole("row").filter({ hasText: entityBIdentifier });
     await expect(entityBRow.getByText("gold")).toBeVisible();
 
-    await page.getByRole("button", { name: `Edit ${entityBIdentifier}` }).click();
+    await rowOperation(page, entityBIdentifier, "Edit");
     const depComputedGroup = page.getByRole("group", { name: "Computed" });
     await expect(depComputedGroup.getByText("Parent tier")).toBeVisible();
     await expect(depComputedGroup.getByText("Mirror")).toBeVisible();
@@ -459,7 +459,7 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     // the JSON preview carries none of the three computed ids, and saving still succeeds — a
     // leaked computed key in the request would 400 instead.
     await page.goto(`/entities?blueprint=${encodeURIComponent(targetIdentifier)}`);
-    await page.getByRole("button", { name: `Edit ${entityAIdentifier}` }).click();
+    await rowOperation(page, entityAIdentifier, "Edit");
     const targetComputedGroup = page.getByRole("group", { name: "Computed" });
     await expect(targetComputedGroup.getByText("Tier badge")).toBeVisible();
     await expect(targetComputedGroup.getByText("Calculation")).toBeVisible();
