@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.11.0",
+    date: "2026-09-20",
+    en: `**Products join the baseline ontology.** The Port sample gains a twelfth blueprint, product — the commercial offering a SaaS company sells: its type (application, platform, API product, add-on, internal tool), commercial stage from discovery to retired, customer segments, delivery and pricing model, SLA, regions, launch date, product manager and the roadmap, status-page and marketing links. Systems now say which products they deliver (a shared platform lists several), products form suites through a parent product and add-ons name the products they depend on, and each product counts its systems, critical systems and services. Five sample products join the demo, which now loads 12 blueprints and 64 entities.`,
+    pl: `**Produkty dołączają do bazowej ontologii.** Przykład Port zyskuje dwunasty blueprint, product — ofertę handlową, którą sprzedaje firma SaaS: jej typ (aplikacja, platforma, produkt API, dodatek, narzędzie wewnętrzne), etap komercyjny od odkrywania po wycofanie, segmenty klientów, model dostarczania i cennika, SLA, regiony, datę premiery, product managera oraz linki do roadmapy, strony statusu i strony marketingowej. Systemy mówią teraz, które produkty dostarczają (wspólna platforma wymienia kilka), produkty tworzą pakiety przez produkt nadrzędny, a dodatki wskazują produkty, od których zależą; każdy produkt zlicza swoje systemy, systemy krytyczne i serwisy. Do demo dołącza pięć przykładowych produktów, które wczytuje się teraz jako 12 blueprintów i 64 encje.`,
+  },
+  {
     version: "2.10.2",
     date: "2026-09-20",
     en: `**Sample data arrives linked to its source.** The Port demo's blueprints and entities now carry the public address of their file on GitHub, so a fresh load shows a clean Errors report and Sync from source works right away; set TOADIE_SOURCE_BASE to point the loaders at a fork, or to an empty value to load without references.`,
