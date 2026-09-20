@@ -71,6 +71,8 @@ jobs:
               est=$(ss -Htan state established "( sport = :8081 or dport = :8081 )" 2>/dev/null | wc -l | tr -d " ")
               stats=$(docker stats --no-stream --format "{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}" toadie-app toadie-postgres 2>/dev/null | tr "\n" " ")
               echo "$ts host=[$host] inner=[$inner] est8081=$est $stats"
+              echo "  listeners: $(ss -Htlnp 2>/dev/null | grep ":8081" | awk "{print \$4}" | tr "\n" " ") published: $(docker port toadie-app 2>/dev/null | tr "\n" " ")"
+              ss -Htanp 2>/dev/null | grep ":8081" | awk "{print \"  sock \" \$1, \$4, \$5, \$6}" | sort | uniq -c | sort -rn | head -40
               code=${host%% *}; secs=${host##* }
               stalled=$(awk -v c="$code" -v t="$secs" "BEGIN{print (c!=\"200\" || t+0>5) ? 1 : 0}")
               now=$(date +%s)
