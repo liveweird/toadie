@@ -86,7 +86,7 @@ async function main() {
     await assertSeedParity(targets, jwt, created.apiKey, schemaPath)
     console.log('Stage: revoking integration key and checking every replica')
     await revokeAndAssert(targets, jwt, created.client.id, created.apiKey)
-    console.log(`GraphQL deployment smoke passed for ${options.target}: 11 blueprints, 59 entities, exact SDL, live findings, restart persistence, and revocation.`)
+    console.log(`GraphQL deployment smoke passed for ${options.target}: 12 blueprints, 64 entities, exact SDL, live findings, restart persistence, and revocation.`)
   } catch (error) {
     primaryFailure = error
     throw error

@@ -1,0 +1,151 @@
+{
+  "identifier": "product",
+  "title": "Product",
+  "description": "The commercial offering — what customers buy, use and see on the roadmap and the status page: a SaaS application, an API product, an add-on, a platform, or an internal tool with internal customers. Delivered by one or more systems (system.products); its stage is the COMMERCIAL lifecycle, distinct from the technical lifecycle on services. Port-only: Backstage has no Product kind, so an export drops it.",
+  "icon": "Package",
+  "hierarchyRelations": {"composition": "parent_product"},
+  "schema": {
+    "properties": {
+      "type": {
+        "type": "string",
+        "title": "Type",
+        "description": "What kind of commercial offering this is.",
+        "enum": ["application", "platform", "api-product", "add-on", "internal-tool"],
+        "enumColors": { "application": "blue", "platform": "purple", "api-product": "turquoise", "add-on": "orange", "internal-tool": "lightGray" }
+      },
+      "stage": {
+        "type": "string",
+        "title": "Stage",
+        "description": "The commercial lifecycle.",
+        "enum": ["discovery", "alpha", "beta", "general-availability", "sunsetting", "retired"],
+        "enumColors": { "discovery": "lightGray", "alpha": "yellow", "beta": "orange", "general-availability": "green", "sunsetting": "bronze", "retired": "darkGray" }
+      },
+      "segment": {
+        "type": "array",
+        "title": "Segment",
+        "description": "The customer segments this product targets.",
+        "items": {
+          "type": "string",
+          "enum": ["enterprise", "mid-market", "smb", "consumer", "developer", "internal"],
+          "enumColors": {"enterprise": "purple", "mid-market": "blue", "smb": "turquoise", "consumer": "green", "developer": "orange", "internal": "lightGray"}
+        },
+        "uniqueItems": true
+      },
+      "delivery_model": {
+        "type": "string",
+        "title": "Delivery model",
+        "enum": ["saas", "self-hosted", "hybrid"],
+        "enumColors": { "saas": "blue", "self-hosted": "bronze", "hybrid": "purple" }
+      },
+      "pricing_model": {
+        "type": "string",
+        "title": "Pricing model",
+        "enum": ["subscription", "usage-based", "freemium", "enterprise-contract", "free"],
+        "enumColors": { "subscription": "green", "usage-based": "turquoise", "freemium": "yellow", "enterprise-contract": "blue", "free": "lightGray" }
+      },
+      "sla": {
+        "type": "number",
+        "title": "SLA",
+        "description": "The availability commitment made to customers (systems carry the internal counterpart: criticality/support_mode).",
+        "enum": [99.9, 99.95, 99.99],
+        "enumColors": {"99.9": "yellow", "99.95": "green", "99.99": "turquoise"}
+      },
+      "regions": {
+        "type": "array",
+        "title": "Regions",
+        "description": "Where this product is available.",
+        "items": {
+          "type": "string",
+          "enum": ["eu", "us", "apac"],
+          "enumColors": {"eu": "blue", "us": "purple", "apac": "orange"}
+        },
+        "uniqueItems": true
+      },
+      "launched_on": {
+        "type": "string",
+        "title": "Launched on",
+        "description": "General-availability date.",
+        "format": "date-time"
+      },
+      "product_manager": {
+        "type": "string",
+        "title": "Product manager",
+        "description": "The accountable product manager — a _user identifier or email.",
+        "format": "user"
+      },
+      "roadmap": {
+        "type": "string",
+        "title": "Roadmap",
+        "format": "url"
+      },
+      "status_page": {
+        "type": "string",
+        "title": "Status page",
+        "format": "url"
+      },
+      "docs": {
+        "type": "string",
+        "title": "Documentation",
+        "description": "Public product documentation.",
+        "format": "url"
+      },
+      "marketing_page": {
+        "type": "string",
+        "title": "Marketing page",
+        "format": "url"
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "description": "Further links ({title, url}).",
+        "items": { "type": "object" }
+      }
+    }
+  },
+  "relations": {
+    "parent_product": {
+      "title": "Parent product",
+      "description": "Suite / product line — the composition parent.",
+      "target": "product",
+      "required": false,
+      "many": false
+    },
+    "depends_on": {
+      "title": "Depends on",
+      "description": "Products this one needs (an add-on's core product).",
+      "target": "product",
+      "required": false,
+      "many": true
+    }
+  },
+  "aggregationProperties": {
+    "system_count": {
+      "title": "System count",
+      "target": "system",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" }
+    },
+    "critical_systems": {
+      "title": "Critical systems",
+      "target": "system",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "query": {
+        "combinator": "and",
+        "rules": [
+          { "property": "criticality", "operator": "=", "value": "critical" }
+        ]
+      }
+    },
+    "service_count": {
+      "title": "Service count",
+      "target": "service",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "pathFilter": [
+        { "fromBlueprint": "service", "path": ["system", "products"] }
+      ]
+    }
+  },
+  "ownership": {
+    "type": "Direct",
+    "title": "Owned by"
+  }
+}

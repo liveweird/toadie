@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
 
 /**
  * Executable documentation for `sample-data/port/commerce-payments/blueprints/` — the
- * eleven-blueprint baseline
+ * twelve-blueprint baseline
  * ontology the platform catalog is built on (`.claude/docs/ontology.md`, v1.25.2; the sample
  * set since v1.25.3; adopting the v1.26.0 system blueprints and real ownership since v1.26.0).
  * Loads the numbered files through the real API in dependency order (every relation target must
@@ -180,9 +180,9 @@ class SampleBlueprintsTest {
     }
 
     /**
-     * Phase 6 (v1.28.0): the same eleven files are also a valid `POST /api/v1/blueprints/import`
+     * Phase 6 (v1.28.0): the same twelve files are also a valid `POST /api/v1/blueprints/import`
      * BATCH, not just a sequential POST/PUT script — `_team`/`_user` already exist (seeded by
-     * V31), so with `replaceExisting = true` they answer `UPDATED` and the other nine `CREATED`;
+     * V31), so with `replaceExisting = true` they answer `UPDATED` and the other ten `CREATED`;
      * the planner's own ordering + two-pass deferral (`.claude/docs/port-data-model.md` "Import
      * and export") must resolve the exact same forward-referencing aggregations
      * (`loadBlueprints`'s pass 2, above) without any file-order hint from the caller — the
@@ -347,7 +347,7 @@ class SampleBlueprintsTest {
 
     private companion object {
         val EXPECTED_ORDER = listOf(
-            "_team", "_user", "domain", "system", "environment", "cluster", "resource", "library", "api", "service", "workload",
+            "_team", "_user", "domain", "product", "system", "environment", "cluster", "resource", "library", "api", "service", "workload",
         )
 
         /** blueprint → its `composition` hierarchyRelations entry (null = roots its own entities). */
@@ -355,6 +355,7 @@ class SampleBlueprintsTest {
             "_team" to "parent",
             "_user" to null,
             "domain" to "parent_domain",
+            "product" to "parent_product",
             "system" to "domain",
             "environment" to null,
             "cluster" to "environment",
@@ -369,6 +370,7 @@ class SampleBlueprintsTest {
         val EXPECTED_PARENT = mapOf(
             "_team" to "_team",
             "domain" to "domain",
+            "product" to "product",
             "system" to "domain",
             "cluster" to "environment",
             "resource" to "system",
@@ -397,7 +399,7 @@ class SampleBlueprintsTest {
          * v1.26.0: `ownership.type == "Direct"` (the entity-level `team` field), no leftover
          * `owned_by` relation — every plain owning blueprint, `workload` excepted (Inherited).
          */
-        val DIRECT_OWNERSHIP = listOf("domain", "system", "service", "library", "api", "resource", "cluster")
+        val DIRECT_OWNERSHIP = listOf("domain", "product", "system", "service", "library", "api", "resource", "cluster")
 
         /**
          * blueprint → its declared mirror/calculation/aggregation property ids (phase 5,
@@ -406,6 +408,7 @@ class SampleBlueprintsTest {
         val COMPUTED_PROPERTIES = mapOf(
             "_team" to setOf("member_count"),
             "domain" to setOf("critical_systems"),
+            "product" to setOf("system_count", "critical_systems", "service_count"),
             "system" to setOf("service_count", "workload_replicas", "deploys_per_week"),
             "service" to setOf("domain_title", "stack", "risk"),
             "workload" to setOf("service_lifecycle", "env_type", "languages"),

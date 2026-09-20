@@ -77,8 +77,8 @@ The database comes up with the admin-curated registries already filled in, but c
 is not seeded. [`sample-data/`](sample-data/README.md) offers two independent commerce/payments
 demos: a [Backstage software catalog](sample-data/backstage/commerce-payments/README.md) with 34
 documents and four intentional reference findings, and a
-[Port ontology](sample-data/port/commerce-payments/README.md) with eleven blueprint definitions
-and 59 entity instances. Each guide names its own import page and loader workflow.
+[Port ontology](sample-data/port/commerce-payments/README.md) with twelve blueprint definitions
+and 64 entity instances. Each guide names its own import page and loader workflow.
 
 ## Running on Kubernetes (local)
 

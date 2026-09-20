@@ -452,7 +452,7 @@ or evaluates computed properties at all, see `.claude/docs/persistence.md`).
   already had).
 - **Reference**: `entities/EntityErrors.kt` (the checkers), `EntityErrorsCheckTest` (one case
   per rule above).
-- **Enforcement**: `SampleBlueprintsTest`'s pin that the eleven baseline blueprints report ZERO
+- **Enforcement**: `SampleBlueprintsTest`'s pin that the twelve baseline blueprints report ZERO
   rows — since 2.10.2 the sample carries its public raw-GitHub `sourceUrl` on every blueprint
   (`SampleData.loadBlueprints`' default), so any row at all is a checker false positive — plus a
   dedicated case proving `SOURCE_MISSING` still fires once a blueprint's `sourceUrl` is cleared,

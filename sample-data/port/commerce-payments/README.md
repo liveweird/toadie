@@ -2,15 +2,15 @@
 
 This standalone Port demo models a commerce and payments platform as two dependent sets:
 
-- [`blueprints/`](blueprints/) contains eleven numbered blueprint definitions.
-- [`entities/`](entities/) contains eleven numbered files with 59 entity instances.
+- [`blueprints/`](blueprints/) contains twelve numbered blueprint definitions.
+- [`entities/`](entities/) contains twelve numbered files with 64 entity instances.
 
 The numbering is dependency order. Load all blueprint definitions before any entity instances.
 The related Backstage demo uses the same broad business vocabulary, but neither sample depends on
 the other.
 
 The first two definitions extend the protected `_team` and `_user` system blueprints seeded by
-V31. The remaining nine are ordinary sample blueprints. The model uses two named hierarchies in
+V31. The remaining ten are ordinary sample blueprints. The model uses two named hierarchies in
 parallel: `composition` for organisation and architecture containment, and `deployment` for
 workload → cluster → environment placement. A relation may participate in both.
 
@@ -19,14 +19,15 @@ workload → cluster → environment placement. A relation may participate in bo
 | 01 | `_team` | organisation | `parent` | — |
 | 02 | `_user` | people | — | — |
 | 03 | `domain` | business domain | `parent_domain` | — |
-| 04 | `system` | software system | `domain` | — |
-| 05 | `environment` | runtime environment | — | — |
-| 06 | `cluster` | runtime cluster | `environment` | `environment` |
-| 07 | `resource` | data/infrastructure resource | `system` | — |
-| 08 | `library` | shared component | `system` | — |
-| 09 | `api` | API or event contract | `system` | — |
-| 10 | `service` | service, site, job, or pipeline | `system` | — |
-| 11 | `workload` | deployed service instance | `service` | `cluster` |
+| 04 | `product` | commercial offering | `parent_product` | — |
+| 05 | `system` | software system | `domain` | — |
+| 06 | `environment` | runtime environment | — | — |
+| 07 | `cluster` | runtime cluster | `environment` | `environment` |
+| 08 | `resource` | data/infrastructure resource | `system` | — |
+| 09 | `library` | shared component | `system` | — |
+| 10 | `api` | API or event contract | `system` | — |
+| 11 | `service` | service, site, job, or pipeline | `system` | — |
+| 12 | `workload` | deployed service instance | `service` | `cluster` |
 
 Every blueprint has instances, every declared property and relation is used at least once, and
 every entity validates without findings. The entity set covers every value of the mirrored type
@@ -46,7 +47,7 @@ sample-data/port/commerce-payments/entities/load.sh
 The blueprint loader ensures both `composition` and `deployment` exist in the `hierarchies`
 dictionary. It then loads definitions in two passes: first without forward-targeting aggregation
 properties, then PUTs the complete definitions after all targets exist. `_team` and `_user` are
-extended; nine definitions are created. The entity loader creates all 59 instances in dependency
+extended; ten definitions are created. The entity loader creates all 64 instances in dependency
 order.
 
 Both loaders are safe to rerun. Existing ordinary blueprints and entities are reported as skipped;
@@ -64,7 +65,7 @@ Entities row menus and editors — works right away, provided the app has outbou
 `raw.githubusercontent.com`. Set `TOADIE_SOURCE_BASE` to point the loaders at a fork or branch's
 own checkout, or to an empty string to load completely without source references. With sources, every row
 starts "Never synced" until its first Sync from source; without them, every row reads "No source"
-and the Port Errors report lists 70 gray `SOURCE_MISSING` findings — one per blueprint and
+and the Port Errors report lists 76 gray `SOURCE_MISSING` findings — one per blueprint and
 entity — until sources are set by hand. `--delete` is unaffected either way: it
 resolves rows by their stored identifiers, not by their source references.
 
@@ -74,16 +75,16 @@ The UI requires one dictionary step that the blueprint loader performs automatic
 
 1. Open **Port → Hierarchies** at `/hierarchies` and add `deployment`. Keep the seeded
    `composition` value.
-2. Open **Port → Import** at `/ontology/import`, select all eleven `blueprints/*.json` files,
+2. Open **Port → Import** at `/ontology/import`, select all twelve `blueprints/*.json` files,
    and turn **Replace existing definitions** on. Check the batch, then import it. `_team` and
-   `_user` report `UPDATED`; the other nine report `CREATED` on a fresh workspace.
-3. On the same Port import page, select all eleven `entities/*.json` files. Check the batch, then
-   import it. A fresh workspace reports 59 `CREATED` rows with no findings.
+   `_user` report `UPDATED`; the other ten report `CREATED` on a fresh workspace.
+3. On the same Port import page, select all twelve `entities/*.json` files. Check the batch, then
+   import it. A fresh workspace reports 64 `CREATED` rows with no findings.
 
 The replacement switch is required for the definition batch because `_team` and `_user` already
 exist. Without it their sample extensions remain unapplied and the team/user entity documents
 fail on their added fields. Reimporting unchanged definitions with replacement enabled updates
-the matching definitions; reimporting unchanged entities with replacement disabled reports 59
+the matching definitions; reimporting unchanged entities with replacement disabled reports 64
 `EXISTS` rows and stores nothing.
 
 ## What the entity files contain
@@ -93,7 +94,8 @@ the matching definitions; reimporting unchanged entities with replacement disabl
 | `_team` | 4: tribes and squads |
 | `_user` | 2: `anna.kowalska`, `marek.nowak` |
 | `domain` | 5, including `commerce`, `payments`, and `back-office` |
-| `system` | 5, including `storefront`, `payments`, and `developer-portal` |
+| `product` | 5: `commerce-suite`, `shop`, `pay`, `invoicing`, `dev-portal` |
+| `system` | 5, including `storefront`, `payments`, and `developer-portal`, each delivering one or more products |
 | `environment` | 4: production, staging, test, development |
 | `cluster` | 4 Kubernetes clusters |
 | `resource` | 8 databases, event stores, and caches |
@@ -102,20 +104,21 @@ the matching definitions; reimporting unchanged entities with replacement disabl
 | `service` | 10 services, sites, jobs, and pipelines |
 | `workload` | 9 runtime deployments |
 
-Five blueprints define eleven computed properties evaluated on reads:
+Six blueprints define fourteen computed properties evaluated on reads:
 
 | Blueprint | Computed properties |
 |---|---|
 | `_team` | aggregation `member_count` |
 | `domain` | aggregation `critical_systems` |
+| `product` | aggregations `system_count`, `critical_systems`, `service_count` |
 | `system` | aggregations `service_count`, `workload_replicas`, `deploys_per_week` |
 | `service` | mirror `domain_title`; calculations `stack`, `risk` |
 | `workload` | mirrors `service_lifecycle`, `env_type`, `languages` |
 
 Computed values are merged into response properties and are never accepted as write input.
 `deploys_per_week` is time-dependent; unresolvable computed values are absent rather than
-findings. Ownership is direct on domain, system, service, library, API, resource, and cluster;
-workload ownership is inherited through its `service` relation.
+findings. Ownership is direct on domain, product, system, service, library, API, resource, and
+cluster; workload ownership is inherited through its `service` relation.
 
 ## Remove the demo
 
@@ -127,7 +130,7 @@ sample-data/port/commerce-payments/blueprints/load.sh --delete
 ```
 
 The entity loader deletes in reverse dependency order. The blueprint loader first removes
-forward-targeting aggregations and then deletes the nine ordinary definitions in reverse order.
+forward-targeting aggregations and then deletes the ten ordinary definitions in reverse order.
 A reference from outside the sample causes a `409` and is reported rather than forced.
 
 Cleanup deliberately keeps the protected `_team` and `_user` rows and keeps both hierarchy

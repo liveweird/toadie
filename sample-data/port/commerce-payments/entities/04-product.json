@@ -1,0 +1,100 @@
+[
+  {
+    "blueprint": "product",
+    "identifier": "commerce-suite",
+    "title": "Commerce Suite",
+    "icon": "Package",
+    "team": "retail-tribe",
+    "properties": {
+      "type": "platform",
+      "stage": "general-availability",
+      "segment": ["mid-market", "enterprise"],
+      "delivery_model": "saas",
+      "pricing_model": "enterprise-contract",
+      "sla": 99.95,
+      "regions": ["eu", "us"],
+      "launched_on": "2022-01-10T00:00:00Z",
+      "product_manager": "anna.kowalska",
+      "roadmap": "https://roadmap.example.com/commerce-suite",
+      "links": [
+        { "title": "Product overview", "url": "https://wiki.example.com/commerce-suite" }
+      ]
+    },
+    "relations": { "parent_product": null }
+  },
+  {
+    "blueprint": "product",
+    "identifier": "pay",
+    "title": "Pay",
+    "icon": "Package",
+    "team": "payments-squad",
+    "properties": {
+      "type": "api-product",
+      "stage": "general-availability",
+      "segment": ["developer", "enterprise"],
+      "delivery_model": "saas",
+      "pricing_model": "usage-based",
+      "sla": 99.99,
+      "regions": ["eu", "us", "apac"],
+      "launched_on": "2023-06-15T00:00:00Z",
+      "product_manager": "marek.nowak",
+      "docs": "https://docs.example.com/products/pay"
+    },
+    "relations": { "parent_product": "commerce-suite" }
+  },
+  {
+    "blueprint": "product",
+    "identifier": "shop",
+    "title": "Shop",
+    "icon": "Package",
+    "team": "storefront-squad",
+    "properties": {
+      "type": "application",
+      "stage": "general-availability",
+      "segment": ["smb", "mid-market"],
+      "delivery_model": "saas",
+      "pricing_model": "subscription",
+      "sla": 99.9,
+      "regions": ["eu", "us"],
+      "launched_on": "2024-03-01T00:00:00Z",
+      "product_manager": "anna.kowalska",
+      "status_page": "https://status.example.com/shop",
+      "marketing_page": "https://shop.example.com/pricing"
+    },
+    "relations": { "parent_product": "commerce-suite", "depends_on": ["pay"] }
+  },
+  {
+    "blueprint": "product",
+    "identifier": "invoicing",
+    "title": "Invoicing",
+    "icon": "Package",
+    "team": "payments-squad",
+    "properties": {
+      "type": "add-on",
+      "stage": "beta",
+      "segment": ["smb"],
+      "delivery_model": "saas",
+      "pricing_model": "freemium",
+      "sla": 99.9,
+      "regions": ["eu"],
+      "product_manager": "marek.nowak"
+    },
+    "relations": { "parent_product": "commerce-suite", "depends_on": ["pay"] }
+  },
+  {
+    "blueprint": "product",
+    "identifier": "dev-portal",
+    "title": "Developer Portal",
+    "icon": "Package",
+    "team": "platform-tribe",
+    "properties": {
+      "type": "internal-tool",
+      "stage": "general-availability",
+      "segment": ["internal"],
+      "delivery_model": "self-hosted",
+      "pricing_model": "free",
+      "product_manager": "anna.kowalska"
+    },
+    "relations": {}
+  }
+]

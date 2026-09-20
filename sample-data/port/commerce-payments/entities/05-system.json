@@ -18,7 +18,7 @@
         { "title": "Production storefront", "url": "https://shop.example.com" }
       ]
     },
-    "relations": { "domain": "commerce" }
+    "relations": { "domain": "commerce", "products": ["shop"] }
   },
   {
     "blueprint": "system",
@@ -34,7 +34,7 @@
       "hosting_model": "on-premise",
       "kubernetes_id": "payments"
     },
-    "relations": { "domain": "payments" }
+    "relations": { "domain": "payments", "products": ["shop", "pay"] }
   },
   {
     "blueprint": "system",
@@ -51,7 +51,7 @@
         { "title": "Acquirer status page", "url": "https://status.acquirer.example.com" }
       ]
     },
-    "relations": {}
+    "relations": { "products": ["pay"] }
   },
   {
     "blueprint": "system",
@@ -65,7 +65,7 @@
       "exposure": "internal",
       "hosting_model": "on-premise"
     },
-    "relations": { "domain": "back-office" }
+    "relations": { "domain": "back-office", "products": ["invoicing"] }
   },
   {
     "blueprint": "system",
@@ -80,6 +80,6 @@
       "hosting_model": "on-premise",
       "docs": "https://docs.example.com/systems/developer-portal"
     },
-    "relations": { "domain": "platform" }
+    "relations": { "domain": "platform", "products": ["dev-portal"] }
   }
 ]

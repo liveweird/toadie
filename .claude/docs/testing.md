@@ -182,7 +182,7 @@ the referrers; `BlueprintConcurrencyTest` is the tag-category held-lock proof fo
 create racing its target's delete (one wins, never a dangling target). `SampleBlueprintsTest`
 is executable documentation for `sample-data/port/commerce-payments/blueprints/` — since
 v1.25.3 the baseline
-ontology in `.claude/docs/ontology.md`: it POSTs the eleven files in dependency order, pins the
+ontology in `.claude/docs/ontology.md`: it POSTs the twelve files in dependency order, pins the
 round trip, and asserts the model contracts — every registry-mirroring enum
 (per-kind types, lifecycles, label value lists, tag categories) equals the seeded registry read
 back through the API, the `hierarchyRelations` map defines the `composition` and `deployment`
@@ -191,7 +191,7 @@ blueprints remain the seeded rows. (The
 v1.23.1–v1.25.2 feature-showcase set and its union assertions were retired with it; the pure
 rule tables carry that coverage.) `SampleEntitiesTest` is the same for
 `sample-data/port/commerce-payments/entities/`
-(59 entities, the catalog landscape re-told in the baseline ontology): it loads the blueprint
+(64 entities, the catalog landscape re-told in the baseline ontology): it loads the blueprint
 set, POSTs every entity in dependency order asserting `201` with ZERO findings on create and
 re-GET, pins the `properties`/`relations` round trip, and asserts the coverage the README
 promises — every property and relation of every blueprint used, every `type`/`lifecycle`
@@ -355,9 +355,9 @@ on `EXISTS`/`UPDATED` rows), storing and auditing nothing, while the real run's 
 `UPDATED` rows carry `import: true` on their `blueprint.*`/`entity.*` audit events.
 `SampleBlueprintsTest` and `SampleEntitiesTest` each gain one case proving the baseline ontology
 sample sets are valid import BATCHES, not just the sequential POST/PUT scripts the earlier cases
-pin: the eleven blueprint files POSTed as ONE `/blueprints/import` batch with
-`replaceExisting = true` answer `_team`/`_user` → `UPDATED` and the other nine → `CREATED`, with
-every re-GET definition matching the two-pass `SampleData.loadBlueprints` shape; the 59 entity
+pin: the twelve blueprint files POSTed as ONE `/blueprints/import` batch with
+`replaceExisting = true` answer `_team`/`_user` → `UPDATED` and the other ten → `CREATED`, with
+every re-GET definition matching the two-pass `SampleData.loadBlueprints` shape; the 64 entity
 files POSTed as ONE `/entities/import` batch answer all rows `CREATED` with empty `findings` on
 re-GET, and an identical second run answers every row `EXISTS`.
 

@@ -45,7 +45,7 @@ import kotlin.test.assertTrue
  * baseline ontology (v1.25.3; adopting the v1.26.0 system blueprints and real `team` ownership
  * since v1.26.0): the e-commerce/payments catalog
  * `sample-data/backstage/commerce-payments/catalog-info.yaml` describes, re-told as Port entities
- * of the eleven `sample-data/port/commerce-payments/blueprints/` — through the real API, in
+ * of the twelve `sample-data/port/commerce-payments/blueprints/` — through the real API, in
  * dependency order, on top of the blueprint set ([SampleBlueprintsTest]'s files, loaded here too
  * via [SampleData.loadBlueprint] since entities cannot exist without their blueprint —
  * `_team`/`_user` are `PUT` extensions of the V31-seeded rows, every other blueprint a fresh
@@ -91,9 +91,9 @@ class SampleEntitiesTest {
         val admin = seededClient("entsample", UserRole.ADMIN)
 
         val bpFiles = blueprintFiles()
-        assertEquals(11, bpFiles.size, "expected the eleven numbered sample blueprint files")
+        assertEquals(12, bpFiles.size, "expected the twelve numbered sample blueprint files")
         val entFiles = entityFiles()
-        assertEquals(11, entFiles.size, "expected the eleven numbered sample entity files")
+        assertEquals(12, entFiles.size, "expected the twelve numbered sample entity files")
 
         val blueprintIdentifiers = mutableListOf<String>()
         val entityIdentifiers = mutableListOf<String>()
@@ -200,10 +200,10 @@ class SampleEntitiesTest {
     }
 
     /**
-     * Phase 6 (v1.28.0): the 59 entity files also load as ONE `POST /api/v1/entities/import`
+     * Phase 6 (v1.28.0): the 64 entity files also load as ONE `POST /api/v1/entities/import`
      * batch on top of the already-loaded blueprint set (the same [SampleData.loadBlueprints] as
      * above) — the planner's own ordering resolves every relation/`team`/format-property sibling
-     * reference across all eleven files without any per-file sequencing from the caller, every
+     * reference across all twelve files without any per-file sequencing from the caller, every
      * row lands `CREATED` and every re-GET carries NO findings, exactly like the sequential-POST
      * path in the main test (both go through the same [ch.nokillswit.entities.EntityService]
      * writes). A second identical run — `replaceExisting` left at its default `false` — reports
@@ -230,7 +230,7 @@ class SampleEntitiesTest {
 
             val response = admin.postJson("/api/v1/entities/import", EntityImportRequest(documents = documents))
                 .body<EntityImportResponse>()
-            assertEquals(59, response.results.size, "expected the 59 sample entities")
+            assertEquals(64, response.results.size, "expected the 64 sample entities")
             assertTrue(
                 response.results.all { it.status == OntologyImportStatus.CREATED },
                 "every row must be CREATED: ${response.results}",
@@ -263,7 +263,7 @@ class SampleEntitiesTest {
      * a non-null `team` naming one or more `_team` identifiers loaded from `01-team.json`; a
      * workload (the one Inherited blueprint, via `service`) must send NO `team` of its own and
      * its re-`GET` must compute the exact `team` of the `service` entity its `service` relation
-     * names (looked up from `10-service.json`'s requests). Blueprints with no `ownership` at all
+     * names (looked up from `11-service.json`'s requests). Blueprints with no `ownership` at all
      * (`_team`, `_user`, `environment`) are untouched by this check.
      */
     private fun assertTeamOwnership(
@@ -335,6 +335,7 @@ class SampleEntitiesTest {
         val teams = byBlueprint("_team")
         val users = byBlueprint("_user")
         val domains = byBlueprint("domain")
+        val products = byBlueprint("product")
         val systems = byBlueprint("system")
         val services = byBlueprint("service")
         val workloads = byBlueprint("workload")
@@ -360,6 +361,36 @@ class SampleEntitiesTest {
                 JsonPrimitive(expected.toLong()),
                 propertiesOf("domain", domain.identifier)["critical_systems"],
                 "domain/${domain.identifier}.critical_systems",
+            )
+        }
+
+        // product.system_count / critical_systems: direct aggregation over system.products (inbound, many).
+        products.forEach { product ->
+            val relatedSystems = systems.filter { system -> product.identifier in teamValuesOf(system.relations["products"]) }
+            assertEquals(
+                JsonPrimitive(relatedSystems.size.toLong()),
+                propertiesOf("product", product.identifier)["system_count"],
+                "product/${product.identifier}.system_count",
+            )
+            val expectedCritical = relatedSystems.count { (it.properties["criticality"] as? JsonPrimitive)?.content == "critical" }
+            assertEquals(
+                JsonPrimitive(expectedCritical.toLong()),
+                propertiesOf("product", product.identifier)["critical_systems"],
+                "product/${product.identifier}.critical_systems",
+            )
+        }
+
+        // product.service_count: reverse pathFilter (fromBlueprint = target) service -> system -> products.
+        products.forEach { product ->
+            val expected = services.count { service ->
+                val systemIdentifier = (service.relations["system"] as? JsonPrimitive)?.content
+                val system = systems.firstOrNull { it.identifier == systemIdentifier }
+                system != null && product.identifier in teamValuesOf(system.relations["products"])
+            }
+            assertEquals(
+                JsonPrimitive(expected.toLong()),
+                propertiesOf("product", product.identifier)["service_count"],
+                "product/${product.identifier}.service_count",
             )
         }
 
