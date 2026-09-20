@@ -6,11 +6,11 @@ import EntityComputedFieldset from "./EntityComputedFieldset";
 import EntityPropertyField from "./EntityPropertyField";
 import EntityRelationField from "./EntityRelationField";
 import EntityTeamField from "./EntityTeamField";
+import SourceFieldset from "./SourceFieldset";
 import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
 import { computedDefinitions } from "../utils/computedProperties";
 import { NO_ENTITY_FINDINGS, type EntityFieldFindings } from "../utils/entityFieldFindings";
 import { MAX_ICON_LENGTH, MAX_IDENTIFIER_LENGTH, MAX_TITLE_LENGTH, type EntityFormValues } from "../utils/entityForm";
-import { MAX_SOURCE_URL_LENGTH } from "../utils/sourceUrl";
 
 type Form = UseFormReturnType<EntityFormValues>;
 
@@ -83,22 +83,6 @@ function PropertiesFieldset({
   );
 }
 
-function SourceFieldset({ form }: { form: Form }) {
-  const { t } = useTranslation();
-  return (
-    <Fieldset legend={t("entities.section.source")}>
-      <TextInput
-        label={t("entities.field.sourceUrl")}
-        placeholder="https://raw.githubusercontent.com/acme/service/main/entity.json"
-        maxLength={MAX_SOURCE_URL_LENGTH}
-        description={t("entities.hint.sourceUrl")}
-        inputWrapperOrder={[...BELOW_INPUT]}
-        {...form.getInputProps("sourceUrl")}
-      />
-    </Fieldset>
-  );
-}
-
 function RelationsFieldset({ form, blueprint }: { form: Form; blueprint: Blueprint }) {
   const { t } = useTranslation();
   if (form.values.relations.length === 0) return null;
@@ -152,6 +136,7 @@ export default function EntityFormFields({
   findings?: EntityFieldFindings;
   computed?: Record<string, unknown>;
 }) {
+  const { t } = useTranslation();
   const definitions = computedDefinitions(blueprint);
   return (
     <Stack gap="md">
@@ -161,7 +146,13 @@ export default function EntityFormFields({
       {computed !== undefined && definitions.length > 0 && (
         <EntityComputedFieldset definitions={definitions} values={computed} />
       )}
-      <SourceFieldset form={form} />
+      <SourceFieldset
+        legend={t("entities.section.source")}
+        label={t("entities.field.sourceUrl")}
+        hint={t("entities.hint.sourceUrl")}
+        placeholder="https://raw.githubusercontent.com/acme/service/main/entity.json"
+        inputProps={form.getInputProps("sourceUrl")}
+      />
     </Stack>
   );
 }

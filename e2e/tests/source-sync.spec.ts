@@ -41,7 +41,7 @@ test("a source reference set after creation clears the report flag and enables t
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(name);
   await expect(
-    page.getByRole("row").filter({ hasText: name }).getByText("No source reference", { exact: true }),
+    page.getByRole("row").filter({ hasText: name }).getByText("No source", { exact: true }),
   ).toBeVisible();
 
   // The list shows "No source" and the Operations menu greys the Sync item out.

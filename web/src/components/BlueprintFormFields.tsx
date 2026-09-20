@@ -8,6 +8,7 @@ import BlueprintPropertyRow from "./BlueprintPropertyRow";
 import BlueprintRelationRow from "./BlueprintRelationRow";
 import EditorRowList, { rowDomId } from "./EditorRowList";
 import LoadingBlock from "./LoadingBlock";
+import SourceFieldset from "./SourceFieldset";
 import { type BlueprintRowExpansion } from "../hooks/useBlueprintRowExpansion";
 import { useHierarchies } from "../hooks/useHierarchies";
 import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
@@ -34,7 +35,6 @@ import {
   type BlueprintFormValues,
 } from "../utils/blueprintForm";
 import { loadErrorMessage } from "../utils/saveError";
-import { MAX_SOURCE_URL_LENGTH } from "../utils/sourceUrl";
 import { lockedRowIds } from "../utils/systemBlueprints";
 
 type Form = UseFormReturnType<BlueprintFormValues>;
@@ -332,22 +332,6 @@ function HierarchyRow({
   );
 }
 
-function SourceFieldset({ form }: { form: Form }) {
-  const { t } = useTranslation();
-  return (
-    <Fieldset legend={t("blueprints.section.source")}>
-      <TextInput
-        label={t("blueprints.field.sourceUrl")}
-        placeholder="https://raw.githubusercontent.com/acme/ontology/main/blueprints/service.json"
-        maxLength={MAX_SOURCE_URL_LENGTH}
-        description={t("blueprints.hint.sourceUrl")}
-        inputWrapperOrder={[...BELOW_INPUT]}
-        {...form.getInputProps("sourceUrl")}
-      />
-    </Fieldset>
-  );
-}
-
 /**
  * The Hierarchy fieldset (v1.25.0, Port migration phase 3; multi-hierarchy v1.32.0) — a
  * Toadie-only extension, not a Port field: one admin-marked relation PER `hierarchies`
@@ -411,6 +395,7 @@ export default function BlueprintFormFields({
    *  its base properties/relations are locked (see `utils/systemBlueprints.ts`). */
   system?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Stack gap="md">
       <IdentityFields form={form} system={system} />
@@ -421,7 +406,13 @@ export default function BlueprintFormFields({
       <AggregationFieldset form={form} expansion={expansion} />
       <OwnershipFieldset form={form} />
       <HierarchyFieldset form={form} />
-      <SourceFieldset form={form} />
+      <SourceFieldset
+        legend={t("blueprints.section.source")}
+        label={t("blueprints.field.sourceUrl")}
+        hint={t("blueprints.hint.sourceUrl")}
+        placeholder="https://raw.githubusercontent.com/acme/ontology/main/blueprints/service.json"
+        inputProps={form.getInputProps("sourceUrl")}
+      />
     </Stack>
   );
 }

@@ -186,8 +186,26 @@
   "sync": {
     "action": "Synchronizuj ze źródłem",
     "actionAria": "Synchronizuj {{name}} ze źródłem",
+    "title": "Synchronizuj ze źródłem — {{identifier}}",
+    "sourceLabel": "Źródło:",
+    "lastSynced": "Ostatnio zsynchronizowano {{ago}}",
+    "neverSynced": "Nigdy nie zsynchronizowano",
+    "changedAtSource": "Zmienione w źródle",
+    "changedInDb": "Zmienione w Toadie",
+    "inSync": "Toadie i źródło są zgodne",
+    "diffLabel": "Różnice między zapisaną kopią a kopią ze źródła",
+    "diffTooLarge": "Te dokumenty są zbyt duże, aby pokazać szczegółowe porównanie. Poniżej znajdziesz pełny zapisany i źródłowy JSON.",
+    "diffStoredLabel": "Pełny zapisany JSON",
+    "diffReplacementLabel": "Pełny źródłowy JSON",
+    "loadingAria": "Wczytywanie kopii ze źródła",
+    "loadFailed": "Nie udało się przygotować porównania",
+    "parseFailed": "Dokument źródłowy nie jest poprawnym JSON-em.",
     "noMatch": "Dokument źródłowy nie zawiera już tego blueprintu.",
-    "refusedBody": "Synchronizacja zakończyłaby się niepowodzeniem — kopia ze źródła nie spełnia reguł blueprintów. Popraw ją u źródła przed ponowną synchronizacją.",
-    "hierarchyKept": "Relacje hierarchii to rozszerzenie Toadie; dokument źródłowy ich nie zawiera, więc zapisana mapa zostaje zachowana."
+    "refusedTitle": "Kopia ze źródła została odrzucona",
+    "refusedBody": "Synchronizacja zakończyłaby się niepowodzeniem — kopia ze źródła nie spełnia reguł blueprintu. Popraw ją u źródła przed ponowną synchronizacją.",
+    "hierarchyKept": "Relacje hierarchii to rozszerzenie Toadie; dokument źródłowy ich nie zawiera, więc zapisana mapa zostaje zachowana.",
+    "overwriteWarning": "Synchronizacja nadpisze zapisaną kopię wersją źródłową pokazaną powyżej. Zmiany wprowadzone tylko w Toadie zostaną utracone.",
+    "confirm": "Nadpisz zapisaną kopię",
+    "failed": "Synchronizacja nie powiodła się"
   }
 }

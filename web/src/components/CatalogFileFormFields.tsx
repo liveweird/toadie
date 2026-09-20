@@ -18,6 +18,7 @@ import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { renderFindingPill } from "./FindingPill";
 import { renderKindOption } from "./KindTierDot";
+import SourceFieldset from "./SourceFieldset";
 import { useAnnotationKeys } from "../hooks/useAnnotationKeys";
 import { useCatalogIdentities } from "../hooks/useCatalogIdentities";
 import { useEntityTypes } from "../hooks/useEntityTypes";
@@ -29,7 +30,6 @@ import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
 import { NO_FINDINGS, type FieldFindings } from "../utils/fieldFindings";
 import { findingProps } from "../utils/findingProps";
 import { refSuggestions, type RefField } from "../utils/refSuggestions";
-import { MAX_SOURCE_URL_LENGTH } from "../utils/sourceUrl";
 import {
   ENTITY_KINDS,
   fieldApplies,
@@ -647,28 +647,6 @@ function AnnotationsFieldset({ form }: { form: CatalogForm }) {
 }
 
 /**
- * The source reference — provenance (the https URL of the file's repo copy), deliberately
- * its own fieldset rather than Metadata: it is envelope state beside the document, never
- * part of the Backstage YAML. Backs the Files list's sync column and the Sync-from-repo
- * operation.
- */
-function SourceFieldset({ form }: { form: CatalogForm }) {
-  const { t } = useTranslation();
-  return (
-    <Fieldset legend={t("catalog.section.source")}>
-      <TextInput
-        label={t("catalog.field.sourceUrl")}
-        placeholder="https://github.com/acme/service/blob/main/catalog-info.yaml"
-        maxLength={MAX_SOURCE_URL_LENGTH}
-        description={t("catalog.hint.sourceUrl")}
-        inputWrapperOrder={[...BELOW_INPUT]}
-        {...form.getInputProps("sourceUrl")}
-      />
-    </Fieldset>
-  );
-}
-
-/**
  * The field block shared by the create and edit catalog-file pages (which own submit/error
  * handling and the YAML preview). The kind Select drives which per-kind spec/relations fields
  * render — hidden fields keep their values (a kind switch back restores them) and the request
@@ -722,7 +700,13 @@ export default function CatalogFileFormFields({
       <LinksFieldset form={form} />
       <LabelsFieldset form={form} />
       <AnnotationsFieldset form={form} />
-      <SourceFieldset form={form} />
+      <SourceFieldset
+        legend={t("catalog.section.source")}
+        label={t("catalog.field.sourceUrl")}
+        hint={t("catalog.hint.sourceUrl")}
+        placeholder="https://github.com/acme/service/blob/main/catalog-info.yaml"
+        inputProps={form.getInputProps("sourceUrl")}
+      />
     </Stack>
     </FindingsContext.Provider>
   );

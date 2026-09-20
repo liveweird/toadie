@@ -36,7 +36,7 @@
     "LIFECYCLE_NOT_ALLOWED": "Niedozwolony cykl życia",
     "STRUCTURE_INVALID": "Nieprawidłowa struktura",
     "NAMESPACE_NOT_ALLOWED": "Niedozwolona przestrzeń nazw",
-    "SOURCE_MISSING": "Brak odnośnika do źródła"
+    "SOURCE_MISSING": "Brak źródła"
   },
   "message": {
     "MISSING": "Żadna zapisana encja nie odpowiada temu odwołaniu.",

@@ -58,7 +58,7 @@ export default function SyncBlueprintModal({
       onClose={() => {
         if (!syncing) onClose();
       }}
-      title={t("entities.sync.title", { identifier: target?.identifier ?? "" })}
+      title={t("blueprints.sync.title", { identifier: target?.identifier ?? "" })}
       size="xl"
       centered
     >
@@ -163,7 +163,7 @@ function SyncModalBody({
     if (detail.isError) return loadErrorMessage(detail.error, t);
     if (syncState.isError) return loadErrorMessage(syncState.error, t);
     if (sourceFetch.isError) return saveErrorMessage(sourceFetch.error, t, FETCH_URL_ERROR_KEYS);
-    if (picked?.error === "parse") return t("entities.sync.parseFailed");
+    if (picked?.error === "parse") return t("blueprints.sync.parseFailed");
     if (picked?.error === "noMatch") return t("blueprints.sync.noMatch");
     return null;
   }
@@ -194,7 +194,7 @@ function SyncModalBody({
     <Stack gap="sm">
       {sourceUrl != null && (
         <Text size="sm">
-          {t("entities.sync.sourceLabel")}{" "}
+          {t("blueprints.sync.sourceLabel")}{" "}
           <Anchor href={sourceUrl} target="_blank" rel="noreferrer" size="sm">
             {sourceUrl}
           </Anchor>
@@ -202,13 +202,13 @@ function SyncModalBody({
       )}
       <Text size="sm" c="dimmed">
         {lastSyncedAt > 0
-          ? t("entities.sync.lastSynced", { ago: relativeTimeAgo(lastSyncedAt, i18n.language) })
-          : t("entities.sync.neverSynced")}
+          ? t("blueprints.sync.lastSynced", { ago: relativeTimeAgo(lastSyncedAt, i18n.language) })
+          : t("blueprints.sync.neverSynced")}
       </Text>
 
-      {loading && <Loader size="sm" role="status" aria-label={t("entities.sync.loadingAria")} />}
+      {loading && <Loader size="sm" role="status" aria-label={t("blueprints.sync.loadingAria")} />}
       {loadError != null && (
-        <Alert color="red" variant="light" title={t("entities.sync.loadFailed")}>
+        <Alert color="red" variant="light" title={t("blueprints.sync.loadFailed")}>
           {loadError}
         </Alert>
       )}
@@ -218,19 +218,19 @@ function SyncModalBody({
           <Group gap="xs">
             {inSync ? (
               <Badge variant="light" color="teal" size="sm">
-                {t("entities.sync.inSync")}
+                {t("blueprints.sync.inSync")}
               </Badge>
             ) : (
               <>
                 {/* No baseline (never synced) = sides cannot be attributed; the diff says it all. */}
                 {sourceChanged && (
                   <Badge variant="light" color="orange" size="sm">
-                    {t("entities.sync.changedAtSource")}
+                    {t("blueprints.sync.changedAtSource")}
                   </Badge>
                 )}
                 {dbChanged && (
                   <Badge variant="light" color="orange" size="sm">
-                    {t("entities.sync.changedInDb")}
+                    {t("blueprints.sync.changedInDb")}
                   </Badge>
                 )}
               </>
@@ -240,11 +240,11 @@ function SyncModalBody({
           {diff != null && (
             <YamlDiffView
               diff={diff}
-              label={t("entities.sync.diffLabel")}
+              label={t("blueprints.sync.diffLabel")}
               fallbackLabels={{
-                tooLarge: t("entities.sync.diffTooLarge"),
-                stored: t("entities.sync.diffStoredLabel"),
-                replacement: t("entities.sync.diffReplacementLabel"),
+                tooLarge: t("blueprints.sync.diffTooLarge"),
+                stored: t("blueprints.sync.diffStoredLabel"),
+                replacement: t("blueprints.sync.diffReplacementLabel"),
               }}
             />
           )}
@@ -256,7 +256,7 @@ function SyncModalBody({
           )}
 
           {preflightInvalid && (
-            <Alert color="red" variant="light" title={t("entities.sync.refusedTitle")}>
+            <Alert color="red" variant="light" title={t("blueprints.sync.refusedTitle")}>
               <Stack gap={4}>
                 <Text size="sm">{t("blueprints.sync.refusedBody")}</Text>
                 {preflightRow?.message && <Text size="sm">{preflightRow.message}</Text>}
@@ -266,14 +266,14 @@ function SyncModalBody({
 
           {!inSync && !preflightInvalid && (
             <Text size="sm" c="dimmed">
-              {t("entities.sync.overwriteWarning")}
+              {t("blueprints.sync.overwriteWarning")}
             </Text>
           )}
         </>
       )}
 
       {confirmError != null && (
-        <Alert color="red" variant="light" title={t("entities.sync.failed")}>
+        <Alert color="red" variant="light" title={t("blueprints.sync.failed")}>
           <Text size="sm">{confirmError}</Text>
         </Alert>
       )}
@@ -288,7 +288,7 @@ function SyncModalBody({
           loading={syncing}
           disabled={remoteDocument == null || inSync || preflightInvalid}
         >
-          {t("entities.sync.confirm")}
+          {t("blueprints.sync.confirm")}
         </Button>
       </Group>
     </Stack>

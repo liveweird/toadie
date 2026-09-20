@@ -115,7 +115,7 @@
     "noMatch": "Dokument źródłowy nie zawiera już tej encji.",
     "blueprintMismatch": "Dokument źródłowy wskazuje inny blueprint niż „{{blueprint}}”.",
     "refusedTitle": "Kopia ze źródła została odrzucona",
-    "refusedBody": "Synchronizacja zakończyłaby się niepowodzeniem — kopia ze źródła nie spełnia już aktualnych reguł blueprintu. Popraw ją u źródła przed ponowną synchronizacją.",
+    "refusedBody": "Synchronizacja zakończyłaby się niepowodzeniem — kopia ze źródła nie spełnia aktualnych reguł blueprintu. Popraw ją u źródła przed ponowną synchronizacją.",
     "overwriteWarning": "Synchronizacja nadpisze zapisaną kopię wersją źródłową pokazaną powyżej. Zmiany wprowadzone tylko w Toadie zostaną utracone.",
     "confirm": "Nadpisz zapisaną kopię",
     "failed": "Synchronizacja nie powiodła się"

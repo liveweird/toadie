@@ -11,7 +11,7 @@
 1. The admin signs in and creates a minimal component (type `service`, lifecycle
    `production`, owner `group:default/platform`) **without** a source file URL.
 2. They open the Errors report (`/errors`) and filter by the file's name.
-   - *Expected*: the file is flagged **No source reference** (the report-only finding —
+   - *Expected*: the file is flagged **No source** (the report-only finding —
      the reference is optional on writes, never a save blocker).
 3. They open the Files list (`/files`) and filter by the name.
    - *Expected*: the **Last sync** column reads **No source**, and the row's Operations

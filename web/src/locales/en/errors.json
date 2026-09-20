@@ -36,7 +36,7 @@
     "LIFECYCLE_NOT_ALLOWED": "Lifecycle not allowed",
     "STRUCTURE_INVALID": "Invalid structure",
     "NAMESPACE_NOT_ALLOWED": "Namespace not allowed",
-    "SOURCE_MISSING": "No source reference"
+    "SOURCE_MISSING": "No source"
   },
   "message": {
     "MISSING": "No stored entity matches this reference.",

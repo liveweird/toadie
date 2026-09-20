@@ -113,7 +113,7 @@
     "noMatch": "The source document no longer contains this entity.",
     "blueprintMismatch": "The source document names a different blueprint than \"{{blueprint}}\".",
     "refusedTitle": "The source copy was refused",
-    "refusedBody": "Syncing would fail — the source copy no longer satisfies the blueprint's current rules. Fix it at the source before syncing again.",
+    "refusedBody": "Syncing would fail — the source copy does not satisfy the blueprint's current rules. Fix it at the source before syncing again.",
     "overwriteWarning": "Syncing overwrites the stored copy with the source version shown above. Changes made only in Toadie will be lost.",
     "confirm": "Overwrite stored copy",
     "failed": "Sync failed"
