@@ -12,12 +12,12 @@ import EditPageLoadState from "../components/EditPageLoadState";
 import EntityEditor from "../components/EntityEditor";
 import PageHeader from "../components/PageHeader";
 import SyncEntityModal from "../components/SyncEntityModal";
-import SyncStateText from "../components/SyncStateText";
+import SyncStateText, { syncStateSource } from "../components/SyncStateText";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useEntitySave } from "../hooks/useEntitySave";
 import { computedValuesOf } from "../utils/computedProperties";
 import { entityFormValidation, fromEntityResponse, teamValuesOf, type EntityFormValues } from "../utils/entityForm";
-import { entitySyncSource, toSyncTarget, type EntitySyncTarget } from "../utils/entitySync";
+import { toSyncTarget, type EntitySyncTarget } from "../utils/entitySync";
 import { entitiesPath } from "../utils/entityLinks";
 import { FORM_MAX_WIDTH } from "../utils/layout";
 import { loadErrorMessage } from "../utils/saveError";
@@ -66,7 +66,7 @@ function EditEntityForm({ entity, blueprint }: { entity: Entity; blueprint: Blue
 
   const actions = (
     <>
-      <SyncStateText file={entitySyncSource(entity)} />
+      <SyncStateText file={syncStateSource(entity)} />
       <Button
         variant="default"
         size="sm"

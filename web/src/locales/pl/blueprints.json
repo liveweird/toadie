@@ -34,7 +34,8 @@
     "title": "Tytuł",
     "properties": "Właściwości",
     "relations": "Relacje",
-    "entities": "Encje"
+    "entities": "Encje",
+    "lastSync": "Ostatnia synchronizacja"
   },
   "section": {
     "properties": "Właściwości",
@@ -43,7 +44,8 @@
     "calculationProperties": "Właściwości obliczane",
     "aggregationProperties": "Właściwości agregowane",
     "ownership": "Własność",
-    "hierarchy": "Hierarchia"
+    "hierarchy": "Hierarchia",
+    "source": "Źródło"
   },
   "field": {
     "identifier": "Identyfikator",
@@ -95,7 +97,8 @@
     "query": "Zapytanie (JSON)",
     "pathFilter": "Filtr ścieżki (JSON)",
     "ownershipType": "Własność",
-    "ownershipNone": "Brak"
+    "ownershipNone": "Brak",
+    "sourceUrl": "Adres URL źródła"
   },
   "hierarchies": {
     "empty": "Nie zdefiniowano jeszcze żadnych hierarchii — dodaj je na stronie Hierarchie.",
@@ -112,7 +115,8 @@
     "query": "Składnia reguł wyszukiwania Port ({ combinator, rules }) — tylko przechowywana i sprawdzana strukturalnie.",
     "hierarchyRelations": "Rozszerzenie właściwe tylko Toadie, nie pole Port: wybierz jedną z własnych relacji jednowartościowych tego blueprintu (nie „wiele”), aby oznaczyć ją jako rodzica dla tej hierarchii w grafie i drzewie encji. Pozostaw nieustawione, jeśli blueprint nie ma tu naturalnego rodzica — przechowywane obok dokumentu Port, nigdy w jego wnętrzu.",
     "hierarchyUnknown": "Ta hierarchia nie istnieje już w słowniku Hierarchie — wyczyść pole lub dodaj ją ponownie.",
-    "systemIdentifier": "Identyfikatora blueprintu systemowego nie można zmienić."
+    "systemIdentifier": "Identyfikatora blueprintu systemowego nie można zmienić.",
+    "sourceUrl": "Adres https kopii tego blueprintu w źródle (eksport blueprintu z Port albo eksport z Toadie) — włącza synchronizację ze źródłem."
   },
   "validation": {
     "identifier": "Musi mieć 1–100 znaków liter, cyfr i [@_.:/=-] oraz nie zaczynać się od $",
@@ -140,7 +144,8 @@
     "pathFirstSegment": "Pierwszy segment musi wskazywać relację tego blueprintu",
     "calculationLength": "Najwyżej 10 000 znaków",
     "aggregationPropertyForbidden": "Właściwość jest niedozwolona przy obliczaniu na podstawie encji",
-    "aggregationFunc": "Nieprawidłowa funkcja dla tego sposobu obliczania"
+    "aggregationFunc": "Nieprawidłowa funkcja dla tego sposobu obliczania",
+    "sourceUrl": "Musi być bezwzględnym adresem https bez danych uwierzytelniających"
   },
   "saveForbidden": "Tylko administratorzy/ki mogą edytować blueprinty",
   "saveConflict": "Blueprint o tym identyfikatorze już istnieje",
@@ -175,6 +180,14 @@
   "toast": {
     "created": "Utworzono blueprint",
     "saved": "Zapisano blueprint",
-    "deleted": "Usunięto blueprint"
+    "deleted": "Usunięto blueprint",
+    "synced": "Blueprint zsynchronizowany"
+  },
+  "sync": {
+    "action": "Synchronizuj ze źródłem",
+    "actionAria": "Synchronizuj {{name}} ze źródłem",
+    "noMatch": "Dokument źródłowy nie zawiera już tego blueprintu.",
+    "refusedBody": "Synchronizacja zakończyłaby się niepowodzeniem — kopia ze źródła nie spełnia reguł blueprintów. Popraw ją u źródła przed ponowną synchronizacją.",
+    "hierarchyKept": "Relacje hierarchii to rozszerzenie Toadie; dokument źródłowy ich nie zawiera, więc zapisana mapa zostaje zachowana."
   }
 }

@@ -38,9 +38,9 @@ const COLUMN_COUNT = 4;
  * table: stale entities (the same `EntityFindingCode`s a strict save already enforces),
  * unresolved ownership, computed-property health (both report-only, always on a BLUEPRINT
  * row), broken saved queries (the caller's own + everyone's PUBLIC, re-parsed against the
- * CURRENT active blueprints/hierarchies), and missing source references (2.9.1, report-only,
- * always on an ENTITY row — gray, an optional reference's absence rather than a defect).
- * `blueprint`/`q`/`team` narrow which entity AND
+ * CURRENT active blueprints/hierarchies), and missing source references (2.9.1, report-only;
+ * since 2.10.0 on either an ENTITY or a BLUEPRINT row — gray, an optional reference's absence
+ * rather than a defect). `blueprint`/`q`/`team` narrow which entity AND
  * blueprint rows are REPORTED — reference resolution stays workspace-wide, so narrowing never
  * manufactures a finding a wider view wouldn't also show (the catalog Errors report's own
  * REPORTED-vs-SHOWN asymmetry); saved queries are never narrowed by these filters. The

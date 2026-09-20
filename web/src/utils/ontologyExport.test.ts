@@ -27,6 +27,7 @@ const BLUEPRINT: Blueprint = {
   createdAt: 1,
   updatedAt: 1,
   system: false,
+  lastSyncedAt: 0,
 };
 
 const DIRECT_ENTITY: Entity = {

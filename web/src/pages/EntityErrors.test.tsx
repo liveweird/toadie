@@ -240,8 +240,33 @@ describe("EntityErrors page", () => {
     const badge = (await screen.findByText("No source")).closest("[class*='Badge-root']")!;
     expect(badge.getAttribute("style")).toContain("gray");
     expect(
-      screen.getByText("This entity has no source reference — optional, but without one it cannot be re-synced."),
+      screen.getByText(
+        "This entity or blueprint has no source reference — optional, but without one it cannot be re-synced.",
+      ),
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Source" }));
+    expect(screen.queryByText("No source")).not.toBeInTheDocument();
+    expect(await screen.findByText(/no errors/i)).toBeInTheDocument();
+  });
+
+  test("a blueprint SOURCE_MISSING finding renders the gray No source badge and the Source chip hides that row", async () => {
+    const sourceReport = entityErrorsReport({
+      blueprints: [
+        {
+          id: 3,
+          identifier: "unsourced",
+          title: "Unsourced",
+          findings: [{ code: "SOURCE_MISSING", field: "source", message: "This blueprint has no source reference" }],
+        },
+      ],
+      checkedBlueprints: 1,
+    });
+    mockReport(mockFetch, sourceReport);
+    renderPage();
+
+    const badge = (await screen.findByText("No source")).closest("[class*='Badge-root']")!;
+    expect(badge.getAttribute("style")).toContain("gray");
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Source" }));
     expect(screen.queryByText("No source")).not.toBeInTheDocument();

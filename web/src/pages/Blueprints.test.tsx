@@ -28,6 +28,7 @@ const REGISTRY = {
       createdAt: 1,
       updatedAt: 1,
       system: false,
+      lastSyncedAt: 0,
     },
     {
       id: 2,
@@ -44,6 +45,8 @@ const REGISTRY = {
       createdAt: 1,
       updatedAt: 1,
       system: false,
+      sourceUrl: "https://example.com/team.json",
+      lastSyncedAt: 1_700_000_000_000,
     },
     {
       id: 3,
@@ -60,6 +63,7 @@ const REGISTRY = {
       createdAt: 1,
       updatedAt: 1,
       system: true,
+      lastSyncedAt: 0,
     },
   ],
 };
@@ -99,6 +103,10 @@ function renderBlueprints() {
   );
 }
 
+async function openMenu(user: ReturnType<typeof userEvent.setup>, identifier: string) {
+  await user.click(await screen.findByRole("button", { name: `Operations for ${identifier}` }));
+}
+
 describe("Blueprints page", () => {
   let mockFetch: FetchMock;
 
@@ -114,7 +122,7 @@ describe("Blueprints page", () => {
     localStorage.clear();
   });
 
-  test("a regular user gets the read-only table without actions", async () => {
+  test("a regular user gets the read-only table without a kebab", async () => {
     localStorage.setItem(ROLES_KEY, "[]");
     serveBlueprints(mockFetch);
     renderBlueprints();
@@ -122,7 +130,7 @@ describe("Blueprints page", () => {
     expect(await screen.findByText("microservice")).toBeInTheDocument();
     expect(screen.getByText("Microservice")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /new blueprint/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^edit/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Operations for/ })).not.toBeInTheDocument();
   });
 
   test("an admin sees property/relation counts and the New blueprint link", async () => {
@@ -182,12 +190,24 @@ describe("Blueprints page", () => {
     expect(screen.getByRole("button", { name: "Export JSON" })).toBeDisabled();
   });
 
+  test("the Last-sync column shows No source, a synced relative time, and Never synced", async () => {
+    serveBlueprints(mockFetch);
+    renderBlueprints();
+
+    await screen.findByText("microservice");
+    const microserviceRow = screen.getByText("microservice").closest("tr")!;
+    expect(microserviceRow).toHaveTextContent("No source");
+    const teamRow = screen.getByText("team").closest("tr")!;
+    expect(teamRow).not.toHaveTextContent("Never synced");
+  });
+
   test("Edit navigates to the editor route for that blueprint", async () => {
     serveBlueprints(mockFetch);
     const user = userEvent.setup();
     renderBlueprints();
 
-    await user.click(await screen.findByRole("button", { name: "Edit microservice" }));
+    await openMenu(user, "microservice");
+    await user.click(screen.getByRole("menuitem", { name: "Edit microservice" }));
     await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/blueprints/1/edit"));
   });
 
@@ -210,6 +230,19 @@ describe("Blueprints page", () => {
     expect(await screen.findByText(/no blueprints defined yet/i)).toBeInTheDocument();
   });
 
+  test("the Sync from source item is disabled without a sourceUrl and enabled with one", async () => {
+    serveBlueprints(mockFetch);
+    const user = userEvent.setup();
+    renderBlueprints();
+
+    await openMenu(user, "microservice");
+    expect(screen.getByRole("menuitem", { name: "Sync microservice from source" })).toBeDisabled();
+    await user.keyboard("{Escape}");
+
+    await openMenu(user, "team");
+    expect(screen.getByRole("menuitem", { name: "Sync team from source" })).toBeEnabled();
+  });
+
   test("a 409 on delete shows the targeted-blueprint message", async () => {
     serveBlueprints(mockFetch, {
       "DELETE /api/v1/blueprints/2": {
@@ -220,7 +253,8 @@ describe("Blueprints page", () => {
     const user = userEvent.setup();
     renderBlueprints();
 
-    await user.click(await screen.findByRole("button", { name: "Delete team" }));
+    await openMenu(user, "team");
+    await user.click(screen.getByRole("menuitem", { name: "Delete team" }));
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
 
     expect(
@@ -238,13 +272,12 @@ describe("Blueprints page", () => {
     const row = screen.getByText("_team").closest("tr")!;
     expect(row).toHaveTextContent("System");
 
-    const deleteButton = screen.getByRole("button", { name: "Delete _team" });
-    expect(deleteButton).toBeDisabled();
-    await user.hover(deleteButton);
-    expect(await screen.findByText("System blueprints cannot be deleted")).toBeInTheDocument();
+    await openMenu(user, "_team");
+    const deleteItem = screen.getByRole("menuitem", { name: "Delete _team" });
+    expect(deleteItem).toBeDisabled();
+    expect(deleteItem).toHaveAttribute("title", "System blueprints cannot be deleted");
     expect(findCall(mockFetch, "DELETE", "/api/v1/blueprints/3")).toBeUndefined();
-
-    await user.click(screen.getByRole("button", { name: "Edit _team" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit _team" }));
     await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/blueprints/3/edit"));
   });
 
@@ -253,7 +286,8 @@ describe("Blueprints page", () => {
     const user = userEvent.setup();
     renderBlueprints();
 
-    await user.click(await screen.findByRole("button", { name: "Delete team" }));
+    await openMenu(user, "team");
+    await user.click(screen.getByRole("menuitem", { name: "Delete team" }));
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
 
     await waitFor(() => expect(findCall(mockFetch, "DELETE", "/api/v1/blueprints/2")).toBeDefined());

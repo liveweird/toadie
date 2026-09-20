@@ -2,6 +2,7 @@ import type { FormErrors } from "@mantine/form";
 import type { TFunction } from "i18next";
 import type { Blueprint, BlueprintBody } from "../api/blueprints";
 import { saveErrorMessage } from "./saveError";
+import { sourceUrlProblem } from "./sourceUrl";
 
 // Wire shapes, derived structurally from the generated contract (the catalogFileForm.ts
 // EntitySpecWire idiom) rather than hand-typed — a drift between this file and the actual
@@ -200,6 +201,10 @@ export type BlueprintFormValues = {
    * to clear it explicitly, rather than the client silently dropping evidence of the problem.
    */
   hierarchyRelations: Record<string, string>;
+  /** The blueprint's source reference (2.10.0) — row state for the whole request, never part
+   *  of the Port document `toBlueprintRequest` builds; sent separately by `useBlueprintSave.ts`,
+   *  the `EntityFormValues.sourceUrl` idiom one level down. "" = unset. */
+  sourceUrl: string;
 };
 
 /** The relations a blueprint's `hierarchyRelations` entries may name — single (`many === false`) ones
@@ -343,6 +348,7 @@ export function emptyBlueprintForm(): BlueprintFormValues {
     ownershipTitle: "",
     ownershipPath: "",
     hierarchyRelations: {},
+    sourceUrl: "",
   };
 }
 
@@ -730,6 +736,7 @@ export function fromBlueprintResponse(blueprint: Blueprint): BlueprintFormValues
     ownershipTitle: blueprint.ownership?.title ?? "",
     ownershipPath: blueprint.ownership?.path ?? "",
     hierarchyRelations: { ...(blueprint.hierarchyRelations ?? {}) },
+    sourceUrl: blueprint.sourceUrl ?? "",
   };
 }
 
@@ -813,6 +820,7 @@ function identityRules(t: TFunction) {
     description: (value: string) =>
       value.length <= MAX_DESCRIPTION_LENGTH ? null : t("blueprints.validation.descriptionLength"),
     icon: (value: string) => (value.length <= MAX_ICON_LENGTH ? null : t("blueprints.validation.iconLength")),
+    sourceUrl: (value: string) => (sourceUrlProblem(value) ? t("blueprints.validation.sourceUrl") : null),
   };
 }
 

@@ -1,3 +1,4 @@
+import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { Alert, Badge, Button, Grid, Group, Paper, Stack } from "@mantine/core";
@@ -28,6 +29,7 @@ export default function BlueprintEditor({
   error,
   submitting,
   system = false,
+  actions,
 }: {
   title: string;
   submitLabel: string;
@@ -38,6 +40,9 @@ export default function BlueprintEditor({
   /** A system blueprint (`_team`/`_user`, Phase 4 v1.26.0) — never true from CreateBlueprint,
    *  since a system row can only ever be edited, not created. */
   system?: boolean;
+  /** The whole-blueprint operations (2.10.0 — Sync from source) — absent on create, since a
+   *  brand-new blueprint has no stored state to act on (the `EntityEditor` `actions` idiom). */
+  actions?: ReactNode;
 }) {
   const { t } = useTranslation();
   const expansion = useBlueprintRowExpansion(form);
@@ -54,6 +59,7 @@ export default function BlueprintEditor({
           )
         }
         backTo={{ to: blueprintsPath, label: t("blueprints.backToList") }}
+        actions={actions}
       />
       <Grid>
         <Grid.Col span={{ base: 12, md: 7 }}>
