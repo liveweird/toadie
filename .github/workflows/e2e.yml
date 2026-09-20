@@ -56,6 +56,35 @@ jobs:
           done
           exit 1
 
+      # SCRATCH DIAGNOSTIC (pool stall attribution, 2026-09-20): every 3 s record the external
+      # and in-container /readyz latency, established :8081 sockets, and container CPU/memory;
+      # on an external stall (>5 s or failure) SIGQUIT the JVM so its thread dump lands in the
+      # container log (stack.log), rate-limited to once per 20 s.
+      - name: Start stall probe
+        run: |
+          nohup bash -c '
+            last=0
+            while true; do
+              ts=$(date -u +%T)
+              host=$(curl -s -o /dev/null -w "%{http_code} %{time_total}" --max-time 8 http://localhost:8081/readyz || echo "ERR 8")
+              inner=$(docker exec toadie-app curl -s -o /dev/null -w "%{http_code} %{time_total}" --max-time 4 http://localhost:8081/readyz 2>/dev/null || echo "ERR 4")
+              est=$(ss -Htan state established "( sport = :8081 or dport = :8081 )" 2>/dev/null | wc -l | tr -d " ")
+              stats=$(docker stats --no-stream --format "{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}" toadie-app toadie-postgres 2>/dev/null | tr "\n" " ")
+              echo "$ts host=[$host] inner=[$inner] est8081=$est $stats"
+              code=${host%% *}; secs=${host##* }
+              stalled=$(awk -v c="$code" -v t="$secs" "BEGIN{print (c!=\"200\" || t+0>5) ? 1 : 0}")
+              now=$(date +%s)
+              if [ "$stalled" = 1 ] && [ $((now-last)) -ge 20 ]; then
+                last=$now
+                echo "$ts STALL -> SIGQUIT toadie-app; host ss:"; ss -tanp 2>/dev/null | grep ":8081" | head -30
+                docker kill -s QUIT toadie-app >/dev/null 2>&1 || true
+                docker exec toadie-app sh -c "echo tcp-rows=\$(cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | wc -l)" 2>/dev/null || true
+              fi
+              sleep 3
+            done
+          ' > e2e/stall-probe.log 2>&1 &
+          echo $! > e2e/stall-probe.pid
+
       - name: Run E2E
         working-directory: e2e
         run: npx playwright test
@@ -64,6 +93,13 @@ jobs:
       - name: Verify seeded GraphQL deployment
         working-directory: e2e
         run: npm run smoke:graphql -- compose
+
+      - name: Stop stall probe
+        if: ${{ always() }}
+        run: |
+          pkill -P "$(cat e2e/stall-probe.pid)" 2>/dev/null || true
+          kill "$(cat e2e/stall-probe.pid)" 2>/dev/null || true
+          tail -5 e2e/stall-probe.log || true
 
       - name: Collect stack diagnostics
         if: ${{ always() }}
@@ -78,6 +114,7 @@ jobs:
             e2e/playwright-report/
             e2e/test-results/
             e2e/stack.log
+            e2e/stall-probe.log
           retention-days: 7
 
       - name: Remove this runner's disposable stack and database
