@@ -558,6 +558,8 @@ stages are provably the same Java build rather than whatever "21" resolves to on
 so `docker compose up` surfaces a slow or crash-looping app as an unhealthy container instead
 of a silently-accepting-connections one.
 
+The app pod now declares the full security context above (non-root uid 10001, read-only root filesystem with an emptyDir at /tmp, all capabilities dropped, no privilege escalation, RuntimeDefault seccomp), pinned by `web/src/test/infrastructure.test.js`. A CPU limit remains deliberately absent — Ktor's async runtime scales with available cores; a limit would throttle without protecting anything the memory limit does not already bound — re-examined 2026-09-20.
+
 ## Stage 5 — selective refactoring
 
 - [x] Extract graph persistence into a dedicated hook as part of Stage 3.
