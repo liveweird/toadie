@@ -33,7 +33,8 @@ Dynamic JSON can contain sensitive workspace content: a key grants read access t
 Port ontology, not ownership-based row permissions. Ownership remains informational. The
 REST-only `sourceUrl`/`lastSyncedAt` source-sync envelope members (2.9.0,
 `.claude/docs/persistence.md` "V37") are deliberately NOT exposed on the GraphQL `Entity` type —
-Toadie provenance, not Port model.
+Toadie provenance, not Port model — and neither is the identical `Blueprint` envelope added in
+2.10.0 (`.claude/docs/persistence.md` "Blueprint source references (V38)").
 
 `errors` is ontology health, separate from GraphQL's top-level execution `errors` array.
 It reports entity and blueprint findings, with paginated finding-row collections and full

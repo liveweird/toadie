@@ -11,7 +11,8 @@ Port's Entity hierarchy; later visits remember your last world.
   saves too, but an explicit **Save anyway** can waive those soft findings; catalog import
   reports them while storing structurally valid documents.
 - **Source synchronization and history:** an optional credential-free HTTPS `sourceUrl`
-  enables SSRF-guarded, one-way repository-to-database synchronization. Review the YAML diff
+  enables SSRF-guarded, one-way repository-to-database synchronization for catalog files,
+  entities, and (since 2.10.0) blueprints alike. Review the YAML diff
   and confirm before overwriting. Every catalog mutation maintains immutable per-file
   structural history; no-op saves do not add events, while syncs always do.
 - **Port blueprints and entities:** administrators define typed schemas, relations, and

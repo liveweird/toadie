@@ -11,7 +11,7 @@
 
 1. Sign in and visit Blueprints, Labels, Tags, Types, and Annotations at 1920px width.
    - Expected: each loaded table fills the content canvas after sidebar and padding.
-2. Resize each screen to 390px and scroll its first edit action into view.
+2. Resize each screen to 390px and scroll its first row action (the Edit link, or the Operations menu on Blueprints) into view.
    - Expected: the action remains reachable and the document does not scroll horizontally.
 3. Visit Users, Feature flags, both Errors reports, and Changelog at 390px.
    - Expected: loaded content remains inside the viewport, including older changelog text.

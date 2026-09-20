@@ -385,6 +385,33 @@ and the header Sync action), `ImportOntology.test.tsx` (the fetch-from-URL wirin
 `entity-sync.spec.ts`, the `source-sync.spec.ts` twin: the fetch→diff→overwrite happy path is
 deliberately server-/unit-tested, never run against external network.
 
+**Blueprint source sync (2.10.0).** `BlueprintSyncTest.kt` is the `EntitySyncTest.kt` case list
+retargeted one level up, ADMIN via `seededClient`, no waiver: create with `sourceUrl` (`GET
+…/sync` `lastSyncedAt 0`), invalid URLs `400` on POST/PUT, sync overwrites and stamps
+`updatedAt == lastSyncedAt` from a baseline equal to the sanitized, merged submitted request
+without `sourceUrl`, `blueprint.synced` audited, `400` without a reference, `400` on
+`document.sourceUrl`, a validation-failing sync answering `400` with the row byte-identical
+afterward (no waiver), the **`hierarchyRelations` trio** (a body omitting the map keeps the
+stored one on GET and in the baseline; a present map replaces it; an omitting body whose remote
+dropped the named relation is `400` naming `hierarchyRelations.<k>`), `_team` extended via sync
+(`system=true` audited) and `_team` renamed via sync `400`, a rename via sync cascading with
+`renamedFrom`, a rename onto a taken identifier `409`, USER `403` on `POST …/sync` and fetch (200
+on `GET …/sync`), `404` on unknown ids (even with a structurally invalid document), and the
+import batch `sourceUrl` (D3 keep-vs-move, per-document `sourceUrl` `INVALID`, pass-2 restoration
+carrying the FINAL document, `/import/check` parity). `UrlFetchTest` gains the
+`POST /api/v1/blueprints/fetch` route through the same `UrlFetcherKey` seam (a fixture-server 200
+audited `blueprint.fetched`, a loopback URL `400` audited `blueprint.fetch_blocked`, USER `403`
+before any fetch). `SampleBlueprintsTest` and `IntegrationOntologyParityTest` are re-pinned in the
+SAME commit as the checker change (`.claude/docs/port-data-model.md` "Computed-property health").
+Frontend: `SyncBlueprintModal.test.tsx` (the `SyncEntityModal.test.tsx` case list minus
+computed/blueprint-mismatch, plus the hierarchy-kept sync and both `["blueprints"]`/`["entities"]`
+invalidations), `Blueprints.test.tsx` (the kebab-driven Last-sync states and the Sync item's
+disabled/enabled wiring), `EditBlueprint.test.tsx` (the Source field and the header Sync action).
+E2E stays at the loopback-refusal posture only — `blueprint-sync.spec.ts`: the
+fetch→diff→overwrite happy path is deliberately server-/unit-tested, never run against external
+network, and the import page's own fetch refusal is NOT duplicated (already covered by
+`entity-sync.spec.ts`).
+
 **Dependency locking.** The Gradle build resolves against the committed lockfiles (`core/` + `server/gradle.lockfile`, the root `settings-` and `buildscript-gradle.lockfile`; enabled in the root `build.gradle.kts`, DEFAULT lock mode): a transitive version outside the lock state fails resolution. After a dependency change run `./gradlew build --write-locks` and commit the lockfiles; the Dockerfile copies them into the build stage, so a forgotten lockfile also fails the image build.
 
 **Schemathesis (optional manual fuzz pass, not in CI).** Property-based fuzzing of the running stack from the spec: `docker compose up --build` (compose ships dev mode, so `/openapi` is exposed), grab a token — `TOKEN=$(curl -s -X POST localhost:8081/api/v1/login -H 'Content-Type: application/json' -d '{"email":"admin@toadie.local","password":"changeme"}' | jq -r .token)` — then `uvx schemathesis run -c all -H "Authorization: Bearer $TOKEN" --exclude-path /api/v1/logout http://localhost:8081/openapi/documentation.yaml --url http://localhost:8081`. The `/logout` exclusion is load-bearing: fuzzing it **revokes the bearer token** (everything after 401s). Login fuzzing also trips the per-account lockout for `admin@toadie.local` (the spec's example email) — in-memory, so `docker compose restart app` clears it. Expect residual noise from stateful invariants the spec cannot express (rate-limit 429s, TRACE probes); a **`Server error` count above zero is the real signal**. It complements, not replaces, the suite-piggybacked conformance layer above; fuzz junk lives only in the compose volume (`docker compose down -v` resets). Needs `uv` (or `pipx`); no Python dependency lives in the repo.
@@ -465,8 +492,10 @@ is set (`EntityErrorsCheckTest` additionally pins the ordering against a stale f
 `JqCalculationTest`
 gains the two `calculationVerdict` cases (`CompileFailed` cached and never submitted to a
 fail-if-touched executor; `Quarantined` after a latch-held deadline miss). `SampleBlueprintsTest`
-pins that the baseline ontology (`.claude/docs/ontology.md`) yields ZERO blueprint rows on the
-report — any row is a checker false positive.
+pins that the baseline ontology (`.claude/docs/ontology.md`) yields, since 2.10.0, exactly eleven
+blueprint rows on the report — one per sample blueprint, each carrying EXACTLY `SOURCE_MISSING`
+and nothing else (the sample carries no source references); any other code, or a missing
+`SOURCE_MISSING` row, is a checker false positive.
 
 **World switch (v2.3.0).** The four unit suites: `navigation.test.ts` pins the world model (worlds, `sectionsFor` filtering per world, `worldOf` longest-prefix resolution), `hooks/useWorld.test.tsx` pins the storage key, `readStoredWorld` fallback, the route-driven sidebar flip, and `switchTo` navigation, `components/WorldSwitch.test.tsx` pins the segment control + navigation, `App.test.tsx` cases pin the route-to-world mapping and the redirects at `/`. E2E: `helpers.ts` `switchWorld(page, "Backstage" | "Port")` switches the sidebar; a fresh Playwright context after sign-in lands on Port, so a spec opening a Backstage leaf calls `switchWorld` first. `world-switch.spec.ts` journey "the world switch follows the route, remembers the last world, and scopes the command palette" pins that deep-linking to a Backstage leaf flips the sidebar, the switch's click navigates to the other world's home, and the palette's pages/actions change. `accessibility.spec.ts`'s `AUTHED_PAGES` lists `/hierarchy` (never `/`) plus the Port pages, and both suite's headings after sign-in are asserted with `exact: true` (the "Entity hierarchy" vs "Hierarchy" substring trap).
 
