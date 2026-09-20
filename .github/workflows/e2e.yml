@@ -16,7 +16,7 @@ jobs:
       # A fresh hosted runner plus an explicit project owns this disposable database.
       # Never point this workflow at an existing workspace or a self-hosted Docker daemon.
       COMPOSE_PROJECT_NAME: toadie-ci
-      E2E_BASE_URL: http://localhost:8081
+      E2E_BASE_URL: http://127.0.0.1:8081
     steps:
       - uses: actions/checkout@v7
         with:
