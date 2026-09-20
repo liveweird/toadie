@@ -21,6 +21,13 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # TypeScript majors are held back: `openapi-typescript` (peer `typescript ^5.x`, tolerated on
+    # 6.0 via `--legacy-peer-deps`) drives the compiler-factory API that TypeScript 7.0 removed —
+    # `npm run check:api` crashes on `createKeywordTypeNode` (PR #76, 2026-09-19). Lift this ignore
+    # once openapi-typescript declares TypeScript 7 support.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/e2e"
@@ -35,11 +42,12 @@ updates:
           - "minor"
           - "patch"
 
-  # Gradle: Dependabot regenerates gradle.lockfile files as part of each bump PR. The FIRST
-  # Dependabot gradle PR must be checked by hand for updated lockfiles (`core/gradle.lockfile`,
-  # `server/gradle.lockfile`, the root `settings-gradle.lockfile` + `buildscript-gradle.lockfile`
-  # — see CLAUDE.md's "Dependency locking" line); if it cannot keep them current, drop this
-  # ecosystem block and keep `./gradlew build --write-locks` a manual step instead.
+  # Gradle: Dependabot regenerates the MODULE lockfiles (`core/gradle.lockfile`,
+  # `server/gradle.lockfile`) in each bump PR but NOT the root `settings-gradle.lockfile`, which
+  # pins the `io.ktor:ktor-version-catalog` coordinate from `settings.gradle.kts` (PR #74,
+  # 2026-09-19: the Ktor 3.5.2 → 3.6.0 bump failed resolution until `./gradlew build --write-locks`
+  # was run on the branch by hand). Expect every Ktor catalog bump to need that step before it can
+  # go green — see CLAUDE.md's "Dependency locking" line.
   - package-ecosystem: "gradle"
     directory: "/"
     schedule:
