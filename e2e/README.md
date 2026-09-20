@@ -93,6 +93,14 @@ tests may be order-dependent); different files run concurrently. That is only so
 **every spec file owns its server-side state exclusively** — the standing rulebook, inherited
 from Lettuce, that any new or edited spec must satisfy:
 
+**Register every awaited response before the action that triggers it.** A `page.waitForResponse`
+registered after a `Promise.all([waitForResponse(...), click()])` has resolved misses any response
+that already arrived in between — a second request the same click fires lands tens of milliseconds
+after the first once the server pools its database connections, so "wait for A, click, then wait
+for B" hangs until the test timeout while the page shows the completed result. Put every wait the
+click will satisfy INTO the same `Promise.all`, before the click (the 2026-09-20 pool stall:
+`ontology-import.spec.ts`'s check/import pairs stalled 12 of 12 attempts on CI and never locally).
+
 - Each spec's scenario file declares its **Owns** line (exclusive server-side state; "nothing —
   read-only" when applicable). Today: `auth`, `accessibility`, `url-import`, and `changelog`
   (device-local localStorage only) are read-only;
