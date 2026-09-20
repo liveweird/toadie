@@ -72,6 +72,6 @@
 - **The full pure planner rule tables** (fixpoint cascades, cap handling, required-reference
   cycles) — pinned by `BlueprintImportPlanTest`/`EntityImportPlanTest`; this journey proves one
   real two-blueprint cycle end to end, not every rule in isolation.
-- **The sample-ontology import recipe** (eleven blueprint files + 59 entities through this same
+- **The sample-ontology import recipe** (twelve blueprint files + 64 entities through this same
   page) — covered by `SampleBlueprintsTest`/`SampleEntitiesTest` and `sample-data/port/commerce-payments/README.md`'s
   documented manual recipe, not by an automated browser journey.
