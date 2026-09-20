@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.13.0",
+    date: "2026-09-20",
+    en: `**Datasets and declared usage join the baseline ontology.** The Port sample gains three blueprints. A dataset is the data-side contract surface the way an API is the request-side one: its type, lifecycle, classification, personal-data flag, freshness, retention and the link to its published data contract, stored in a resource and produced or consumed by services, which now list their datasets beside their APIs. Two relation entities record declared usage: an API adoption says which major line a service consumes an API on, a dataset adoption which contract version — each with who declared it, when it was verified and its migration status, owned through the consuming service. APIs and datasets count their adopters; datasets count producers and consumers. The demo now loads 15 blueprints and 76 entities.`,
+    pl: `**Zbiory danych i zadeklarowane użycie dołączają do bazowej ontologii.** Przykład Port zyskuje trzy blueprinty. Zbiór danych (dataset) jest kontraktową powierzchnią po stronie danych, tak jak API po stronie żądań: typ, cykl życia, klasyfikacja, flaga danych osobowych, świeżość, retencja i link do opublikowanego kontraktu danych; przechowywany w zasobie, produkowany i konsumowany przez serwisy, które wymieniają teraz swoje zbiory obok swoich API. Dwie encje relacyjne zapisują zadeklarowane użycie: adopcja API mówi, na której linii głównej serwis konsumuje API, adopcja zbioru — którą wersję kontraktu; każda z autorem deklaracji, datą weryfikacji i statusem migracji, a właściciel wynika z konsumującego serwisu. API i zbiory zliczają swoich adoptujących, zbiory także producentów i konsumentów. Demo wczytuje teraz 15 blueprintów i 76 encji.`,
+  },
+  {
     version: "2.12.0",
     date: "2026-09-20",
     en: `**Integrations can tell when the ontology changed.** Every page of blueprints and entities the integration API returns now carries the ontology revision, a counter that moves with every blueprint, entity and hierarchy change. A client reading several pages compares the revision across them and simply restarts when it moved, so an assembled graph is never a mix of two states. Nothing is stored per client and existing queries are unchanged.`,
