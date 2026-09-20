@@ -543,7 +543,10 @@ stored Port document stays byte-identical and a future export never needs to str
 `syncFromSource` (`blueprints/BlueprintSync.kt`) is an ORDINARY replace under the blueprint's
 existing V27 table lock — it takes no new lock — that stamps `updated_at = last_synced_at` from
 one clock read, so a successful sync always leaves `updatedAt == lastSyncedAt` byte-exact.
-`synced_content` is the baseline a blueprint's sync diffs against: the submitted
+`updatedAt` bumps on every blueprint PUT REGARDLESS of whether the document changed (D2 — as for
+entities, unlike the catalog, which only bumps on an actual content change), so the SPA's "Local
+changes" badge means "saved in Toadie since the sync", not "the document differs from the
+baseline". `synced_content` is the baseline a blueprint's sync diffs against: the submitted
 `BlueprintRequest` re-encoded through `blueprintJson` (request-shaped, `sourceUrl` itself never
 inside it), INCLUDING the request's merged `hierarchyRelations` — the map actually stored, never
 whatever the remote document happened to carry. **The one deliberate departure from V37's rule**:

@@ -221,10 +221,11 @@ fun Application.configureEntityRoutes() {
                 // and parsed/decoded it (a client concern); strict, no waiver exists for
                 // entities (unlike the catalog's repo sync) — a fetched copy failing
                 // `entityFindings` is refused outright.
-                // No route-side validateEntityRequest: the service checks the row's existence
-                // FIRST so a missing id 404s before an invalid body would 400 (the PUT
-                // precedent above), then validates inside the same locked transaction
-                // (`syncFromSource` -> `applyUpdate`).
+                // The service checks the row's existence FIRST, so a missing id 404s before the
+                // service's OWN `entityFindings` validation would 400 (the PUT precedent above);
+                // the two route-side guards below — `requireNoDocumentSourceUrl` and the
+                // sanitizer — still run before the service and can answer 400 for an unknown id,
+                // the same partial ordering as the PUT.
                 val request = call.receive<SyncEntityRequest>()
                 requireNoDocumentSourceUrl(request.document)
                 val document = sanitizedEntityRequest(request.document)

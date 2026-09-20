@@ -1590,8 +1590,9 @@ export interface paths {
          *     can drop it into the ontology import flow or the blueprint sync modal. Server-side so
          *     any reachable host works, not only CORS-friendly ones; parsing stays a client concern,
          *     this returns TEXT. Identical SSRF posture and guard chain to `POST /entities/fetch`
-         *     (`.claude/docs/security.md` "Outbound URL fetch") — the same shared fetcher, one shared
-         *     connection pool; the Import page keeps using `POST /entities/fetch`, so this route
+         *     (`.claude/docs/security.md` "Outbound URL fetch") — the same shared `UrlFetcher` and
+         *     bounded worker pool (each fetch still owns its private connection pool — see the
+         *     security notes); the Import page keeps using `POST /entities/fetch`, so this route
          *     backs the blueprint editor's Source fieldset and the Blueprints list's Sync action only.
          *
          *     SSRF posture: the URL must be an absolute `https` address without credentials whose
@@ -2074,8 +2075,9 @@ export interface paths {
          *     SPA can drop it into the ontology import flow or the entity sync modal. Server-side so
          *     any reachable host works, not only CORS-friendly ones; parsing stays a client concern,
          *     this returns TEXT. Identical SSRF posture and guard chain to `POST /files/fetch`
-         *     (`.claude/docs/security.md` "Outbound URL fetch") — the same shared fetcher, one shared
-         *     connection pool.
+         *     (`.claude/docs/security.md` "Outbound URL fetch") — the same shared `UrlFetcher` and
+         *     bounded worker pool (each fetch still owns its private connection pool — see the
+         *     security notes).
          *
          *     SSRF posture: the URL must be an absolute `https` address without credentials whose
          *     host resolves ONLY to public addresses — anything else (http, userinfo, loopback,
