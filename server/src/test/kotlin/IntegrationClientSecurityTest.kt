@@ -1,10 +1,21 @@
 package ch.nokillswit
 
+import ch.nokillswit.integration.GraphQLHttpRequest
 import ch.nokillswit.integration.RevokeOutcome
 import ch.nokillswit.integration.apiKeyHash
 import ch.nokillswit.integration.generateApiKey
+import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserService.GuardedMutation
 import ch.nokillswit.users.UserRole
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.sql.DriverManager
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +33,55 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IntegrationClientSecurityTest {
+    /**
+     * Reverse-credential pair (2.13.1): each credential type opens exactly one door. Neither
+     * direction existed before — [IntegrationGraphQlTest] only pinned a login JWT rejected on
+     * the schema GET, without asserting the audit reason, and no test had tried an integration
+     * key against the ordinary REST API.
+     */
+    @Test
+    fun `a login JWT opens no integration door and an integration key opens no REST door`() = testApplication {
+        configureApp("integration.enabled" to "true")
+        startApplication()
+        TestRefTargets.ensure()
+
+        val email = uniqueEmail("int-reverse")
+        val owner = TestUsers.seed(email, "pw")
+        val (_, key) = TestIntegrationClients.service.create("Reverse-credential probe", owner)
+        val jwtClient = authedClient(email, "pw")
+        val plainClient = jsonClient()
+
+        withAuditCapture { capture ->
+            val graphqlWithJwt = jwtClient.post("/integration/graphql") {
+                contentType(ContentType.Application.Json)
+                setBody(GraphQLHttpRequest("{ __typename }"))
+            }
+            assertEquals(HttpStatusCode.Unauthorized, graphqlWithJwt.status)
+            assertEquals("Missing or invalid integration API key", graphqlWithJwt.body<ProblemDetail>().detail)
+            val authFailed = assertNotNull(
+                capture.awaitEvent { it.message == "integration.auth_failed" },
+                "expected an integration.auth_failed audit event",
+            )
+            // A JWT never matches the `toadie_int_...` bearer grammar at all, so the caller is
+            // classified the same as an absent/malformed key — never `unknown_or_revoked` (that
+            // reason is reserved for a well-formed key the store doesn't recognize).
+            assertTrue(
+                authFailed.hasKeyValue("reason", "missing_or_malformed"),
+                "unexpected audit reason: ${authFailed.keyValuePairs}",
+            )
+        }
+
+        val restWithIntegrationKey = plainClient.get("/api/v1/blueprints") {
+            header(HttpHeaders.Authorization, "Bearer $key")
+        }
+        assertEquals(HttpStatusCode.Unauthorized, restWithIntegrationKey.status)
+        assertEquals(
+            "Missing or invalid bearer token",
+            restWithIntegrationKey.body<ProblemDetail>().detail,
+            "an integration key must fail the ordinary JWT challenge, not a feature-specific check",
+        )
+    }
+
     @Test
     fun `machine credentials outlive their creating login account until explicitly revoked`() = testApplication {
         usePostgresTestcontainer()
