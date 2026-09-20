@@ -2,6 +2,7 @@ package ch.nokillswit
 
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.SyncBlueprintRequest
+import ch.nokillswit.catalog.SyncCatalogFileRequest
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.SyncEntityRequest
 import ch.nokillswit.plugins.ProblemDetail
@@ -47,6 +48,13 @@ class NegativeIdTest {
             client.postJson(
                 "/api/v1/entities/-1/sync",
                 SyncEntityRequest(document = EntityRequest(blueprint = "bp", identifier = "x", title = "T")),
+            ),
+        )
+        assertNegative400(client.get("/api/v1/files/-1/sync"))
+        assertNegative400(
+            client.postJson(
+                "/api/v1/files/-1/sync",
+                SyncCatalogFileRequest(document = componentFile("neg-id")),
             ),
         )
 

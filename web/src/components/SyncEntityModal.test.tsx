@@ -276,6 +276,58 @@ describe("SyncEntityModal", () => {
     expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
   });
 
+  test("Esc cannot dismiss the modal mid-sync; it closes once the POST settles", async () => {
+    mockRoutes(mockFetch);
+    // Hold the sync POST open so the busy state is observable.
+    let releaseSync: (response: Response) => void = () => {};
+    const base = mockFetch.getMockImplementation() as (
+      url: string,
+      init?: RequestInit,
+    ) => Promise<Response>;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/v1/entities/1/sync" && init?.method === "POST") {
+        return new Promise<Response>((resolve) => {
+          releaseSync = resolve;
+        });
+      }
+      return base(url, init);
+    });
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("button", { name: "Overwrite stored copy" }));
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+
+    releaseSync(new Response(null, { status: 204 }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  test("exposes a named loading status while the sync state is pending", async () => {
+    mockRoutes(mockFetch);
+    let releaseState: (response: Response) => void = () => {};
+    const statePromise = new Promise<Response>((resolve) => {
+      releaseState = resolve;
+    });
+    const base = mockFetch.getMockImplementation() as (
+      url: string,
+      init?: RequestInit,
+    ) => Promise<Response>;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url === "/api/v1/entities/1/sync" && method === "GET") return statePromise;
+      return base(url, init);
+    });
+    renderModal();
+
+    expect(
+      await screen.findByRole("status", { name: "Loading the source copy" }),
+    ).toBeInTheDocument();
+
+    releaseState(jsonResponse(200, SYNC_STATE));
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
   test("stays closed without a target", () => {
     renderModal(null);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

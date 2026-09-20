@@ -550,4 +550,24 @@ class EntitySyncTest {
             TestBlueprints.remove(bpId)
         }
     }
+
+    @Test
+    fun `an invalid batch sourceUrl is a whole-request 400`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("esync-badbatchurl", UserRole.ADMIN)
+        val bpId = unique("bp-esync-badbatchurl")
+        val entId = unique("ent-esync-badbatchurl")
+        try {
+            client.createBlueprint(simpleBlueprint(bpId))
+            val doc = blueprintJson.encodeToJsonElement(entityRequest(bpId, entId)).jsonObject
+            val response = client.postJson(
+                "/api/v1/entities/import",
+                EntityImportRequest(documents = listOf(doc), sourceUrl = "not-a-url"),
+            )
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
 }

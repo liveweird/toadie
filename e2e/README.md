@@ -503,7 +503,7 @@ the same commit** — this list is the coverage map, the scenario file is the de
   downloads them as one `---`-separated file, and re-importing the export reports every row
   Already exists (nothing overwritten).
 - [`source-sync.spec.ts`](scenarios/source-sync.md) — source references: a file created
-  source-less is flagged on the Errors report (No source reference), setting the URL in the
+  source-less is flagged on the Errors report (No source), setting the URL in the
   editor's Source section clears the flag and turns on the Last-sync column + the Sync
   operation, and the sync modal shows the SSRF guard's public-https error against a
   loopback URL with the overwrite disabled (the fetch→overwrite happy path deliberately

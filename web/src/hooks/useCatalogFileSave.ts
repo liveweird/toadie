@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ParseKeys } from "i18next";
 import {
   softRejectionFindings,
   type CatalogFileRequest,
@@ -37,7 +36,7 @@ export function useCatalogFileSave({
 }: {
   /** The transport call — create, or update bound to its id. */
   saveRequest: (body: CatalogFileWriteRequest, options?: CatalogSaveOptions) => Promise<unknown>;
-  toastKey: ParseKeys;
+  toastKey: "catalog.toast.created" | "catalog.toast.saved";
   errorKeys: SaveErrorKeys;
 }) {
   const { t } = useTranslation();

@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.10.1",
+    date: "2026-09-20",
+    en: `**Sync wording aligned across catalog files, entities and blueprints.** The blueprint sync dialog now has its own texts, the "sync refused" explanation reads the same for entities and blueprints, and the Errors reports label a missing source the same way in both worlds.`,
+    pl: `**Ujednolicone teksty synchronizacji dla plików katalogu, encji i blueprintów.** Okno synchronizacji blueprintu ma teraz własne teksty, wyjaśnienie odmowy synchronizacji brzmi tak samo dla encji i blueprintów, a raporty Błędy w obu światach tak samo oznaczają brak źródła.`,
+  },
+  {
     version: "2.10.0",
     date: "2026-09-20",
     en: `**Blueprints as sync targets.** A blueprint can now carry the https address of its canonical copy — set it in the blueprint editor's Source section, or fetch a file from a URL on the Import page so every imported blueprint starts linked and synced, exactly like entities since 2.9.0. Sync from source, in the Blueprints list's row menu and in the editor, shows what changed at the source and in Toadie side by side before overwriting the stored definition; a copy that breaks the blueprint rules is refused, never stored, and the Toadie-only hierarchy relations are kept when the source document does not carry them. The Blueprints list gains a Last sync column, and the Port Errors report lists source-less blueprints under the gray Source class.`,

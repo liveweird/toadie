@@ -136,10 +136,11 @@ fun Application.configureBlueprintRoutes() {
                 // and parsed/decoded it (a client concern); strict, no waiver exists for
                 // blueprints (unlike the catalog's repo sync) — a fetched copy failing
                 // validation is refused outright.
-                // No route-side validateBlueprintRequest: the service checks the row's existence
-                // FIRST so a missing id 404s before an invalid body would 400 (the PUT
-                // precedent above), then validates inside the same locked transaction
-                // (`syncFromSource` -> `applyUpdate`).
+                // The service checks the row's existence FIRST, so a missing id 404s before the
+                // service's OWN validation would 400 (the PUT precedent above); the two
+                // route-side guards below — `requireNoDocumentSourceUrl` and the sanitizer —
+                // still run before the service and can answer 400 for an unknown id, the same
+                // partial ordering as the PUT.
                 val request = call.receive<SyncBlueprintRequest>()
                 requireNoDocumentSourceUrl(request.document)
                 val document = sanitizedBlueprintRequest(request.document)
