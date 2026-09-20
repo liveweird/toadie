@@ -1,7 +1,7 @@
 {
   "identifier": "system",
   "title": "System",
-  "description": "A set of services, APIs and resources that together deliver one product or capability — the unit whose criticality and support mode are agreed with the business. Backstage kind: System (domain → spec.domain, the team field → spec.owner; criticality/support_mode/exposure/hosting_model → the labels of the same name).",
+  "description": "A set of services, APIs and resources that together deliver one or more products or a shared capability — the unit whose criticality and support mode are agreed with the business. Backstage kind: System (domain → spec.domain, the team field → spec.owner; criticality/support_mode/exposure/hosting_model → the labels of the same name).",
   "icon": "Box",
   "hierarchyRelations": {"composition": "domain"},
   "schema": {
@@ -9,7 +9,7 @@
       "type": {
         "type": "string",
         "title": "Type",
-        "description": "The System type dictionary.",
+        "description": "The System type dictionary: product = a system that on its own realises a customer-facing offering listed under Products; capability = a building block shared by several products.",
         "enum": ["product", "capability"],
         "enumColors": { "product": "blue", "capability": "turquoise" }
       },
@@ -72,6 +72,13 @@
       "target": "domain",
       "required": false,
       "many": false
+    },
+    "products": {
+      "title": "Delivered as part of",
+      "description": "The products this system delivers or is shared by — a platform system lists several. Port-only (dropped on Backstage export).",
+      "target": "product",
+      "required": false,
+      "many": true
     }
   },
   "aggregationProperties": {
