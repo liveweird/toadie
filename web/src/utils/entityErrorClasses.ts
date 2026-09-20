@@ -4,14 +4,17 @@ import type { components } from "../api/schema";
 type EntityFindingCode = components["schemas"]["EntityFindingCode"];
 
 /**
- * The Port-world Errors report's pill classes (v2.5.0) — four classes over the report's
+ * The Port-world Errors report's pill classes (v2.5.0, five since 2.9.1) — over the report's
  * `EntityFindingCode` findings (entity AND blueprint rows share the same code vocabulary) plus
  * one class for every saved-query row, which carries `QueryDiagnostic`s instead: `stale` is the
- * 19 codes every strict entity save already enforces (HARD on the entity's next save); the
- * other three are report-only. See `.claude/docs/port-data-model.md` "Computed-property health"
- * and `getEntityErrors`'s own OpenAPI description for the full rule table.
+ * 19 codes every strict entity save already enforces (HARD on the entity's next save); `source`
+ * (2.9.1) is the opposite kind of report-only class — an entity's missing `sourceUrl`, never a
+ * save blocker, the catalog Errors report's own `source` class one level down; the remaining
+ * three are report-only and soft (HARD would be misleading for something that never blocks a
+ * save). See `.claude/docs/port-data-model.md` "Computed-property health" and
+ * `getEntityErrors`'s own OpenAPI description for the full rule table.
  */
-export const ENTITY_ERROR_CLASSES = ["stale", "ownership", "queries", "computed"] as const;
+export const ENTITY_ERROR_CLASSES = ["stale", "ownership", "queries", "computed", "source"] as const;
 
 export type EntityErrorClass = (typeof ENTITY_ERROR_CLASSES)[number];
 
@@ -28,17 +31,20 @@ const COMPUTED_CODES = new Set<EntityFindingCode>([
 export function classOfEntityCode(code: EntityFindingCode): EntityErrorClass {
   if (OWNERSHIP_CODES.has(code)) return "ownership";
   if (COMPUTED_CODES.has(code)) return "computed";
+  if (code === "SOURCE_MISSING") return "source";
   return "stale";
 }
 
 /**
  * The report's badge colour, the app-wide vocabulary restated: red = HARD on the entity's next
- * save (`stale`), orange = every report-only class (`ownership`, `queries`, `computed`) — a
- * soft finding that never blocks a save, the same orange as the catalog Errors report's soft
- * classes.
+ * save (`stale`), orange = every other report-only class (`ownership`, `queries`, `computed`) —
+ * a soft finding that never blocks a save, gray = `source` — an optional reference's absence,
+ * not a defect (the catalog Errors report's own `colorOfStatus` vocabulary for `SOURCE_MISSING`).
  */
 export function colorOfEntityClass(entityClass: EntityErrorClass): string {
-  return entityClass === "stale" ? "red" : "orange";
+  if (entityClass === "stale") return "red";
+  if (entityClass === "source") return "gray";
+  return "orange";
 }
 
 /**

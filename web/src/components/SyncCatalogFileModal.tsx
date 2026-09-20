@@ -10,9 +10,10 @@ import {
   syncCatalogFile,
 } from "../api/catalogFiles";
 import YamlDiffView from "./YamlDiffView";
-import { normalizeCatalogUrl, parseCatalogYaml, pickRepoDocument } from "../utils/catalogImport";
+import { parseCatalogYaml, pickRepoDocument } from "../utils/catalogImport";
 import { catalogInfoYaml } from "../utils/catalogYaml";
 import { relativeTimeAgo } from "../utils/relativeTime";
+import { normalizeSourceUrl } from "../utils/sourceUrl";
 import { compareSyncSides } from "../utils/syncComparison";
 import {
   CATALOG_SAVE_ERROR_KEYS,
@@ -115,7 +116,7 @@ function SyncModalBody({
   // must never re-trigger this server-side outbound fetch (or the findings check below).
   const repoFetch = useQuery({
     queryKey: ["repoCopy", id],
-    queryFn: () => fetchCatalogUrl(normalizeCatalogUrl(sourceUrl ?? "")),
+    queryFn: () => fetchCatalogUrl(normalizeSourceUrl(sourceUrl ?? "")),
     enabled: sourceUrl != null,
     staleTime: 0,
     gcTime: 0,

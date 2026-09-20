@@ -3,6 +3,8 @@ package ch.nokillswit.catalog
 import ch.nokillswit.annotations.AnnotationKeyService
 import ch.nokillswit.dictionaries.Dictionary
 import ch.nokillswit.dictionaries.DictionaryService
+import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.labels.LabelService
 import ch.nokillswit.tags.TagCategoryService

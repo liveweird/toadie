@@ -49,12 +49,14 @@
    - *Expected*: the download parses as JSON; it contains A and B with none of the response-only
      keys (`id`, `system`, `createdAt`, `createdBy`, `updatedAt`, `creatorName`,
      `creatorDeleted`), and A's aggregation still targets B.
-8. On the **Entities** page, picking blueprint A, they click **Export JSON**.
-   - *Expected*: the download contains `a1` with none of `findings`/`blueprintId`/`id`, and its
-     `properties` carry neither of A's computed ids (`siblingTitle`, `peerCount`) — a mirror or
+8. On the **Entities** page, picking blueprint A, they open `a1`'s row **Operations** menu and
+   click **Export JSON**.
+   - *Expected*: the download is ONE bare entity document (Port's create-entity body plus
+     `blueprint`) — `identifier` a1, none of `findings`/`blueprintId`/`id`, and `properties`
+     carrying neither of A's computed ids (`siblingTitle`, `peerCount`) — a mirror or
      aggregation's evaluated value must never round-trip back into an import.
-9. Back on Import, they paste the blueprints export and add the entities export as a picked
-   file (`setInputFiles`), switch Replace-existing off, and import again.
+9. Back on Import, they paste the blueprints export and add the single-entity export as a
+   picked file (`setInputFiles`), switch Replace-existing off, and import again.
    - *Expected*: the Source column appears (two sources); A, B, and `a1` all report **Already
      exists** — the round trip changed nothing.
 10. Cleanup (API): PUT blueprint A back to its bare schema — dropping the relation, mirror, and

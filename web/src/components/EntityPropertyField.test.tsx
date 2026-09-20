@@ -30,7 +30,16 @@ function Harness({
   findings?: EntityFinding[];
 }) {
   const form = useForm<EntityFormValues>({
-    initialValues: { blueprint: "bp", identifier: "", title: "", icon: "", team: [], properties: [initial], relations: [] },
+    initialValues: {
+      blueprint: "bp",
+      identifier: "",
+      title: "",
+      icon: "",
+      team: [],
+      properties: [initial],
+      relations: [],
+      sourceUrl: "",
+    },
     validate: validate ? { properties: validate } : undefined,
     validateInputOnBlur: true,
   });

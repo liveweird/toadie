@@ -171,28 +171,76 @@ export async function checkEntityQuery(query: string): Promise<EntityQueryCheckR
 export type EntityImportResponse =
   paths["/api/v1/entities/import"]["post"]["responses"]["200"]["content"]["application/json"];
 
-async function postEntityImport(
+async function postEntityImportBatch(
   path: "import" | "import/check",
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
+  sourceUrl?: string,
 ): Promise<EntityImportResponse> {
   return jsonRequest<EntityImportResponse>(`/api/v1/entities/${path}`, {
     method: "POST",
-    body: JSON.stringify({ documents, replaceExisting }),
+    body: JSON.stringify({ documents, replaceExisting, sourceUrl }),
   });
 }
 
+/**
+ * `sourceUrl` (2.9.0, the fetch-from-URL import flow, one level down from
+ * `importCatalogFiles`): every CREATED/UPDATED row gets it as its source reference AND starts
+ * synced. Omit for pasted/uploaded batches.
+ */
 export async function importEntities(
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
+  sourceUrl?: string,
 ): Promise<EntityImportResponse> {
-  return postEntityImport("import", documents, replaceExisting);
+  return postEntityImportBatch("import", documents, replaceExisting, sourceUrl);
 }
 
-/** The dry-run: identical row shape, nothing stored or audited. */
+/** The dry-run: identical row shape, nothing stored or audited. `sourceUrl` is accepted for
+ *  parity with `importEntities` (the server ignores its effect on a dry-run's classification). */
 export async function checkEntityImport(
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
+  sourceUrl?: string,
 ): Promise<EntityImportResponse> {
-  return postEntityImport("import/check", documents, replaceExisting);
+  return postEntityImportBatch("import/check", documents, replaceExisting, sourceUrl);
+}
+
+// -- Source references & HTTP re-sync (2.9.0) — the `api/catalogFiles.ts` twin, one level
+// down: `POST /api/v1/entities/fetch` (SSRF-guarded, the shared `infra/fetch/UrlFetcher`) and
+// `GET`/`POST /api/v1/entities/{id}/sync`. Unlike the catalog's repo sync, the entity sync
+// NEVER waives: a fetched copy failing `entityFindings` is refused outright (`400`, the same
+// `EntityInvalidProblem` a strict create/replace would answer).
+
+export type EntitySyncState =
+  paths["/api/v1/entities/{id}/sync"]["get"]["responses"]["200"]["content"]["application/json"];
+
+export type FetchEntityUrlResult =
+  paths["/api/v1/entities/fetch"]["post"]["responses"]["200"]["content"]["application/json"];
+
+/** Server-side fetch of a URL (SSRF-guarded); returns the raw text — a catalog-info.yaml or a
+ *  Port entity JSON document, parsing stays a client concern. The shared fetcher behind
+ *  `POST /files/fetch`, one connection pool for both. */
+export async function fetchEntityUrl(url: string): Promise<FetchEntityUrlResult> {
+  return jsonRequest<FetchEntityUrlResult>("/api/v1/entities/fetch", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+/** The entity's sync state: source URL, last-sync stamp, and the baseline document. */
+export async function getEntitySyncState(id: number): Promise<EntitySyncState> {
+  return jsonRequest<EntitySyncState>(`/api/v1/entities/${id}/sync`);
+}
+
+/**
+ * The HTTP→DB sync: overwrites the stored document with `document` (the parsed remote copy)
+ * and stamps the sync state. No waiver — a submitted document failing `entityFindings` is a
+ * `400` carrying the full `findings` list, exactly like a strict create/replace.
+ */
+export async function syncEntity(id: number, document: EntityBody): Promise<void> {
+  await voidRequest(`/api/v1/entities/${id}/sync`, {
+    method: "POST",
+    body: JSON.stringify({ document }),
+  });
 }

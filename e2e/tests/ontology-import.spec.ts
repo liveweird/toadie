@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
-import { expect, login, test, uniqueText } from "./helpers";
+import { expect, login, rowOperation, test, uniqueText } from "./helpers";
 
 // The ontology bulk-import page (Phase 6, v1.28.0 — `.claude/docs/port-data-model.md` "Import
 // and export"): a mixed Toadie-shaped batch (two blueprints forming a relation/aggregation
 // CYCLE — A's mirror+aggregation forward-reference B, B's relation forward-references A, so the
 // two-pass deferral trick fires; two entities in deliberately reversed order; one entity naming
 // an unknown blueprint) -> Check (dry run, nothing stored) -> Import (real) -> re-import reports
-// Already exists -> edit + Replace-existing reports Updated -> Export JSON from both the
-// Blueprints and Entities pages -> pasting both exports back in round-trips as Already exists.
+// Already exists -> edit + Replace-existing reports Updated -> Export JSON from the Blueprints
+// page (the whole registry) and from a1's row on the Entities page (one bare entity document) ->
+// pasting both exports back in round-trips as Already exists.
 //
 // One documented deviation from a literal "nothing exists yet" prediction: `POST
 // /entities/import(/check)` resolves `blueprint` against the ACTUAL stored registry only (never
@@ -236,7 +237,8 @@ test("a mixed batch imports with a two-pass blueprint cycle, then round-trips th
     }
     expect(exportedA!.aggregationProperties.peerCount.target).toBe(bId);
 
-    // 8. Entities page, blueprint A: Export JSON, then confirm a1 is present with none of the
+    // 8. Entities page, blueprint A: from a1's row Operations menu, Export JSON — ONE bare
+    // entity document (Port's create-entity body plus `blueprint`), with none of the
     // response-only/computed keys — A's own mirror value ("siblingTitle") must not be carried.
     await portOntologyNav.getByRole("link", { name: "Entities", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Entities" })).toBeVisible();
@@ -247,20 +249,20 @@ test("a mixed batch imports with a two-pass blueprint cycle, then round-trips th
     await expect(page).toHaveURL(new RegExp(`blueprint=${aId}`));
     const [entitiesDownload] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: "Export JSON" }).click(),
+      rowOperation(page, a1Id, `Export ${a1Id} as JSON`),
     ]);
     const entitiesExportText = readFileSync((await entitiesDownload.path())!, "utf8");
-    const entitiesExport = JSON.parse(entitiesExportText) as { entities: Record<string, any>[] };
-    const exportedA1 = entitiesExport.entities.find((e) => e.identifier === a1Id);
-    expect(exportedA1, "the export must contain entity a1").toBeDefined();
+    const exportedA1 = JSON.parse(entitiesExportText) as Record<string, any>;
+    expect(exportedA1.identifier).toBe(a1Id);
+    expect(exportedA1.blueprint).toBe(aId);
     for (const key of ["findings", "blueprintId", "id"]) {
       expect(exportedA1).not.toHaveProperty(key);
     }
-    expect(exportedA1!.properties).not.toHaveProperty("siblingTitle");
-    expect(exportedA1!.properties).not.toHaveProperty("peerCount");
+    expect(exportedA1.properties).not.toHaveProperty("siblingTitle");
+    expect(exportedA1.properties).not.toHaveProperty("peerCount");
 
-    // 9. Round trip: back on Import, paste the blueprints export, add the entities export as a
-    // picked file, switch off, and import again — everything that exists (A, B, a1) reports
+    // 9. Round trip: back on Import, paste the blueprints export, add the single-entity export
+    // as a picked file, switch off, and import again — everything that exists (A, B, a1) reports
     // Already exists, and the Source column appears because there are now two sources.
     await portOntologyNav.getByRole("link", { name: "Import", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Import ontology" })).toBeVisible();

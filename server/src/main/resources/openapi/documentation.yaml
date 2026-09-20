@@ -2252,8 +2252,9 @@ paths:
 
         Supports offset pagination, sorting and filtering.
 
-        - Sortable fields: `identifier`, `title`, `updatedAt`. Default sort is `identifier`
-          ascending; `id` ascending is always appended as a deterministic tiebreaker.
+        - Sortable fields: `identifier`, `title`, `updatedAt`, `lastSyncedAt`. Default sort is
+          `identifier` ascending; `id` ascending is always appended as a deterministic
+          tiebreaker.
         - Filters (optional): `blueprint` — exact (case-insensitive) match against the
           blueprint identifier (an unknown identifier answers an empty page, not `404`);
           `q` — case- and accent-insensitive substring match against `identifier` OR
@@ -2429,7 +2430,7 @@ paths:
         Any authenticated user; no admin gate. The `catalog/Errors.kt` Errors report's Port-world
         twin (2.5.0): a workspace-wide sweep over the ACTIVE entity/blueprint/saved-query
         registries, unpaged, never audited (the same rule as `GET …/files/errors`,
-        `POST …/entities/query/check`, and export). Four finding classes, one report:
+        `POST …/entities/query/check`, and export). Five finding classes, one report:
 
         1. **Stale entities** — the same 19 `EntityFindingCode` values every strict save already
            enforces (`Entity.findings`), re-evaluated against each entity's blueprint's CURRENT
@@ -2480,6 +2481,12 @@ paths:
            diagnostics (`DEADLINE_EXCEEDED`, `BINDING_LIMIT`, `WORKSPACE_TOO_LARGE`) are
            explicitly OUT of scope here — those are per-request and already inline on the query
            bar; a saved query is checked for PARSE/VALIDATE health only.
+        5. **Source references** (2.9.1) — report-only, never blocks a save: `SOURCE_MISSING`
+           (an entity row; field `source`) flags an entity with no `sourceUrl` reference — the
+           `catalog/Errors.kt` `SOURCE_MISSING` twin one level over, and the OPPOSITE kind of
+           report-only finding from classes 2-3 above: the reference is optional on writes, so
+           this is never a save blocker, just a standing report entry. Never emitted on
+           blueprint or saved-query rows.
 
         Filter semantics (REPORTED vs SHOWN, the catalog Errors report's own asymmetry):
         `blueprint` (any-of, case-insensitive, unknown identifiers ignored — an all-unknown list
@@ -2714,6 +2721,105 @@ paths:
       responses:
         '204': { description: Deleted }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/entities/fetch:
+    post:
+      tags: [entities]
+      operationId: fetchEntityUrl
+      summary: Fetch an entity document from a URL (server-side)
+      description: |
+        Any authenticated user. Source references & HTTP re-sync (2.9.0): retrieves the raw
+        text at the given URL — a catalog-info.yaml or a Port entity JSON document — so the
+        SPA can drop it into the ontology import flow or the entity sync modal. Server-side so
+        any reachable host works, not only CORS-friendly ones; parsing stays a client concern,
+        this returns TEXT. Identical SSRF posture and guard chain to `POST /files/fetch`
+        (`.claude/docs/security.md` "Outbound URL fetch") — the same shared fetcher, one shared
+        connection pool.
+
+        SSRF posture: the URL must be an absolute `https` address without credentials whose
+        host resolves ONLY to public addresses — anything else (http, userinfo, loopback,
+        private/link-local/unique-local ranges, unresolvable hosts) is a uniform `400` that
+        never echoes what was probed. Redirects are not followed (`502` — use the final URL),
+        the response body is capped at 1 MB, and one 10-second deadline covers validation,
+        DNS resolution, connection/headers, and the complete response body. Upstream
+        failures (non-200, deadline expiry, body-read failure, oversize) answer `502`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FetchUrlRequest'
+      responses:
+        '200':
+          description: The raw text at the URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FetchUrlResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/entities/{id}/sync:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [entities]
+      operationId: getEntitySyncState
+      summary: Read an entity's sync state
+      description: |
+        Any authenticated user. The entity's source reference, last-sync stamp, and the
+        BASELINE document stored at the last sync — what the sync modal compares the current
+        DB document and the freshly fetched remote copy against to attribute changes to a
+        side. A never-synced entity answers `lastSyncedAt: 0` with `syncedDocument` absent.
+        A pure read, not audited.
+      responses:
+        '200':
+          description: The sync state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitySyncStateResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    post:
+      tags: [entities]
+      operationId: syncEntity
+      summary: Overwrite the entity with its remote copy (HTTP→DB sync)
+      description: |
+        The remote→DB sync: overwrites the stored document with the submitted one — the copy
+        the client fetched via `POST /entities/fetch` and parsed/decoded client-side — and
+        stamps the sync state (`lastSyncedAt` = `updatedAt` = now, the submitted document
+        becomes the new baseline).
+
+        **No waiver exists for entities** (unlike the catalog's repo sync, which always
+        waives): the submitted document is validated STRICTLY against the owning blueprint's
+        current `schema`/`relations`/`ownership`, exactly as a strict create/replace would — a
+        fetched copy failing `entityFindings` is refused outright (`400`, full `findings`
+        list). `blueprint` must equal the entity's stored blueprint (`400` otherwise — moving
+        an entity between blueprints is not supported, sync included). The document's own
+        `sourceUrl` member must be absent (`400` — it is row state for the whole entity, set
+        once via PUT or import, never resubmitted through the sync body). The entity must hold
+        a source reference (`400` otherwise — set one first, e.g. via the editor's Source
+        field). Renaming the identifier CASCADES exactly as a PUT would (audited `cascaded`/
+        `renamedFrom`); a repo-side rename landing on an identity another active entity holds
+        is a `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncEntityRequest'
+      responses:
+        '204': { description: Synced — the DB copy now equals the submitted remote copy }
+        '400': { $ref: '#/components/responses/EntityInvalid' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -5014,6 +5120,16 @@ components:
           description: >-
             relation identifier → target entity identifier (single) | array of identifiers
             (many) | null (unset). Defaults to empty when omitted.
+        sourceUrl:
+          type: string
+          maxLength: 2048
+          description: >-
+            The entity's source reference (2.9.0) — the https URL of its canonical remote
+            copy. Row state for the WHOLE request, not a Port document member: a bulk-import
+            document carrying this is `INVALID` (see `EntityImportRequest.sourceUrl`), and the
+            sync body's own `document.sourceUrl` is refused (`400`). Absent when unset. On
+            PUT, full-replace semantics: omitted or blank CLEARS the stored reference; any
+            change resets the sync state.
 
     EntityFindingCode:
       type: string
@@ -5044,6 +5160,7 @@ components:
         - AGGREGATION_PROPERTY_STALE
         - CALCULATION_COMPILE_FAILED
         - CALCULATION_QUARANTINED
+        - SOURCE_MISSING
       description: >-
         Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY
         (key is a mirror/calculation/aggregation id — never accepted as input),
@@ -5057,14 +5174,17 @@ components:
         `team` value, or a `format: team` property value, does not resolve to an active
         `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an
         Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property
-        value does not resolve to an active `_user` entity). The remaining seven codes are
+        value does not resolve to an active `_user` entity). The remaining eight codes are
         **report-only — emitted only by `getEntityErrors`** (2.5.0), never by a strict save:
         OWNERSHIP_UNRESOLVED (an entity row; an Inherited entity's effective team resolved to
         nothing), OWNERSHIP_PATH_STALE (a blueprint row; its `ownership.path` can never
         resolve), MIRROR_PATH_STALE / AGGREGATION_PATH_STALE / AGGREGATION_PROPERTY_STALE /
         CALCULATION_COMPILE_FAILED / CALCULATION_QUARANTINED (all blueprint rows; a mirror/
         aggregation/calculation property's STATIC health — see `getEntityErrors`'s own
-        description for the full rule table).
+        description for the full rule table), and SOURCE_MISSING (2.9.1, an entity row; field
+        `source` — the entity carries no `sourceUrl` reference; the OPPOSITE kind of report-only
+        code, since the reference is optional on writes and this never blocks a save; never
+        emitted on blueprint rows).
 
     EntityFinding:
       type: object
@@ -5081,8 +5201,9 @@ components:
           type: string
           description: >-
             `properties.<id>` or `relations.<id>` naming the offending key, `team` (Phase 4
-            ownership), or — for `getEntityErrors`'s blueprint rows (2.5.0) —
-            `ownership.path`, `mirrorProperties.<id>`, `aggregationProperties.<id>`, or
+            ownership), `source` (2.9.1, `getEntityErrors`'s entity rows only), or — for
+            `getEntityErrors`'s blueprint rows (2.5.0) — `ownership.path`,
+            `mirrorProperties.<id>`, `aggregationProperties.<id>`, or
             `calculationProperties.<id>`.
         message: { type: string }
 
@@ -5229,6 +5350,7 @@ components:
         - creatorDeleted
         - createdAt
         - updatedAt
+        - lastSyncedAt
       description: >-
         An entity — an instance of a blueprint (Phase 2 of the Port data-model move — see
         `.claude/docs/port-data-model.md`). Every optional field is simply ABSENT when
@@ -5295,6 +5417,44 @@ components:
         creatorDeleted: { type: boolean }
         createdAt: { type: integer, format: int64, description: Epoch millis. }
         updatedAt: { type: integer, format: int64, description: Epoch millis. }
+        sourceUrl:
+          type: string
+          description: >-
+            The entity's source reference (2.9.0); absent = none set.
+        lastSyncedAt:
+          type: integer
+          format: int64
+          description: >-
+            Epoch millis of the last HTTP→DB sync; 0 = never. A sync stamps `updatedAt`
+            equal, so `updatedAt > lastSyncedAt` means "modified in Toadie since the sync".
+
+    EntitySyncStateResponse:
+      type: object
+      required: [lastSyncedAt]
+      description: >-
+        GET …/entities/{id}/sync's body — the `SyncStateResponse` shape one level down, with
+        the entity DTOs' ABSENT-not-null convention (never `nullable`).
+      properties:
+        sourceUrl:
+          type: string
+          description: The entity's source reference; absent = none set (syncing is refused).
+        lastSyncedAt:
+          type: integer
+          format: int64
+          description: Epoch millis of the last HTTP→DB sync; 0 = never.
+        syncedDocument:
+          allOf:
+            - $ref: '#/components/schemas/EntityRequest'
+          description: >-
+            The document as stored at the last sync — the baseline the sync modal compares the
+            current DB document and the fetched remote copy against; absent = never synced.
+
+    SyncEntityRequest:
+      type: object
+      required: [document]
+      properties:
+        document:
+          $ref: '#/components/schemas/EntityRequest'
 
     EntityPage:
       type: object
@@ -5334,6 +5494,16 @@ components:
             Off (default): a document whose (blueprint, identifier) already exists reports
             `EXISTS` and is left untouched. On: it is replaced in place (a full PUT), reported
             `UPDATED` — a PUT changing `blueprint` still stays `INVALID`.
+        sourceUrl:
+          type: string
+          maxLength: 2048
+          nullable: true
+          description: >-
+            The URL the batch was fetched from (2.9.0, the `ImportRequest.sourceUrl` twin, one
+            level down) — every CREATED/UPDATED entity row gets it as its source reference AND
+            starts synced (the document IS the remote copy at import time); blueprints never
+            carry it. Omit for pasted batches. A per-document `sourceUrl` member is `INVALID`
+            for that row — it is row state for the whole request, not one document.
 
     EntityImportRow:
       type: object
@@ -5447,7 +5617,7 @@ components:
     EntityErrorRow:
       type: object
       required: [id, blueprintId, blueprint, blueprintTitle, identifier, title, team, findings]
-      description: One entity flagged by `getEntityErrors` (2.5.0) — the same `findings` shape a strict save would reject, plus any report-only ownership finding.
+      description: One entity flagged by `getEntityErrors` (2.5.0) — the same `findings` shape a strict save would reject, plus any report-only ownership or source-missing finding.
       properties:
         id: { type: integer, format: int32, minimum: 0 }
         blueprintId: { type: integer, format: int32, minimum: 0 }

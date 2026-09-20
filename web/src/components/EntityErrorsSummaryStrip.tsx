@@ -15,7 +15,7 @@ const EMPTY_REPORT: EntityErrorsReport = {
 /**
  * The Port-world Errors report's summary strip (v2.5.0) — the `ErrorsSummaryStrip` shape over
  * the entity/blueprint/saved-query registries: three stat tiles (entities checked, blueprints
- * checked, errors shown) and the four class chips, rendered through the shared
+ * checked, errors shown) and the five class chips, rendered through the shared
  * `ReportSummaryStrip`. Class counts come from the UNFILTERED report; `shownErrors` is the
  * count AFTER the page's own class filter (the `ErrorsSummaryStrip` convention).
  */

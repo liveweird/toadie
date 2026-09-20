@@ -60,14 +60,24 @@ class EntityErrorsTest {
     private suspend fun HttpClient.createBlueprint(request: BlueprintRequest) =
         postJson("/api/v1/blueprints", request).body<BlueprintResponse>()
 
+    /**
+     * Every fixture entity carries a `sourceUrl` by default (2.9.1) so pre-existing exact-findings
+     * and "stays clean" assertions in this file are unaffected by `SOURCE_MISSING` — pass
+     * `sourceUrl = null` to build a source-less fixture for the dedicated SOURCE_MISSING case below.
+     */
     private fun entityRequest(
         blueprint: String,
         identifier: String,
         properties: kotlinx.serialization.json.JsonObject = buildJsonObject { },
-    ) = EntityRequest(blueprint = blueprint, identifier = identifier, title = "Title $identifier", properties = properties)
+        sourceUrl: String? = "https://example.com/entities/$identifier.json",
+    ) = EntityRequest(
+        blueprint = blueprint, identifier = identifier, title = "Title $identifier", properties = properties, sourceUrl = sourceUrl,
+    )
 
-    private fun teamEntity(identifier: String) =
-        EntityRequest(blueprint = SYSTEM_TEAM_BLUEPRINT, identifier = identifier, title = identifier)
+    private fun teamEntity(identifier: String) = EntityRequest(
+        blueprint = SYSTEM_TEAM_BLUEPRINT, identifier = identifier, title = identifier,
+        sourceUrl = "https://example.com/entities/$identifier.json",
+    )
 
     private suspend fun HttpClient.readErrors(query: String = ""): EntityErrorsReport =
         get("/api/v1/entities/errors$query").body()
@@ -536,6 +546,30 @@ class EntityErrorsTest {
             }
         } finally {
             TestEntities.remove(id)
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    @Test
+    fun `a source-less entity reports SOURCE_MISSING, cleared once a sourceUrl is set`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ee-source", UserRole.ADMIN)
+        val bp = unique("bp-ee-source")
+        val ent = unique("ent-ee-source")
+        try {
+            client.createBlueprint(BlueprintRequest(identifier = bp, title = "T", schema = BlueprintSchema()))
+            val created = client.postJson("/api/v1/entities", entityRequest(bp, ent, sourceUrl = null)).body<EntityResponse>()
+
+            val report = client.readErrors("?blueprint=$bp")
+            val row = report.entities.single { it.identifier == ent }
+            assertEquals(listOf("SOURCE_MISSING"), row.findings.map { it.code })
+            assertEquals("source", row.findings.single().field)
+
+            val withSource = entityRequest(bp, ent, sourceUrl = "https://example.com/entities/$ent.json")
+            assertEquals(HttpStatusCode.NoContent, client.putJson("/api/v1/entities/${created.id}", withSource).status)
+            assertTrue(client.readErrors("?blueprint=$bp").entities.none { it.identifier == ent })
+        } finally {
+            TestEntities.remove(ent)
             TestBlueprints.remove(bp)
         }
     }

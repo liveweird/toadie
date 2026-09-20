@@ -17,7 +17,16 @@ function serveEntities(mockFetch: FetchMock, items: { id: number; identifier: st
 
 function Harness({ initial, definition, required = false }: { initial: RelationValueDraft; definition: RelationDefinitionWire; required?: boolean }) {
   const form = useForm<EntityFormValues>({
-    initialValues: { blueprint: "bp", identifier: "", title: "", icon: "", team: [], properties: [], relations: [initial] },
+    initialValues: {
+      blueprint: "bp",
+      identifier: "",
+      title: "",
+      icon: "",
+      team: [],
+      properties: [],
+      relations: [initial],
+      sourceUrl: "",
+    },
   });
   return (
     <div>
