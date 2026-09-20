@@ -126,4 +126,27 @@ describe("deployment and verification safety defaults", () => {
     expect(postgres.spec.replicas).toBe(1);
     expect(postgres.spec.strategy.type).toBe("Recreate");
   });
+
+  it("the app pod and container declare full security context (non-root, read-only root, no capabilities)", () => {
+    const app = parse(appDeploymentSource);
+    const podSecurityContext = app.spec.template.spec.securityContext;
+    expect(podSecurityContext.runAsNonRoot).toBe(true);
+    expect(podSecurityContext.runAsUser).toBe(10001);
+    expect(podSecurityContext.runAsGroup).toBe(10001);
+    expect(podSecurityContext.seccompProfile.type).toBe("RuntimeDefault");
+
+    const appContainer = app.spec.template.spec.containers[0];
+    const containerSecurityContext = appContainer.securityContext;
+    expect(containerSecurityContext.allowPrivilegeEscalation).toBe(false);
+    expect(containerSecurityContext.readOnlyRootFilesystem).toBe(true);
+    expect(containerSecurityContext.capabilities.drop).toEqual(["ALL"]);
+
+    const tmpVolume = app.spec.template.spec.volumes.find((v) => v.name === "tmp");
+    expect(tmpVolume).toBeDefined();
+    expect(tmpVolume.emptyDir).toBeDefined();
+
+    const tmpVolumeMount = appContainer.volumeMounts.find((v) => v.name === "tmp");
+    expect(tmpVolumeMount).toBeDefined();
+    expect(tmpVolumeMount.mountPath).toBe("/tmp");
+  });
 });

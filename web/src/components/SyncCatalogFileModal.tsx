@@ -194,7 +194,7 @@ function SyncModalBody({
     <Stack gap="sm">
       {sourceUrl != null && (
         <Text size="sm">
-          {t("catalog.sync.sourceLabel")}{" "}
+          {t("sync.sourceLabel")}{" "}
           <Anchor href={sourceUrl} target="_blank" rel="noreferrer" size="sm">
             {sourceUrl}
           </Anchor>
@@ -202,13 +202,13 @@ function SyncModalBody({
       )}
       <Text size="sm" c="dimmed">
         {lastSyncedAt > 0
-          ? t("catalog.sync.lastSynced", { ago: relativeTimeAgo(lastSyncedAt, i18n.language) })
-          : t("catalog.sync.neverSynced")}
+          ? t("sync.lastSynced", { ago: relativeTimeAgo(lastSyncedAt, i18n.language) })
+          : t("sync.neverSynced")}
       </Text>
 
       {loading && <Loader size="sm" role="status" aria-label={t("catalog.sync.loadingAria")} />}
       {loadError != null && (
-        <Alert color="red" variant="light" title={t("catalog.sync.loadFailed")}>
+        <Alert color="red" variant="light" title={t("sync.loadFailed")}>
           {loadError}
         </Alert>
       )}
@@ -230,7 +230,7 @@ function SyncModalBody({
                 )}
                 {dbChanged && (
                   <Badge variant="light" color="orange" size="sm">
-                    {t("catalog.sync.changedInDb")}
+                    {t("sync.changedInDb")}
                   </Badge>
                 )}
               </>
@@ -254,7 +254,7 @@ function SyncModalBody({
       )}
 
       {syncError != null && (
-        <Alert color="red" variant="light" title={t("catalog.sync.failed")}>
+        <Alert color="red" variant="light" title={t("sync.failed")}>
           {syncError}
         </Alert>
       )}
@@ -269,7 +269,7 @@ function SyncModalBody({
           loading={syncing}
           disabled={repoDocument == null || inSync}
         >
-          {t("catalog.sync.confirm")}
+          {t("sync.confirm")}
         </Button>
       </Group>
     </Stack>

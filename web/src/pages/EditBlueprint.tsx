@@ -118,7 +118,7 @@ export default function EditBlueprint() {
         onClick={() => setSyncTarget(toBlueprintSyncTarget(data))}
         disabled={data.sourceUrl == null}
       >
-        {t("blueprints.sync.action")}
+        {t("sync.action")}
       </Button>
     </>
   );

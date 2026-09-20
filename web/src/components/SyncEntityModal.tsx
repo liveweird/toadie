@@ -190,7 +190,7 @@ function SyncModalBody({
     <Stack gap="sm">
       {sourceUrl != null && (
         <Text size="sm">
-          {t("entities.sync.sourceLabel")}{" "}
+          {t("sync.sourceLabel")}{" "}
           <Anchor href={sourceUrl} target="_blank" rel="noreferrer" size="sm">
             {sourceUrl}
           </Anchor>
@@ -198,13 +198,13 @@ function SyncModalBody({
       )}
       <Text size="sm" c="dimmed">
         {lastSyncedAt > 0
-          ? t("entities.sync.lastSynced", { ago: relativeTimeAgo(lastSyncedAt, i18n.language) })
-          : t("entities.sync.neverSynced")}
+          ? t("sync.lastSynced", { ago: relativeTimeAgo(lastSyncedAt, i18n.language) })
+          : t("sync.neverSynced")}
       </Text>
 
       {loading && <Loader size="sm" role="status" aria-label={t("entities.sync.loadingAria")} />}
       {loadError != null && (
-        <Alert color="red" variant="light" title={t("entities.sync.loadFailed")}>
+        <Alert color="red" variant="light" title={t("sync.loadFailed")}>
           {loadError}
         </Alert>
       )}
@@ -221,12 +221,12 @@ function SyncModalBody({
                 {/* No baseline (never synced) = sides cannot be attributed; the diff says it all. */}
                 {sourceChanged && (
                   <Badge variant="light" color="orange" size="sm">
-                    {t("entities.sync.changedAtSource")}
+                    {t("sync.changedAtSource")}
                   </Badge>
                 )}
                 {dbChanged && (
                   <Badge variant="light" color="orange" size="sm">
-                    {t("entities.sync.changedInDb")}
+                    {t("sync.changedInDb")}
                   </Badge>
                 )}
               </>
@@ -238,9 +238,9 @@ function SyncModalBody({
               diff={diff}
               label={t("entities.sync.diffLabel")}
               fallbackLabels={{
-                tooLarge: t("entities.sync.diffTooLarge"),
-                stored: t("entities.sync.diffStoredLabel"),
-                replacement: t("entities.sync.diffReplacementLabel"),
+                tooLarge: t("sync.diffTooLarge"),
+                stored: t("sync.diffStoredLabel"),
+                replacement: t("sync.diffReplacementLabel"),
               }}
             />
           )}
@@ -255,7 +255,7 @@ function SyncModalBody({
           )}
 
           {preflightInvalid && (
-            <Alert color="red" variant="light" title={t("entities.sync.refusedTitle")}>
+            <Alert color="red" variant="light" title={t("sync.refusedTitle")}>
               <Stack gap={4}>
                 <Text size="sm">{t("entities.sync.refusedBody")}</Text>
                 {(preflightRow?.findings ?? []).length > 0 ? (
@@ -280,7 +280,7 @@ function SyncModalBody({
       )}
 
       {confirmError != null && (
-        <Alert color="red" variant="light" title={t("entities.sync.failed")}>
+        <Alert color="red" variant="light" title={t("sync.failed")}>
           <Stack gap={4}>
             {confirmError.findings.length > 0 ? (
               confirmError.findings.map((finding, i) => (
@@ -305,7 +305,7 @@ function SyncModalBody({
           loading={syncing}
           disabled={remoteDocument == null || inSync || preflightInvalid}
         >
-          {t("entities.sync.confirm")}
+          {t("sync.confirm")}
         </Button>
       </Group>
     </Stack>

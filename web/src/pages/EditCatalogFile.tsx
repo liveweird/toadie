@@ -160,7 +160,7 @@ export default function EditCatalogFile() {
         onClick={() => setSyncOpen(true)}
         disabled={file.sourceUrl == null}
       >
-        {t("catalog.sync.action")}
+        {t("sync.action")}
       </Button>
     </>
   );

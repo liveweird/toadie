@@ -1,7 +1,9 @@
 package ch.nokillswit.entities
 
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.infra.fetch.SourceColumns
 import ch.nokillswit.infra.fetch.SourceWrite
+import ch.nokillswit.infra.fetch.resolveSourceColumns
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
@@ -62,31 +64,9 @@ internal suspend fun EntityService.syncState(id: UInt): EntitySyncStateResponse?
  * FINAL values to persist, i.e. after any rename rewriting.
  */
 internal suspend fun EntityService.replaceRow(id: UInt, row: ResultRow, request: EntityRequest, source: SourceWrite, now: Long): Int {
-    val currentSourceUrl = row[EntityRows.sourceUrl]
-    val sourceUrlValue: String?
-    val lastSyncedAtValue: Long
-    val syncedContentValue: String?
-    when (source) {
-        SourceWrite.FromRequest -> {
-            sourceUrlValue = request.sourceUrl
-            if (request.sourceUrl != currentSourceUrl) {
-                lastSyncedAtValue = 0L
-                syncedContentValue = null
-            } else {
-                lastSyncedAtValue = row[EntityRows.lastSyncedAt]
-                syncedContentValue = row[EntityRows.syncedContent]
-            }
-        }
-        SourceWrite.Keep -> {
-            sourceUrlValue = currentSourceUrl
-            lastSyncedAtValue = row[EntityRows.lastSyncedAt]
-            syncedContentValue = row[EntityRows.syncedContent]
-        }
-        is SourceWrite.Synced -> {
-            sourceUrlValue = source.sourceUrl
-            lastSyncedAtValue = now
-            syncedContentValue = baselineJson(request, EntityDocument(request.properties, request.relations))
-        }
+    val current = SourceColumns(row[EntityRows.sourceUrl], row[EntityRows.lastSyncedAt], row[EntityRows.syncedContent])
+    val resolved = resolveSourceColumns(source, request.sourceUrl, current, now) {
+        baselineJson(request, EntityDocument(request.properties, request.relations))
     }
     return EntityRows.update({ (EntityRows.id eq id) and active() }) {
         it[identifier] = request.identifier
@@ -95,9 +75,9 @@ internal suspend fun EntityService.replaceRow(id: UInt, row: ResultRow, request:
         it[EntityRows.team] = request.team?.let { t -> blueprintJson.encodeToString(t) }
         it[EntityRows.document] = blueprintJson.encodeToString(EntityDocument(request.properties, request.relations))
         it[updatedAt] = now
-        it[EntityRows.sourceUrl] = sourceUrlValue
-        it[EntityRows.lastSyncedAt] = lastSyncedAtValue
-        it[EntityRows.syncedContent] = syncedContentValue
+        it[EntityRows.sourceUrl] = resolved.sourceUrl
+        it[EntityRows.lastSyncedAt] = resolved.lastSyncedAt
+        it[EntityRows.syncedContent] = resolved.syncedContent
     }
 }
 

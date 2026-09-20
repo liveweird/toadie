@@ -173,7 +173,7 @@ function Loaded({ file }: { file: CatalogFileResponse }) {
             onClick={() => setSyncOpen(true)}
             disabled={file.sourceUrl == null}
           >
-            {t("catalog.sync.action")}
+            {t("sync.action")}
           </Button>
           {/* Edit navigates WITHOUT closing: the list's history entry keeps `?file=`, so Back
               from the editor lands on the list with the drawer open again. */}

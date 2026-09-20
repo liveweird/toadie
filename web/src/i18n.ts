@@ -30,6 +30,7 @@ import enLenses from "./locales/en/lenses.json";
 import enLifecycles from "./locales/en/lifecycles.json";
 import enNamespaces from "./locales/en/namespaces.json";
 import enOntology from "./locales/en/ontology.json";
+import enSync from "./locales/en/sync.json";
 import enTags from "./locales/en/tags.json";
 import enTypes from "./locales/en/types.json";
 import enUsers from "./locales/en/users.json";
@@ -92,6 +93,7 @@ export const en = {
   lifecycles: enLifecycles,
   namespaces: enNamespaces,
   ontology: enOntology,
+  sync: enSync,
   tags: enTags,
   types: enTypes,
   users: enUsers,

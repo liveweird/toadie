@@ -20,6 +20,12 @@ spec:
       labels:
         io.kompose.service: app
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - env:
             # Secrets come from the `toadie-secrets` Secret — see k8s/templates/secret.yaml for how to
@@ -117,11 +123,18 @@ spec:
           image: toadie-app:latest
           imagePullPolicy: IfNotPresent
           name: toadie-app
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8081
               protocol: TCP
           # Sized for the tuned JVM baked into the image (SerialGC + -Xmx256m + C1): ~270 MiB RSS
           # under light load. Request covers steady state; the 512 MiB limit bounds it with headroom.
+          # Re-examined in the 2026-09-20 checkup Tier 2 (2.13.1) and deliberately kept absent.
           resources:
             requests:
               cpu: "250m"
@@ -168,4 +181,11 @@ spec:
                 - name: X-Forwarded-Proto
                   value: https
             periodSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      # Writable /tmp under readOnlyRootFilesystem: the JVM writes hsperfdata and Netty extracts its native transport library into java.io.tmpdir; nothing else on the image is written at runtime (Dockerfile runs as uid 10001, owns only /app).
+      volumes:
+        - name: tmp
+          emptyDir: {}
       restartPolicy: Always

@@ -74,7 +74,7 @@ function EditEntityForm({ entity, blueprint }: { entity: Entity; blueprint: Blue
         onClick={() => setSyncTarget(toSyncTarget(entity))}
         disabled={entity.sourceUrl == null}
       >
-        {t("entities.sync.action")}
+        {t("sync.action")}
       </Button>
     </>
   );

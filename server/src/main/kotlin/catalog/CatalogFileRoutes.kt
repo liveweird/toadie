@@ -1,15 +1,13 @@
 package ch.nokillswit.catalog
 
+import ch.nokillswit.audit.AuditEvent
 import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.caller
 import ch.nokillswit.infra.db.EVENT_LOG_DEFAULT_SORT
 import ch.nokillswit.infra.db.EVENT_LOG_SORT_FIELDS
 import ch.nokillswit.infra.db.orVanished
-import ch.nokillswit.infra.fetch.BlockedUrlException
-import ch.nokillswit.infra.fetch.FETCH_URL_INVALID_DETAIL
-import ch.nokillswit.infra.fetch.FetchUrlRequest
-import ch.nokillswit.infra.fetch.FetchUrlResponse
+import ch.nokillswit.infra.fetch.fetchForCaller
 import ch.nokillswit.infra.fetch.UrlFetcher
 import ch.nokillswit.infra.fetch.UrlFetcherKey
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
@@ -242,29 +240,12 @@ fun Application.configureCatalogFileRoutes() {
             }
             post<CatalogFiles.Fetch> {
                 val caller = call.caller()
-                val request = call.receive<FetchUrlRequest>()
-                val fetched = try {
-                    urlFetcher.fetch(request.url)
-                } catch (blocked: BlockedUrlException) {
-                    // A blocked fetch attempt is a probe signal worth keeping; the response
-                    // itself stays uniform so nothing about the internal network leaks.
-                    audit(
-                        "catalog_file.fetch_blocked",
-                        "byUserId" to caller.userId.toLong(),
-                        "scheme" to blocked.scheme,
-                        "host" to blocked.host,
-                    )
-                    throw BadRequestException(FETCH_URL_INVALID_DETAIL)
-                }
-                // The success trail: the server pulled a body from a public host on user
-                // command — record who and from where (scheme/host ONLY, never the full URL).
-                audit(
-                    "catalog_file.fetched",
-                    "byUserId" to caller.userId.toLong(),
-                    "scheme" to fetched.uri.scheme,
-                    "host" to fetched.uri.host,
+                call.fetchForCaller(
+                    urlFetcher,
+                    blocked = AuditEvent("catalog_file.fetch_blocked"),
+                    fetched = AuditEvent("catalog_file.fetched"),
+                    byUserId = caller.userId,
                 )
-                call.respond(HttpStatusCode.OK, FetchUrlResponse(content = fetched.content))
             }
             get<CatalogFiles.Id> { route ->
                 call.caller()

@@ -3,7 +3,6 @@ package ch.nokillswit.blueprints
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.validation.requireNoDuplicates
 import ch.nokillswit.infra.validation.sanitizeSingleLine
-import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -218,7 +217,8 @@ data class BlueprintRequest(
      * The blueprint's source reference (2.10.0, the `entities.source_url` twin, one level up) —
      * the https URL of its canonical remote copy (a Port blueprint export or a Toadie export).
      * Row state, never part of [toDefinition] or a bulk-import DOCUMENT
-     * ([requireNoDocumentSourceUrl]) — set via the editor's Source fieldset, PUT full-replace
+     * (`infra/validation/Text.kt`'s `requireNoDocumentSourceUrl`, shared with
+     * `entities/Entity.kt`) — set via the editor's Source fieldset, PUT full-replace
      * semantics (omitted/blank clears it), or stamped by [BlueprintService.import]'s batch
      * `sourceUrl`/`POST …/blueprints/{id}/sync`.
      */
@@ -270,19 +270,6 @@ data class BlueprintSyncStateResponse(
 /** POST …/blueprints/{id}/sync — the remote copy, parsed/decoded client-side. */
 @Serializable
 data class SyncBlueprintRequest(val document: BlueprintRequest)
-
-/**
- * A bulk-import DOCUMENT never carries `sourceUrl` itself — it is row state for the WHOLE
- * request ([BlueprintImportRequest.sourceUrl]), not a per-document member (the
- * `entities/Entity.kt` `requireNoDocumentSourceUrl` precedent, one level down). Thrown before the
- * row's ordinary validation so the message is specific rather than a generic unknown-member
- * decode failure.
- */
-fun requireNoDocumentSourceUrl(request: BlueprintRequest) {
-    if (request.sourceUrl != null) {
-        throw BadRequestException("sourceUrl is row state set for the whole request, not a document member")
-    }
-}
 
 /** The non-identity fields as the stored [BlueprintDefinition] document. */
 fun BlueprintRequest.toDefinition(): BlueprintDefinition = BlueprintDefinition(

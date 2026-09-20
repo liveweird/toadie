@@ -1,5 +1,6 @@
 package ch.nokillswit.entities
 
+import ch.nokillswit.audit.AuditEvent
 import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
@@ -7,10 +8,7 @@ import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.entityquery.EntityQueryCheckRequest
 import ch.nokillswit.entityquery.EntityQueryCheckResponse
 import ch.nokillswit.entityquery.MAX_QUERY_LENGTH
-import ch.nokillswit.infra.fetch.BlockedUrlException
-import ch.nokillswit.infra.fetch.FETCH_URL_INVALID_DETAIL
-import ch.nokillswit.infra.fetch.FetchUrlRequest
-import ch.nokillswit.infra.fetch.FetchUrlResponse
+import ch.nokillswit.infra.fetch.fetchForCaller
 import ch.nokillswit.infra.fetch.UrlFetcher
 import ch.nokillswit.infra.fetch.UrlFetcherKey
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
@@ -22,6 +20,7 @@ import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
 import ch.nokillswit.infra.paging.repeatedValues
 import ch.nokillswit.infra.paging.toPage
+import ch.nokillswit.infra.validation.requireNoDocumentSourceUrl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -144,29 +143,12 @@ fun Application.configureEntityRoutes() {
             // `catalog/CatalogFileRoutes.kt` (`.claude/docs/security.md` "Outbound URL fetch").
             post<EntitiesRoute.Fetch> {
                 val caller = call.caller()
-                val request = call.receive<FetchUrlRequest>()
-                val fetched = try {
-                    urlFetcher.fetch(request.url)
-                } catch (blocked: BlockedUrlException) {
-                    // A blocked fetch attempt is a probe signal worth keeping; the response
-                    // itself stays uniform so nothing about the internal network leaks.
-                    audit(
-                        "entity.fetch_blocked",
-                        "byUserId" to caller.userId.toLong(),
-                        "scheme" to blocked.scheme,
-                        "host" to blocked.host,
-                    )
-                    throw BadRequestException(FETCH_URL_INVALID_DETAIL)
-                }
-                // The success trail: the server pulled a body from a public host on user
-                // command — record who and from where (scheme/host ONLY, never the full URL).
-                audit(
-                    "entity.fetched",
-                    "byUserId" to caller.userId.toLong(),
-                    "scheme" to fetched.uri.scheme,
-                    "host" to fetched.uri.host,
+                call.fetchForCaller(
+                    urlFetcher,
+                    blocked = AuditEvent("entity.fetch_blocked"),
+                    fetched = AuditEvent("entity.fetched"),
+                    byUserId = caller.userId,
                 )
-                call.respond(HttpStatusCode.OK, FetchUrlResponse(content = fetched.content))
             }
             post<EntitiesRoute> {
                 val caller = call.caller()
@@ -227,7 +209,7 @@ fun Application.configureEntityRoutes() {
                 // sanitizer — still run before the service and can answer 400 for an unknown id,
                 // the same partial ordering as the PUT.
                 val request = call.receive<SyncEntityRequest>()
-                requireNoDocumentSourceUrl(request.document)
+                requireNoDocumentSourceUrl(request.document.sourceUrl)
                 val document = sanitizedEntityRequest(request.document)
                 val result = entityService.syncFromSource(route.parent.id, document)
                 result.affected.orNotFound("Entity")

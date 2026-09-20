@@ -128,6 +128,23 @@ a JWT timestamp boundary: the account epoch is exact. Tests must never rely on a
 administrator's stale token to perform protected operations. The users browser journey checks
 the required re-login after self password change, with its scenario/coverage-map entry updated.
 
+**Anonymous sweep (2.13.1).** `AnonymousAccessTest`'s spec-driven case parses
+`openapi/documentation.yaml` with the same library `OpenApiConformance` already loads it with
+(`OpenApiSpec.parsed`), computes every `/api/v1/` operation's EFFECTIVE security (the global
+`security: [bearerAuth]` requirement unless an operation overrides it with an empty
+`security: []`), and asserts the resulting PUBLIC set equals a hard-coded allowlist — the
+CONSCIOUS public surface (`login`, `login/mfa`, `refresh`, `password-reset`,
+`password-reset/confirm`). Adding a public operation to the spec means editing that allowlist
+in the same change, never growing it silently. Every remaining operation is then hit with no
+Authorization header, a substituted path parameter, and no body, proving the JWT challenge
+answers a uniform 401 problem detail (`"Missing or invalid bearer token"`) BEFORE any
+query/body decoding runs — the guard-before-receive rule holds for every route, not just the
+ones with a named test. `IntegrationClientSecurityTest` complements it with the reverse
+pair: a valid login JWT against `POST /integration/graphql` fails the integration key check
+(audited `integration.auth_failed` `reason=missing_or_malformed` — a JWT never matches the
+`toadie_int_...` grammar at all) and a valid integration key against `GET /api/v1/blueprints`
+fails the ordinary JWT challenge — each credential opens exactly one door.
+
 **Automatic CI.** `.github/workflows/ci.yml` runs every push/PR, merge group, and manual dispatch without path filters. Backend: `./gradlew build :server:koverXmlReport`; frontend: locked `npm ci --legacy-peer-deps`, `lint:api`, `check:api`, build, lint, knip, and coverage. The reusable E2E workflow runs TypeScript/scenario parity and browser journeys. The aggregate **Quality gate** fails if any dependency fails, is cancelled, or is skipped; make it a required repository status after pushing (repository settings, not something YAML activates). E2E owns a disposable `toadie-ci` project on a fresh GitHub-hosted runner, waits for `/readyz` and Mailpit, collects diagnostics, and always removes only that project's volume. Never move it to a shared self-hosted Docker daemon. Retries collect evidence but `failOnFlakyTests` keeps flaky tests red; missing Mailpit fails CI instead of skipping MFA/reset coverage. `web/src/test/infrastructure.test.js` guards demo bindings and CI wiring; this Node filesystem test stays JavaScript so it needs no Node globals in the SPA's TypeScript configuration. A long browser journey that legitimately exceeds the 60s default `timeout` on the hosted runner is marked `test.slow()` (`graph.spec.ts`'s ~200-action journey measured at 60.7s on CI vs 19.6s locally) — never given looser per-`expect` timeouts. Throwaway rows created mid-journey are removed through the API in `finally`, not through UI round trips inside the `try`, keeping teardown fast and reachable even when the journey fails partway through.
 
 **OrbStack discovery.** If Docker CLI works but Testcontainers cannot find a daemon, set `DOCKER_HOST` to the endpoint printed by `docker context inspect --format '{{.Endpoints.docker.Host}}'` for that invocation. The CLI's selected context is not automatically inherited by Testcontainers. Never bake a developer's socket path into repository configuration.

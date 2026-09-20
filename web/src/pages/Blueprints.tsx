@@ -148,11 +148,11 @@ export default function Blueprints() {
                           </Menu.Item>
                           <Menu.Item
                             leftSection={<IconRefresh size={14} />}
-                            aria-label={t("blueprints.sync.actionAria", { name: blueprint.identifier })}
+                            aria-label={t("sync.actionAria", { name: blueprint.identifier })}
                             disabled={blueprint.sourceUrl == null}
                             onClick={() => setSyncTarget(toBlueprintSyncTarget(blueprint))}
                           >
-                            {t("blueprints.sync.action")}
+                            {t("sync.action")}
                           </Menu.Item>
                           <Menu.Divider />
                           <Menu.Item

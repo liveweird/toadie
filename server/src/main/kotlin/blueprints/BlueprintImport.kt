@@ -9,6 +9,7 @@ import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.infra.importing.decodeDocument
 import ch.nokillswit.infra.importing.orderWithDeferral
 import ch.nokillswit.infra.importing.rawString
+import ch.nokillswit.infra.validation.requireNoDocumentSourceUrl
 import ch.nokillswit.plugins.isUniqueViolation
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.coroutines.CancellationException
@@ -101,7 +102,7 @@ private fun classifyDocuments(
             return@forEachIndexed
         }
         try {
-            requireNoDocumentSourceUrl(decoded)
+            requireNoDocumentSourceUrl(decoded.sourceUrl)
         } catch (e: BadRequestException) {
             verdicts[index] = rejected(index, decoded.identifier, e.message)
             return@forEachIndexed

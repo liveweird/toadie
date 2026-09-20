@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.13.1",
+    date: "2026-09-20",
+    en: `**Tidier sync internals, a stricter sign-in sweep, and a locked-down pod.** The three fetch routes, the two source-reference writers and the two sourceUrl guards now share one implementation each, the sync modals read one shared set of strings, and a test that used to sleep on a timer now flushes the microtask queue instead. A new test walks every operation in the API contract without credentials and proves each answers 401, and confirms a login token opens no integration door and an integration key opens no REST door. The Kubernetes pod runs as a non-root user on a read-only filesystem with every capability dropped and only /tmp writable.`,
+    pl: `**Porządek w mechanice synchronizacji, surowszy przegląd logowania i zamknięty pod.** Trzy trasy pobierania, dwa zapisy odniesień źródłowych i dwie kontrole sourceUrl mają teraz po jednej wspólnej implementacji, okna synchronizacji czytają jeden wspólny zestaw tekstów, a test, który dotąd czekał na zegar, opróżnia teraz kolejkę mikrozadań. Nowy test przechodzi każdą operację kontraktu API bez poświadczeń i dowodzi, że każda odpowiada 401, oraz potwierdza, że token logowania nie otwiera drzwi integracji, a klucz integracji nie otwiera drzwi REST. Pod Kubernetes działa jako użytkownik bez uprawnień roota na systemie plików tylko do odczytu, z odrzuconymi wszystkimi uprawnieniami i zapisem wyłącznie w /tmp.`,
+  },
+  {
     version: "2.13.0",
     date: "2026-09-20",
     en: `**Datasets and declared usage join the baseline ontology.** The Port sample gains three blueprints. A dataset is the data-side contract surface the way an API is the request-side one: its type, lifecycle, classification, personal-data flag, freshness, retention and the link to its published data contract, stored in a resource and produced or consumed by services, which now list their datasets beside their APIs. Two relation entities record declared usage: an API adoption says which major line a service consumes an API on, a dataset adoption which contract version — each with who declared it, when it was verified and its migration status, owned through the consuming service. APIs and datasets count their adopters; datasets count producers and consumers. The demo now loads 15 blueprints and 76 entities.`,

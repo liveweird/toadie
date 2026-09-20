@@ -5,7 +5,6 @@ import ch.nokillswit.infra.paging.PageResponse
 import ch.nokillswit.infra.validation.InvalidPayloadException
 import ch.nokillswit.infra.validation.invalidPayloadJson
 import ch.nokillswit.infra.validation.sanitizeSingleLine
-import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -59,8 +58,9 @@ data class EntityRequest(
      * down) — the https URL of its canonical remote copy. Flat on the request body: unlike
      * `catalog/CatalogFileWriteRequest`, an entity body IS the Port document plus `blueprint`,
      * so there is no separate envelope wrapper. Row state, never part of a bulk-import
-     * DOCUMENT ([requireNoDocumentSourceUrl]) — set via the editor's Source fieldset, PUT
-     * full-replace semantics (omitted/blank clears it), or stamped by [EntityService.import]'s
+     * DOCUMENT (`infra/validation/Text.kt`'s `requireNoDocumentSourceUrl`, shared with
+     * `blueprints/Blueprint.kt`) — set via the editor's Source fieldset, PUT full-replace
+     * semantics (omitted/blank clears it), or stamped by [EntityService.import]'s
      * batch `sourceUrl`/`POST …/entities/{id}/sync`.
      */
     val sourceUrl: String? = null,
@@ -142,18 +142,6 @@ data class EntitySyncStateResponse(
 /** POST …/entities/{id}/sync — the remote copy, parsed/decoded client-side. */
 @Serializable
 data class SyncEntityRequest(val document: EntityRequest)
-
-/**
- * A bulk-import DOCUMENT never carries `sourceUrl` itself — it is row state for the WHOLE
- * request ([EntityImportRequest.sourceUrl]), not a per-document member (`.claude/docs/
- * port-data-model.md` "Import and export"). Thrown before the row's ordinary validation so the
- * message is specific rather than a generic unknown-member decode failure.
- */
-fun requireNoDocumentSourceUrl(request: EntityRequest) {
-    if (request.sourceUrl != null) {
-        throw BadRequestException("sourceUrl is row state set for the whole request, not a document member")
-    }
-}
 
 /**
  * The request's `properties`/`relations` as the stored document: an explicit JSON `null` value

@@ -39,3 +39,17 @@ fun requireNoDuplicates(values: Collection<String>, message: String, fold: (Stri
         throw BadRequestException(message)
     }
 }
+
+/**
+ * A bulk-import DOCUMENT (or the sync/create/update body itself) never carries `sourceUrl` —
+ * it is row state for the WHOLE request (`entities/Entity.kt`'s `EntityRequest.sourceUrl`,
+ * `blueprints/Blueprint.kt`'s `BlueprintRequest.sourceUrl`), never a document member. Extracted
+ * from the two byte-identical per-feature checks so callers pass their own request's
+ * `sourceUrl` field; thrown before the row's ordinary validation so the message is specific
+ * rather than a generic unknown-member decode failure.
+ */
+fun requireNoDocumentSourceUrl(sourceUrl: String?) {
+    if (sourceUrl != null) {
+        throw BadRequestException("sourceUrl is row state set for the whole request, not a document member")
+    }
+}

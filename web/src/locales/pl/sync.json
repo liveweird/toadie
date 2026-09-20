@@ -1,0 +1,16 @@
+{
+  "action": "Synchronizuj ze źródłem",
+  "sourceLabel": "Źródło:",
+  "lastSynced": "Ostatnio zsynchronizowano {{ago}}",
+  "neverSynced": "Nigdy nie zsynchronizowano",
+  "changedInDb": "Zmienione w Toadie",
+  "loadFailed": "Nie udało się przygotować porównania",
+  "confirm": "Nadpisz zapisaną kopię",
+  "failed": "Synchronizacja nie powiodła się",
+  "actionAria": "Synchronizuj {{name}} ze źródłem",
+  "changedAtSource": "Zmienione w źródle",
+  "diffTooLarge": "Te dokumenty są zbyt duże, aby pokazać szczegółowe porównanie. Poniżej znajdziesz pełny zapisany i źródłowy JSON.",
+  "diffStoredLabel": "Pełny zapisany JSON",
+  "diffReplacementLabel": "Pełny źródłowy JSON",
+  "refusedTitle": "Kopia ze źródła została odrzucona"
+}

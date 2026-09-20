@@ -390,11 +390,11 @@ export default function Entities() {
                       </Menu.Item>
                       <Menu.Item
                         leftSection={<IconRefresh size={14} />}
-                        aria-label={t("entities.sync.actionAria", { name: entity.identifier })}
+                        aria-label={t("sync.actionAria", { name: entity.identifier })}
                         disabled={entity.sourceUrl == null}
                         onClick={() => setSyncTarget(toSyncTarget(entity))}
                       >
-                        {t("entities.sync.action")}
+                        {t("sync.action")}
                       </Menu.Item>
                       <Menu.Divider />
                       <Menu.Item
