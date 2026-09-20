@@ -7,7 +7,7 @@ commerce and payments landscape with vocabulary suited to each catalog paradigm.
   `catalog-info.yaml` covering Backstage's seven fixed kinds.
 - [Port ontology](port/commerce-payments/README.md) — eleven blueprint definitions and 59
   entity instances, including computed properties and parallel `composition` and `deployment`
-  hierarchies.
+  hierarchies, loaded linked to their public raw-GitHub source references by default.
 
 Neither demo is seeded by a migration. Start the stack, choose one of the guides above, and load
 only the model you want to explore. Loading one demo does not require loading the other.

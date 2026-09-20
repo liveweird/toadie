@@ -492,10 +492,13 @@ is set (`EntityErrorsCheckTest` additionally pins the ordering against a stale f
 `JqCalculationTest`
 gains the two `calculationVerdict` cases (`CompileFailed` cached and never submitted to a
 fail-if-touched executor; `Quarantined` after a latch-held deadline miss). `SampleBlueprintsTest`
-pins that the baseline ontology (`.claude/docs/ontology.md`) yields, since 2.10.0, exactly eleven
-blueprint rows on the report — one per sample blueprint, each carrying EXACTLY `SOURCE_MISSING`
-and nothing else (the sample carries no source references); any other code, or a missing
-`SOURCE_MISSING` row, is a checker false positive.
+pins that the baseline ontology (`.claude/docs/ontology.md`) yields ZERO blueprint rows on the
+report — since 2.10.2 every sample blueprint carries its public raw-GitHub `sourceUrl`
+(`SampleData.loadBlueprints`' default), so a row's findings are always empty and the row itself
+is omitted (`EntityErrorsReport`'s own zero-findings-are-omitted rule); any row at all is a
+checker false positive. The same test also proves the source-less path still reports: clearing
+one sample blueprint's `sourceUrl` via an ordinary PUT (`BlueprintResponse.asRequest()` carries
+none) surfaces `SOURCE_MISSING` as that row's ONLY finding.
 
 **World switch (v2.3.0).** The four unit suites: `navigation.test.ts` pins the world model (worlds, `sectionsFor` filtering per world, `worldOf` longest-prefix resolution), `hooks/useWorld.test.tsx` pins the storage key, `readStoredWorld` fallback, the route-driven sidebar flip, and `switchTo` navigation, `components/WorldSwitch.test.tsx` pins the segment control + navigation, `App.test.tsx` cases pin the route-to-world mapping and the redirects at `/`. E2E: `helpers.ts` `switchWorld(page, "Backstage" | "Port")` switches the sidebar; a fresh Playwright context after sign-in lands on Port, so a spec opening a Backstage leaf calls `switchWorld` first. `world-switch.spec.ts` journey "the world switch follows the route, remembers the last world, and scopes the command palette" pins that deep-linking to a Backstage leaf flips the sidebar, the switch's click navigates to the other world's home, and the palette's pages/actions change. `accessibility.spec.ts`'s `AUTHED_PAGES` lists `/hierarchy` (never `/`) plus the Port pages, and both suite's headings after sign-in are asserted with `exact: true` (the "Entity hierarchy" vs "Hierarchy" substring trap).
 

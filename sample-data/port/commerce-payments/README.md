@@ -53,6 +53,21 @@ Both loaders are safe to rerun. Existing ordinary blueprints and entities are re
 the protected system blueprints are PUT again to the sample definition, and definitions with
 aggregation properties receive their second-pass PUT.
 
+## Source references
+
+By default both loaders stamp every blueprint and entity they create or extend with the public
+raw-GitHub address of its own sample file: `sourceUrl = $TOADIE_SOURCE_BASE/blueprints/<file>` or
+`$TOADIE_SOURCE_BASE/entities/<file>` (an entity's `sourceUrl` names the ARRAY file it came from,
+since the sync picker matches an entity by identifier inside one). A freshly loaded workspace
+therefore shows a clean Port Errors report, and **Sync from source** — in the Blueprints and
+Entities row menus and editors — works right away, provided the app has outbound https access to
+`raw.githubusercontent.com`. Set `TOADIE_SOURCE_BASE` to point the loaders at a fork or branch's
+own checkout, or to an empty string to load completely without source references. With sources, every row
+starts "Never synced" until its first Sync from source; without them, every row reads "No source"
+and the Port Errors report lists 70 gray `SOURCE_MISSING` findings — one per blueprint and
+entity — until sources are set by hand. `--delete` is unaffected either way: it
+resolves rows by their stored identifiers, not by their source references.
+
 ## Load through the Port UI
 
 The UI requires one dictionary step that the blueprint loader performs automatically:

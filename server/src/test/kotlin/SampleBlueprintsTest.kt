@@ -18,6 +18,12 @@ import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -114,13 +120,16 @@ class SampleBlueprintsTest {
      * 2.5.0 (`entities/EntityErrors.kt`): the Errors report's static checkers (mirror/aggregation/
      * ownership path health, calculation compile verdicts) must never flag the baseline ontology —
      * every one of its computed paths and expressions resolves cleanly at runtime
-     * (`SampleEntitiesTest` pins that with real entities). Since 2.10.0 every sample blueprint IS
-     * source-less (`SampleData.loadBlueprints` never sets `sourceUrl`), so `SOURCE_MISSING` is the
-     * one EXPECTED code per row — any OTHER code is still a checker false positive to fix, never a
-     * reason to change the sample.
+     * (`SampleEntitiesTest` pins that with real entities). Since 2.10.2 every sample blueprint
+     * carries the public raw-GitHub `sourceUrl` of its own file (`SampleData.loadBlueprints`'s
+     * default), so a fresh load yields ZERO blueprint rows on the report — rows with no findings
+     * are omitted entirely (`EntityErrorsReport`'s own KDoc) — and any row at all is a checker
+     * false positive. A second block proves the source-less path still reports: clearing one
+     * sample blueprint's `sourceUrl` via an ordinary PUT must surface `SOURCE_MISSING` as its
+     * ONLY finding.
      */
     @Test
-    fun `the sample ontology yields only SOURCE_MISSING blueprint rows - any other code is a checker false positive`() = testApplication {
+    fun `the sample ontology yields zero blueprint rows on the report - any row is a checker false positive`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("bpsample-errors", UserRole.ADMIN)
         val files = SampleData.numberedFiles("blueprints")
@@ -130,13 +139,32 @@ class SampleBlueprintsTest {
         val hierarchiesBefore = SampleData.snapshotHierarchies()
         try {
             TestHierarchies.ensure(*SampleData.requiredHierarchies)
-            SampleData.loadBlueprints(admin, files)
+            val responsesByIdentifier = SampleData.loadBlueprints(admin, files)
 
-            identifiers.forEach { identifier ->
-                val report = admin.get("/api/v1/entities/errors?blueprint=$identifier").body<EntityErrorsReport>()
-                val row = report.blueprints.single { it.identifier == identifier }
-                assertEquals(listOf("SOURCE_MISSING"), row.findings.map { it.code }, "false-positive codes on $identifier: ${row.findings}")
+            val errorsQuery = identifiers.joinToString("&") { "blueprint=$it" }
+            val report = admin.get("/api/v1/entities/errors?$errorsQuery").body<EntityErrorsReport>()
+            assertTrue(report.blueprints.isEmpty(), "false-positive rows on the sample ontology: ${report.blueprints}")
+
+            // The source-less path still reports: BlueprintResponse.asRequest() carries no
+            // sourceUrl, so an ordinary PUT of it CLEARS the stored reference (the envelope's
+            // own PUT-is-full-replace rule) without touching anything else about the definition.
+            val probeIdentifier = "domain"
+            val probe = responsesByIdentifier.getValue(probeIdentifier)
+            val clearPut = admin.put("/api/v1/blueprints/${probe.id}") {
+                contentType(ContentType.Application.Json)
+                setBody(blueprintJson.encodeToString(probe.asRequest()))
             }
+            assertEquals(HttpStatusCode.NoContent, clearPut.status, "PUT (clear sourceUrl) $probeIdentifier: ${clearPut.bodyAsText()}")
+
+            val clearedReport = admin.get("/api/v1/entities/errors?blueprint=$probeIdentifier").body<EntityErrorsReport>()
+            val clearedRow = clearedReport.blueprints.single { it.identifier == probeIdentifier }
+            assertEquals(
+                listOf("SOURCE_MISSING"),
+                clearedRow.findings.map { it.code },
+                "source-less $probeIdentifier: ${clearedRow.findings}",
+            )
+            // No explicit restore: `finally` below soft-deletes every sample blueprint, `domain`
+            // included, so the cleared sourceUrl leaves no lingering shared state.
         } finally {
             try {
                 TestBlueprints.restoreSystemBlueprints()

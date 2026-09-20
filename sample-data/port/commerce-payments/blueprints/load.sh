@@ -22,9 +22,14 @@
 # stripped ("aggregations dropped <identifier>"), then removes the rows highest-numbered first.
 #
 # Env:
-#   TOADIE_URL       default http://localhost:8081
-#   TOADIE_EMAIL     default admin@toadie.local (the seed admin — mutations are ADMIN-only)
-#   TOADIE_PASSWORD  default changeme
+#   TOADIE_URL          default http://localhost:8081
+#   TOADIE_EMAIL        default admin@toadie.local (the seed admin — mutations are ADMIN-only)
+#   TOADIE_PASSWORD     default changeme
+#   TOADIE_SOURCE_BASE  default the public raw-GitHub base of this very directory (2.10.2) — every
+#                       loaded/extended blueprint gets `sourceUrl = $TOADIE_SOURCE_BASE/blueprints/
+#                       <file>`, so a fresh load shows no SOURCE_MISSING rows and Sync from source
+#                       works right away. Set to another base to point a fork/branch's checkout at
+#                       itself, or to an EMPTY string to load completely source-less.
 #
 # Secrets never touch argv: the password comes from the environment only (no shell history),
 # the login body is built by jq and piped to curl on stdin, and the bearer token rides a
@@ -36,6 +41,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOADIE_URL="${TOADIE_URL:-http://localhost:8081}"
 TOADIE_EMAIL="${TOADIE_EMAIL:-admin@toadie.local}"
 TOADIE_PASSWORD="${TOADIE_PASSWORD:-changeme}"
+TOADIE_SOURCE_BASE="${TOADIE_SOURCE_BASE-https://raw.githubusercontent.com/liveweird/toadie/master/sample-data/port/commerce-payments}"
 
 command -v curl >/dev/null || { echo "load.sh needs curl" >&2; exit 1; }
 command -v jq >/dev/null || { echo "load.sh needs jq" >&2; exit 1; }
@@ -50,6 +56,30 @@ BODY="$WORK/response"
 source "$SCRIPT_DIR/../../../lib/api.sh"
 
 sample_files() { printf '%s\n' "$SCRIPT_DIR"/[0-9][0-9]-*.json | sort; }
+
+# Pass-1 body: `aggregationProperties` stripped (a forward-referencing target hasn't loaded
+# yet), plus the file's public raw-GitHub `sourceUrl` unless TOADIE_SOURCE_BASE is empty — the
+# key is OMITTED, never sent as `null`, so an empty base loads the sample completely source-less.
+stripped_body() {
+  local file="$1" out="$2"
+  if [ -n "$TOADIE_SOURCE_BASE" ]; then
+    jq --arg url "$TOADIE_SOURCE_BASE/blueprints/$(basename "$file")" \
+      'del(.aggregationProperties) + {sourceUrl: $url}' "$file" > "$out"
+  else
+    jq 'del(.aggregationProperties)' "$file" > "$out"
+  fi
+}
+
+# Pass-2 body: the file's complete desired definition plus the same `sourceUrl` — a PUT that
+# omitted it would CLEAR the reference pass 1 just set.
+full_body() {
+  local file="$1" out="$2"
+  if [ -n "$TOADIE_SOURCE_BASE" ]; then
+    jq --arg url "$TOADIE_SOURCE_BASE/blueprints/$(basename "$file")" '. + {sourceUrl: $url}' "$file" > "$out"
+  else
+    cp "$file" "$out"
+  fi
+}
 
 ensure_hierarchies_dictionary() {
   # Blueprints' hierarchyRelations keys must be active dictionary values. Get the current
@@ -88,7 +118,7 @@ load() {
   # aggregationProperties stripped — a forward-referencing target hasn't loaded yet.
   while IFS= read -r file; do
     identifier=$(jq -r '.identifier' "$file")
-    jq 'del(.aggregationProperties)' "$file" > "$stripped"
+    stripped_body "$file" "$stripped"
     if [[ "$identifier" == _* ]]; then
       status=$(request "$TOADIE_URL/api/v1/blueprints" -H @"$HEADERS")
       if [ "$status" != "200" ]; then
@@ -137,8 +167,9 @@ load() {
       failed=1
       continue
     fi
+    full_body "$file" "$stripped"
     status=$(request -X PUT "$TOADIE_URL/api/v1/blueprints/$id" -H @"$HEADERS" \
-      -H 'Content-Type: application/json' --data-binary @"$file")
+      -H 'Content-Type: application/json' --data-binary @"$stripped")
     case "$status" in
       204) echo "aggregations $identifier" ;;
       *) echo "FAILED $identifier ($status): $(problem)" >&2; failed=1 ;;
@@ -196,6 +227,11 @@ delete_set() {
 }
 
 main() {
+  if [ -n "$TOADIE_SOURCE_BASE" ]; then
+    echo "source base: $TOADIE_SOURCE_BASE"
+  else
+    echo "no source references"
+  fi
   login
   ensure_hierarchies_dictionary
   if [ "${1:-}" = "--delete" ]; then delete_set; else load; fi
