@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
 
 /**
  * POST /api/v1/password-reset. The test app uses the dev-default `log` mail transport, so
- * delivered email is captured with a ListAppender on the `ch.nokillswit.mail` logger (the
+ * delivered email is captured with LogCapture on the `ch.nokillswit.mail` logger (the
  * AuditTest pattern); the endpoint's work is asynchronous, so assertions await the audit
  * events that the worker emits as completion barriers.
  */
