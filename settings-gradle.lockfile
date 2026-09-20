@@ -2,5 +2,5 @@
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew dependencies --write-locks
-io.ktor:ktor-version-catalog:3.5.2=incomingCatalogForKtorLibs0
+io.ktor:ktor-version-catalog:3.6.0=incomingCatalogForKtorLibs0
 empty=incomingCatalogForLibs0

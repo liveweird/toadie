@@ -14,7 +14,7 @@ function discardUnownedLegacyState() {
   }
 }
 
-export function entityQueryStorageKey(userId: number, key: string): string {
+function entityQueryStorageKey(userId: number, key: string): string {
   return `entityQuery.account.${userId}.${key}`;
 }
 

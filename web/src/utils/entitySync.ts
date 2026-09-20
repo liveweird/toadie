@@ -120,7 +120,7 @@ function dropNullTopLevelKeys(doc: Record<string, unknown>): Record<string, unkn
   return result;
 }
 
-export type PickedSourceDocumentError = "parse" | "noMatch" | "blueprintMismatch";
+type PickedSourceDocumentError = "parse" | "noMatch" | "blueprintMismatch";
 
 export type PickedSourceDocument = {
   document: Record<string, unknown> | null;
