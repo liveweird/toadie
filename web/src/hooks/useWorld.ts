@@ -10,7 +10,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { DEFAULT_WORLD, homeOf, isWorld, type World, worldOf } from "../utils/navigation";
 import { readStoredJson, useStoredState } from "./useStoredState";
 
-export const WORLD_STORAGE_KEY = "appShell.world";
+const WORLD_STORAGE_KEY = "appShell.world";
 
 /** The remembered world, read once without subscribing — for the `/` redirect. */
 export function readStoredWorld(): World {
