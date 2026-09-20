@@ -129,11 +129,13 @@ test("a mixed batch imports with a two-pass blueprint cycle, then round-trips th
     // 3. Check: nothing is stored. The two blueprints predict Created; the two entities that
     // target them predict Invalid (see the header comment) alongside the deliberately unknown
     // `bad` document — all three share the "Unknown blueprint" message.
+    // Both waits are registered BEFORE the click: the entity response follows the blueprint one
+      // within ~50 ms on a pooled server, so a wait registered after the first resolves misses it.
     await Promise.all([
       page.waitForResponse((r) => r.url().endsWith("/api/v1/blueprints/import/check") && r.ok()),
+      page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import/check") && r.ok()),
       checkButton.click(),
     ]);
-    await page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import/check") && r.ok());
     await expect(aRow().getByText("Would be created", { exact: true })).toBeVisible();
     await expect(bRow().getByText("Would be created", { exact: true })).toBeVisible();
     await expect(a1Row().getByText("Invalid", { exact: true })).toBeVisible();
@@ -150,11 +152,12 @@ test("a mixed batch imports with a two-pass blueprint cycle, then round-trips th
 
     // 4. Import for real: the blueprint cycle resolves in two passes, then the entities (now
     // that A/B actually exist) both land, and `bad` still fails.
-    const [blueprintImportResp] = await Promise.all([
+    // Both waits registered BEFORE the click (see step 3).
+    const [blueprintImportResp, entityImportResp] = await Promise.all([
       page.waitForResponse((r) => r.url().endsWith("/api/v1/blueprints/import") && r.ok()),
+      page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import") && r.ok()),
       importButton.click(),
     ]);
-    const entityImportResp = await page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import") && r.ok());
     const blueprintResults = (await blueprintImportResp.json()).results as { identifier: string; id: number }[];
     aBlueprintId = blueprintResults.find((r) => r.identifier === aId)?.id;
     bBlueprintId = blueprintResults.find((r) => r.identifier === bId)?.id;
@@ -188,11 +191,13 @@ test("a mixed batch imports with a two-pass blueprint cycle, then round-trips th
 
     // 5. Import the SAME batch again, switch off: all four now report Already exists (gray);
     // `bad` is still Invalid.
+    // Both waits are registered BEFORE the click: the entity response follows the blueprint one
+      // within ~50 ms on a pooled server, so a wait registered after the first resolves misses it.
     await Promise.all([
       page.waitForResponse((r) => r.url().endsWith("/api/v1/blueprints/import") && r.ok()),
+      page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import") && r.ok()),
       importButton.click(),
     ]);
-    await page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import") && r.ok());
     await expect(aRow().getByText("Already exists", { exact: true })).toBeVisible();
     await expect(bRow().getByText("Already exists", { exact: true })).toBeVisible();
     await expect(a1Row().getByText("Already exists", { exact: true })).toBeVisible();
@@ -204,11 +209,13 @@ test("a mixed batch imports with a two-pass blueprint cycle, then round-trips th
     await textarea.fill(JSON.stringify(payload(newATitle), null, 2));
     await expect(page.getByText("2 blueprints, 3 entities ready")).toBeVisible();
     await setReplaceExisting(true);
+    // Both waits are registered BEFORE the click: the entity response follows the blueprint one
+      // within ~50 ms on a pooled server, so a wait registered after the first resolves misses it.
     await Promise.all([
       page.waitForResponse((r) => r.url().endsWith("/api/v1/blueprints/import") && r.ok()),
+      page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import") && r.ok()),
       importButton.click(),
     ]);
-    await page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import") && r.ok());
     await expect(aRow().getByText("Updated", { exact: true })).toBeVisible();
     await expect(bRow().getByText("Updated", { exact: true })).toBeVisible();
     await expect(a1Row().getByText("Updated", { exact: true })).toBeVisible();
@@ -271,11 +278,13 @@ test("a mixed batch imports with a two-pass blueprint cycle, then round-trips th
     await fileInput.setInputFiles((await entitiesDownload.path())!);
     await setReplaceExisting(false);
     await expect(importButton).toBeEnabled();
+    // Both waits are registered BEFORE the click: the entity response follows the blueprint one
+      // within ~50 ms on a pooled server, so a wait registered after the first resolves misses it.
     await Promise.all([
       page.waitForResponse((r) => r.url().endsWith("/api/v1/blueprints/import") && r.ok()),
+      page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import") && r.ok()),
       importButton.click(),
     ]);
-    await page.waitForResponse((r) => r.url().endsWith("/api/v1/entities/import") && r.ok());
     await expect(page.getByRole("columnheader", { name: "Source" })).toBeVisible();
     await expect(aRow().getByText("Already exists", { exact: true })).toBeVisible();
     await expect(bRow().getByText("Already exists", { exact: true })).toBeVisible();

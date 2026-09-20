@@ -270,6 +270,16 @@ from Lettuce, that any new or edited spec must satisfy:
   assumptions. A future spec minting globally-visible state (banners, org-wide notifications)
   runs in its own dependent project phase, not in the parallel pool.
 
+## Waiting for responses
+
+**Register every awaited response before the action that triggers it.** A `page.waitForResponse`
+registered after a `Promise.all([waitForResponse(...), click()])` has resolved misses any response
+that already arrived in between — a second request the same click fires lands tens of milliseconds
+after the first once the server pools its database connections, so "wait for A, click, then wait
+for B" hangs until the test timeout while the page shows the completed result. Put every wait the
+click will satisfy INTO the same `Promise.all`, before the click (the 2026-09-20 pool stall:
+`ontology-import.spec.ts`'s check/import pairs stalled 12 of 12 attempts on CI and never locally).
+
 ## What's covered
 
 **Each spec's full design lives in its scenario file under [`scenarios/`](scenarios/README.md)** —

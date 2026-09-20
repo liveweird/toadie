@@ -20,6 +20,45 @@ PostgreSQL is the only database. Connection settings come from the `postgres:` b
 
 The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flyway; runtime queries go through R2DBC.
 
+### Connection pool
+
+- **Applies when:** touching `infra/db/Database.kt`'s connect call, the `postgres.pool.*`
+  configuration, or reasoning about how many PostgreSQL backends one Toadie instance can hold.
+- **Requirement:** Exposed connects through ONE bounded `io.r2dbc:r2dbc-pool` `ConnectionPool`
+  (2.11.1) wrapping the plain PostgreSQL R2DBC factory — never a raw `r2dbc:postgresql://`
+  connect, which opens one backend per `suspendTransaction` with nothing capping concurrency
+  (measured 2026-09-20 on the compose stack: 120 parallel graph reads → 81 concurrent backends
+  against PostgreSQL's default `max_connections = 100`). Bounds come from `application.yaml`'s
+  `postgres.pool` block, each boot-validated (startup fails outside the range, the
+  `security.passwordReset.tokenTtlSeconds` idiom): `maxSize` (`POSTGRES_POOL_MAX_SIZE`, default
+  20, 1..1000), `initialSize` (`POSTGRES_POOL_INITIAL_SIZE`, default 2, 0..maxSize),
+  `maxAcquireTimeSeconds` (`POSTGRES_POOL_MAX_ACQUIRE_SECONDS`, default 10, 1..600) and
+  `maxIdleTimeSeconds` (`POSTGRES_POOL_MAX_IDLE_SECONDS`, default 600, 1..86400). Every pooled
+  connection carries `application_name = toadie` (`postgres.pool.applicationName`), so operators
+  count this instance's backends with `SELECT count(*) FROM pg_stat_activity WHERE
+  application_name = 'toadie'`. Size it as `maxSize × replicas + 1` (Flyway's short-lived JDBC
+  connection) well under the server's `max_connections`. A caller that waits past the acquire
+  deadline fails with the pool's timeout exception, which `plugins/ErrorHandling.kt`'s catch-all
+  renders as a logged `500` — deliberately NOT a new declared status, since the OpenAPI
+  conformance gate would need it on every operation. The pool is disposed on
+  `ApplicationStopped`, so every `testApplication` the suite boots releases its connections.
+  Exposed's `R2dbcDatabase.connect(connectionFactory, databaseConfig)` derives the dialect from
+  `databaseConfig.connectionFactoryOptions` alone, so the parsed options (still `driver=postgresql`)
+  are threaded into the config unchanged while traffic goes through the pool. The same config pins
+  `defaultMaxAttempts = 1`: Exposed would otherwise retry ANY `R2dbcException` three times, and the
+  pool's acquire timeout is one — a saturated pool would cost 3 × the acquire budget per request
+  and re-enter the acquire queue each time; Toadie's writes serialize on table locks, never on
+  serialization failures, so no code path relied on the retry.
+- **Reference:** `infra/db/Database.kt` (`connectPooled`, `readPoolBounds`), `application.yaml`
+  `postgres.pool`.
+- **Enforcement:** `ConnectionPoolTest` — concurrent transactions never exceed `maxSize` in
+  `pg_stat_activity`, a saturated pool times out an acquire instead of hanging, the pool releases
+  every connection when the application stops, and out-of-range bounds fail startup.
+- **Exception:** the pool runs r2dbc-pool's defaults for liveness (`ValidationDepth.LOCAL`, no
+  `maxLifeTime`): a connection killed server-side between uses is handed out once and fails that
+  request with a 500 — accepted until a deployment introduces an idle killer or proxy. Lettuce's `infra/db/Database.kt` still connects unpooled — this is a
+  Toadie-first fix, not a port; carry it back rather than copying Lettuce's connect call.
+
 **Cross-feature table reads (the service-layer rule, inherited from Lettuce).** A feature service MAY query another feature's Exposed table objects directly when the read must run **inside its own transaction** (SQL joins, atomic snapshots) — calling the other feature's *service* would open a second transaction and break atomicity. Route handlers never touch tables (services only). The reads in place: `BlueprintService`'s read of the active `HIERARCHY` rows in `DictionaryService.Entries` (every `hierarchyRelations` key must be one, inside the V27 locked write) and `DictionaryService.replace`'s read of `BlueprintService.Blueprints` (the hierarchy referrer check, under the same lock — V34), `CatalogFileService.joined()`, `LensService.joined()`, and `EntityService.joined()` (catalog list/read, the lens list, and the entity list/read join `UserService.Users` for the creator's display fields), `EntityService.errors`'s read of `SavedEntityQueryService.EntityQueries` via the extracted `savedQueriesVisibleTo(callerId)` predicate (2.5.0 — inside the errors report's own read transaction, the `joined()` idiom above), `EntityService`'s `narrowTargets`/`loadReadSet` (`entities/EntityWorkspaceRead.kt`, 2.4.0) — the per-call read of active rows from `BlueprintService.Blueprints`, the `_team`/`_user` system blueprints (if they exist), and the set of blueprints named by any Inherited `ownership.path` (rows raw inside the transaction, decoded outside it under the read ledger), used to validate relation targets and compute inherited teams (since 2.10.0, `EntityService.loadActiveBlueprints` — the shared `ActiveBlueprint` read behind `list`/`graph`/`errors` alike — also carries each blueprint's `source_url`, so the errors report can decide the blueprint-row `SOURCE_MISSING` finding without a second query). The definition each entity's `entityFindings` is checked against, and every map (`(blueprintId, identifier)` pairs for relations, `(blueprintId, teamId)` for ownership, and the blueprint-graph for path-following) are read inside the calling write/list/read transaction so an entity is never validated against definitions mid-change — see the V28 lock protocol below, `CatalogFileService.resolvedNamespace()` (every catalog write resolves its namespace against the active `NAMESPACE` dictionary entries inside the write's own transaction: blank → the ADMIN-flagged default entry, none flagged → 400; a concrete value must be an active entry — STRICT, no grandfathering: a stored file whose namespace was since removed cannot be saved until it is re-added or changed. The stored row AND content JSON always carry the resolved concrete value), and `CatalogFileService.loadRegistrySnapshot()` (one snapshot of the five soft-check registries — active labels with kinds+closed value lists, annotation keys with kinds, tag categories, per-kind `entity_types` dictionaries, and the GLOBAL `LIFECYCLE` dictionary entries — plus the active `NAMESPACE` dictionary values (feeding ONLY the Errors report's report-only namespace check, never the soft checks) — read inside the calling write/report transaction; the soft rules themselves are the PURE `registryFindings` in `catalog/Errors.kt`: label key registered + kind allowed + value in the closed list, annotation KEY registered + kind allowed with values staying free, tag registered in a category whose kinds allow the file's kind, non-blank `spec.type` in the kind's active dictionary — no dictionary allows no types — and non-blank `spec.lifecycle` an active entry, byte-exact against the lowercase-folded stored values; empty registries allow nothing). These are the write path's SOFT checks (`CatalogFileService.softFindings` adds reference resolution): strict by default with the same no-grandfathering rule — a stored file whose registry row was since removed cannot be strict-saved until fixed — but waivable per write via `allowInvalid=true` (see `.claude/docs/authorization.md`), and the same snapshot feeds the Errors report (`GET …/errors` — which adds the report-only `STRUCTURE_INVALID`/`NAMESPACE_NOT_ALLOWED` checks over stored content, rules that stay HARD on writes) and `POST …/check`.
 
 **Tag-category ownership under concurrency.** `TagCategoryService` takes a transaction-scoped
