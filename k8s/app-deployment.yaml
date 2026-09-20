@@ -7,6 +7,11 @@ metadata:
   namespace: toadie
 spec:
   replicas: 1
+  # RollingUpdate's default maxSurge briefly runs a second pod on every rollout, which would
+  # violate the documented single-instance posture (instance-local login/reset throttles and
+  # MFA challenges — .claude/docs/security.md); Recreate keeps exactly one app pod at a time.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       io.kompose.service: app

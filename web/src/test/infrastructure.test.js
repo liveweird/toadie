@@ -12,6 +12,8 @@ const e2eSource = readFileSync(resolve(repoRoot, ".github/workflows/e2e.yml"), "
 const toolchainSource = readFileSync(resolve(repoRoot, "mise.toml"), "utf8");
 const dockerfileSource = readFileSync(resolve(repoRoot, "Dockerfile"), "utf8");
 const dependabotSource = readFileSync(resolve(repoRoot, ".github/dependabot.yml"), "utf8");
+const appDeploymentSource = readFileSync(resolve(repoRoot, "k8s/app-deployment.yaml"), "utf8");
+const postgresDeploymentSource = readFileSync(resolve(repoRoot, "k8s/postgres-deployment.yaml"), "utf8");
 
 describe("deployment and verification safety defaults", () => {
   it("uses the full Temurin version from the local toolchain in CI", () => {
@@ -114,5 +116,14 @@ describe("deployment and verification safety defaults", () => {
       ]),
     );
     expect(pairs).toHaveLength(5);
+  });
+
+  it("the app Deployment recreates rather than rolls (single-instance posture)", () => {
+    const app = parse(appDeploymentSource);
+    expect(app.spec.replicas).toBe(1);
+    expect(app.spec.strategy.type).toBe("Recreate");
+    const postgres = parse(postgresDeploymentSource);
+    expect(postgres.spec.replicas).toBe(1);
+    expect(postgres.spec.strategy.type).toBe("Recreate");
   });
 });

@@ -349,8 +349,15 @@ fun Application.configureAuthRoutes() {
                 val body = try {
                     call.receiveNullable<LogoutRequest>()
                 } catch (cause: BadRequestException) {
-                    // ContentNegotiation's malformed-JSON wrap.
-                    call.application.log.debug("Logout body unparsable — skipping refresh-token revocation", cause)
+                    // ContentNegotiation's malformed-JSON wrap. The cause chain can embed a body
+                    // excerpt (kotlinx's decode error message) — log the exception CLASS NAME
+                    // only, the login.mfa_send_failed/password_reset.send_failed `errorType` rule
+                    // (.claude/docs/observability.md), never the throwable itself.
+                    val errorType = cause.cause?.javaClass?.simpleName ?: cause.javaClass.simpleName
+                    call.application.log.debug(
+                        "Logout body unparsable — skipping refresh-token revocation ({})",
+                        errorType,
+                    )
                     null
                 } catch (cause: CannotTransformContentToTypeException) {
                     // A body-less/Content-Type-less POST never enters ContentNegotiation.
