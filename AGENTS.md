@@ -39,7 +39,7 @@ upstream Backstage documentation when introducing a new validation rule.
 
 For blueprint/entity work, read `.claude/docs/port-data-model.md` (Port wire shapes, validation,
 ownership, computed properties, lifecycle, import/export, and Toadie extensions) and
-`.claude/docs/ontology.md` (the twelve-blueprint baseline and Backstage round-trip decisions).
+`.claude/docs/ontology.md` (the fifteen-blueprint baseline and Backstage round-trip decisions).
 For query work, also read `.claude/docs/entity-query-language.md`: it defines the implemented
 subset, semantics, budgets, diagnostics, saved queries, and canvas actions. Update the relevant
 reference in the same change. `api-guidelines/GRAPHQL-GUIDELINES.md` and
@@ -88,7 +88,7 @@ This is a Kotlin/Gradle backend plus a separate React frontend:
   user/feature administration, MFA, password reset, command palette, and changelog, plus the
   Port blueprint/entity editors, hierarchy registry, ontology import, and query-enabled canvases.
 - `sample-data/backstage/commerce-payments/catalog-info.yaml` is the hand-imported Backstage
-  demo; `sample-data/port/commerce-payments/blueprints/` contains the twelve-blueprint baseline
+  demo; `sample-data/port/commerce-payments/blueprints/` contains the fifteen-blueprint baseline
   and its sibling `entities/` directory contains the Port instances. Use the Port `load.sh`
   scripts or each paradigm's matching import UI. Migrations never
   seed catalog files or entity instances. V31 seeds only the protected `_team`/`_user` system

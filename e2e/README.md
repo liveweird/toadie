@@ -73,7 +73,7 @@ whose cluster shares Docker's local image store; it uses two production-mode app
 new namespace. Requirements: Node 24, Docker/Compose, bash, curl, jq; Kubernetes also needs kubectl
 and the running OrbStack cluster.
 
-It loads the existing Port sample with the normal loaders (twelve blueprints, 64 entities),
+It loads the existing Port sample with the normal loaders (fifteen blueprints, 76 entities),
 compares REST and GraphQL values including computed properties and ownership, checks the SDL and
 ontology findings, and verifies that writes and revocation are visible across replicas. It
 restarts the app without reseeding and repeats the persistence checks. Only resources created
