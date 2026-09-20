@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.11.1",
+    date: "2026-09-20",
+    en: `**September checkup fixes.** The Kubernetes rollout now recreates the single app instance instead of briefly running two, the migration log no longer echoes the database URL, a malformed sign-out body is no longer logged, and the reference docs caught up with the last eight releases.`,
+    pl: `**Poprawki z wrześniowego przeglądu.** Wdrożenie w Kubernetes odtwarza teraz pojedynczą instancję aplikacji zamiast na chwilę uruchamiać dwie, log migracji nie wypisuje już adresu bazy, niepoprawne ciało wylogowania nie trafia do logu, a dokumentacja referencyjna nadrobiła ostatnie osiem wydań.`,
+  },
+  {
     version: "2.11.0",
     date: "2026-09-20",
     en: `**Products join the baseline ontology.** The Port sample gains a twelfth blueprint, product — the commercial offering a SaaS company sells: its type (application, platform, API product, add-on, internal tool), commercial stage from discovery to retired, customer segments, delivery and pricing model, SLA, regions, launch date, product manager and the roadmap, status-page and marketing links. Systems now say which products they deliver (a shared platform lists several), products form suites through a parent product and add-ons name the products they depend on, and each product counts its systems, critical systems and services. Five sample products join the demo, which now loads 12 blueprints and 64 entities.`,
