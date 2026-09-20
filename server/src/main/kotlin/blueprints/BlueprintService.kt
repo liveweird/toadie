@@ -8,7 +8,10 @@ import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.entities.EntityService
+import ch.nokillswit.infra.db.bumpOntologyRevision
+import ch.nokillswit.infra.db.currentOntologyRevision
 import ch.nokillswit.infra.db.lockingTransaction
+import ch.nokillswit.infra.db.ontologyRevisionExpression
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
 import ch.nokillswit.infra.fetch.SourceWrite
 import ch.nokillswit.users.UserService
@@ -28,6 +31,7 @@ import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.R2dbcTransaction
 import org.jetbrains.exposed.v1.r2dbc.insert
+import org.jetbrains.exposed.v1.r2dbc.select
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
@@ -53,7 +57,8 @@ private fun decodeHierarchyRelations(raw: String): Map<String, String> = bluepri
 internal fun encodeHierarchyRelations(hierarchyRelations: Map<String, String>?): String =
     blueprintJson.encodeToString(hierarchyRelations ?: emptyMap())
 
-data class BlueprintPageResult(val items: List<BlueprintResponse>, val total: Long)
+/** [BlueprintService.listPage]'s outcome — [revision] is the V39 ontology counter as of the SAME statement as [items]. */
+data class BlueprintPageResult(val items: List<BlueprintResponse>, val total: Long, val revision: Long)
 
 class BlueprintService(internal val database: R2dbcDatabase) {
     object Blueprints : UIntIdTable("blueprints") {
@@ -148,16 +153,22 @@ class BlueprintService(internal val database: R2dbcDatabase) {
             .toList()
     }
 
-    /** SQL-paged integration read: decode only this page, never the complete registry. */
+    /**
+     * SQL-paged integration read: decode only this page, never the complete registry. [ontologyRevisionExpression]
+     * rides the SAME row-select statement as [items] (`.claude/docs/persistence.md` "V39") so the two can never
+     * straddle a concurrent commit; a page with zero rows has no row to read it off and falls back to
+     * [currentOntologyRevision] — a direct read, since there is nothing for it to be inconsistent WITH.
+     */
     suspend fun listPage(paging: PageRequest): BlueprintPageResult = suspendTransaction(database) {
         val total = Blueprints.selectAll().where { active() }.count()
         val budget = OntologyReadBudget()
-        val items = joined().selectAll().where { active() }
+        val revisionColumn = ontologyRevisionExpression()
+        val rows = joined().select(joined().columns + revisionColumn).where { active() }
             .applyPaging(paging, mapOf("id" to Blueprints.id))
-            .map { row ->
-                row.toResponse(decodeForRead(row[Blueprints.definition], budget))
-            }.toList()
-        BlueprintPageResult(items, total)
+            .toList()
+        val items = rows.map { row -> row.toResponse(decodeForRead(row[Blueprints.definition], budget)) }
+        val revision = rows.firstOrNull()?.get(revisionColumn) ?: currentOntologyRevision()
+        BlueprintPageResult(items, total, revision)
     }
 
     suspend fun read(id: UInt, budget: OntologyReadBudget? = null): BlueprintResponse? = suspendTransaction(database) {
@@ -261,6 +272,7 @@ class BlueprintService(internal val database: R2dbcDatabase) {
             requireTargetsExist(definition, self = request.identifier, known = known)
             val now = System.currentTimeMillis()
             val id = insertRow(request, definition, callerId, now, source)
+            bumpOntologyRevision() // V39, ch.nokillswit.infra.db.OntologyRevision — one bump per committed write
             joined().selectAll().where { Blueprints.id eq id }.map { it.toResponse() }.singleOrNull()
                 ?: error("blueprint $id vanished between insert and read-back")
         }
@@ -350,6 +362,10 @@ class BlueprintService(internal val database: R2dbcDatabase) {
         val now = System.currentTimeMillis()
         val affected = replaceRow(id, current, request, definition, source, now)
         if (affected == 0) return BlueprintUpdateResult(0, emptyList(), null, current.isSystem)
+        // V39 — a PUT always bumps, even a byte-identical resubmission (updatedAt already does
+        // the same unconditionally, `.claude/docs/persistence.md`'s "D2" rule); shared by
+        // `update` and `blueprints/BlueprintSync.kt`'s `syncFromSource`, which both call this.
+        bumpOntologyRevision()
 
         val cascaded = if (renamed) cascadeRename(others, current.identifier, request.identifier) else emptyList()
         return BlueprintUpdateResult(affected, cascaded, if (renamed) current.identifier else null, current.isSystem)
@@ -396,6 +412,7 @@ class BlueprintService(internal val database: R2dbcDatabase) {
             )
         }
         val affected = Blueprints.update({ (Blueprints.id eq id) and active() }) { it[markedAsDeleted] = true }
+        if (affected > 0) bumpOntologyRevision() // V39
         BlueprintDeleteResult(affected, current.identifier)
     }
 }

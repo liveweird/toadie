@@ -3,7 +3,11 @@ package ch.nokillswit.entities
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.infra.db.containsNormalized
+import ch.nokillswit.infra.db.currentOntologyRevision
 import ch.nokillswit.infra.db.jsonStringOrArrayContainsFolded
+import ch.nokillswit.infra.db.ontologyRevisionExpression
+import ch.nokillswit.infra.paging.PageRequest
+import ch.nokillswit.infra.paging.applyPaging
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.json.JsonElement
@@ -14,6 +18,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.core.stringParam
+import org.jetbrains.exposed.v1.r2dbc.select
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 
 // The entity list/graph filter set, shared by `EntityService.list`/`EntityService.graph` — the
@@ -34,6 +39,7 @@ data class EntityGraphFilter(val blueprints: List<String>, val q: String?, val t
 
 private typealias ActiveBlueprint = EntityService.ActiveBlueprint
 private typealias Entities = EntityService.Entities
+private typealias RawEntity = EntityService.RawEntity
 
 /** Case-folded blueprint-identifier lookup — identifiers are unique case-insensitively, the ONE folded map [list]/[graph] build. */
 internal fun foldedByIdentifier(blueprints: List<ActiveBlueprint>): Map<String, ActiveBlueprint> =
@@ -119,4 +125,29 @@ internal suspend fun EntityService.inheritedTeamMatches(
         .toList()
         .filter { (_, effective) -> teamValueMatches(effective, team) }
         .map { it.first }
+}
+
+/**
+ * [EntityService.list]'s row+revision read, extracted purely to keep `EntityService.kt` under
+ * detekt's `LargeClass` threshold (the `entities/EntityWorkspaceRead.kt` idiom, one file up).
+ * [ontologyRevisionExpression] rides the SAME row-select statement as the page rows
+ * (`.claude/docs/persistence.md` "V39") so the two can never straddle a concurrent commit; an
+ * [unknownBlueprint] filter (no query issued at all) has no row to read the revision off and
+ * falls back to a direct [currentOntologyRevision] read — there is nothing for it to be
+ * inconsistent WITH.
+ */
+internal suspend fun EntityService.entityPageRowsWithRevision(
+    predicate: Op<Boolean>,
+    unknownBlueprint: Boolean,
+    paging: PageRequest,
+    budget: OntologyReadBudget?,
+): Pair<List<RawEntity>, Long> {
+    if (unknownBlueprint) return emptyList<RawEntity>() to currentOntologyRevision()
+    val revisionColumn = ontologyRevisionExpression()
+    val selected = joined().select(joined().columns + revisionColumn).where { predicate }
+        .applyPaging(paging, SORTABLE_COLUMNS)
+        .toList()
+    val rows = selected.map { it.toRawEntity(budget) }
+    val revision = selected.firstOrNull()?.get(revisionColumn) ?: currentOntologyRevision()
+    return rows to revision
 }

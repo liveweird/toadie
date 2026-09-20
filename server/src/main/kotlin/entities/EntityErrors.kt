@@ -13,6 +13,7 @@ import ch.nokillswit.entityquery.SavedEntityQueryVisibility
 import ch.nokillswit.entityquery.parseEntityQuery
 import ch.nokillswit.entityquery.savedQueriesVisibleTo
 import ch.nokillswit.entityquery.validateEntityQuery
+import ch.nokillswit.infra.db.currentOntologyRevision
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
@@ -286,33 +287,49 @@ internal suspend fun EntityService.shownScope(
  * [JqEvaluator.evaluateBounded], so this endpoint never touches the jq worker pool.
  */
 suspend fun EntityService.errors(filter: EntityGraphFilter, callerId: UInt): EntityErrorsReport =
-    readErrorReport(filter, callerId)
+    readErrorReport(filter, callerId).first
 
-/** Ontology-only findings: machine clients never read or validate users' saved queries. */
+/**
+ * Ontology-only findings: machine clients never read or validate users' saved queries.
+ * [revision] is the V39 ontology counter read as the FIRST statement inside the report's one
+ * transaction (`.claude/docs/persistence.md` "V39") — unlike the paged reads, this report issues
+ * several statements to gather its subjects, so there is no single row-select to ride the
+ * revision alongside; reading it first pins the EARLIEST possible snapshot the rest of the report
+ * could have seen; nothing here should be interpreted as a guarantee it also matches the LAST
+ * statement, only that no ontology write committed before this one started.
+ */
 @Serializable
 data class OntologyErrorsReport(
     val entities: List<EntityErrorRow>,
     val blueprints: List<BlueprintErrorRow>,
     val checkedEntities: Int,
     val checkedBlueprints: Int,
+    val revision: Long,
 )
 
 suspend fun EntityService.ontologyErrors(
     filter: EntityGraphFilter,
     budget: OntologyReadBudget? = null,
 ): OntologyErrorsReport {
-    val report = readErrorReport(filter, callerId = null, budget)
-    return OntologyErrorsReport(report.entities, report.blueprints, report.checkedEntities, report.checkedBlueprints)
+    val (report, revision) = readErrorReport(filter, callerId = null, budget)
+    return OntologyErrorsReport(report.entities, report.blueprints, report.checkedEntities, report.checkedBlueprints, revision)
 }
 
+/**
+ * [Pair.first] is the REST-shaped [EntityErrorsReport] `errors()` returns unchanged (no `revision`
+ * field — GraphQL-only, per `.claude/docs/integration-api.md` "Ontology revision");
+ * [Pair.second] is the V39 counter [ontologyErrors] alone threads onto [OntologyErrorsReport].
+ */
 private suspend fun EntityService.readErrorReport(
     filter: EntityGraphFilter,
     callerId: UInt?,
     budget: OntologyReadBudget? = null,
-): EntityErrorsReport {
+): Pair<EntityErrorsReport, Long> {
     readLedger.open().use { reservation ->
         try {
-            val subjects = suspendTransaction(database) {
+            val (subjects, revision) = suspendTransaction(database) {
+                // FIRST statement in this transaction, on purpose (see [OntologyErrorsReport] KDoc).
+                val revision = currentOntologyRevision()
                 val activeBlueprints = loadActiveBlueprints(budget)
                 val blueprintsById = activeBlueprints.associateBy { it.id }
                 val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
@@ -332,9 +349,9 @@ private suspend fun EntityService.readErrorReport(
                     loadActiveHierarchies(),
                 )
                 val savedQueries = callerId?.let { loadVisibleSavedQueries(it) }.orEmpty()
-                EntityErrorSubjects(entitySubjects, blueprintCandidates, definitionsByIdentifier, savedQueries, querySchema)
+                EntityErrorSubjects(entitySubjects, blueprintCandidates, definitionsByIdentifier, savedQueries, querySchema) to revision
             }
-            return entityErrorsReport(subjects, budget, jq::calculationVerdict)
+            return entityErrorsReport(subjects, budget, jq::calculationVerdict) to revision
         } catch (cause: ReadBudgetExceeded) {
             throwReadBudgetHttp(cause)
         }

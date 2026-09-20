@@ -28,12 +28,12 @@ import ch.nokillswit.entityquery.VariableSlots
 import ch.nokillswit.entityquery.parseEntityQuery
 import ch.nokillswit.entityquery.validateAndBind
 import ch.nokillswit.entityquery.validateEntityQuery
+import ch.nokillswit.infra.db.bumpOntologyRevision
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.infra.db.octetLength
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
 import ch.nokillswit.infra.fetch.SourceWrite
 import ch.nokillswit.infra.paging.PageRequest
-import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.users.UserService
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
@@ -69,7 +69,8 @@ import java.util.concurrent.ThreadFactory
 
 val EntityServiceKey = AttributeKey<EntityService>("EntityService")
 
-data class EntityListResult(val items: List<EntityResponse>, val total: Long)
+/** [EntityService.list]'s outcome — [revision] is the V39 ontology counter as of the SAME statement as [items]. */
+data class EntityListResult(val items: List<EntityResponse>, val total: Long, val revision: Long)
 
 /** [EntityService.update]'s outcome: affected-row count plus what the rename cascaded (for the audit). */
 data class EntityUpdateResult(val affected: Int, val cascaded: List<String>, val renamedFrom: String?)
@@ -77,7 +78,7 @@ data class EntityUpdateResult(val affected: Int, val cascaded: List<String>, val
 /** [EntityService.delete]'s outcome: affected-row count plus the deleted identity (for the audit). */
 data class EntityDeleteResult(val affected: Int, val blueprint: String?, val identifier: String?)
 
-private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
+internal val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "id" to EntityService.Entities.id,
     "identifier" to EntityService.Entities.identifier,
     "title" to EntityService.Entities.title,
@@ -185,7 +186,7 @@ class EntityService(
 
     // The sanctioned cross-feature table reads (persistence.md): the creator's display fields
     // and the blueprint's identifier must come from the same transaction as the entity row.
-    private fun joined() = Entities
+    internal fun joined() = Entities
         .join(UserService.Users, JoinType.INNER, onColumn = Entities.createdBy, otherColumn = UserService.Users.id)
         .join(BlueprintService.Blueprints, JoinType.INNER, onColumn = Entities.blueprintId, otherColumn = BlueprintService.Blueprints.id)
 
@@ -272,7 +273,7 @@ class EntityService(
     }
 
     /** One entity row as [toResponse] needs it — decoded ONCE, before computed-property evaluation runs OUTSIDE the transaction. */
-    private data class RawEntity(
+    internal data class RawEntity(
         val id: UInt,
         val blueprintId: UInt,
         val identifier: String,
@@ -289,7 +290,7 @@ class EntityService(
         val lastSyncedAt: Long,
     )
 
-    private fun ResultRow.toRawEntity(budget: OntologyReadBudget? = null): RawEntity = RawEntity(
+    internal fun ResultRow.toRawEntity(budget: OntologyReadBudget? = null): RawEntity = RawEntity(
         id = this[Entities.id].value,
         blueprintId = this[Entities.blueprintId].value,
         identifier = this[Entities.identifier],
@@ -406,12 +407,7 @@ class EntityService(
                     }
 
                     val total = if (unknownBlueprint) 0L else joined().selectAll().where { predicate }.count()
-                    val rows = if (unknownBlueprint) {
-                        emptyList()
-                    } else {
-                        joined().selectAll().where { predicate }.applyPaging(paging, SORTABLE_COLUMNS)
-                            .map { it.toRawEntity(budget) }.toList()
-                    }
+                    val (rows, revision) = entityPageRowsWithRevision(predicate, unknownBlueprint, paging, budget)
                     // REST bounds the page by row count; integration additionally caps decoded
                     // page documents with budget. The shared read
                     // budget's ledger charge here covers the TARGET rows a computed property might
@@ -420,10 +416,10 @@ class EntityService(
                     val targets = narrowTargets(definitions, definitionsByIdentifier, computed = true)
                     val readSet = loadReadSet(Op.FALSE, targets, blueprintsByIdentifier, reservation)
                     val context = EntityContext(blueprintsById, definitionsByIdentifier, readSet.snapshot, jq, now)
-                    Materialized(rows to total, context)
+                    Materialized(Triple(rows, total, revision), context)
                 }
-                val (rows, total) = materialized.payload
-                return EntityListResult(rows.map { toResponse(it, materialized.context, budget) }, total)
+                val (rows, total, revision) = materialized.payload
+                return EntityListResult(rows.map { toResponse(it, materialized.context, budget) }, total, revision)
             } catch (cause: ReadBudgetExceeded) {
                 throwReadBudgetHttp(cause)
             }
@@ -780,6 +776,7 @@ class EntityService(
             val findings = entityFindings(document, blueprint.definition, readSet.snapshot.targetExists, request.team)
             requireNoFindings(findings)
             val id = insertRow(request, blueprint.id, document, callerId, now, source)
+            bumpOntologyRevision() // V39, ch.nokillswit.infra.db.OntologyRevision — one bump per committed write
             val row = joined().selectAll().where { Entities.id eq id }.singleOrNull()
                 ?: error("entity $id vanished between insert and read-back")
             val blueprintsById = activeBlueprints.associateBy { it.id } + (blueprint.id to blueprint)
@@ -931,6 +928,10 @@ class EntityService(
         val finalRequest = request.copy(team = team, properties = document.properties, relations = document.relations)
         val affected = replaceRow(id, row, finalRequest, source, now)
         if (affected == 0) return EntityUpdateResult(0, emptyList(), null)
+        // V39 — a PUT always bumps, even a byte-identical resubmission (updatedAt already does
+        // the same unconditionally, `.claude/docs/persistence.md`'s "D2" rule); shared by
+        // `update` and `entities/EntitySync.kt`'s `syncFromSource`, which both call this.
+        bumpOntologyRevision()
 
         val cascaded = if (renamed) {
             cascadeRename(activeBlueprints, currentBlueprint.identifier, currentIdentifier, request.identifier, excludingId = id)
@@ -1020,6 +1021,7 @@ class EntityService(
             throw ConflictException("Entity '$target' is the target of relations in: ${referrers.joinToString()}")
         }
         val affected = Entities.update({ (Entities.id eq id) and active() }) { it[markedAsDeleted] = true }
+        if (affected > 0) bumpOntologyRevision() // V39
         EntityDeleteResult(affected, blueprint.identifier, identifier)
     }
 

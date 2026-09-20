@@ -906,6 +906,15 @@ object TestEntities {
     }
 }
 
+/**
+ * Direct read of the V39 monotonic ontology-revision counter (`ch.nokillswit.infra.db.OntologyRevision.kt`)
+ * — a tiny query-only helper for [OntologyRevisionTest], since the counter has no HTTP surface
+ * of its own (it rides GraphQL page/report responses only).
+ */
+object TestOntologyRevision {
+    suspend fun current(): Long = suspendTransaction(sharedTestDatabase) { ch.nokillswit.infra.db.currentOntologyRevision() }
+}
+
 // Bootstrap tests (and prod-mode boot tests) rotate the seed admin password in the SHARED
 // container. Call this afterwards to put the V3 seed state back so later tests (and re-runs)
 // see the pristine seed.

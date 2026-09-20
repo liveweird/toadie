@@ -61,6 +61,8 @@ type BlueprintPage {
   pageSize: Int!
   "Total matching blueprints across all pages."
   total: Long!
+  "The ontology revision at the moment this page was read, encoded as a decimal string (the `id` idiom). Bumped by every blueprint, entity, and hierarchy-dictionary write; compare it across the pages of one scan and restart the scan if it changed."
+  revision: String!
 }
 
 "A Port blueprint definition and its audit identity."
@@ -113,6 +115,8 @@ type EntityPage {
   pageSize: Int!
   "Total matching entities across all pages."
   total: Long!
+  "The ontology revision at the moment this page was read, encoded as a decimal string (the `id` idiom). Bumped by every blueprint, entity, and hierarchy-dictionary write; compare it across the pages of one scan and restart the scan if it changed."
+  revision: String!
 }
 
 "A Port entity including computed read-time properties."
@@ -179,6 +183,8 @@ type OntologyErrors {
   checkedEntities: Int!
   "Number of blueprints checked in the report snapshot."
   checkedBlueprints: Int!
+  "The ontology revision at the moment this report was read, encoded as a decimal string (the `id` idiom). Bumped by every blueprint, entity, and hierarchy-dictionary write; compare it across the pages of one scan and restart the scan if it changed."
+  revision: String!
 }
 
 "One page of entity finding rows."

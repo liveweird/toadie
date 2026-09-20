@@ -162,6 +162,38 @@ and root response keys restricted to the fixed SDL root-name vocabulary. Arbitra
 omitted. Never log credentials, query text, variables, or result data. Audit output remains a
 post-operation log, not a transactional outbox.
 
+## Ontology revision
+
+- **Applies when:** changing blueprint/entity write paths, the `HIERARCHY` dictionary replace, or
+  any GraphQL field that pages `blueprints`/`entities`/`errors`.
+- **Requirement:** `BlueprintPage.revision`, `EntityPage.revision`, and `OntologyErrors.revision`
+  (each a decimal string, the `id` idiom) carry the V39 monotonic counter
+  (`ch.nokillswit.infra.db.OntologyRevision.kt`) — bumped exactly once inside the SAME
+  V27/V28-locked transaction as every committed blueprint write, entity write, and `HIERARCHY`
+  dictionary replace (NAMESPACE/LIFECYCLE replaces never bump). This is change DETECTION, never a
+  snapshot: the API stays stateless and answers no other query about the ontology's history.
+  EQUAL revisions across the pages of one scan mean no ontology write committed between the FIRST
+  page read and the LAST; a consumer that sees the revision move restarts its scan rather than
+  assembling a graph from two different states. A blueprint/entity page reads its revision in the
+  SAME SQL statement as its rows (a scalar subquery, so READ COMMITTED's per-statement snapshot
+  can never let the two straddle a concurrent commit); a page with zero rows has none to read it
+  off and falls back to a direct read of the counter. The `errors` report issues several
+  statements to gather its subjects, so its revision is read as the FIRST statement in its one
+  transaction instead — the earliest possible snapshot the rest of the report could have seen, not
+  a guarantee it also matches the report's LAST statement. The counter is a single database row,
+  not process state: it holds across restarts and is shared by every replica reading the same
+  database, so a multi-replica deployment sees ONE consistent revision regardless of which
+  instance answers a given page.
+- **Reference:** `infra/db/OntologyRevision.kt`, `blueprints/BlueprintService.kt`'s `create`/
+  `applyUpdate`/`delete`, `entities/EntityService.kt`'s `create`/`applyUpdate`/`delete`,
+  `dictionaries/DictionaryService.kt`'s `replace` (the `HIERARCHY`-only branch),
+  `integration/Fetchers.kt`.
+- **Enforcement:** `OntologyRevisionTest`.
+- **Exception:** REST responses (`GET /api/v1/blueprints`, `GET /api/v1/entities`,
+  `GET /api/v1/entities/errors`) do not carry a revision field — this is a GraphQL-only
+  affordance for a multi-page/multi-root scanning consumer; a REST caller reads one page or one
+  report at a time and has no cross-page consistency question to answer.
+
 ## Required regression boundaries
 
 - **Applies when:** changing integration credentials, transport, schema, resolvers, limits, or UI.

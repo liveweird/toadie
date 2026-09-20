@@ -554,6 +554,29 @@ Browser coverage lives in `e2e/scenarios/integration-clients.md`. The Docker-fre
 `:server:checkGraphqlCompatibility` gate compares SDL against the relevant Git baseline and
 runs in `check`; see `api-guidelines/GRAPHQL-GUIDELINES.md` for selection and failure policy.
 
+**Ontology revision (2.12.0).** `OntologyRevisionTest` covers the V39 monotonic counter
+(`.claude/docs/persistence.md` "Ontology revision (V39)", `.claude/docs/integration-api.md`
+"Ontology revision") through `TestOntologyRevision.current()` (`TestEnvironment.kt`, a direct
+query — the counter has no REST surface of its own): blueprint create/update/delete each bump
+exactly once, including a byte-identical PUT (the "D2" posture — a write always bumps,
+never diffed first); the same for entities, plus an entity-import batch with no deferrals
+bumping exactly once per row; a rejected blueprint/entity write (409/400) never bumps; a
+NAMESPACE dictionary replace never bumps while a HIERARCHY replace adding a value bumps once;
+the GraphQL `entities` page's `revision` matches a direct read and advances by exactly one after
+a PUT; and the uncommitted-writer case — a raw JDBC connection holds the SAME `entities` SHARE
+ROW EXCLUSIVE lock a real write would, performs both the row update and the counter bump, and
+withholds its COMMIT, pinning that a concurrent GraphQL read answers the OLD rows with the OLD
+revision until the commit and the NEW rows with the NEW revision after it (a plain read never
+blocks behind SHARE ROW EXCLUSIVE and never observes an uncommitted transaction's writes, so no
+lock-wait polling is needed). That case does NOT prove rows and revision ride one statement — a
+two-statement read would pass it too, since nothing commits between one reader call's two
+statements in that timeline and there is no seam to hold that microsecond window open without a
+production timing hook. The same-statement property is a code-shape rule (the scalar subquery is
+a column of the row SELECT in `entityPageRowsWithRevision` and `BlueprintService.listPage`),
+kept by review. Sync is
+not separately exercised with a live HTTP fixture: `BlueprintSync`/`EntitySync`'s
+`syncFromSource` both call straight into the same `applyUpdate` the PUT cases already cover.
+
 **Seeded GraphQL deployment checks.**
 
 - **Applies when:** changing integration deployment, service adapters, schema, or sample data.

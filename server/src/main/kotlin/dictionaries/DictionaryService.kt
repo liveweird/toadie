@@ -3,6 +3,7 @@ package ch.nokillswit.dictionaries
 import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.blueprints.BlueprintService
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.infra.db.bumpOntologyRevision
 import ch.nokillswit.infra.db.lockingTransaction
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
@@ -155,6 +156,11 @@ class DictionaryService(private val database: R2dbcDatabase) {
                 }
             }
         }
+
+        // V39 — ONLY the HIERARCHY dictionary counts as an ontology write: it is the one dictionary
+        // a blueprint's `hierarchyRelations` map references (`.claude/docs/persistence.md`
+        // "Blueprint targets under concurrency (V27)"); NAMESPACE/LIFECYCLE replaces never bump.
+        if (dict == Dictionary.HIERARCHY) bumpOntologyRevision()
 
         return DictionaryReplaceCounts(
             added = request.items.count { it.id == null },
