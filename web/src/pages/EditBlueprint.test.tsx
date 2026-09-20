@@ -209,4 +209,51 @@ describe("EditBlueprint page", () => {
     expect(screen.getByRole("button", { name: "Remove relation 1" })).toBeDisabled();
     expect(screen.getByText("Seeded")).toBeInTheDocument();
   });
+
+  const STORED_WITH_SOURCE = {
+    ...STORED,
+    sourceUrl: "https://raw.githubusercontent.com/acme/ontology/main/service.json",
+    lastSyncedAt: 0,
+  };
+
+  test("the Source URL field is seeded from the stored blueprint, the save body carries it, and the preview does not", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url === "/api/v1/blueprints/7") return Promise.resolve(jsonResponse(200, STORED_WITH_SOURCE));
+      if (method === "PUT" && url === "/api/v1/blueprints/7") return Promise.resolve(new Response(null, { status: 204 }));
+      if (method === "GET" && url === "/api/v1/blueprints") {
+        return Promise.resolve(jsonResponse(200, { items: [STORED_WITH_SOURCE] }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderEdit();
+
+    const sourceInput = (await screen.findByLabelText("Source URL")) as HTMLInputElement;
+    expect(sourceInput.value).toBe(STORED_WITH_SOURCE.sourceUrl);
+    // The live JSON preview mirrors the pure request document — it never shows sourceUrl.
+    expect(screen.queryByText(/sourceUrl/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("/blueprints"));
+    const putCall = mockFetch.mock.calls.find(
+      ([url, init]) => (init as RequestInit | undefined)?.method === "PUT" && url === "/api/v1/blueprints/7",
+    );
+    const body = JSON.parse((putCall![1] as RequestInit).body as string) as { sourceUrl?: string };
+    expect(body.sourceUrl).toBe(STORED_WITH_SOURCE.sourceUrl);
+  });
+
+  test("the header Sync button is disabled without a source and shows the sync state", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url === "/api/v1/blueprints/7") return Promise.resolve(jsonResponse(200, STORED));
+      if (method === "GET" && url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: [STORED] }));
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderEdit();
+
+    expect(await screen.findByText("No source")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sync from source" })).toBeDisabled();
+  });
 });

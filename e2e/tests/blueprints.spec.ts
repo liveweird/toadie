@@ -4,6 +4,7 @@ import {
   expect,
   login,
   readyDialog,
+  rowOperation,
   signOut,
   test,
   uniqueText,
@@ -41,8 +42,10 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   // relation locked ("Seeded" badge, disabled Remove) — never edited or deleted by this spec.
   const teamRow = page.getByRole("row").filter({ hasText: "_team" });
   await expect(teamRow.getByText("System", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Delete _team" })).toBeDisabled();
-  await page.getByRole("button", { name: "Edit _team" }).click();
+  await page.getByRole("button", { name: "Operations for _team" }).click();
+  await expect(page.getByRole("menuitem", { name: "Delete _team" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await rowOperation(page, "_team", "Edit");
   const systemIdentifierInput = page.getByRole("textbox", { name: "Identifier" });
   await expect(systemIdentifierInput).toHaveValue("_team");
   await expect(systemIdentifierInput).not.toBeEditable();
@@ -175,7 +178,7 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   await expect(depRow.getByRole("cell").nth(3)).toHaveText("1");
 
   // 5. Deleting the first (targeted) blueprint is refused.
-  await page.getByRole("button", { name: `Delete ${firstIdentifier}` }).click();
+  await rowOperation(page, firstIdentifier, "Delete");
   await readyDialog(page, "Delete blueprint?");
   const [blockedDelete] = await Promise.all([
     page.waitForResponse(
@@ -196,7 +199,7 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
 
   // 6. Rename the first blueprint's identifier; the second's relation target follows the
   // cascade server-side.
-  await page.getByRole("button", { name: `Edit ${firstIdentifier}` }).click();
+  await rowOperation(page, firstIdentifier, "Edit");
   await expect(identifierInput).toHaveValue(firstIdentifier);
   const renamedIdentifier = `${firstIdentifier}-renamed`;
   await identifierInput.fill(renamedIdentifier);
@@ -208,7 +211,7 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   ]);
   await expect(page).toHaveURL(/\/blueprints$/);
 
-  await page.getByRole("button", { name: `Edit ${depIdentifier}` }).click();
+  await rowOperation(page, depIdentifier, "Edit");
   await expect(identifierInput).toHaveValue(depIdentifier);
   // The dependent blueprint's one stored relation is the first (and only) row of its
   // family — it starts expanded on load, same as any other family.
@@ -233,8 +236,7 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   const teamRowReadOnly = page.getByRole("row").filter({ hasText: "_team" });
   await expect(teamRowReadOnly.getByText("System", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "New blueprint" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: `Edit ${depIdentifier}` })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: `Delete ${depIdentifier}` })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: `Operations for ${depIdentifier}` })).toHaveCount(0);
 
   await page.goto("/blueprints/new");
   await expect(page).toHaveURL(/\/blueprints$/);
@@ -245,7 +247,7 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   // throwaway user.
   await login(page);
   await page.goto("/blueprints");
-  await page.getByRole("button", { name: `Delete ${depIdentifier}` }).click();
+  await rowOperation(page, depIdentifier, "Delete");
   await readyDialog(page, "Delete blueprint?");
   await Promise.all([
     page.waitForResponse(
@@ -255,7 +257,7 @@ test("admin curates the blueprint registry; a rename cascades; a regular user re
   ]);
   await expect(page.getByRole("row").filter({ hasText: depIdentifier })).toHaveCount(0);
 
-  await page.getByRole("button", { name: `Delete ${renamedIdentifier}` }).click();
+  await rowOperation(page, renamedIdentifier, "Delete");
   await readyDialog(page, "Delete blueprint?");
   await Promise.all([
     page.waitForResponse(

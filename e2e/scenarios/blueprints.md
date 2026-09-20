@@ -13,8 +13,8 @@
 
 1. The admin signs in and opens **Blueprints** from the nav's Ontology section.
    - *Expected*: the registry page renders with the **New blueprint** action (ADMIN-only).
-2. The seeded `_team` system row shows a "System" badge and a disabled Delete control; they
-   open its editor and go back without saving.
+2. The seeded `_team` system row shows a "System" badge and a disabled Delete control in its
+   Operations menu; they open its editor and go back without saving.
    - *Expected*: the identifier field is read-only and shows `_team`; the seeded `parent`
      relation row carries a "Seeded" badge and its Remove control is disabled (move stays
      allowed); no request reaches the server.
@@ -34,20 +34,21 @@
 5. They create a second blueprint (`e2e-bp-…-dep`) whose relation targets the first (picked
    from the target Select) and save.
    - *Expected*: the POST succeeds; the list shows both rows.
-6. They try to delete the first blueprint from the list.
+6. They try to delete the first blueprint from its row's Operations menu.
    - *Expected*: the confirm modal's request is refused with the "referenced by other
      blueprints" message; the row stays.
-7. They edit the first blueprint, change its identifier, and save; then open the second.
+7. They edit the first blueprint via its Operations menu, change its identifier, and save; then
+   open the second the same way.
    - *Expected*: the PUT succeeds; the second blueprint's one stored relation — its family's
      first and only row — starts expanded; its target shows the NEW identifier (the rename
      cascaded server-side).
 8. A throwaway regular user (created via the one-time reveal flow) signs in, opens
    **Blueprints**, and then navigates to `/blueprints/new` directly.
    - *Expected*: the same list read-only — both blueprints visible, the `_team` row's "System"
-     badge still shown, no **New blueprint**, edit, or delete affordances; the editor route
-     bounces them back to the list.
+     badge still shown, no **New blueprint** action and no Operations menu on any row; the
+     editor route bounces them back to the list.
 9. Cleanup: back as the admin, the dependent blueprint is deleted first, then the target (both
-   through their confirm modals), and the throwaway user through the Users list.
+   via their Operations menus and confirm modals), and the throwaway user through the Users list.
 
 ## Not covered here (and why)
 

@@ -34,7 +34,8 @@
     "title": "Title",
     "properties": "Properties",
     "relations": "Relations",
-    "entities": "Entities"
+    "entities": "Entities",
+    "lastSync": "Last sync"
   },
   "section": {
     "properties": "Properties",
@@ -43,7 +44,8 @@
     "calculationProperties": "Calculation properties",
     "aggregationProperties": "Aggregation properties",
     "ownership": "Ownership",
-    "hierarchy": "Hierarchy"
+    "hierarchy": "Hierarchy",
+    "source": "Source"
   },
   "field": {
     "identifier": "Identifier",
@@ -95,7 +97,8 @@
     "query": "Query (JSON)",
     "pathFilter": "Path filter (JSON)",
     "ownershipType": "Ownership",
-    "ownershipNone": "None"
+    "ownershipNone": "None",
+    "sourceUrl": "Source URL"
   },
   "hierarchies": {
     "empty": "No hierarchies defined yet — add them on the Hierarchies page.",
@@ -112,7 +115,8 @@
     "query": "Port's search-rule syntax ({ combinator, rules }) — stored and shape-checked only.",
     "hierarchyRelations": "A Toadie-only extension, not a Port field: pick one of this blueprint's own single relations (not \"many\") to mark it as the containment parent for this hierarchy on the Entity graph and hierarchy pages. Leave unset for a blueprint with no natural parent here — stored beside the Port document, never inside it.",
     "hierarchyUnknown": "This hierarchy no longer exists in the Hierarchies dictionary — clear it or re-add the value.",
-    "systemIdentifier": "A system blueprint's identifier cannot be changed."
+    "systemIdentifier": "A system blueprint's identifier cannot be changed.",
+    "sourceUrl": "The https address of this blueprint's copy at its source (a Port blueprint export or a Toadie export) — enables Sync from source."
   },
   "validation": {
     "identifier": "Must be 1–100 characters of letters, digits, and [@_.:/=-], and not start with $",
@@ -140,7 +144,8 @@
     "pathFirstSegment": "The first segment must name a relation of this blueprint",
     "calculationLength": "At most 10,000 characters",
     "aggregationPropertyForbidden": "A property is not allowed when calculating by entities",
-    "aggregationFunc": "Not a valid function for this calculation"
+    "aggregationFunc": "Not a valid function for this calculation",
+    "sourceUrl": "Must be an absolute https URL without credentials"
   },
   "saveForbidden": "Only administrators can edit blueprints",
   "saveConflict": "A blueprint with this identifier already exists",
@@ -175,6 +180,14 @@
   "toast": {
     "created": "Blueprint created",
     "saved": "Blueprint saved",
-    "deleted": "Blueprint deleted"
+    "deleted": "Blueprint deleted",
+    "synced": "Blueprint synced"
+  },
+  "sync": {
+    "action": "Sync from source",
+    "actionAria": "Sync {{name}} from source",
+    "noMatch": "The source document no longer contains this blueprint.",
+    "refusedBody": "Syncing would fail — the source copy does not satisfy the blueprint rules. Fix it at the source before syncing again.",
+    "hierarchyKept": "Hierarchy relations are a Toadie-only extension; the source document does not carry them, so the stored map is kept."
   }
 }

@@ -5,7 +5,7 @@
     "urlLabel": "Pobierz z adresu URL",
     "fetchButton": "Pobierz",
     "urlFailedTitle": "Pobieranie nie powiodło się",
-    "sourceHint": "Pobrane encje będą mieć {{url}} jako źródło i zaczną jako zsynchronizowane; blueprinty importują się bez odwołania.",
+    "sourceHint": "Pobrane blueprinty i encje będą mieć {{url}} jako źródło i zaczną jako zsynchronizowane.",
     "textareaLabel": "Zawartość JSON",
     "placeholder": "{ \"blueprints\": [...], \"entities\": [...] }",
     "pickFiles": "Wybierz pliki…",

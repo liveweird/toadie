@@ -99,7 +99,7 @@
     "AGGREGATION_PROPERTY_STALE": "This aggregation's calculation property or time field no longer names a valid property of the target blueprint — fix the calculation.",
     "CALCULATION_COMPILE_FAILED": "This jq expression fails to compile — the message names jq's own error. Fix the expression.",
     "CALCULATION_QUARANTINED": "This server instance quarantined the expression after an earlier run missed its evaluation deadline — edit the expression, or wait for a restart, to clear it.",
-    "SOURCE_MISSING": "This entity has no source reference — optional, but without one it cannot be re-synced.",
+    "SOURCE_MISSING": "This entity or blueprint has no source reference — optional, but without one it cannot be re-synced.",
     "SYNTAX": "The query text doesn't parse — check for a missing keyword, bracket, or quote.",
     "UNSUPPORTED": "The query uses a feature outside the supported subset of Cypher — see the query language reference for what's accepted.",
     "UNKNOWN_LABEL": "The query names a blueprint identifier that doesn't exist — check the spelling or the suggested match.",

@@ -261,9 +261,7 @@ describe("ImportOntology page", () => {
 
     await waitFor(() => expect(screen.getByLabelText("JSON content")).toHaveValue(JSON.stringify(ENTITY_DOC)));
     expect(
-      screen.getByText(
-        `Fetched entities will carry ${url} as their source and start synced; blueprints import without a reference.`,
-      ),
+      screen.getByText(`Fetched blueprints and entities will carry ${url} as their source and start synced.`),
     ).toBeInTheDocument();
   });
 
@@ -280,15 +278,15 @@ describe("ImportOntology page", () => {
     expect(await screen.findByText(/must be a public https address/)).toBeInTheDocument();
   });
 
-  test("a fetched batch's sourceUrl reaches importEntities only, never importBlueprints", async () => {
+  test("a fetched batch's sourceUrl reaches BOTH importBlueprints and importEntities", async () => {
     const url = "https://raw.githubusercontent.com/acme/service/main/entity.json";
     let entitySourceUrl: unknown;
-    let blueprintBody: Record<string, unknown> | undefined;
+    let blueprintSourceUrl: unknown;
     baseRoutes(mockFetch, {
       "POST /api/v1/entities/fetch": () =>
         jsonResponse(200, { content: JSON.stringify({ blueprints: [BLUEPRINT_DOC], entities: [ENTITY_DOC] }) }),
       "POST /api/v1/blueprints/import": (init) => {
-        blueprintBody = bodyOf(init);
+        blueprintSourceUrl = bodyOf(init).sourceUrl;
         return jsonResponse(200, { results: [{ index: 0, identifier: "service", status: "CREATED", id: 10 }] });
       },
       "POST /api/v1/entities/import": (init) => {
@@ -307,7 +305,7 @@ describe("ImportOntology page", () => {
     await user.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() => expect(entitySourceUrl).toBe(url));
-    expect(blueprintBody).not.toHaveProperty("sourceUrl");
+    expect(blueprintSourceUrl).toBe(url);
   });
 
   test("editing the fetched text (or picking a file) drops the source reference", async () => {

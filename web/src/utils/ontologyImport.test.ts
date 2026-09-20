@@ -348,7 +348,7 @@ describe("runImportBatch", () => {
     expect(importEntitiesChunk).toHaveBeenCalledWith([{ identifier: "e1" }], false);
   });
 
-  test("a batch sourceUrl reaches entity chunks only, never blueprint chunks", async () => {
+  test("a batch sourceUrl reaches BOTH blueprint and entity chunks", async () => {
     const documents = [makeDoc("blueprint", 0, "b1"), makeDoc("entity", 1, "e1")];
     const importBlueprintsChunk = vi.fn().mockResolvedValue({ results: [{ index: 0, identifier: "b1", status: "CREATED", id: 10 }] });
     const importEntitiesChunk = vi.fn().mockResolvedValue({ results: [{ index: 0, blueprint: "service", identifier: "e1", status: "CREATED", id: 20 }] });
@@ -362,7 +362,11 @@ describe("runImportBatch", () => {
       sourceUrl: "https://raw.githubusercontent.com/acme/service/main/entity.json",
     });
 
-    expect(importBlueprintsChunk).toHaveBeenCalledWith([{ identifier: "b1" }], false);
+    expect(importBlueprintsChunk).toHaveBeenCalledWith(
+      [{ identifier: "b1" }],
+      false,
+      "https://raw.githubusercontent.com/acme/service/main/entity.json",
+    );
     expect(importEntitiesChunk).toHaveBeenCalledWith(
       [{ identifier: "e1" }],
       false,

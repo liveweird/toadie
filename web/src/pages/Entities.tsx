@@ -18,7 +18,7 @@ import PaginationBar from "../components/PaginationBar";
 import RowActionsMenu from "../components/RowActionsMenu";
 import SortHeader from "../components/SortHeader";
 import SyncEntityModal from "../components/SyncEntityModal";
-import SyncStateText from "../components/SyncStateText";
+import SyncStateText, { syncStateSource } from "../components/SyncStateText";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useBlueprintParam, useQParam, useTeamParam } from "../hooks/useBlueprintParam";
 import { useBlueprints } from "../hooks/useBlueprints";
@@ -28,7 +28,7 @@ import { useEntityOptions } from "../hooks/useEntityOptions";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { previewComputedColumns, type ComputedDefinition } from "../utils/computedProperties";
 import { entityDeleteErrorMessage, teamValuesOf } from "../utils/entityForm";
-import { entitySyncSource, toSyncTarget, type EntitySyncTarget } from "../utils/entitySync";
+import { toSyncTarget, type EntitySyncTarget } from "../utils/entitySync";
 import { editEntityPath, newEntityPath } from "../utils/entityLinks";
 import { entityExportFileName, entityExportJson, downloadJson } from "../utils/ontologyExport";
 import { ontologyImportPath } from "../utils/ontologyLinks";
@@ -362,7 +362,7 @@ export default function Entities() {
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <SyncStateText file={entitySyncSource(entity)} />
+                    <SyncStateText file={syncStateSource(entity)} />
                   </Table.Td>
                   <Table.Td style={{ width: 1 }} ta="right">
                     <RowActionsMenu label={t("common.table.operationsAria", { name: entity.identifier })}>

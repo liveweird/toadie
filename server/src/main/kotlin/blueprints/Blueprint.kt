@@ -1,7 +1,9 @@
 package ch.nokillswit.blueprints
 
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.validation.requireNoDuplicates
 import ch.nokillswit.infra.validation.sanitizeSingleLine
+import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -212,6 +214,15 @@ data class BlueprintRequest(
     // above whose `many` is false (validateBlueprintRequest) — two different hierarchy keys
     // may legitimately share one relation value.
     val hierarchyRelations: Map<String, String>? = null,
+    /**
+     * The blueprint's source reference (2.10.0, the `entities.source_url` twin, one level up) —
+     * the https URL of its canonical remote copy (a Port blueprint export or a Toadie export).
+     * Row state, never part of [toDefinition] or a bulk-import DOCUMENT
+     * ([requireNoDocumentSourceUrl]) — set via the editor's Source fieldset, PUT full-replace
+     * semantics (omitted/blank clears it), or stamped by [BlueprintService.import]'s batch
+     * `sourceUrl`/`POST …/blueprints/{id}/sync`.
+     */
+    val sourceUrl: String? = null,
 )
 
 /** The flattened request/response shape: identity columns + [BlueprintDefinition]'s fields. */
@@ -237,10 +248,41 @@ data class BlueprintResponse(
     // Phase 4 (v1.26.0): `_team`/`_user`, seeded by V31 — response-only (no default, so a
     // request echoing it is a strict-decode 400); see blueprints/SystemBlueprints.kt.
     val system: Boolean,
+    /** The blueprint's source reference; absent = none set. */
+    val sourceUrl: String? = null,
+    /** Epoch millis of the last HTTP→DB sync; 0 = never. */
+    val lastSyncedAt: Long,
 )
 
 @Serializable
 data class BlueprintList(val items: List<BlueprintResponse>)
+
+/** GET …/blueprints/{id}/sync — the sync state incl. the baseline document stored at the last sync. */
+@Serializable
+data class BlueprintSyncStateResponse(
+    val sourceUrl: String? = null,
+    /** Epoch millis; 0 = never synced. */
+    val lastSyncedAt: Long,
+    /** The document as stored at the last sync (incl. the merged `hierarchyRelations`) — absent = never. */
+    val syncedDocument: BlueprintRequest? = null,
+)
+
+/** POST …/blueprints/{id}/sync — the remote copy, parsed/decoded client-side. */
+@Serializable
+data class SyncBlueprintRequest(val document: BlueprintRequest)
+
+/**
+ * A bulk-import DOCUMENT never carries `sourceUrl` itself — it is row state for the WHOLE
+ * request ([BlueprintImportRequest.sourceUrl]), not a per-document member (the
+ * `entities/Entity.kt` `requireNoDocumentSourceUrl` precedent, one level down). Thrown before the
+ * row's ordinary validation so the message is specific rather than a generic unknown-member
+ * decode failure.
+ */
+fun requireNoDocumentSourceUrl(request: BlueprintRequest) {
+    if (request.sourceUrl != null) {
+        throw BadRequestException("sourceUrl is row state set for the whole request, not a document member")
+    }
+}
 
 /** The non-identity fields as the stored [BlueprintDefinition] document. */
 fun BlueprintRequest.toDefinition(): BlueprintDefinition = BlueprintDefinition(
@@ -264,6 +306,7 @@ fun sanitizedBlueprintRequest(request: BlueprintRequest): BlueprintRequest = req
     title = sanitizeSingleLine(request.title, "title"),
     description = request.description?.trim(),
     icon = request.icon?.trim(),
+    sourceUrl = sanitizedSourceUrl(request.sourceUrl),
     schema = request.schema.copy(properties = request.schema.properties.mapValues { (_, def) -> sanitizedProperty(def) }),
     relations = request.relations.mapValues { (_, relation) -> sanitizedRelation(relation) },
     mirrorProperties = request.mirrorProperties.mapValues { (_, mirror) -> sanitizedMirror(mirror) },

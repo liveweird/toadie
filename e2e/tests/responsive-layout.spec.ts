@@ -32,7 +32,8 @@ test("data lists fill the desktop canvas and contain scrolling on narrow screens
     })).toBeLessThanOrEqual(2);
     await page.setViewportSize({ width: 390, height: 844 });
     await expectContainedPage(page);
-    const action = page.getByRole("table").getByRole("button", { name: /^Edit / }).first();
+    // Registry rows end in an Edit link, the Blueprints rows (2.10.0) in an Operations kebab.
+    const action = page.getByRole("table").getByRole("button", { name: /^(Edit |Operations for )/ }).first();
     await action.scrollIntoViewIfNeeded();
     await expect(action).toBeInViewport();
     await expectContainedPage(page);

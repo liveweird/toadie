@@ -87,8 +87,12 @@ class IntegrationOntologyParityTest {
                 blueprints { items { id identifier title findings { code field message } } total }
             } }""").getValue("errors").jsonObject.getValue("blueprints").jsonObject
             assertEquals("1", blueprints.getValue("total").jsonPrimitive.content)
-            assertEquals("CALCULATION_COMPILE_FAILED", blueprints.getValue("items").jsonArray.single()
-                .jsonObject.getValue("findings").jsonArray.single().jsonObject.getValue("code").jsonPrimitive.content)
+            // The compile failure plus the report-only SOURCE_MISSING (2.10.0 — the blueprint has no source).
+            assertEquals(
+                setOf("CALCULATION_COMPILE_FAILED", "SOURCE_MISSING"),
+                blueprints.getValue("items").jsonArray.single().jsonObject.getValue("findings").jsonArray
+                    .map { it.jsonObject.getValue("code").jsonPrimitive.content }.toSet(),
+            )
             val direct = read("""{ entity(id:"${entity.id}") { properties } blueprint(id:"${blueprint.id}") { identifier } }""")
             assertEquals("42", direct.getValue("entity").jsonObject.getValue("properties")
                 .jsonObject.getValue("computed").jsonPrimitive.content)

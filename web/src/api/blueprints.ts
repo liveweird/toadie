@@ -43,24 +43,72 @@ async function postBlueprintImport(
   path: "import" | "import/check",
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
+  sourceUrl?: string,
 ): Promise<BlueprintImportResponse> {
   return jsonRequest<BlueprintImportResponse>(`/api/v1/blueprints/${path}`, {
     method: "POST",
-    body: JSON.stringify({ documents, replaceExisting }),
+    body: JSON.stringify({ documents, replaceExisting, sourceUrl }),
   });
 }
 
+/**
+ * `sourceUrl` (2.10.0, the fetch-from-URL import flow, `importEntities`'s twin one level down):
+ * every CREATED/UPDATED row gets it as its source reference AND starts synced. Omit for
+ * pasted/uploaded batches.
+ */
 export async function importBlueprints(
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
+  sourceUrl?: string,
 ): Promise<BlueprintImportResponse> {
-  return postBlueprintImport("import", documents, replaceExisting);
+  return postBlueprintImport("import", documents, replaceExisting, sourceUrl);
 }
 
-/** The dry-run: identical row shape, nothing stored or audited. */
+/** The dry-run: identical row shape, nothing stored or audited. `sourceUrl` is accepted for
+ *  parity with `importBlueprints` (the server ignores its effect on a dry-run's classification). */
 export async function checkBlueprintImport(
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
+  sourceUrl?: string,
 ): Promise<BlueprintImportResponse> {
-  return postBlueprintImport("import/check", documents, replaceExisting);
+  return postBlueprintImport("import/check", documents, replaceExisting, sourceUrl);
+}
+
+// -- Source references & HTTP re-sync (2.10.0) — the `api/entities.ts` twin, one level up:
+// `POST /api/v1/blueprints/fetch` (SSRF-guarded, the shared `infra/fetch/UrlFetcher`) and
+// `GET`/`POST /api/v1/blueprints/{id}/sync`. Unlike the catalog's repo sync, the blueprint sync
+// NEVER waives: a fetched copy failing validation is refused outright (`400`).
+
+export type BlueprintSyncState =
+  paths["/api/v1/blueprints/{id}/sync"]["get"]["responses"]["200"]["content"]["application/json"];
+
+export type FetchBlueprintUrlResult =
+  paths["/api/v1/blueprints/fetch"]["post"]["responses"]["200"]["content"]["application/json"];
+
+/** Server-side fetch of a URL (SSRF-guarded, ADMIN only); returns the raw text — a Port
+ *  blueprint JSON document, parsing stays a client concern. The shared fetcher behind
+ *  `POST /entities/fetch`, one connection pool for both. */
+export async function fetchBlueprintUrl(url: string): Promise<FetchBlueprintUrlResult> {
+  return jsonRequest<FetchBlueprintUrlResult>("/api/v1/blueprints/fetch", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+/** The blueprint's sync state: source URL, last-sync stamp, and the baseline document
+ *  (including the merged `hierarchyRelations`). Any authenticated user may read it. */
+export async function getBlueprintSyncState(id: number): Promise<BlueprintSyncState> {
+  return jsonRequest<BlueprintSyncState>(`/api/v1/blueprints/${id}/sync`);
+}
+
+/**
+ * The HTTP→DB sync (ADMIN only): overwrites the stored definition with `document` (the parsed
+ * remote copy) and stamps the sync state. No waiver — a submitted document failing validation
+ * is a `400`, exactly like a strict create/replace.
+ */
+export async function syncBlueprint(id: number, document: BlueprintBody): Promise<void> {
+  await voidRequest(`/api/v1/blueprints/${id}/sync`, {
+    method: "POST",
+    body: JSON.stringify({ document }),
+  });
 }

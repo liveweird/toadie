@@ -328,6 +328,7 @@ type EntityRowResult = {
 type BlueprintImportCaller = (
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
+  sourceUrl?: string,
 ) => Promise<{ results: BlueprintRowResult[] }>;
 
 type EntityImportCaller = (
@@ -346,8 +347,8 @@ type RunImportBatchDeps = {
   importBlueprintsChunk: BlueprintImportCaller;
   importEntitiesChunk: EntityImportCaller;
   /** The URL the batch was FETCHED from (2.9.0, the `ImportCatalogFiles.tsx` `sourceUrl`
-   *  twin) — forwarded to ENTITY chunks only (blueprints never carry a source reference).
-   *  Omit for pasted/uploaded batches. */
+   *  twin) — forwarded to BOTH blueprint and entity chunks since 2.10.0, when blueprints
+   *  gained their own source reference too. Omit for pasted/uploaded batches. */
   sourceUrl?: string;
   onProgress?: (sentChunks: number, totalChunks: number) => void;
   /** Called with the FULL accumulated row set after every completed chunk, so the page can
@@ -435,17 +436,22 @@ export async function runImportBatch(deps: RunImportBatchDeps): Promise<Ontology
     deps.onRows?.(sortedByIndex(rows));
   };
 
+  // Forward `sourceUrl` only when the caller actually supplied one — an omitted argument,
+  // never an explicit `undefined`, so a pasted/uploaded batch's call shape is unchanged.
   for (const chunk of chunked(blueprintDocs, IMPORT_CHUNK_SIZE)) {
     if (!deps.admin) {
       reportChunk(chunk.map(forbiddenRow));
     } else {
-      reportChunk(await runOneChunk(chunk, deps.importBlueprintsChunk, deps.replaceExisting, blueprintRow));
+      const callBlueprints =
+        deps.sourceUrl !== undefined
+          ? (documents: Record<string, unknown>[], replaceExisting: boolean) =>
+              deps.importBlueprintsChunk(documents, replaceExisting, deps.sourceUrl)
+          : deps.importBlueprintsChunk;
+      reportChunk(await runOneChunk(chunk, callBlueprints, deps.replaceExisting, blueprintRow));
     }
   }
 
   for (const chunk of chunked(entityDocs, IMPORT_CHUNK_SIZE)) {
-    // Forward `sourceUrl` only when the caller actually supplied one — an omitted argument,
-    // never an explicit `undefined`, so a pasted/uploaded batch's call shape is unchanged.
     const callEntities =
       deps.sourceUrl !== undefined
         ? (documents: Record<string, unknown>[], replaceExisting: boolean) =>

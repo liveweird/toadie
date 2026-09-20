@@ -59,11 +59,12 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
  *    the `entityquery/SavedEntityQueryService.kt` rule), re-parsed/re-validated against the
  *    CURRENT blueprints/hierarchies. Query EVALUATION diagnostics are explicitly OUT of scope —
  *    those are per-request and already inline on the query bar.
- * 5. **Source references** (2.9.1) — [SOURCE_MISSING] (an entity row; field `source`) flags an
- *    entity with no `sourceUrl` reference — the `catalog/Errors.kt` `SOURCE_MISSING` twin, one
- *    level over: the OPPOSITE kind of report-only finding from classes 2-3 above, since the
- *    reference is OPTIONAL on writes and this never blocks a save, just a standing report entry.
- *    Never emitted on blueprint or saved-query rows.
+ * 5. **Source references** (2.9.1; blueprint rows since 2.10.0) — [SOURCE_MISSING] (field
+ *    `source`) flags an entity OR blueprint with no `sourceUrl` reference — the
+ *    `catalog/Errors.kt` `SOURCE_MISSING` twin, one level over: the OPPOSITE kind of report-only
+ *    finding from classes 2-3 above, since the reference is OPTIONAL on writes and this never
+ *    blocks a save, just a standing report entry. Emitted on `_team`/`_user` too when
+ *    source-less — no special case. Never emitted on saved-query rows.
  *
  * Blueprint rows exist because classes 2 and 3 are properties of the BLUEPRINT's definition, not
  * of any one entity — one broken mirror path affects every entity of that blueprint alike, so
@@ -148,6 +149,8 @@ internal data class EntityErrorBlueprintCandidate(
     val identifier: String,
     val title: String,
     val definition: BlueprintDefinition,
+    /** The blueprint's `sourceUrl` — threaded through so [entityErrorsReport] (pure) can decide [SOURCE_MISSING]. */
+    val sourceUrl: String?,
 )
 
 /** One saved query visible to the caller — the minimal projection the report needs (no creator display fields). */
@@ -202,7 +205,7 @@ internal fun materializeEntityErrorSubjects(
             sourceUrl = row.sourceUrl,
         )
     }
-    val blueprintCandidates = candidates.map { EntityErrorBlueprintCandidate(it.id, it.identifier, it.title, it.definition) }
+    val blueprintCandidates = candidates.map { EntityErrorBlueprintCandidate(it.id, it.identifier, it.title, it.definition, it.sourceUrl) }
     return entities to blueprintCandidates
 }
 
@@ -655,12 +658,13 @@ internal fun ownershipFinding(definition: BlueprintDefinition, team: List<String
 
 /**
  * [SOURCE_MISSING] — the `catalog/Errors.kt` twin, one level over: the opposite kind of
- * report-only finding (the reference is OPTIONAL on writes, never a save blocker), entity rows
- * only. `null`/blank [sourceUrl] both mean "no reference" — the write path already folds a blank
- * submission to `null` (`sanitizedSourceUrl`), but a defensive blank check costs nothing here.
+ * report-only finding (the reference is OPTIONAL on writes, never a save blocker), entity AND
+ * (2.10.0) blueprint rows alike. `null`/blank [sourceUrl] both mean "no reference" — the write
+ * path already folds a blank submission to `null` (`sanitizedSourceUrl`), but a defensive blank
+ * check costs nothing here. [subject] names the row kind in the message ("entity"/"blueprint").
  */
-internal fun sourceMissingFinding(sourceUrl: String?): EntityFinding? =
-    if (sourceUrl.isNullOrBlank()) EntityFinding(SOURCE_MISSING, "source", "This entity has no source reference") else null
+internal fun sourceMissingFinding(sourceUrl: String?, subject: String): EntityFinding? =
+    if (sourceUrl.isNullOrBlank()) EntityFinding(SOURCE_MISSING, "source", "This $subject has no source reference") else null
 
 /** [text]'s parse+validate diagnostics against [schema] — [EntityService.checkQuery]'s posture, never evaluated. */
 internal fun savedQueryDiagnostics(text: String, schema: QuerySchema): List<QueryDiagnostic> = try {
@@ -690,7 +694,9 @@ internal fun entityErrorsReport(
     val blueprintRows = subjects.blueprintCandidates
         .sortedBy { it.identifier.lowercase() }
         .mapNotNull { candidate ->
-            val findings = blueprintFindingsById.getValue(candidate.identifier)
+            val sourceMissing = sourceMissingFinding(candidate.sourceUrl, "blueprint")
+            if (sourceMissing != null) budget?.retainFindings(listOf(sourceMissing))
+            val findings = blueprintFindingsById.getValue(candidate.identifier) + listOfNotNull(sourceMissing)
             if (findings.isEmpty()) null else BlueprintErrorRow(candidate.id, candidate.identifier, candidate.title, findings)
         }
 
@@ -698,7 +704,7 @@ internal fun entityErrorsReport(
         val definition = subjects.definitionsByIdentifier[subject.blueprint]
         val ownership = definition?.let { ownershipFinding(it, subject.team, subject.blueprint in staleOwnershipBlueprints) }
         if (ownership != null) budget?.retainFindings(listOf(ownership))
-        val sourceMissing = sourceMissingFinding(subject.sourceUrl)
+        val sourceMissing = sourceMissingFinding(subject.sourceUrl, "entity")
         if (sourceMissing != null) budget?.retainFindings(listOf(sourceMissing))
         val findings = subject.findings + listOfNotNull(ownership, sourceMissing)
         if (findings.isEmpty()) {

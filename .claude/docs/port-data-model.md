@@ -444,15 +444,18 @@ or evaluates computed properties at all, see `.claude/docs/persistence.md`).
   there; see "Ownership" above for `OWNERSHIP_UNRESOLVED`/`OWNERSHIP_PATH_STALE`, the two
   report-only codes covering ownership's own drift.
 
-  A fifth report-only class joined in 2.9.1: `SOURCE_MISSING` (field `source`) — an entity row
-  only, never a blueprint row — flags an entity whose `sourceUrl` is unset, the
-  `catalog/Errors.kt` `SOURCE_MISSING` twin one level over (2.9.0 gave entities the same source
-  reference/re-sync machinery the catalog already had).
+  A fifth report-only class joined in 2.9.1: `SOURCE_MISSING` (field `source`) flags a row with
+  no `sourceUrl` — an entity row since 2.9.1, and, since 2.10.0, a blueprint row too (`_team`/
+  `_user` included, no special case: a fresh install shows both gray Source rows until an admin
+  sets a reference) — the `catalog/Errors.kt` `SOURCE_MISSING` twin one level over (2.9.0 gave
+  entities, 2.10.0 gave blueprints, the same source reference/re-sync machinery the catalog
+  already had).
 - **Reference**: `entities/EntityErrors.kt` (the checkers), `EntityErrorsCheckTest` (one case
   per rule above).
-- **Enforcement**: `SampleBlueprintsTest`'s zero-blueprint-rows pin (the baseline ontology must
-  report NOTHING — any row is a checker false positive) plus `EntityErrorsCheckTest`;
-  report-only — never blocks a blueprint write.
+- **Enforcement**: `SampleBlueprintsTest`'s pin that every one of the eleven baseline blueprints
+  reports EXACTLY `SOURCE_MISSING` and nothing else — the sample carries no source references, so
+  any OTHER code, or a missing `SOURCE_MISSING` row, is a checker false positive — plus
+  `EntityErrorsCheckTest`; report-only — never blocks a blueprint write.
 - **Exception**: `CALCULATION_QUARANTINED` is instance-local (the deadline quarantine's own
   caveat, `.claude/docs/security.md`) — a second instance may not agree.
 
@@ -576,6 +579,21 @@ Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's ow
   not a Port field, and reimporting an export must not accidentally graft someone else's
   reference onto a fresh row.
 
+- **Source reference & HTTP re-sync (2.10.0)** — the entity's own `sourceUrl`/re-sync feature,
+  one level up again: three envelope columns beside `definition` (`.claude/docs/persistence.md`
+  "Blueprint source references (V38)") — `sourceUrl` (an optional https URL, absent on the wire
+  when unset), `lastSyncedAt` (epoch millis, `0` = never), and a private `syncedContent` baseline
+  never exposed on the wire. Wire members: `BlueprintRequest.sourceUrl` (optional, row state for
+  the whole request — never a document member, `document.sourceUrl` is `400`) and
+  `BlueprintResponse.sourceUrl`/`lastSyncedAt`. The stored baseline is the request-shaped
+  `BlueprintRequest`, INCLUDING the request's merged `hierarchyRelations` — a Toadie-only field
+  the source Port document never carries, so a sync that OMITS it KEEPS the stored map rather
+  than clearing it (the one point where a blueprint sync diverges from the entity sync's plain
+  full-replace; a present, non-empty map still replaces the stored one, and clearing the map
+  stays an ordinary editor PUT). The export (`blueprintExportDocument`) never carries
+  `sourceUrl`/`lastSyncedAt` — the same provenance-is-not-a-Port-field rule as the entity export
+  above.
+
 ## System blueprints (V31)
 
 Toadie seeds exactly two system blueprints — `_team` and `_user` — flagged `system: true` on the
@@ -640,7 +658,17 @@ clearing it — only a batch that itself carries a URL moves or re-stamps one. A
 `sourceUrl` inside an individual entity document is always `INVALID` (`requireNoDocumentSourceUrl`
 — the same rule the ordinary create/sync routes enforce): the reference is a property of the
 BATCH REQUEST, never a document member, so it cannot ride inside one row while a sibling row
-gets a different value. Blueprint import documents carry no `sourceUrl` concept at all.
+gets a different value.
+
+**Blueprint import source references (2.10.0).** `BlueprintImportRequest.sourceUrl` is the
+identical batch-level https URL, one level up: every `CREATED`/`UPDATED` row this batch produces
+is stamped referenced-and-synced (the pass-2 restoration of a deferred row is stamped too, so a
+row's FINAL baseline is always its complete, fully-resolved document — see
+`.claude/docs/persistence.md` "Blueprint source references (V38)"). A `replaceExisting` batch
+submitted WITHOUT a `sourceUrl` KEEPS an existing row's own reference untouched rather than
+clearing it — the same D3 rule as the entity import. A per-document `sourceUrl` inside an
+individual blueprint document is always `INVALID` (the same `requireNoDocumentSourceUrl` rule),
+for the same reason: the reference is a property of the BATCH REQUEST, never a document member.
 
 **Ordering and deferral, one mechanism for forward references and cycles.** Both planners
 topologically order the batch (Kahn's algorithm, ties broken by the document's 0-based batch

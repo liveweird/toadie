@@ -69,6 +69,14 @@ class BlueprintImportPlanTest {
     }
 
     @Test
+    fun `a per-document sourceUrl is INVALID - it is row state for the whole request`() {
+        val result = plan(listOf(doc(simple("nope").copy(sourceUrl = "https://example.com/nope.json"))))
+        val row = (result.verdicts[0] as BlueprintPlanVerdict.Rejected).row
+        assertEquals(OntologyImportStatus.INVALID, row.status)
+        assertTrue(row.message!!.contains("sourceUrl"), row.message!!)
+    }
+
+    @Test
     fun `an underscore identifier is reserved unless it names an active system blueprint`() {
         val result = plan(listOf(doc(simple("_notasystemblueprint"))))
         val row = (result.verdicts[0] as BlueprintPlanVerdict.Rejected).row

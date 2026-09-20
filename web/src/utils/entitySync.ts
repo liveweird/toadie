@@ -7,7 +7,7 @@
 
 import type { Blueprint } from "../api/blueprints";
 import type { Entity } from "../api/entities";
-import type { SyncStateSource } from "../components/SyncStateText";
+import { canonicalDocumentJson } from "./canonicalJson";
 import {
   buildComputedIdsByBlueprint,
   sanitizeDocument,
@@ -38,16 +38,6 @@ export function toSyncTarget(entity: Entity): EntitySyncTarget {
   };
 }
 
-/** Feeds the shared `SyncStateText`/`entitySync` idiom the same way a catalog file does — the
- *  ONE narrowing both the Entities list's Last-sync column and the editor's header use. */
-export function entitySyncSource(entity: {
-  sourceUrl?: string;
-  lastSyncedAt: number;
-  updatedAt: number;
-}): SyncStateSource {
-  return { sourceUrl: entity.sourceUrl ?? null, lastSyncedAt: entity.lastSyncedAt, updatedAt: entity.updatedAt };
-}
-
 const TOP_LEVEL_KEY_ORDER = [
   "blueprint",
   "identifier",
@@ -58,41 +48,17 @@ const TOP_LEVEL_KEY_ORDER = [
   "relations",
 ] as const;
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Recursively sorts object keys (alphabetically); arrays keep their element order, but each
- *  element is itself sorted the same way. */
-function sortKeysDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeysDeep);
-  if (isPlainObject(value)) {
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(value).sort()) {
-      sorted[key] = sortKeysDeep(value[key]);
-    }
-    return sorted;
-  }
-  return value;
-}
-
 /**
- * Renders an entity document with a stable key order for comparison: the top-level identity
- * fields in a fixed, human-meaningful order (only those present), any other top-level key
- * alphabetically after them, and every nested object's keys sorted recursively (arrays keep
- * their element order). Mirrors `utils/catalogYaml.ts`'s canonical-rendering role one level
- * down, in JSON rather than YAML — entities have no YAML form.
+ * Renders an entity document with a stable key order for comparison — see
+ * `utils/canonicalJson.ts#canonicalDocumentJson` for the shared mechanism; entities have no
+ * YAML form, so this is the JSON analog of `utils/catalogYaml.ts`'s canonical render.
  */
 export function canonicalEntityDocumentJson(doc: Record<string, unknown>): string {
-  const ordered: Record<string, unknown> = {};
-  for (const key of TOP_LEVEL_KEY_ORDER) {
-    if (key in doc) ordered[key] = sortKeysDeep(doc[key]);
-  }
-  const orderedKeys = new Set<string>(TOP_LEVEL_KEY_ORDER);
-  for (const key of Object.keys(doc).filter((k) => !orderedKeys.has(k)).sort()) {
-    ordered[key] = sortKeysDeep(doc[key]);
-  }
-  return JSON.stringify(ordered, null, 2);
+  return canonicalDocumentJson(doc, TOP_LEVEL_KEY_ORDER);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

@@ -1,5 +1,7 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintRequest
+import ch.nokillswit.blueprints.SyncBlueprintRequest
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.SyncEntityRequest
 import ch.nokillswit.plugins.ProblemDetail
@@ -32,6 +34,13 @@ class NegativeIdTest {
         // GET on them would fail the conformance plugin as an undeclared method rather than
         // exercising the interceptor under test.
         assertNegative400(client.get("/api/v1/blueprints/-1"))
+        assertNegative400(client.get("/api/v1/blueprints/-1/sync"))
+        assertNegative400(
+            client.postJson(
+                "/api/v1/blueprints/-1/sync",
+                SyncBlueprintRequest(document = BlueprintRequest(identifier = "bp", title = "T")),
+            ),
+        )
         assertNegative400(client.get("/api/v1/entities/-1"))
         assertNegative400(client.get("/api/v1/entities/-1/sync"))
         assertNegative400(

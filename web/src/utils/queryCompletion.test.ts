@@ -17,6 +17,7 @@ function blueprint(overrides: Partial<Blueprint> & { identifier: string }): Blue
     createdAt: 0,
     updatedAt: 0,
     system: false,
+    lastSyncedAt: 0,
     ...overrides,
   };
 }

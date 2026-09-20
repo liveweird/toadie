@@ -114,11 +114,13 @@ class SampleBlueprintsTest {
      * 2.5.0 (`entities/EntityErrors.kt`): the Errors report's static checkers (mirror/aggregation/
      * ownership path health, calculation compile verdicts) must never flag the baseline ontology —
      * every one of its computed paths and expressions resolves cleanly at runtime
-     * (`SampleEntitiesTest` pins that with real entities), so a blueprint row here would be a
-     * CHECKER false positive to fix, never a reason to change the sample.
+     * (`SampleEntitiesTest` pins that with real entities). Since 2.10.0 every sample blueprint IS
+     * source-less (`SampleData.loadBlueprints` never sets `sourceUrl`), so `SOURCE_MISSING` is the
+     * one EXPECTED code per row — any OTHER code is still a checker false positive to fix, never a
+     * reason to change the sample.
      */
     @Test
-    fun `the sample ontology yields zero blueprint rows from the Errors report`() = testApplication {
+    fun `the sample ontology yields only SOURCE_MISSING blueprint rows - any other code is a checker false positive`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient("bpsample-errors", UserRole.ADMIN)
         val files = SampleData.numberedFiles("blueprints")
@@ -130,8 +132,11 @@ class SampleBlueprintsTest {
             TestHierarchies.ensure(*SampleData.requiredHierarchies)
             SampleData.loadBlueprints(admin, files)
 
-            val report = admin.get("/api/v1/entities/errors").body<EntityErrorsReport>()
-            assertTrue(report.blueprints.isEmpty(), "false-positive blueprint rows: ${report.blueprints}")
+            identifiers.forEach { identifier ->
+                val report = admin.get("/api/v1/entities/errors?blueprint=$identifier").body<EntityErrorsReport>()
+                val row = report.blueprints.single { it.identifier == identifier }
+                assertEquals(listOf("SOURCE_MISSING"), row.findings.map { it.code }, "false-positive codes on $identifier: ${row.findings}")
+            }
         } finally {
             try {
                 TestBlueprints.restoreSystemBlueprints()

@@ -302,6 +302,14 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`quick-view.spec.ts`](scenarios/quick-view.md) — the quick-view drawer opens from a
   row menu, is addressed by `?file=`, survives a reload, scans clean, and hands over to the
   editor (owns one throwaway System in the `graph` run namespace).
+- [`blueprint-sync.spec.ts`](scenarios/blueprint-sync.md) — blueprint source references &
+  re-sync (2.10.0, the Blueprints-registry twin of `entity-sync.spec.ts`): a throwaway blueprint
+  created source-less shows "No source" on the Last sync column and a disabled Sync-from-source
+  kebab item, setting the URL in the blueprint editor's Source fieldset turns the column to
+  "Never synced", and the sync modal shows the SSRF guard's public-https error against a
+  loopback URL with the overwrite disabled — sync/fetch are ADMIN-only for blueprints, so the
+  whole journey runs as the admin, and the import page's own loopback-fetch refusal is not
+  duplicated here (already covered by `entity-sync.spec.ts`).
 - [`blueprints.spec.ts`](scenarios/blueprints.md) — the blueprint registry (Port
   compatibility, phase 1; + Phase 4 system-blueprint protections, v1.26.0): the seeded `_team`
   system row's System badge/disabled Delete and its editor's read-only identifier + locked

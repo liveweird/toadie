@@ -40,6 +40,7 @@ export function blueprintResponse(overrides: Partial<Blueprint> = {}): Blueprint
     createdAt: EPOCH,
     updatedAt: EPOCH,
     system: false,
+    lastSyncedAt: 0,
     ...overrides,
   };
 }

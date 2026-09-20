@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.10.0",
+    date: "2026-09-20",
+    en: `**Blueprints as sync targets.** A blueprint can now carry the https address of its canonical copy — set it in the blueprint editor's Source section, or fetch a file from a URL on the Import page so every imported blueprint starts linked and synced, exactly like entities since 2.9.0. Sync from source, in the Blueprints list's row menu and in the editor, shows what changed at the source and in Toadie side by side before overwriting the stored definition; a copy that breaks the blueprint rules is refused, never stored, and the Toadie-only hierarchy relations are kept when the source document does not carry them. The Blueprints list gains a Last sync column, and the Port Errors report lists source-less blueprints under the gray Source class.`,
+    pl: `**Blueprinty jako cele synchronizacji.** Blueprint może teraz mieć adres https swojej kanonicznej kopii — ustaw go w sekcji Źródło w edytorze blueprintu albo pobierz plik z adresu URL na stronie Import, aby każdy zaimportowany blueprint od razu był powiązany i zsynchronizowany, dokładnie tak jak encje od wersji 2.9.0. Synchronizuj ze źródła, w menu wiersza na liście Blueprinty i w edytorze, pokazuje obok siebie, co zmieniło się w źródle i w Toadie, zanim nadpisze zapisaną definicję; kopia, która łamie reguły blueprintów, jest odrzucana i nigdy nie zapisywana, a relacje hierarchii (rozszerzenie Toadie) zostają zachowane, gdy dokument źródłowy ich nie zawiera. Lista Blueprinty zyskuje kolumnę Ostatnia synchronizacja, a raport Błędy w świecie Port wymienia blueprinty bez źródła w szarej klasie Źródło.`,
+  },
+  {
     version: "2.9.1",
     date: "2026-09-20",
     en: `**Source-less entities on the Errors report.** The Port Errors report now lists entities that have no source reference under a new gray Source class — report-only, like the Backstage report's own: a source is optional, but without one an entity cannot be re-synced. Switch the Source chip off to hide these rows.`,

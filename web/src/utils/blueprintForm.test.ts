@@ -491,6 +491,19 @@ describe("fromBlueprintResponse edge branches", () => {
     expect(form.calculationProperties[0].colorized).toBe(false);
     expect(form.calculationProperties[0].colorsJson).toBe("");
   });
+
+  test("sourceUrl seeds from the response, absent reads as blank", () => {
+    expect(fromBlueprintResponse(responseWith({ sourceUrl: "https://example.com/a.json" })).sourceUrl).toBe(
+      "https://example.com/a.json",
+    );
+    expect(fromBlueprintResponse(responseWith({})).sourceUrl).toBe("");
+  });
+});
+
+describe("emptyBlueprintForm", () => {
+  test("sourceUrl starts blank", () => {
+    expect(emptyBlueprintForm().sourceUrl).toBe("");
+  });
 });
 
 describe("blueprintFormValidation", () => {
@@ -511,6 +524,13 @@ describe("blueprintFormValidation", () => {
     expect(validate.description("short")).toBeNull();
     expect(validate.icon("x".repeat(101))).toBe("blueprints.validation.iconLength");
     expect(validate.icon("short")).toBeNull();
+  });
+
+  test("sourceUrl must be an absolute https URL without credentials, blank is fine", () => {
+    expect(validate.sourceUrl("")).toBeNull();
+    expect(validate.sourceUrl("https://example.com/a.json")).toBeNull();
+    expect(validate.sourceUrl("http://example.com/a.json")).toBe("blueprints.validation.sourceUrl");
+    expect(validate.sourceUrl("https://user:pass@example.com/a.json")).toBe("blueprints.validation.sourceUrl");
   });
 
   test("enum values on a non-string/non-number property type are ignored by the rule", () => {

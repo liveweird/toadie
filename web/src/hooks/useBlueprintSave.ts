@@ -30,7 +30,7 @@ export function useBlueprintSave({
     setError(null);
     setSubmitting(true);
     try {
-      await saveRequest(toBlueprintRequest(values));
+      await saveRequest({ ...toBlueprintRequest(values), sourceUrl: values.sourceUrl.trim() || undefined });
       await queryClient.invalidateQueries({ queryKey: ["blueprints"] });
       // A hierarchy-relation edit changes both the Entity graph/hierarchy shaping AND every
       // affected entity's findings (a relation no longer marked as hierarchy, or newly marked,

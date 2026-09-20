@@ -432,7 +432,7 @@ class EntityErrorsCheckTest {
         )
         // Only bpA is a CANDIDATE (the "blueprint" filter narrowed to it) — resolving its mirror
         // path against bpB (outside the candidate set) must still succeed.
-        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA))
+        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA, sourceUrl = "https://example.com/bpA"))
 
         val cleanEntity = EntityErrorEntitySubject(1u, 1u, "bpA", "A", "e1", "E1", emptyList(), emptyList(), "https://example.com/e1")
         val staleEntity = EntityErrorEntitySubject(
@@ -466,17 +466,19 @@ class EntityErrorsCheckTest {
     // ---------------------------------------------------------------------------------------
 
     @Test
-    fun `sourceMissingFinding flags a null or blank sourceUrl and nothing else`() {
-        assertEquals("source", sourceMissingFinding(null)?.field)
-        assertEquals(SOURCE_MISSING, sourceMissingFinding(null)?.code)
-        assertEquals(SOURCE_MISSING, sourceMissingFinding("")?.code)
-        assertNull(sourceMissingFinding("https://example.com/e"))
+    fun `sourceMissingFinding flags a null or blank sourceUrl and nothing else, naming the subject`() {
+        assertEquals("source", sourceMissingFinding(null, "entity")?.field)
+        assertEquals(SOURCE_MISSING, sourceMissingFinding(null, "entity")?.code)
+        assertEquals("This entity has no source reference", sourceMissingFinding(null, "entity")?.message)
+        assertEquals("This blueprint has no source reference", sourceMissingFinding(null, "blueprint")?.message)
+        assertEquals(SOURCE_MISSING, sourceMissingFinding("", "entity")?.code)
+        assertNull(sourceMissingFinding("https://example.com/e", "entity"))
     }
 
     @Test
     fun `entityErrorsReport reports SOURCE_MISSING for a source-less entity as its last finding`() {
         val bpA = bp()
-        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA))
+        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA, sourceUrl = "https://example.com/bpA"))
         val sourceless = EntityErrorEntitySubject(1u, 1u, "bpA", "A", "e1", "E1", emptyList(), emptyList(), sourceUrl = null)
         val subjects = EntityErrorSubjects(
             entities = listOf(sourceless),
@@ -494,7 +496,7 @@ class EntityErrorsCheckTest {
     @Test
     fun `entityErrorsReport omits an entity that carries a source and nothing else`() {
         val bpA = bp()
-        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA))
+        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA, sourceUrl = "https://example.com/bpA"))
         val sourced = EntityErrorEntitySubject(1u, 1u, "bpA", "A", "e1", "E1", emptyList(), emptyList(), "https://example.com/e1")
         val subjects = EntityErrorSubjects(
             entities = listOf(sourced),
@@ -510,7 +512,7 @@ class EntityErrorsCheckTest {
     @Test
     fun `entityErrorsReport reports a stale, source-less entity's stale finding then SOURCE_MISSING`() {
         val bpA = bp()
-        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA))
+        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA, sourceUrl = "https://example.com/bpA"))
         val staleAndSourceless = EntityErrorEntitySubject(
             1u, 1u, "bpA", "A", "e1", "E1", emptyList(),
             listOf(EntityFinding("REQUIRED_MISSING", "properties.x", "Required property 'x' is missing")),
@@ -526,5 +528,52 @@ class EntityErrorsCheckTest {
         val report = entityErrorsReport(subjects) { _, _ -> CalculationVerdict.Ok }
         val row = report.entities.single { it.identifier == "e1" }
         assertEquals(listOf("REQUIRED_MISSING", SOURCE_MISSING), row.findings.map { it.code })
+    }
+
+    @Test
+    fun `entityErrorsReport reports a source-less blueprint's SOURCE_MISSING last, after a stale computed finding`() {
+        val bpA = bp(mirrorProperties = mapOf("m" to MirrorPropertyDefinition("T", "unknownRel.title")))
+        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA, sourceUrl = null))
+        val subjects = EntityErrorSubjects(
+            entities = emptyList(),
+            blueprintCandidates = candidates,
+            definitionsByIdentifier = mapOf("bpA" to bpA),
+            savedQueries = emptyList(),
+            querySchema = QuerySchema(emptyMap(), emptySet()),
+        )
+        val report = entityErrorsReport(subjects) { _, _ -> CalculationVerdict.Ok }
+        val row = report.blueprints.single { it.identifier == "bpA" }
+        assertEquals(listOf(MIRROR_PATH_STALE, SOURCE_MISSING), row.findings.map { it.code })
+    }
+
+    @Test
+    fun `entityErrorsReport omits a sourced blueprint with nothing else wrong`() {
+        val bpA = bp()
+        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "bpA", "A", bpA, sourceUrl = "https://example.com/bpA"))
+        val subjects = EntityErrorSubjects(
+            entities = emptyList(),
+            blueprintCandidates = candidates,
+            definitionsByIdentifier = mapOf("bpA" to bpA),
+            savedQueries = emptyList(),
+            querySchema = QuerySchema(emptyMap(), emptySet()),
+        )
+        val report = entityErrorsReport(subjects) { _, _ -> CalculationVerdict.Ok }
+        assertTrue(report.blueprints.isEmpty())
+    }
+
+    @Test
+    fun `entityErrorsReport reports a source-less _team candidate like any other blueprint row`() {
+        val team = bp()
+        val candidates = listOf(EntityErrorBlueprintCandidate(1u, "_team", "Team", team, sourceUrl = null))
+        val subjects = EntityErrorSubjects(
+            entities = emptyList(),
+            blueprintCandidates = candidates,
+            definitionsByIdentifier = mapOf("_team" to team),
+            savedQueries = emptyList(),
+            querySchema = QuerySchema(emptyMap(), emptySet()),
+        )
+        val report = entityErrorsReport(subjects) { _, _ -> CalculationVerdict.Ok }
+        val row = report.blueprints.single { it.identifier == "_team" }
+        assertEquals(listOf(SOURCE_MISSING), row.findings.map { it.code })
     }
 }

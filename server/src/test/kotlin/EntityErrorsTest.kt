@@ -57,8 +57,16 @@ class EntityErrorsTest {
 
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().substring(0, 8)}"
 
-    private suspend fun HttpClient.createBlueprint(request: BlueprintRequest) =
-        postJson("/api/v1/blueprints", request).body<BlueprintResponse>()
+    /**
+     * Every fixture blueprint carries a `sourceUrl` by default (2.10.0) so pre-existing
+     * exact-findings and "stays clean" assertions in this file are unaffected by
+     * `SOURCE_MISSING` — pass `sourceUrl = null` explicitly on the request to build a
+     * source-less fixture for the dedicated SOURCE_MISSING case below.
+     */
+    private suspend fun HttpClient.createBlueprint(request: BlueprintRequest) = postJson(
+        "/api/v1/blueprints",
+        request.copy(sourceUrl = request.sourceUrl ?: "https://example.com/blueprints/${request.identifier}.json"),
+    ).body<BlueprintResponse>()
 
     /**
      * Every fixture entity carries a `sourceUrl` by default (2.9.1) so pre-existing exact-findings
@@ -570,6 +578,45 @@ class EntityErrorsTest {
             assertTrue(client.readErrors("?blueprint=$bp").entities.none { it.identifier == ent })
         } finally {
             TestEntities.remove(ent)
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    @Test
+    fun `a source-less blueprint reports SOURCE_MISSING last, cleared once a sourceUrl is PUT`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ee-bp-source", UserRole.ADMIN)
+        val bp = unique("bp-ee-bp-source")
+        try {
+            // Bypasses createBlueprint's own default-source idiom: this fixture must start
+            // source-less, which the route helper above can no longer produce.
+            val created = TestBlueprints.service.create(
+                BlueprintRequest(
+                    identifier = bp, title = "T",
+                    calculationProperties = mapOf("broken" to CalculationPropertyDefinition("Broken", "string", calculation = "((")),
+                ),
+                callerId = 1u,
+            )
+
+            val report = client.readErrors("?blueprint=$bp")
+            val row = report.blueprints.single { it.identifier == bp }
+            assertEquals(listOf("CALCULATION_COMPILE_FAILED", "SOURCE_MISSING"), row.findings.map { it.code })
+            assertEquals("source", row.findings.last().field)
+
+            assertEquals(
+                HttpStatusCode.NoContent,
+                client.putJson(
+                    "/api/v1/blueprints/${created.id}",
+                    BlueprintRequest(
+                        identifier = bp, title = "T",
+                        calculationProperties = mapOf("broken" to CalculationPropertyDefinition("Broken", "string", calculation = "((")),
+                        sourceUrl = "https://example.com/blueprints/$bp.json",
+                    ),
+                ).status,
+            )
+            val cleared = client.readErrors("?blueprint=$bp").blueprints.single()
+            assertEquals(listOf("CALCULATION_COMPILE_FAILED"), cleared.findings.map { it.code })
+        } finally {
             TestBlueprints.remove(bp)
         }
     }
