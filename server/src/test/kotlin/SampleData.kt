@@ -28,6 +28,14 @@ import kotlin.test.assertEquals
  * directory), so files are read via `../sample-data/port/commerce-payments/<dir>`.
  */
 object SampleData {
+    /**
+     * The public raw-GitHub base every sample blueprint/entity is stamped with (2.10.2) unless a
+     * caller opts out — the very same default `sample-data/port/commerce-payments/{blueprints,
+     * entities}/load.sh` use, so a freshly loaded sample workspace shows no `SOURCE_MISSING` rows
+     * in either loading path.
+     */
+    const val SAMPLE_SOURCE_BASE = "https://raw.githubusercontent.com/liveweird/toadie/master/sample-data/port/commerce-payments"
+
     fun numberedFiles(dir: String): List<File> =
         File("../sample-data/port/commerce-payments/$dir")
             .listFiles { f -> f.name.matches(Regex("[0-9]{2}-.*\\.json")) }
@@ -71,12 +79,20 @@ object SampleData {
      * `target` must already be an ACTIVE blueprint
      * (`BlueprintService.requireTargetsExist`/`.claude/docs/persistence.md` "Blueprint targets
      * under concurrency (V27)"), so a forward-referencing rollup (domain -> system, system ->
-     * service/workload) names a blueprint that has not loaded yet. Pass 2 `PUT`s the FULL file
-     * back onto every blueprint that actually declares `aggregationProperties`, now that every
-     * target exists. Returns the FINAL (post-pass-2) response per identifier.
+     * service/workload) names a blueprint that has not loaded yet. Pass 2 `PUT`s the FULL
+     * definition back onto every blueprint that actually declares `aggregationProperties`, now
+     * that every target exists. Returns the FINAL (post-pass-2) response per identifier.
+     *
+     * [sourceUrl] (default `true`, 2.10.2) attaches `sourceUrl = SAMPLE_SOURCE_BASE/blueprints/
+     * <file name>` to every request on BOTH passes — `sample-data/port/commerce-payments/
+     * blueprints/load.sh`'s own default — so a caller that wants the pre-2.10.2 source-less
+     * behavior (e.g. a dedicated regression) passes `false`.
      */
-    suspend fun loadBlueprints(client: HttpClient, files: List<File>): Map<String, BlueprintResponse> {
-        val decoded = files.map { it to blueprintJson.decodeFromString<BlueprintRequest>(it.readText()) }
+    suspend fun loadBlueprints(client: HttpClient, files: List<File>, sourceUrl: Boolean = true): Map<String, BlueprintResponse> {
+        val decoded = files.map { file ->
+            val request = blueprintJson.decodeFromString<BlueprintRequest>(file.readText())
+            file to if (sourceUrl) request.copy(sourceUrl = "$SAMPLE_SOURCE_BASE/blueprints/${file.name}") else request
+        }
 
         decoded.forEach { (_, request) ->
             loadBlueprint(client, blueprintJson.encodeToString(request.copy(aggregationProperties = emptyMap())))
@@ -84,11 +100,11 @@ object SampleData {
 
         val idByIdentifier = client.get("/api/v1/blueprints").body<BlueprintList>().items.associate { it.identifier to it.id }
 
-        decoded.filter { (_, request) -> request.aggregationProperties.isNotEmpty() }.forEach { (file, request) ->
+        decoded.filter { (_, request) -> request.aggregationProperties.isNotEmpty() }.forEach { (_, request) ->
             val id = idByIdentifier.getValue(request.identifier)
             val put = client.put("/api/v1/blueprints/$id") {
                 contentType(ContentType.Application.Json)
-                setBody(file.readText())
+                setBody(blueprintJson.encodeToString(request))
             }
             assertEquals(HttpStatusCode.NoContent, put.status, "PUT (aggregations) ${request.identifier}: ${put.bodyAsText()}")
         }

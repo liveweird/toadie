@@ -6,10 +6,17 @@
 # every entity names a blueprint, and the blueprint registry must already hold it.
 #
 # Env:
-#   TOADIE_URL       default http://localhost:8081
-#   TOADIE_EMAIL     default admin@toadie.local (any authenticated user may mutate entities,
-#                    but the seed admin is always present)
-#   TOADIE_PASSWORD  default changeme
+#   TOADIE_URL          default http://localhost:8081
+#   TOADIE_EMAIL        default admin@toadie.local (any authenticated user may mutate entities,
+#                       but the seed admin is always present)
+#   TOADIE_PASSWORD     default changeme
+#   TOADIE_SOURCE_BASE  default the public raw-GitHub base of this very directory (2.10.2) — every
+#                       created entity gets `sourceUrl = $TOADIE_SOURCE_BASE/entities/<file>`, the
+#                       URL of the ARRAY FILE it came from (the sync picker matches an entity by
+#                       identifier inside an array), so a fresh load shows no SOURCE_MISSING rows
+#                       and Sync from source works right away. Set to another base to point a
+#                       fork/branch's checkout at itself, or to an EMPTY string to load completely
+#                       source-less.
 #
 # Secrets never touch argv: the password comes from the environment only (no shell history),
 # the login body is built by jq and piped to curl on stdin, and the bearer token rides a
@@ -21,6 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOADIE_URL="${TOADIE_URL:-http://localhost:8081}"
 TOADIE_EMAIL="${TOADIE_EMAIL:-admin@toadie.local}"
 TOADIE_PASSWORD="${TOADIE_PASSWORD:-changeme}"
+TOADIE_SOURCE_BASE="${TOADIE_SOURCE_BASE-https://raw.githubusercontent.com/liveweird/toadie/master/sample-data/port/commerce-payments}"
 
 command -v curl >/dev/null || { echo "load.sh needs curl" >&2; exit 1; }
 command -v jq >/dev/null || { echo "load.sh needs jq" >&2; exit 1; }
@@ -42,6 +50,11 @@ load() {
     while IFS= read -r entity; do
       identifier=$(jq -r '.identifier' <<<"$entity")
       bp=$(jq -r '.blueprint' <<<"$entity")
+      # sourceUrl is the ARRAY FILE's own URL (unless TOADIE_SOURCE_BASE is empty) — omitted,
+      # never sent as null, so an empty base loads the sample completely source-less.
+      if [ -n "$TOADIE_SOURCE_BASE" ]; then
+        entity=$(jq -c --arg url "$TOADIE_SOURCE_BASE/entities/$(basename "$file")" '. + {sourceUrl: $url}' <<<"$entity")
+      fi
       status=$(printf '%s' "$entity" \
         | request -X POST "$TOADIE_URL/api/v1/entities" -H @"$HEADERS" \
             -H 'Content-Type: application/json' --data-binary @-)
@@ -95,6 +108,11 @@ delete_set() {
 }
 
 main() {
+  if [ -n "$TOADIE_SOURCE_BASE" ]; then
+    echo "source base: $TOADIE_SOURCE_BASE"
+  else
+    echo "no source references"
+  fi
   login
   if [ "${1:-}" = "--delete" ]; then delete_set; else load; fi
 }

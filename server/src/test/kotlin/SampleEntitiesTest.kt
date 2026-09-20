@@ -3,6 +3,7 @@ package ch.nokillswit
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.blueprints.toDefinition
+import ch.nokillswit.entities.EntityErrorsReport
 import ch.nokillswit.entities.EntityImportRequest
 import ch.nokillswit.entities.EntityImportResponse
 import ch.nokillswit.entities.EntityRequest
@@ -118,7 +119,12 @@ class SampleEntitiesTest {
             val requestsByFile = mutableListOf<List<EntityRequest>>()
 
             entFiles.forEachIndexed { fileIndex, file ->
+                // 2.10.2: every entity is stamped with the public raw-GitHub URL of the ARRAY
+                // FILE it came from — `sample-data/port/commerce-payments/entities/load.sh`'s
+                // own default — so a freshly loaded sample workspace reports no SOURCE_MISSING
+                // rows (assertNoSourceMissingFindings below).
                 val requests = blueprintJson.decodeFromString<List<EntityRequest>>(file.readText())
+                    .map { it.copy(sourceUrl = "${SampleData.SAMPLE_SOURCE_BASE}/entities/${file.name}") }
                 requestsByFile += requests
 
                 assertDependencyOrder(requests, fileIndex, blueprintRequestsByIdentifier, blueprintFileIndex, file.name)
@@ -168,6 +174,16 @@ class SampleEntitiesTest {
             assertShowcaseCoverage(requestsByFile, blueprintRequestsByIdentifier)
             assertTeamOwnership(requestsByFile, blueprintRequestsByIdentifier, responseByKey)
             assertComputedProperties(requestsByFile, responseByKey)
+
+            // 2.10.2: every sample entity now carries a sourceUrl (above), so none of the SAMPLE's
+            // rows may appear on the Port Errors report (a row is omitted once its findings go empty,
+            // EntityErrorsReport's own KDoc). Scoped to the sample's own (blueprint, identifier) keys:
+            // the suite's database is shared, and other classes leave source-less `_team`/`_user`
+            // entities behind that this query would otherwise sweep in.
+            val errorsQuery = blueprintIdentifiers.joinToString("&") { "blueprint=$it" }
+            val report = admin.get("/api/v1/entities/errors?$errorsQuery").body<EntityErrorsReport>()
+            val sampleRows = report.entities.filter { "${it.blueprint}/${it.identifier}" in responseByKey.keys }
+            assertTrue(sampleRows.isEmpty(), "sample entities must report no findings: $sampleRows")
         } finally {
             try {
                 TestEntities.remove(*entityIdentifiers.toTypedArray())

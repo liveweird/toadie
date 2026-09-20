@@ -452,10 +452,11 @@ or evaluates computed properties at all, see `.claude/docs/persistence.md`).
   already had).
 - **Reference**: `entities/EntityErrors.kt` (the checkers), `EntityErrorsCheckTest` (one case
   per rule above).
-- **Enforcement**: `SampleBlueprintsTest`'s pin that every one of the eleven baseline blueprints
-  reports EXACTLY `SOURCE_MISSING` and nothing else — the sample carries no source references, so
-  any OTHER code, or a missing `SOURCE_MISSING` row, is a checker false positive — plus
-  `EntityErrorsCheckTest`; report-only — never blocks a blueprint write.
+- **Enforcement**: `SampleBlueprintsTest`'s pin that the eleven baseline blueprints report ZERO
+  rows — since 2.10.2 the sample carries its public raw-GitHub `sourceUrl` on every blueprint
+  (`SampleData.loadBlueprints`' default), so any row at all is a checker false positive — plus a
+  dedicated case proving `SOURCE_MISSING` still fires once a blueprint's `sourceUrl` is cleared,
+  and `EntityErrorsCheckTest`; report-only — never blocks a blueprint write.
 - **Exception**: `CALCULATION_QUARANTINED` is instance-local (the deadline quarantine's own
   caveat, `.claude/docs/security.md`) — a second instance may not agree.
 

@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.10.2",
+    date: "2026-09-20",
+    en: `**Sample data arrives linked to its source.** The Port demo's blueprints and entities now carry the public address of their file on GitHub, so a fresh load shows a clean Errors report and Sync from source works right away; set TOADIE_SOURCE_BASE to point the loaders at a fork, or to an empty value to load without references.`,
+    pl: `**Dane przykładowe przychodzą powiązane ze źródłem.** Blueprinty i encje demo Port mają teraz publiczny adres swojego pliku na GitHubie, więc świeżo wczytany zestaw pokazuje pusty raport Błędy, a Synchronizuj ze źródła działa od razu; ustaw TOADIE_SOURCE_BASE, aby wskazać loaderom fork, albo pustą wartość, aby wczytać bez odwołań.`,
+  },
+  {
     version: "2.10.1",
     date: "2026-09-20",
     en: `**Sync wording aligned across catalog files, entities and blueprints.** The blueprint sync dialog now has its own texts, the "sync refused" explanation reads the same for entities and blueprints, and the Errors reports label a missing source the same way in both worlds.`,
