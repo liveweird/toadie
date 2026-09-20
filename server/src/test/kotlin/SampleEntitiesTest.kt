@@ -175,12 +175,15 @@ class SampleEntitiesTest {
             assertTeamOwnership(requestsByFile, blueprintRequestsByIdentifier, responseByKey)
             assertComputedProperties(requestsByFile, responseByKey)
 
-            // 2.10.2: every sample entity now carries a sourceUrl (above), so the Port Errors
-            // report's entity rows — omitted entirely once a row's findings go empty
-            // (EntityErrorsReport's own KDoc) — must be empty for this blueprint set.
+            // 2.10.2: every sample entity now carries a sourceUrl (above), so none of the SAMPLE's
+            // rows may appear on the Port Errors report (a row is omitted once its findings go empty,
+            // EntityErrorsReport's own KDoc). Scoped to the sample's own (blueprint, identifier) keys:
+            // the suite's database is shared, and other classes leave source-less `_team`/`_user`
+            // entities behind that this query would otherwise sweep in.
             val errorsQuery = blueprintIdentifiers.joinToString("&") { "blueprint=$it" }
             val report = admin.get("/api/v1/entities/errors?$errorsQuery").body<EntityErrorsReport>()
-            assertTrue(report.entities.isEmpty(), "sample entities must report no findings: ${report.entities}")
+            val sampleRows = report.entities.filter { "${it.blueprint}/${it.identifier}" in responseByKey.keys }
+            assertTrue(sampleRows.isEmpty(), "sample entities must report no findings: $sampleRows")
         } finally {
             try {
                 TestEntities.remove(*entityIdentifiers.toTypedArray())
