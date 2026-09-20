@@ -1,5 +1,6 @@
 {
   "title": "Encje",
+  "exportAria": "Eksportuj {{name}} jako JSON",
   "intro": "Instancje blueprintu — wybierz jeden poniżej, aby zobaczyć, tworzyć i edytować jego encje. Każdy zalogowany użytkownik/każda zalogowana użytkowniczka może tworzyć, edytować i usuwać encje — ta sama zasada współdzielonego obszaru roboczego co w przypadku plików katalogu.",
   "empty": "Brak encji dla tego blueprintu",
   "pickBlueprintEmpty": "Wybierz blueprint powyżej, aby zobaczyć jego encje",
@@ -14,7 +15,6 @@
   "staleTitle": "Ta encja jest nieaktualna względem swojego blueprintu",
   "staleBody": "Blueprint zmienił się od czasu ostatniego zapisu tej encji. Popraw poniższe właściwości/relacje, aby móc zapisać ponownie.",
   "column": {
-    "findings": "Ustalenia",
     "team": "Zespół"
   },
   "field": {
@@ -24,6 +24,8 @@
     "icon": "Ikona",
     "team": "Zespół",
     "updated": "Zaktualizowano",
+    "lastSync": "Ostatnia synchronizacja",
+    "sourceUrl": "Adres URL źródła",
     "unset": "Nieustawione",
     "true": "Prawda",
     "false": "Fałsz",
@@ -40,7 +42,8 @@
     "identity": "Tożsamość",
     "properties": "Właściwości",
     "relations": "Relacje",
-    "computed": "Obliczone"
+    "computed": "Obliczone",
+    "source": "Źródło"
   },
   "computed": {
     "kind": {
@@ -58,7 +61,8 @@
   "hint": {
     "team": "Każda wartość musi wskazywać aktywny zespół (encję „_team”).",
     "teamInherited": "Obliczane automatycznie na podstawie łańcucha relacji „{{path}}” — nie do edycji tutaj.",
-    "computed": "Obliczane automatycznie po stronie serwera — nie do edycji tutaj."
+    "computed": "Obliczane automatycznie po stronie serwera — nie do edycji tutaj.",
+    "sourceUrl": "Adres https kopii tej encji w źródle (eksport Port albo catalog-info.yaml) — włącza synchronizację ze źródłem."
   },
   "finding": {
     "teamTargetMissing": "Ten zespół już nie istnieje."
@@ -88,7 +92,33 @@
   "toast": {
     "created": "Encja utworzona",
     "saved": "Encja zapisana",
-    "deleted": "Encja usunięta"
+    "deleted": "Encja usunięta",
+    "synced": "Encja zsynchronizowana"
+  },
+  "sync": {
+    "action": "Synchronizuj ze źródłem",
+    "actionAria": "Synchronizuj {{name}} ze źródłem",
+    "title": "Synchronizuj ze źródłem — {{identifier}}",
+    "sourceLabel": "Źródło:",
+    "lastSynced": "Ostatnio zsynchronizowano {{ago}}",
+    "neverSynced": "Nigdy nie zsynchronizowano",
+    "changedAtSource": "Zmienione w źródle",
+    "changedInDb": "Zmienione w Toadie",
+    "inSync": "Toadie i źródło są zgodne",
+    "diffLabel": "Różnice między zapisaną kopią a kopią ze źródła",
+    "diffTooLarge": "Te dokumenty są zbyt duże, aby pokazać szczegółowe porównanie. Poniżej znajdziesz pełny zapisany i źródłowy JSON.",
+    "diffStoredLabel": "Pełny zapisany JSON",
+    "diffReplacementLabel": "Pełny źródłowy JSON",
+    "loadingAria": "Wczytywanie kopii ze źródła",
+    "loadFailed": "Nie udało się przygotować porównania",
+    "parseFailed": "Dokument źródłowy nie jest poprawnym JSON-em.",
+    "noMatch": "Dokument źródłowy nie zawiera już tej encji.",
+    "blueprintMismatch": "Dokument źródłowy wskazuje inny blueprint niż „{{blueprint}}”.",
+    "refusedTitle": "Kopia ze źródła została odrzucona",
+    "refusedBody": "Synchronizacja zakończyłaby się niepowodzeniem — kopia ze źródła nie spełnia już aktualnych reguł blueprintu. Popraw ją u źródła przed ponowną synchronizacją.",
+    "overwriteWarning": "Synchronizacja nadpisze zapisaną kopię wersją źródłową pokazaną powyżej. Zmiany wprowadzone tylko w Toadie zostaną utracone.",
+    "confirm": "Nadpisz zapisaną kopię",
+    "failed": "Synchronizacja nie powiodła się"
   },
   "validation": {
     "required": "Wymagane",
@@ -115,6 +145,7 @@
     "maxItems": "Wymaga co najwyżej {{max}} elementów",
     "uniqueItems": "Elementy muszą być unikalne",
     "jsonInvalid": "Podaj prawidłowy JSON",
-    "objectShape": "Podaj adres URL i opcjonalnie tekst wyświetlany — nic więcej"
+    "objectShape": "Podaj adres URL i opcjonalnie tekst wyświetlany — nic więcej",
+    "sourceUrl": "Musi być bezwzględnym adresem https bez danych uwierzytelniających"
   }
 }

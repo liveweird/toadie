@@ -4,6 +4,7 @@ import type { Entity, EntityBody } from "../api/entities";
 import { safeJsonParse } from "./blueprintForm";
 import { computedPropertyIds } from "./computedProperties";
 import { saveErrorMessage } from "./saveError";
+import { sourceUrlProblem } from "./sourceUrl";
 
 // Wire shapes, derived structurally from the generated contract (the blueprintForm.ts idiom)
 // rather than hand-typed.
@@ -70,6 +71,10 @@ export type EntityFormValues = {
   team: string[];
   properties: PropertyValueDraft[];
   relations: RelationValueDraft[];
+  /** The optional source reference (2.9.0) — envelope state beside the document, never a
+   *  Port document member (`toEntityRequest` never emits it; `useEntitySave` adds it
+   *  alongside the pure request, the `useCatalogFileSave` idiom one level down). */
+  sourceUrl: string;
 };
 
 function emptyPropertyValueDraft(id: string): PropertyValueDraft {
@@ -127,6 +132,7 @@ export function emptyEntityForm(blueprint: Blueprint): EntityFormValues {
       valueToDraft(id, def, def.default),
     ),
     relations: Object.entries(blueprint.relations).map(([id]) => emptyRelationValueDraft(id)),
+    sourceUrl: "",
   };
 }
 
@@ -172,6 +178,7 @@ export function fromEntityResponse(entity: Entity, blueprint: Blueprint): Entity
     team: teamValuesOf(entity.team as TeamWire),
     properties,
     relations,
+    sourceUrl: entity.sourceUrl ?? "",
   };
 }
 
@@ -461,6 +468,9 @@ export function entityFormValidation(t: TFunction, blueprint: Blueprint) {
       if (value.length > MAX_TEAM_ENTRIES) return t("entities.validation.teamCount");
       return value.some((v) => v.length > MAX_TEAM_ENTRY_LENGTH) ? t("entities.validation.teamEntryLength") : null;
     },
+    // The server's static sourceUrl guards, shared with the catalog editor via
+    // `utils/sourceUrl.ts`: absolute https, no credentials, sane length.
+    sourceUrl: (value: string) => (sourceUrlProblem(value) ? t("entities.validation.sourceUrl") : null),
     properties: {
       text: (_value: string, values: EntityFormValues, path: string) => textFieldError(t, blueprint, values, path),
       list: (_value: string[], values: EntityFormValues, path: string) => listFieldError(t, blueprint, values, path),

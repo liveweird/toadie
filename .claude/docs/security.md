@@ -102,15 +102,20 @@ per-line DOM creation. This is a presentation fallback, not a validation bypass 
 upload limit: parsing/rendering the full document still costs work proportional to its
 size, and the normal validation and explicit overwrite confirmation remain in force.
 
-**Outbound URL fetch (SSRF posture).** `POST /api/v1/files/fetch` (`catalog/UrlFetch.kt`)
-serves the import page and repo-sync modal. Guards, in order: absolute `https` only, no
-userinfo, non-blank host, URL ≤ 2048 chars (`parseFetchUrl`); then EVERY resolved address
-must be public (`resolveFetchTarget` / `requirePublicAddresses`). Loopback, site-local, link-local, any-local, multicast,
+**Outbound URL fetch (SSRF posture).** `infra/fetch/UrlFetch.kt` (relocated from `catalog/` in
+2.9.0 when entities gained their own source references — one shared bounded fetcher/pool behind
+BOTH `POST /api/v1/files/fetch` and `POST /api/v1/entities/fetch`) serves the catalog import
+page/repo-sync modal and the ontology import page/entity sync modal alike. Guards, in order:
+absolute `https` only, no userinfo, non-blank host, URL ≤ 2048 chars (`parseFetchUrl`); then
+EVERY resolved address must be public (`resolveFetchTarget` / `requirePublicAddresses`). Loopback, site-local, link-local, any-local, multicast,
 IPv6 ULA `fc00::/7`, CGNAT `100.64.0.0/10`, `192.0.0.0/24`, benchmarking `198.18.0.0/15`,
 and NAT64 `64:ff9b::/96` embedding a non-public IPv4 are refused, as are unresolvable hosts.
 Guard rejections retain the uniform **400** `FETCH_URL_INVALID_DETAIL`. Audits remain
-`catalog_file.fetch_blocked` / `catalog_file.fetched`, with scheme/host ONLY, never the
-full URL or upstream exception text (either may contain query-string credentials).
+`catalog_file.fetch_blocked` / `catalog_file.fetched` for the files route and, since 2.9.0,
+`entity.fetch_blocked` / `entity.fetched` for the entities route — with scheme/host ONLY, never
+the full URL or upstream exception text (either may contain query-string credentials). Like
+`catalog_files.source_url`, `entities.source_url` is served IN FULL to every authenticated user
+in this shared workspace — do not embed secrets in either kind of source reference.
 
 **Validated destinations, including connection time.** The OkHttp transport resolves the
 canonical URL hostname once and rejects an empty result or any non-public address. It copies

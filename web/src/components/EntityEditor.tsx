@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { Alert, Button, Grid, Group, Paper, Stack, Text } from "@mantine/core";
@@ -37,6 +37,7 @@ export default function EntityEditor({
   saveFindings = [],
   computedTeam = [],
   computed,
+  actions,
 }: {
   title: string;
   submitLabel: string;
@@ -51,6 +52,9 @@ export default function EntityEditor({
   /** The entity's evaluated mirror/calculation/aggregation values (v1.27.0) — absent on
    *  create, `utils/computedProperties.ts#computedValuesOf(entity, blueprint)` on edit. */
   computed?: Record<string, unknown>;
+  /** The whole-entity operations (2.9.0 — Sync from source) — absent on create, since a
+   *  brand-new entity has no stored state to act on (the `CatalogFileEditor` `actions` idiom). */
+  actions?: ReactNode;
 }) {
   const { t } = useTranslation();
   const preview = JSON.stringify(toEntityRequest(form.values, blueprint), null, 2);
@@ -67,6 +71,7 @@ export default function EntityEditor({
         title={title}
         description={t("entities.editor.blueprintLabel", { identifier: blueprint.identifier })}
         backTo={{ to: entitiesPath(blueprint.identifier), label: t("entities.backToList") }}
+        actions={actions}
       />
       {allFindings.length > 0 && (
         <Alert

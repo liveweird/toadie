@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
-import { Alert, Button, FileButton, Group, Paper, Pill, Progress, Stack, Switch, Text, Textarea } from "@mantine/core";
+import { Alert, Button, FileButton, Group, Paper, Pill, Progress, Stack, Switch, Text, Textarea, TextInput } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { IconFileImport, IconListCheck, IconUpload } from "@tabler/icons-react";
+import { IconDownload, IconFileImport, IconListCheck, IconUpload } from "@tabler/icons-react";
 import { isAdmin } from "../api/session";
 import { checkBlueprintImport, importBlueprints } from "../api/blueprints";
-import { checkEntityImport, importEntities } from "../api/entities";
+import { checkEntityImport, fetchEntityUrl, importEntities } from "../api/entities";
 import {
   parseOntologySources,
   runImportBatch,
@@ -14,7 +14,8 @@ import {
   type ImportSource,
   type OntologyResultRow,
 } from "../utils/ontologyImport";
-import { saveErrorMessage } from "../utils/saveError";
+import { FETCH_URL_ERROR_KEYS, saveErrorMessage } from "../utils/saveError";
+import { normalizeSourceUrl } from "../utils/sourceUrl";
 import { useBlueprints } from "../hooks/useBlueprints";
 import OntologyImportResults from "../components/OntologyImportResults";
 import PageHeader from "../components/PageHeader";
@@ -32,6 +33,13 @@ export default function ImportOntology() {
 
   const [text, setText] = useState("");
   const [files, setFiles] = useState<ImportSource[]>([]);
+  const [url, setUrl] = useState("");
+  const [fetching, setFetching] = useState(false);
+  // The normalized URL the CURRENT text came from — set on a successful fetch, cleared the
+  // moment the text changes by typing or a file add/remove. Import passes it as the batch's
+  // source reference: every stored ENTITY row starts referenced-and-synced, blueprints never.
+  const [fetchedFrom, setFetchedFrom] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -63,12 +71,34 @@ export default function ImportOntology() {
     if (pickedFiles.length === 0) return;
     const picked = await Promise.all(pickedFiles.map(async (file) => ({ label: file.name, text: await file.text() })));
     setFiles((prev) => [...prev, ...picked]);
+    setFetchedFrom(null);
     clearResults();
   }
 
   function removeFile(index: number) {
     setFiles((prev) => prev.filter((_, i) => i !== index));
+    setFetchedFrom(null);
     clearResults();
+  }
+
+  // Server-side fetch (any reachable host, not just CORS-friendly ones) of a catalog-info.yaml
+  // or a bare/enveloped Port entity JSON document — the `pages/ImportCatalogFiles.tsx` block,
+  // one level over; blob-style Git-hosting links are rewritten to their raw form first.
+  async function handleFetchUrl() {
+    setFetching(true);
+    setFetchError(null);
+    try {
+      const normalized = normalizeSourceUrl(url);
+      const fetched = await fetchEntityUrl(normalized);
+      setText(fetched.content);
+      setFiles([]);
+      setFetchedFrom(normalized);
+      clearResults();
+    } catch (err) {
+      setFetchError(saveErrorMessage(err, t, FETCH_URL_ERROR_KEYS));
+    } finally {
+      setFetching(false);
+    }
   }
 
   async function runBatch(mode: "import" | "check") {
@@ -86,6 +116,7 @@ export default function ImportOntology() {
         admin: isAdmin(),
         importBlueprintsChunk: mode === "import" ? importBlueprints : checkBlueprintImport,
         importEntitiesChunk: mode === "import" ? importEntities : checkEntityImport,
+        sourceUrl: fetchedFrom ?? undefined,
         onProgress: (sent, total) => setProgress({ sent, total }),
         onRows: (partial) => setResults({ mode, rows: partial }),
       });
@@ -114,12 +145,44 @@ export default function ImportOntology() {
 
       <Paper withBorder p="lg" radius="md">
         <Stack gap="md">
+          <Group align="flex-end" gap="xs">
+            <TextInput
+              label={t("ontology.import.urlLabel")}
+              placeholder="https://raw.githubusercontent.com/acme/service/main/entity.json"
+              value={url}
+              onChange={(event) => setUrl(event.currentTarget.value)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              variant="default"
+              leftSection={<IconDownload size={16} />}
+              onClick={() => void handleFetchUrl()}
+              disabled={!url.trim()}
+              loading={fetching}
+            >
+              {t("ontology.import.fetchButton")}
+            </Button>
+          </Group>
+
+          {fetchError && (
+            <Alert color="red" variant="light" title={t("ontology.import.urlFailedTitle")}>
+              {fetchError}
+            </Alert>
+          )}
+
+          {fetchedFrom != null && (
+            <Text size="sm" c="dimmed">
+              {t("ontology.import.sourceHint", { url: fetchedFrom })}
+            </Text>
+          )}
+
           <Textarea
             label={t("ontology.import.textareaLabel")}
             placeholder={t("ontology.import.placeholder")}
             value={text}
             onChange={(event) => {
               setText(event.currentTarget.value);
+              setFetchedFrom(null);
               clearResults();
             }}
             autosize

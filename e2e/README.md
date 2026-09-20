@@ -190,20 +190,24 @@ from Lettuce, that any new or edited spec must satisfy:
   `entity-query.spec.ts` (`e2e-eq-*` — phase 7, v2.0.0),
   `entity-query-builder.spec.ts` (`e2e-query-builder-*`),
   `responsive-layout.spec.ts` (`e2e-layout-*`; one self-related blueprint and six entities),
-  `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries), and
-  `entity-errors.spec.ts` (`e2e-ee-*` — the Ontology Errors report, v2.5.0); the
+  `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries),
+  `entity-errors.spec.ts` (`e2e-ee-*` — the Ontology Errors report, v2.5.0), and
+  `entity-sync.spec.ts` (`e2e-esync-*` — entity source references & re-sync, 2.9.0); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
   what makes their concurrent creates safe — the same rule the other registries' single
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
-  `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-query-builder-*`, `e2e-layout-*`, `e2e-eqs-*`, `e2e-ee-*` today) and is removed by that same spec
+  `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-query-builder-*`, `e2e-layout-*`, `e2e-eqs-*`, `e2e-ee-*`,
+  `e2e-esync-*` today) and is removed by that same spec
   before it returns, so a future entity-creating spec can join safely as long as it never
   touches another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
-  registry (the Blueprints page's only export mode) and re-imports it as part of its round-trip
-  check — safe under concurrent writers because it always sends `replaceExisting: false` there,
-  so every foreign row it did not create reports Already Exists, untouched, and its own
-  assertions only ever check its own two identifiers.
+  registry (the Blueprints page's only export mode, unchanged) and, since 2.8.0, ONE entity via
+  its row's Operations menu on the Entities page (the whole-blueprint `{entities: [...]}` export
+  retired that release), re-importing both as part of its round-trip check — safe under
+  concurrent writers because it always sends `replaceExisting: false` there, so every foreign row
+  it did not create reports Already Exists, untouched, and its own assertions only ever check its
+  own two identifiers.
 - **`_team`/`_user` (Phase 4, v1.26.0) are SEEDED, PROTECTED system blueprints — no spec ever
   edits or deletes either row** (the server itself refuses both: rename/base-shape changes are
   `400`, delete is `409`). A spec needing ownership fixtures creates only its OWN uniquely
@@ -397,6 +401,14 @@ the same commit** — this list is the coverage map, the scenario file is the de
   class chip hides and restores the entity's row without touching the other two → Open in graph
   on the saved-query row hands its text to the Entity graph's shared query bar, which reports
   the identical missing-blueprint diagnostic → cleanup.
+- [`entity-sync.spec.ts`](scenarios/entity-sync.md) — entity source references & re-sync
+  (2.9.0, the Port twin of `source-sync.spec.ts`): a throwaway blueprint and entity created
+  source-less show "No source" on the Last sync column and a disabled Sync-from-source kebab
+  item, setting the URL in the entity editor's Source fieldset turns the column to "Never
+  synced", and the sync modal shows the SSRF guard's public-https error against a loopback URL
+  with the overwrite disabled; a second, unowned journey refuses a loopback fetch on the
+  ontology import page with the same message (the fetch→overwrite happy path deliberately
+  stays server-/unit-tested).
 - [`changelog.spec.ts`](scenarios/changelog.md) — the what's-new dot on a fresh device
   leads to the changelog via the version stamp and clears once read (no language switching
   — it runs as the seed admin; see `i18n.spec.ts`).

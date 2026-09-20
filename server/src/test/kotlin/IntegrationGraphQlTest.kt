@@ -169,6 +169,9 @@ class IntegrationGraphQlTest {
                     identifier = entityIdentifier,
                     title = "GraphQL entity",
                     properties = buildJsonObject { put("precise", Json.parseToJsonElement(precise)) },
+                    // A source reference keeps the errors report empty for this row (2.9.1 reports
+                    // source-less entities as SOURCE_MISSING).
+                    sourceUrl = "https://example.com/graphql-entity.json",
                 ),
                 creator,
             )

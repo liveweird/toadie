@@ -218,6 +218,36 @@ describe("EntityErrors page", () => {
     expect(tileValue("Errors")).toBe("4");
   });
 
+  test("a SOURCE_MISSING finding renders the gray No source badge and its explanation, and the Source chip hides a row whose only finding it is", async () => {
+    const sourceReport = entityErrorsReport({
+      entities: [
+        {
+          id: 20,
+          blueprintId: 1,
+          blueprint: "service",
+          blueprintTitle: "Service",
+          identifier: "no-source",
+          title: "No Source",
+          team: [],
+          findings: [{ code: "SOURCE_MISSING", field: "source", message: "This entity has no source reference" }],
+        },
+      ],
+      checkedEntities: 1,
+    });
+    mockReport(mockFetch, sourceReport);
+    renderPage();
+
+    const badge = (await screen.findByText("No source")).closest("[class*='Badge-root']")!;
+    expect(badge.getAttribute("style")).toContain("gray");
+    expect(
+      screen.getByText("This entity has no source reference — optional, but without one it cannot be re-synced."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Source" }));
+    expect(screen.queryByText("No source")).not.toBeInTheDocument();
+    expect(await screen.findByText(/no errors/i)).toBeInTheDocument();
+  });
+
   test("hiding every blueprint pill shows the empty state and stops fetching the report", async () => {
     mockReport(mockFetch);
     const user = userEvent.setup();

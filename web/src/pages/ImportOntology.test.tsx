@@ -247,4 +247,82 @@ describe("ImportOntology page", () => {
     await user.click(screen.getByRole("button", { name: "Remove extra.json" }));
     await waitFor(() => expect(screen.queryByText("extra.json")).not.toBeInTheDocument());
   });
+
+  test("fetching from a URL fills the textarea and shows the source hint", async () => {
+    const url = "https://raw.githubusercontent.com/acme/service/main/entity.json";
+    baseRoutes(mockFetch, {
+      "POST /api/v1/entities/fetch": () => jsonResponse(200, { content: JSON.stringify(ENTITY_DOC) }),
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<ImportOntology />);
+
+    await user.type(screen.getByLabelText("Fetch from URL"), url);
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+
+    await waitFor(() => expect(screen.getByLabelText("JSON content")).toHaveValue(JSON.stringify(ENTITY_DOC)));
+    expect(
+      screen.getByText(
+        `Fetched entities will carry ${url} as their source and start synced; blueprints import without a reference.`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test("a blocked URL shows the fixed public-https message", async () => {
+    baseRoutes(mockFetch, {
+      "POST /api/v1/entities/fetch": () => jsonResponse(400, { title: "Bad Request", status: 400, detail: "blocked" }),
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<ImportOntology />);
+
+    await user.type(screen.getByLabelText("Fetch from URL"), "https://127.0.0.1/entity.json");
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+
+    expect(await screen.findByText(/must be a public https address/)).toBeInTheDocument();
+  });
+
+  test("a fetched batch's sourceUrl reaches importEntities only, never importBlueprints", async () => {
+    const url = "https://raw.githubusercontent.com/acme/service/main/entity.json";
+    let entitySourceUrl: unknown;
+    let blueprintBody: Record<string, unknown> | undefined;
+    baseRoutes(mockFetch, {
+      "POST /api/v1/entities/fetch": () =>
+        jsonResponse(200, { content: JSON.stringify({ blueprints: [BLUEPRINT_DOC], entities: [ENTITY_DOC] }) }),
+      "POST /api/v1/blueprints/import": (init) => {
+        blueprintBody = bodyOf(init);
+        return jsonResponse(200, { results: [{ index: 0, identifier: "service", status: "CREATED", id: 10 }] });
+      },
+      "POST /api/v1/entities/import": (init) => {
+        entitySourceUrl = bodyOf(init).sourceUrl;
+        return jsonResponse(200, {
+          results: [{ index: 0, blueprint: "service", identifier: "checkout", status: "CREATED", id: 20 }],
+        });
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<ImportOntology />);
+
+    await user.type(screen.getByLabelText("Fetch from URL"), url);
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Import" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Import" }));
+
+    await waitFor(() => expect(entitySourceUrl).toBe(url));
+    expect(blueprintBody).not.toHaveProperty("sourceUrl");
+  });
+
+  test("editing the fetched text (or picking a file) drops the source reference", async () => {
+    const url = "https://raw.githubusercontent.com/acme/service/main/entity.json";
+    baseRoutes(mockFetch, {
+      "POST /api/v1/entities/fetch": () => jsonResponse(200, { content: JSON.stringify(ENTITY_DOC) }),
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<ImportOntology />);
+
+    await user.type(screen.getByLabelText("Fetch from URL"), url);
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+    await waitFor(() => expect(screen.getByText(new RegExp(url))).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("JSON content"), { target: { value: JSON.stringify([ENTITY_DOC]) } });
+    expect(screen.queryByText(new RegExp(url))).not.toBeInTheDocument();
+  });
 });

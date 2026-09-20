@@ -20,6 +20,10 @@ describe("classOfEntityCode", () => {
     }
   });
 
+  test("SOURCE_MISSING maps to source", () => {
+    expect(classOfEntityCode("SOURCE_MISSING")).toBe("source");
+  });
+
   test("every other EntityFindingCode (the 19 strict-save codes) maps to stale", () => {
     for (const code of [
       "UNKNOWN_PROPERTY",
@@ -48,11 +52,15 @@ describe("classOfEntityCode", () => {
 });
 
 describe("colorOfEntityClass", () => {
-  test("stale is red (HARD on the entity's next save); every report-only class is orange", () => {
+  test("stale is red (HARD on the entity's next save); every soft report-only class is orange", () => {
     expect(colorOfEntityClass("stale")).toBe("red");
-    for (const entityClass of ENTITY_ERROR_CLASSES.filter((c) => c !== "stale")) {
+    for (const entityClass of ENTITY_ERROR_CLASSES.filter((c) => c !== "stale" && c !== "source")) {
       expect(colorOfEntityClass(entityClass)).toBe("orange");
     }
+  });
+
+  test("source is gray (an optional reference's absence, not a defect)", () => {
+    expect(colorOfEntityClass("source")).toBe("gray");
   });
 });
 
@@ -71,6 +79,7 @@ describe("countByEntityClass", () => {
           findings: [
             { code: "REQUIRED_MISSING", field: "properties.name", message: "m" },
             { code: "OWNERSHIP_UNRESOLVED", field: "team", message: "m" },
+            { code: "SOURCE_MISSING", field: "source", message: "m" },
           ],
         },
       ],
@@ -102,6 +111,7 @@ describe("countByEntityClass", () => {
       ownership: 1,
       computed: 1,
       queries: 2,
+      source: 1,
     });
   });
 
@@ -111,6 +121,7 @@ describe("countByEntityClass", () => {
       ownership: 0,
       computed: 0,
       queries: 0,
+      source: 0,
     });
   });
 });

@@ -98,7 +98,10 @@ test("populated entity lists, deep hierarchy rows and query controls remain usab
     await page.goto(`/entities?blueprint=${marker}`);
     const row = page.getByRole("row").filter({ has: page.getByRole("link", { name: `Edit ${identifiers[1]}`, exact: true }) });
     await expect(row).toBeVisible();
-    await expect(page.getByRole("columnheader")).toHaveCount(10);
+    // Identity, team, three property previews (this fixture's mirrored parent identifier
+    // falls off the 3-cap), updated, Last sync (2.9.0), and operations.
+    await expect(page.getByRole("columnheader")).toHaveCount(8);
+    await expect(page.getByRole("columnheader", { name: "Last sync" })).toBeVisible();
     // Text must fit each cell even when the table scrolls: containment alone missed the
     // old fixed 640px table's overlapping identifier/title and nowrap header text.
     for (const cells of [page.getByRole("columnheader"), row.getByRole("cell")]) {
@@ -107,7 +110,7 @@ test("populated entity lists, deep hierarchy rows and query controls remain usab
         .map((cell) => ({ text: cell.textContent, width: cell.clientWidth, contentWidth: cell.scrollWidth })),
       )).toEqual([]);
     }
-    const edit = row.getByRole("button", { name: `Edit ${identifiers[1]}`, exact: true });
+    const edit = row.getByRole("button", { name: `Operations for ${identifiers[1]}`, exact: true });
     await edit.scrollIntoViewIfNeeded();
     await expect(edit).toBeInViewport();
     await expectContainedPage(page);

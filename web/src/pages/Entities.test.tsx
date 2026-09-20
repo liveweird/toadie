@@ -21,7 +21,7 @@ const BLUEPRINTS = [
       required: [],
     },
     relations: {},
-    mirrorProperties: {},
+    mirrorProperties: { siblingTitle: { title: "Sibling title", path: "language.$title" } },
     calculationProperties: {},
     aggregationProperties: {},
   },
@@ -34,7 +34,7 @@ const ENTITY = {
   identifier: "checkout",
   title: "Checkout",
   team: ["platform"],
-  properties: { language: "kotlin", active: true },
+  properties: { language: "kotlin", active: true, siblingTitle: "Billing" },
   relations: {},
   findings: [{ code: "REQUIRED_MISSING", field: "properties.tier", message: "Required" }],
   createdBy: 1,
@@ -42,6 +42,7 @@ const ENTITY = {
   creatorDeleted: false,
   createdAt: 0,
   updatedAt: 0,
+  lastSyncedAt: 0,
 };
 
 const ENTITY_NO_PREVIEW_VALUES = {
@@ -55,8 +56,9 @@ const ENTITY_NO_PREVIEW_VALUES = {
 };
 
 // v1.27.0 — computed (mirror/calculation/aggregation) preview columns: two schema scalar
-// columns plus three computed ones, so the combined list (5) exceeds MAX_COLUMN_PROPERTIES
-// (4) and the cap must drop the LAST one (aggregation), preserving schema-then-computed order.
+// columns plus one computed one, so the combined list (5) exceeds MAX_COLUMN_PROPERTIES (3,
+// since 2.9.0's Last-sync column) and the cap must drop the LAST two (calculation, aggregation),
+// preserving schema-then-computed order.
 const BLUEPRINT_COMPUTED = {
   id: 2,
   identifier: "workload",
@@ -99,6 +101,18 @@ const ENTITY_COMPUTED = {
   creatorDeleted: false,
   createdAt: 0,
   updatedAt: 0,
+  lastSyncedAt: 0,
+};
+
+// Sourced + synced entity (2.9.0) — a distinct row for the Last-sync column/kebab cases.
+const ENTITY_SYNCED = {
+  ...ENTITY,
+  id: 8,
+  identifier: "billing-synced",
+  title: "Billing synced",
+  sourceUrl: "https://raw.githubusercontent.com/acme/service/main/billing.json",
+  updatedAt: 0,
+  lastSyncedAt: 1_700_000_000_000,
 };
 
 // D2 — `?q=` is a URL-carried filter now, debounced-written; this sibling exposes the
@@ -145,7 +159,6 @@ describe("Entities page", () => {
 
     expect(await screen.findByText("Pick a blueprint above to see its entities")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "New entity" })).toHaveAttribute("data-disabled", "true");
-    expect(screen.getByRole("button", { name: "Export JSON" })).toBeDisabled();
     // The Team filter's own options pool (`_team`) loads independently of the picked
     // blueprint — only the primary, blueprint-scoped list must stay unfetched.
     expect(
@@ -161,7 +174,7 @@ describe("Entities page", () => {
     expect(await screen.findByRole("link", { name: "Import" })).toHaveAttribute("href", "/ontology/import");
   });
 
-  test("Export JSON downloads the picked blueprint's entities as a Blob", async () => {
+  test("the row menu's Export JSON downloads that one entity as a Port-shaped document", async () => {
     const createObjectURL = vi.fn().mockReturnValue("blob:fake");
     const revokeObjectURL = vi.fn();
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL }));
@@ -176,37 +189,49 @@ describe("Entities page", () => {
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
     await screen.findByRole("link", { name: "Edit checkout" });
-    await user.click(screen.getByRole("button", { name: "Export JSON" }));
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Export checkout as JSON" }));
 
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce());
     const blob = createObjectURL.mock.calls[0][0] as Blob;
-    const parsed = JSON.parse(await blob.text()) as { entities: { identifier: string }[] };
-    expect(parsed.entities.map((e) => e.identifier)).toEqual(["checkout"]);
-    expect(downloadedName).toBe("toadie-entities-service.json");
+    const parsed = JSON.parse(await blob.text()) as Record<string, unknown>;
+    expect(parsed.identifier).toBe("checkout");
+    expect(parsed.blueprint).toBe("service");
+    for (const key of ["entities", "id", "findings", "blueprintId", "createdBy"]) {
+      expect(parsed).not.toHaveProperty(key);
+    }
+    expect(parsed.properties).not.toHaveProperty("siblingTitle");
+    expect(downloadedName).toBe("toadie-entity-service-checkout.json");
     click.mockRestore();
   });
 
-  test("a failed export shows an inline alert", async () => {
+  test("the row menu's Export JSON is disabled while the blueprint registry is still loading", async () => {
     mockFetch.mockImplementation((url: string) => {
-      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
-      if (url.startsWith("/api/v1/entities?")) return Promise.resolve(jsonResponse(500, {}));
+      if (url === "/api/v1/blueprints") return new Promise<Response>(() => {});
+      if (url.startsWith("/api/v1/entities?")) {
+        return Promise.resolve(jsonResponse(200, { items: [ENTITY], page: 1, pageSize: 20, total: 1 }));
+      }
       return Promise.resolve(jsonResponse(404, {}));
     });
     const user = userEvent.setup();
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Export JSON" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Export JSON" }));
-
-    expect(await screen.findByText("Couldn't export entities. Check your connection and try again.")).toBeInTheDocument();
+    await screen.findByRole("link", { name: "Edit checkout" });
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    expect(await screen.findByRole("menuitem", { name: "Export checkout as JSON" })).toHaveAttribute("data-disabled", "true");
   });
 
   test("picking a blueprint via the URL lists its entities with identifier link and findings badge", async () => {
     mockRoutes(mockFetch);
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
-    expect(await screen.findByRole("link", { name: "Edit checkout" })).toBeInTheDocument();
-    expect(screen.getByText("1 finding")).toBeInTheDocument();
+    const editLink = await screen.findByRole("link", { name: "Edit checkout" });
+    expect(editLink).toBeInTheDocument();
+    const findingsBadge = screen.getByText("1 finding");
+    expect(findingsBadge).toBeInTheDocument();
+    // The findings badge rides the same identity cell as the identifier link (2.8.1 —
+    // the Files name-cell idiom: identifier, dimmed title, and the findings badge together).
+    expect(findingsBadge.closest("td")).toBe(editLink.closest("td"));
     // The Team column renders the entity's own team as a badge.
     expect(screen.getByText("platform")).toBeInTheDocument();
     // The boolean preview column renders a badge for its true value.
@@ -216,6 +241,27 @@ describe("Entities page", () => {
     expect(screen.getByRole("link", { name: "New entity" })).toHaveAttribute(
       "href",
       "/entities/new?blueprint=service",
+    );
+  });
+
+  test("the identifier header sorts by title too and the Title/Findings columns are gone", async () => {
+    mockRoutes(mockFetch);
+    const user = userEvent.setup();
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    expect(screen.queryByRole("columnheader", { name: "Title" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Findings" })).not.toBeInTheDocument();
+
+    mockFetch.mockClear();
+    await user.click(screen.getByRole("button", { name: "Title" }));
+
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(
+          ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities?") && url.includes("sort=title"),
+        ),
+      ).toBe(true),
     );
   });
 
@@ -322,7 +368,10 @@ describe("Entities page", () => {
     );
 
     await screen.findByRole("link", { name: "Edit checkout" });
-    await user.click(screen.getByRole("button", { name: "Edit checkout" }));
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    const editItem = await screen.findByRole("menuitem", { name: "Edit checkout" });
+    expect(editItem).toHaveAttribute("href", "/entities/5/edit");
+    await user.click(editItem);
     expect(await screen.findByTestId("probe")).toHaveTextContent("/entities/5/edit");
   });
 
@@ -340,7 +389,8 @@ describe("Entities page", () => {
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
     await screen.findByRole("link", { name: "Edit checkout" });
-    await user.click(screen.getByRole("button", { name: "Delete checkout" }));
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete checkout" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(await screen.findByText("This entity is still targeted by another entity's relation.")).toBeInTheDocument();
@@ -352,13 +402,14 @@ describe("Entities page", () => {
     renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
 
     await screen.findByRole("link", { name: "Edit checkout" });
-    await user.click(screen.getByRole("button", { name: "Delete checkout" }));
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete checkout" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledWith("/api/v1/entities/5", expect.objectContaining({ method: "DELETE" })));
   });
 
-  test("preview columns are schema-then-computed, capped at 4, with array and colorized computed cells", async () => {
+  test("preview columns are schema-then-computed, capped at 3 (2.9.0, room for Last sync), with array computed cells", async () => {
     mockFetch.mockImplementation((url: string) => {
       if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: [BLUEPRINT_COMPUTED] }));
       if (url.startsWith("/api/v1/entities?")) {
@@ -371,19 +422,17 @@ describe("Entities page", () => {
     await screen.findByRole("link", { name: "Edit checkout-staging" });
 
     // Cap + ordering: the two schema columns come first, then computed columns in mirror ->
-    // calculation -> aggregation order, cut at MAX_COLUMN_PROPERTIES (4) — "Dependents" (the
-    // aggregation, 5th column) never appears.
+    // calculation -> aggregation order, cut at MAX_COLUMN_PROPERTIES (3, since 2.9.0) — "Risk"
+    // (the calculation) and "Dependents" (the aggregation) never appear.
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(expect.arrayContaining(["Env", "Replicas", "Langs", "Risk"]));
+    expect(headers).toEqual(expect.arrayContaining(["Env", "Replicas", "Langs"]));
+    expect(headers).not.toEqual(expect.arrayContaining(["Risk"]));
     expect(headers).not.toEqual(expect.arrayContaining(["Dependents"]));
 
     const row = screen.getByRole("link", { name: "Edit checkout-staging" }).closest("tr")!;
     // The mirror column ("Langs") renders its array value as pills.
     expect(within(row).getByText("java")).toBeInTheDocument();
     expect(within(row).getByText("kotlin")).toBeInTheDocument();
-    // The colorized calculation column ("Risk") renders its value as a badge.
-    const riskBadge = within(row).getByText("high");
-    expect(riskBadge.closest(".mantine-Badge-root")).not.toBeNull();
   });
 
   test("the Filters drawer is closed by default: Blueprint stays visible while Team and Search are hidden", async () => {
@@ -414,5 +463,69 @@ describe("Entities page", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^Filters/ }).textContent).toBe("Filters2"),
     );
+  });
+
+  test("the Last-sync column shows No source, Never synced, and relative time + Local changes", async () => {
+    const NEVER_SYNCED = { ...ENTITY, id: 9, identifier: "checkout-linked", sourceUrl: "https://example.com/a.json", lastSyncedAt: 0 };
+    const LOCAL_CHANGES = { ...ENTITY_SYNCED, updatedAt: ENTITY_SYNCED.lastSyncedAt + 1000 };
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (url.startsWith("/api/v1/entities?")) {
+        return Promise.resolve(
+          jsonResponse(200, { items: [ENTITY, NEVER_SYNCED, LOCAL_CHANGES], page: 1, pageSize: 20, total: 3 }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    expect(screen.getByText("No source")).toBeInTheDocument();
+    expect(screen.getByText("Never synced")).toBeInTheDocument();
+    expect(screen.getByText("Local changes")).toBeInTheDocument();
+  });
+
+  test("header sort on Last sync refetches with sort=lastSyncedAt", async () => {
+    mockRoutes(mockFetch);
+    const user = userEvent.setup();
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    mockFetch.mockClear();
+    await user.click(screen.getByRole("button", { name: "Last sync" }));
+
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(
+          ([url]) => typeof url === "string" && url.startsWith("/api/v1/entities?") && url.includes("sort=lastSyncedAt"),
+        ),
+      ).toBe(true),
+    );
+  });
+
+  test("the kebab's Sync from source item is disabled without a source and opens the modal with one", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (url.startsWith("/api/v1/entities?")) {
+        return Promise.resolve(
+          jsonResponse(200, { items: [ENTITY, ENTITY_SYNCED], page: 1, pageSize: 20, total: 2 }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+    await screen.findByRole("link", { name: "Edit checkout" });
+    await user.click(screen.getByRole("button", { name: "Operations for checkout" }));
+    expect(await screen.findByRole("menuitem", { name: "Sync checkout from source" })).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: "Operations for billing-synced" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Sync billing-synced from source" }));
+    expect(await screen.findByRole("dialog", { name: "Sync from source — billing-synced" })).toBeInTheDocument();
   });
 });

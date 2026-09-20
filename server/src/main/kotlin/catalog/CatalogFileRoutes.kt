@@ -6,6 +6,13 @@ import ch.nokillswit.authz.caller
 import ch.nokillswit.infra.db.EVENT_LOG_DEFAULT_SORT
 import ch.nokillswit.infra.db.EVENT_LOG_SORT_FIELDS
 import ch.nokillswit.infra.db.orVanished
+import ch.nokillswit.infra.fetch.BlockedUrlException
+import ch.nokillswit.infra.fetch.FETCH_URL_INVALID_DETAIL
+import ch.nokillswit.infra.fetch.FetchUrlRequest
+import ch.nokillswit.infra.fetch.FetchUrlResponse
+import ch.nokillswit.infra.fetch.UrlFetcher
+import ch.nokillswit.infra.fetch.UrlFetcherKey
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
@@ -134,8 +141,8 @@ fun Application.configureCatalogFileRoutes() {
     val catalogFileService = attributes[CatalogFileServiceKey]
     val eventService = attributes[CatalogFileEventServiceKey]
     // Stateless, no DB — constructed here rather than in the composition root. Lazy so the
-    // test seam (CatalogUrlFetcherKey, set after module load) can supply a fixture fetcher.
-    val urlFetcher by lazy { attributes.getOrNull(CatalogUrlFetcherKey) ?: CatalogUrlFetcher() }
+    // test seam (UrlFetcherKey, set after module load) can supply a fixture fetcher.
+    val urlFetcher by lazy { attributes.getOrNull(UrlFetcherKey) ?: UrlFetcher() }
 
     routing {
         authenticate {
