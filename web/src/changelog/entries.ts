@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.11.2",
+    date: "2026-09-20",
+    en: `**Bounded database connections.** The server now keeps a fixed-size pool of PostgreSQL connections (20 by default, POSTGRES_POOL_MAX_SIZE) instead of opening a fresh one for every request — a burst of traffic can no longer exhaust the database's connection limit, and a saturated pool fails a request after one acquire deadline instead of three.`,
+    pl: `**Ograniczona liczba połączeń z bazą.** Serwer utrzymuje teraz pulę połączeń z PostgreSQL o stałym rozmiarze (domyślnie 20, POSTGRES_POOL_MAX_SIZE) zamiast otwierać nowe dla każdego żądania — nagły ruch nie wyczerpie już limitu połączeń bazy, a przy pełnej puli żądanie kończy się po jednym limicie oczekiwania zamiast trzech.`,
+  },
+  {
     version: "2.11.1",
     date: "2026-09-20",
     en: `**September checkup fixes.** The Kubernetes rollout now recreates the single app instance instead of briefly running two, the migration log no longer echoes the database URL, a malformed sign-out body is no longer logged, and the reference docs caught up with the last eight releases.`,
