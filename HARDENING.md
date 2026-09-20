@@ -517,7 +517,7 @@ the historical PR failure remains recorded above pending hosted verification of 
 Dependabot (not Renovate, decision D4) opens weekly, minor/patch-grouped pull requests per
 ecosystem — npm for `web/` and `e2e/`, Gradle for the root build, GitHub Actions, and Docker
 (`.github/dependabot.yml`); majors stay ungrouped so a breaking bump still gets its own review.
-Base images are pinned by TAG, not digest (`eclipse-temurin:21.0.11_10-jdk`/`-jre`, `node:24-alpine`
+Base images are pinned by TAG, not digest (`eclipse-temurin:21.0.12_8-jdk`/`-jre`, `node:24-alpine`
 in `Dockerfile`) — paired with Dependabot's `docker` ecosystem watching those same tags, this
 gives most of a digest pin's reproducibility without the churn of hand-editing a new digest on
 every upstream patch release; it is a separate, narrower concern from Stage 4's still-open item
@@ -536,7 +536,9 @@ the pinned 21/24; both were closed and the ignore rule added.
   real client IPs/rate limits, upload limits, probes, and rollback.
 - [ ] Right-size storage; document and exercise backup/restore without touching the dev volume.
 - [ ] Adopt immutable release image references with an intentional update process.
-- [ ] Keep one app replica until instance-local authentication state is addressed.
+- [ ] Keep one app replica until instance-local authentication state is addressed — the
+  Deployment's `strategy: Recreate` (k8s/app-deployment.yaml) only stops a rolling update from
+  briefly running two pods; it does not itself let a second replica run.
 
 Controller installation/cutover is a cluster-level action: inventory existing workloads first
 (Lettuce may share the controller), and do not remove a controller another app still needs.
@@ -548,7 +550,7 @@ The runtime image drops root: `Dockerfile`'s `runtime` stage creates a dedicated
 `USER app` before `ENTRYPOINT` — the process never runs, and never needs to run, as root
 (port 8081 is unprivileged and the app writes nowhere outside `/app`). Both the build-stage
 JDK and the runtime-stage JRE are pinned to the exact `mise.toml` Temurin patch
-(`eclipse-temurin:21.0.11_10-jdk`/`-jre`, not the floating `21-jdk`/`21-jre` tags), so the two
+(`eclipse-temurin:21.0.12_8-jdk`/`-jre`, not the floating `21-jdk`/`21-jre` tags), so the two
 stages are provably the same Java build rather than whatever "21" resolves to on a given pull;
 `web/src/test/infrastructure.test.js` pins both the non-root `USER` line and tag parity with
 `mise.toml`. `docker-compose.yaml`'s `app` service gained a `healthcheck` against `/readyz`
@@ -707,7 +709,8 @@ Deployment/data verification follow-up:
   a temporary blueprint to produce real entity findings. GraphQL entity findings and the
   ontology errors root matched REST. Temporary entities/blueprints were removed and keys revoked.
 - Ran the Kubernetes checks against each of two production-mode app replicas sharing the same
-  dedicated PostgreSQL PVC. Both saw the same data mutations/findings and rejected a key revoked
+  dedicated PostgreSQL PVC (a deliberate verification exercise for the shared-database path only —
+  the supported posture stays one replica, see the open item above). Both saw the same data mutations/findings and rejected a key revoked
   through the first replica. Repeated these checks after rolling both app pods, without reloading
   the sample, confirming persistence across pod replacement. Tests used pod-specific loopback
   port-forwards with the documented trusted proxy header; external ingress/TLS and a full

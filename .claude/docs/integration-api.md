@@ -28,7 +28,9 @@ GraphQL requires. Schema changes are additive; the evolution rules are in
 Entity reads reuse the ordinary service: stored and computed properties, inherited ownership,
 current findings, soft deletion, and existing read budgets have the same meaning as REST.
 `_team` and `_user` are ontology blueprints/entities and are included. Login accounts,
-Backstage catalog data, saved queries, and the entity query-language evaluator are excluded.
+Backstage catalog data, saved queries, and the entity query-language evaluator are excluded —
+with one provenance exception: `Blueprint` and `Entity` expose their creator's `createdBy` id,
+`creatorName` and `creatorDeleted` flag (the REST list's display fields), never an email or role.
 Dynamic JSON can contain sensitive workspace content: a key grants read access to the whole
 Port ontology, not ownership-based row permissions. Ownership remains informational. The
 REST-only `sourceUrl`/`lastSyncedAt` source-sync envelope members (2.9.0,
