@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Loads (or, with --delete, removes) the sample blueprint set at sample-data/port/commerce-payments/blueprints/*.json —
-# the twelve-blueprint baseline ontology (.claude/docs/ontology.md) — against a running toadie
+# the fifteen-blueprint baseline ontology (.claude/docs/ontology.md) — against a running toadie
 # instance, using the blueprint API: a scriptable, re-runnable alternative to the Import page
 # (/ontology/import, v1.28.0 — see sample-data/port/commerce-payments/README.md "Through the Import page") for CI and
 # local setup outside a browser session. An already-loaded file is reported "exists, skipped",

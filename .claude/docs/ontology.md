@@ -1,6 +1,6 @@
 ### The baseline ontology (Port blueprints)
 
-**`sample-data/port/commerce-payments/blueprints/` is the twelve-blueprint model the platform catalog is built on**
+**`sample-data/port/commerce-payments/blueprints/` is the fifteen-blueprint model the platform catalog is built on**
 (the baseline ontology, v1.25.2; the sample set itself since v1.25.3, when it replaced the
 feature-showcase set), and `sample-data/port/commerce-payments/entities/` is the same broad
 landscape as `sample-data/backstage/commerce-payments/catalog-info.yaml` re-told as Port entities —
@@ -9,7 +9,23 @@ is what the Backstage round trip below is about.
 The design decisions, taken 2026-09-10: `service` + `library` rather than one `component` or a
 five-way split (a Port relation targets ONE blueprint, so every extra blueprint multiplies the
 dependency relations); the full runtime layer `environment` + `cluster` + `workload`; Kafka topics
-are `api` of type `asyncapi`; a minimal `user`; `product` (2.11.0, 2026-09-20): the commercial offering as its own blueprint rather than a `system.type` value — linked from the system side (`system.products`, many) so a shared platform lists every product it serves, suites via `parent_product`, add-ons via `depends_on`, Port-only since Backstage has no Product kind, `system.type` kept as `product|capability` with reworded descriptions. `SampleBlueprintsTest` pins everything below that is
+are `api` of type `asyncapi`; a minimal `user`; `product` (2.11.0, 2026-09-20): the commercial offering as its own blueprint rather than a `system.type` value — linked from the system side (`system.products`, many) so a shared platform lists every product it serves, suites via `parent_product`, add-ons via `depends_on`, Port-only since Backstage has no Product kind, `system.type` kept as `product|capability` with reworded descriptions; `dataset`, `api_adoption`,
+`dataset_adoption` (2.13.0, 2026-09-20): the data-side contract surface and declared usage join
+the model — `dataset` is the data-side interface surface the way `api` is the request-side one
+(`resource` says a store exists, not WHICH datasets it holds or who produces/consumes them), so
+its edges live on the SERVICE side (`service.produces_datasets`/`consumes_datasets`, the
+`provides_apis`/`consumes_apis` twin) rather than the dataset side — one place to read a
+service's interfaces, and the same mapping shape downstream consumers already understand;
+`api_adoption`/`dataset_adoption` are relation ENTITIES, not properties on a relation (Port
+relations carry none — the `workload` precedent, service × environment × cluster), each
+Inherited ownership via `consumer` and composition under `consumer` (the `workload` posture);
+both are declared, never observed — `declared_by` (format `user`) + `verified_at` only, no
+runtime-evidence fields, since Toadie observes nothing, so an absent `major_line`/
+`contract_version` is a valid "undeclared" adoption; `dataset.contract_url` points at the
+published contract rather than a `data_contract` blueprint, since contract documents live in
+contract-management tools and Toadie only records that one exists; an adoption coexisting with
+the consumer's own `consumes_apis`/`consumes_datasets` is a convention, never validated.
+`SampleBlueprintsTest` pins everything below that is
 mechanical, and `SampleEntitiesTest` proves the entity sample saves with zero findings (`.claude/docs/testing.md`).
 
 **Four constraints the set satisfies.** (1) Every blueprint maps to one of the seven Backstage
@@ -33,17 +49,24 @@ default shape (service / environment / workload / `_team` / `_user`) with the us
 | | `library` | Component (type `library`) | composition: `system` → system |
 | | `api` | API (type incl. `asyncapi` = a Kafka topic) | composition: `system` → system |
 | | `resource` | Resource | composition: `system` → system |
+| | `dataset` | — Port-only (the data-side surface; Backstage has no Dataset kind), dropped on export | composition: `system` → system |
 | C runtime | `environment` | — Port default, dropped on export | none |
 | | `cluster` | — Port-only (Resource `kubernetes-cluster` if ever exported) | composition: `environment` → environment; deployment: `environment` → environment |
 | | `workload` | — Port's "running service", dropped on export | composition: `service` → service; deployment: `cluster` → cluster |
+| | `api_adoption` | — Port-only relation entity (the `workload` pattern), dropped on export | composition: `consumer` → service |
+| | `dataset_adoption` | — Port-only relation entity (the `workload` pattern), dropped on export | composition: `consumer` → service |
 
 Load order = file order (a relation target must exist): _team, _user, domain, product, system, environment,
-cluster, resource, library, api, service, workload. There is deliberately NO `api.provided_by`:
+cluster, resource, dataset, library, api, service, workload, api_adoption, dataset_adoption.
+There is deliberately NO `api.provided_by`:
 it would make `api` ↔ `service` a cycle no load order satisfies, and Backstage's own direction is
 `providesApis` on the component. Under the `composition` hierarchy (v1.32.0: the `hierarchies`
 dictionary's seeded value, the one the pre-1.32 single `hierarchyRelation` always described) the
 Entity hierarchy page shows three trees — the org tree (teams), the product tree (suite → products, since 2.11.0) and the architecture tree (domain →
-system → service/library/api/resource → workload, with cluster → environment beside it); an orphan
+system → service/library/api/resource/dataset → workload, with `api_adoption`/`dataset_adoption`
+hanging under their consumer service and cluster → environment beside it) — datasets and
+adoptions (2.13.0) join the SAME architecture tree rather than adding a fourth one, since their
+composition parents (`system`, `consumer` → service) already sit in it; an orphan
 (a service without a system) surfaces as a root, which is the intended nudge rather than an error —
 `system` is optional everywhere Backstage makes `spec.system` optional.
 A second, PARALLEL
@@ -56,19 +79,25 @@ before loading. Ownership is deliberately NOT a hierarchy here: Port models it a
 
 **Conventions.** Property names `snake_case`. Ownership is Port's `$team` (arrived with Phase 4,
 v1.26.0, V31): each blueprint declares `ownership: {type: Direct}` (domain, product, system, service,
-library, api, resource, cluster) or `ownership: {type: Inherited, path: service}` (workload). On entities, the top-level `team`
+library, api, resource, dataset, cluster) or `ownership: {type: Inherited, path: service}`
+(workload) — plus `{type: Inherited, path: consumer}` (`api_adoption`, `dataset_adoption`,
+2.13.0). On entities, the top-level `team`
 field IS the ownership — for Direct blueprints it must name an active `_team` entity (string or
 array; validated on write, `TEAM_TARGET_MISSING` finding on read; renaming a `_team` cascades,
 deleting a referenced one is `409`), for Inherited blueprints it is read-only and computed from
 the `ownership.path`. `_user.team` (many, optional) is membership, a relation to `_team` entities.
-Required relations are always single (Port forbids `required` + `many`). Every blueprint carries
-`links` (`array` of `object`, ↔ `metadata.links`) plus named link properties where the link has
-one meaning (`repository`, `docs`, `ci_pipeline`, `dashboard`, `logs`, `runbook`). `external:
-boolean` on `system`/`api` preserves the `external` namespace (third parties). `product_manager` (format: `user`) is the first `format: user` property — validated against `_user` entities on write, `USER_TARGET_MISSING` finding on read, renaming a `_user` cascades. No secrets,
+Required relations are always single (Port forbids `required` + `many`). Every blueprint except the
+two adoption relation entities (`api_adoption`/`dataset_adoption`, 2.13.0 — a declaration, not a
+thing with pages of its own) carries `links` (`array` of `object`, ↔ `metadata.links`) plus named
+link properties where the link has one meaning (`repository`, `docs`, `ci_pipeline`, `dashboard`, `logs`, `runbook`). `external:
+boolean` on `system`/`api` preserves the `external` namespace (third parties). `product_manager` (format: `user`) is the first `format: user` property — validated against `_user` entities on write, `USER_TARGET_MISSING` finding on read, renaming a `_user` cascades. `declared_by`
+(`api_adoption`/`dataset_adoption`, 2.13.0) is the second `format: user` property, validated the
+same way; `notes` (the same two blueprints) is the first `format: markdown` property — free
+text, no further validation. No secrets,
 connection strings or hostnames as properties, ever.
 
-**Computed properties (phase 5, v1.27.0).** Fourteen mirror/calculation/aggregation properties
-across six blueprints, evaluated at entity read time (`.claude/docs/port-data-model.md`
+**Computed properties (phase 5, v1.27.0).** Twenty mirror/calculation/aggregation properties
+across ten blueprints, evaluated at entity read time (`.claude/docs/port-data-model.md`
 "Computed properties"); `SampleEntitiesTest` derives every expected value from the sample
 entity files rather than hardcoding them.
 
@@ -82,16 +111,24 @@ entity files rather than hardcoding them.
 | `system` | `service_count` | aggregation | target `service`, `entities/count` — direct, via `service.system` |
 | `system` | `workload_replicas` | aggregation | target `workload`, `property/sum` of `replicas`, `pathFilter [{fromBlueprint: workload, path: [service, system]}]` (reverse: workload → service → system) |
 | `system` | `deploys_per_week` | aggregation | target `workload`, `entities/average` per `week`, `measureTimeBy: last_deployed`, the same reverse `pathFilter` — time-dependent (**assumption**, see `port-data-model.md`) |
+| `dataset` | `producer_count` | aggregation (2.13.0) | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [produces_datasets]}]` — reverse, one hop, distinguished from `consumer_count` by relation key |
+| `dataset` | `consumer_count` | aggregation (2.13.0) | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [consumes_datasets]}]` — reverse, one hop, distinguished from `producer_count` by relation key |
+| `dataset` | `adoption_count` | aggregation (2.13.0) | target `dataset_adoption`, `entities/count` — direct, inbound via `dataset_adoption.dataset` |
+| `api` | `adoption_count` | aggregation (2.13.0) | target `api_adoption`, `entities/count` — direct, inbound via `api_adoption.api` |
 | `service` | `domain_title` | mirror | `system.domain.$title` |
 | `service` | `stack` | calculation | `((.properties.languages // []) + (.properties.frameworks // [])) \| join(", ")` |
 | `service` | `risk` | calculation, colorized | `technology_status`/`lifecycle` black-list/deprecated → `high` (red), grey-zone/sunsetting → `medium` (yellow), else `low` (green) |
 | `workload` | `service_lifecycle`, `env_type`, `languages` | mirror | `service.lifecycle`, `environment.type`, `service.languages` |
+| `api_adoption` | `api_lifecycle` | mirror (2.13.0) | `api.lifecycle` — so a `deprecated` line shows on the adoption row |
+| `dataset_adoption` | `dataset_lifecycle` | mirror (2.13.0) | `dataset.lifecycle` — so a `deprecated` contract shows on the adoption row |
 
 An unresolvable value (a dangling relation, a jq failure, a type mismatch) is simply ABSENT —
 never a finding, never a save blocker; `01-team.json`'s `member_count` is the one SYSTEM
 blueprint extension (`_team` may add aggregation properties like any other field). Because an
 aggregation's `target` must already be an ACTIVE blueprint, `domain.critical_systems`, `product`'s three aggregations,
-and `system`'s three aggregations name a blueprint that loads LATER in the numbered set — the
+`dataset`'s three aggregations (`producer_count`/`consumer_count` target `service`,
+`adoption_count` target `dataset_adoption`), `api.adoption_count` (target `api_adoption`), and
+`system`'s three aggregations name a blueprint that loads LATER in the numbered set — the
 loader (`sample-data/port/commerce-payments/blueprints/load.sh`, `SampleData.loadBlueprints`) applies these in TWO
 passes: every file first, with `aggregationProperties` stripped, then a second pass PUTs the
 full file back onto every blueprint that declares one, once every target exists.
@@ -113,7 +150,9 @@ full file back onto every blueprint that declares one, once every target exists.
   `consumes_apis` → `consumesApis`; `_user.team` → `memberOf`; Group `children`/`members`
   and API providers are derived from the reverse side; `api.definition_url` → `definition:
   {$text: <url>}`, `api.definition` → the inline text.
-- Lossy (Port-only): `product` (the whole blueprint), `system.products`, `environment`, `cluster`, `workload`, `service.schedule`, `library.artifact`,
+- Lossy (Port-only): `product`, `dataset`, `api_adoption`, `dataset_adoption` (the whole
+  blueprints), `system.products`, `service.produces_datasets`, `service.consumes_datasets`,
+  `api.adoption_count`, `environment`, `cluster`, `workload`, `service.schedule`, `library.artifact`,
   `resource.hosted_on`. No registry change is needed for the baseline; `kubernetes-cluster` joins
   the Resource types only if clusters are ever exported.
 

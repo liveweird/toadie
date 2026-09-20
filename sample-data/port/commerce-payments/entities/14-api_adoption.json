@@ -1,0 +1,51 @@
+[
+  {
+    "blueprint": "api_adoption",
+    "identifier": "storefront-web-catalog-graphql",
+    "title": "storefront-web → catalog-graphql v2",
+    "icon": "Link",
+    "properties": {
+      "major_line": "v2",
+      "status": "current",
+      "declared_by": "anna.kowalska",
+      "verified_at": "2026-08-01T09:00:00Z"
+    },
+    "relations": { "consumer": "storefront-web", "api": "catalog-graphql" }
+  },
+  {
+    "blueprint": "api_adoption",
+    "identifier": "storefront-web-checkout-rest",
+    "title": "storefront-web → checkout-rest v1",
+    "properties": {
+      "major_line": "v1",
+      "status": "migrating",
+      "declared_by": "marek.nowak",
+      "verified_at": "2026-07-15T14:30:00Z",
+      "notes": "Migrating to v2 once the cart-checkout consolidation ships; v1 stays until then."
+    },
+    "relations": { "consumer": "storefront-web", "api": "checkout-rest", "environment": "production" }
+  },
+  {
+    "blueprint": "api_adoption",
+    "identifier": "storefront-bff-live-cart",
+    "title": "storefront-bff → live-cart (unknown line)",
+    "properties": {
+      "status": "current",
+      "declared_by": "anna.kowalska",
+      "verified_at": "2026-06-20T11:00:00Z"
+    },
+    "relations": { "consumer": "storefront-bff", "api": "live-cart" }
+  },
+  {
+    "blueprint": "api_adoption",
+    "identifier": "checkout-service-payments-grpc",
+    "title": "checkout-service → payments-grpc v1",
+    "properties": {
+      "major_line": "v1",
+      "status": "retiring",
+      "declared_by": "marek.nowak",
+      "verified_at": "2026-05-10T08:00:00Z"
+    },
+    "relations": { "consumer": "checkout-service", "api": "payments-grpc", "environment": "staging" }
+  }
+]

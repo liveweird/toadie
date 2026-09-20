@@ -1,0 +1,73 @@
+{
+  "identifier": "api_adoption",
+  "title": "API adoption",
+  "description": "A declared consumption of an API by a service on a specific major line — the versioned twin of service.consumes_apis, which only says THAT a service consumes an API. A relation entity like workload, since Port relations carry no properties. Declared, never observed: it records what a team states it runs and who verified it when; runtime evidence lives outside Toadie. Convention: the api should be among the consumer's consumes_apis (not validated). Port-only.",
+  "icon": "Link",
+  "hierarchyRelations": {"composition": "consumer"},
+  "schema": {
+    "properties": {
+      "major_line": {
+        "type": "string",
+        "title": "Major line",
+        "description": "The major line consumed, e.g. `v2`. Absent = the consumer has not declared one (unknown adoption is valid)."
+      },
+      "status": {
+        "type": "string",
+        "title": "Status",
+        "description": "Where this consumer stands on the line.",
+        "enum": ["current", "migrating", "retiring"],
+        "enumColors": { "current": "green", "migrating": "yellow", "retiring": "orange" }
+      },
+      "declared_by": {
+        "type": "string",
+        "title": "Declared by",
+        "description": "Who declared it (a _user).",
+        "format": "user"
+      },
+      "verified_at": {
+        "type": "string",
+        "title": "Verified at",
+        "description": "When the declaration was last confirmed.",
+        "format": "date-time"
+      },
+      "notes": {
+        "type": "string",
+        "title": "Notes",
+        "description": "Migration plan, blockers.",
+        "format": "markdown"
+      }
+    }
+  },
+  "relations": {
+    "consumer": {
+      "title": "Consumer",
+      "target": "service",
+      "required": true,
+      "many": false
+    },
+    "api": {
+      "title": "API",
+      "target": "api",
+      "required": true,
+      "many": false
+    },
+    "environment": {
+      "title": "In environment",
+      "description": "Absent = every environment.",
+      "target": "environment",
+      "required": false,
+      "many": false
+    }
+  },
+  "mirrorProperties": {
+    "api_lifecycle": {
+      "title": "API lifecycle",
+      "path": "api.lifecycle"
+    }
+  },
+  "ownership": {
+    "type": "Inherited",
+    "path": "consumer",
+    "title": "Owned by (via consumer)"
+  }
+}

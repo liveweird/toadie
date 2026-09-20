@@ -74,6 +74,13 @@
       "many": false
     }
   },
+  "aggregationProperties": {
+    "adoption_count": {
+      "title": "Adoption count",
+      "target": "api_adoption",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" }
+    }
+  },
   "ownership": {
     "type": "Direct",
     "title": "Owned by"

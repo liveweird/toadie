@@ -1,0 +1,108 @@
+{
+  "identifier": "dataset",
+  "title": "Dataset",
+  "description": "A named, contract-bearing set of data a store holds — the data-side interface surface, the way `api` is the request-side one. An ODCS contract (kept outside Toadie) describes one or more datasets; Toadie records that the dataset exists, where it is stored, and which services produce and consume it (service.produces_datasets / consumes_datasets). Port-only: Backstage has no Dataset kind, so an export drops it.",
+  "icon": "Table",
+  "hierarchyRelations": {"composition": "system"},
+  "schema": {
+    "properties": {
+      "type": {
+        "type": "string",
+        "title": "Type",
+        "description": "How the dataset is delivered.",
+        "enum": ["table", "view", "event-stream", "file-export"],
+        "enumColors": { "table": "blue", "view": "turquoise", "event-stream": "purple", "file-export": "orange" }
+      },
+      "lifecycle": {
+        "type": "string",
+        "title": "Lifecycle",
+        "description": "The lifecycles dictionary.",
+        "enum": ["experimental", "production", "sunsetting", "deprecated"],
+        "enumColors": { "experimental": "paleBlue", "production": "green", "sunsetting": "orange", "deprecated": "red" }
+      },
+      "classification": {
+        "type": "string",
+        "title": "Classification",
+        "description": "The dataset's own classification; a store's data_classification is the store-wide maximum.",
+        "enum": ["public", "internal", "confidential", "restricted"],
+        "enumColors": { "public": "green", "internal": "blue", "confidential": "orange", "restricted": "red" }
+      },
+      "pii": {
+        "type": "boolean",
+        "title": "Contains PII",
+        "description": "Carries personal data (drives GDPR handling of every consumer)."
+      },
+      "freshness": {
+        "type": "string",
+        "title": "Freshness",
+        "description": "How stale a consumer may find it.",
+        "enum": ["real-time", "hourly", "daily", "weekly"],
+        "enumColors": { "real-time": "green", "hourly": "turquoise", "daily": "blue", "weekly": "lightGray" }
+      },
+      "retention_days": {
+        "type": "number",
+        "title": "Retention (days)",
+        "description": "Days a record is kept before deletion or archival."
+      },
+      "contract_url": {
+        "type": "string",
+        "title": "Contract",
+        "description": "The published data contract (ODCS) for this dataset.",
+        "format": "url"
+      },
+      "docs": {
+        "type": "string",
+        "title": "Documentation",
+        "format": "url"
+      },
+      "links": {
+        "type": "array",
+        "title": "Links",
+        "description": "Further links ({title, url}).",
+        "items": { "type": "object" }
+      }
+    }
+  },
+  "relations": {
+    "system": {
+      "title": "Part of",
+      "target": "system",
+      "required": false,
+      "many": false
+    },
+    "stored_in": {
+      "title": "Stored in",
+      "description": "The resource holding it — absent for a file export delivered elsewhere.",
+      "target": "resource",
+      "required": false,
+      "many": false
+    }
+  },
+  "aggregationProperties": {
+    "producer_count": {
+      "title": "Producer count",
+      "target": "service",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "pathFilter": [
+        { "fromBlueprint": "service", "path": ["produces_datasets"] }
+      ]
+    },
+    "consumer_count": {
+      "title": "Consumer count",
+      "target": "service",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "pathFilter": [
+        { "fromBlueprint": "service", "path": ["consumes_datasets"] }
+      ]
+    },
+    "adoption_count": {
+      "title": "Adoption count",
+      "target": "dataset_adoption",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" }
+    }
+  },
+  "ownership": {
+    "type": "Direct",
+    "title": "Owned by"
+  }
+}

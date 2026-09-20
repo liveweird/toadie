@@ -84,15 +84,15 @@ export async function assertSeedParity(baseUrls, jwt, apiKey, schemaPath) {
     const restEntities = (await request(baseUrl, '/api/v1/entities?pageSize=100', { token: jwt })).items
     const gqlBlueprints = (await graphql(baseUrl, apiKey, BLUEPRINT_QUERY)).blueprints
     const gqlEntities = []
-    // 64 entities at pageSize:10 need 7 pages (ceil(64/10)).
-    for (let page = 1; page <= 7; page += 1) {
+    // 76 entities at pageSize:10 need 8 pages (ceil(76/10)).
+    for (let page = 1; page <= 8; page += 1) {
       const result = (await graphql(baseUrl, apiKey, ENTITY_QUERY(page))).entities
-      assert.equal(result.total, 64)
+      assert.equal(result.total, 76)
       gqlEntities.push(...result.items)
     }
-    assert.equal(gqlBlueprints.total, 12)
-    assert.equal(restBlueprints.length, 12)
-    assert.equal(restEntities.length, 64)
+    assert.equal(gqlBlueprints.total, 15)
+    assert.equal(restBlueprints.length, 15)
+    assert.equal(restEntities.length, 76)
     compareRows(restBlueprints, gqlBlueprints.items, new Set(['id', 'createdBy']))
     compareRows(restEntities, gqlEntities, new Set(['id', 'blueprintId', 'createdBy']))
 
@@ -125,20 +125,31 @@ export async function assertSeedParity(baseUrls, jwt, apiKey, schemaPath) {
     assert.ok(shop, 'shop sample entity is missing')
     assert.equal(shop.properties.service_count, 8)
 
+    // 2.13.0: the `dataset`/`api_adoption`/`dataset_adoption` blueprints. `orders` is consumed
+    // by both `storefront-web` and `legacy-invoicing` (their `consumes_datasets` relations) ->
+    // consumer_count 2. `catalog-graphql` has one declared adoption (`storefront-web-catalog-
+    // graphql`) -> adoption_count 1.
+    const orders = gqlEntities.find((row) => row.blueprint === 'dataset' && row.identifier === 'orders')
+    assert.ok(orders, 'orders sample entity is missing')
+    assert.equal(orders.properties.consumer_count, 2)
+    const catalogGraphql = gqlEntities.find((row) => row.blueprint === 'api' && row.identifier === 'catalog-graphql')
+    assert.ok(catalogGraphql, 'catalog-graphql sample entity is missing')
+    assert.equal(catalogGraphql.properties.adoption_count, 1)
+
     const report = (await graphql(baseUrl, apiKey,
       '{ errors { checkedEntities checkedBlueprints entities { total } blueprints { total } } }')).errors
     // Since 2.10.2 the shell loaders stamp every sample blueprint and entity with its public
     // raw-GitHub sourceUrl, so a fresh load carries no SOURCE_MISSING (or any other) finding —
     // rows with zero findings are omitted entirely, so both report lists are empty.
     assert.deepEqual(report, {
-      checkedEntities: 64,
-      checkedBlueprints: 12,
+      checkedEntities: 76,
+      checkedBlueprints: 15,
       entities: { total: 0 },
       blueprints: { total: 0 },
     })
     const restReport = await request(baseUrl, '/api/v1/entities/errors', { token: jwt })
-    assert.equal(restReport.checkedEntities, 64)
-    assert.equal(restReport.checkedBlueprints, 12)
+    assert.equal(restReport.checkedEntities, 76)
+    assert.equal(restReport.checkedBlueprints, 15)
     assert.equal(restReport.entities.length, 0, `unexpected entity findings: ${JSON.stringify(restReport.entities)}`)
     assert.equal(restReport.blueprints.length, 0, `unexpected blueprint findings: ${JSON.stringify(restReport.blueprints)}`)
     const actualSdl = await request(baseUrl, '/integration/graphql/schema', {

@@ -45,7 +45,7 @@ import kotlin.test.assertTrue
  * baseline ontology (v1.25.3; adopting the v1.26.0 system blueprints and real `team` ownership
  * since v1.26.0): the e-commerce/payments catalog
  * `sample-data/backstage/commerce-payments/catalog-info.yaml` describes, re-told as Port entities
- * of the twelve `sample-data/port/commerce-payments/blueprints/` — through the real API, in
+ * of the fifteen `sample-data/port/commerce-payments/blueprints/` — through the real API, in
  * dependency order, on top of the blueprint set ([SampleBlueprintsTest]'s files, loaded here too
  * via [SampleData.loadBlueprint] since entities cannot exist without their blueprint —
  * `_team`/`_user` are `PUT` extensions of the V31-seeded rows, every other blueprint a fresh
@@ -91,9 +91,9 @@ class SampleEntitiesTest {
         val admin = seededClient("entsample", UserRole.ADMIN)
 
         val bpFiles = blueprintFiles()
-        assertEquals(12, bpFiles.size, "expected the twelve numbered sample blueprint files")
+        assertEquals(15, bpFiles.size, "expected the fifteen numbered sample blueprint files")
         val entFiles = entityFiles()
-        assertEquals(12, entFiles.size, "expected the twelve numbered sample entity files")
+        assertEquals(15, entFiles.size, "expected the fifteen numbered sample entity files")
 
         val blueprintIdentifiers = mutableListOf<String>()
         val entityIdentifiers = mutableListOf<String>()
@@ -200,10 +200,10 @@ class SampleEntitiesTest {
     }
 
     /**
-     * Phase 6 (v1.28.0): the 64 entity files also load as ONE `POST /api/v1/entities/import`
+     * Phase 6 (v1.28.0): the 76 entity files also load as ONE `POST /api/v1/entities/import`
      * batch on top of the already-loaded blueprint set (the same [SampleData.loadBlueprints] as
      * above) — the planner's own ordering resolves every relation/`team`/format-property sibling
-     * reference across all twelve files without any per-file sequencing from the caller, every
+     * reference across all fifteen files without any per-file sequencing from the caller, every
      * row lands `CREATED` and every re-GET carries NO findings, exactly like the sequential-POST
      * path in the main test (both go through the same [ch.nokillswit.entities.EntityService]
      * writes). A second identical run — `replaceExisting` left at its default `false` — reports
@@ -230,7 +230,7 @@ class SampleEntitiesTest {
 
             val response = admin.postJson("/api/v1/entities/import", EntityImportRequest(documents = documents))
                 .body<EntityImportResponse>()
-            assertEquals(64, response.results.size, "expected the 64 sample entities")
+            assertEquals(76, response.results.size, "expected the 76 sample entities")
             assertTrue(
                 response.results.all { it.status == OntologyImportStatus.CREATED },
                 "every row must be CREATED: ${response.results}",
@@ -505,6 +505,90 @@ class SampleEntitiesTest {
                 service.properties["languages"],
                 propertiesOf("workload", workload.identifier)["languages"],
                 "workload/${workload.identifier}.languages",
+            )
+        }
+
+        assertDeclaredUsageComputedProperties(allRequests, responseByKey)
+    }
+
+    /**
+     * The 2.13.0 computed properties — `dataset.producer_count`/`consumer_count` (reverse one-hop
+     * pathFilter over `service.produces_datasets`/`consumes_datasets`), the two `adoption_count`
+     * inbound aggregations on `dataset`/`api`, and the two single-hop lifecycle mirrors on the
+     * adoption relation entities — split out of [assertComputedProperties] purely to keep each
+     * derivation walk under detekt's cyclomatic-complexity threshold.
+     */
+    private fun assertDeclaredUsageComputedProperties(
+        allRequests: List<EntityRequest>,
+        responseByKey: Map<String, EntityResponse>,
+    ) {
+        fun byBlueprint(blueprint: String) = allRequests.filter { it.blueprint == blueprint }
+        fun propertiesOf(blueprint: String, identifier: String) = responseByKey.getValue("$blueprint/$identifier").properties
+        val services = byBlueprint("service")
+        val datasets = byBlueprint("dataset")
+        val apis = byBlueprint("api")
+        val apiAdoptions = byBlueprint("api_adoption")
+        val datasetAdoptions = byBlueprint("dataset_adoption")
+
+        // dataset.producer_count / consumer_count: reverse pathFilter over service.produces_datasets /
+        // consumes_datasets (2.13.0).
+        datasets.forEach { dataset ->
+            val producers = services.count { service ->
+                dataset.identifier in teamValuesOf(service.relations["produces_datasets"])
+            }
+            assertEquals(
+                JsonPrimitive(producers.toLong()),
+                propertiesOf("dataset", dataset.identifier)["producer_count"],
+                "dataset/${dataset.identifier}.producer_count",
+            )
+            val consumers = services.count { service ->
+                dataset.identifier in teamValuesOf(service.relations["consumes_datasets"])
+            }
+            assertEquals(
+                JsonPrimitive(consumers.toLong()),
+                propertiesOf("dataset", dataset.identifier)["consumer_count"],
+                "dataset/${dataset.identifier}.consumer_count",
+            )
+            // dataset.adoption_count: direct inbound aggregation over dataset_adoption.dataset.
+            val adoptions = datasetAdoptions.count { adoption ->
+                (adoption.relations["dataset"] as? JsonPrimitive)?.content == dataset.identifier
+            }
+            assertEquals(
+                JsonPrimitive(adoptions.toLong()),
+                propertiesOf("dataset", dataset.identifier)["adoption_count"],
+                "dataset/${dataset.identifier}.adoption_count",
+            )
+        }
+
+        // api.adoption_count: direct inbound aggregation over api_adoption.api (2.13.0).
+        apis.forEach { api ->
+            val adoptions = apiAdoptions.count { adoption ->
+                (adoption.relations["api"] as? JsonPrimitive)?.content == api.identifier
+            }
+            assertEquals(
+                JsonPrimitive(adoptions.toLong()),
+                propertiesOf("api", api.identifier)["adoption_count"],
+                "api/${api.identifier}.adoption_count",
+            )
+        }
+
+        // api_adoption.api_lifecycle / dataset_adoption.dataset_lifecycle: single-hop mirrors (2.13.0).
+        apiAdoptions.forEach { adoption ->
+            val apiIdentifier = (adoption.relations.getValue("api") as JsonPrimitive).content
+            val api = apis.first { it.identifier == apiIdentifier }
+            assertEquals(
+                api.properties["lifecycle"],
+                propertiesOf("api_adoption", adoption.identifier)["api_lifecycle"],
+                "api_adoption/${adoption.identifier}.api_lifecycle",
+            )
+        }
+        datasetAdoptions.forEach { adoption ->
+            val datasetIdentifier = (adoption.relations.getValue("dataset") as JsonPrimitive).content
+            val dataset = datasets.first { it.identifier == datasetIdentifier }
+            assertEquals(
+                dataset.properties["lifecycle"],
+                propertiesOf("dataset_adoption", adoption.identifier)["dataset_lifecycle"],
+                "dataset_adoption/${adoption.identifier}.dataset_lifecycle",
             )
         }
     }

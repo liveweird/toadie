@@ -2,16 +2,16 @@
 
 This standalone Port demo models a commerce and payments platform as two dependent sets:
 
-- [`blueprints/`](blueprints/) contains twelve numbered blueprint definitions.
-- [`entities/`](entities/) contains twelve numbered files with 64 entity instances.
+- [`blueprints/`](blueprints/) contains fifteen numbered blueprint definitions.
+- [`entities/`](entities/) contains fifteen numbered files with 76 entity instances.
 
 The numbering is dependency order. Load all blueprint definitions before any entity instances.
 The related Backstage demo uses the same broad business vocabulary, but neither sample depends on
 the other.
 
 The first two definitions extend the protected `_team` and `_user` system blueprints seeded by
-V31. The remaining ten are ordinary sample blueprints. The model uses two named hierarchies in
-parallel: `composition` for organisation and architecture containment, and `deployment` for
+V31. The remaining thirteen are ordinary sample blueprints. The model uses two named hierarchies
+in parallel: `composition` for organisation and architecture containment, and `deployment` for
 workload → cluster → environment placement. A relation may participate in both.
 
 | # | Blueprint | Role | `composition` parent | `deployment` parent |
@@ -24,10 +24,13 @@ workload → cluster → environment placement. A relation may participate in bo
 | 06 | `environment` | runtime environment | — | — |
 | 07 | `cluster` | runtime cluster | `environment` | `environment` |
 | 08 | `resource` | data/infrastructure resource | `system` | — |
-| 09 | `library` | shared component | `system` | — |
-| 10 | `api` | API or event contract | `system` | — |
-| 11 | `service` | service, site, job, or pipeline | `system` | — |
-| 12 | `workload` | deployed service instance | `service` | `cluster` |
+| 09 | `dataset` | data contract surface | `system` | — |
+| 10 | `library` | shared component | `system` | — |
+| 11 | `api` | API or event contract | `system` | — |
+| 12 | `service` | service, site, job, or pipeline | `system` | — |
+| 13 | `workload` | deployed service instance | `service` | `cluster` |
+| 14 | `api_adoption` | declared API usage | `consumer` | — |
+| 15 | `dataset_adoption` | declared dataset usage | `consumer` | — |
 
 Every blueprint has instances, every declared property and relation is used at least once, and
 every entity validates without findings. The entity set covers every value of the mirrored type
@@ -47,8 +50,8 @@ sample-data/port/commerce-payments/entities/load.sh
 The blueprint loader ensures both `composition` and `deployment` exist in the `hierarchies`
 dictionary. It then loads definitions in two passes: first without forward-targeting aggregation
 properties, then PUTs the complete definitions after all targets exist. `_team` and `_user` are
-extended; ten definitions are created. The entity loader creates all 64 instances in dependency
-order.
+extended; thirteen definitions are created. The entity loader creates all 76 instances in
+dependency order.
 
 Both loaders are safe to rerun. Existing ordinary blueprints and entities are reported as skipped;
 the protected system blueprints are PUT again to the sample definition, and definitions with
@@ -65,7 +68,7 @@ Entities row menus and editors — works right away, provided the app has outbou
 `raw.githubusercontent.com`. Set `TOADIE_SOURCE_BASE` to point the loaders at a fork or branch's
 own checkout, or to an empty string to load completely without source references. With sources, every row
 starts "Never synced" until its first Sync from source; without them, every row reads "No source"
-and the Port Errors report lists 76 gray `SOURCE_MISSING` findings — one per blueprint and
+and the Port Errors report lists 91 gray `SOURCE_MISSING` findings — one per blueprint and
 entity — until sources are set by hand. `--delete` is unaffected either way: it
 resolves rows by their stored identifiers, not by their source references.
 
@@ -75,16 +78,16 @@ The UI requires one dictionary step that the blueprint loader performs automatic
 
 1. Open **Port → Hierarchies** at `/hierarchies` and add `deployment`. Keep the seeded
    `composition` value.
-2. Open **Port → Import** at `/ontology/import`, select all twelve `blueprints/*.json` files,
+2. Open **Port → Import** at `/ontology/import`, select all fifteen `blueprints/*.json` files,
    and turn **Replace existing definitions** on. Check the batch, then import it. `_team` and
-   `_user` report `UPDATED`; the other ten report `CREATED` on a fresh workspace.
-3. On the same Port import page, select all twelve `entities/*.json` files. Check the batch, then
-   import it. A fresh workspace reports 64 `CREATED` rows with no findings.
+   `_user` report `UPDATED`; the other thirteen report `CREATED` on a fresh workspace.
+3. On the same Port import page, select all fifteen `entities/*.json` files. Check the batch, then
+   import it. A fresh workspace reports 76 `CREATED` rows with no findings.
 
 The replacement switch is required for the definition batch because `_team` and `_user` already
 exist. Without it their sample extensions remain unapplied and the team/user entity documents
 fail on their added fields. Reimporting unchanged definitions with replacement enabled updates
-the matching definitions; reimporting unchanged entities with replacement disabled reports 64
+the matching definitions; reimporting unchanged entities with replacement disabled reports 76
 `EXISTS` rows and stores nothing.
 
 ## What the entity files contain
@@ -99,12 +102,15 @@ the matching definitions; reimporting unchanged entities with replacement disabl
 | `environment` | 4: production, staging, test, development |
 | `cluster` | 4 Kubernetes clusters |
 | `resource` | 8 databases, event stores, and caches |
+| `dataset` | 5: `product-catalog`, `orders`, `payments-ledger`, `settlements-daily`, `catalog-search-index` |
 | `library` | 2: `acme-commons`, `payments-sdk` |
 | `api` | 6 API and event contracts |
 | `service` | 10 services, sites, jobs, and pipelines |
 | `workload` | 9 runtime deployments |
+| `api_adoption` | 4 declared API consumptions, one major-line-less |
+| `dataset_adoption` | 3 declared dataset consumptions, one contract-version-less |
 
-Six blueprints define fourteen computed properties evaluated on reads:
+Ten blueprints define twenty computed properties evaluated on reads:
 
 | Blueprint | Computed properties |
 |---|---|
@@ -112,13 +118,18 @@ Six blueprints define fourteen computed properties evaluated on reads:
 | `domain` | aggregation `critical_systems` |
 | `product` | aggregations `system_count`, `critical_systems`, `service_count` |
 | `system` | aggregations `service_count`, `workload_replicas`, `deploys_per_week` |
+| `dataset` | aggregations `producer_count`, `consumer_count`, `adoption_count` |
+| `api` | aggregation `adoption_count` |
 | `service` | mirror `domain_title`; calculations `stack`, `risk` |
 | `workload` | mirrors `service_lifecycle`, `env_type`, `languages` |
+| `api_adoption` | mirror `api_lifecycle` |
+| `dataset_adoption` | mirror `dataset_lifecycle` |
 
 Computed values are merged into response properties and are never accepted as write input.
 `deploys_per_week` is time-dependent; unresolvable computed values are absent rather than
-findings. Ownership is direct on domain, product, system, service, library, API, resource, and
-cluster; workload ownership is inherited through its `service` relation.
+findings. Ownership is direct on domain, product, system, service, library, API, resource,
+cluster, and dataset; workload ownership is inherited through its `service` relation, and
+`api_adoption`/`dataset_adoption` ownership is inherited through their `consumer` relation.
 
 ## Remove the demo
 
@@ -130,8 +141,8 @@ sample-data/port/commerce-payments/blueprints/load.sh --delete
 ```
 
 The entity loader deletes in reverse dependency order. The blueprint loader first removes
-forward-targeting aggregations and then deletes the ten ordinary definitions in reverse order.
-A reference from outside the sample causes a `409` and is reported rather than forced.
+forward-targeting aggregations and then deletes the thirteen ordinary definitions in reverse
+order. A reference from outside the sample causes a `409` and is reported rather than forced.
 
 Cleanup deliberately keeps the protected `_team` and `_user` rows and keeps both hierarchy
 dictionary entries. Because the loader extended the system blueprints, `--delete` does not restore

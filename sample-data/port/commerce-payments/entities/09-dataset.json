@@ -1,0 +1,80 @@
+[
+  {
+    "blueprint": "dataset",
+    "identifier": "product-catalog",
+    "title": "Product catalog",
+    "icon": "Table",
+    "team": "retail-tribe",
+    "properties": {
+      "type": "table",
+      "lifecycle": "production",
+      "classification": "internal",
+      "pii": false,
+      "freshness": "hourly",
+      "contract_url": "https://contracts.example.com/contracts/product-catalog",
+      "docs": "https://docs.example.com/datasets/product-catalog"
+    },
+    "relations": { "system": "storefront", "stored_in": "catalog-db" }
+  },
+  {
+    "blueprint": "dataset",
+    "identifier": "orders",
+    "title": "Orders",
+    "team": "retail-tribe",
+    "properties": {
+      "type": "table",
+      "lifecycle": "production",
+      "classification": "confidential",
+      "pii": true,
+      "freshness": "real-time",
+      "retention_days": 3650
+    },
+    "relations": { "system": "storefront", "stored_in": "orders-db" }
+  },
+  {
+    "blueprint": "dataset",
+    "identifier": "payments-ledger",
+    "title": "Payments ledger",
+    "team": "payments-squad",
+    "properties": {
+      "type": "event-stream",
+      "lifecycle": "production",
+      "classification": "restricted",
+      "pii": true,
+      "freshness": "real-time",
+      "links": [
+        { "title": "Ledger schema", "url": "https://wiki.example.com/payments-ledger/schema" }
+      ]
+    },
+    "relations": { "system": "payments", "stored_in": "ledger-log" }
+  },
+  {
+    "blueprint": "dataset",
+    "identifier": "settlements-daily",
+    "title": "Settlements (daily)",
+    "team": "payments-squad",
+    "properties": {
+      "type": "file-export",
+      "lifecycle": "sunsetting",
+      "classification": "confidential",
+      "pii": false,
+      "freshness": "daily",
+      "retention_days": 2555
+    },
+    "relations": { "system": "payments" }
+  },
+  {
+    "blueprint": "dataset",
+    "identifier": "catalog-search-index",
+    "title": "Catalog search index",
+    "team": "retail-tribe",
+    "properties": {
+      "type": "view",
+      "lifecycle": "experimental",
+      "classification": "public",
+      "pii": false,
+      "freshness": "weekly"
+    },
+    "relations": { "system": "storefront", "stored_in": "catalog-db" }
+  }
+]
