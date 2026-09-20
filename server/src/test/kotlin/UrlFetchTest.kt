@@ -1007,4 +1007,69 @@ class UrlFetchTest {
             assertNotNull(event)
         }
     }
+
+    // ---- the blueprint twin, POST /api/v1/blueprints/fetch (2.10.0) --------------------------
+
+    @Test
+    fun `the blueprint fetch route returns the fetched text and audits it, and maps a missing upstream to 502`() =
+        withFixtureServer(
+            configure = { server ->
+                server.respond("/ok", 200, "{\"identifier\":\"bp1\",\"title\":\"T\"}".toByteArray())
+                server.respond("/missing", 404, "not here".toByteArray())
+            },
+        ) { base ->
+            testApplication {
+                configureApp()
+                // The test seam: a lenient-validator fetcher so the ROUTE can reach the
+                // 127.0.0.1 fixture; production wiring never sets this attribute.
+                application {
+                    attributes.put(UrlFetcherKey, fixtureFetcher(Duration.ofMillis(500)))
+                }
+                startApplication()
+                val client = seededClient("blueprintfetchroute", UserRole.ADMIN)
+
+                withAuditCapture { capture ->
+                    val ok = client.postJson("/api/v1/blueprints/fetch", FetchUrlRequest(url = "$base/ok"))
+                    assertEquals(HttpStatusCode.OK, ok.status)
+                    assertTrue(ok.body<FetchUrlResponse>().content.contains("\"identifier\":\"bp1\""))
+                    // A successful outbound fetch leaves its own trail — scheme/host only, never
+                    // the full URL (it may embed query-string tokens).
+                    val fetched = capture.events.firstOrNull { it.message == "blueprint.fetched" }
+                    assertNotNull(fetched)
+                    assertTrue(fetched.hasKeyValue("host", "127.0.0.1"))
+                }
+
+                val bad = client.postJson("/api/v1/blueprints/fetch", FetchUrlRequest(url = "$base/missing"))
+                assertEquals(HttpStatusCode.BadGateway, bad.status)
+                assertTrue(bad.body<ProblemDetail>().detail!!.contains("HTTP 404"))
+            }
+        }
+
+    @Test
+    fun `the blueprint fetch route answers a uniform 400 for a blocked URL and audits the attempt`() = testApplication {
+        usePostgresTestcontainer()
+        withAuditCapture { capture ->
+            val client = seededClient("blueprinturlfetch", UserRole.ADMIN)
+
+            val response = client.postJson("/api/v1/blueprints/fetch", FetchUrlRequest(url = "https://127.0.0.1/x.json"))
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals(FETCH_URL_INVALID_DETAIL, response.body<ProblemDetail>().detail)
+
+            val event = capture.awaitEvent { it.message == "blueprint.fetch_blocked" && it.hasKeyValue("host", "127.0.0.1") }
+            assertNotNull(event)
+        }
+    }
+
+    @Test
+    fun `the blueprint fetch route is ADMIN-only, guarded before any fetch`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("blueprintfetchuser")
+        TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
+        val client = authedClient(email, "pw")
+
+        // A URL that would otherwise succeed if the fetch ever ran (loopback is always
+        // blocked anyway, but the point is 403 wins BEFORE the fetcher is ever consulted).
+        val response = client.postJson("/api/v1/blueprints/fetch", FetchUrlRequest(url = "https://example.com/bp.json"))
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
 }

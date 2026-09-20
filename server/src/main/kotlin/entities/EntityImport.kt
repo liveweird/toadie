@@ -5,6 +5,7 @@ import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
+import ch.nokillswit.infra.fetch.SourceWrite
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.infra.importing.ImportMutation

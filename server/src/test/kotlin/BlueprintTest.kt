@@ -308,6 +308,8 @@ class BlueprintTest {
             assertFalse(text.contains("\"description\""), "an unset description key must be ABSENT, not null: $text")
             assertFalse(text.contains("\"icon\""), "an unset icon key must be ABSENT, not null: $text")
             assertFalse(text.contains("\"ownership\""), "an unset ownership key must be ABSENT, not null: $text")
+            assertFalse(text.contains("\"sourceUrl\""), "an unset sourceUrl key must be ABSENT, not null: $text")
+            assertTrue(text.contains("\"lastSyncedAt\":0"), "lastSyncedAt (2.10.0) is required and 0 = never synced: $text")
 
             val get = admin.get("/api/v1/blueprints/${create.body<BlueprintResponse>().id}")
             val getText = get.bodyAsText()

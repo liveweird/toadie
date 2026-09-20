@@ -31,6 +31,7 @@ import ch.nokillswit.entityquery.validateEntityQuery
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.infra.db.octetLength
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
+import ch.nokillswit.infra.fetch.SourceWrite
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.users.UserService
@@ -198,6 +199,8 @@ class EntityService(
         val definition: BlueprintDefinition,
         /** Hierarchy identifier -> relation key (V34) — decoded from `blueprints.hierarchy_relations`. */
         val hierarchyRelations: Map<String, String>,
+        /** The blueprint's source reference (2.10.0, V38) — threaded through for `entities/EntityErrors.kt`'s `SOURCE_MISSING`. */
+        val sourceUrl: String?,
     )
 
     internal suspend fun loadActiveBlueprints(budget: OntologyReadBudget? = null): List<ActiveBlueprint> =
@@ -209,6 +212,7 @@ class EntityService(
                     it[BlueprintService.Blueprints.title],
                     decodeForRead<BlueprintDefinition>(it[BlueprintService.Blueprints.definition], budget),
                     blueprintJson.decodeFromString<Map<String, String>>(it[BlueprintService.Blueprints.hierarchyRelations]),
+                    it[BlueprintService.Blueprints.sourceUrl],
                 )
             }
             .toList()

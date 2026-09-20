@@ -144,23 +144,6 @@ data class EntitySyncStateResponse(
 data class SyncEntityRequest(val document: EntityRequest)
 
 /**
- * The entity write path's column-write policy for the `sourceUrl`/`lastSyncedAt`/`synced_content`
- * envelope (2.9.0, the `catalog/CatalogFileService.kt` create/update precedent, one level down):
- * [FromRequest] is the ordinary create/PUT posture (the submitted `sourceUrl`, resetting the sync
- * stamp when it differs from the stored one); [Keep] leaves all three columns untouched (an
- * import row replaced without a batch `sourceUrl`, D3); [Synced] is a fetch-backed write (a
- * batch import with a `sourceUrl`, or `POST …/entities/{id}/sync`) — stamps the reference, the
- * sync timestamp, and the baseline document together.
- */
-sealed interface SourceWrite {
-    data object FromRequest : SourceWrite
-
-    data object Keep : SourceWrite
-
-    data class Synced(val sourceUrl: String) : SourceWrite
-}
-
-/**
  * A bulk-import DOCUMENT never carries `sourceUrl` itself — it is row state for the WHOLE
  * request ([EntityImportRequest.sourceUrl]), not a per-document member (`.claude/docs/
  * port-data-model.md` "Import and export"). Thrown before the row's ordinary validation so the

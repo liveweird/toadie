@@ -1,5 +1,7 @@
 package ch.nokillswit.blueprints
 
+import ch.nokillswit.infra.fetch.SourceWrite
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.infra.importing.ImportMutation
 import ch.nokillswit.infra.importing.ImportMutationKind
@@ -29,6 +31,14 @@ import kotlinx.serialization.json.JsonObject
 data class BlueprintImportRequest(
     val documents: List<JsonObject>,
     val replaceExisting: Boolean = false,
+    /**
+     * The URL the batch was fetched from (2.10.0, the `entities/EntityImportRequest.sourceUrl`
+     * twin, one level down) — every CREATED/UPDATED blueprint row gets it as its source
+     * reference AND starts synced (the document IS the remote copy at import time). Omit for
+     * pasted batches. A per-document `sourceUrl` is `INVALID` ([requireNoDocumentSourceUrl]) —
+     * row state belongs to the whole request, not one document.
+     */
+    val sourceUrl: String? = null,
 )
 
 @Serializable
@@ -88,6 +98,12 @@ private fun classifyDocuments(
         val decoded = decodeDocument<BlueprintRequest>(obj)
         if (decoded == null) {
             verdicts[index] = rejected(index, rawString(obj, "identifier"), IMPORT_SCHEMA_MESSAGE)
+            return@forEachIndexed
+        }
+        try {
+            requireNoDocumentSourceUrl(decoded)
+        } catch (e: BadRequestException) {
+            verdicts[index] = rejected(index, decoded.identifier, e.message)
             return@forEachIndexed
         }
         val sanitized = sanitizedBlueprintRequest(decoded)
@@ -316,17 +332,22 @@ suspend fun BlueprintService.import(
     documents: List<JsonObject>,
     callerId: UInt,
     replaceExisting: Boolean,
+    sourceUrl: String? = null,
     onCommitted: (ImportMutation) -> Unit,
 ): List<BlueprintImportRow> {
     val registry = list().map { RegistryBlueprint(it.id, it.identifier, it.system) }
     val plan = planBlueprintImport(documents, registry, replaceExisting, knownHierarchies())
+    // D3 (`.claude/docs/persistence.md` "V38"): a batch WITH a `sourceUrl` moves/re-stamps every
+    // stored row; without one, `replaceExisting` keeps a row's existing reference untouched.
+    val source: SourceWrite = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
+        ?.let { SourceWrite.Synced(it) } ?: SourceWrite.Keep
     val rows = arrayOfNulls<BlueprintImportRow>(documents.size)
     plan.verdicts.forEachIndexed { idx, verdict -> if (verdict is BlueprintPlanVerdict.Rejected) rows[idx] = verdict.row }
 
     val storedIds = mutableMapOf<Int, UInt>()
     for (idx in plan.order) {
         val verdict = plan.verdicts[idx] as? BlueprintPlanVerdict.Store ?: continue
-        val write = writeBlueprintRow(idx, verdict, callerId, storedIds)
+        val write = writeBlueprintRow(idx, verdict, callerId, storedIds, source)
         rows[idx] = write.row
         // Outside writeBlueprintRow's storage-failure classifier: audit/log failures and
         // cancellation are never mislabeled as a database ERROR after the mutation committed.
@@ -336,7 +357,7 @@ suspend fun BlueprintService.import(
         val verdict = plan.verdicts[idx] as? BlueprintPlanVerdict.Store ?: continue
         if (verdict.deferred.isEmpty()) continue
         val id = storedIds[idx] ?: continue
-        rows[idx] = pass2Blueprint(id, verdict, rows[idx] ?: error("blueprint import row $idx missing after pass 1"))
+        rows[idx] = pass2Blueprint(id, verdict, rows[idx] ?: error("blueprint import row $idx missing after pass 1"), source)
     }
     return rows.map { it ?: error("blueprint import row left unset") }
 }
@@ -350,18 +371,19 @@ private suspend fun BlueprintService.writeBlueprintRow(
     verdict: BlueprintPlanVerdict.Store,
     callerId: UInt,
     storedIds: MutableMap<Int, UInt>,
+    source: SourceWrite,
 ): BlueprintPass1Write {
     val identifier = verdict.request.identifier
     return try {
         if (verdict.existingId == null) {
-            val created = create(verdict.pass1, callerId)
+            val created = create(verdict.pass1, callerId, source)
             storedIds[index] = created.id
             BlueprintPass1Write(
                 BlueprintImportRow(index, identifier, OntologyImportStatus.CREATED, id = created.id),
                 ImportMutation(ImportMutationKind.CREATED, created.id, identifier, system = created.system),
             )
         } else {
-            val result = update(verdict.existingId, verdict.pass1)
+            val result = update(verdict.existingId, verdict.pass1, source)
             if (result.affected == 0) {
                 BlueprintPass1Write(BlueprintImportRow(index, identifier, OntologyImportStatus.ERROR, message = "Blueprint vanished"))
             } else {
@@ -393,9 +415,10 @@ private suspend fun BlueprintService.pass2Blueprint(
     id: UInt,
     verdict: BlueprintPlanVerdict.Store,
     previousRow: BlueprintImportRow,
+    source: SourceWrite,
 ): BlueprintImportRow =
     try {
-        val result = update(id, verdict.request)
+        val result = update(id, verdict.request, source)
         if (result.affected == 0) {
             previousRow.copy(
                 status = OntologyImportStatus.ERROR,

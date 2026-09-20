@@ -1437,7 +1437,8 @@ export interface paths {
          *     each root at a different relation (two hierarchy identifiers may legitimately share one
          *     relation); naming an unknown hierarchy identifier or an unknown/many-valued relation is
          *     `400`. Identifiers starting with `_` are reserved for Port's own system blueprints
-         *     (`_team`/`_user`) and are rejected with `400`.
+         *     (`_team`/`_user`) and are rejected with `400`. Optionally carries `sourceUrl` (2.10.0)
+         *     — the blueprint's source reference, set from the start.
          */
         post: operations["createBlueprint"];
         delete?: never;
@@ -1470,7 +1471,9 @@ export interface paths {
          *     system blueprint (`_team`/`_user`, `system: true`) additionally rejects an identifier
          *     rename and any removal or retyping of its base properties/relations with `400`;
          *     everything else about it (titles, extra properties/relations, `hierarchyRelations`,
-         *     `ownership`) remains an ordinary admin edit.
+         *     `ownership`) remains an ordinary admin edit. Full-replace semantics for `sourceUrl`
+         *     (2.10.0) too: omitted or blank CLEARS the stored reference, and any change resets the
+         *     sync state (`lastSyncedAt`/`syncedDocument`).
          */
         put: operations["replaceBlueprint"];
         post?: never;
@@ -1565,6 +1568,93 @@ export interface paths {
          *     documents).
          */
         post: operations["checkBlueprintImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blueprints/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch a blueprint document from a URL (server-side)
+         * @description ADMIN only, guarded BEFORE receive. Source references & HTTP re-sync (2.10.0):
+         *     retrieves the raw text at the given URL — a Port blueprint JSON document — so the SPA
+         *     can drop it into the ontology import flow or the blueprint sync modal. Server-side so
+         *     any reachable host works, not only CORS-friendly ones; parsing stays a client concern,
+         *     this returns TEXT. Identical SSRF posture and guard chain to `POST /entities/fetch`
+         *     (`.claude/docs/security.md` "Outbound URL fetch") — the same shared fetcher, one shared
+         *     connection pool; the Import page keeps using `POST /entities/fetch`, so this route
+         *     backs the blueprint editor's Source fieldset and the Blueprints list's Sync action only.
+         *
+         *     SSRF posture: the URL must be an absolute `https` address without credentials whose
+         *     host resolves ONLY to public addresses — anything else (http, userinfo, loopback,
+         *     private/link-local/unique-local ranges, unresolvable hosts) is a uniform `400` that
+         *     never echoes what was probed. Redirects are not followed (`502` — use the final URL),
+         *     the response body is capped at 1 MB, and one 10-second deadline covers validation,
+         *     DNS resolution, connection/headers, and the complete response body. Upstream
+         *     failures (non-200, deadline expiry, body-read failure, oversize) answer `502`.
+         */
+        post: operations["fetchBlueprintUrl"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blueprints/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a blueprint's sync state
+         * @description Any authenticated user (whoever reads a blueprint reads its sync state). The
+         *     blueprint's source reference, last-sync stamp, and the BASELINE document stored at the
+         *     last sync (including the merged `hierarchyRelations`) — what the sync modal compares
+         *     the current DB document and the freshly fetched remote copy against to attribute
+         *     changes to a side. A never-synced blueprint answers `lastSyncedAt: 0` with
+         *     `syncedDocument` absent. A pure read, not audited.
+         */
+        get: operations["getBlueprintSyncState"];
+        put?: never;
+        /**
+         * Overwrite the blueprint with its remote copy (HTTP→DB sync)
+         * @description ADMIN only, guarded BEFORE receive (403 before 404/400). The remote→DB sync: overwrites
+         *     the stored definition with the submitted one — the copy the client fetched via
+         *     `POST /blueprints/fetch` and parsed/decoded client-side — and stamps the sync state
+         *     (`lastSyncedAt` = `updatedAt` = now, the submitted document plus the merged
+         *     `hierarchyRelations` becomes the new baseline).
+         *
+         *     **No waiver exists for blueprints** (unlike the catalog's repo sync, which always
+         *     waives): the submitted document is validated STRICTLY, exactly as a strict
+         *     create/replace would — including `validateSystemExtension` for `_team`/`_user`. The
+         *     document's own `sourceUrl` member must be absent (`400` — it is row state for the whole
+         *     blueprint, set once via PUT or import, never resubmitted through the sync body). The
+         *     blueprint must hold a source reference (`400` otherwise — set one first, e.g. via the
+         *     editor's Source field). Renaming the identifier CASCADES exactly as a PUT would (a
+         *     system blueprint rejects a rename with `400` before that ever applies); a repo-side
+         *     rename landing on an identity another active blueprint holds is a `409`.
+         *
+         *     **`hierarchyRelations` keep-when-absent**: when the submitted document OMITS this
+         *     Toadie-only extension (or sends an empty map), the STORED map is copied onto it BEFORE
+         *     validation — a sync can never CLEAR it, since most blueprint exports never carry this
+         *     field at all; clearing the map remains an ordinary editor PUT. Merging happens before
+         *     validation, so a remote that dropped the very relation the stored map still names is
+         *     refused `400` naming that key, exactly as an ordinary PUT would be.
+         */
+        post: operations["syncBlueprint"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1774,11 +1864,11 @@ export interface paths {
          *        explicitly OUT of scope here — those are per-request and already inline on the query
          *        bar; a saved query is checked for PARSE/VALIDATE health only.
          *     5. **Source references** (2.9.1) — report-only, never blocks a save: `SOURCE_MISSING`
-         *        (an entity row; field `source`) flags an entity with no `sourceUrl` reference — the
+         *        (an entity or blueprint row; field `source`) flags an entity or blueprint with no `sourceUrl` reference — the
          *        `catalog/Errors.kt` `SOURCE_MISSING` twin one level over, and the OPPOSITE kind of
          *        report-only finding from classes 2-3 above: the reference is optional on writes, so
          *        this is never a save blocker, just a standing report entry. Never emitted on
-         *        blueprint or saved-query rows.
+         *        saved-query rows.
          *
          *     Filter semantics (REPORTED vs SHOWN, the catalog Errors report's own asymmetry):
          *     `blueprint` (any-of, case-insensitive, unknown identifiers ignored — an all-unknown list
@@ -3000,6 +3090,13 @@ export interface components {
             updatedAt: number;
             /** @description True for Port's own system blueprints (`_team`/`_user`, seeded by migration — Phase 4, v1.26.0). A system blueprint can never be deleted or renamed, and its base properties/relations can never be removed or retyped; everything else about it is an ordinary admin edit. Response-only — a request carrying this field is rejected by strict decoding. */
             system: boolean;
+            /** @description The blueprint's source reference (2.10.0); absent = none set. */
+            sourceUrl?: string;
+            /**
+             * Format: int64
+             * @description Epoch millis of the last HTTP→DB sync; 0 = never. A sync stamps `updatedAt` equal, so `updatedAt > lastSyncedAt` means "modified in Toadie since the sync".
+             */
+            lastSyncedAt: number;
         };
         BlueprintList: {
             /** @description Active blueprints, identifier-ordered case-insensitively. */
@@ -3020,6 +3117,8 @@ export interface components {
              * @default false
              */
             replaceExisting: boolean;
+            /** @description The URL the batch was fetched from (2.10.0, the `EntityImportRequest.sourceUrl` twin, one level down) — every CREATED/UPDATED blueprint row gets it as its source reference AND starts synced (the document IS the remote copy at import time). Omit for pasted batches. A per-document `sourceUrl` member is `INVALID` for that row — it is row state for the whole request, not one document. A `replaceExisting` batch submitted WITHOUT this keeps an existing row's reference untouched. */
+            sourceUrl?: string | null;
         };
         BlueprintImportRow: {
             /** @description The document's 0-based position in the submitted batch. */
@@ -3068,6 +3167,8 @@ export interface components {
             hierarchyRelations?: {
                 [key: string]: string;
             };
+            /** @description The blueprint's source reference (2.10.0) — the https URL of its canonical remote copy. Row state for the WHOLE request, not part of the Port document: a bulk-import document carrying this is `INVALID` (see `BlueprintImportRequest.sourceUrl`), and the sync body's own `document.sourceUrl` is refused (`400`). Absent when unset. On PUT, full-replace semantics: omitted or blank CLEARS the stored reference; any change resets the sync state. */
+            sourceUrl?: string;
         };
         /** @description Phase 2 of the Port data-model move (see `.claude/docs/port-data-model.md`): an entity is an instance of a registered blueprint. */
         EntityRequest: {
@@ -3096,14 +3197,14 @@ export interface components {
             sourceUrl?: string;
         };
         /**
-         * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint). Phase 4 ownership (field `team`, or `properties.<id>` for a `format: team|user` property): TEAM_TARGET_MISSING (a `team` value, or a `format: team` property value, does not resolve to an active `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property value does not resolve to an active `_user` entity). The remaining eight codes are **report-only — emitted only by `getEntityErrors`** (2.5.0), never by a strict save: OWNERSHIP_UNRESOLVED (an entity row; an Inherited entity's effective team resolved to nothing), OWNERSHIP_PATH_STALE (a blueprint row; its `ownership.path` can never resolve), MIRROR_PATH_STALE / AGGREGATION_PATH_STALE / AGGREGATION_PROPERTY_STALE / CALCULATION_COMPILE_FAILED / CALCULATION_QUARANTINED (all blueprint rows; a mirror/ aggregation/calculation property's STATIC health — see `getEntityErrors`'s own description for the full rule table), and SOURCE_MISSING (2.9.1, an entity row; field `source` — the entity carries no `sourceUrl` reference; the OPPOSITE kind of report-only code, since the reference is optional on writes and this never blocks a save; never emitted on blueprint rows).
+         * @description Properties: UNKNOWN_PROPERTY (key not declared by the blueprint), COMPUTED_PROPERTY (key is a mirror/calculation/aggregation id — never accepted as input), REQUIRED_MISSING, TYPE_MISMATCH, ENUM_MISMATCH, FORMAT_INVALID, LENGTH_OUT_OF_RANGE, PATTERN_MISMATCH, RANGE_OUT_OF_BOUNDS, ARRAY_SIZE, ARRAY_NOT_UNIQUE, OBJECT_SHAPE. Relations: UNKNOWN_RELATION (key not declared), RELATION_SHAPE (single vs many mismatch), RELATION_REQUIRED (missing/empty required relation), RELATION_TARGET_MISSING (target does not resolve to an active entity of the target blueprint). Phase 4 ownership (field `team`, or `properties.<id>` for a `format: team|user` property): TEAM_TARGET_MISSING (a `team` value, or a `format: team` property value, does not resolve to an active `_team` entity), TEAM_NOT_ALLOWED (a `team` value was supplied on an Inherited-ownership blueprint), USER_TARGET_MISSING (a `format: user` property value does not resolve to an active `_user` entity). The remaining eight codes are **report-only — emitted only by `getEntityErrors`** (2.5.0), never by a strict save: OWNERSHIP_UNRESOLVED (an entity row; an Inherited entity's effective team resolved to nothing), OWNERSHIP_PATH_STALE (a blueprint row; its `ownership.path` can never resolve), MIRROR_PATH_STALE / AGGREGATION_PATH_STALE / AGGREGATION_PROPERTY_STALE / CALCULATION_COMPILE_FAILED / CALCULATION_QUARANTINED (all blueprint rows; a mirror/ aggregation/calculation property's STATIC health — see `getEntityErrors`'s own description for the full rule table), and SOURCE_MISSING (2.9.1, an entity or blueprint row; field `source` — the entity or blueprint carries no `sourceUrl` reference; the OPPOSITE kind of report-only code, since the reference is optional on writes and this never blocks a save; never emitted on saved-query rows).
          * @enum {string}
          */
         EntityFindingCode: "UNKNOWN_PROPERTY" | "COMPUTED_PROPERTY" | "REQUIRED_MISSING" | "TYPE_MISMATCH" | "ENUM_MISMATCH" | "FORMAT_INVALID" | "LENGTH_OUT_OF_RANGE" | "PATTERN_MISMATCH" | "RANGE_OUT_OF_BOUNDS" | "ARRAY_SIZE" | "ARRAY_NOT_UNIQUE" | "OBJECT_SHAPE" | "UNKNOWN_RELATION" | "RELATION_SHAPE" | "RELATION_REQUIRED" | "RELATION_TARGET_MISSING" | "TEAM_TARGET_MISSING" | "TEAM_NOT_ALLOWED" | "USER_TARGET_MISSING" | "OWNERSHIP_UNRESOLVED" | "OWNERSHIP_PATH_STALE" | "MIRROR_PATH_STALE" | "AGGREGATION_PATH_STALE" | "AGGREGATION_PROPERTY_STALE" | "CALCULATION_COMPILE_FAILED" | "CALCULATION_QUARANTINED" | "SOURCE_MISSING";
         /** @description One violation of the owning blueprint's current schema/relations — the same rule a strict save enforces. A non-empty `findings` list on a GET/list response means the entity is STALE (its blueprint changed since its last save) and its next save is refused until fixed. Since 2.5.0 `getEntityErrors` reuses this SAME shape for its report-only blueprint-health codes, on both entity AND blueprint rows. */
         EntityFinding: {
             code: components["schemas"]["EntityFindingCode"];
-            /** @description `properties.<id>` or `relations.<id>` naming the offending key, `team` (Phase 4 ownership), `source` (2.9.1, `getEntityErrors`'s entity rows only), or — for `getEntityErrors`'s blueprint rows (2.5.0) — `ownership.path`, `mirrorProperties.<id>`, `aggregationProperties.<id>`, or `calculationProperties.<id>`. */
+            /** @description `properties.<id>` or `relations.<id>` naming the offending key, `team` (Phase 4 ownership), `source` (2.9.1, `getEntityErrors`'s entity or blueprint rows), or — for `getEntityErrors`'s blueprint rows (2.5.0) — `ownership.path`, `mirrorProperties.<id>`, `aggregationProperties.<id>`, or `calculationProperties.<id>`. */
             field: string;
             message: string;
         };
@@ -3227,6 +3328,21 @@ export interface components {
         SyncEntityRequest: {
             document: components["schemas"]["EntityRequest"];
         };
+        /** @description GET …/blueprints/{id}/sync's body — the `EntitySyncStateResponse` shape one level down, with the same ABSENT-not-null convention (never `nullable`). */
+        BlueprintSyncStateResponse: {
+            /** @description The blueprint's source reference; absent = none set (syncing is refused). */
+            sourceUrl?: string;
+            /**
+             * Format: int64
+             * @description Epoch millis of the last HTTP→DB sync; 0 = never.
+             */
+            lastSyncedAt: number;
+            /** @description The document as stored at the last sync (including the merged `hierarchyRelations` — see `syncBlueprint`'s keep-when-absent rule) — the baseline the sync modal compares the current DB document and the fetched remote copy against; absent = never synced. */
+            syncedDocument?: components["schemas"]["BlueprintRequest"];
+        };
+        SyncBlueprintRequest: {
+            document: components["schemas"]["BlueprintRequest"];
+        };
         EntityPage: {
             items: components["schemas"]["Entity"][];
             page: number;
@@ -3317,7 +3433,7 @@ export interface components {
             team: string[];
             findings: components["schemas"]["EntityFinding"][];
         };
-        /** @description One blueprint flagged by `getEntityErrors` (2.5.0): its `ownership.path` and/or one or more mirror/aggregation/calculation properties are stale or unhealthy against the CURRENT blueprint graph — see `getEntityErrors`'s own description for the rule table. */
+        /** @description One blueprint flagged by `getEntityErrors` (2.5.0): its `ownership.path` and/or one or more mirror/aggregation/calculation properties are stale or unhealthy against the CURRENT blueprint graph — see `getEntityErrors`'s own description for the rule table. Plus any report-only `SOURCE_MISSING` finding (field `source`) when the blueprint carries no `sourceUrl` reference. */
         BlueprintErrorRow: {
             /** Format: int32 */
             id: number;
@@ -5717,6 +5833,91 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    fetchBlueprintUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FetchUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description The raw text at the URL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FetchUrlResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    getBlueprintSyncState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sync state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlueprintSyncStateResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    syncBlueprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncBlueprintRequest"];
+            };
+        };
+        responses: {
+            /** @description Synced — the DB copy now equals the submitted remote copy */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };

@@ -9,6 +9,8 @@ import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.entities.EntityService
 import ch.nokillswit.infra.db.lockingTransaction
+import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
+import ch.nokillswit.infra.fetch.SourceWrite
 import ch.nokillswit.users.UserService
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
@@ -44,12 +46,16 @@ data class BlueprintDeleteResult(val affected: Int, val identifier: String?)
 /** The `blueprints.hierarchy_relations` column's JSON-object-in-TEXT codec (V34). */
 private fun decodeHierarchyRelations(raw: String): Map<String, String> = blueprintJson.decodeFromString(raw)
 
-private fun encodeHierarchyRelations(hierarchyRelations: Map<String, String>?): String =
+/**
+ * Widened to `internal` (from `private`) so `blueprints/BlueprintSync.kt`'s `replaceRow` can
+ * reuse it (the same column, one write path down).
+ */
+internal fun encodeHierarchyRelations(hierarchyRelations: Map<String, String>?): String =
     blueprintJson.encodeToString(hierarchyRelations ?: emptyMap())
 
 data class BlueprintPageResult(val items: List<BlueprintResponse>, val total: Long)
 
-class BlueprintService(private val database: R2dbcDatabase) {
+class BlueprintService(internal val database: R2dbcDatabase) {
     object Blueprints : UIntIdTable("blueprints") {
         // Case-folded identifier uniqueness is enforced by the partial unique index
         // uq_blueprints_identifier_active (active rows only; V27), so a soft-deleted
@@ -73,18 +79,28 @@ class BlueprintService(private val database: R2dbcDatabase) {
         val createdAt = long("created_at")
         val updatedAt = long("updated_at")
         val markedAsDeleted = bool("marked_as_deleted").default(false)
+        // Source references & HTTP re-sync (2.10.0, V38 — the `entities` envelope, one level
+        // down): the https URL of the blueprint's canonical remote copy; NULL = none set.
+        val sourceUrl = varchar("source_url", length = MAX_FETCH_URL_LENGTH).nullable()
+        // Epoch millis of the last HTTP->DB sync; 0 = never (the entities.last_synced_at idiom).
+        val lastSyncedAt = long("last_synced_at").default(0)
+        // The request-shaped document snapshot taken at sync time — the sync modal's baseline. NULL = never synced.
+        val syncedContent = text("synced_content").nullable()
     }
 
     /**
      * Serializes the cross-row target-existence/rename-cascade/delete-409 invariants across
      * every application instance sharing this database — the tag-category table-lock idiom
      * (`.claude/docs/persistence.md`, "cooperating writer protocol"), via the shared
-     * [lockingTransaction] helper (`infra/db/Locking.kt`).
+     * [lockingTransaction] helper (`infra/db/Locking.kt`). Widened to `internal` (from
+     * `private`) so `blueprints/BlueprintSync.kt` (the `entities/EntitySync.kt` extension-file
+     * idiom, kept out of this class purely to stay under detekt's `LargeClass` threshold) can
+     * reach it.
      */
-    private suspend fun <T> writeTransaction(block: suspend R2dbcTransaction.() -> T): T =
+    internal suspend fun <T> writeTransaction(block: suspend R2dbcTransaction.() -> T): T =
         lockingTransaction(database, LOCK_BLUEPRINTS_SHARE_ROW_EXCLUSIVE, block = block)
 
-    private fun active(): Op<Boolean> = Blueprints.markedAsDeleted eq false
+    internal fun active(): Op<Boolean> = Blueprints.markedAsDeleted eq false
 
     // The sanctioned cross-feature table read (persistence.md): the creator's display fields
     // must come from the same transaction as the blueprint row, so the users table is joined
@@ -118,6 +134,8 @@ class BlueprintService(private val database: R2dbcDatabase) {
             createdAt = this[Blueprints.createdAt],
             updatedAt = this[Blueprints.updatedAt],
             system = this[Blueprints.isSystem],
+            sourceUrl = this[Blueprints.sourceUrl],
+            lastSyncedAt = this[Blueprints.lastSyncedAt],
         )
     }
 
@@ -147,16 +165,25 @@ class BlueprintService(private val database: R2dbcDatabase) {
             .map { it.toResponse(decodeForRead(it[Blueprints.definition], budget)) }.singleOrNull()
     }
 
-    /** One row's id, identifier, decoded definition, and hierarchy relations map — the snapshot every mutation loads once. */
-    private data class ActiveRow(
+    /**
+     * One row's id, identifier, decoded definition, hierarchy relations map, and source-reference
+     * columns — the snapshot every mutation loads once. Widened to `internal` (from `private`) so
+     * `blueprints/BlueprintSync.kt` can read `current.sourceUrl`/`lastSyncedAt`/`syncedContent`
+     * when deciding the [SourceWrite.FromRequest] reset rule (the `entities/EntitySync.kt`
+     * `replaceRow` precedent, one level down).
+     */
+    internal data class ActiveRow(
         val id: UInt,
         val identifier: String,
         val definition: BlueprintDefinition,
         val hierarchyRelations: Map<String, String>,
         val isSystem: Boolean,
+        val sourceUrl: String?,
+        val lastSyncedAt: Long,
+        val syncedContent: String?,
     )
 
-    private suspend fun activeRows(): List<ActiveRow> = Blueprints.selectAll().where { active() }
+    internal suspend fun activeRows(): List<ActiveRow> = Blueprints.selectAll().where { active() }
         .map {
             ActiveRow(
                 it[Blueprints.id].value,
@@ -164,6 +191,9 @@ class BlueprintService(private val database: R2dbcDatabase) {
                 blueprintJson.decodeFromString<BlueprintDefinition>(it[Blueprints.definition]),
                 decodeHierarchyRelations(it[Blueprints.hierarchyRelations]),
                 it[Blueprints.isSystem],
+                it[Blueprints.sourceUrl],
+                it[Blueprints.lastSyncedAt],
+                it[Blueprints.syncedContent],
             )
         }
         .toList()
@@ -210,7 +240,11 @@ class BlueprintService(private val database: R2dbcDatabase) {
             .toSet()
     }
 
-    suspend fun create(request: BlueprintRequest, callerId: UInt): BlueprintResponse {
+    suspend fun create(
+        request: BlueprintRequest,
+        callerId: UInt,
+        source: SourceWrite = SourceWrite.FromRequest,
+    ): BlueprintResponse {
         validateBlueprintRequest(request) // re-checked service-side so direct callers stay guarded
         return writeTransaction {
             // Identifiers starting with `_` are reserved for Port's own system blueprints
@@ -226,14 +260,27 @@ class BlueprintService(private val database: R2dbcDatabase) {
             val definition = request.toDefinition()
             requireTargetsExist(definition, self = request.identifier, known = known)
             val now = System.currentTimeMillis()
-            val id = insertRow(request, definition, callerId, now)
+            val id = insertRow(request, definition, callerId, now, source)
             joined().selectAll().where { Blueprints.id eq id }.map { it.toResponse() }.singleOrNull()
                 ?: error("blueprint $id vanished between insert and read-back")
         }
     }
 
-    private suspend fun insertRow(request: BlueprintRequest, definition: BlueprintDefinition, callerId: UInt, now: Long): UInt =
-        Blueprints.insert {
+    private suspend fun insertRow(
+        request: BlueprintRequest,
+        definition: BlueprintDefinition,
+        callerId: UInt,
+        now: Long,
+        source: SourceWrite,
+    ): UInt {
+        val (sourceUrlValue, lastSyncedAtValue, syncedContentValue) = when (source) {
+            SourceWrite.FromRequest -> Triple(request.sourceUrl, 0L, null)
+            // Keep only ever reaches create via an import row with NO batch sourceUrl:
+            // requireNoDocumentSourceUrl guarantees request.sourceUrl == null on every such path.
+            SourceWrite.Keep -> Triple(null, 0L, null)
+            is SourceWrite.Synced -> Triple(source.sourceUrl, now, baselineJson(request, definition))
+        }
+        return Blueprints.insert {
             it[identifier] = request.identifier
             it[title] = request.title
             it[description] = request.description
@@ -243,7 +290,11 @@ class BlueprintService(private val database: R2dbcDatabase) {
             it[createdBy] = callerId
             it[createdAt] = now
             it[updatedAt] = now
+            it[Blueprints.sourceUrl] = sourceUrlValue
+            it[Blueprints.lastSyncedAt] = lastSyncedAtValue
+            it[Blueprints.syncedContent] = syncedContentValue
         }[Blueprints.id].value
+    }
 
     /**
      * Row missing → affected 0 (the route's 404), decided BEFORE validation — the LensService
@@ -255,10 +306,32 @@ class BlueprintService(private val database: R2dbcDatabase) {
      * (byte-exact identifier change) cascades the same rewrite onto every OTHER active row's
      * targets in this same locked transaction.
      */
-    suspend fun update(id: UInt, request: BlueprintRequest): BlueprintUpdateResult = writeTransaction {
+    suspend fun update(
+        id: UInt,
+        request: BlueprintRequest,
+        source: SourceWrite = SourceWrite.FromRequest,
+    ): BlueprintUpdateResult = writeTransaction {
         val rows = activeRows()
         val current = rows.firstOrNull { it.id == id }
             ?: return@writeTransaction BlueprintUpdateResult(0, emptyList(), null, false)
+        applyUpdate(id, rows, current, request, source)
+    }
+
+    /**
+     * The shared body of [update] and `blueprints/BlueprintSync.kt`'s `syncFromSource`, once the
+     * row is known to exist: validation, the system-extension rule, the self-reference rename
+     * rewrite, the target-existence check, and the rename cascade — parameterized only by
+     * [source] (the `sourceUrl`/sync-stamp write policy, `.claude/docs/persistence.md` "V38").
+     * [rows] is the FULL active-row snapshot the caller already loaded (needed for the rename
+     * cascade's `others`); [current] is [id]'s own row within it.
+     */
+    internal suspend fun applyUpdate(
+        id: UInt,
+        rows: List<ActiveRow>,
+        current: ActiveRow,
+        request: BlueprintRequest,
+        source: SourceWrite,
+    ): BlueprintUpdateResult {
         validateBlueprintRequest(request) // re-checked service-side so direct callers stay guarded
         if (current.isSystem) {
             // No rename, no removal/retyping of the base shape — the rename cascade below
@@ -274,19 +347,12 @@ class BlueprintService(private val database: R2dbcDatabase) {
         }
         requireTargetsExist(definition, self = request.identifier, known = others.map { it.identifier }.toSet())
 
-        val affected = Blueprints.update({ (Blueprints.id eq id) and active() }) {
-            it[identifier] = request.identifier
-            it[title] = request.title
-            it[description] = request.description
-            it[icon] = request.icon
-            it[Blueprints.definition] = blueprintJson.encodeToString(definition)
-            it[hierarchyRelations] = encodeHierarchyRelations(request.hierarchyRelations)
-            it[updatedAt] = System.currentTimeMillis()
-        }
-        if (affected == 0) return@writeTransaction BlueprintUpdateResult(0, emptyList(), null, current.isSystem)
+        val now = System.currentTimeMillis()
+        val affected = replaceRow(id, current, request, definition, source, now)
+        if (affected == 0) return BlueprintUpdateResult(0, emptyList(), null, current.isSystem)
 
         val cascaded = if (renamed) cascadeRename(others, current.identifier, request.identifier) else emptyList()
-        BlueprintUpdateResult(affected, cascaded, if (renamed) current.identifier else null, current.isSystem)
+        return BlueprintUpdateResult(affected, cascaded, if (renamed) current.identifier else null, current.isSystem)
     }
 
     /** Rewrites every OTHER active row targeting [oldIdentifier], returning the rewritten identifiers. */
