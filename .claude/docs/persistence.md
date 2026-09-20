@@ -488,7 +488,7 @@ before touching the session and reject a stale epoch. Cleanup uses its own trans
 avoid reversing that lock order. Renewal updates only an existing live family and never
 shortens its expiry. No runtime DDL; prior migration checksums remain untouched.
 
-`users`, `catalog_files`, `dictionary_entries`, `labels`, `annotation_keys`, `tag_categories`, `entity_types`, `lenses`, `blueprints`, `entities`, and `entity_queries` are **soft-deleted** — rows are flagged, never physically removed; every future business entity follows the same convention (except V31's two system blueprints, schema not content). Only join/audit/detail tables (today: `password_reset_tokens` (V26, expiring single-use credentials), `auth_sessions` (V25, expiring login families deleted at logout and pruned on login), `revoked_tokens`, a pure token registry, `user_disabled_features`, a pure flag join whose PUT is a wholesale replace, `graph_layouts` (V19) and its V30 twin `entity_graph_layouts`, both pure per-user settings rows whose PUT is a wholesale replace, and `catalog_file_events` (V23), the immutable audit trail itself — none carry history worth keeping, or ARE the history) hard-delete — a new hard-delete table needs a documented justification, exactly like Lettuce's exceptions list. To add soft-delete to a new entity, follow the established pattern (reference implementations: `users/UserService.kt`, `catalog/CatalogFileService.kt` — the latter shows the full CRUD shape incl. the delete route):
+`users`, `catalog_files`, `dictionary_entries`, `labels`, `annotation_keys`, `tag_categories`, `entity_types`, `lenses`, `blueprints`, `entities`, and `entity_queries` are **soft-deleted** — rows are flagged, never physically removed; every future business entity follows the same convention (except V31's two system blueprints, schema not content). Only join/audit/detail tables (today: `password_reset_tokens` (V26, expiring single-use credentials), `auth_sessions` (V25, expiring login families deleted at logout and pruned on login), `revoked_tokens`, a pure token registry, `user_disabled_features`, a pure flag join whose PUT is a wholesale replace, `graph_layouts` (V19) and its V30 twin `entity_graph_layouts`, both pure per-user settings rows whose PUT is a wholesale replace, `catalog_file_events` (V23), the immutable audit trail itself, and `ontology_revision` (V39, a single row forever UPDATEd in place — a pure counter, not a business entity, with nothing to soft-delete) — none carry history worth keeping, or ARE the history) hard-delete — a new hard-delete table needs a documented justification, exactly like Lettuce's exceptions list. To add soft-delete to a new entity, follow the established pattern (reference implementations: `users/UserService.kt`, `catalog/CatalogFileService.kt` — the latter shows the full CRUD shape incl. the delete route):
 
 1. **Migration** — `marked_as_deleted BOOLEAN NOT NULL DEFAULT FALSE` in the CREATE (a retrofit adds the column plus `CREATE INDEX idx_<t>_marked_as_deleted ON <t>(marked_as_deleted);`).
 2. **Exposed table** — add `val markedAsDeleted = bool("marked_as_deleted").default(false)` and a private helper `fun active(): Op<Boolean> = <T>.markedAsDeleted eq false`.
@@ -610,3 +610,38 @@ blueprint are NOT re-validated at sync time — they go stale and are re-checked
 on their own next save, the same as after any other blueprint PUT
 (`.claude/docs/port-data-model.md` "Lifecycle rules"). Migration checksums, including V38, are
 pinned in `MigrationChecksumTest`.
+
+### Ontology revision (V39)
+
+`CREATE TABLE ontology_revision (id SMALLINT PRIMARY KEY CHECK (id = 1), revision BIGINT NOT NULL)`
+(2.12.0) — a single row, seeded `(1, 0)`, backing the GraphQL integration API's monotonic
+change-detection counter (`.claude/docs/integration-api.md` "Ontology revision"). A **hard-update
+table** (a new hard-delete-adjacent exception, listed below): a pure counter, not a soft-deletable
+business entity, so there is nothing to soft-delete and no history worth keeping — the row is
+UPDATEd in place forever, never inserted again and never flagged. `infra/db/OntologyRevision.kt`
+owns it: `bumpOntologyRevision()` (`UPDATE ontology_revision SET revision = revision + 1 WHERE id
+= 1`) is called from inside the CALLER's own already-open V27/V28-locked transaction, immediately
+after that transaction's row write succeeds — it takes **no lock of its own**, because every
+ontology writer already serializes through the `blueprints` (V27) or `blueprints`-then-`entities`
+(V28) table lock before reaching this call, so two concurrent bumps can never race. Bump sites:
+`BlueprintService.create`/`applyUpdate`/`delete` (`applyUpdate` is shared by `update` and
+`BlueprintSync.kt`'s `syncFromSource`, so a sync bumps through the same call), the same three on
+`EntityService`, and `DictionaryService.replace`'s `HIERARCHY`-only branch (the one dictionary a
+blueprint's `hierarchyRelations` can reference, already locked under V27 for its referrer check —
+`NAMESPACE`/`LIFECYCLE` replaces never bump). **A blueprint/entity PUT always bumps, even a
+byte-identical resubmission**: `updatedAt` already bumps on every PUT regardless of whether the
+document changed (the V37/V38 "D2" rule above), and this counter follows the SAME posture — it
+answers "did an ontology WRITE commit", never "did the ontology CHANGE". A rejected write (400/
+409) never reaches the bump call: either the transaction never got that far, or it rolls back and
+takes the bump with it. `ontologyRevisionExpression()` is a scalar subquery
+(`(SELECT revision FROM ontology_revision WHERE id = 1)`) usable as an extra column alongside a
+row SELECT, so `BlueprintService.listPage`/`EntityService.list` (the GraphQL-only paged reads)
+return the counter read in the SAME statement as their page rows — READ COMMITTED gives each
+STATEMENT its own snapshot, so two separate statements could straddle a concurrent commit and
+report a revision that does not match the rows just read; a page with zero rows has none to read
+it off and falls back to `currentOntologyRevision()`, a direct read. `EntityService.errors`
+(behind the GraphQL `errors` root) issues several statements to gather its subjects, so it reads
+the counter as the FIRST statement in its one transaction instead of riding a row select — the
+earliest snapshot the rest of the report could have seen, not a promise it also matches the
+report's last statement. Migration checksums, including V39, are pinned in
+`MigrationChecksumTest`.

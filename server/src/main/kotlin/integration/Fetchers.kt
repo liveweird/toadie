@@ -99,12 +99,15 @@ private data class ErrorReportView(
     val blueprintPages: Map<PageKey, Map<String, Any?>>,
     val checkedEntities: Int,
     val checkedBlueprints: Int,
+    /** The V39 ontology counter, as a decimal string — the `Blueprint`/`Entity` `id` idiom. */
+    val revision: String,
 ) : RetainedGraphQLValue {
     override val retentionTree: Any? = mapOf(
         "entityPages" to entityPages.values,
         "blueprintPages" to blueprintPages.values,
         "checkedEntities" to checkedEntities,
         "checkedBlueprints" to checkedBlueprints,
+        "revision" to revision,
     )
 }
 
@@ -119,7 +122,7 @@ internal fun TypeRuntimeWiring.Builder.queryFetchers(services: IntegrationServic
         val paging = environment.pageRequest()
         environment.memo().get(RootRequestKey.Blueprints(paging.page, paging.pageSize)) {
             val result = services.blueprints.listPage(paging)
-            pageEnvelope(result.items.map(::blueprintMap), paging, result.total)
+            pageEnvelope(result.items.map(::blueprintMap), paging, result.total) + ("revision" to result.revision.toString())
         }
     })
     .dataFetcher("blueprint", suspendFetcher { environment ->
@@ -138,7 +141,7 @@ internal fun TypeRuntimeWiring.Builder.queryFetchers(services: IntegrationServic
         val key = RootRequestKey.Entities(paging.page, paging.pageSize, filter.blueprint, filter.q, filter.team)
         environment.memo().get(key) {
             val result = services.entities.list(filter, paging, OntologyReadBudget())
-            pageEnvelope(result.items.map(::entityMap), paging, result.total)
+            pageEnvelope(result.items.map(::entityMap), paging, result.total) + ("revision" to result.revision.toString())
         }
     })
     .dataFetcher("entity", suspendFetcher { environment ->
@@ -172,6 +175,7 @@ internal fun TypeRuntimeWiring.Builder.errorReportFetchers(): TypeRuntimeWiring.
     }
     .dataFetcher("checkedEntities") { environment -> checkNotNull(environment.getSource<ErrorReportView>()).checkedEntities }
     .dataFetcher("checkedBlueprints") { environment -> checkNotNull(environment.getSource<ErrorReportView>()).checkedBlueprints }
+    .dataFetcher("revision") { environment -> checkNotNull(environment.getSource<ErrorReportView>()).revision }
 
 internal fun DataFetchingEnvironment.pageRequest(): PageRequest {
     val page = getArgument<Int>("page") ?: 1
@@ -231,6 +235,7 @@ private fun OntologyErrorsReport.toView(entityPages: Set<PageKey>, blueprintPage
     },
     checkedEntities = checkedEntities,
     checkedBlueprints = checkedBlueprints,
+    revision = revision.toString(),
 )
 
 private val mappingJson = Json { encodeDefaults = true; explicitNulls = false }

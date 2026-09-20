@@ -160,7 +160,11 @@ ch.nokillswit
 │                       catalog_file_events, the first and so far only clone) + Locking.kt
 │                       (lockingTransaction — the shared cooperating-writer table-lock helper
 │                       behind BlueprintService/TagCategoryService/EntityService's V27/V11/V28
-│                       protocols)
+│                       protocols) + OntologyRevision.kt (the V39 monotonic ontology-revision
+│                       counter — bumpOntologyRevision/ontologyRevisionExpression/
+│                       currentOntologyRevision — behind the GraphQL integration API's
+│                       BlueprintPage/EntityPage/OntologyErrors `revision` field, see
+│                       `.claude/docs/integration-api.md` "Ontology revision")
 ├── infra/paging/       the shared list-endpoint machinery (PageRequest/parsePaging/applyPaging/
 │                       PageResponse + the strict query-param readers) — Lettuce's, ported verbatim
 ├── infra/validation/   cross-feature input helpers (sanitizeSingleLine — trim + control-char 400,

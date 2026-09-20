@@ -58,6 +58,7 @@ class MigrationChecksumTest {
         "V36__create_integration_clients.sql" to 727059242,
         "V37__entity_source.sql" to -153945127,
         "V38__blueprint_source.sql" to 977124289,
+        "V39__ontology_revision.sql" to 246056121,
     )
 
     @Test

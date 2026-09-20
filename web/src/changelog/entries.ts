@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.12.0",
+    date: "2026-09-20",
+    en: `**Integrations can tell when the ontology changed.** Every page of blueprints and entities the integration API returns now carries the ontology revision, a counter that moves with every blueprint, entity and hierarchy change. A client reading several pages compares the revision across them and simply restarts when it moved, so an assembled graph is never a mix of two states. Nothing is stored per client and existing queries are unchanged.`,
+    pl: `**Integracje wiedzą, kiedy ontologia się zmieniła.** Każda strona blueprintów i encji zwracana przez API integracyjne niesie teraz rewizję ontologii — licznik rosnący przy każdej zmianie blueprintu, encji lub hierarchii. Klient czytający kilka stron porównuje rewizję między nimi i po prostu zaczyna od nowa, gdy się zmieniła, więc złożony graf nigdy nie miesza dwóch stanów. Nic nie jest przechowywane per klient, a dotychczasowe zapytania działają bez zmian.`,
+  },
+  {
     version: "2.11.2",
     date: "2026-09-20",
     en: `**Bounded database connections.** The server now keeps a fixed-size pool of PostgreSQL connections (20 by default, POSTGRES_POOL_MAX_SIZE) instead of opening a fresh one for every request — a burst of traffic can no longer exhaust the database's connection limit, and a saturated pool fails a request after one acquire deadline instead of three.`,
