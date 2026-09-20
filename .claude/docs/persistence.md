@@ -570,8 +570,10 @@ refused `400` (`requireNoDocumentSourceUrl`) on both create and sync, since the 
 state for the whole request, never a document member. There is no waiver for entities: a sync
 whose fetched copy fails `entityFindings` is refused `400` with the findings, exactly like an
 ordinary strict save — entities have no `allowInvalid` escape hatch (unlike the catalog's
-sync, which always waives). Migration checksums, including V37, are pinned in
-`MigrationChecksumTest`.
+sync, which always waives). `EntitySync.kt`'s `replaceRow` resolves these three columns via the
+shared, pure `infra/fetch/SourceWrite.kt` `resolveSourceColumns` (2.13.1 — extracted once
+verified byte-identical to the blueprint dispatch below). Migration checksums, including V37,
+are pinned in `MigrationChecksumTest`.
 
 ### Blueprint source references (V38)
 
@@ -608,8 +610,11 @@ the findings and nothing is stored — the ordinary strict-save posture, `valida
 included, so `_team`/`_user` are syncable exactly as they are PUTtable. Entities of a synced
 blueprint are NOT re-validated at sync time — they go stale and are re-checked (and re-blocked)
 on their own next save, the same as after any other blueprint PUT
-(`.claude/docs/port-data-model.md` "Lifecycle rules"). Migration checksums, including V38, are
-pinned in `MigrationChecksumTest`.
+(`.claude/docs/port-data-model.md` "Lifecycle rules"). `BlueprintSync.kt`'s `replaceRow` resolves
+these three columns via the SAME shared `resolveSourceColumns` (2.13.1) as `EntitySync.kt`
+above — `catalog/CatalogFileService.kt`'s own repo sync predates that extraction, always waives,
+and has no `Keep` branch, so it remains the older, inline copy rather than a third consumer.
+Migration checksums, including V38, are pinned in `MigrationChecksumTest`.
 
 ### Ontology revision (V39)
 

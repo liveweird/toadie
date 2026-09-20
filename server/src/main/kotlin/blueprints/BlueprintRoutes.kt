@@ -1,19 +1,18 @@
 package ch.nokillswit.blueprints
 
+import ch.nokillswit.audit.AuditEvent
 import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
-import ch.nokillswit.infra.fetch.BlockedUrlException
-import ch.nokillswit.infra.fetch.FETCH_URL_INVALID_DETAIL
-import ch.nokillswit.infra.fetch.FetchUrlRequest
-import ch.nokillswit.infra.fetch.FetchUrlResponse
+import ch.nokillswit.infra.fetch.fetchForCaller
 import ch.nokillswit.infra.fetch.UrlFetcher
 import ch.nokillswit.infra.fetch.UrlFetcherKey
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.importing.ImportMutation
 import ch.nokillswit.infra.importing.ImportMutationKind
 import ch.nokillswit.infra.importing.requireBatchSize
+import ch.nokillswit.infra.validation.requireNoDocumentSourceUrl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -22,7 +21,6 @@ import io.ktor.http.withCharset
 import io.ktor.resources.Resource
 import io.ktor.server.application.*
 import io.ktor.server.auth.authenticate
-import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
 import io.ktor.server.resources.delete
 import io.ktor.server.resources.get
@@ -98,29 +96,12 @@ fun Application.configureBlueprintRoutes() {
             post<BlueprintsRoute.Fetch> {
                 val caller = call.caller()
                 requireAdmin(caller)
-                val request = call.receive<FetchUrlRequest>()
-                val fetched = try {
-                    urlFetcher.fetch(request.url)
-                } catch (blocked: BlockedUrlException) {
-                    // A blocked fetch attempt is a probe signal worth keeping; the response
-                    // itself stays uniform so nothing about the internal network leaks.
-                    audit(
-                        "blueprint.fetch_blocked",
-                        "byUserId" to caller.userId.toLong(),
-                        "scheme" to blocked.scheme,
-                        "host" to blocked.host,
-                    )
-                    throw BadRequestException(FETCH_URL_INVALID_DETAIL)
-                }
-                // The success trail: the server pulled a body from a public host on user
-                // command — record who and from where (scheme/host ONLY, never the full URL).
-                audit(
-                    "blueprint.fetched",
-                    "byUserId" to caller.userId.toLong(),
-                    "scheme" to fetched.uri.scheme,
-                    "host" to fetched.uri.host,
+                call.fetchForCaller(
+                    urlFetcher,
+                    blocked = AuditEvent("blueprint.fetch_blocked"),
+                    fetched = AuditEvent("blueprint.fetched"),
+                    byUserId = caller.userId,
                 )
-                call.respond(HttpStatusCode.OK, FetchUrlResponse(content = fetched.content))
             }
             // GET: any authenticated user (whoever reads a blueprint reads its sync state).
             get<BlueprintsRoute.Id.Sync> { route ->
@@ -142,7 +123,7 @@ fun Application.configureBlueprintRoutes() {
                 // still run before the service and can answer 400 for an unknown id, the same
                 // partial ordering as the PUT.
                 val request = call.receive<SyncBlueprintRequest>()
-                requireNoDocumentSourceUrl(request.document)
+                requireNoDocumentSourceUrl(request.document.sourceUrl)
                 val document = sanitizedBlueprintRequest(request.document)
                 val result = blueprintService.syncFromSource(route.parent.id, document)
                 result.affected.orNotFound("Blueprint")

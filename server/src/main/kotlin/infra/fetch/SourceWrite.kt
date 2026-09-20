@@ -18,3 +18,32 @@ sealed interface SourceWrite {
 
     data class Synced(val sourceUrl: String) : SourceWrite
 }
+
+/** The three source-reference columns a write resolves together — one record's [SourceWrite] envelope. */
+data class SourceColumns(val sourceUrl: String?, val lastSyncedAt: Long, val syncedContent: String?)
+
+/**
+ * The PURE dispatch [SourceWrite] describes, extracted from `entities/EntitySync.kt`'s and
+ * `blueprints/BlueprintSync.kt`'s byte-identical `replaceRow` `when (source)` blocks (verified
+ * identical when extracted — `.claude/docs/persistence.md` "V37"/"V38"): [SourceWrite.FromRequest]
+ * keeps [current]'s stamp/baseline when [requestSourceUrl] is unchanged, else resets both to
+ * `0`/`null`; [SourceWrite.Keep] leaves [current] untouched; [SourceWrite.Synced] stamps [now] and
+ * invokes [baseline] — the ONLY branch that does, since it is the one write that needs one.
+ * `catalog/CatalogFileService.kt`'s own sync predates this type, always waives, and has no [Keep]
+ * branch — it stays its own inline copy rather than a third consumer.
+ */
+fun resolveSourceColumns(
+    source: SourceWrite,
+    requestSourceUrl: String?,
+    current: SourceColumns,
+    now: Long,
+    baseline: () -> String,
+): SourceColumns = when (source) {
+    SourceWrite.FromRequest -> if (requestSourceUrl != current.sourceUrl) {
+        SourceColumns(requestSourceUrl, 0L, null)
+    } else {
+        current
+    }
+    SourceWrite.Keep -> current
+    is SourceWrite.Synced -> SourceColumns(source.sourceUrl, now, baseline())
+}

@@ -168,8 +168,11 @@ ch.nokillswit
 ├── infra/paging/       the shared list-endpoint machinery (PageRequest/parsePaging/applyPaging/
 │                       PageResponse + the strict query-param readers) — Lettuce's, ported verbatim
 ├── infra/validation/   cross-feature input helpers (sanitizeSingleLine — trim + control-char 400,
-│                       requireNoDuplicates) + InvalidPayloadException, the one findings-bearing 400
-│                       shape (catalog strict save, entity save) — ErrorHandling.kt renders it feature-free
+│                       requireNoDuplicates, requireNoDocumentSourceUrl — 2.13.1, the one guard
+│                       shared by `entities/Entity.kt` and `blueprints/Blueprint.kt`'s bulk-import/
+│                       sync bodies, replacing their two byte-identical copies) + InvalidPayloadException,
+│                       the one findings-bearing 400 shape (catalog strict save, entity save) —
+│                       ErrorHandling.kt renders it feature-free
 ├── infra/importing/    shared ontology bulk-import vocabulary (phase 6, v1.28.0 — the
 │                       `catalog/CatalogFileImport.kt` precedent, one level up): ImportBatch.kt —
 │                       `MAX_IMPORT_DOCUMENTS` (200), `OntologyImportStatus`, the per-row
@@ -186,12 +189,19 @@ ch.nokillswit
 │                       URL fetch and the jq evaluator
 ├── infra/fetch/        UrlFetch.kt — the SSRF-guarded outbound fetcher (relocated from
 │                       catalog/ in 2.9.0 when entities gained their own source references:
-│                       `UrlFetcher`/`UrlFetcherKey`, one shared bounded pool) + SourceWrite.kt
+│                       `UrlFetcher`/`UrlFetcherKey`, one shared bounded pool, plus
+│                       `ApplicationCall.fetchForCaller` — 2.13.1, the byte-identical
+│                       receive/fetch/audit body the three fetch routes shared, called with
+│                       each route's own `blocked`/`fetched` `AuditEvent` literals) + SourceWrite.kt
 │                       (2.10.0 — the sealed FromRequest/Keep/Synced write-source vocabulary,
 │                       moved here from `entities/Entity.kt` once blueprints gained the same
-│                       source references); consumers: `POST …/files/fetch`,
+│                       source references; 2.13.1 adds `SourceColumns`/`resolveSourceColumns`,
+│                       the pure dispatch extracted from `entities/EntitySync.kt`'s and
+│                       `blueprints/BlueprintSync.kt`'s byte-identical `replaceRow` blocks —
+│                       `catalog/CatalogFileService.kt`'s own sync predates the type, always
+│                       waives, and stays its own inline copy); consumers: `POST …/files/fetch`,
 │                       `POST …/entities/fetch`, and `POST …/blueprints/fetch`
-├── audit/              security audit trail: `audit(event, fields…)` → AUDIT-marked structured logs
+├── audit/              security audit trail: `audit(event, fields…)` → AUDIT-marked structured logs; `AuditEvent("…")` literals for a shared emitter (2.13.1)
 ├── authz/              CallerPrincipal + guards (requireAdmin, requireSelfOrAdmin) + typed
 │                       HTTP exceptions (401/403/404/409/429/502)
 ├── auth/               POST /api/v1/login (+ the email-MFA branch and /login/mfa second

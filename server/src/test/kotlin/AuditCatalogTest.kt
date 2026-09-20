@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 /**
  * Pins doc/code parity for the audit event catalog: `.claude/docs/observability.md`'s
- * "Emitted today:" bullet list must name exactly the `audit("…")` events the server actually
+ * "Emitted today:" bullet list must name exactly the `audit("…")`/`AuditEvent("…")` events the server actually
  * emits — no more (a phantom entry like the former `password_reset.store_failed` or the
  * former `refresh.rejected` reason `predates_password_change`), no fewer (an emitted event the
  * doc never mentions, like the former `password_reset.link_sent`/`notification_failed`/
@@ -20,7 +20,9 @@ class AuditCatalogTest {
 
     // Multi-line-aware: `audit(` and its literal event-name string may sit on different
     // source lines (the multi-argument call convention used throughout the routes).
-    private val codeEventRegex = Regex("""audit\(\s*"([a-z_.]+)"""")
+    // `AuditEvent("…")` is the second spelling: a literal handed to a SHARED emitter (the fetch
+    // handler in infra/fetch/UrlFetch.kt) so the name still lives in the calling feature's source.
+    private val codeEventRegex = Regex("""(?:audit|AuditEvent)\(\s*"([a-z_.]+)"""")
     private val docTokenRegex = Regex("`([^`]+)`")
     private val eventNameShape = Regex("""^[a-z_]+\.[a-z_.]+$""")
 

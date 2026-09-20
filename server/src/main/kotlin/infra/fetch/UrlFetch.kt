@@ -1,8 +1,14 @@
 package ch.nokillswit.infra.fetch
 
+import ch.nokillswit.audit.AuditEvent
+import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.BadGatewayException
 import ch.nokillswit.infra.concurrency.awaitBounded
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
 import io.ktor.util.AttributeKey
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -178,6 +184,42 @@ fun sanitizedSourceUrl(raw: String?): String? {
         throw BadRequestException(SOURCE_URL_INVALID_DETAIL)
     }
     return trimmed
+}
+
+/**
+ * The shared body of the three fetch routes (`catalog/CatalogFileRoutes.kt`,
+ * `entities/EntityRoutes.kt`, `blueprints/BlueprintRoutes.kt`) AFTER their own guard (`call.
+ * caller()`; blueprints additionally `requireAdmin` BEFORE receive — the guard-before-receive
+ * rule, left in each route): receive [FetchUrlRequest], fetch through [fetcher], and audit the
+ * caller's [blocked]/[fetched] events with scheme+host only — never the full URL, which may carry
+ * query-string credentials. The two event names arrive as [AuditEvent] LITERALS from each route
+ * (`AuditEvent("catalog_file.fetched")`, …), never as an interpolated prefix, so
+ * `AuditCatalogTest`'s doc/code sweep still sees every name where it is emitted.
+ */
+suspend fun ApplicationCall.fetchForCaller(fetcher: UrlFetcher, blocked: AuditEvent, fetched: AuditEvent, byUserId: UInt) {
+    val request = receive<FetchUrlRequest>()
+    val result = try {
+        fetcher.fetch(request.url)
+    } catch (refusal: BlockedUrlException) {
+        // A blocked fetch attempt is a probe signal worth keeping; the response
+        // itself stays uniform so nothing about the internal network leaks.
+        audit(
+            blocked,
+            "byUserId" to byUserId.toLong(),
+            "scheme" to refusal.scheme,
+            "host" to refusal.host,
+        )
+        throw BadRequestException(FETCH_URL_INVALID_DETAIL)
+    }
+    // The success trail: the server pulled a body from a public host on user
+    // command — record who and from where (scheme/host ONLY, never the full URL).
+    audit(
+        fetched,
+        "byUserId" to byUserId.toLong(),
+        "scheme" to result.uri.scheme,
+        "host" to result.uri.host,
+    )
+    respond(HttpStatusCode.OK, FetchUrlResponse(content = result.content))
 }
 
 val UrlFetcherKey = AttributeKey<UrlFetcher>("UrlFetcher")

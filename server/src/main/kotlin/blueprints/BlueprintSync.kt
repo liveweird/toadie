@@ -1,6 +1,8 @@
 package ch.nokillswit.blueprints
 
+import ch.nokillswit.infra.fetch.SourceColumns
 import ch.nokillswit.infra.fetch.SourceWrite
+import ch.nokillswit.infra.fetch.resolveSourceColumns
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
@@ -77,31 +79,8 @@ internal suspend fun BlueprintService.replaceRow(
     source: SourceWrite,
     now: Long,
 ): Int {
-    val sourceUrlValue: String?
-    val lastSyncedAtValue: Long
-    val syncedContentValue: String?
-    when (source) {
-        SourceWrite.FromRequest -> {
-            sourceUrlValue = request.sourceUrl
-            if (request.sourceUrl != current.sourceUrl) {
-                lastSyncedAtValue = 0L
-                syncedContentValue = null
-            } else {
-                lastSyncedAtValue = current.lastSyncedAt
-                syncedContentValue = current.syncedContent
-            }
-        }
-        SourceWrite.Keep -> {
-            sourceUrlValue = current.sourceUrl
-            lastSyncedAtValue = current.lastSyncedAt
-            syncedContentValue = current.syncedContent
-        }
-        is SourceWrite.Synced -> {
-            sourceUrlValue = source.sourceUrl
-            lastSyncedAtValue = now
-            syncedContentValue = baselineJson(request, definition)
-        }
-    }
+    val currentColumns = SourceColumns(current.sourceUrl, current.lastSyncedAt, current.syncedContent)
+    val resolved = resolveSourceColumns(source, request.sourceUrl, currentColumns, now) { baselineJson(request, definition) }
     return BlueprintRows.update({ (BlueprintRows.id eq id) and active() }) {
         it[identifier] = request.identifier
         it[title] = request.title
@@ -110,9 +89,9 @@ internal suspend fun BlueprintService.replaceRow(
         it[BlueprintRows.definition] = blueprintJson.encodeToString(definition)
         it[hierarchyRelations] = encodeHierarchyRelations(request.hierarchyRelations)
         it[updatedAt] = now
-        it[BlueprintRows.sourceUrl] = sourceUrlValue
-        it[BlueprintRows.lastSyncedAt] = lastSyncedAtValue
-        it[BlueprintRows.syncedContent] = syncedContentValue
+        it[BlueprintRows.sourceUrl] = resolved.sourceUrl
+        it[BlueprintRows.lastSyncedAt] = resolved.lastSyncedAt
+        it[BlueprintRows.syncedContent] = resolved.syncedContent
     }
 }
 
