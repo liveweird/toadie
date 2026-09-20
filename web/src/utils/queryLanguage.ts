@@ -13,7 +13,7 @@ import { tags, type Tag } from "@lezer/highlight";
 export const CLAUSE_KEYWORDS = ["MATCH", "OPTIONAL MATCH", "WHERE", "RETURN", "LIMIT"] as const;
 
 /** Boolean/comparison operator words (case-insensitive, like every keyword here). */
-export const OPERATOR_KEYWORDS = [
+const OPERATOR_KEYWORDS = [
   "AND",
   "OR",
   "NOT",
@@ -28,7 +28,7 @@ export const OPERATOR_KEYWORDS = [
 ] as const;
 
 /** Literal keywords — tokenized/highlighted as atoms, not plain keywords. */
-export const LITERAL_KEYWORDS = ["NULL", "TRUE", "FALSE"] as const;
+const LITERAL_KEYWORDS = ["NULL", "TRUE", "FALSE"] as const;
 
 /** The seven meta-properties (`$identifier` etc., without their leading `$`). */
 export const METAS = [

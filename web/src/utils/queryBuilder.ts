@@ -69,7 +69,7 @@ export type QueryBuilderIssueCode =
   | "queryTooLong"
   | "unsupportedName";
 
-export type QueryBuilderIssue = { path: string; code: QueryBuilderIssueCode };
+type QueryBuilderIssue = { path: string; code: QueryBuilderIssueCode };
 
 export type QueryBuilderResult = { query: string; errors: QueryBuilderIssue[] };
 
