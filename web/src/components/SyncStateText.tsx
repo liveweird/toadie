@@ -40,7 +40,7 @@ export default function SyncStateText({ file }: { file: SyncStateSource }) {
   if (file.lastSyncedAt === 0) {
     return (
       <Text size="sm" c="dimmed">
-        {t("catalog.sync.neverSynced")}
+        {t("sync.neverSynced")}
       </Text>
     );
   }

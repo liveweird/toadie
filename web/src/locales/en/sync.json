@@ -1,0 +1,16 @@
+{
+  "action": "Sync from source",
+  "sourceLabel": "Source:",
+  "lastSynced": "Last synced {{ago}}",
+  "neverSynced": "Never synced",
+  "changedInDb": "Changed in Toadie",
+  "loadFailed": "Could not prepare the comparison",
+  "confirm": "Overwrite stored copy",
+  "failed": "Sync failed",
+  "actionAria": "Sync {{name}} from source",
+  "changedAtSource": "Changed at source",
+  "diffTooLarge": "These documents are too large for a detailed comparison. Review the complete stored and source JSON below.",
+  "diffStoredLabel": "Complete stored JSON",
+  "diffReplacementLabel": "Complete source JSON",
+  "refusedTitle": "The source copy was refused"
+}

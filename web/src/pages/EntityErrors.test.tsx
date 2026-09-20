@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import EntityErrors from "./EntityErrors";
 import { jsonResponse } from "../test/http";
@@ -285,7 +285,9 @@ describe("EntityErrors page", () => {
     expect(await screen.findByText(/no errors/i)).toBeInTheDocument();
 
     mockFetch.mockClear();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Flush the microtask queue deterministically instead of a setTimeout(0) barrier — a
+    // negative assertion inside waitFor would pass vacuously.
+    await act(async () => {});
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

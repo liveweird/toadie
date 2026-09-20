@@ -194,7 +194,7 @@ function SyncModalBody({
     <Stack gap="sm">
       {sourceUrl != null && (
         <Text size="sm">
-          {t("blueprints.sync.sourceLabel")}{" "}
+          {t("sync.sourceLabel")}{" "}
           <Anchor href={sourceUrl} target="_blank" rel="noreferrer" size="sm">
             {sourceUrl}
           </Anchor>
@@ -202,13 +202,13 @@ function SyncModalBody({
       )}
       <Text size="sm" c="dimmed">
         {lastSyncedAt > 0
-          ? t("blueprints.sync.lastSynced", { ago: relativeTimeAgo(lastSyncedAt, i18n.language) })
-          : t("blueprints.sync.neverSynced")}
+          ? t("sync.lastSynced", { ago: relativeTimeAgo(lastSyncedAt, i18n.language) })
+          : t("sync.neverSynced")}
       </Text>
 
       {loading && <Loader size="sm" role="status" aria-label={t("blueprints.sync.loadingAria")} />}
       {loadError != null && (
-        <Alert color="red" variant="light" title={t("blueprints.sync.loadFailed")}>
+        <Alert color="red" variant="light" title={t("sync.loadFailed")}>
           {loadError}
         </Alert>
       )}
@@ -225,12 +225,12 @@ function SyncModalBody({
                 {/* No baseline (never synced) = sides cannot be attributed; the diff says it all. */}
                 {sourceChanged && (
                   <Badge variant="light" color="orange" size="sm">
-                    {t("blueprints.sync.changedAtSource")}
+                    {t("sync.changedAtSource")}
                   </Badge>
                 )}
                 {dbChanged && (
                   <Badge variant="light" color="orange" size="sm">
-                    {t("blueprints.sync.changedInDb")}
+                    {t("sync.changedInDb")}
                   </Badge>
                 )}
               </>
@@ -242,9 +242,9 @@ function SyncModalBody({
               diff={diff}
               label={t("blueprints.sync.diffLabel")}
               fallbackLabels={{
-                tooLarge: t("blueprints.sync.diffTooLarge"),
-                stored: t("blueprints.sync.diffStoredLabel"),
-                replacement: t("blueprints.sync.diffReplacementLabel"),
+                tooLarge: t("sync.diffTooLarge"),
+                stored: t("sync.diffStoredLabel"),
+                replacement: t("sync.diffReplacementLabel"),
               }}
             />
           )}
@@ -256,7 +256,7 @@ function SyncModalBody({
           )}
 
           {preflightInvalid && (
-            <Alert color="red" variant="light" title={t("blueprints.sync.refusedTitle")}>
+            <Alert color="red" variant="light" title={t("sync.refusedTitle")}>
               <Stack gap={4}>
                 <Text size="sm">{t("blueprints.sync.refusedBody")}</Text>
                 {preflightRow?.message && <Text size="sm">{preflightRow.message}</Text>}
@@ -273,7 +273,7 @@ function SyncModalBody({
       )}
 
       {confirmError != null && (
-        <Alert color="red" variant="light" title={t("blueprints.sync.failed")}>
+        <Alert color="red" variant="light" title={t("sync.failed")}>
           <Text size="sm">{confirmError}</Text>
         </Alert>
       )}
@@ -288,7 +288,7 @@ function SyncModalBody({
           loading={syncing}
           disabled={remoteDocument == null || inSync || preflightInvalid}
         >
-          {t("blueprints.sync.confirm")}
+          {t("sync.confirm")}
         </Button>
       </Group>
     </Stack>

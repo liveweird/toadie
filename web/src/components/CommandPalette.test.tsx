@@ -111,6 +111,10 @@ describe("CommandPalette", () => {
       renderPalette("backstage");
       palette.open();
       await user.type(await screen.findByPlaceholderText("Search files or jump to a page…"), "p");
+      // A REAL 400 ms wait past the 300 ms debounce, deliberately: this is a bounded negative
+      // assertion (a slow runner can only make it weaker, never red), and driving the debounce
+      // with vi.useFakeTimers deadlocks userEvent inside the Mantine Spotlight here (10/10 timeouts
+      // on 2026-09-20, checkup Tier 2) — the one wait the fake-clock sweep left in place.
       await new Promise((r) => setTimeout(r, 400));
       expect(mockFetch).not.toHaveBeenCalled();
     });
@@ -182,6 +186,10 @@ describe("CommandPalette", () => {
       renderPalette("port");
       palette.open();
       await user.type(await screen.findByPlaceholderText("Search entities or jump to a page…"), "p");
+      // A REAL 400 ms wait past the 300 ms debounce, deliberately: this is a bounded negative
+      // assertion (a slow runner can only make it weaker, never red), and driving the debounce
+      // with vi.useFakeTimers deadlocks userEvent inside the Mantine Spotlight here (10/10 timeouts
+      // on 2026-09-20, checkup Tier 2) — the one wait the fake-clock sweep left in place.
       await new Promise((r) => setTimeout(r, 400));
       expect(mockFetch).not.toHaveBeenCalled();
     });

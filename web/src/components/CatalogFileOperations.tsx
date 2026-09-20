@@ -107,7 +107,7 @@ export default function CatalogFileOperations({
           onClick={sync.onSync}
           disabled={!sync.enabled}
         >
-          {t("catalog.sync.action")}
+          {t("sync.action")}
         </Menu.Item>
       )}
       <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={onDelete}>
