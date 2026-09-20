@@ -27,7 +27,8 @@
     "relations": {
       "system": "storefront",
       "consumes_apis": ["catalog-graphql", "checkout-rest", "live-cart"],
-      "uses": ["session-cache"]
+      "uses": ["session-cache"],
+      "consumes_datasets": ["orders"]
     }
   },
   {
@@ -48,7 +49,8 @@
     "relations": {
       "system": "storefront",
       "subcomponent_of": "storefront-web",
-      "consumes_apis": ["catalog-graphql"]
+      "consumes_apis": ["catalog-graphql", "live-cart"],
+      "consumes_datasets": ["product-catalog"]
     }
   },
   {
@@ -73,7 +75,8 @@
       "system": "storefront",
       "provides_apis": ["catalog-graphql"],
       "uses": ["catalog-db"],
-      "uses_libraries": ["acme-commons"]
+      "uses_libraries": ["acme-commons"],
+      "produces_datasets": ["product-catalog", "catalog-search-index"]
     }
   },
   {
@@ -101,7 +104,8 @@
       "provides_apis": ["checkout-rest", "order-events"],
       "consumes_apis": ["payments-grpc"],
       "uses": ["orders-db", "order-bus"],
-      "uses_libraries": ["payments-sdk", "acme-commons"]
+      "uses_libraries": ["payments-sdk", "acme-commons"],
+      "produces_datasets": ["orders"]
     }
   },
   {
@@ -173,7 +177,8 @@
     "relations": {
       "system": "payments",
       "uses": ["payments-db", "ledger-log"],
-      "consumes_apis": ["order-events"]
+      "consumes_apis": ["order-events"],
+      "produces_datasets": ["payments-ledger"]
     }
   },
   {
@@ -193,7 +198,9 @@
     },
     "relations": {
       "system": "payments",
-      "uses": ["payments-db", "settlement-warehouse"]
+      "uses": ["payments-db", "settlement-warehouse"],
+      "produces_datasets": ["settlements-daily"],
+      "consumes_datasets": ["payments-ledger"]
     }
   },
   {
@@ -213,7 +220,8 @@
     },
     "relations": {
       "system": "invoicing",
-      "uses": ["orders-db"]
+      "uses": ["orders-db"],
+      "consumes_datasets": ["orders", "settlements-daily"]
     }
   },
   {

@@ -1,0 +1,39 @@
+[
+  {
+    "blueprint": "dataset_adoption",
+    "identifier": "storefront-bff-product-catalog",
+    "title": "storefront-bff → product-catalog 1.4.0",
+    "icon": "Link",
+    "properties": {
+      "contract_version": "1.4.0",
+      "status": "current",
+      "declared_by": "anna.kowalska",
+      "verified_at": "2026-08-05T10:00:00Z"
+    },
+    "relations": { "consumer": "storefront-bff", "dataset": "product-catalog" }
+  },
+  {
+    "blueprint": "dataset_adoption",
+    "identifier": "legacy-invoicing-orders",
+    "title": "legacy-invoicing → orders 2.0.0",
+    "properties": {
+      "contract_version": "2.0.0",
+      "status": "migrating",
+      "declared_by": "marek.nowak",
+      "verified_at": "2026-07-22T13:00:00Z",
+      "notes": "Moving off the 1.x flat schema once the legacy invoicing rewrite lands."
+    },
+    "relations": { "consumer": "legacy-invoicing", "dataset": "orders" }
+  },
+  {
+    "blueprint": "dataset_adoption",
+    "identifier": "settlement-pipeline-payments-ledger",
+    "title": "settlement-pipeline → payments-ledger (unknown contract)",
+    "properties": {
+      "status": "retiring",
+      "declared_by": "marek.nowak",
+      "verified_at": "2026-04-30T09:00:00Z"
+    },
+    "relations": { "consumer": "settlement-pipeline", "dataset": "payments-ledger", "environment": "production" }
+  }
+]

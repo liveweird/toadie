@@ -1,0 +1,73 @@
+{
+  "identifier": "dataset_adoption",
+  "title": "Dataset adoption",
+  "description": "A declared consumption of a dataset by a service on a specific contract version — the versioned twin of service.consumes_datasets, which only says THAT a service consumes a dataset. A relation entity like workload, since Port relations carry no properties. Declared, never observed: it records what a team states it runs and who verified it when; runtime evidence lives outside Toadie. Convention: the dataset should be among the consumer's consumes_datasets (not validated). Port-only.",
+  "icon": "Link",
+  "hierarchyRelations": {"composition": "consumer"},
+  "schema": {
+    "properties": {
+      "contract_version": {
+        "type": "string",
+        "title": "Contract version",
+        "description": "The data-contract version consumed, e.g. `2.1.0` (ODCS semver). Absent = undeclared."
+      },
+      "status": {
+        "type": "string",
+        "title": "Status",
+        "description": "Where this consumer stands on the contract version.",
+        "enum": ["current", "migrating", "retiring"],
+        "enumColors": { "current": "green", "migrating": "yellow", "retiring": "orange" }
+      },
+      "declared_by": {
+        "type": "string",
+        "title": "Declared by",
+        "description": "Who declared it (a _user).",
+        "format": "user"
+      },
+      "verified_at": {
+        "type": "string",
+        "title": "Verified at",
+        "description": "When the declaration was last confirmed.",
+        "format": "date-time"
+      },
+      "notes": {
+        "type": "string",
+        "title": "Notes",
+        "description": "Migration plan, blockers.",
+        "format": "markdown"
+      }
+    }
+  },
+  "relations": {
+    "consumer": {
+      "title": "Consumer",
+      "target": "service",
+      "required": true,
+      "many": false
+    },
+    "dataset": {
+      "title": "Dataset",
+      "target": "dataset",
+      "required": true,
+      "many": false
+    },
+    "environment": {
+      "title": "In environment",
+      "description": "Absent = every environment.",
+      "target": "environment",
+      "required": false,
+      "many": false
+    }
+  },
+  "mirrorProperties": {
+    "dataset_lifecycle": {
+      "title": "Dataset lifecycle",
+      "path": "dataset.lifecycle"
+    }
+  },
+  "ownership": {
+    "type": "Inherited",
+    "path": "consumer",
+    "title": "Owned by (via consumer)"
+  }
+}

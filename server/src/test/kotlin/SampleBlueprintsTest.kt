@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
 
 /**
  * Executable documentation for `sample-data/port/commerce-payments/blueprints/` — the
- * twelve-blueprint baseline
+ * fifteen-blueprint baseline
  * ontology the platform catalog is built on (`.claude/docs/ontology.md`, v1.25.2; the sample
  * set since v1.25.3; adopting the v1.26.0 system blueprints and real ownership since v1.26.0).
  * Loads the numbered files through the real API in dependency order (every relation target must
@@ -51,12 +51,13 @@ import kotlin.test.assertTrue
  *    Backstage export is a copy and a registry edit that forgets the blueprint fails here.
  * 2. **Hierarchy**: `hierarchyRelations` (v1.32.0, a map — several PARALLEL hierarchies) names
  *    TWO forests: `composition` — the org tree (`_team` → `_team`) and the architecture tree
- *    (domain → system → service/library/api/resource → workload, cluster → environment) — and
- *    `deployment` — workload → cluster → environment, sharing `cluster`'s own `environment`
- *    relation with `composition`.
+ *    (domain → system → service/library/api/resource/dataset → workload, cluster → environment,
+ *    api_adoption/dataset_adoption → service) — and `deployment` — workload → cluster →
+ *    environment, sharing `cluster`'s own `environment` relation with `composition`.
  * 3. **Ownership**: every blueprint but `_team`/`_user`/environment declares `ownership` — Direct
- *    on domain/system/service/library/api/resource/cluster (no `owned_by` relation: the team
- *    field IS the ownership, v1.26.0), Inherited via `service` on workload.
+ *    on domain/system/service/library/api/resource/cluster/dataset (no `owned_by` relation: the
+ *    team field IS the ownership, v1.26.0), Inherited via `service` on workload and via
+ *    `consumer` on api_adoption/dataset_adoption (2.13.0).
  * 4. **System blueprints stay put**: `_team`/`_user` are the seeded rows, not fresh creates.
  *
  * Test cwd is `server/` (the Gradle test task's default working directory), so the fixture
@@ -180,9 +181,9 @@ class SampleBlueprintsTest {
     }
 
     /**
-     * Phase 6 (v1.28.0): the same twelve files are also a valid `POST /api/v1/blueprints/import`
+     * Phase 6 (v1.28.0): the same fifteen files are also a valid `POST /api/v1/blueprints/import`
      * BATCH, not just a sequential POST/PUT script — `_team`/`_user` already exist (seeded by
-     * V31), so with `replaceExisting = true` they answer `UPDATED` and the other ten `CREATED`;
+     * V31), so with `replaceExisting = true` they answer `UPDATED` and the other thirteen `CREATED`;
      * the planner's own ordering + two-pass deferral (`.claude/docs/port-data-model.md` "Import
      * and export") must resolve the exact same forward-referencing aggregations
      * (`loadBlueprints`'s pass 2, above) without any file-order hint from the caller — the
@@ -266,7 +267,8 @@ class SampleBlueprintsTest {
      * v1.26.0: ownership is the entity-level `team` field, not a Backstage `owned_by` relation.
      * Every blueprint but `_team`/`_user`/environment declares `ownership`: Direct for the plain
      * owning blueprints (no `owned_by` relation left over from the pre-v1.26.0 shape), Inherited
-     * via `service` for workload.
+     * via `service` for workload and via `consumer` for api_adoption/dataset_adoption (2.13.0,
+     * [INHERITED_OWNERSHIP]).
      */
     private fun assertOwnership(requests: Map<String, BlueprintRequest>) {
         DIRECT_OWNERSHIP.forEach { blueprint ->
@@ -274,9 +276,12 @@ class SampleBlueprintsTest {
             assertNull(request.relations["owned_by"], "$blueprint must not keep a Backstage owned_by relation")
             assertEquals("Direct", request.ownership?.type, "$blueprint.ownership.type")
         }
-        assertNull(requests.getValue("workload").relations["owned_by"], "workload inherits ownership")
-        assertEquals("Inherited", requests.getValue("workload").ownership?.type)
-        assertEquals("service", requests.getValue("workload").ownership?.path)
+        INHERITED_OWNERSHIP.forEach { (blueprint, path) ->
+            val request = requests.getValue(blueprint)
+            assertNull(request.relations["owned_by"], "$blueprint inherits ownership")
+            assertEquals("Inherited", request.ownership?.type, "$blueprint.ownership.type")
+            assertEquals(path, request.ownership?.path, "$blueprint.ownership.path")
+        }
         listOf("_team", "_user", "environment").forEach {
             assertNull(requests.getValue(it).ownership, "$it must declare no ownership")
         }
@@ -319,8 +324,9 @@ class SampleBlueprintsTest {
         assertEquals(types.getValue("API"), enumOf("api", "type"))
         assertEquals(types.getValue("Resource"), enumOf("resource", "type"))
 
-        // The lifecycles dictionary on every Backstage kind that carries spec.lifecycle.
-        listOf("service", "library", "api").forEach { assertEquals(lifecycles, enumOf(it, "lifecycle"), "$it.lifecycle") }
+        // The lifecycles dictionary on every Backstage kind that carries spec.lifecycle, plus
+        // the Port-only `dataset` (2.13.0), whose `type` stays uncompared (no Backstage twin).
+        listOf("service", "library", "api", "dataset").forEach { assertEquals(lifecycles, enumOf(it, "lifecycle"), "$it.lifecycle") }
 
         // Labels: closed value lists, verbatim; the yes/no ones are booleans.
         LABEL_PROPERTIES.forEach { (label, sites) ->
@@ -347,7 +353,8 @@ class SampleBlueprintsTest {
 
     private companion object {
         val EXPECTED_ORDER = listOf(
-            "_team", "_user", "domain", "product", "system", "environment", "cluster", "resource", "library", "api", "service", "workload",
+            "_team", "_user", "domain", "product", "system", "environment", "cluster", "resource", "dataset",
+            "library", "api", "service", "workload", "api_adoption", "dataset_adoption",
         )
 
         /** blueprint → its `composition` hierarchyRelations entry (null = roots its own entities). */
@@ -360,10 +367,13 @@ class SampleBlueprintsTest {
             "environment" to null,
             "cluster" to "environment",
             "resource" to "system",
+            "dataset" to "system",
             "library" to "system",
             "api" to "system",
             "service" to "system",
             "workload" to "service",
+            "api_adoption" to "consumer",
+            "dataset_adoption" to "consumer",
         )
 
         /** blueprint → the blueprint its `composition` hierarchy relation targets. */
@@ -374,10 +384,13 @@ class SampleBlueprintsTest {
             "system" to "domain",
             "cluster" to "environment",
             "resource" to "system",
+            "dataset" to "system",
             "library" to "system",
             "api" to "system",
             "service" to "system",
             "workload" to "service",
+            "api_adoption" to "service",
+            "dataset_adoption" to "service",
         )
 
         /**
@@ -397,9 +410,17 @@ class SampleBlueprintsTest {
 
         /**
          * v1.26.0: `ownership.type == "Direct"` (the entity-level `team` field), no leftover
-         * `owned_by` relation — every plain owning blueprint, `workload` excepted (Inherited).
+         * `owned_by` relation — every plain owning blueprint, `workload`/api_adoption/
+         * dataset_adoption excepted (Inherited, [INHERITED_OWNERSHIP]).
          */
-        val DIRECT_OWNERSHIP = listOf("domain", "product", "system", "service", "library", "api", "resource", "cluster")
+        val DIRECT_OWNERSHIP = listOf("domain", "product", "system", "service", "library", "api", "resource", "cluster", "dataset")
+
+        /** blueprint → its Inherited `ownership.path` (v1.26.0 workload; 2.13.0 the two adoptions via `consumer`). */
+        val INHERITED_OWNERSHIP = mapOf(
+            "workload" to "service",
+            "api_adoption" to "consumer",
+            "dataset_adoption" to "consumer",
+        )
 
         /**
          * blueprint → its declared mirror/calculation/aggregation property ids (phase 5,
@@ -410,8 +431,12 @@ class SampleBlueprintsTest {
             "domain" to setOf("critical_systems"),
             "product" to setOf("system_count", "critical_systems", "service_count"),
             "system" to setOf("service_count", "workload_replicas", "deploys_per_week"),
+            "dataset" to setOf("producer_count", "consumer_count", "adoption_count"),
+            "api" to setOf("adoption_count"),
             "service" to setOf("domain_title", "stack", "risk"),
             "workload" to setOf("service_lifecycle", "env_type", "languages"),
+            "api_adoption" to setOf("api_lifecycle"),
+            "dataset_adoption" to setOf("dataset_lifecycle"),
         )
 
         /** label key → the (blueprint, property) enums that mirror its closed value list. */
