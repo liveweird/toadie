@@ -200,10 +200,8 @@ describe("EditCatalogFile page", () => {
 
     const nameInput = (await screen.findByLabelText(/^name( \*)?$/i)) as HTMLInputElement;
     await waitFor(() => expect(nameInput.value).toBe("stored-svc"));
-    await user.type(
-      screen.getByLabelText(/subcomponent of/i, { selector: "input" }),
-      "component:team-a/stored-svc",
-    );
+    await user.click(screen.getByLabelText(/subcomponent of/i, { selector: "input" }));
+    await user.paste("component:team-a/stored-svc");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
     // The strict PUT was rejected for the self reference — the modal lists it (scoped: the
