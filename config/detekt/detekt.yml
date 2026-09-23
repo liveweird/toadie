@@ -9,7 +9,7 @@ complexity:
   # (plugins/*.kt — Http, ErrorHandling, Security) are declarative in the same way: one
   # configureXxx listing every `install {}` block. Tests are exempt from LongMethod: scenario
   # tests are named sentences and read top-to-bottom. Threshold 80 (detekt default 60) — the
-  # longest remaining service functions (EntityService.graph, CatalogFileService.loadRegistrySnapshot)
+  # longest remaining cohesive reads (EntityService.graph, CatalogRegistryReader.loadSnapshot)
   # sit in the 60s and are one cohesive read each.
   LongMethod:
     excludes: ['**/src/test/**', '**/*Routes.kt', '**/plugins/*.kt']

@@ -569,7 +569,11 @@ The app pod now declares the full security context above (non-root uid 10001, re
 ## Stage 5 — selective refactoring
 
 - [x] Extract graph persistence into a dedicated hook as part of Stage 3.
-- [ ] Split catalog service/form responsibilities where concrete changes repeatedly overlap.
+- [x] Split the catalog responsibilities that repeatedly overlapped: move registry and
+  namespace reads into the transaction-neutral `CatalogRegistryReader` (called within the
+  existing service transactions), and move label/annotation picker fieldsets into
+  `CatalogRegistryFieldsets`. Keep their validation, findings, and save behavior unchanged;
+  leave other catalog service/form responsibilities in place until a concrete change needs them.
 - [x] Guard SPA catalog edits against stale writes. V40 adds per-file revisions; the editor,
   YAML overwrite, repo sync, and Files/Hierarchy deletion send their captured revision in
   `X-Expected-Revision`. A mismatch leaves file/history unchanged and returns a typed `409`;

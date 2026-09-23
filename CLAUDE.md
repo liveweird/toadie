@@ -466,6 +466,8 @@ ch.nokillswit
                         CatalogFileService.kt, CatalogFileRoutes.kt — /api/v1/files CRUD
                         + paginated list + the sync pair (GET/POST …/{id}/sync); shared
                         workspace (no admin gate on content);
+                        CatalogRegistryReader.kt — transaction-neutral namespace lookup and
+                        registry snapshot SQL called inside the service's write/report transaction;
                         CatalogFileImport.kt — the import pipeline (import/importCheck as
                         service extensions; ONE shared per-document classification, so the
                         real run and the dry-run cannot drift);
