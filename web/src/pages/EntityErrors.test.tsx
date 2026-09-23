@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import EntityErrors from "./EntityErrors";
 import { jsonResponse } from "../test/http";
@@ -273,8 +273,17 @@ describe("EntityErrors page", () => {
     expect(await screen.findByText(/no errors/i)).toBeInTheDocument();
   });
 
-  test("hiding every blueprint pill shows the empty state and stops fetching the report", async () => {
-    mockReport(mockFetch);
+  test("hiding every blueprint keeps saved-query diagnostics and their class chip independent", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (url.startsWith("/api/v1/entities/errors")) {
+        const report = url.includes("blueprint=%21")
+          ? { ...REPORT, savedQueries: REPORT.savedQueries.map((row) => ({ ...row, name: "hidden-scope-query" })) }
+          : REPORT;
+        return Promise.resolve(jsonResponse(200, report));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
     const user = userEvent.setup();
     renderPage();
     await screen.findByRole("checkbox", { name: "service" });
@@ -282,13 +291,28 @@ describe("EntityErrors page", () => {
     await user.click(screen.getByRole("checkbox", { name: "service" }));
     await user.click(screen.getByRole("checkbox", { name: "team" }));
 
-    expect(await screen.findByText(/no errors/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/entities/errors?blueprint=%21"),
+        expect.any(Object),
+      ),
+    );
+    expect(await screen.findByText("hidden-scope-query")).toBeInTheDocument();
+    expect(screen.queryByText("broken-query")).not.toBeInTheDocument();
+    expect(screen.queryByText("Required property missing")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ownership unresolved")).not.toBeInTheDocument();
+    expect(screen.queryByText("Calculation does not compile")).not.toBeInTheDocument();
+    expect(screen.getByText("Unknown blueprint")).toBeInTheDocument();
+    expect(tileValue("Errors")).toBe("1");
 
-    mockFetch.mockClear();
-    // Flush the microtask queue deterministically instead of a setTimeout(0) barrier — a
-    // negative assertion inside waitFor would pass vacuously.
-    await act(async () => {});
-    expect(mockFetch).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("checkbox", { name: "Saved queries" }));
+    expect(screen.queryByText("Unknown blueprint")).not.toBeInTheDocument();
+    expect(screen.getByText(/no errors/i)).toBeInTheDocument();
+    expect(tileValue("Errors")).toBe("0");
+
+    await user.click(screen.getByRole("checkbox", { name: "Saved queries" }));
+    expect(screen.getByText("Unknown blueprint")).toBeInTheDocument();
+    expect(tileValue("Errors")).toBe("1");
   });
 
   test("shows an alert when the report fails to load", async () => {

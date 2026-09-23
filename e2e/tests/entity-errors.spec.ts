@@ -154,6 +154,22 @@ test("stale entities, a broken calculation and a broken saved query land on the 
     await page.getByText("Source", { exact: true }).click();
     await expect(noSourceLink).toBeVisible();
 
+    // 5c. Blueprint pills select which entity/blueprint rows are reported, never which saved
+    // queries are diagnosed. Hide every currently registered blueprint and keep this broken
+    // query visible while the entity and blueprint findings disappear.
+    const blueprintGroup = page.getByRole("group", { name: "Blueprints" });
+    const checkedBlueprints = blueprintGroup.getByRole("checkbox", { checked: true });
+    while (await checkedBlueprints.count()) {
+      const identifier = await checkedBlueprints.first().getAttribute("value");
+      expect(identifier).toBeTruthy();
+      await blueprintGroup.getByText(identifier!, { exact: true }).click();
+    }
+    await expect(checkedBlueprints).toHaveCount(0);
+    await expect(entityLink).toHaveCount(0);
+    await expect(blueprintLink).toHaveCount(0);
+    await expect(queryNameText).toBeVisible();
+    await expect(queryRow.getByText("Unknown blueprint", { exact: true })).toBeVisible();
+
     // 6. "Open in graph" on the saved-query row hands its text to the Entity graph's shared
     // query bar and runs it there; the graph 400s (the blueprint still doesn't exist) and the
     // bar's diagnostics name the same missing label.

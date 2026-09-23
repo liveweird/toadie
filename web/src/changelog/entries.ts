@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.14.3",
+    date: "2026-09-24",
+    en: `**Clearer Port diagnostics and hierarchy graph.** The Errors page keeps broken saved queries visible when every blueprint is hidden. In the Entity Graph, hierarchy emphasis now follows the actual parent links for the selected hierarchy, so an unrelated relation with the same name no longer appears as a hierarchy edge.`,
+    pl: `**Czytelniejsze błędy i graf hierarchii w Port.** Strona Błędy pokazuje nieprawidłowe zapisane zapytania także wtedy, gdy wszystkie blueprinty są ukryte. W Grafie encji wyróżnienie hierarchii obejmuje teraz rzeczywiste powiązania nadrzędne wybranej hierarchii, więc niezwiązana relacja o tej samej nazwie nie wygląda już jak krawędź hierarchii.`,
+  },
+  {
     version: "2.14.2",
     date: "2026-09-24",
     en: `**Safer Port source sync.** Blueprint and entity sync now refuse to overwrite a record when its source reference changed after the remote copy was fetched. The sync dialog waits for the current record, the remote copy, and a matching validation result before offering Overwrite. Entity sync also refreshes blueprint definitions so a stale cached schema cannot silently discard source properties.`,

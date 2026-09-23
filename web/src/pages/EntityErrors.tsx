@@ -30,6 +30,10 @@ import { editEntityPath, entityGraphPath } from "../utils/entityLinks";
 import { loadErrorMessage } from "../utils/saveError";
 
 const COLUMN_COUNT = 4;
+// `blueprint` is an any-of filter, while an empty array means "no filter". `!` cannot be a
+// blueprint identifier, so it asks the server for no entity/blueprint rows while preserving
+// the saved-query diagnostics that deliberately ignore these filters.
+const NO_BLUEPRINTS_FILTER = ["!"] as const;
 
 /**
  * The Port-world Errors report at /ontology/errors (v2.5.0) — `pages/Errors.tsx`'s twin one
@@ -64,16 +68,18 @@ export default function EntityErrors() {
     (v) => v === null || typeof v === "string",
   );
 
+  const noBlueprints = filters.noBlueprints;
+  const reportFilters = noBlueprints ? { ...filters.values, blueprints: NO_BLUEPRINTS_FILTER } : filters.values;
   const { data, isPending, isError, error } = useQuery({
-    queryKey: ["entities", "errors", filters.values],
-    queryFn: () => getEntityErrors(filters.values),
+    queryKey: ["entities", "errors", reportFilters],
+    queryFn: () => getEntityErrors(reportFilters),
     placeholderData: keepPreviousData,
-    // Every blueprint pill off = show/report nothing — never fetch (the pills' shared rule).
-    enabled: filters.ready && !filters.noBlueprints,
+    enabled: filters.ready,
   });
 
-  const noBlueprints = filters.noBlueprints;
-  const report = data && !noBlueprints ? data : undefined;
+  const report = data && noBlueprints
+    ? { ...data, entities: [], blueprints: [], checkedEntities: 0, checkedBlueprints: 0 }
+    : data;
 
   const classFilter = new Set(classes);
   const entityRows = (report?.entities ?? [])
@@ -145,8 +151,7 @@ export default function EntityErrors() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {/* A disabled (noBlueprints) query stays pending forever — fall through to the empty state. */}
-            {isPending && !data && !noBlueprints ? (
+            {isPending && !data ? (
               <TableLoadingRow colSpan={COLUMN_COUNT} />
             ) : rowCount > 0 ? (
               <>

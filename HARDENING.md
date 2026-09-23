@@ -4,6 +4,10 @@ This is the implementation tracker for the review of revision `63d6fd4` (2026-09
 It is not a production-readiness certificate. Keep Claude's cross-cutting docs and focused
 regression tests synchronized with each stage; do not lower coverage thresholds.
 
+The later [2026-09-24 quality check-up](.claude/reviews/2026-09-24-quality-checkup.md)
+has its own five-finding disposition ledger. This historical tracker is not that
+review's backlog.
+
 ## Stage 1 — verification foundation
 
 - [x] Automatic push/PR/merge-queue backend, frontend, contract, and browser gates.

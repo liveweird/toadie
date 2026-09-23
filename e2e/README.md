@@ -425,7 +425,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
   PRIVATE saved entity query naming a blueprint identifier that never exists → the report shows
   the entity's Required-missing finding, the blueprint's Calculation-does-not-compile finding,
   and the saved query's Unknown-blueprint finding, each with its localized label → the Stale
-  class chip hides and restores the entity's row without touching the other two → Open in graph
+  class chip hides and restores the entity's row without touching the other two → hiding every
+  blueprint pill removes entity/blueprint rows but retains the broken saved query → Open in graph
   on the saved-query row hands its text to the Entity graph's shared query bar, which reports
   the identical missing-blueprint diagnostic → cleanup.
 - [`entity-sync.spec.ts`](scenarios/entity-sync.md) — entity source references & re-sync

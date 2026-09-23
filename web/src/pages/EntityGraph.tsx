@@ -50,8 +50,10 @@ import {
 import { foldGraph } from "../utils/graphFold";
 import {
   buildEntityHierarchy,
+  entityGraphEdgeKey,
   effectiveHierarchyId,
   filterEntityGraph,
+  hierarchyEdgeKeys,
   OWNERSHIP_EDGE_STYLE,
   relationsOf,
   toFoldable,
@@ -177,16 +179,18 @@ export default function EntityGraph() {
   const baseLayout = useMemo(() => {
     if (!graph) return { nodes: [] as LaidOutNode<EntityGraphNodeApi>[], edges: [] as Edge[], anyCollapsed: false };
     const filtered = filterEntityGraph(graph, disabled);
-    const hierarchyRelations = new Set(
-      graph.edges.filter((e) => e.hierarchies.includes(hierarchyId)).map((e) => e.relation),
-    );
+    const selectedHierarchyEdges = hierarchyEdgeKeys(graph, hierarchyId);
     const folded = foldGraph(toFoldable(filtered), forest, new Set(collapsed));
     const laidOut = layoutGraph(folded, ENTITY_CLUSTER);
     // Hierarchy edges draw solid and thicker, labelled by relation id — folding can still dash
     // one that stands in for a hidden relation, so the fold's own style wins when both apply.
     const edges = laidOut.edges
       .map((e) =>
-        hierarchyRelations.has(e.label as string) && !e.style
+        selectedHierarchyEdges.has(entityGraphEdgeKey({
+          sourceId: e.source,
+          targetId: e.target,
+          relation: (e.data as { field?: string } | undefined)?.field ?? "",
+        })) && !e.style
           ? { ...e, style: { strokeWidth: 2 } }
           : e,
       )

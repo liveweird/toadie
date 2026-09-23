@@ -47,17 +47,21 @@
    - *Expected*: the second entity's row (its only finding is class Source) disappears entirely
      while the chip is off, and the first entity's row (which carries a source) is unaffected;
      the second entity's row returns once the chip is back on.
-9. They click **Open in graph** on the saved query's row.
+9. They hide every registered blueprint pill.
+   - *Expected*: the entity and blueprint rows disappear, while the broken saved-query row
+     and its "Unknown blueprint" diagnostic remain visible because blueprint filtering does
+     not apply to saved queries.
+10. They click **Open in graph** on the saved query's row.
    - *Expected*: the app navigates to the Entity graph; its shared "Entity query" editor now
      holds the saved query's exact text, the graph request answers `400` (the blueprint still
      doesn't exist), and the query bar's diagnostics name the same missing blueprint identifier.
-10. Cleanup (API): the saved query, then both entities, then the blueprint.
+11. Cleanup (API): the saved query, then both entities, then the blueprint.
 
 ## Not covered here (and why)
 
 - **The remaining vocabulary classes this report covers — unresolved ownership
   (`OWNERSHIP_UNRESOLVED`/`OWNERSHIP_PATH_STALE`) and the mirror/aggregation-path stale codes
-  — and the full REPORTED-vs-SHOWN filter semantics (`blueprint`/`q`/`team` narrowing entity and
+  — and the other REPORTED-vs-SHOWN filter semantics (`q`/`team` narrowing entity and
   blueprint rows, never saved queries)** — pinned exhaustively by `EntityErrorsCheckTest` (the
   pure checker rule table) and `EntityErrorsTest` (the route, including every filter
   combination and the read-budget refusals); this journey sticks to the classes an ordinary user
