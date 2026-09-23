@@ -1,14 +1,8 @@
 package ch.nokillswit.catalog
 
-import ch.nokillswit.annotations.AnnotationKeyService
-import ch.nokillswit.dictionaries.Dictionary
-import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.paging.PageRequest
-import ch.nokillswit.labels.LabelService
-import ch.nokillswit.tags.TagCategoryService
-import ch.nokillswit.types.EntityTypesService
 import ch.nokillswit.infra.paging.applyPaging
 import ch.nokillswit.users.UserService
 import io.ktor.server.plugins.BadRequestException
@@ -140,6 +134,7 @@ class CatalogFileService(
     }
 
     private val json = Json
+    private val registryReader = CatalogRegistryReader(json)
 
     private fun active(): Op<Boolean> = CatalogFiles.markedAsDeleted eq false
 
@@ -153,124 +148,6 @@ class CatalogFileService(
         otherColumn = UserService.Users.id,
     )
 
-    /** The active NAMESPACE entry flagged as the default, or null when none is (V9). */
-    private suspend fun flaggedDefaultNamespace(): String? =
-        DictionaryService.Entries.selectAll()
-            .where {
-                (DictionaryService.Entries.dictionary eq Dictionary.NAMESPACE.name) and
-                    (DictionaryService.Entries.isDefault eq true) and
-                    (DictionaryService.Entries.markedAsDeleted eq false)
-            }
-            .map { it[DictionaryService.Entries.value] }
-            .toList()
-            .singleOrNull()
-
-    /**
-     * The second sanctioned cross-feature table read (see persistence.md): STRICT namespace
-     * enforcement — every write (create, update, import) resolves its (sanitized: folded,
-     * possibly blank) namespace inside the write's own transaction. Blank means "the
-     * ADMIN-flagged default entry" (none flagged → 400); a concrete value must be an ACTIVE
-     * dictionary entry. There is no grandfathering: a stored file whose namespace was since
-     * removed cannot be saved until it is re-added or changed (a deliberate product decision).
-     */
-    private suspend fun resolvedNamespace(namespace: String): String {
-        if (namespace.isEmpty()) {
-            return flaggedDefaultNamespace() ?: throw BadRequestException(
-                "No default namespace is defined — mark one on the Namespaces page or specify a namespace",
-            )
-        }
-        val defined = DictionaryService.Entries.selectAll()
-            .where {
-                (DictionaryService.Entries.dictionary eq Dictionary.NAMESPACE.name) and
-                    (DictionaryService.Entries.value eq namespace) and
-                    (DictionaryService.Entries.markedAsDeleted eq false)
-            }
-            .count() > 0
-        if (!defined) {
-            throw BadRequestException(
-                "metadata.namespace '$namespace' is not a defined namespace — define it on the Namespaces page",
-            )
-        }
-        return namespace
-    }
-
-    /**
-     * The third sanctioned cross-feature table read (see persistence.md) — one snapshot of
-     * the five soft-check registries (labels, tag categories, per-kind type dictionaries,
-     * the LIFECYCLE dictionary, annotation keys) plus the NAMESPACE dictionary values,
-     * taken inside the calling write/report transaction. The soft rules themselves are the
-     * pure `registryFindings` in Errors.kt: every value must be allowed by its ADMIN-curated
-     * registry for the file's kind (byte-exact, no grandfathering; an empty registry allows
-     * nothing). A violation is a SOFT finding — it rejects a strict save but is waivable via
-     * `allowInvalid` (see [softFindings]). The namespaces set is different: it feeds ONLY
-     * the report-only `storedDocumentFindings` (namespace resolution stays a HARD write rule
-     * via [resolvedNamespace]).
-     */
-    private suspend fun loadRegistrySnapshot(): RegistrySnapshot {
-        val labels = LabelService.Labels.selectAll()
-            .where { LabelService.Labels.markedAsDeleted eq false }
-            .map {
-                it[LabelService.Labels.key] to Pair(
-                    json.decodeFromString<List<String>>(it[LabelService.Labels.allowedKinds]),
-                    json.decodeFromString<List<String>>(it[LabelService.Labels.allowedValues]),
-                )
-            }
-            .toList()
-            .toMap()
-        val annotationKeys = AnnotationKeyService.AnnotationKeys.selectAll()
-            .where { AnnotationKeyService.AnnotationKeys.markedAsDeleted eq false }
-            .map {
-                it[AnnotationKeyService.AnnotationKeys.key] to
-                    json.decodeFromString<List<String>>(it[AnnotationKeyService.AnnotationKeys.allowedKinds])
-            }
-            .toList()
-            .toMap()
-        // tag -> (owning category name, its allowed kinds); categories are disjoint by the
-        // one-category-per-tag rule, so a plain map suffices.
-        val tags = mutableMapOf<String, Pair<String, List<String>>>()
-        TagCategoryService.TagCategories.selectAll()
-            .where { TagCategoryService.TagCategories.markedAsDeleted eq false }
-            .toList()
-            .forEach { row ->
-                val category = row[TagCategoryService.TagCategories.name]
-                val kinds = json.decodeFromString<List<String>>(row[TagCategoryService.TagCategories.allowedKinds])
-                json.decodeFromString<List<String>>(row[TagCategoryService.TagCategories.tags])
-                    .forEach { tags[it] = category to kinds }
-            }
-        val types = EntityTypesService.EntityTypes.selectAll()
-            .where { EntityTypesService.EntityTypes.markedAsDeleted eq false }
-            .map {
-                it[EntityTypesService.EntityTypes.kind] to
-                    json.decodeFromString<List<String>>(it[EntityTypesService.EntityTypes.types])
-            }
-            .toList()
-            .toMap()
-        val lifecycles = DictionaryService.Entries.selectAll()
-            .where {
-                (DictionaryService.Entries.dictionary eq Dictionary.LIFECYCLE.name) and
-                    (DictionaryService.Entries.markedAsDeleted eq false)
-            }
-            .map { it[DictionaryService.Entries.value] }
-            .toList()
-            .toSet()
-        val namespaces = DictionaryService.Entries.selectAll()
-            .where {
-                (DictionaryService.Entries.dictionary eq Dictionary.NAMESPACE.name) and
-                    (DictionaryService.Entries.markedAsDeleted eq false)
-            }
-            .map { it[DictionaryService.Entries.value] }
-            .toList()
-            .toSet()
-        return RegistrySnapshot(
-            labels = labels,
-            annotationKeys = annotationKeys,
-            tags = tags,
-            types = types,
-            lifecycles = lifecycles,
-            namespaces = namespaces,
-        )
-    }
-
     private fun CatalogFile.withNamespace(resolved: String): CatalogFile =
         if (metadata.namespace == resolved) this else copy(metadata = metadata.copy(namespace = resolved))
 
@@ -278,7 +155,7 @@ class CatalogFileService(
      * The write path's SOFT checks, as findings: every entity reference resolved against the
      * active workspace (the ONE rulebook in Errors.kt — per-field default kinds, allowed
      * target kinds, contextual namespace, never the document ITSELF) plus the registry checks
-     * against [loadRegistrySnapshot]. Runs inside the write's own transaction. A strict save
+     * against the registry reader's snapshot. Runs inside the write's own transaction. A strict save
      * rejects any finding with ONE aggregated 400; `allowInvalid=true` waives them all and
      * stores anyway (the Errors report is the net for what was waived).
      * [extraIdentities] is the import path's batch universe (sibling documents resolve
@@ -292,16 +169,16 @@ class CatalogFileService(
     ): List<SoftFinding> {
         val references = checkDocument(stored, activeIdentities(excludingId) + extraIdentities).findings
             .map { SoftFinding(it, referenceFindingMessage(it)) }
-        return references + registryFindings(stored, loadRegistrySnapshot())
+        return references + registryFindings(stored, registryReader.loadSnapshot())
     }
 
     /**
-     * Resolves a sanitized file's namespace outside a write ([resolvedNamespace] semantics,
+     * Resolves a sanitized file's namespace outside a write (the registry reader's semantics,
      * own transaction) — the import path uses it so each result row reports the CONCRETE
      * namespace a blank one resolved to.
      */
     suspend fun resolveNamespace(file: CatalogFile): CatalogFile = suspendTransaction(database) {
-        file.withNamespace(resolvedNamespace(file.metadata.namespace))
+        file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace))
     }
 
     suspend fun create(
@@ -319,7 +196,7 @@ class CatalogFileService(
         validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
         val source = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
         // The stored row AND the content JSON both carry the resolved concrete namespace.
-        val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
+        val stored = file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace))
         val findings = requireOrWaive(stored, extraIdentities, allowInvalid)
         val now = System.currentTimeMillis()
         val encoded = json.encodeToString(stored)
@@ -380,7 +257,7 @@ class CatalogFileService(
         suspendTransaction(database) {
             validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
             val source = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
-            val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
+            val stored = file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace))
             val findings = requireOrWaive(stored, emptySet(), allowInvalid, excludingId = id)
             val encoded = json.encodeToString(stored)
             // The current row decides the sync-state consequences: a changed/cleared reference
@@ -455,7 +332,7 @@ class CatalogFileService(
             if (current[CatalogFiles.sourceUrl] == null) {
                 throw BadRequestException("This file has no source reference — set one before syncing")
             }
-            val stored = file.withNamespace(resolvedNamespace(file.metadata.namespace))
+            val stored = file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace))
             val findings = softFindings(stored, emptySet())
             val now = System.currentTimeMillis()
             val encoded = json.encodeToString(stored)
@@ -532,7 +409,11 @@ class CatalogFileService(
      */
     suspend fun errors(filter: CatalogFileListFilter): ErrorsReport = suspendTransaction(database) {
         val all = activeSources()
-        errorsReport(reported = all.filter { filter.matches(it.file) }, all = all, registries = loadRegistrySnapshot())
+        errorsReport(
+            reported = all.filter { filter.matches(it.file) },
+            all = all,
+            registries = registryReader.loadSnapshot(),
+        )
     }
 
     /**
@@ -546,10 +427,10 @@ class CatalogFileService(
     suspend fun check(file: CatalogFile): DocumentCheckReport = suspendTransaction(database) {
         // A blank namespace resolves to the flagged default for the live check too; the
         // literal fallback keeps the check non-blocking when nothing is flagged.
-        val ns = file.metadata.namespace.ifEmpty { flaggedDefaultNamespace() ?: DEFAULT_NAMESPACE }
+        val ns = file.metadata.namespace.ifEmpty { registryReader.flaggedDefaultNamespace() ?: DEFAULT_NAMESPACE }
         val resolved = file.withNamespace(ns)
         val references = checkDocument(resolved, activeIdentities()).findings
-        val registry = registryFindings(resolved, loadRegistrySnapshot()).map { it.finding }
+        val registry = registryFindings(resolved, registryReader.loadSnapshot()).map { it.finding }
         DocumentCheckReport(findings = references + registry)
     }
 
@@ -619,8 +500,8 @@ class CatalogFileService(
             resolve: suspend (CatalogFile) -> CatalogFile,
         ) -> T,
     ): T = suspendTransaction(database) {
-        block(activeIdentities(), loadRegistrySnapshot()) { file ->
-            file.withNamespace(resolvedNamespace(file.metadata.namespace))
+        block(activeIdentities(), registryReader.loadSnapshot()) { file ->
+            file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace))
         }
     }
 

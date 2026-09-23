@@ -346,7 +346,8 @@ fun errorsReport(
  * The report-only checks over one STORED row, as (finding, optional message) pairs:
  * structural descriptor validation, namespace-dictionary membership, and the source
  * reference's presence. The first two rules are HARD on every write (validateCatalogFile /
- * resolvedNamespace throw 400 before the soft checks run, allowInvalid notwithstanding), so
+ * CatalogRegistryReader.resolveNamespace throw 400 before the soft checks run, allowInvalid
+ * notwithstanding), so
  * they are deliberately NOT part of [registryFindings]/softFindings — a finding there can
  * only mean the row predates a rule or dictionary change (planted legacy content, a
  * namespace entry removed after the save). The source check is the opposite kind of
@@ -412,7 +413,7 @@ fun referenceFindingMessage(finding: DocumentCheckFinding): String {
 
 /**
  * The active registry rows the soft checks match against, snapshotted by the caller inside
- * its own transaction (CatalogFileService.loadRegistrySnapshot) so the pure checks below
+ * its own transaction (CatalogRegistryReader.loadSnapshot) so the pure checks below
  * stay DB-free and one report reads each registry once.
  */
 data class RegistrySnapshot(
