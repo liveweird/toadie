@@ -7,6 +7,7 @@
   "loadFailed": "Could not prepare the comparison",
   "confirm": "Overwrite stored copy",
   "failed": "Sync failed",
+  "sourceConflict": "The source reference changed before the sync was saved. Reload the record and try again.",
   "actionAria": "Sync {{name}} from source",
   "changedAtSource": "Changed at source",
   "diffTooLarge": "These documents are too large for a detailed comparison. Review the complete stored and source JSON below.",

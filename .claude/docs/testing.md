@@ -438,6 +438,23 @@ fetch→diff→overwrite happy path is deliberately server-/unit-tested, never r
 network, and the import page's own fetch refusal is NOT duplicated (already covered by
 `entity-sync.spec.ts`).
 
+**Port sync source guard and confirm readiness.** Applies when changing either Port sync
+endpoint or modal. Requirement: backend regressions cover matching, changed, and cleared
+`expectedSourceUrl` under the write transaction, with rejected requests leaving the document,
+sync state, and audit unchanged; omitted guards retain `/api/v1` compatibility. Frontend
+regressions hold detail, sync state, remote fetch, and pre-flight independently, and prove no
+POST is possible until the comparison and matching pre-flight succeed. Test a stale opening
+row, a changed source URL, an invalid/failed/empty pre-flight, and candidate changes while a
+prior check is pending. Reference: `.claude/docs/persistence.md` "Source-bound sync" and
+`web/CLAUDE.md` source-sync sections. Enforcement: `EntitySyncTest`, `BlueprintSyncTest`,
+`SyncEntityModal.test.tsx`, `SyncBlueprintModal.test.tsx`. Exception: external network success
+is covered at the route/unit boundary, not browser E2E.
+
+The entity modal must refresh the blueprint registry on open and wait for that request before
+stripping computed properties or building the comparison. Pin a cached blueprint where a
+computed property became a stored optional property, plus a fresh registry missing the entity's
+blueprint; a cached success or background refetch must never authorize the old candidate.
+
 **Dependency locking.** The Gradle build resolves against the committed lockfiles (`core/` + `server/gradle.lockfile`, the root `settings-` and `buildscript-gradle.lockfile`; enabled in the root `build.gradle.kts`, DEFAULT lock mode): a transitive version outside the lock state fails resolution. After a dependency change run `./gradlew build --write-locks` and commit the lockfiles; the Dockerfile copies them into the build stage, so a forgotten lockfile also fails the image build.
 
 **Schemathesis (optional manual fuzz pass, not in CI).** Property-based fuzzing of the running stack from the spec: `docker compose up --build` (compose ships dev mode, so `/openapi` is exposed), grab a token — `TOKEN=$(curl -s -X POST localhost:8081/api/v1/login -H 'Content-Type: application/json' -d '{"email":"admin@toadie.local","password":"changeme"}' | jq -r .token)` — then `uvx schemathesis run -c all -H "Authorization: Bearer $TOKEN" --exclude-path /api/v1/logout http://localhost:8081/openapi/documentation.yaml --url http://localhost:8081`. The `/logout` exclusion is load-bearing: fuzzing it **revokes the bearer token** (everything after 401s). Login fuzzing also trips the per-account lockout for `admin@toadie.local` (the spec's example email) — in-memory, so `docker compose restart app` clears it. Expect residual noise from stateful invariants the spec cannot express (rate-limit 429s, TRACE probes); a **`Server error` count above zero is the real signal**. It complements, not replaces, the suite-piggybacked conformance layer above; fuzz junk lives only in the compose volume (`docker compose down -v` resets). Needs `uv` (or `pipx`); no Python dependency lives in the repo.

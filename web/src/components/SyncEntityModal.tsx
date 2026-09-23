@@ -20,7 +20,17 @@ import { entityExportDocument } from "../utils/ontologyExport";
 import { relativeTimeAgo } from "../utils/relativeTime";
 import { normalizeSourceUrl } from "../utils/sourceUrl";
 import { compareSyncSides } from "../utils/syncComparison";
-import { FETCH_URL_ERROR_KEYS, loadErrorMessage, saveErrorMessage } from "../utils/saveError";
+import {
+  preflightAccepted as isPreflightAccepted,
+  preflightPending,
+  querySettled,
+} from "../utils/syncReadiness";
+import {
+  FETCH_URL_ERROR_KEYS,
+  isSourceReferenceConflict,
+  loadErrorMessage,
+  saveErrorMessage,
+} from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
 
 /**
@@ -91,10 +101,15 @@ function SyncModalBody({
   const queryClient = useQueryClient();
   const [confirmError, setConfirmError] = useState<{ message: string; findings: EntityFinding[] } | null>(null);
 
-  const { id, sourceUrl } = target;
-  const { blueprints, loading: blueprintsLoading, error: blueprintsError, loadError: blueprintsLoadError } =
-    useBlueprints();
-  const blueprint = blueprints.find((b) => b.identifier === target.blueprint);
+  const { id } = target;
+  const {
+    blueprints,
+    loading: blueprintsLoading,
+    fetching: blueprintsFetching,
+    loaded: blueprintsLoaded,
+    error: blueprintsError,
+    loadError: blueprintsLoadError,
+  } = useBlueprints({ freshOnMount: true });
 
   const detail = useQuery({
     queryKey: ["entities", "detail", id],
@@ -104,44 +119,57 @@ function SyncModalBody({
     queryKey: ["entities", "syncState", id],
     queryFn: () => getEntitySyncState(id),
   });
+  const blueprint = blueprints.find((b) => b.identifier === detail.data?.blueprint);
+  // Bind the fetch and eventual write guard to the source reference on the freshly loaded
+  // detail. The list row that opened this modal may predate a source-reference edit.
+  const sourceUrl = detail.data?.sourceUrl ?? null;
+  const sourceStateMatches = sourceUrl != null && syncState.data?.sourceUrl === sourceUrl;
   // Keyed OUTSIDE the ["entities"] prefix on purpose: the post-sync list invalidation must
   // never re-trigger this server-side outbound fetch (or the pre-flight check below).
   const sourceFetch = useQuery({
-    queryKey: ["entitySourceCopy", id],
+    queryKey: ["entitySourceCopy", id, sourceUrl],
     queryFn: () => fetchEntityUrl(normalizeSourceUrl(sourceUrl ?? "")),
-    enabled: sourceUrl != null,
+    enabled: [querySettled(detail), querySettled(syncState), sourceUrl != null, sourceStateMatches].every(Boolean),
     staleTime: 0,
     gcTime: 0,
   });
 
   // The remote side: parse the fetched text and pick this entity's document.
   const picked = useMemo(() => {
-    if (!sourceFetch.data) return null;
-    return pickSourceEntityDocument(sourceFetch.data.content, target, blueprints);
-  }, [sourceFetch.data, target, blueprints]);
+    if (!sourceFetch.data || !detail.data || !blueprintsLoaded || blueprintsFetching) return null;
+    return pickSourceEntityDocument(sourceFetch.data.content, detail.data, blueprints);
+  }, [sourceFetch.data, detail.data, blueprints, blueprintsLoaded, blueprintsFetching]);
 
   const remoteDocument = picked?.document ?? null;
+  const remoteJson = remoteDocument ? canonicalEntityDocumentJson(remoteDocument) : null;
   // The pre-flight: the SAME classification a real sync would apply, run as a dry-run import
   // of one document against the CURRENT blueprint — an INVALID row is exactly what the sync
   // would refuse with, shown BEFORE the reader confirms rather than only after.
   const preflight = useQuery({
-    queryKey: ["entitySourceCheck", id],
+    queryKey: ["entitySourceCheck", id, sourceUrl, remoteJson],
     queryFn: () => {
       // `enabled` gates but does not narrow — guard honestly instead of casting.
       if (remoteDocument == null) throw new Error("pre-flight queried without a remote document");
       return checkEntityImport([remoteDocument], true);
     },
-    enabled: remoteDocument != null,
+    enabled: [
+      querySettled(sourceFetch),
+      blueprintsLoaded,
+      !blueprintsFetching,
+      !blueprintsError,
+      blueprint != null,
+      remoteDocument != null,
+    ].every(Boolean),
     staleTime: 0,
     gcTime: 0,
   });
   const preflightRow = preflight.data?.results[0];
   const preflightInvalid = preflightRow?.status === "INVALID";
+  const preflightAccepted = isPreflightAccepted(preflight, preflightRow?.status);
 
   // All comparison runs over the canonical JSON render — one equality for diff and badges.
   const currentJson =
     detail.data && blueprint ? canonicalEntityDocumentJson(entityExportDocument(detail.data, blueprint)) : null;
-  const remoteJson = remoteDocument ? canonicalEntityDocumentJson(remoteDocument) : null;
   const baselineJson = syncState.data?.syncedDocument
     ? canonicalEntityDocumentJson(syncState.data.syncedDocument as Record<string, unknown>)
     : null;
@@ -154,25 +182,61 @@ function SyncModalBody({
     lastSyncedAt,
   });
 
-  const loading = detail.isLoading || syncState.isLoading || blueprintsLoading || sourceFetch.isLoading;
+  const loading = [
+    detail.isFetching,
+    syncState.isFetching,
+    blueprintsLoading,
+    blueprintsFetching,
+    sourceFetch.isFetching,
+    preflightPending(blueprint != null && remoteDocument != null, preflight),
+  ].some(Boolean);
+  const comparisonReady = [
+    querySettled(detail),
+    querySettled(syncState),
+    blueprintsLoaded,
+    !blueprintsFetching,
+    !blueprintsError,
+    blueprint != null,
+    querySettled(sourceFetch),
+    sourceStateMatches,
+    currentJson != null,
+    remoteJson != null,
+  ].every(Boolean);
   function loadErrorText(): string | null {
     if (detail.isError) return loadErrorMessage(detail.error, t);
     if (syncState.isError) return loadErrorMessage(syncState.error, t);
     if (blueprintsError) return loadErrorMessage(blueprintsLoadError, t);
+    if (blueprintsLoaded && !blueprintsFetching && detail.data && blueprint == null) {
+      return t("entities.editor.blueprintMissing");
+    }
     if (sourceFetch.isError) return saveErrorMessage(sourceFetch.error, t, FETCH_URL_ERROR_KEYS);
+    if (sourceUrl == null && detail.data) return t("entities.sync.noSource");
+    if (detail.data && syncState.data && !sourceStateMatches) return t("entities.sync.sourceStateMismatch");
     if (picked?.error === "parse") return t("entities.sync.parseFailed");
     if (picked?.error === "noMatch") return t("entities.sync.noMatch");
-    if (picked?.error === "blueprintMismatch") return t("entities.sync.blueprintMismatch", { blueprint: target.blueprint });
+    if (picked?.error === "blueprintMismatch") {
+      return t("entities.sync.blueprintMismatch", { blueprint: detail.data?.blueprint ?? target.blueprint });
+    }
+    if (preflight.isError) return loadErrorMessage(preflight.error, t);
+    if (preflight.isSuccess && !preflightInvalid && !preflightAccepted) return t("entities.sync.preflightEmpty");
     return null;
   }
   const loadError = loadErrorText();
+  const canConfirm = [
+    !syncing,
+    comparisonReady,
+    preflightAccepted,
+    remoteDocument != null,
+    !inSync,
+    loadError == null,
+  ].every(Boolean);
 
   async function onConfirm() {
-    if (remoteDocument == null) return;
+    if (!canConfirm || remoteDocument == null || sourceUrl == null) return;
     onSyncingChange(true);
     setConfirmError(null);
     try {
-      await syncEntity(id, remoteDocument as EntityBody);
+      await syncEntity(id, remoteDocument as EntityBody, sourceUrl);
       showSuccessToast(t("entities.toast.synced"));
       onSyncingChange(false);
       onClose();
@@ -182,7 +246,10 @@ function SyncModalBody({
       onCompleted?.();
     } catch (err) {
       onSyncingChange(false);
-      setConfirmError({ message: entitySaveErrorMessage(err, t), findings: entitySaveFindings(err) });
+      setConfirmError({
+        message: isSourceReferenceConflict(err) ? t("sync.sourceConflict") : entitySaveErrorMessage(err, t),
+        findings: entitySaveFindings(err),
+      });
     }
   }
 
@@ -209,7 +276,7 @@ function SyncModalBody({
         </Alert>
       )}
 
-      {!loading && loadError == null && currentJson != null && remoteDocument != null && (
+      {comparisonReady && loadError == null && remoteDocument != null && (
         <>
           <Group gap="xs">
             {inSync ? (
@@ -271,7 +338,7 @@ function SyncModalBody({
             </Alert>
           )}
 
-          {!inSync && !preflightInvalid && (
+          {!inSync && preflightAccepted && (
             <Text size="sm" c="dimmed">
               {t("entities.sync.overwriteWarning")}
             </Text>
@@ -303,7 +370,7 @@ function SyncModalBody({
           color="red"
           onClick={() => void onConfirm()}
           loading={syncing}
-          disabled={remoteDocument == null || inSync || preflightInvalid}
+          disabled={!canConfirm}
         >
           {t("sync.confirm")}
         </Button>

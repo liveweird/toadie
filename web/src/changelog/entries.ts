@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.14.2",
+    date: "2026-09-24",
+    en: `**Safer Port source sync.** Blueprint and entity sync now refuse to overwrite a record when its source reference changed after the remote copy was fetched. The sync dialog waits for the current record, the remote copy, and a matching validation result before offering Overwrite. Entity sync also refreshes blueprint definitions so a stale cached schema cannot silently discard source properties.`,
+    pl: `**Bezpieczniejsza synchronizacja ze źródła w Port.** Synchronizacja blueprintów i encji odmawia teraz nadpisania rekordu, gdy jego adres źródłowy zmienił się po pobraniu zdalnej kopii. Okno synchronizacji czeka na aktualny rekord, zdalną kopię i pasujący wynik walidacji, zanim udostępni nadpisanie. Synchronizacja encji odświeża też definicje blueprintów, aby nieaktualny schemat z pamięci podręcznej nie usuwał po cichu właściwości ze źródła.`,
+  },
+  {
     version: "2.14.1",
     date: "2026-09-23",
     en: `**Consistent ontology pages for integrations.** Blueprint and entity pages now read their totals, definitions, rows, and ontology revision from one database snapshot. A concurrent edit can no longer make equal revisions describe different page contents.`,

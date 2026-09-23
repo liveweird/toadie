@@ -7,6 +7,7 @@
   "loadFailed": "Nie udało się przygotować porównania",
   "confirm": "Nadpisz zapisaną kopię",
   "failed": "Synchronizacja nie powiodła się",
+  "sourceConflict": "Odwołanie do źródła zmieniło się przed zapisaniem synchronizacji. Wczytaj rekord ponownie i spróbuj jeszcze raz.",
   "actionAria": "Synchronizuj {{name}} ze źródłem",
   "changedAtSource": "Zmienione w źródle",
   "diffTooLarge": "Te dokumenty są zbyt duże, aby pokazać szczegółowe porównanie. Poniżej znajdziesz pełny zapisany i źródłowy JSON.",

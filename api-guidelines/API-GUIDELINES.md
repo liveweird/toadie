@@ -688,6 +688,11 @@ against Toadie's write surface — the previous inventory described Lettuce's):
   answers `409` with type `urn:toadie:catalog-revision-conflict`; every state-changing write
   advances the per-file counter, including headerless legacy writes. The header cannot become
   required within released `/api/v1`, so omitted-header requests remain last-write-wins.
+- **Source-reference-guarded when requested** — Port blueprint/entity sync accepts optional
+  `expectedSourceUrl` beside the submitted document. The SPA supplies the stored reference
+  observed before fetch. A changed or cleared reference answers typed `409` under the existing
+  write lock before content mutation. Legacy callers may omit the guard; it protects source
+  identity only, not against unrelated document edits or untrusted submitted content.
 - **Accepted last-write-wins** — the remaining Toadie full-replace writes, accepted because
   writers are few and scoped (the registries are single-ADMIN-curated and users PUT is
   ADMIN-only): users PUT, per-user features PUT
