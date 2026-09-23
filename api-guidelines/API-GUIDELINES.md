@@ -438,7 +438,8 @@ sensitive/authed data, `max-age` for static assets) rather than relying on defau
 against the resource's `ETag` and return `412 Precondition Failed` on mismatch. Domain-level
 guards (e.g. "only the latest document is editable" → `409`) are an acceptable alternative
 where they fit the model better — document which one each write uses. *(Registered gap: no
-`If-Match`/`412` anywhere; the per-write inventory lives under the known-gaps register.)*
+`If-Match`/`412` anywhere, and most writes remain unguarded; catalog-file mutations offer the
+documented revision/`409` alternative. The per-write inventory lives under the known-gaps register.)*
 **Check:** concurrency-sensitive `PUT`/`DELETE` have a documented lost-update defense.
 
 ### API-CACHE-004 — Push for hot data `[llm/manual]`
@@ -668,7 +669,7 @@ prioritized. Reviewers cite these as "registered gap"; the Spectral ruleset carr
 | API-ERR-007 | Generic unique-violation `409`s carry no `instance` URI | `ConflictException` rides `ProblemDetail` (`plugins/ErrorHandling.kt`); no Toadie conflict site populates `instance` yet — adopt it where the service knows the conflicting row's id (the tag-claim and last-admin `409`s could; the generic 23505 handler never can, and existence-disclosure rules apply per API-ERR-006) |
 | API-RATE-001 | No `Retry-After` / `RateLimit-*` headers on `429`s | Set `Retry-After` where the wait is known (login lockout knows its window); add headers to the shared `TooManyRequests` response |
 | API-CACHE-001/002 | No `ETag`/`304`; `Cache-Control` only on CSS | Install `ConditionalHeaders`; extend the `CachingHeaders` config in `plugins/Http.kt` with deliberate per-class policies (`no-store` on API responses) |
-| API-CACHE-003 | No `If-Match`/`ETag`/`412` conditional writes anywhere; unguarded full-document writes are last-write-wins (see the inventory below) | Add `ETag` + `If-Match` handling to the concurrency-sensitive `PUT`s if contention ever materializes; a `version` column + `409` is the R2DBC-friendly alternative |
+| API-CACHE-003 | No `If-Match`/`ETag`/`412` conditional writes; catalog files offer an optional revision/typed-`409` guard, while headerless catalog clients and the remaining full-document writes are last-write-wins (see the inventory below) | Require a new API version before making the catalog header mandatory; add `ETag` + `If-Match` or the same explicit revision alternative to other writes where contention materializes |
 | API-IDEM-001 | No `Idempotency-Key` handling | Domain no-duplicate `409`s cover double-submits today; adopt the header if external/retrying clients appear |
 | API-HTTP-001 | HTTP/1.1 only (Netty defaults; no edge HTTP/2) | Configure HTTP/2 at the TLS-terminating ingress when one exists |
 | API-META-001/002 | No `x-sla`, no `info.termsOfService` in the spec | Add both to `documentation.yaml` when commitments/terms exist to publish |
@@ -682,10 +683,14 @@ prioritized. Reviewers cite these as "registered gap"; the Spectral ruleset carr
 Per API-CACHE-003, each concurrency-sensitive write documents its defense (audited 2026-08-29
 against Toadie's write surface — the previous inventory described Lettuce's):
 
-- **Accepted last-write-wins** — every Toadie full-replace write, accepted because writers are
-  few and scoped (the registries are single-ADMIN-curated, users PUT is ADMIN-only, and the
-  catalog workspace's documents are small with per-entity identity conflicts caught by the
-  partial unique indexes → `409`): catalog-files PUT, users PUT, per-user features PUT
+- **Revision-guarded when requested** — catalog-file PUT, repo sync, and delete accept the
+  optional `X-Expected-Revision` returned by detail/list/graph/sync-state reads. A stale value
+  answers `409` with type `urn:toadie:catalog-revision-conflict`; every state-changing write
+  advances the per-file counter, including headerless legacy writes. The header cannot become
+  required within released `/api/v1`, so omitted-header requests remain last-write-wins.
+- **Accepted last-write-wins** — the remaining Toadie full-replace writes, accepted because
+  writers are few and scoped (the registries are single-ADMIN-curated and users PUT is
+  ADMIN-only): users PUT, per-user features PUT
   (wholesale replace by design), the dictionaries whole-document PUT (namespaces, lifecycles),
   and the labels / annotation-keys / tag-categories / entity-types PUTs. Two admins editing the
   same registry entry simultaneously can overwrite each other — a deliberate, documented

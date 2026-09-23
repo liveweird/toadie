@@ -4,7 +4,7 @@
 - **Actors**: the seed administrator (`admin@toadie.local`) — acting as an ordinary user
   (the workspace is shared; no route is admin-gated)
 - **Owns** (exclusive server-side state): its one throwaway catalog file, unique-named
-  (`e2e-comp-…`) and deleted at the end; every list assertion is name-filter-anchored, so
+  (`e2e-comp-…`) and a second revision-test file (`e2e-revision-…`), deleted at the end; every list assertion is name-filter-anchored, so
   parallel runs and leftover residue never interfere
 
 ## Scenario: admin creates a component file, edits it, downloads the YAML, and deletes it
@@ -41,10 +41,21 @@
 11. They load the list fresh and filter by the name again.
    - *Expected*: "No catalog files" — the file is gone.
 
+## Scenario: two editors keep the losing draft when the catalog file changes
+
+1. Sign in and create one uniquely named catalog file through the API, then open its editor in two browser tabs.
+   - *Expected*: both forms start with the same stored title.
+2. Save a new title from the first tab.
+   - *Expected*: the write succeeds.
+3. Change the second tab's title and save its older revision.
+   - *Expected*: a typed `409` explains the stale revision; the second tab keeps its draft.
+4. Read the stored file directly, then clean up only this test's file.
+   - *Expected*: the first writer's title remains stored.
+
 ## Not covered here (and why)
 
-- **Validation rejections (400) and identity conflicts (409)** — exhaustively covered by the
-  server suite (`CatalogFileTest`) and the form unit tests; e2e sticks to the happy journey.
+- **Validation rejections (400) and identity conflicts (409)** — covered by the
+  server suite (`CatalogFileTest`) and the form unit tests; this browser test focuses on stale edits.
 - **Pagination/sorting mechanics** — unit- and server-tested; the shared database's row count
   is not this spec's to assume.
 - **YAML content beyond the preview smoke** — `catalogYaml.test.ts` pins the full document

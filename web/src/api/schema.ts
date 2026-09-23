@@ -865,8 +865,12 @@ export interface paths {
          *
          *     The replacement and any UPDATED history event commit together. Failure to store
          *     the event preserves the previous file, source reference, timestamps, and sync state.
-         *     An unchanged save creates no event. Concurrent replacements remain last-write-wins;
-         *     each event describes the state its transaction actually replaced.
+         *     An unchanged save creates no event and retains the file's revision. Send the optional
+         *     `X-Expected-Revision` header from the latest detail/list/graph response to guard the
+         *     replacement: a stale value answers `409` with problem type
+         *     `urn:toadie:catalog-revision-conflict`. The header is optional for v1 compatibility;
+         *     an omitted header keeps last-write-wins behavior. Every state-changing write still
+         *     advances the revision, including an unguarded legacy write.
          */
         put: operations["replaceCatalogFile"];
         post?: never;
@@ -874,7 +878,9 @@ export interface paths {
          * Delete a catalog file
          * @description Soft delete — the file leaves every list and read, and its identity is freed.
          *     The deletion flag and DELETED history event commit together; failure to store the
-         *     event leaves the file active. The event outlives the soft-deleted file.
+         *     event leaves the file active. The event outlives the soft-deleted file. Send the
+         *     optional `X-Expected-Revision` header to reject a stale delete with the typed `409`;
+         *     omission preserves the v1 unguarded behavior.
          */
         delete: operations["deleteCatalogFile"];
         options?: never;
@@ -959,7 +965,10 @@ export interface paths {
          *
          *     The document, sync timestamp, baseline, and SYNCED history event commit together.
          *     Failure to store the event preserves the complete previous state. A matching
-         *     document still records a sync event because performing the sync is itself an action.
+         *     document still records a sync event and advances the revision because performing the
+         *     sync is itself an action. Send the optional `X-Expected-Revision` header to reject a
+         *     stale sync with problem type `urn:toadie:catalog-revision-conflict`; omission preserves
+         *     the v1 unguarded behavior.
          */
         post: operations["syncCatalogFile"];
         delete?: never;
@@ -2474,6 +2483,8 @@ export interface components {
         CatalogFileResponse: {
             /** Format: int32 */
             id: number;
+            /** Format: int64 */
+            revision: number;
             kind: components["schemas"]["EntityKind"];
             metadata: components["schemas"]["CatalogFileMetadata"];
             spec: components["schemas"]["EntitySpec"];
@@ -2503,6 +2514,8 @@ export interface components {
         CatalogFileListItem: {
             /** Format: int32 */
             id: number;
+            /** Format: int64 */
+            revision: number;
             kind: components["schemas"]["EntityKind"];
             name: string;
             namespace: string;
@@ -2528,6 +2541,8 @@ export interface components {
             lastSyncedAt: number;
         };
         SyncStateResponse: {
+            /** Format: int64 */
+            revision: number;
             /** @description The file's source reference; null = none set (syncing is refused). */
             sourceUrl: string | null;
             /**
@@ -2611,6 +2626,11 @@ export interface components {
              * @description The backing file for STORED nodes; null for a MISSING node.
              */
             fileId?: number | null;
+            /**
+             * Format: int64
+             * @description The backing file's mutation token for STORED nodes; null for a MISSING node.
+             */
+            revision?: number | null;
             status: components["schemas"]["GraphNodeStatus"];
         };
         GraphEdge: {
@@ -3619,6 +3639,8 @@ export interface components {
          *     workspace Errors report and block the file's next strict save.
          */
         AllowInvalid: boolean;
+        /** @description Optional optimistic-concurrency token for catalog-file PUT, sync, and delete. Use the revision from the latest detail, list, graph stored node, or sync-state response. A stale value answers 409 with problem type `urn:toadie:catalog-revision-conflict`; malformed or non-positive values answer 400. Omission preserves the v1 unguarded-write contract. */
+        ExpectedCatalogRevision: number;
         /**
          * @description Sort spec. Format: `field` (ascending) or `-field` (descending). Multiple fields are
          *     comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
@@ -4790,7 +4812,10 @@ export interface operations {
                  */
                 allowInvalid?: components["parameters"]["AllowInvalid"];
             };
-            header?: never;
+            header?: {
+                /** @description Optional optimistic-concurrency token for catalog-file PUT, sync, and delete. Use the revision from the latest detail, list, graph stored node, or sync-state response. A stale value answers 409 with problem type `urn:toadie:catalog-revision-conflict`; malformed or non-positive values answer 400. Omission preserves the v1 unguarded-write contract. */
+                "X-Expected-Revision"?: components["parameters"]["ExpectedCatalogRevision"];
+            };
             path: {
                 id: components["parameters"]["ResourceId"];
             };
@@ -4820,7 +4845,10 @@ export interface operations {
     deleteCatalogFile: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional optimistic-concurrency token for catalog-file PUT, sync, and delete. Use the revision from the latest detail, list, graph stored node, or sync-state response. A stale value answers 409 with problem type `urn:toadie:catalog-revision-conflict`; malformed or non-positive values answer 400. Omission preserves the v1 unguarded-write contract. */
+                "X-Expected-Revision"?: components["parameters"]["ExpectedCatalogRevision"];
+            };
             path: {
                 id: components["parameters"]["ResourceId"];
             };
@@ -4838,6 +4866,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -4908,7 +4937,10 @@ export interface operations {
     syncCatalogFile: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional optimistic-concurrency token for catalog-file PUT, sync, and delete. Use the revision from the latest detail, list, graph stored node, or sync-state response. A stale value answers 409 with problem type `urn:toadie:catalog-revision-conflict`; malformed or non-positive values answer 400. Omission preserves the v1 unguarded-write contract. */
+                "X-Expected-Revision"?: components["parameters"]["ExpectedCatalogRevision"];
+            };
             path: {
                 id: components["parameters"]["ResourceId"];
             };

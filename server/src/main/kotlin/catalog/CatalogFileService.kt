@@ -38,6 +38,7 @@ data class CatalogFileListResult(
 /** A stored file with its envelope (creator resolved via join, timestamps, sync state). */
 data class CatalogFileDetail(
     val id: UInt,
+    val revision: Long,
     val file: CatalogFile,
     val createdBy: UInt,
     val creatorName: String,
@@ -49,6 +50,7 @@ data class CatalogFileDetail(
 ) {
     fun toResponse() = CatalogFileResponse(
         id = id,
+        revision = revision,
         kind = file.kind,
         metadata = file.metadata,
         spec = file.spec,
@@ -64,11 +66,13 @@ data class CatalogFileDetail(
 
 /** GET {id}/sync's read model: the reference + stamp + the baseline stored at the last sync. */
 data class CatalogFileSyncState(
+    val revision: Long,
     val sourceUrl: String?,
     val lastSyncedAt: Long,
     val syncedDocument: CatalogFile?,
 ) {
     fun toResponse() = SyncStateResponse(
+        revision = revision,
         sourceUrl = sourceUrl,
         lastSyncedAt = lastSyncedAt,
         syncedDocument = syncedDocument,
@@ -120,6 +124,9 @@ class CatalogFileService(
         val createdBy = reference("created_by", UserService.Users)
         val createdAt = long("created_at")
         val updatedAt = long("updated_at")
+        // Monotonic per-file token for optional guarded mutations (V40). Every state-changing
+        // write advances it; a no-op replacement retains it.
+        val revision = long("revision").default(1)
         // The source reference & sync state (V21) — envelope columns, never part of `content`
         // (the stored document stays a pure Backstage document). 0 = never synced; a sync
         // stamps updated_at and last_synced_at EQUAL, so — while last_synced_at > 0 —
@@ -366,6 +373,7 @@ class CatalogFileService(
         id: UInt,
         file: CatalogFile,
         actingUserId: UInt,
+        expectedRevision: Long? = null,
         allowInvalid: Boolean = false,
         sourceUrl: String? = null,
     ): CatalogFileUpdateResult =
@@ -379,12 +387,13 @@ class CatalogFileService(
             // resets the sync state (a different source was never synced from), and updatedAt
             // bumps ONLY on a content change — a reference-only edit must not read as
             // "modified in the DB since the sync" (updatedAt > lastSyncedAt is that signal).
-            val current = CatalogFiles.select(CatalogFiles.content, CatalogFiles.sourceUrl)
+            val current = CatalogFiles.select(CatalogFiles.content, CatalogFiles.sourceUrl, CatalogFiles.revision)
                 .where { (CatalogFiles.id eq id) and active() }
                 .forUpdate()
                 .toList()
                 .singleOrNull()
                 ?: return@suspendTransaction CatalogFileUpdateResult(rows = 0, waived = findings)
+            requireExpectedRevision(expectedRevision, current[CatalogFiles.revision])
             val contentChanged = current[CatalogFiles.content] != encoded
             val sourceChanged = current[CatalogFiles.sourceUrl] != source
             // The history's field-level diff — the stored JSON is only decoded when it actually
@@ -406,6 +415,9 @@ class CatalogFileService(
                     it[lastSyncedAt] = 0
                     it[syncedContent] = null
                 }
+                if (contentChanged || sourceChanged) {
+                    it[revision] = current[CatalogFiles.revision] + 1
+                }
             }
             catalogFileUpdateEvent(changes)?.let {
                 eventService.recordInTransaction(id, actingUserId, it)
@@ -421,19 +433,25 @@ class CatalogFileService(
      * hold a source reference (400 otherwise); an identity rename colliding with another
      * active file surfaces as the ordinary 23505 → 409.
      */
-    suspend fun syncFromRepo(id: UInt, file: CatalogFile, actingUserId: UInt): CatalogFileUpdateResult =
+    suspend fun syncFromRepo(
+        id: UInt,
+        file: CatalogFile,
+        actingUserId: UInt,
+        expectedRevision: Long? = null,
+    ): CatalogFileUpdateResult =
         suspendTransaction(database) {
             validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
             // The cheap row checks come FIRST: a 404/400 must not pay for the workspace +
             // registry snapshot that softFindings loads.
             // `content` rides along for the history's field-level diff (the sync overwrites the
             // document wholesale, so what it CHANGED is the interesting part).
-            val current = CatalogFiles.select(CatalogFiles.sourceUrl, CatalogFiles.content)
+            val current = CatalogFiles.select(CatalogFiles.sourceUrl, CatalogFiles.content, CatalogFiles.revision)
                 .where { (CatalogFiles.id eq id) and active() }
                 .forUpdate()
                 .toList()
                 .singleOrNull()
                 ?: return@suspendTransaction CatalogFileUpdateResult(rows = 0, waived = emptyList())
+            requireExpectedRevision(expectedRevision, current[CatalogFiles.revision])
             if (current[CatalogFiles.sourceUrl] == null) {
                 throw BadRequestException("This file has no source reference — set one before syncing")
             }
@@ -449,6 +467,7 @@ class CatalogFileService(
                 it[updatedAt] = now
                 it[lastSyncedAt] = now
                 it[syncedContent] = encoded
+                it[revision] = current[CatalogFiles.revision] + 1
             }
             val changes = documentChanges(json.decodeFromString(current[CatalogFiles.content]), stored)
             eventService.recordInTransaction(id, actingUserId, catalogFileSyncEvent(changes))
@@ -461,12 +480,18 @@ class CatalogFileService(
 
     /** The sync state of one active file (null = no such file — the route's 404). */
     suspend fun syncState(id: UInt): CatalogFileSyncState? = suspendTransaction(database) {
-        CatalogFiles.select(CatalogFiles.sourceUrl, CatalogFiles.lastSyncedAt, CatalogFiles.syncedContent)
+        CatalogFiles.select(
+            CatalogFiles.revision,
+            CatalogFiles.sourceUrl,
+            CatalogFiles.lastSyncedAt,
+            CatalogFiles.syncedContent,
+        )
             .where { (CatalogFiles.id eq id) and active() }
             .toList()
             .singleOrNull()
             ?.let { row ->
                 CatalogFileSyncState(
+                    revision = row[CatalogFiles.revision],
                     sourceUrl = row[CatalogFiles.sourceUrl],
                     lastSyncedAt = row[CatalogFiles.lastSyncedAt],
                     syncedDocument = row[CatalogFiles.syncedContent]
@@ -475,9 +500,21 @@ class CatalogFileService(
             }
     }
 
-    suspend fun delete(id: UInt, actingUserId: UInt): Int = suspendTransaction(database) {
+    suspend fun delete(
+        id: UInt,
+        actingUserId: UInt,
+        expectedRevision: Long? = null,
+    ): Int = suspendTransaction(database) {
+        val current = CatalogFiles.select(CatalogFiles.revision)
+            .where { (CatalogFiles.id eq id) and active() }
+            .forUpdate()
+            .toList()
+            .singleOrNull()
+            ?: return@suspendTransaction 0
+        requireExpectedRevision(expectedRevision, current[CatalogFiles.revision])
         val rows = CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
             it[markedAsDeleted] = true
+            it[revision] = current[CatalogFiles.revision] + 1
         }
         if (rows > 0) {
             eventService.recordInTransaction(id, actingUserId, catalogFileDeletionEvent())
@@ -593,6 +630,7 @@ class CatalogFileService(
             .map {
                 CatalogSource(
                     id = it[CatalogFiles.id].value,
+                    revision = it[CatalogFiles.revision],
                     file = json.decodeFromString(it[CatalogFiles.content]),
                     sourceUrl = it[CatalogFiles.sourceUrl],
                 )
@@ -614,6 +652,7 @@ class CatalogFileService(
 
     private fun ResultRow.toDetail(): CatalogFileDetail = CatalogFileDetail(
         id = this[CatalogFiles.id].value,
+        revision = this[CatalogFiles.revision],
         file = json.decodeFromString<CatalogFile>(this[CatalogFiles.content]),
         createdBy = this[CatalogFiles.createdBy].value,
         creatorName = this[UserService.Users.name],
@@ -626,6 +665,7 @@ class CatalogFileService(
 
     private fun CatalogFileDetail.toListItem() = CatalogFileListItem(
         id = id,
+        revision = revision,
         kind = file.kind,
         name = file.metadata.name,
         namespace = file.metadata.namespace,
@@ -640,5 +680,11 @@ class CatalogFileService(
         sourceUrl = sourceUrl,
         lastSyncedAt = lastSyncedAt,
     )
+
+    private fun requireExpectedRevision(expected: Long?, current: Long) {
+        if (expected != null && expected != current) {
+            throw CatalogRevisionConflictException(expected, current)
+        }
+    }
 
 }

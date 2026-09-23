@@ -57,6 +57,7 @@ fun Application.configureHttp() {
             allowMethod(HttpMethod.Patch)
             allowHeader(HttpHeaders.Authorization)
             allowHeader(HttpHeaders.ContentType)
+            allowHeader("X-Expected-Revision")
             corsHosts.forEach { allowHost(it, schemes = listOf("http", "https")) }
         }
     }

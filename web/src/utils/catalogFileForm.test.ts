@@ -198,6 +198,7 @@ describe("toCatalogFileRequest / fromCatalogFileResponse", () => {
     (kind) => {
       const response: CatalogFileResponse = {
         id: 7,
+        revision: 1,
         kind,
         metadata: { name: "thing", namespace: "team-a" },
         spec: {

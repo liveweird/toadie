@@ -13,6 +13,7 @@ import {
   listAllCatalogFiles,
   listCatalogFiles,
   softRejectionFindings,
+  syncCatalogFile,
   updateCatalogFile,
   type CatalogFileRequest,
 } from "./catalogFiles";
@@ -87,19 +88,31 @@ describe("catalogFiles API wrappers", () => {
 
   test("updateCatalogFile PUTs the document to the id path", async () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
-    await updateCatalogFile(5, REQUEST);
+    await updateCatalogFile(5, REQUEST, 7);
     const [url, init] = lastCall();
     expect(url).toBe("/api/v1/files/5");
     expect(init.method).toBe("PUT");
+    expect(new Headers(init.headers).get("X-Expected-Revision")).toBe("7");
     expect(JSON.parse(init.body as string)).toEqual(REQUEST);
   });
 
   test("deleteCatalogFile DELETEs the id path", async () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
-    await deleteCatalogFile(5);
+    await deleteCatalogFile(5, 7);
     const [url, init] = lastCall();
     expect(url).toBe("/api/v1/files/5");
     expect(init.method).toBe("DELETE");
+    expect(new Headers(init.headers).get("X-Expected-Revision")).toBe("7");
+  });
+
+  test("syncCatalogFile sends the compared revision with its document", async () => {
+    mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
+    await syncCatalogFile(5, REQUEST, 7);
+    const [url, init] = lastCall();
+    expect(url).toBe("/api/v1/files/5/sync");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("X-Expected-Revision")).toBe("7");
+    expect(JSON.parse(init.body as string)).toEqual({ document: REQUEST });
   });
 
   test("getCatalogErrors appends only the populated filters", async () => {

@@ -1221,10 +1221,15 @@ paths:
 
         The replacement and any UPDATED history event commit together. Failure to store
         the event preserves the previous file, source reference, timestamps, and sync state.
-        An unchanged save creates no event. Concurrent replacements remain last-write-wins;
-        each event describes the state its transaction actually replaced.
+        An unchanged save creates no event and retains the file's revision. Send the optional
+        `X-Expected-Revision` header from the latest detail/list/graph response to guard the
+        replacement: a stale value answers `409` with problem type
+        `urn:toadie:catalog-revision-conflict`. The header is optional for v1 compatibility;
+        an omitted header keeps last-write-wins behavior. Every state-changing write still
+        advances the revision, including an unguarded legacy write.
       parameters:
         - $ref: '#/components/parameters/AllowInvalid'
+        - $ref: '#/components/parameters/ExpectedCatalogRevision'
       requestBody:
         required: true
         content:
@@ -1246,12 +1251,17 @@ paths:
       description: |
         Soft delete — the file leaves every list and read, and its identity is freed.
         The deletion flag and DELETED history event commit together; failure to store the
-        event leaves the file active. The event outlives the soft-deleted file.
+        event leaves the file active. The event outlives the soft-deleted file. Send the
+        optional `X-Expected-Revision` header to reject a stale delete with the typed `409`;
+        omission preserves the v1 unguarded behavior.
+      parameters:
+        - $ref: '#/components/parameters/ExpectedCatalogRevision'
       responses:
         '204': { description: Deleted }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
   /api/v1/files/{id}/events:
@@ -1342,7 +1352,12 @@ paths:
 
         The document, sync timestamp, baseline, and SYNCED history event commit together.
         Failure to store the event preserves the complete previous state. A matching
-        document still records a sync event because performing the sync is itself an action.
+        document still records a sync event and advances the revision because performing the
+        sync is itself an action. Send the optional `X-Expected-Revision` header to reject a
+        stale sync with problem type `urn:toadie:catalog-revision-conflict`; omission preserves
+        the v1 unguarded behavior.
+      parameters:
+        - $ref: '#/components/parameters/ExpectedCatalogRevision'
       requestBody:
         required: true
         content:
@@ -2975,6 +2990,17 @@ components:
         the explicit save-anyway opt-in. The structural descriptor-format rules and
         namespace resolution stay hard `400`s regardless. Waived findings surface on the
         workspace Errors report and block the file's next strict save.
+    ExpectedCatalogRevision:
+      name: X-Expected-Revision
+      in: header
+      required: false
+      schema: { type: integer, format: int64, minimum: 1 }
+      description: >-
+        Optional optimistic-concurrency token for catalog-file PUT, sync, and delete. Use the
+        revision from the latest detail, list, graph stored node, or sync-state response.
+        A stale value answers 409 with problem type
+        `urn:toadie:catalog-revision-conflict`; malformed or non-positive values answer 400.
+        Omission preserves the v1 unguarded-write contract.
     Sort:
       name: sort
       in: query
@@ -3856,9 +3882,10 @@ components:
 
     CatalogFileResponse:
       type: object
-      required: [id, kind, metadata, spec, createdBy, creatorName, creatorDeleted, createdAt, updatedAt, sourceUrl, lastSyncedAt]
+      required: [id, revision, kind, metadata, spec, createdBy, creatorName, creatorDeleted, createdAt, updatedAt, sourceUrl, lastSyncedAt]
       properties:
         id: { type: integer, format: int32, minimum: 0 }
+        revision: { type: integer, format: int64, minimum: 1 }
         kind: { $ref: '#/components/schemas/EntityKind' }
         metadata: { $ref: '#/components/schemas/CatalogFileMetadata' }
         spec: { $ref: '#/components/schemas/EntitySpec' }
@@ -3882,9 +3909,10 @@ components:
 
     CatalogFileListItem:
       type: object
-      required: [id, kind, name, namespace, title, type, lifecycle, owner, tags, creatorName, creatorDeleted, updatedAt, sourceUrl, lastSyncedAt]
+      required: [id, revision, kind, name, namespace, title, type, lifecycle, owner, tags, creatorName, creatorDeleted, updatedAt, sourceUrl, lastSyncedAt]
       properties:
         id: { type: integer, format: int32, minimum: 0 }
+        revision: { type: integer, format: int64, minimum: 1 }
         kind: { $ref: '#/components/schemas/EntityKind' }
         name: { type: string }
         namespace: { type: string }
@@ -3913,8 +3941,9 @@ components:
 
     SyncStateResponse:
       type: object
-      required: [sourceUrl, lastSyncedAt, syncedDocument]
+      required: [revision, sourceUrl, lastSyncedAt, syncedDocument]
       properties:
+        revision: { type: integer, format: int64, minimum: 1 }
         sourceUrl:
           type: string
           nullable: true
@@ -4093,6 +4122,12 @@ components:
           minimum: 0
           nullable: true
           description: The backing file for STORED nodes; null for a MISSING node.
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+          description: The backing file's mutation token for STORED nodes; null for a MISSING node.
         status: { $ref: '#/components/schemas/GraphNodeStatus' }
 
     GraphEdge:

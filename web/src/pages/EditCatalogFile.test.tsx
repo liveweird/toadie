@@ -113,6 +113,7 @@ describe("EditCatalogFile page", () => {
       ([url, init]) => (init as RequestInit | undefined)?.method === "PUT" && url === "/api/v1/files/7",
     );
     expect(putCall).toBeDefined();
+    expect(new Headers((putCall![1] as RequestInit).headers).get("X-Expected-Revision")).toBe("1");
     expect(JSON.parse((putCall![1] as RequestInit).body as string)).toEqual({
       kind: "Component",
       metadata: {
@@ -199,10 +200,8 @@ describe("EditCatalogFile page", () => {
 
     const nameInput = (await screen.findByLabelText(/^name( \*)?$/i)) as HTMLInputElement;
     await waitFor(() => expect(nameInput.value).toBe("stored-svc"));
-    await user.type(
-      screen.getByLabelText(/subcomponent of/i, { selector: "input" }),
-      "component:team-a/stored-svc",
-    );
+    await user.click(screen.getByLabelText(/subcomponent of/i, { selector: "input" }));
+    await user.paste("component:team-a/stored-svc");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
     // The strict PUT was rejected for the self reference — the modal lists it (scoped: the
@@ -219,6 +218,76 @@ describe("EditCatalogFile page", () => {
         url === "/api/v1/files/7?allowInvalid=true",
     );
     expect(waived).toBeDefined();
+    const puts = mockFetch.mock.calls.filter(
+      ([url, init]) => (init as RequestInit | undefined)?.method === "PUT" && String(url).startsWith("/api/v1/files/7"),
+    );
+    expect(puts.map(([, init]) => new Headers((init as RequestInit).headers).get("X-Expected-Revision")))
+      .toEqual(["1", "1"]);
+  });
+
+  test("a stale save keeps the user's draft and explains how to review the latest file", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/v1/files/7" && (init?.method ?? "GET") === "GET") {
+        return Promise.resolve(jsonResponse(200, { ...STORED_FILE, revision: 4 }));
+      }
+      if (url === "/api/v1/files/7" && init?.method === "PUT") {
+        return Promise.resolve(jsonResponse(409, {
+          type: "urn:toadie:catalog-revision-conflict",
+          title: "Conflict",
+          status: 409,
+        }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderEdit();
+    const title = await screen.findByLabelText("Title");
+    await user.clear(title);
+    await user.paste("My unsaved draft");
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText(/This file changed since you opened it/)).toBeInTheDocument();
+    expect(title).toHaveValue("My unsaved draft");
+    expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
+    const put = mockFetch.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "PUT");
+    expect(new Headers((put![1] as RequestInit).headers).get("X-Expected-Revision")).toBe("4");
+  });
+
+  test("a background detail refetch cannot rebase a draft onto a newer revision", async () => {
+    let reads = 0;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url === "/api/v1/files/7" && method === "GET") {
+        reads += 1;
+        return Promise.resolve(jsonResponse(200, {
+          ...STORED_FILE,
+          revision: reads === 1 ? 4 : 5,
+          metadata: { ...STORED_FILE.metadata, title: reads === 1 ? "Stored" : "Other editor" },
+        }));
+      }
+      if (url === "/api/v1/files/7" && method === "PUT") {
+        return Promise.resolve(jsonResponse(409, {
+          type: "urn:toadie:catalog-revision-conflict",
+          title: "Conflict",
+          status: 409,
+        }));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderEdit();
+    const title = await screen.findByLabelText("Title");
+    await user.clear(title);
+    await user.paste("My draft");
+    await user.click(screen.getByRole("button", { name: "Overwrite with YAML" }));
+    await waitFor(() => expect(reads).toBeGreaterThan(1));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText(/This file changed since you opened it/)).toBeInTheDocument();
+    expect(title).toHaveValue("My draft");
+    const put = mockFetch.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "PUT");
+    expect(new Headers((put![1] as RequestInit).headers).get("X-Expected-Revision")).toBe("4");
   });
 
   test("a non-numeric id redirects to the list without fetching the file", () => {

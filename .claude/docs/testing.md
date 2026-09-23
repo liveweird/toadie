@@ -10,6 +10,15 @@ overlap with an observed database lock barrier to verify the event diff's actual
 Fault injection belongs only in tests, scoped to uniquely owned fixtures, with cancellation-safe
 cleanup; never add production timing/failure hooks or alter applied migrations.
 
+**Catalog optimistic concurrency.** Exercise the optional `X-Expected-Revision` guard on PUT,
+repo sync, and delete with real persisted revisions. Pin malformed/non-positive headers as
+`400`, stale guards as `409` with type `urn:toadie:catalog-revision-conflict`, and verify the
+losing request changes neither the row nor history. Cover document changes, source-only changes,
+always-recorded matching syncs, stable no-op PUTs, and headerless legacy writes advancing the
+revision. An overlap regression must hold the real PostgreSQL row lock, queue two guarded writers
+with the same revision, then prove exactly one commits and one conflicts after observing the
+winner's increment; do not use sleeps or an in-process mutex.
+
 **Tag-category concurrency.** Exercise overlapping create/create, replace/replace, and
 create/replace claims against real PostgreSQL connections. Use a held database lock and
 observe blocked contenders before release, so the original check-then-write implementation

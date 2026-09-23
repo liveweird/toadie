@@ -95,17 +95,22 @@ export async function createCatalogFile(
 export async function updateCatalogFile(
   id: number,
   req: CatalogFileWriteRequest,
+  expectedRevision: number,
   opts?: CatalogSaveOptions,
 ): Promise<void> {
   const params = saveQuery(opts);
   await voidRequest(`/api/v1/files/${id}${params ? `?${params}` : ""}`, {
     method: "PUT",
+    headers: { "X-Expected-Revision": String(expectedRevision) },
     body: JSON.stringify(req),
   });
 }
 
-export async function deleteCatalogFile(id: number): Promise<void> {
-  await voidRequest(`/api/v1/files/${id}`, { method: "DELETE" });
+export async function deleteCatalogFile(id: number, expectedRevision: number): Promise<void> {
+  await voidRequest(`/api/v1/files/${id}`, {
+    method: "DELETE",
+    headers: { "X-Expected-Revision": String(expectedRevision) },
+  });
 }
 
 export type ErrorsReport =
@@ -216,9 +221,14 @@ export async function getSyncState(id: number): Promise<SyncState> {
  * The repo→DB sync: overwrites the DB copy with `document` (the parsed repo copy) and
  * stamps the sync state. Soft findings are always waived server-side (the import posture).
  */
-export async function syncCatalogFile(id: number, document: CatalogFileRequest): Promise<void> {
+export async function syncCatalogFile(
+  id: number,
+  document: CatalogFileRequest,
+  expectedRevision: number,
+): Promise<void> {
   await voidRequest(`/api/v1/files/${id}/sync`, {
     method: "POST",
+    headers: { "X-Expected-Revision": String(expectedRevision) },
     body: JSON.stringify({ document }),
   });
 }

@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.14.0",
+    date: "2026-09-23",
+    en: `**Safer catalog editing and a tested recovery path.** Catalog file edits, YAML overwrite, source sync, and deletion now check the revision you saw before changing a file. If another editor has saved first, Toadie keeps your draft and asks you to reload instead of silently overwriting their work. New Kubernetes PostgreSQL claims start at 10 GiB, with a documented backup and restore procedure and an isolated restore drill.`,
+    pl: `**Bezpieczniejsza edycja katalogu i sprawdzona ścieżka odtwarzania.** Edycja pliku katalogu, nadpisanie YAML-em, synchronizacja ze źródła i usunięcie sprawdzają teraz wersję widzianą przed zmianą pliku. Jeśli inna osoba zapisze wcześniej, Toadie zachowuje szkic i prosi o ponowne wczytanie zamiast po cichu nadpisać cudzą pracę. Nowe wolumeny PostgreSQL w Kubernetes zaczynają od 10 GiB; dostępne są też instrukcja tworzenia i odtwarzania kopii oraz odizolowany test odtwarzania.`,
+  },
+  {
     version: "2.13.1",
     date: "2026-09-20",
     en: `**Tidier sync internals, a stricter sign-in sweep, and a locked-down pod.** The three fetch routes, the two source-reference writers and the two sourceUrl guards now share one implementation each, the sync modals read one shared set of strings, and a test that used to sleep on a timer now flushes the microtask queue instead. A new test walks every operation in the API contract without credentials and proves each answers 401, and confirms a login token opens no integration door and an integration key opens no REST door. The Kubernetes pod runs as a non-root user on a read-only filesystem with every capability dropped and only /tmp writable.`,

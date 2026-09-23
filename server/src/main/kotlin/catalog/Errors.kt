@@ -142,6 +142,8 @@ data class ErrorsReport(
 /** What the checker needs to know about one stored file. */
 data class CatalogSource(
     val id: UInt,
+    /** Monotonic envelope revision; carried into STORED graph nodes for guarded actions. */
+    val revision: Long = 1,
     val file: CatalogFile,
     /** The row's source reference — feeds only the report-only SOURCE_MISSING check.
      *  Deliberately NO default: a caller that forgot the column would silently flag the

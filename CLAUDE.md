@@ -50,6 +50,12 @@ after success. Imports retain one transaction per document. Fault-injection test
 history failures roll back the full file state and leave adjacent successful import rows intact.
 Preserve no-op PUT suppression, always-recorded syncs, redaction, and truthful concurrent diffs.
 
+Catalog file writes support an optional `X-Expected-Revision` guard in `/api/v1`: the SPA sends
+the revision paired with its original detail/list/graph/sync-state read on replace, sync, and
+delete. A stale revision gives a typed `409` without changing the file or history; headerless
+legacy writes remain accepted and advance the revision. Follow `.claude/docs/persistence.md`
+for the atomic service rule and `web/CLAUDE.md` for draft/reseed handling.
+
 Tag-category create, replace, and soft-delete serialize in PostgreSQL before reading registry
 state. The ownership check and mutation share one transaction, so overlapping claims cannot
 assign a tag to different active categories. Preserve the complete losing category on `409`,

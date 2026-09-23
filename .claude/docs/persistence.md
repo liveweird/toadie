@@ -513,8 +513,22 @@ free-text redaction remain unchanged.
 
 Replacement and sync lock the current file row before deriving the before/after diff, so
 concurrent writes describe the state they actually replace. Keep these transactions short;
-URL fetching stays outside them. This is per-file transaction consistency, not optimistic
-concurrency control: competing full replacements still have last-write-wins behavior.
+URL fetching stays outside them.
+
+**Catalog optimistic concurrency (V40).**
+- **Applies when:** A caller replaces, repo-syncs, or soft-deletes a catalog file.
+- **Requirement:** `catalog_files.revision BIGINT NOT NULL DEFAULT 1` is returned by detail,
+  list, sync-state, and graph stored-node reads. A supplied `X-Expected-Revision` is compared
+  with the current row after the existing `FOR UPDATE` lock is acquired; mismatch throws the
+  typed `urn:toadie:catalog-revision-conflict` `409` before changing the row or history. Every
+  content/source change, every sync, and every delete increments the revision in the same
+  transaction as its history event; a no-op PUT keeps it stable. The header remains optional
+  for `/api/v1` compatibility, so an omitted header is an unguarded last-write-wins mutation,
+  but it still increments the revision for guarded clients. Creates/imports start at revision 1.
+- **Reference:** `CatalogFileService`, `CatalogFileRoutes`, `V40__catalog_file_revision.sql`.
+- **Enforcement:** `CatalogFileConcurrencyTest` and `MigrationChecksumTest`.
+- **Exception:** The optional header preserves released v1 clients; the SPA always supplies it
+  for interactive PUT, sync, and delete flows.
 
 Import remains report-and-skip with one transaction per document. Each successful row commits
 its file and CREATED event (`origin=import`) together. An unexpected storage/history failure

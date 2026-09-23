@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router-dom";
 import { Alert, Button, Paper, Stack } from "@mantine/core";
@@ -41,9 +41,16 @@ export default function EditCatalogFile() {
     validateInputOnBlur: true,
   });
 
+  // Keep the revision paired with the form's original document. A background query refetch
+  // may update `data` without changing the user's draft, so it must not advance this value.
+  const formRevision = useRef<number | null>(null);
+
   // The strict-save → Save-anyway flow shared with the create page.
   const save = useCatalogFileSave({
-    saveRequest: (body, options) => updateCatalogFile(id, body, options),
+    saveRequest: (body, options) => {
+      if (formRevision.current == null) throw new Error("Catalog form has no loaded revision");
+      return updateCatalogFile(id, body, formRevision.current, options);
+    },
     toastKey: "catalog.toast.saved",
     errorKeys: CATALOG_SAVE_ERROR_KEYS,
   });
@@ -73,14 +80,14 @@ export default function EditCatalogFile() {
     // is replaced by its load-error branch — which is what must happen, since a Save over a
     // form we could not refresh would revert the write that just committed.
     try {
-      const values = fromCatalogFileResponse(
-        await queryClient.fetchQuery({
+      const refreshed = await queryClient.fetchQuery({
           queryKey: ["catalogFiles", "detail", id],
           queryFn: () => getCatalogFile(id),
           retry: false,
           staleTime: 0,
-        }),
-      );
+        });
+      const values = fromCatalogFileResponse(refreshed);
+      formRevision.current = refreshed.revision;
       form.setInitialValues(values);
       form.setValues(values);
       form.resetDirty();
@@ -97,6 +104,10 @@ export default function EditCatalogFile() {
     enabled: idIsValid,
     retry: false,
   });
+
+  useEffect(() => {
+    if (data && formRevision.current == null) formRevision.current = data.revision;
+  }, [data]);
 
   // Derived, not effect-set: initialize applies once (the guarded-initialize idiom).
   if (data && !form.initialized) {

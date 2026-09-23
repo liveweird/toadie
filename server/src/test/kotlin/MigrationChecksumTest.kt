@@ -59,6 +59,7 @@ class MigrationChecksumTest {
         "V37__entity_source.sql" to -153945127,
         "V38__blueprint_source.sql" to 977124289,
         "V39__ontology_revision.sql" to 246056121,
+        "V40__catalog_file_revision.sql" to 1121035069,
     )
 
     @Test

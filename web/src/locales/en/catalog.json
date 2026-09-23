@@ -114,6 +114,7 @@
   },
   "validationError": "Validation error. Please check the form and try again.",
   "conflictError": "An active file with this namespace and name already exists.",
+  "staleRevision": "This file changed since you opened it. Your draft is still here; copy it before reloading and reviewing the latest version.",
   "toast": {
     "created": "Catalog file created",
     "saved": "Catalog file updated",

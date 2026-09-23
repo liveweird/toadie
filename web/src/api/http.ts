@@ -213,6 +213,11 @@ export class ApiError extends Error {
     this.body = body;
   }
 
+  /** The RFC 7807 `type` URI, when the problem body carried one. */
+  get type(): string | undefined {
+    return this.problemField("type");
+  }
+
   /** The RFC 7807 `detail` string, when the problem body carried one. */
   get detail(): string | undefined {
     return this.problemField("detail");
@@ -223,7 +228,7 @@ export class ApiError extends Error {
     return this.problemField("instance");
   }
 
-  private problemField(field: "detail" | "instance"): string | undefined {
+  private problemField(field: "type" | "detail" | "instance"): string | undefined {
     const value = (this.body as Record<string, unknown> | null)?.[field];
     return typeof value === "string" ? value : undefined;
   }

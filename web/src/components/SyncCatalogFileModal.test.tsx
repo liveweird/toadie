@@ -42,6 +42,7 @@ const DETAIL = catalogFileResponse({
 const SYNC_STATE = {
   sourceUrl: SOURCE_URL,
   lastSyncedAt: 1000,
+  revision: 1,
   syncedDocument: {
     kind: "Component",
     metadata: { name: "svc", namespace: "default", title: "Base title" },
@@ -136,11 +137,32 @@ describe("SyncCatalogFileModal", () => {
       ([url, init]) => url === "/api/v1/files/1/sync" && (init as RequestInit)?.method === "POST",
     );
     expect(syncCall).toBeDefined();
+    expect(new Headers((syncCall![1] as RequestInit).headers).get("X-Expected-Revision")).toBe("1");
     const body = JSON.parse((syncCall![1] as RequestInit).body as string) as {
       document: CatalogFileRequest;
     };
     expect(body.document.metadata.title).toBe("New title");
     expect(body.document.metadata.name).toBe("svc");
+  });
+
+  test("a changed source reference uses the fresh detail URL", async () => {
+    const freshSource = "https://raw.githubusercontent.com/acme/svc/main/new-catalog-info.yaml";
+    mockRoutes(mockFetch, { detail: jsonResponse(200, { ...DETAIL, sourceUrl: freshSource }) });
+    renderModal();
+    await screen.findByText("Changed in repo");
+    const fetchCall = mockFetch.mock.calls.find(([url]) => url === "/api/v1/files/fetch");
+    expect(fetchCall).toBeDefined();
+    expect(JSON.parse((fetchCall![1] as RequestInit).body as string)).toEqual({ url: freshSource });
+  });
+
+  test("a mixed detail and sync-state revision cannot be confirmed", async () => {
+    mockRoutes(mockFetch, { state: jsonResponse(200, { ...SYNC_STATE, revision: 2 }) });
+    renderModal();
+    expect(await screen.findByText(/This file changed since you opened it/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
+    expect(mockFetch.mock.calls.some(
+      ([url, init]) => url === "/api/v1/files/1/sync" && (init as RequestInit | undefined)?.method === "POST",
+    )).toBe(false);
   });
 
   test("identical DB and repo copies read as in sync and disable the overwrite", async () => {

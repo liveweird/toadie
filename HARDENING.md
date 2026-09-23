@@ -534,7 +534,13 @@ the pinned 21/24; both were closed and the ignore rule added.
 
 - [ ] Replace ingress-nginx with Traefik; verify TLS, HSTS, redirects, forwarded-header trust,
   real client IPs/rate limits, upload limits, probes, and rollback.
-- [ ] Right-size storage; document and exercise backup/restore without touching the dev volume.
+- [x] Right-size storage and exercise backup/restore without touching the dev volume. New claims
+  start at 10 GiB; `k8s/BACKUP-RESTORE.md` defines measurement/alerting, expansion and retention
+  guidance, production backup handling, and the disposable two-volume restore drill. The drill's
+  guarded random Compose project publishes no ports, mounts no existing volumes, verifies a
+  custom-format archive after restoring into a second empty PostgreSQL 18 volume, and removes
+  only its own resources on completion, failure, or catchable interruption. Production capacity,
+  RPO, and RTO still need measurement and an operator decision before deployment.
 - [ ] Adopt immutable release image references with an intentional update process.
 - [ ] Keep one app replica until instance-local authentication state is addressed — the
   Deployment's `strategy: Recreate` (k8s/app-deployment.yaml) only stops a rolling update from
@@ -564,7 +570,12 @@ The app pod now declares the full security context above (non-root uid 10001, re
 
 - [x] Extract graph persistence into a dedicated hook as part of Stage 3.
 - [ ] Split catalog service/form responsibilities where concrete changes repeatedly overlap.
-- [ ] Add optimistic concurrency for catalog edits before relying on multi-user editing.
+- [x] Guard SPA catalog edits against stale writes. V40 adds per-file revisions; the editor,
+  YAML overwrite, repo sync, and Files/Hierarchy deletion send their captured revision in
+  `X-Expected-Revision`. A mismatch leaves file/history unchanged and returns a typed `409`;
+  the SPA keeps the losing draft. The header is optional for released `/api/v1` compatibility:
+  legacy API clients can still make unguarded writes, and a mandatory contract belongs in a
+  future API version (registered under API-CACHE-003).
 
 Do not introduce a generic registry framework or interfaces solely to satisfy a principle.
 The modular-monolith architecture remains appropriate; the work is hardening, not a rewrite.
