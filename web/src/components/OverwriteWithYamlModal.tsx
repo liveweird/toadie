@@ -8,7 +8,7 @@ import YamlDiffView from "./YamlDiffView";
 import { parseCatalogYaml, pickRepoDocument } from "../utils/catalogImport";
 import { catalogInfoYaml } from "../utils/catalogYaml";
 import { diffLines } from "../utils/yamlDiff";
-import { CATALOG_SAVE_ERROR_KEYS, loadErrorMessage, saveErrorMessage } from "../utils/saveError";
+import { catalogMutationErrorMessage, loadErrorMessage } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
 
 /** The identity a multi-document paste is matched against. */
@@ -142,7 +142,7 @@ function OverwriteModalBody({
 
   async function onConfirm() {
     // The detail is what carries `sourceUrl` forward, so never write without it.
-    if (document == null || !detail.data) return;
+    if (document == null || !detail.data || detail.isFetching) return;
     onSavingChange(true);
     setSaveError(null);
     try {
@@ -152,6 +152,7 @@ function OverwriteModalBody({
       await updateCatalogFile(
         file.id,
         { ...document, sourceUrl: detail.data?.sourceUrl ?? undefined },
+        detail.data.revision,
         findingCount > 0 ? { allowInvalid: true } : undefined,
       );
       showSuccessToast(t("catalog.toast.overwritten"));
@@ -161,7 +162,7 @@ function OverwriteModalBody({
       onCompleted?.();
     } catch (err) {
       onSavingChange(false);
-      setSaveError(saveErrorMessage(err, t, CATALOG_SAVE_ERROR_KEYS));
+      setSaveError(catalogMutationErrorMessage(err, t));
     }
   }
 
@@ -197,7 +198,7 @@ function OverwriteModalBody({
         </FileButton>
       </Group>
 
-      {detail.isLoading && (
+      {detail.isFetching && (
         <Loader size="sm" role="status" aria-label={t("catalog.overwrite.loadingAria")} />
       )}
 
@@ -241,7 +242,7 @@ function OverwriteModalBody({
           color="red"
           onClick={() => void onConfirm()}
           loading={saving}
-          disabled={document == null || identical || !detail.data}
+          disabled={document == null || identical || !detail.data || detail.isFetching}
         >
           {t("catalog.overwrite.confirm")}
         </Button>

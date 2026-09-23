@@ -9,7 +9,7 @@ import {
   type CatalogFileWriteRequest,
   type DocumentCheckFinding,
 } from "../api/catalogFiles";
-import { saveErrorMessage, type SaveErrorKeys } from "../utils/saveError";
+import { isCatalogRevisionConflict, saveErrorMessage, type SaveErrorKeys } from "../utils/saveError";
 import { showSuccessToast } from "../utils/toast";
 import { catalogFilesPath } from "../utils/catalogFileLinks";
 import type { CatalogFileFormValues } from "../utils/catalogFileForm";
@@ -54,7 +54,9 @@ export function useCatalogFileSave({
     navigate(catalogFilesPath, { replace: true });
   }
 
-  const mapError = (err: unknown) => saveErrorMessage(err, t, errorKeys);
+  const mapError = (err: unknown) => isCatalogRevisionConflict(err)
+    ? t("catalog.staleRevision")
+    : saveErrorMessage(err, t, errorKeys);
 
   async function onSubmit(values: CatalogFileFormValues) {
     setError(null);

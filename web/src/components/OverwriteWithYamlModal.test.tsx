@@ -123,6 +123,7 @@ describe("OverwriteWithYamlModal", () => {
       ([, init]) => (init as RequestInit | undefined)?.method === "PUT",
     );
     expect(put).toBeDefined();
+    expect(new Headers((put![1] as RequestInit).headers).get("X-Expected-Revision")).toBe("1");
     const body = JSON.parse((put![1] as RequestInit).body as string) as {
       metadata: { title: string };
       sourceUrl?: string;

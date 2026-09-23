@@ -10,4 +10,6 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 100Mi
+      # Initial production-sized allocation. Monitor actual PostgreSQL use and grow before
+      # 70%; the sizing and expansion procedure lives in k8s/BACKUP-RESTORE.md.
+      storage: 10Gi

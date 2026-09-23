@@ -7,6 +7,7 @@ import ch.nokillswit.authz.ForbiddenException
 import ch.nokillswit.authz.NotFoundException
 import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.authz.UnauthorizedException
+import ch.nokillswit.catalog.CatalogRevisionConflictException
 import ch.nokillswit.infra.validation.InvalidPayloadException
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
@@ -58,8 +59,9 @@ suspend fun ApplicationCall.respondProblem(
     detail: String? = null,
     title: String = status.description,
     instance: String? = null,
+    type: String = "about:blank",
 ) {
-    val problem = ProblemDetail(title = title, status = status.value, detail = detail, instance = instance)
+    val problem = ProblemDetail(type = type, title = title, status = status.value, detail = detail, instance = instance)
     respond(
         TextContent(
             problemSerializer.encodeToString(ProblemDetail.serializer(), problem),
@@ -245,6 +247,13 @@ fun Application.configureErrorHandling() {
         }
         exception<ConflictException> { call, cause ->
             call.respondProblem(HttpStatusCode.Conflict, cause.message ?: "Conflict")
+        }
+        exception<CatalogRevisionConflictException> { call, cause ->
+            call.respondProblem(
+                HttpStatusCode.Conflict,
+                cause.message,
+                type = "urn:toadie:catalog-revision-conflict",
+            )
         }
         exception<BadGatewayException> { call, cause ->
             call.respondProblem(HttpStatusCode.BadGateway, cause.message ?: "Upstream request failed")

@@ -181,6 +181,14 @@ per document. Preserve no-op PUT suppression, always-recorded syncs, redaction, 
 diff accuracy. Tag-category writes serialize the ownership check and mutation in the same
 transaction; a conflict must preserve the complete losing category.
 
+Catalog detail, list, sync-state, and stored graph nodes expose a per-file `revision`. SPA
+replace, sync, and delete flows send that value as `X-Expected-Revision`; the service checks it
+under the row lock and answers a typed `409` if the file changed. The header remains optional
+for `/api/v1` compatibility, so legacy clients can still make unguarded writes; those writes
+also advance the revision. Keep the form's revision paired with its original draft through
+background refetches and Save anyway, and retain user edits on a stale conflict. See
+`.claude/docs/persistence.md` and `web/CLAUDE.md` for the full rule.
+
 Catalog content is a shared authenticated workspace; ADMIN has no extra content privilege.
 Catalog validation has two classes. Structural descriptor rules and namespace resolution are
 hard: namespaces must exist in the `NAMESPACE` dictionary (blank resolves to its flagged default)

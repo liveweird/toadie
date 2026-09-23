@@ -34,6 +34,8 @@ data class GraphNode(
     val tags: List<String> = emptyList(),
     /** The backing file for STORED nodes; null for a MISSING one. */
     val fileId: UInt? = null,
+    /** The backing file's mutation token; null for a MISSING node. */
+    val revision: Long? = null,
     val status: GraphNodeStatus,
 )
 
@@ -64,6 +66,7 @@ private fun storedNode(source: CatalogSource): GraphNode {
         type = source.file.spec.type,
         tags = source.file.metadata.tags,
         fileId = source.id,
+        revision = source.revision,
         status = GraphNodeStatus.STORED,
     )
 }

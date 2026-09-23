@@ -33,6 +33,21 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
 
+const val EXPECTED_REVISION_HEADER = "X-Expected-Revision"
+
+private val POSITIVE_REVISION = Regex("[1-9]\\d*")
+
+/** Optional for v1 compatibility; when present it must identify one positive BIGINT revision. */
+private fun ApplicationCall.expectedRevision(): Long? {
+    val values = request.headers.getAll(EXPECTED_REVISION_HEADER) ?: return null
+    val raw = values.singleOrNull()
+    if (raw == null || !POSITIVE_REVISION.matches(raw)) {
+        throw BadRequestException("$EXPECTED_REVISION_HEADER must be one positive integer")
+    }
+    return raw.toLongOrNull()
+        ?: throw BadRequestException("$EXPECTED_REVISION_HEADER must be one positive integer")
+}
+
 // The URL says /files (the SPA's route name); the domain keeps its CatalogFile naming —
 // classes, DTOs, audit events, and the OpenAPI operationIds all stay catalog-file-shaped.
 @Serializable
@@ -263,6 +278,7 @@ fun Application.configureCatalogFileRoutes() {
                     route.id,
                     file,
                     caller.userId,
+                    expectedRevision = call.expectedRevision(),
                     allowInvalid = allowInvalid,
                     sourceUrl = sourceUrl,
                 )
@@ -284,7 +300,12 @@ fun Application.configureCatalogFileRoutes() {
                 val request = call.receive<SyncCatalogFileRequest>()
                 val file = sanitizedCatalogFile(request.document)
                 validateCatalogFile(file)
-                val result = catalogFileService.syncFromRepo(route.parent.id, file, caller.userId)
+                val result = catalogFileService.syncFromRepo(
+                    route.parent.id,
+                    file,
+                    caller.userId,
+                    expectedRevision = call.expectedRevision(),
+                )
                 result.rows.orNotFound("Catalog file")
                 audit(
                     "catalog_file.synced",
@@ -306,7 +327,11 @@ fun Application.configureCatalogFileRoutes() {
             }
             delete<CatalogFiles.Id> { route ->
                 val caller = call.caller()
-                catalogFileService.delete(route.id, caller.userId).orNotFound("Catalog file")
+                catalogFileService.delete(
+                    route.id,
+                    caller.userId,
+                    expectedRevision = call.expectedRevision(),
+                ).orNotFound("Catalog file")
                 audit(
                     "catalog_file.deleted",
                     "byUserId" to caller.userId.toLong(),

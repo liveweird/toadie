@@ -4,6 +4,7 @@ import ch.nokillswit.catalog.CatalogFileEventPageResponse
 import ch.nokillswit.catalog.CatalogFileEventType
 import ch.nokillswit.catalog.CatalogFileResponse
 import ch.nokillswit.catalog.CatalogFileWriteRequest
+import ch.nokillswit.catalog.EXPECTED_REVISION_HEADER
 import ch.nokillswit.catalog.ImportRequest
 import ch.nokillswit.catalog.ImportResponse
 import ch.nokillswit.catalog.ImportResultStatus
@@ -13,7 +14,12 @@ import ch.nokillswit.users.UserRole
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.sql.Connection
 import java.sql.DriverManager
@@ -411,6 +417,45 @@ class CatalogFileAtomicHistoryTest {
         val current: CatalogFileResponse = client.get("$CATALOG_FILES_PATH/${created.id}").body()
         assertEquals(current.metadata.title, updates[1].params["metadata.title.to"])
 
+        client.delete("$CATALOG_FILES_PATH/${created.id}")
+    }
+
+    @Test
+    fun `overlapping guarded updates allow exactly one revision winner`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("revision-overlap")
+        val name = uniqueEntityName("revision-overlap")
+        val created = client.createCatalogFile(componentFile(name, title = "Original"))
+        val barrier = CatalogRowBarrier.acquire(created.id)
+        try {
+            coroutineScope {
+                suspend fun replace(title: String) = client.put("$CATALOG_FILES_PATH/${created.id}") {
+                    header(EXPECTED_REVISION_HEADER, created.revision)
+                    contentType(ContentType.Application.Json)
+                    setBody(writeRequest(componentFile(name, title = title)))
+                }
+                val first = async { replace("First") }
+                val second = async { replace("Second") }
+                try {
+                    barrier.awaitWriters(2)
+                } finally {
+                    barrier.release()
+                }
+                val responses = withTimeout(15_000) { listOf(first.await(), second.await()) }
+                assertEquals(
+                    setOf(HttpStatusCode.NoContent, HttpStatusCode.Conflict),
+                    responses.map { it.status }.toSet(),
+                )
+            }
+        } finally {
+            barrier.release()
+        }
+
+        val current: CatalogFileResponse = client.get("$CATALOG_FILES_PATH/${created.id}").body()
+        assertEquals(created.revision + 1, current.revision)
+        val events: CatalogFileEventPageResponse =
+            client.get("$CATALOG_FILES_PATH/${created.id}/events").body()
+        assertEquals(1, events.items.count { it.type == CatalogFileEventType.UPDATED })
         client.delete("$CATALOG_FILES_PATH/${created.id}")
     }
 }

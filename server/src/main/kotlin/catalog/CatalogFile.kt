@@ -106,6 +106,7 @@ data class CatalogFileWriteRequest(
 @Serializable
 data class CatalogFileResponse(
     val id: UInt,
+    val revision: Long,
     val kind: String,
     val metadata: CatalogFileMetadata,
     val spec: EntitySpec,
@@ -123,6 +124,7 @@ data class CatalogFileResponse(
 @Serializable
 data class CatalogFileListItem(
     val id: UInt,
+    val revision: Long,
     val kind: String,
     val name: String,
     val namespace: String,
@@ -143,6 +145,7 @@ data class CatalogFileListItem(
 /** GET /files/{id}/sync — the sync state incl. the baseline document stored at the last sync. */
 @Serializable
 data class SyncStateResponse(
+    val revision: Long,
     val sourceUrl: String?,
     /** Epoch millis; 0 = never synced. */
     val lastSyncedAt: Long,
@@ -155,3 +158,15 @@ data class SyncStateResponse(
 data class SyncCatalogFileRequest(val document: CatalogFile)
 
 typealias CatalogFilePageResponse = PageResponse<CatalogFileListItem>
+
+/**
+ * A guarded mutation named an older catalog-file revision. This is deliberately separate
+ * from identity/unique conflicts so the transport can expose a stable RFC 7807 type and the
+ * SPA can offer reload/retry behavior without parsing human-readable detail text.
+ */
+class CatalogRevisionConflictException(
+    val expectedRevision: Long,
+    val currentRevision: Long,
+) : RuntimeException(
+    "Catalog file revision conflict: expected $expectedRevision but the current revision is $currentRevision",
+)

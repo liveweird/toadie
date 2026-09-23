@@ -26,7 +26,7 @@ import { useQuickViewParam } from "../hooks/useQuickViewParam";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
-import { loadErrorMessage } from "../utils/saveError";
+import { catalogMutationErrorMessage, isCatalogRevisionConflict, loadErrorMessage } from "../utils/saveError";
 import { formatDateTime, relativeTimeAgo } from "../utils/relativeTime";
 import { importCatalogFilesPath, newCatalogFilePath } from "../utils/catalogFileLinks";
 import KindBadge from "../components/KindBadge";
@@ -64,7 +64,14 @@ export default function CatalogFiles() {
   const { isLoading, isError, error } = query;
 
   const deleteConfirm = useDeleteConfirm<CatalogFileListItem>({
-    mutationFn: (row) => deleteCatalogFile(row.id),
+    mutationFn: async (row) => {
+      try {
+        await deleteCatalogFile(row.id, row.revision);
+      } catch (err) {
+        if (isCatalogRevisionConflict(err)) void queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
+        throw err;
+      }
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catalogFiles"] }),
     successMessage: t("catalog.toast.deleted"),
   });
@@ -242,6 +249,7 @@ export default function CatalogFiles() {
         confirm={deleteConfirm}
         title={t("catalog.deleteTitle")}
         errorTitle={t("catalog.deleteFailed")}
+        errorMessage={(err) => catalogMutationErrorMessage(err, t)}
         body={(target) => (
           <>
             {t("catalog.deleteBody", { name: target.name, namespace: target.namespace })}{" "}

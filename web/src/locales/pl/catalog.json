@@ -114,6 +114,7 @@
   },
   "validationError": "Błąd walidacji. Sprawdź formularz i spróbuj ponownie.",
   "conflictError": "Aktywny plik o tej przestrzeni nazw i nazwie już istnieje.",
+  "staleRevision": "Ten plik zmienił się od chwili otwarcia. Twój szkic nadal tu jest; skopiuj go przed odświeżeniem i sprawdzeniem najnowszej wersji.",
   "toast": {
     "created": "Utworzono plik katalogu",
     "saved": "Zaktualizowano plik katalogu",

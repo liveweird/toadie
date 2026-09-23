@@ -35,7 +35,7 @@ class OpenApiSpecTest {
         val request = SimpleRequest.Builder.get("/api/v1/files/1/sync").build()
         fun response(timestamp: String) = SimpleResponse.Builder.status(200)
             .withHeader("Content-Type", "application/json")
-            .withBody("""{"sourceUrl":null,"lastSyncedAt":$timestamp,"syncedDocument":null}""")
+            .withBody("""{"revision":1,"sourceUrl":null,"lastSyncedAt":$timestamp,"syncedDocument":null}""")
             .build()
         assertFalse(OpenApiSpec.validator.validate(request, response("0")).hasErrors())
         assertTrue(OpenApiSpec.validator.validate(request, response("\"invalid\"")).hasErrors())

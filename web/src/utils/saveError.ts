@@ -48,6 +48,18 @@ export const CATALOG_SAVE_ERROR_KEYS: SaveErrorKeys = {
   failed: "common.error.saveFailedNetwork",
 };
 
+/** The catalog revision conflict has its own stable problem type; an ordinary 409 is an identity clash. */
+export function isCatalogRevisionConflict(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409 &&
+    err.type === "urn:toadie:catalog-revision-conflict";
+}
+
+export function catalogMutationErrorMessage(err: unknown, t: TFunction): string {
+  return isCatalogRevisionConflict(err)
+    ? t("catalog.staleRevision")
+    : saveErrorMessage(err, t, CATALOG_SAVE_ERROR_KEYS);
+}
+
 /** The create page's variant: a create has no 404, and fails with the create wording. */
 export const CATALOG_CREATE_ERROR_KEYS: SaveErrorKeys = {
   invalid: "catalog.validationError",

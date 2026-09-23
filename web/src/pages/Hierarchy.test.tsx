@@ -14,11 +14,11 @@ type FetchMock = ReturnType<typeof vi.fn>;
 // placeholder parent with a child of its own.
 const GRAPH = {
   nodes: [
-    { id: "system:default/billing", kind: "system", namespace: "default", name: "billing", title: "Billing", fileId: 1, status: "STORED" },
-    { id: "component:default/core", kind: "component", namespace: "default", name: "core", title: null, fileId: 2, status: "STORED" },
-    { id: "component:default/worker", kind: "component", namespace: "default", name: "worker", title: null, fileId: 3, status: "STORED" },
+    { id: "system:default/billing", kind: "system", namespace: "default", name: "billing", title: "Billing", fileId: 1, revision: 1, status: "STORED" },
+    { id: "component:default/core", kind: "component", namespace: "default", name: "core", title: null, fileId: 2, revision: 1, status: "STORED" },
+    { id: "component:default/worker", kind: "component", namespace: "default", name: "worker", title: null, fileId: 3, revision: 1, status: "STORED" },
     { id: "system:default/gone-sys", kind: "system", namespace: "default", name: "gone-sys", title: null, fileId: null, status: "MISSING" },
-    { id: "component:default/orphan", kind: "component", namespace: "default", name: "orphan", title: null, fileId: 4, status: "STORED" },
+    { id: "component:default/orphan", kind: "component", namespace: "default", name: "orphan", title: null, fileId: 4, revision: 1, status: "STORED" },
   ],
   edges: [
     { sourceId: "component:default/core", targetId: "system:default/billing", field: "spec.system" },
@@ -124,6 +124,7 @@ describe("Hierarchy page", () => {
           (init as RequestInit | undefined)?.method === "DELETE" && url === "/api/v1/files/4",
       );
       expect(deleted).toBeTruthy();
+      expect(new Headers((deleted![1] as RequestInit).headers).get("X-Expected-Revision")).toBe("1");
     });
   });
 

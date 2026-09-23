@@ -28,7 +28,7 @@ import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useStoredState, isString } from "../hooks/useStoredState";
 import { buildHierarchy, findPlacement, type HierarchyNode } from "../utils/hierarchy";
-import { loadErrorMessage } from "../utils/saveError";
+import { catalogMutationErrorMessage, isCatalogRevisionConflict, loadErrorMessage } from "../utils/saveError";
 import LoadingBlock from "../components/LoadingBlock";
 import KindBadge from "../components/KindBadge";
 import classes from "../theme.module.css";
@@ -38,6 +38,7 @@ interface DeleteTarget {
   id: number;
   name: string;
   namespace: string;
+  revision: number;
 }
 
 /** Collapse-state keys are PATHS, not node ids — a User under two Groups folds independently. */
@@ -182,7 +183,14 @@ export default function Hierarchy() {
   }, [pinnedId, data, noKinds, placement, setPinnedId]);
 
   const deleteConfirm = useDeleteConfirm<DeleteTarget>({
-    mutationFn: (row) => deleteCatalogFile(row.id),
+    mutationFn: async (row) => {
+      try {
+        await deleteCatalogFile(row.id, row.revision);
+      } catch (err) {
+        if (isCatalogRevisionConflict(err)) void queryClient.invalidateQueries({ queryKey: ["catalogFiles"] });
+        throw err;
+      }
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catalogFiles"] }),
     successMessage: t("catalog.toast.deleted"),
   });
@@ -199,7 +207,8 @@ export default function Hierarchy() {
   const quickView = useQuickViewParam();
   const operations = (node: GraphNode) => {
     const fileId = node.fileId;
-    if (fileId == null) return null;
+    const revision = node.revision;
+    if (fileId == null || revision == null) return null;
     return (
       <CatalogFileOperations
         id={fileId}
@@ -216,7 +225,12 @@ export default function Hierarchy() {
         }
         onQuickView={() => quickView.open(fileId)}
         onDelete={() =>
-          deleteConfirm.requestDelete({ id: fileId, name: node.name, namespace: node.namespace })
+          deleteConfirm.requestDelete({
+            id: fileId,
+            name: node.name,
+            namespace: node.namespace,
+            revision,
+          })
         }
         pin={{
           pinned: node.id === pinnedId,
@@ -323,6 +337,7 @@ export default function Hierarchy() {
         confirm={deleteConfirm}
         title={t("catalog.deleteTitle")}
         errorTitle={t("catalog.deleteFailed")}
+        errorMessage={(err) => catalogMutationErrorMessage(err, t)}
         body={(target) => (
           <>
             {t("catalog.deleteBody", { name: target.name, namespace: target.namespace })}{" "}

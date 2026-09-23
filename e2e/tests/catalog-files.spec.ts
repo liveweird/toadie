@@ -157,3 +157,54 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await page.getByLabel("Name", { exact: true }).fill(name);
   await expect(page.getByText("No catalog files")).toBeVisible();
 });
+
+test("two editors keep the losing draft when the catalog file changes", async ({ page }) => {
+  await login(page);
+  const token = await page.evaluate(() => localStorage.getItem("toadie.auth.token"));
+  expect(token).toBeTruthy();
+  const name = uniqueText("e2e-revision");
+  const headers = { Authorization: `Bearer ${token}` };
+  const created = await page.request.post("/api/v1/files?allowInvalid=true", {
+    headers,
+    data: {
+      kind: "Component",
+      metadata: { name, namespace: "default", title: "Original" },
+      spec: { type: "service", lifecycle: "production", owner: "group:default/platform" },
+    },
+  });
+  expect(created.status()).toBe(201);
+  const id: number = (await created.json()).id;
+  const second = await page.context().newPage();
+  try {
+    await page.goto(`/files/${id}/edit`);
+    await second.goto(`/files/${id}/edit`);
+    const firstTitle = page.getByRole("textbox", { name: "Title", exact: true });
+    const secondTitle = second.getByRole("textbox", { name: "Title", exact: true });
+    await expect(firstTitle).toHaveValue("Original");
+    await expect(secondTitle).toHaveValue("Original");
+
+    await firstTitle.fill("First writer");
+    const [saved] = await Promise.all([
+      waitForApi(page, { method: "PUT", path: `/api/v1/files/${id}` }),
+      page.getByRole("button", { name: "Save", exact: true }).click(),
+    ]);
+    expect(saved.status()).toBe(204);
+
+    await secondTitle.fill("Second draft");
+    const [rejected] = await Promise.all([
+      waitForApi(second, { method: "PUT", path: `/api/v1/files/${id}` }),
+      second.getByRole("button", { name: "Save", exact: true }).click(),
+    ]);
+    expect(rejected.status()).toBe(409);
+    expect((await rejected.json()).type).toBe("urn:toadie:catalog-revision-conflict");
+    await expect(second.getByText(/This file changed since you opened it/)).toBeVisible();
+    await expect(secondTitle).toHaveValue("Second draft");
+    const stored = await page.request.get(`/api/v1/files/${id}`, { headers });
+    expect(stored.status()).toBe(200);
+    expect((await stored.json()).metadata.title).toBe("First writer");
+  } finally {
+    await second.close();
+    const deleted = await page.request.delete(`/api/v1/files/${id}`, { headers });
+    expect(deleted.status()).toBe(204);
+  }
+});

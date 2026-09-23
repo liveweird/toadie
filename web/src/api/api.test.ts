@@ -123,11 +123,14 @@ describe("session", () => {
 });
 
 describe("ApiError and helpers", () => {
-  test("detail and instance surface RFC 7807 fields when present", () => {
-    const err = new ApiError(409, { title: "Conflict", status: 409, detail: "Duplicate", instance: "/x" });
+  test("type, detail and instance surface RFC 7807 fields when present", () => {
+    const err = new ApiError(409, { type: "urn:toadie:catalog-revision-conflict", title: "Conflict", status: 409, detail: "Duplicate", instance: "/x" });
     expect(err.status).toBe(409);
+    expect(err.type).toBe("urn:toadie:catalog-revision-conflict");
     expect(err.detail).toBe("Duplicate");
     expect(err.instance).toBe("/x");
+    expect(new ApiError(500, null).type).toBeUndefined();
+    expect(new ApiError(500, { type: 42 }).type).toBeUndefined();
     expect(new ApiError(500, null).detail).toBeUndefined();
   });
 

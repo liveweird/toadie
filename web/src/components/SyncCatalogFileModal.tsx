@@ -16,8 +16,8 @@ import { relativeTimeAgo } from "../utils/relativeTime";
 import { normalizeSourceUrl } from "../utils/sourceUrl";
 import { compareSyncSides } from "../utils/syncComparison";
 import {
-  CATALOG_SAVE_ERROR_KEYS,
   FETCH_URL_ERROR_KEYS,
+  catalogMutationErrorMessage,
   loadErrorMessage,
   saveErrorMessage,
 } from "../utils/saveError";
@@ -102,7 +102,7 @@ function SyncModalBody({
   const queryClient = useQueryClient();
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  const { id, sourceUrl } = file;
+  const { id } = file;
 
   const detail = useQuery({
     queryKey: ["catalogFiles", "detail", id],
@@ -112,10 +112,13 @@ function SyncModalBody({
     queryKey: ["catalogFiles", "syncState", id],
     queryFn: () => getSyncState(id),
   });
+  // Use the source reference belonging to the detail we compare and guard. The list row
+  // that opened the modal may predate a source-reference edit.
+  const sourceUrl = detail.data?.sourceUrl ?? null;
   // Keyed OUTSIDE the ["catalogFiles"] prefix on purpose: the post-sync list invalidation
   // must never re-trigger this server-side outbound fetch (or the findings check below).
   const repoFetch = useQuery({
-    queryKey: ["repoCopy", id],
+    queryKey: ["repoCopy", id, sourceUrl],
     queryFn: () => fetchCatalogUrl(normalizeSourceUrl(sourceUrl ?? "")),
     enabled: sourceUrl != null,
     staleTime: 0,
@@ -160,11 +163,15 @@ function SyncModalBody({
     lastSyncedAt,
   });
 
-  const loading = detail.isLoading || syncState.isLoading || repoFetch.isLoading;
+  const loading = detail.isFetching || syncState.isFetching || repoFetch.isFetching;
+  const comparisonStale = detail.data != null && syncState.data != null &&
+    detail.data.revision !== syncState.data.revision;
   function loadErrorText(): string | null {
     if (detail.isError) return loadErrorMessage(detail.error, t);
     if (syncState.isError) return loadErrorMessage(syncState.error, t);
     if (repoFetch.isError) return saveErrorMessage(repoFetch.error, t, FETCH_URL_ERROR_KEYS);
+    if (sourceUrl == null && detail.data) return t("catalog.sync.noSource");
+    if (comparisonStale) return t("catalog.staleRevision");
     if (repo?.error === "parse") return t("catalog.sync.parseFailed");
     if (repo?.error === "noMatch") return t("catalog.sync.noMatch");
     return null;
@@ -172,11 +179,11 @@ function SyncModalBody({
   const loadError = loadErrorText();
 
   async function onConfirm() {
-    if (repoDocument == null) return;
+    if (repoDocument == null || !detail.data || !syncState.data || loading || comparisonStale) return;
     onSyncingChange(true);
     setSyncError(null);
     try {
-      await syncCatalogFile(id, repoDocument);
+      await syncCatalogFile(id, repoDocument, detail.data.revision);
       showSuccessToast(t("catalog.toast.synced"));
       onSyncingChange(false);
       onClose();
@@ -186,7 +193,7 @@ function SyncModalBody({
       onCompleted?.();
     } catch (err) {
       onSyncingChange(false);
-      setSyncError(saveErrorMessage(err, t, CATALOG_SAVE_ERROR_KEYS));
+      setSyncError(catalogMutationErrorMessage(err, t));
     }
   }
 
@@ -267,7 +274,7 @@ function SyncModalBody({
           color="red"
           onClick={() => void onConfirm()}
           loading={syncing}
-          disabled={repoDocument == null || inSync}
+          disabled={repoDocument == null || inSync || loading || comparisonStale || loadError != null}
         >
           {t("sync.confirm")}
         </Button>

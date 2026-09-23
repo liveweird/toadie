@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "check:scenarios": "node scripts/check-scenarios.mjs",
     "smoke:graphql": "node scripts/graphql-smoke/run.mjs",
-    "test:smoke": "node --test scripts/graphql-smoke/*.test.mjs"
+    "drill:backup-restore": "node scripts/backup-restore/drill.mjs",
+    "test:smoke": "node --test scripts/graphql-smoke/*.test.mjs scripts/backup-restore/*.test.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

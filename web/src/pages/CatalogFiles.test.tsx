@@ -432,6 +432,7 @@ describe("CatalogFiles page", () => {
         (init as RequestInit | undefined)?.method === "DELETE" && url === "/api/v1/files/2",
     );
     expect(deleteCall).toBeDefined();
+    expect(new Headers((deleteCall![1] as RequestInit).headers).get("X-Expected-Revision")).toBe("1");
     expect(listCount).toBeGreaterThanOrEqual(2);
     expect(toast).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Catalog file deleted", color: "teal" }),

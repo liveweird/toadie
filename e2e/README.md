@@ -85,6 +85,14 @@ The Compose target runs in the reusable E2E workflow and contributes to **Qualit
 Kubernetes remains an explicit local check; this test does not certify external ingress/TLS or
 multi-replica MFA/throttling support. Browser journeys and their scenario map remain separate.
 
+## PostgreSQL recovery drill
+
+`npm run drill:backup-restore` creates two disposable PostgreSQL 18 volumes, backs up a
+synthetic source database, restores into the second volume, compares fingerprints, and cleans
+up its own Compose project. It never connects to the development database. `npm run test:smoke`
+also runs the drill's isolation and interruption tests, but does not run the live Docker drill.
+See [`k8s/BACKUP-RESTORE.md`](../k8s/BACKUP-RESTORE.md) for sizing and real backup/recovery steps.
+
 ## Parallel execution
 
 The suite runs on **4 workers by default** (`E2E_WORKERS` overrides; `E2E_WORKERS=1` restores
@@ -305,7 +313,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
   create with live YAML preview → filtered list (name, the type/owner dropdown filters with
   owner-reference resolution, and the always-visible Kind pills as a visibility switch) →
   edit → Overwrite with YAML (diff, confirm, and the editor re-seeding so a later Save keeps
-  the overwritten document) → download `catalog-info.yaml` → delete.
+  the overwritten document) → download `catalog-info.yaml` → delete; a second journey opens
+  two editors and proves a stale save preserves the losing draft and stored winner.
 - [`command-palette.spec.ts`](scenarios/command-palette.md) — Ctrl K opens the palette:
   a page name jumps there, a file name searches the catalog and opens the editor (owns one
   throwaway System in the `graph` run namespace).
