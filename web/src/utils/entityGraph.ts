@@ -33,6 +33,26 @@ export function relationsOf(graph: EntityGraph): string[] {
   return [...new Set(graph.edges.map((e) => e.relation))].sort((a, b) => a.localeCompare(b));
 }
 
+/** Collision-safe identity for one concrete entity relation edge. Hierarchy membership belongs
+ *  to this full edge (and therefore its source blueprint), not to the relation id globally: two
+ *  blueprints may both declare `parent` while only one maps it to the selected hierarchy. */
+export function entityGraphEdgeKey(edge: {
+  sourceId: string;
+  targetId: string;
+  relation: string;
+}): string {
+  return JSON.stringify([edge.sourceId, edge.targetId, edge.relation]);
+}
+
+/** The concrete, non-ownership edges that belong to the selected hierarchy. */
+export function hierarchyEdgeKeys(graph: EntityGraph, hierarchyId: string): ReadonlySet<string> {
+  return new Set(
+    graph.edges
+      .filter((edge) => !edge.ownership && edge.hierarchies.includes(hierarchyId))
+      .map(entityGraphEdgeKey),
+  );
+}
+
 /** The entity graph's edges as `utils/graphFold.ts#foldGraph`'s generic shape — `relation`
  *  mapped onto `field`, so the fold's merge key and info stay byte-identical to the catalog
  *  graph's. */

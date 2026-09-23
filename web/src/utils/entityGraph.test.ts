@@ -1,7 +1,15 @@
 import { describe, expect, test } from "vitest";
 import type { EntityGraph, EntityGraphEdge, EntityGraphNode } from "../api/entities";
 import { foldGraph } from "./graphFold";
-import { buildEntityHierarchy, effectiveHierarchyId, filterEntityGraph, relationsOf, toFoldable } from "./entityGraph";
+import {
+  buildEntityHierarchy,
+  effectiveHierarchyId,
+  entityGraphEdgeKey,
+  filterEntityGraph,
+  hierarchyEdgeKeys,
+  relationsOf,
+  toFoldable,
+} from "./entityGraph";
 
 let nextEntityId = 1;
 function node(blueprint: string, identifier: string, title = identifier, findings = 0): EntityGraphNode {
@@ -51,6 +59,30 @@ describe("relationsOf", () => {
 
   test("no edges means no chips", () => {
     expect(relationsOf({ nodes: [], edges: [] })).toEqual([]);
+  });
+});
+
+describe("hierarchyEdgeKeys", () => {
+  test("selects the concrete hierarchy edge, not an ordinary same-named relation from another blueprint", () => {
+    const compositionParent = edge("component|checkout", "system|commerce", "parent", ["composition"]);
+    const ordinaryParent = edge("cost-center|payments", "cost-center|finance", "parent");
+    const ownershipParent = edge("component|checkout", "team|platform", "parent", ["composition"], true);
+    const graph: EntityGraph = {
+      nodes: [],
+      edges: [compositionParent, ordinaryParent, ownershipParent],
+    };
+
+    const selected = hierarchyEdgeKeys(graph, "composition");
+
+    expect(selected).toEqual(new Set([entityGraphEdgeKey(compositionParent)]));
+    expect(selected.has(entityGraphEdgeKey(ordinaryParent))).toBe(false);
+    expect(selected.has(entityGraphEdgeKey(ownershipParent))).toBe(false);
+  });
+
+  test("the identity cannot collide when delimiters occur inside entity or relation ids", () => {
+    expect(entityGraphEdgeKey({ sourceId: "a", targetId: "b|c", relation: "d" })).not.toBe(
+      entityGraphEdgeKey({ sourceId: "a|b", targetId: "c", relation: "d" }),
+    );
   });
 });
 

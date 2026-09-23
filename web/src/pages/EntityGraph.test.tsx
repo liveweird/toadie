@@ -400,6 +400,30 @@ describe("EntityGraph page", () => {
     expect(localStorage.getItem("toadie.viewSettings.entityGraph.hierarchy")).toBe('"cost-center"');
   });
 
+  test("only the selected hierarchy edge is thick when another blueprint reuses its relation name", async () => {
+    const graph = {
+      nodes: [
+        { id: "system|commerce", entityId: 1, blueprint: "system", blueprintTitle: "System", identifier: "commerce", title: "Commerce", findings: 0 },
+        { id: "component|checkout", entityId: 2, blueprint: "component", blueprintTitle: "Component", identifier: "checkout", title: "Checkout", findings: 0 },
+        { id: "cost-center|finance", entityId: 3, blueprint: "cost-center", blueprintTitle: "Cost center", identifier: "finance", title: "Finance", findings: 0 },
+        { id: "cost-center|payments", entityId: 4, blueprint: "cost-center", blueprintTitle: "Cost center", identifier: "payments", title: "Payments", findings: 0 },
+      ],
+      edges: [
+        { sourceId: "component|checkout", targetId: "system|commerce", relation: "parent", hierarchies: ["composition"] },
+        { sourceId: "cost-center|payments", targetId: "cost-center|finance", relation: "parent", hierarchies: [] },
+      ],
+    };
+    const blueprints = ["system", "component", "cost-center"].map((identifier, index) =>
+      blueprintResponse({ id: index + 1, identifier, title: identifier }),
+    );
+    mockGraph(mockFetch, graph, 200, { mode: "auto", positions: {} }, HIERARCHIES, [], blueprints);
+    renderPage();
+
+    await screen.findByText(/checkout \[component\]/);
+    expect(screen.getByTestId("edge:component|checkout->system|commerce:parent")).toHaveAttribute("data-stroke-width", "2");
+    expect(screen.getByTestId("edge:cost-center|payments->cost-center|finance:parent")).toHaveAttribute("data-stroke-width", "");
+  });
+
   test("a stale stored hierarchy id falls back to the first dictionary value", async () => {
     mockGraph(mockFetch);
     localStorage.setItem("toadie.viewSettings.entityGraph.hierarchy", '"gone"');

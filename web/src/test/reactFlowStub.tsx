@@ -95,7 +95,7 @@ export function ReactFlow({
   children,
 }: {
   nodes: StubNode[];
-  edges: { id: string; label?: unknown; style?: { strokeDasharray?: unknown } }[];
+  edges: { id: string; label?: unknown; style?: { strokeDasharray?: unknown; strokeWidth?: unknown } }[];
   nodesDraggable?: boolean;
   onInit?: (instance: { fitView: () => void }) => void;
   onNodesChange?: (changes: unknown[]) => void;
@@ -131,10 +131,15 @@ export function ReactFlow({
     <div data-testid="flow" data-draggable={String(nodesDraggable ?? true)}>
       {/* The canvas overlays (cluster frames, Background, Controls) are children. */}
       {children}
-      {/* Edges by id with their label — the fold's re-attribution is asserted on these; the
-          dash attribute surfaces an edge's `style.strokeDasharray` (folded/ownership edges). */}
+      {/* Edges by id with their label — the fold's re-attribution is asserted on these; style
+          attributes expose folded/ownership dashes and selected-hierarchy emphasis. */}
       {edges.map((e) => (
-        <span key={e.id} data-testid={`edge:${e.id}`} data-dash={String(e.style?.strokeDasharray ?? "")}>
+        <span
+          key={e.id}
+          data-testid={`edge:${e.id}`}
+          data-dash={String(e.style?.strokeDasharray ?? "")}
+          data-stroke-width={String(e.style?.strokeWidth ?? "")}
+        >
           {String(e.label ?? "")}
         </span>
       ))}
