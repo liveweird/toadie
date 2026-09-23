@@ -594,12 +594,14 @@ ROW EXCLUSIVE lock a real write would, performs both the row update and the coun
 withholds its COMMIT, pinning that a concurrent GraphQL read answers the OLD rows with the OLD
 revision until the commit and the NEW rows with the NEW revision after it (a plain read never
 blocks behind SHARE ROW EXCLUSIVE and never observes an uncommitted transaction's writes, so no
-lock-wait polling is needed). That case does NOT prove rows and revision ride one statement — a
-two-statement read would pass it too, since nothing commits between one reader call's two
-statements in that timeline and there is no seam to hold that microsecond window open without a
-production timing hook. The same-statement property is a code-shape rule (the scalar subquery is
-a column of the row SELECT in `entityPageRowsWithRevision` and `BlueprintService.listPage`),
-kept by review. Sync is
+lock-wait polling is needed). `OntologyPageSnapshotTest` covers the second boundary: it holds a
+real read-only ontology transaction after consuming its first count/revision SELECTs, commits a
+blueprint write on another connection, then verifies later count/revision SELECTs keep the first
+snapshot and a fresh read sees the write. This fails under READ COMMITTED without relying on
+timing or a production hook. `BlueprintService.listPage` and `EntityService.list` must keep their
+full materialization inside the tested `ontologyReadTransaction` helper; that service wiring is
+reviewed as code shape. The row SELECT's scalar revision column and the zero-row direct fallback
+remain in that transaction. Sync is
 not separately exercised with a live HTTP fixture: `BlueprintSync`/`EntitySync`'s
 `syncFromSource` both call straight into the same `applyUpdate` the PUT cases already cover.
 

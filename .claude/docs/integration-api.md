@@ -173,11 +173,12 @@ post-operation log, not a transactional outbox.
   dictionary replace (NAMESPACE/LIFECYCLE replaces never bump). This is change DETECTION, never a
   snapshot: the API stays stateless and answers no other query about the ontology's history.
   EQUAL revisions across the pages of one scan mean no ontology write committed between the FIRST
-  page read and the LAST; a consumer that sees the revision move restarts its scan rather than
-  assembling a graph from two different states. A blueprint/entity page reads its revision in the
-  SAME SQL statement as its rows (a scalar subquery, so READ COMMITTED's per-statement snapshot
-  can never let the two straddle a concurrent commit); a page with zero rows has none to read it
-  off and falls back to a direct read of the counter. The `errors` report issues several
+  page snapshot and the LAST; a consumer that sees the revision move restarts its scan rather than
+  assembling a graph from two different states. Each blueprint/entity page materializes its
+  total, definitions, filtered rows, dependency inputs, and revision in one read-only REPEATABLE
+  READ transaction. The row SELECT carries the revision as a scalar subquery; a page with zero
+  rows reads the counter directly in that same transaction. Both paths use the page's snapshot,
+  even when a write commits between the page's SQL statements. The `errors` report issues several
   statements to gather its subjects, so its revision is read as the FIRST statement in its one
   transaction instead — the earliest possible snapshot the rest of the report could have seen, not
   a guarantee it also matches the report's LAST statement. The counter is a single database row,

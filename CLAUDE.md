@@ -169,8 +169,10 @@ ch.nokillswit
 │                       protocols) + OntologyRevision.kt (the V39 monotonic ontology-revision
 │                       counter — bumpOntologyRevision/ontologyRevisionExpression/
 │                       currentOntologyRevision — behind the GraphQL integration API's
-│                       BlueprintPage/EntityPage/OntologyErrors `revision` field, see
-│                       `.claude/docs/integration-api.md` "Ontology revision")
+│                       BlueprintPage/EntityPage/OntologyErrors `revision` field) +
+│                       OntologyReadTransaction.kt (read-only REPEATABLE READ snapshot for
+│                       paged blueprint/entity materialization; writer locks stay READ
+│                       COMMITTED — see `.claude/docs/integration-api.md` "Ontology revision")
 ├── infra/paging/       the shared list-endpoint machinery (PageRequest/parsePaging/applyPaging/
 │                       PageResponse + the strict query-param readers) — Lettuce's, ported verbatim
 ├── infra/validation/   cross-feature input helpers (sanitizeSingleLine — trim + control-char 400,

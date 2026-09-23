@@ -31,6 +31,7 @@ import ch.nokillswit.entityquery.validateEntityQuery
 import ch.nokillswit.infra.db.bumpOntologyRevision
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.infra.db.octetLength
+import ch.nokillswit.infra.db.ontologyReadTransaction
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
 import ch.nokillswit.infra.fetch.SourceWrite
 import ch.nokillswit.infra.paging.PageRequest
@@ -69,7 +70,7 @@ import java.util.concurrent.ThreadFactory
 
 val EntityServiceKey = AttributeKey<EntityService>("EntityService")
 
-/** [EntityService.list]'s outcome — [revision] is the V39 ontology counter as of the SAME statement as [items]. */
+/** [EntityService.list]'s outcome — [items], [total], and V39 [revision] share one read snapshot. */
 data class EntityListResult(val items: List<EntityResponse>, val total: Long, val revision: Long)
 
 /** [EntityService.update]'s outcome: affected-row count plus what the rename cascaded (for the audit). */
@@ -368,8 +369,9 @@ class EntityService(
 
     /**
      * `q` substring-matches identifier OR title; an unknown `blueprint` identifier is empty
-     * (never a 404/400). Rows and the snapshot materialize inside ONE transaction; computed
-     * properties evaluate over them AFTER it closes (choice 1, `.claude/docs/persistence.md`).
+     * (never a 404/400). Rows, totals, definitions, targets, revision, and the empty-page
+     * revision fallback materialize inside ONE REPEATABLE READ transaction; computed properties
+     * evaluate over them AFTER it closes (choice 1, `.claude/docs/persistence.md`).
      * `team` matches the EFFECTIVE team (v1.30.0): [inheritedTeamMatches] resolves the matching
      * Inherited entity ids from the SAME committed read first, then folds them into the ONE
      * SQL [predicate] via [teamPredicate] — `count()` and the page rows stay one shared
@@ -383,7 +385,7 @@ class EntityService(
         val now = System.currentTimeMillis()
         readLedger.open().use { reservation ->
             try {
-                val materialized = suspendTransaction(database) {
+                val materialized = ontologyReadTransaction(database) {
                     val activeBlueprints = loadActiveBlueprints(budget)
                     val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
                     val blueprintsById = activeBlueprints.associateBy { it.id }

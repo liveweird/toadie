@@ -131,10 +131,10 @@ internal suspend fun EntityService.inheritedTeamMatches(
  * [EntityService.list]'s row+revision read, extracted purely to keep `EntityService.kt` under
  * detekt's `LargeClass` threshold (the `entities/EntityWorkspaceRead.kt` idiom, one file up).
  * [ontologyRevisionExpression] rides the SAME row-select statement as the page rows
- * (`.claude/docs/persistence.md` "V39") so the two can never straddle a concurrent commit; an
- * [unknownBlueprint] filter (no query issued at all) has no row to read the revision off and
- * falls back to a direct [currentOntologyRevision] read — there is nothing for it to be
- * inconsistent WITH.
+ * (`.claude/docs/persistence.md` "V39"). [EntityService.list] also wraps this call and its
+ * preceding/following materialization queries in one REPEATABLE READ snapshot, so the direct
+ * [currentOntologyRevision] fallback for an unknown blueprint or empty page stays consistent
+ * with the definitions, total, and target rows read by that list operation.
  */
 internal suspend fun EntityService.entityPageRowsWithRevision(
     predicate: Op<Boolean>,

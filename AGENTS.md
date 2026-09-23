@@ -250,6 +250,11 @@ still referenced by an active blueprint. These are relation-based forests, not a
 multi-parent ownership trees. The renderer guards cycles and promotes disconnected cycle
 islands to roots; the hierarchy marker does not impose acyclicity on stored entity relations.
 
+GraphQL blueprint/entity pages materialize definitions, filters, totals, rows, dependency inputs,
+and ontology revision within one read-only REPEATABLE READ transaction. Keep this reader scope
+separate from the READ COMMITTED cooperating-writer lock protocol; see
+`.claude/docs/integration-api.md` and `.claude/docs/persistence.md` for the revision contract.
+
 Mirrors, jq calculations, and aggregations are computed on reads and merged into response
 properties; computed IDs are rejected as write input. Unresolvable computed values are absent,
 not findings. Materialize dependencies inside the read transaction, then evaluate outside it.

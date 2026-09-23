@@ -51,13 +51,10 @@ suspend fun bumpOntologyRevision() {
 /**
  * A scalar subquery expression — `(SELECT revision FROM ontology_revision WHERE id = 1)` — usable
  * as an EXTRA column alongside a row SELECT's own columns, so a single statement returns the page
- * rows and the revision they were read against together. This matters under READ COMMITTED:
- * PostgreSQL gives each STATEMENT its own snapshot, so two SEPARATE statements (rows, then
- * revision) could straddle a concurrent commit and report a revision that does not actually match
- * the rows just read. Embedding the read in the SAME statement rules that out. `null` only if the
- * one seeded row were ever missing — never expected outside a corrupted database (see
- * [currentOntologyRevision] for the zero-row-page fallback, which has no such row to attach to
- * and reads the counter directly).
+ * rows and the revision they were read against together. [ontologyReadTransaction] extends that
+ * consistency across the list operation's other statements (count, definitions, and target
+ * reads), including [currentOntologyRevision]'s zero-row fallback. `null` only if the one seeded
+ * row were ever missing — never expected outside a corrupted database.
  */
 fun ontologyRevisionExpression(): Expression<Long?> = wrapAsExpression(
     OntologyRevisions.select(OntologyRevisions.revision).where { OntologyRevisions.id eq ONTOLOGY_REVISION_ROW_ID },
@@ -67,7 +64,8 @@ fun ontologyRevisionExpression(): Expression<Long?> = wrapAsExpression(
  * A plain, direct read of the counter — the fallback for a page with ZERO rows (there are no rows
  * for [ontologyRevisionExpression] to ride along with) and the seam `OntologyRevisionTest` reads
  * through directly. Must run inside the caller's own transaction, exactly like every other query
- * helper in this package.
+ * helper in this package; multi-statement ontology lists use [ontologyReadTransaction] so this
+ * fallback shares their snapshot.
  */
 suspend fun currentOntologyRevision(): Long =
     OntologyRevisions.selectAll()
