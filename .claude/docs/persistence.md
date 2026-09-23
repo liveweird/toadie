@@ -652,13 +652,15 @@ byte-identical resubmission**: `updatedAt` already bumps on every PUT regardless
 document changed (the V37/V38 "D2" rule above), and this counter follows the SAME posture — it
 answers "did an ontology WRITE commit", never "did the ontology CHANGE". A rejected write (400/
 409) never reaches the bump call: either the transaction never got that far, or it rolls back and
-takes the bump with it. `ontologyRevisionExpression()` is a scalar subquery
-(`(SELECT revision FROM ontology_revision WHERE id = 1)`) usable as an extra column alongside a
-row SELECT, so `BlueprintService.listPage`/`EntityService.list` (the GraphQL-only paged reads)
-return the counter read in the SAME statement as their page rows — READ COMMITTED gives each
-STATEMENT its own snapshot, so two separate statements could straddle a concurrent commit and
-report a revision that does not match the rows just read; a page with zero rows has none to read
-it off and falls back to `currentOntologyRevision()`, a direct read. `EntityService.errors`
+takes the bump with it. `BlueprintService.listPage` and `EntityService.list` materialize each
+page in a read-only REPEATABLE READ transaction. Count, blueprint definitions, inherited-team
+matches, page rows, computed-property dependencies, and revision therefore see one PostgreSQL
+snapshot, including when another ontology write commits between their SELECT statements. This
+is scoped to those readers; the cooperating-writer lock protocol stays READ COMMITTED.
+`ontologyRevisionExpression()` remains a scalar subquery
+(`(SELECT revision FROM ontology_revision WHERE id = 1)`) alongside nonempty page rows; a
+zero-row page reads `currentOntologyRevision()` directly in the same transaction and thus the
+same snapshot. `EntityService.errors`
 (behind the GraphQL `errors` root) issues several statements to gather its subjects, so it reads
 the counter as the FIRST statement in its one transaction instead of riding a row select — the
 earliest snapshot the rest of the report could have seen, not a promise it also matches the

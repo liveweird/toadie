@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.14.1",
+    date: "2026-09-23",
+    en: `**Consistent ontology pages for integrations.** Blueprint and entity pages now read their totals, definitions, rows, and ontology revision from one database snapshot. A concurrent edit can no longer make equal revisions describe different page contents.`,
+    pl: `**Spójne strony ontologii dla integracji.** Strony blueprintów i encji odczytują teraz liczniki, definicje, wiersze i wersję ontologii z jednego obrazu bazy danych. Równoległa edycja nie może już sprawić, że ta sama wersja będzie opisywać różną zawartość stron.`,
+  },
+  {
     version: "2.14.0",
     date: "2026-09-23",
     en: `**Safer catalog editing and a tested recovery path.** Catalog file edits, YAML overwrite, source sync, and deletion now check the revision you saw before changing a file. If another editor has saved first, Toadie keeps your draft and asks you to reload instead of silently overwriting their work. New Kubernetes PostgreSQL claims start at 10 GiB, with a documented backup and restore procedure and an isolated restore drill.`,

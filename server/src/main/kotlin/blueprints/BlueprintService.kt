@@ -11,6 +11,7 @@ import ch.nokillswit.entities.EntityService
 import ch.nokillswit.infra.db.bumpOntologyRevision
 import ch.nokillswit.infra.db.currentOntologyRevision
 import ch.nokillswit.infra.db.lockingTransaction
+import ch.nokillswit.infra.db.ontologyReadTransaction
 import ch.nokillswit.infra.db.ontologyRevisionExpression
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
 import ch.nokillswit.infra.fetch.SourceWrite
@@ -57,7 +58,7 @@ private fun decodeHierarchyRelations(raw: String): Map<String, String> = bluepri
 internal fun encodeHierarchyRelations(hierarchyRelations: Map<String, String>?): String =
     blueprintJson.encodeToString(hierarchyRelations ?: emptyMap())
 
-/** [BlueprintService.listPage]'s outcome — [revision] is the V39 ontology counter as of the SAME statement as [items]. */
+/** [BlueprintService.listPage]'s outcome — [items], [total], and V39 [revision] share one read snapshot. */
 data class BlueprintPageResult(val items: List<BlueprintResponse>, val total: Long, val revision: Long)
 
 class BlueprintService(internal val database: R2dbcDatabase) {
@@ -154,12 +155,12 @@ class BlueprintService(internal val database: R2dbcDatabase) {
     }
 
     /**
-     * SQL-paged integration read: decode only this page, never the complete registry. [ontologyRevisionExpression]
-     * rides the SAME row-select statement as [items] (`.claude/docs/persistence.md` "V39") so the two can never
-     * straddle a concurrent commit; a page with zero rows has no row to read it off and falls back to
-     * [currentOntologyRevision] — a direct read, since there is nothing for it to be inconsistent WITH.
+     * SQL-paged integration read: decode only this page, never the complete registry. The count,
+     * page rows, definitions, revision, and zero-row revision fallback all materialize in one
+     * REPEATABLE READ snapshot. [ontologyRevisionExpression] still rides the page-row statement
+     * so a non-empty page obtains its revision without another query.
      */
-    suspend fun listPage(paging: PageRequest): BlueprintPageResult = suspendTransaction(database) {
+    suspend fun listPage(paging: PageRequest): BlueprintPageResult = ontologyReadTransaction(database) {
         val total = Blueprints.selectAll().where { active() }.count()
         val budget = OntologyReadBudget()
         val revisionColumn = ontologyRevisionExpression()
