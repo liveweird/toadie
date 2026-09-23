@@ -268,6 +268,12 @@ dependency ordering, optional-reference deferral, mandatory entity-cycle rejecti
 report-and-skip behavior, and `replaceExisting` full replacement. Reuse the existing planners
 and service writes; keep exports compatible with import, including Toadie hierarchy mappings.
 
+For Port source sync, fetch against the current detail's stored source reference and submit
+that value as optional `expectedSourceUrl` with the document. The server checks it under the
+existing write lock and returns `409` if the reference changed or was cleared. See the
+source-bound sync rule in `.claude/docs/persistence.md` and modal readiness rules in
+`web/CLAUDE.md`; omitted guards remain accepted for legacy `/api/v1` clients.
+
 The entity query language is an openCypher-shaped read-only subset, not full Cypher. Its pure
 parser/validator/evaluator live in `entityquery/`; saved-query persistence/routes share that
 package. `GET /api/v1/entities/graph?query=...` evaluates over the whole active workspace, then

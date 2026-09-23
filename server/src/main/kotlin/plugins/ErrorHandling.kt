@@ -8,6 +8,7 @@ import ch.nokillswit.authz.NotFoundException
 import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.authz.UnauthorizedException
 import ch.nokillswit.catalog.CatalogRevisionConflictException
+import ch.nokillswit.infra.fetch.SourceReferenceConflictException
 import ch.nokillswit.infra.validation.InvalidPayloadException
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
@@ -253,6 +254,13 @@ fun Application.configureErrorHandling() {
                 HttpStatusCode.Conflict,
                 cause.message,
                 type = "urn:toadie:catalog-revision-conflict",
+            )
+        }
+        exception<SourceReferenceConflictException> { call, cause ->
+            call.respondProblem(
+                HttpStatusCode.Conflict,
+                cause.message ?: "Source reference changed while syncing",
+                type = "urn:toadie:source-reference-conflict",
             )
         }
         exception<BadGatewayException> { call, cause ->

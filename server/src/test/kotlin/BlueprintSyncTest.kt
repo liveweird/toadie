@@ -49,8 +49,11 @@ class BlueprintSyncTest {
 
     private suspend fun HttpClient.syncState(id: UInt) = get("/api/v1/blueprints/$id/sync").body<BlueprintSyncStateResponse>()
 
-    private suspend fun HttpClient.sync(id: UInt, document: BlueprintRequest) =
-        postJson("/api/v1/blueprints/$id/sync", SyncBlueprintRequest(document = document))
+    private suspend fun HttpClient.sync(id: UInt, document: BlueprintRequest, expectedSourceUrl: String? = null) =
+        postJson(
+            "/api/v1/blueprints/$id/sync",
+            SyncBlueprintRequest(document = document, expectedSourceUrl = expectedSourceUrl),
+        )
 
     @Test
     fun `a create with a sourceUrl stores the reference but starts unsynced`() = testApplication {
@@ -120,6 +123,81 @@ class BlueprintSyncTest {
             // The baseline is request-shaped and drops sourceUrl (the envelope reference never
             // rides inside the compared document).
             assertNull(state.syncedDocument!!.sourceUrl)
+        } finally {
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `source guard rejects changed and cleared references without mutation or audit, while matching and omitted guards sync`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("bpsync-source-guard", UserRole.ADMIN)
+            val bpId = unique("bp-bpsync-source-guard")
+            val originalUrl = sourceUrl(bpId)
+            val movedUrl = sourceUrl(unique("moved"))
+            try {
+                val created = client.createBlueprint(simple(bpId).copy(sourceUrl = originalUrl))
+
+                // API-VER-002: omission remains a successful legacy sync.
+                assertEquals(HttpStatusCode.NoContent, client.sync(created.id, simple(bpId).copy(title = "Legacy")).status)
+
+                client.putJson(
+                    "/api/v1/blueprints/${created.id}",
+                    simple(bpId).copy(title = "Moved locally", sourceUrl = movedUrl),
+                )
+                val beforeChangedConflict = client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>()
+                val beforeChangedState = client.syncState(created.id)
+                withAuditCapture { capture ->
+                    val stale = client.sync(
+                        created.id,
+                        simple(bpId).copy(title = "Stale remote"),
+                        expectedSourceUrl = originalUrl,
+                    )
+                    assertEquals(HttpStatusCode.Conflict, stale.status)
+                    assertEquals("urn:toadie:source-reference-conflict", stale.body<ProblemDetail>().type)
+                    assertTrue(capture.events.none { it.message == "blueprint.synced" })
+                }
+                assertEquals(beforeChangedConflict, client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>())
+                assertEquals(beforeChangedState, client.syncState(created.id))
+
+                assertEquals(
+                    HttpStatusCode.NoContent,
+                    client.sync(
+                        created.id,
+                        simple(bpId).copy(title = "Current remote"),
+                        expectedSourceUrl = movedUrl,
+                    ).status,
+                )
+                assertEquals("Current remote", client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>().title)
+
+                client.putJson("/api/v1/blueprints/${created.id}", simple(bpId).copy(title = "Cleared locally"))
+                val beforeClearedConflict = client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>()
+                val beforeClearedState = client.syncState(created.id)
+                val staleAfterClear = client.sync(
+                    created.id,
+                    simple(bpId).copy(title = "Old remote after clear"),
+                    expectedSourceUrl = movedUrl,
+                )
+                assertEquals(HttpStatusCode.Conflict, staleAfterClear.status)
+                assertEquals(beforeClearedConflict, client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>())
+                assertEquals(beforeClearedState, client.syncState(created.id))
+            } finally {
+                TestBlueprints.remove(bpId)
+            }
+        }
+
+    @Test
+    fun `source guard validates after authorization and blueprint lookup`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("bpsync-source-guard-order", UserRole.ADMIN)
+        val user = seededClient("bpsync-source-guard-order-user", UserRole.USER)
+        val bpId = unique("bp-bpsync-source-guard-order")
+        try {
+            val created = admin.createBlueprint(simple(bpId).copy(sourceUrl = sourceUrl(bpId)))
+            assertEquals(HttpStatusCode.BadRequest, admin.sync(created.id, simple(bpId), expectedSourceUrl = " ").status)
+            assertEquals(HttpStatusCode.NotFound, admin.sync(999_999_999u, simple(bpId), expectedSourceUrl = " ").status)
+            assertEquals(HttpStatusCode.Forbidden, user.sync(created.id, simple(bpId), expectedSourceUrl = " ").status)
         } finally {
             TestBlueprints.remove(bpId)
         }

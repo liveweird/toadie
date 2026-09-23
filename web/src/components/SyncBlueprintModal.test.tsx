@@ -114,7 +114,7 @@ describe("SyncBlueprintModal", () => {
     expect(screen.getByText("Changed in Toadie")).toBeInTheDocument();
 
     const confirm = screen.getByRole("button", { name: "Overwrite stored copy" });
-    expect(confirm).toBeEnabled();
+    await waitFor(() => expect(confirm).toBeEnabled());
     await user.click(confirm);
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -122,8 +122,12 @@ describe("SyncBlueprintModal", () => {
       ([url, init]) => url === "/api/v1/blueprints/1/sync" && (init as RequestInit)?.method === "POST",
     );
     expect(syncCall).toBeDefined();
-    const body = JSON.parse((syncCall![1] as RequestInit).body as string) as { document: Record<string, unknown> };
+    const body = JSON.parse((syncCall![1] as RequestInit).body as string) as {
+      document: Record<string, unknown>;
+      expectedSourceUrl: string;
+    };
     expect(body.document).toEqual(remoteDoc("New title"));
+    expect(body.expectedSourceUrl).toBe(TARGET.sourceUrl);
     await waitFor(() => expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ["blueprints"] }));
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ["entities"] });
     expect(onCompleted).toHaveBeenCalled();
@@ -138,11 +142,32 @@ describe("SyncBlueprintModal", () => {
     const user = userEvent.setup();
     renderModal();
 
-    await user.click(await screen.findByRole("button", { name: "Overwrite stored copy" }));
+    const confirm = await screen.findByRole("button", { name: "Overwrite stored copy" });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
 
     expect(await screen.findByText("Sync failed")).toBeInTheDocument();
     expect(screen.getByText("A blueprint with this identifier already exists")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test("a typed source conflict asks the reader to reload instead of reporting an identity clash", async () => {
+    mockRoutes(mockFetch, {
+      sync: jsonResponse(409, {
+        type: "urn:toadie:source-reference-conflict",
+        title: "Conflict",
+        status: 409,
+      }),
+    });
+    const user = userEvent.setup();
+    renderModal();
+
+    const confirm = await screen.findByRole("button", { name: "Overwrite stored copy" });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+
+    expect(await screen.findByText(/source reference changed before the sync was saved/i)).toBeInTheDocument();
+    expect(screen.queryByText("A blueprint with this identifier already exists")).not.toBeInTheDocument();
   });
 
   test("identical current and source copies read as in sync and disable the overwrite", async () => {
@@ -189,7 +214,7 @@ describe("SyncBlueprintModal", () => {
     renderModal();
 
     expect(await screen.findByText("Changed at source")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeEnabled());
   });
 
   test("a no-longer-matching source document reads as noMatch", async () => {
@@ -203,6 +228,18 @@ describe("SyncBlueprintModal", () => {
     renderModal();
 
     expect(await screen.findByText("The source document no longer contains this blueprint.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
+  });
+
+  test("blocks a comparison assembled from detail and sync state with different source references", async () => {
+    mockRoutes(mockFetch, {
+      state: jsonResponse(200, { ...SYNC_STATE, sourceUrl: "https://example.com/other.json" }),
+    });
+    renderModal();
+
+    expect(
+      await screen.findByText(/source reference changed while the comparison was loading/i),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
   });
 
@@ -229,6 +266,80 @@ describe("SyncBlueprintModal", () => {
     expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
   });
 
+  test("keeps overwrite disabled until pre-flight for the picked document completes", async () => {
+    mockRoutes(mockFetch);
+    let releaseCheck: (response: Response) => void = () => {};
+    const base = mockFetch.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/v1/blueprints/import/check" && init?.method === "POST") {
+        return new Promise<Response>((resolve) => {
+          releaseCheck = resolve;
+        });
+      }
+      return base(url, init);
+    });
+    renderModal();
+
+    expect(await screen.findByText("Changed at source")).toBeInTheDocument();
+    const confirm = screen.getByRole("button", { name: "Overwrite stored copy" });
+    expect(confirm).toBeDisabled();
+    const checkCall = mockFetch.mock.calls.find(
+      ([url, init]) => url === "/api/v1/blueprints/import/check" && (init as RequestInit)?.method === "POST",
+    );
+    const checkBody = JSON.parse((checkCall![1] as RequestInit).body as string) as {
+      documents: Record<string, unknown>[];
+    };
+    expect(checkBody.documents).toEqual([remoteDoc("New title")]);
+
+    releaseCheck(jsonResponse(200, { results: [{ index: 0, identifier: "service", status: "UPDATED", id: 1 }] }));
+    await waitFor(() => expect(confirm).toBeEnabled());
+  });
+
+  test("shows a safe error and blocks overwrite when pre-flight fails", async () => {
+    mockRoutes(mockFetch, { check: jsonResponse(503, { title: "Unavailable", status: 503 }) });
+    renderModal();
+
+    expect(await screen.findByText("Load failed (503)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
+  });
+
+  test("blocks overwrite when pre-flight returns no classification", async () => {
+    mockRoutes(mockFetch, { check: jsonResponse(200, { results: [] }) });
+    renderModal();
+
+    expect(await screen.findByText("The source copy could not be validated.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
+  });
+
+  test("uses the fresh detail source and identity instead of the opening row snapshot", async () => {
+    const freshSource = "https://github.com/acme/ontology/blob/main/renamed.json";
+    const normalizedSource = "https://raw.githubusercontent.com/acme/ontology/main/renamed.json";
+    const freshDocument = { ...remoteDoc("Fresh"), identifier: "renamed" };
+    mockRoutes(mockFetch, {
+      detail: jsonResponse(200, { ...DETAIL, identifier: "renamed", sourceUrl: freshSource }),
+      state: jsonResponse(200, { ...SYNC_STATE, sourceUrl: freshSource }),
+      fetch: jsonResponse(200, {
+        content: JSON.stringify({ blueprints: [remoteDoc("Stale row"), freshDocument] }),
+      }),
+    });
+    const user = userEvent.setup();
+    renderModal();
+
+    const confirm = await screen.findByRole("button", { name: "Overwrite stored copy" });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    const fetchCall = mockFetch.mock.calls.find(
+      ([url, init]) => url === "/api/v1/blueprints/fetch" && (init as RequestInit)?.method === "POST",
+    );
+    expect(JSON.parse((fetchCall![1] as RequestInit).body as string)).toEqual({ url: normalizedSource });
+    await user.click(confirm);
+
+    const syncCall = mockFetch.mock.calls.find(
+      ([url, init]) => url === "/api/v1/blueprints/1/sync" && (init as RequestInit)?.method === "POST",
+    );
+    const body = JSON.parse((syncCall![1] as RequestInit).body as string);
+    expect(body).toEqual({ document: freshDocument, expectedSourceUrl: freshSource });
+  });
+
   test("a remote document without hierarchyRelations keeps the stored map and shows the hint", async () => {
     mockRoutes(mockFetch, {
       // The map lives on the LIVE definition; the sync baseline plays no part in the keep rule.
@@ -243,7 +354,9 @@ describe("SyncBlueprintModal", () => {
       ),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Overwrite stored copy" }));
+    const confirm = screen.getByRole("button", { name: "Overwrite stored copy" });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     const syncCall = mockFetch.mock.calls.find(
@@ -272,6 +385,7 @@ describe("SyncBlueprintModal", () => {
     ).not.toBeInTheDocument();
 
     const confirmButton = await screen.findByRole("button", { name: "Overwrite stored copy" });
+    await waitFor(() => expect(confirmButton).toBeEnabled());
     await user.click(confirmButton);
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -302,7 +416,9 @@ describe("SyncBlueprintModal", () => {
     const user = userEvent.setup();
     renderModal();
 
-    await user.click(await screen.findByRole("button", { name: "Overwrite stored copy" }));
+    const confirm = await screen.findByRole("button", { name: "Overwrite stored copy" });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
     await user.keyboard("{Escape}");
     expect(onClose).not.toHaveBeenCalled();
 
@@ -330,6 +446,7 @@ describe("SyncBlueprintModal", () => {
     expect(
       await screen.findByRole("status", { name: "Loading the source copy" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
 
     releaseState(jsonResponse(200, SYNC_STATE));
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());

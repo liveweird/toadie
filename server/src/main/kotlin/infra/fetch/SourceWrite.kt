@@ -1,5 +1,7 @@
 package ch.nokillswit.infra.fetch
 
+import io.ktor.server.plugins.BadRequestException
+
 /**
  * The shared write-path policy for a record's `sourceUrl`/`lastSyncedAt`/`synced_content`
  * envelope — one level below `catalog/CatalogFileService.kt`'s own inline handling, common to
@@ -21,6 +23,26 @@ sealed interface SourceWrite {
 
 /** The three source-reference columns a write resolves together — one record's [SourceWrite] envelope. */
 data class SourceColumns(val sourceUrl: String?, val lastSyncedAt: Long, val syncedContent: String?)
+
+/**
+ * A guarded source sync named a reference that is no longer current. Kept separate from
+ * identity/unique conflicts so clients can offer reload/retry behavior from a stable RFC 7807
+ * type without parsing the human-readable detail or receiving either URL in the response.
+ */
+internal class SourceReferenceConflictException : RuntimeException(
+    "Source reference changed while syncing; reload the record and try again",
+)
+
+/**
+ * Validates an optional v1-compatible source guard and compares it with the source reference
+ * read under the caller's existing write lock. A missing guard preserves legacy behavior.
+ */
+internal fun requireExpectedSourceUrl(expectedSourceUrl: String?, currentSourceUrl: String?) {
+    if (expectedSourceUrl == null) return
+    val expected = sanitizedSourceUrl(expectedSourceUrl)
+        ?: throw BadRequestException(SOURCE_URL_INVALID_DETAIL)
+    if (expected != currentSourceUrl) throw SourceReferenceConflictException()
+}
 
 /**
  * The PURE dispatch [SourceWrite] describes, extracted from `entities/EntitySync.kt`'s and

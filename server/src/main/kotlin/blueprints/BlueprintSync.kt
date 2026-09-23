@@ -2,6 +2,7 @@ package ch.nokillswit.blueprints
 
 import ch.nokillswit.infra.fetch.SourceColumns
 import ch.nokillswit.infra.fetch.SourceWrite
+import ch.nokillswit.infra.fetch.requireExpectedSourceUrl
 import ch.nokillswit.infra.fetch.resolveSourceColumns
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.coroutines.flow.singleOrNull
@@ -37,9 +38,14 @@ private typealias BlueprintRows = BlueprintService.Blueprints
  * validation means a remote that dropped the very relation the stored map still names is refused
  * `400` naming that key, exactly as an ordinary PUT would be.
  */
-internal suspend fun BlueprintService.syncFromSource(id: UInt, request: BlueprintRequest): BlueprintUpdateResult = writeTransaction {
+internal suspend fun BlueprintService.syncFromSource(
+    id: UInt,
+    request: BlueprintRequest,
+    expectedSourceUrl: String? = null,
+): BlueprintUpdateResult = writeTransaction {
     val rows = activeRows()
     val current = rows.firstOrNull { it.id == id } ?: return@writeTransaction BlueprintUpdateResult(0, emptyList(), null, false)
+    requireExpectedSourceUrl(expectedSourceUrl, current.sourceUrl)
     val sourceUrl = current.sourceUrl ?: throw BadRequestException("This blueprint has no source reference — set one before syncing")
     val merged = if (request.hierarchyRelations == null) {
         request.copy(hierarchyRelations = current.hierarchyRelations.ifEmpty { null })

@@ -24,7 +24,16 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
+import java.sql.Connection
+import java.sql.DriverManager
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
@@ -45,6 +54,82 @@ import kotlin.test.assertTrue
  * [TestEntities]/[TestBlueprints].
  */
 class EntitySyncTest {
+
+    /** Holds entity writers so a retarget can be queued ahead of a guarded sync deterministically. */
+    private class EntityWriteBarrier private constructor(
+        private val holder: Connection,
+        private val observer: Connection,
+    ) {
+        private var released = false
+
+        suspend fun awaitWriters(count: Int) {
+            withTimeout(15_000) {
+                while (waitingWriters() != count) delay(25)
+            }
+        }
+
+        private suspend fun waitingWriters(): Int = withContext(Dispatchers.IO) {
+            observer.prepareStatement(
+                """
+                SELECT COUNT(*)
+                FROM pg_locks
+                WHERE relation = 'entities'::regclass
+                  AND mode = 'ShareRowExclusiveLock'
+                  AND NOT granted
+                """.trimIndent(),
+            ).use { statement ->
+                statement.executeQuery().use { rows ->
+                    check(rows.next())
+                    rows.getInt(1)
+                }
+            }
+        }
+
+        suspend fun release() {
+            if (released) return
+            released = true
+            withContext(NonCancellable + Dispatchers.IO) {
+                var committed = false
+                try {
+                    holder.commit()
+                    committed = true
+                } finally {
+                    if (!committed) runCatching { holder.rollback() }
+                    try {
+                        holder.close()
+                    } finally {
+                        observer.close()
+                    }
+                }
+            }
+        }
+
+        companion object {
+            suspend fun acquire(): EntityWriteBarrier = withContext(NonCancellable + Dispatchers.IO) {
+                var holder: Connection? = null
+                var observer: Connection? = null
+                try {
+                    holder = DriverManager.getConnection(
+                        PostgresTestSupport.jdbcUrl,
+                        PostgresTestSupport.user,
+                        PostgresTestSupport.password,
+                    )
+                    observer = DriverManager.getConnection(
+                        PostgresTestSupport.jdbcUrl,
+                        PostgresTestSupport.user,
+                        PostgresTestSupport.password,
+                    )
+                    holder.autoCommit = false
+                    holder.createStatement().use { it.execute("LOCK TABLE entities IN SHARE MODE") }
+                    EntityWriteBarrier(holder, observer)
+                } catch (failure: Exception) {
+                    runCatching { holder?.close() }
+                    runCatching { observer?.close() }
+                    throw failure
+                }
+            }
+        }
+    }
 
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().substring(0, 8)}"
 
@@ -120,10 +205,184 @@ class EntitySyncTest {
             assertEquals(after.lastSyncedAt, after.updatedAt)
 
             val state = client.get("/api/v1/entities/${created.id}/sync").body<EntitySyncStateResponse>()
-            assertEquals("From remote", state.syncedDocument!!.title)
+            val syncedDocument = assertNotNull(state.syncedDocument)
+            assertEquals("From remote", syncedDocument.title)
             // The baseline is request-shaped and drops sourceUrl (the envelope reference never
             // rides inside the compared document).
-            assertNull(state.syncedDocument!!.sourceUrl)
+            assertNull(syncedDocument.sourceUrl)
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `source guard rejects changed and cleared references without mutation or audit, while matching and omitted guards sync`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val client = seededClient("esync-source-guard", UserRole.ADMIN)
+            val bpId = unique("bp-esync-source-guard")
+            val entId = unique("ent-esync-source-guard")
+            val originalUrl = sourceUrl(entId)
+            val movedUrl = sourceUrl(unique("moved"))
+            try {
+                client.createBlueprint(simpleBlueprint(bpId))
+                val created = client.postJson(
+                    "/api/v1/entities",
+                    entityRequest(bpId, entId, originalUrl),
+                ).body<EntityResponse>()
+
+                // API-VER-002: omission remains a successful legacy sync.
+                assertEquals(
+                    HttpStatusCode.NoContent,
+                    client.postJson(
+                        "/api/v1/entities/${created.id}/sync",
+                        SyncEntityRequest(document = entityRequest(bpId, entId).copy(title = "Legacy")),
+                    ).status,
+                )
+
+                client.putJson(
+                    "/api/v1/entities/${created.id}",
+                    entityRequest(bpId, entId, movedUrl).copy(title = "Moved locally"),
+                )
+                val beforeChangedConflict = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
+                val beforeChangedState = client.get("/api/v1/entities/${created.id}/sync").body<EntitySyncStateResponse>()
+                withAuditCapture { capture ->
+                    val stale = client.postJson(
+                        "/api/v1/entities/${created.id}/sync",
+                        SyncEntityRequest(
+                            document = entityRequest(bpId, entId).copy(title = "Stale remote"),
+                            expectedSourceUrl = originalUrl,
+                        ),
+                    )
+                    assertEquals(HttpStatusCode.Conflict, stale.status)
+                    assertEquals("urn:toadie:source-reference-conflict", stale.body<ProblemDetail>().type)
+                    assertTrue(capture.events.none { it.message == "entity.synced" })
+                }
+                assertEquals(beforeChangedConflict, client.get("/api/v1/entities/${created.id}").body<EntityResponse>())
+                assertEquals(
+                    beforeChangedState,
+                    client.get("/api/v1/entities/${created.id}/sync").body<EntitySyncStateResponse>(),
+                )
+
+                // A guard matching the locked row succeeds and stamps that exact reference.
+                assertEquals(
+                    HttpStatusCode.NoContent,
+                    client.postJson(
+                        "/api/v1/entities/${created.id}/sync",
+                        SyncEntityRequest(
+                            document = entityRequest(bpId, entId).copy(title = "Current remote"),
+                            expectedSourceUrl = movedUrl,
+                        ),
+                    ).status,
+                )
+                assertEquals("Current remote", client.get("/api/v1/entities/${created.id}").body<EntityResponse>().title)
+
+                client.putJson("/api/v1/entities/${created.id}", entityRequest(bpId, entId).copy(title = "Cleared locally"))
+                val beforeClearedConflict = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
+                val beforeClearedState = client.get("/api/v1/entities/${created.id}/sync").body<EntitySyncStateResponse>()
+                val staleAfterClear = client.postJson(
+                    "/api/v1/entities/${created.id}/sync",
+                    SyncEntityRequest(
+                        document = entityRequest(bpId, entId).copy(title = "Old remote after clear"),
+                        expectedSourceUrl = movedUrl,
+                    ),
+                )
+                assertEquals(HttpStatusCode.Conflict, staleAfterClear.status)
+                assertEquals(beforeClearedConflict, client.get("/api/v1/entities/${created.id}").body<EntityResponse>())
+                assertEquals(
+                    beforeClearedState,
+                    client.get("/api/v1/entities/${created.id}/sync").body<EntitySyncStateResponse>(),
+                )
+            } finally {
+                TestEntities.remove(entId)
+                TestBlueprints.remove(bpId)
+            }
+        }
+
+    @Test
+    fun `source guard validates after authentication and entity lookup`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("esync-source-guard-order", UserRole.ADMIN)
+        val user = seededClient("esync-source-guard-order-user", UserRole.USER)
+        val bpId = unique("bp-esync-source-guard-order")
+        val entId = unique("ent-esync-source-guard-order")
+        try {
+            client.createBlueprint(simpleBlueprint(bpId))
+            val created = client.postJson(
+                "/api/v1/entities",
+                entityRequest(bpId, entId, sourceUrl(entId)),
+            ).body<EntityResponse>()
+            val invalidExpectedUrls = listOf(
+                " ",
+                "http://example.com/entity.json",
+                "https://example.com/${"x".repeat(2048)}",
+            )
+            invalidExpectedUrls.forEach { invalid ->
+                val body = SyncEntityRequest(document = entityRequest(bpId, entId), expectedSourceUrl = invalid)
+                assertEquals(HttpStatusCode.BadRequest, client.postJson("/api/v1/entities/${created.id}/sync", body).status)
+            }
+            val body = SyncEntityRequest(document = entityRequest(bpId, entId), expectedSourceUrl = " ")
+            assertEquals(HttpStatusCode.NotFound, client.postJson("/api/v1/entities/999999999/sync", body).status)
+            // Entities are a shared workspace: an authenticated USER reaches the same guarded write.
+            assertEquals(HttpStatusCode.BadRequest, user.postJson("/api/v1/entities/${created.id}/sync", body).status)
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `source guard compares after a queued retarget commits`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("esync-source-guard-race", UserRole.ADMIN)
+        val bpId = unique("bp-esync-source-guard-race")
+        val entId = unique("ent-esync-source-guard-race")
+        val originalUrl = sourceUrl(entId)
+        val movedUrl = sourceUrl(unique("moved"))
+        try {
+            client.createBlueprint(simpleBlueprint(bpId))
+            val created = client.postJson(
+                "/api/v1/entities",
+                entityRequest(bpId, entId, originalUrl),
+            ).body<EntityResponse>()
+
+            coroutineScope {
+                val barrier = EntityWriteBarrier.acquire()
+                val retarget = async {
+                    client.putJson(
+                        "/api/v1/entities/${created.id}",
+                        entityRequest(bpId, entId, movedUrl).copy(title = "Retargeted"),
+                    )
+                }
+                try {
+                    // Queue the retarget first, then the sync carrying the source it fetched.
+                    barrier.awaitWriters(1)
+                    val sync = async {
+                        client.postJson(
+                            "/api/v1/entities/${created.id}/sync",
+                            SyncEntityRequest(
+                                document = entityRequest(bpId, entId).copy(title = "Old remote"),
+                                expectedSourceUrl = originalUrl,
+                            ),
+                        )
+                    }
+                    barrier.awaitWriters(2)
+                    barrier.release()
+                    assertEquals(HttpStatusCode.NoContent, withTimeout(15_000) { retarget.await() }.status)
+                    val stale = withTimeout(15_000) { sync.await() }
+                    assertEquals(HttpStatusCode.Conflict, stale.status)
+                    assertEquals("urn:toadie:source-reference-conflict", stale.body<ProblemDetail>().type)
+                } finally {
+                    barrier.release()
+                }
+            }
+
+            val after = client.get("/api/v1/entities/${created.id}").body<EntityResponse>()
+            assertEquals("Retargeted", after.title)
+            assertEquals(movedUrl, after.sourceUrl)
+            assertEquals(0L, after.lastSyncedAt)
+            assertNull(client.get("/api/v1/entities/${created.id}/sync").body<EntitySyncStateResponse>().syncedDocument)
         } finally {
             TestEntities.remove(entId)
             TestBlueprints.remove(bpId)

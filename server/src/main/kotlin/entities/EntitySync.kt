@@ -3,6 +3,7 @@ package ch.nokillswit.entities
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.infra.fetch.SourceColumns
 import ch.nokillswit.infra.fetch.SourceWrite
+import ch.nokillswit.infra.fetch.requireExpectedSourceUrl
 import ch.nokillswit.infra.fetch.resolveSourceColumns
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.coroutines.flow.singleOrNull
@@ -33,10 +34,16 @@ private typealias EntityRows = EntityService.Entities
  * `EntityService.applyUpdate`. The cheap row checks (existence, then a source reference) run
  * BEFORE that heavier blueprint/findings work.
  */
-internal suspend fun EntityService.syncFromSource(id: UInt, request: EntityRequest): EntityUpdateResult = writeTransaction {
+internal suspend fun EntityService.syncFromSource(
+    id: UInt,
+    request: EntityRequest,
+    expectedSourceUrl: String? = null,
+): EntityUpdateResult = writeTransaction {
     val row = EntityRows.selectAll().where { (EntityRows.id eq id) and active() }.singleOrNull()
         ?: return@writeTransaction EntityUpdateResult(0, emptyList(), null)
-    val sourceUrl = row[EntityRows.sourceUrl]
+    val currentSourceUrl = row[EntityRows.sourceUrl]
+    requireExpectedSourceUrl(expectedSourceUrl, currentSourceUrl)
+    val sourceUrl = currentSourceUrl
         ?: throw BadRequestException("This entity has no source reference — set one before syncing")
     applyUpdate(id, row, request, SourceWrite.Synced(sourceUrl))
 }

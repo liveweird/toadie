@@ -589,6 +589,18 @@ shared, pure `infra/fetch/SourceWrite.kt` `resolveSourceColumns` (2.13.1 — ext
 verified byte-identical to the blueprint dispatch below). Migration checksums, including V37,
 are pinned in `MigrationChecksumTest`.
 
+**Source-bound sync (entities and blueprints).** Applies when a client fetches a remote Port
+document, then submits it through either `POST …/{id}/sync`. Requirement: send the stored
+`sourceUrl` observed before the fetch as optional `expectedSourceUrl` alongside `document`.
+The sync service compares it with the current source reference inside the existing write
+transaction and lock, before domain validation or mutation. If the reference changed or was
+cleared, sync answers `409` without altering the row, baseline, timestamp, cascade, or audit
+trail. A missing guard retains the released `/api/v1` behavior for legacy clients
+(API-VER-002); the SPA always sends the guard. Reference: `EntitySync.kt`, `BlueprintSync.kt`,
+and the sync request schemas in OpenAPI.
+Enforcement: `EntitySyncTest` and `BlueprintSyncTest`; frontend modal regressions. Exception:
+batch imports stamp their own source reference and do not use this sync guard.
+
 ### Blueprint source references (V38)
 
 `ALTER TABLE blueprints ADD COLUMN source_url VARCHAR(2048) NULL, ADD COLUMN last_synced_at BIGINT

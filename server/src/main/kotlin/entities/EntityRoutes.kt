@@ -211,7 +211,7 @@ fun Application.configureEntityRoutes() {
                 val request = call.receive<SyncEntityRequest>()
                 requireNoDocumentSourceUrl(request.document.sourceUrl)
                 val document = sanitizedEntityRequest(request.document)
-                val result = entityService.syncFromSource(route.parent.id, document)
+                val result = entityService.syncFromSource(route.parent.id, document, request.expectedSourceUrl)
                 result.affected.orNotFound("Entity")
                 val fields = buildList<Pair<String, Any?>> {
                     add("byUserId" to caller.userId.toLong())

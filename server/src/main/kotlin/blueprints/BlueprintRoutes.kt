@@ -125,7 +125,7 @@ fun Application.configureBlueprintRoutes() {
                 val request = call.receive<SyncBlueprintRequest>()
                 requireNoDocumentSourceUrl(request.document.sourceUrl)
                 val document = sanitizedBlueprintRequest(request.document)
-                val result = blueprintService.syncFromSource(route.parent.id, document)
+                val result = blueprintService.syncFromSource(route.parent.id, document, request.expectedSourceUrl)
                 result.affected.orNotFound("Blueprint")
                 val fields = buildList<Pair<String, Any?>> {
                     add("byUserId" to caller.userId.toLong())

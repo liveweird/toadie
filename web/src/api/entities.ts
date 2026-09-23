@@ -238,9 +238,9 @@ export async function getEntitySyncState(id: number): Promise<EntitySyncState> {
  * and stamps the sync state. No waiver — a submitted document failing `entityFindings` is a
  * `400` carrying the full `findings` list, exactly like a strict create/replace.
  */
-export async function syncEntity(id: number, document: EntityBody): Promise<void> {
+export async function syncEntity(id: number, document: EntityBody, expectedSourceUrl: string): Promise<void> {
   await voidRequest(`/api/v1/entities/${id}/sync`, {
     method: "POST",
-    body: JSON.stringify({ document }),
+    body: JSON.stringify({ document, expectedSourceUrl }),
   });
 }

@@ -54,6 +54,12 @@ export function isCatalogRevisionConflict(err: unknown): boolean {
     err.type === "urn:toadie:catalog-revision-conflict";
 }
 
+/** A guarded Port sync fetched from a source reference that changed before the write lock. */
+export function isSourceReferenceConflict(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409 &&
+    err.type === "urn:toadie:source-reference-conflict";
+}
+
 export function catalogMutationErrorMessage(err: unknown, t: TFunction): string {
   return isCatalogRevisionConflict(err)
     ? t("catalog.staleRevision")

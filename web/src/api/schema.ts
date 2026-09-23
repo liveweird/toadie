@@ -1657,6 +1657,14 @@ export interface paths {
          *     system blueprint rejects a rename with `400` before that ever applies); a repo-side
          *     rename landing on an identity another active blueprint holds is a `409`.
          *
+         *     Clients that fetched the remote copy SHOULD send `expectedSourceUrl` with the stored
+         *     source reference observed before the fetch (not a normalized fetch URL). The service
+         *     compares it with the current reference under the blueprint write lock before applying
+         *     the document. A changed or cleared reference returns `409` with ProblemDetail type
+         *     `urn:toadie:source-reference-conflict` and leaves the definition,
+         *     sync baseline, and timestamp unchanged; reload before retrying. The field is optional
+         *     for compatibility with existing `/api/v1` clients.
+         *
          *     **`hierarchyRelations` keep-when-absent**: when the submitted document OMITS this
          *     Toadie-only extension (or sends an empty map), the STORED map is copied onto it BEFORE
          *     validation — a sync can never CLEAR it, since most blueprint exports never carry this
@@ -2141,6 +2149,14 @@ export interface paths {
          *     field). Renaming the identifier CASCADES exactly as a PUT would (audited `cascaded`/
          *     `renamedFrom`); a repo-side rename landing on an identity another active entity holds
          *     is a `409`.
+         *
+         *     Clients that fetched the remote copy SHOULD send `expectedSourceUrl` with the stored
+         *     source reference observed before the fetch (not a normalized fetch URL). The service
+         *     compares it with the current reference under the entity write lock before applying the
+         *     document. A changed or cleared reference returns `409` with ProblemDetail type
+         *     `urn:toadie:source-reference-conflict` and leaves the entity, sync
+         *     baseline, and timestamp unchanged; reload before retrying. The field is optional for
+         *     compatibility with existing `/api/v1` clients.
          */
         post: operations["syncEntity"];
         delete?: never;
@@ -3349,6 +3365,11 @@ export interface components {
         };
         SyncEntityRequest: {
             document: components["schemas"]["EntityRequest"];
+            /**
+             * Format: uri
+             * @description Optional stored source reference observed before fetching the submitted document. A mismatch with the current reference refuses sync with 409; omitted by legacy clients. Send the stored HTTPS URL before any fetch-URL normalization.
+             */
+            expectedSourceUrl?: string;
         };
         /** @description GET …/blueprints/{id}/sync's body — the `EntitySyncStateResponse` shape one level down, with the same ABSENT-not-null convention (never `nullable`). */
         BlueprintSyncStateResponse: {
@@ -3364,6 +3385,11 @@ export interface components {
         };
         SyncBlueprintRequest: {
             document: components["schemas"]["BlueprintRequest"];
+            /**
+             * Format: uri
+             * @description Optional stored source reference observed before fetching the submitted document. A mismatch with the current reference refuses sync with 409; omitted by legacy clients. Send the stored HTTPS URL before any fetch-URL normalization.
+             */
+            expectedSourceUrl?: string;
         };
         EntityPage: {
             items: components["schemas"]["Entity"][];

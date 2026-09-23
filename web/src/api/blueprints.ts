@@ -106,9 +106,9 @@ export async function getBlueprintSyncState(id: number): Promise<BlueprintSyncSt
  * remote copy) and stamps the sync state. No waiver — a submitted document failing validation
  * is a `400`, exactly like a strict create/replace.
  */
-export async function syncBlueprint(id: number, document: BlueprintBody): Promise<void> {
+export async function syncBlueprint(id: number, document: BlueprintBody, expectedSourceUrl: string): Promise<void> {
   await voidRequest(`/api/v1/blueprints/${id}/sync`, {
     method: "POST",
-    body: JSON.stringify({ document }),
+    body: JSON.stringify({ document, expectedSourceUrl }),
   });
 }

@@ -595,6 +595,14 @@ Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's ow
   `sourceUrl`/`lastSyncedAt` — the same provenance-is-not-a-Port-field rule as the entity export
   above.
 
+For both Port sync endpoints, the optional `expectedSourceUrl` sync-envelope member binds a
+fetched document to the source reference observed before fetching. The SPA supplies the stored
+reference, including when its fetch URL is normalized to a raw-file URL. If another write
+changes or clears the reference before sync obtains its write lock, sync refuses with a typed
+`409` and stores nothing. Omission remains accepted for existing `/api/v1` clients; this guard
+does not authenticate the submitted document's provenance or prevent unrelated concurrent
+document edits.
+
 ## System blueprints (V31)
 
 Toadie seeds exactly two system blueprints — `_team` and `_user` — flagged `system: true` on the

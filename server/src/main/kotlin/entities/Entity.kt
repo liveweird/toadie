@@ -141,7 +141,10 @@ data class EntitySyncStateResponse(
 
 /** POST …/entities/{id}/sync — the remote copy, parsed/decoded client-side. */
 @Serializable
-data class SyncEntityRequest(val document: EntityRequest)
+data class SyncEntityRequest(
+    val document: EntityRequest,
+    val expectedSourceUrl: String? = null,
+)
 
 /**
  * The request's `properties`/`relations` as the stored document: an explicit JSON `null` value

@@ -269,7 +269,10 @@ data class BlueprintSyncStateResponse(
 
 /** POST …/blueprints/{id}/sync — the remote copy, parsed/decoded client-side. */
 @Serializable
-data class SyncBlueprintRequest(val document: BlueprintRequest)
+data class SyncBlueprintRequest(
+    val document: BlueprintRequest,
+    val expectedSourceUrl: String? = null,
+)
 
 /** The non-identity fields as the stored [BlueprintDefinition] document. */
 fun BlueprintRequest.toDefinition(): BlueprintDefinition = BlueprintDefinition(
