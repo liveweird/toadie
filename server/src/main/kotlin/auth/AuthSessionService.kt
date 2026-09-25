@@ -65,7 +65,8 @@ class AuthSessionService(
         (Sessions innerJoin Users).select(Sessions.id).where {
             (Sessions.id eq id) and (Sessions.userId eq userId) and
                 (Sessions.authVersion eq Users.authVersion) and
-                (Users.markedAsDeleted eq false) and (Sessions.expiresAt greater clock())
+                (Users.markedAsDeleted eq false) and (Users.serviceAccount eq false) and
+                (Sessions.expiresAt greater clock())
         }.count() == 1L
     }
 

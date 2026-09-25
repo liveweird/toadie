@@ -530,20 +530,6 @@ URL fetching stays outside them.
 - **Exception:** The optional header preserves released v1 clients; the SPA always supplies it
   for interactive PUT, sync, and delete flows.
 
-**Service accounts (V41).** `ALTER TABLE users ADD COLUMN service_account BOOLEAN NOT NULL
-DEFAULT FALSE` plus the CHECK `ck_users_service_account_never_admin` (`NOT (service_account AND
-"role" = 'ADMIN')`) and `idx_users_service_account` (2.15.0). A service account is a `users` row
-that can never authenticate — no login, reset link, session, role change, or admin password set
-(`.claude/docs/authorization.md` "Service accounts (V41)") — and exists only so entity writes made
-by an integration client through the MCP endpoint carry an ordinary `created_by`. `UserService`
-reads the management surface through `human()` (`active() AND service_account = FALSE`); the
-bootstrap seed checks keep `active()`, since they look for the seed admin's hash and a service
-account can never carry it. Rows are inserted by `insertServiceAccountInTransaction` inside the
-integration client's own create transaction (V42, below) and soft-deleted when that client is
-revoked — never hard-deleted, so `entities.created_by` keeps joining and the entity's
-`creatorDeleted` becomes the honest signal. Migration checksums, including V41, are pinned in
-`MigrationChecksumTest`.
-
 Import remains report-and-skip with one transaction per document. Each successful row commits
 its file and CREATED event (`origin=import`) together. An unexpected storage/history failure
 rolls back that row and returns ERROR without a fileId; other rows proceed, and earlier successful
@@ -567,6 +553,21 @@ This whole-feature convention deliberately supersedes Lettuce's split mutation/e
 Terminal `revoked_at` is the documented removal exception to `marked_as_deleted`: rows remain
 for administrator inspection and cannot be re-enabled. No ontology columns or data change.
 See [integration-api.md](integration-api.md) for transaction/authentication invariants.
+
+**Service accounts (V41).** `ALTER TABLE users ADD COLUMN service_account BOOLEAN NOT NULL
+DEFAULT FALSE` plus the CHECK `ck_users_service_account_never_admin` (`NOT (service_account AND
+"role" = 'ADMIN')`) and `idx_users_service_account` (2.15.0). A service account is a `users` row
+that can never authenticate — no login, reset link, session, role change, or admin password set
+(`.claude/docs/authorization.md` "Service accounts (V41)") — and exists only so entity writes made
+by an integration client through the MCP endpoint carry an ordinary `created_by`. `UserService`
+reads the management surface through `human()` (`active() AND service_account = FALSE`);
+`rotatePasswordIfHashMatches` and `countActiveWithPasswordHash` keep `active()`, since they look
+for the seed admin's hash, which a service account can never carry (`seedNeedsRotation` goes
+through `findWithIdByEmail` and therefore `human()` — harmless, the seed admin is human). Rows
+are inserted by `insertServiceAccountInTransaction` inside the integration client's own create
+transaction (V42, below) and soft-deleted when that client is revoked — never hard-deleted, so
+`entities.created_by` keeps joining and the entity's `creatorDeleted` becomes the honest signal.
+Migration checksums, including V41, are pinned in `MigrationChecksumTest`.
 
 **V42 — key scope and the paired service account (2.15.0).** `ALTER TABLE integration_clients ADD
 COLUMN scope VARCHAR(10) NOT NULL DEFAULT 'read' CHECK (scope IN ('read','write')), ADD COLUMN

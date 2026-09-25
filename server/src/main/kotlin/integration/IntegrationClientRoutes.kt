@@ -82,7 +82,8 @@ fun Application.configureIntegrationClientRoutes() {
             post<IntegrationClients.Id.Revoke> { route ->
                 val caller = call.caller()
                 requireAdmin(caller)
-                when (clientService.revoke(route.parent.id)) {
+                val result = clientService.revoke(route.parent.id)
+                when (result.outcome) {
                     RevokeOutcome.NOT_FOUND -> throw NotFoundException("Integration client not found")
                     RevokeOutcome.ALREADY_REVOKED -> throw ConflictException("Client is already revoked")
                     RevokeOutcome.REVOKED -> {
@@ -90,6 +91,7 @@ fun Application.configureIntegrationClientRoutes() {
                             "integration_client.revoked",
                             "byUserId" to caller.userId.toLong(),
                             "clientId" to route.parent.id.toLong(),
+                            "serviceUserId" to result.serviceUserId?.toLong(),
                         )
                         call.respond(HttpStatusCode.NoContent)
                     }

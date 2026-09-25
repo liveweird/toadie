@@ -57,7 +57,8 @@ class PasswordResetService(
         return suspendTransaction(database) {
             (Tokens innerJoin Users).select(Tokens.tokenHash).where {
                 (Tokens.tokenHash eq digest(token)) and (Tokens.expiresAt greater clock()) and
-                    (Users.markedAsDeleted eq false) and (Tokens.authVersion eq Users.authVersion)
+                    (Users.markedAsDeleted eq false) and (Users.serviceAccount eq false) and
+                    (Tokens.authVersion eq Users.authVersion)
             }.count() == 1L
         }
     }

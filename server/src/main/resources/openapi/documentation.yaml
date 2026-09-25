@@ -3502,7 +3502,10 @@ components:
       required: [name, email, password]
       properties:
         name: { type: string, minLength: 1, maxLength: 50 }
-        email: { type: string, maxLength: 254 }
+        email:
+          type: string
+          maxLength: 254
+          description: The `toadie.invalid` domain is reserved for service accounts (`400`).
         password:
           type: string
           minLength: 10
@@ -3523,7 +3526,10 @@ components:
       required: [name, email, roles]
       properties:
         name: { type: string, minLength: 1, maxLength: 50 }
-        email: { type: string, maxLength: 254 }
+        email:
+          type: string
+          maxLength: 254
+          description: The `toadie.invalid` domain is reserved for service accounts (`400`).
         roles:
           type: array
           items: { $ref: '#/components/schemas/UserRole' }

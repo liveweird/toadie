@@ -2331,6 +2331,7 @@ export interface components {
         };
         UserCreateRequest: {
             name: string;
+            /** @description The `toadie.invalid` domain is reserved for service accounts (`400`). */
             email: string;
             /** @description Client-generated; at most 71 UTF-8 bytes (the bcrypt ceiling). Stored only as a hash and never returned. */
             password: string;
@@ -2341,6 +2342,7 @@ export interface components {
         };
         UserUpdateRequest: {
             name: string;
+            /** @description The `toadie.invalid` domain is reserved for service accounts (`400`). */
             email: string;
             roles: components["schemas"]["UserRole"][];
         };

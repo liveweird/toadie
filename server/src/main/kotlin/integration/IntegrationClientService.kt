@@ -6,6 +6,7 @@ import ch.nokillswit.infra.paging.toPage
 import ch.nokillswit.users.MAX_NAME_LENGTH
 import ch.nokillswit.users.SERVICE_ACCOUNT_EMAIL_DOMAIN
 import ch.nokillswit.users.UserService
+import ch.nokillswit.users.discardedServiceAccountPasswordHash
 import ch.nokillswit.users.insertServiceAccountInTransaction
 import io.ktor.util.AttributeKey
 import java.security.MessageDigest
@@ -43,9 +44,14 @@ data class IntegrationClientPrincipal(
  * only `write` scope is expected to ever use it.
  */
 fun IntegrationClientPrincipal.writerId(): UInt =
-    checkNotNull(serviceUserId) { "write scope without a service user" }
+    checkNotNull(serviceUserId) { "integration client $clientId has no paired service account" }
 
 enum class RevokeOutcome { REVOKED, NOT_FOUND, ALREADY_REVOKED }
+
+/** [IntegrationClientService.revoke]'s result: the outcome plus the client's paired service
+ *  account id (null for a pre-V42 row that never got one), so the route can audit it without a
+ *  second read. */
+data class RevokeResult(val outcome: RevokeOutcome, val serviceUserId: UInt?)
 
 /** SHA-256 hex digest — the at-rest form of every API key. No bcrypt work factor needed:
  *  keys contain 256 bits of server-generated randomness, not human-chosen secrets. */
@@ -83,31 +89,38 @@ class IntegrationClientService(val database: R2dbcDatabase) {
      * service user), the service account (name = the client's own, email
      * `integration-client-<clientId>@toadie.invalid`), then ONE update setting the requested
      * scope and `service_user_id` together, so `write` never exists without its service user.
+     * The service account's discarded password is hashed with bcrypt BEFORE the transaction
+     * opens ([discardedServiceAccountPasswordHash]'s own contract) so the CPU-bound hash never
+     * runs while this create holds a pooled connection.
      */
     suspend fun create(
         name: String,
         createdBy: UInt,
         scope: IntegrationScope = IntegrationScope.READ,
-    ): IntegrationClientCreated = suspendTransaction(database) {
+    ): IntegrationClientCreated {
         validateIntegrationClientName(name)
-        val rawKey = generateApiKey()
-        val record = IntegrationClients.insert {
-            it[IntegrationClients.name] = name
-            it[keyHash] = apiKeyHash(rawKey)
-            it[IntegrationClients.createdBy] = createdBy
-            it[createdAt] = System.currentTimeMillis()
-            it[IntegrationClients.scope] = IntegrationScope.READ.name.lowercase()
+        val serviceAccountPasswordHash = discardedServiceAccountPasswordHash()
+        return suspendTransaction(database) {
+            val rawKey = generateApiKey()
+            val record = IntegrationClients.insert {
+                it[IntegrationClients.name] = name
+                it[keyHash] = apiKeyHash(rawKey)
+                it[IntegrationClients.createdBy] = createdBy
+                it[createdAt] = System.currentTimeMillis()
+                it[IntegrationClients.scope] = IntegrationScope.READ.name.lowercase()
+            }
+            val clientId = record[IntegrationClients.id].value
+            val serviceUserId = insertServiceAccountInTransaction(
+                name = name.take(MAX_NAME_LENGTH),
+                email = "integration-client-$clientId@$SERVICE_ACCOUNT_EMAIL_DOMAIN",
+                passwordHash = serviceAccountPasswordHash,
+            )
+            IntegrationClients.update({ IntegrationClients.id eq clientId }) {
+                it[IntegrationClients.scope] = scope.name.lowercase()
+                it[IntegrationClients.serviceUserId] = serviceUserId
+            }
+            IntegrationClientCreated(id = clientId, apiKey = rawKey, serviceUserId = serviceUserId)
         }
-        val clientId = record[IntegrationClients.id].value
-        val serviceUserId = insertServiceAccountInTransaction(
-            name = name.take(MAX_NAME_LENGTH),
-            email = "integration-client-$clientId@$SERVICE_ACCOUNT_EMAIL_DOMAIN",
-        )
-        IntegrationClients.update({ IntegrationClients.id eq clientId }) {
-            it[IntegrationClients.scope] = scope.name.lowercase()
-            it[IntegrationClients.serviceUserId] = serviceUserId
-        }
-        IntegrationClientCreated(id = clientId, apiKey = rawKey, serviceUserId = serviceUserId)
     }
 
     suspend fun read(id: UInt): IntegrationClientResponse? = suspendTransaction(database) {
@@ -121,14 +134,17 @@ class IntegrationClientService(val database: R2dbcDatabase) {
         paging.toPage(items, total)
     }
 
-    suspend fun revoke(id: UInt): RevokeOutcome = suspendTransaction(database) {
+    suspend fun revoke(id: UInt): RevokeResult = suspendTransaction(database) {
         // Keep the whole row: a `map { it[revokedAt] }.singleOrNull()` would fold the
         // legitimate "exists with NULL revoked_at" case into "missing".
         val row = IntegrationClients.selectAll()
             .where { IntegrationClients.id eq id }
             .singleOrNull()
-            ?: return@suspendTransaction RevokeOutcome.NOT_FOUND
-        if (row[IntegrationClients.revokedAt] != null) return@suspendTransaction RevokeOutcome.ALREADY_REVOKED
+            ?: return@suspendTransaction RevokeResult(RevokeOutcome.NOT_FOUND, serviceUserId = null)
+        val serviceUserId = row[IntegrationClients.serviceUserId]?.value
+        if (row[IntegrationClients.revokedAt] != null) {
+            return@suspendTransaction RevokeResult(RevokeOutcome.ALREADY_REVOKED, serviceUserId)
+        }
         // Conditional on the flag so a concurrent revoke loses cleanly: the second caller's
         // update matches zero rows and answers 409 instead of double-stamping (checkup #30, A-L1).
         val updated = IntegrationClients.update({
@@ -136,15 +152,15 @@ class IntegrationClientService(val database: R2dbcDatabase) {
         }) {
             it[IntegrationClients.revokedAt] = System.currentTimeMillis()
         }
-        if (updated == 0) return@suspendTransaction RevokeOutcome.ALREADY_REVOKED
+        if (updated == 0) return@suspendTransaction RevokeResult(RevokeOutcome.ALREADY_REVOKED, serviceUserId)
         // Soft-delete the paired service account (V41) in the SAME transaction. Pre-V42 rows
         // (migrated with no service_user_id) skip this — nothing to delete.
-        row[IntegrationClients.serviceUserId]?.value?.let { serviceUserId ->
-            UserService.Users.update({ UserService.Users.id eq serviceUserId }) {
+        serviceUserId?.let { accountId ->
+            UserService.Users.update({ UserService.Users.id eq accountId }) {
                 it[UserService.Users.markedAsDeleted] = true
             }
         }
-        RevokeOutcome.REVOKED
+        RevokeResult(RevokeOutcome.REVOKED, serviceUserId)
     }
 
     /** The bearer-provider lookup: non-revoked hash match → principal (stamping `last_used_at`), else null. */

@@ -1,5 +1,9 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintService
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.r2dbc.update
+import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import ch.nokillswit.blueprints.AggregationCalculationSpec
 import ch.nokillswit.blueprints.AggregationPropertyDefinition
 import ch.nokillswit.blueprints.BlueprintRequest
@@ -361,6 +365,27 @@ class EntityTest {
                 TestBlueprints.remove(bpId, otherBpId)
             }
         }
+
+    @Test
+    fun `EntityService findByIdentity answers null once the owning blueprint is soft-deleted`() = testApplication {
+        usePostgresTestcontainer()
+        val owner = TestUsers.seed(uniqueEmail("ent-find-identity-bp"), "pw")
+        val bpId = unique("bp-find-identity-gone")
+        val entId = unique("ent-find-identity-gone")
+        try {
+            TestBlueprints.service.create(simpleBlueprint(bpId), owner)
+            val created = TestEntities.service.create(entityRequest(bpId, entId), owner)
+            assertEquals(created.id, TestEntities.service.findByIdentity(bpId, entId))
+            // The service refuses to delete a blueprint with active entities (V28), so the
+            // blueprint-side predicate can only be reached by flipping the row directly.
+            setBlueprintDeleted(bpId, deleted = true)
+            assertEquals(null, TestEntities.service.findByIdentity(bpId, entId))
+        } finally {
+            setBlueprintDeleted(bpId, deleted = false)
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
 
     @Test
     fun `rename cascades into the referrer's stored relation, observed on its GET`() = testApplication {
@@ -1300,4 +1325,12 @@ class EntityTest {
                 TestBlueprints.remove(bpId)
             }
         }
+}
+
+private suspend fun setBlueprintDeleted(identifier: String, deleted: Boolean) {
+    suspendTransaction(TestBlueprints.service.database) {
+        BlueprintService.Blueprints.update({ BlueprintService.Blueprints.identifier eq identifier }) {
+            it[BlueprintService.Blueprints.markedAsDeleted] = deleted
+        }
+    }
 }

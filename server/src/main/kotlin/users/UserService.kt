@@ -285,8 +285,10 @@ class UserService(private val database: R2dbcDatabase) {
      * read/write: `read`, `findWithIdByEmail`, `list`, and `lockedUser` (and therefore every
      * mutation built on it — `setLanguage`/`setDisabledFeatures`/`updateGuarded`/
      * `deleteGuarded`). A service account is 404 across the whole `/api/v1/users` surface and
-     * never counted in the list. Pure infra reads that must still see service accounts (the
-     * bootstrap seed-hash check, the seed-admin rotation) keep using [active] instead.
+     * never counted in the list. `rotatePasswordIfHashMatches` and `countActiveWithPasswordHash`
+     * keep using [active] instead, since they look for the seed admin's hash, which a service
+     * account can never carry (`seedNeedsRotation` goes through `findWithIdByEmail` and
+     * therefore this predicate — harmless, the seed admin is human).
      */
     private fun human(): Op<Boolean> = active() and (Users.serviceAccount eq false)
 
@@ -319,8 +321,14 @@ class UserService(private val database: R2dbcDatabase) {
 
 private val serviceAccountSecretRandom = SecureRandom()
 
-/** A discarded random 256-bit base64url secret nobody holds — hashed once and never verified. */
-private suspend fun discardedServiceAccountPasswordHash(): String {
+/**
+ * A discarded random 256-bit base64url secret nobody holds — hashed once and never verified.
+ * bcrypt is CPU-bound (deliberately, cost 12): callers must compute this BEFORE opening the
+ * service account's insert transaction, never inside it, so the hash never pins a pooled
+ * connection or a table lock (`IntegrationClientService.create`'s V27/V28 lock, this feature's
+ * own `insertServiceAccountInTransaction` callers) for the duration of a bcrypt round.
+ */
+internal suspend fun discardedServiceAccountPasswordHash(): String {
     val bytes = ByteArray(32).also(serviceAccountSecretRandom::nextBytes)
     val secret = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     return hashPassword(secret)
@@ -328,24 +336,24 @@ private suspend fun discardedServiceAccountPasswordHash(): String {
 
 /**
  * Inserts a service account (2.15.0): role USER, never loginable. The caller owns the
- * transaction — the [updatePasswordInTransaction] precedent. Written only by
- * `IntegrationClientService` (a later change) so an integration client's entity writes carry
- * an ordinary `created_by`. The synthetic `@toadie.invalid` address is NOT validated against
- * the human email rules (`validateEmail` rejects that whole domain for everything else) —
- * collision-freedom against `uq_users_email_active` comes from the integration client id
- * baked into the address, not from the usual grammar checks. `name` still goes through the
- * ordinary ≤50-character rule. No `user_disabled_features` row: MFA is login-scoped, and a
- * service account never logs in.
+ * transaction — the [updatePasswordInTransaction] precedent — and must supply [passwordHash]
+ * precomputed via [discardedServiceAccountPasswordHash] BEFORE opening it, so bcrypt's CPU work
+ * never runs inside a database transaction/lock. Written only by `IntegrationClientService` so
+ * an integration client's entity writes carry an ordinary `created_by`. The synthetic
+ * `@toadie.invalid` address is NOT validated against the human email rules (`validateEmail`
+ * rejects that whole domain for everything else) — collision-freedom against
+ * `uq_users_email_active` comes from the integration client id baked into the address, not from
+ * the usual grammar checks. `name` still goes through the ordinary ≤50-character rule. No
+ * `user_disabled_features` row: MFA is login-scoped, and a service account never logs in.
  */
-internal suspend fun insertServiceAccountInTransaction(name: String, email: String): UInt {
+internal suspend fun insertServiceAccountInTransaction(name: String, email: String, passwordHash: String): UInt {
     if (name.isBlank()) throw BadRequestException("Name must not be blank")
     if (name.length > MAX_NAME_LENGTH) throw BadRequestException("Name must be at most $MAX_NAME_LENGTH characters")
-    val hash = discardedServiceAccountPasswordHash()
     return with(UserService.Users) {
         val newRecord = insert {
             it[UserService.Users.name] = name
             it[UserService.Users.email] = canonicalEmail(email)
-            it[passwordHash] = hash
+            it[UserService.Users.passwordHash] = passwordHash
             it[role] = UserRole.USER.name
             it[language] = "en"
             it[serviceAccount] = true

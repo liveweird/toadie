@@ -447,6 +447,11 @@ class UserRoutesTest {
                 HttpStatusCode.NotFound,
                 client.putJson("/api/v1/users/$id/graph-layout", GraphLayoutDocument()).status,
             )
+            assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/users/$id/entity-graph-layout").status)
+            assertEquals(
+                HttpStatusCode.NotFound,
+                client.putJson("/api/v1/users/$id/entity-graph-layout", GraphLayoutDocument()).status,
+            )
         }
 
     @Test

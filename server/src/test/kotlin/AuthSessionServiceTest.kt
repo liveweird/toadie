@@ -90,6 +90,25 @@ class AuthSessionServiceTest {
         }
 
     @Test
+    fun `renewal is refused once the session's user becomes a service account`() = testApplication {
+        usePostgresTestcontainer()
+        val now = System.currentTimeMillis()
+        val sessions = newAuthSessionService { now }
+        val userId = TestUsers.seed(uniqueEmail("session-svc-flip"), "pw", role = UserRole.USER)
+        val id = UUID.randomUUID().toString()
+        try {
+            assertTrue(sessions.create(id, userId, 0, now + 60_000))
+            assertTrue(sessions.renew(id, userId, 0, now + 120_000))
+            // A raw flip past every guard (the CHECK only forbids ADMIN) — the live family must die
+            // with it, because lockCurrentUser carries the V41 predicate on renewal too.
+            TestUsers.forceServiceAccount(userId)
+            assertFalse(sessions.renew(id, userId, 0, now + 180_000))
+        } finally {
+            TestUsers.softDelete(userId)
+        }
+    }
+
+    @Test
     fun `concurrent renewal cannot resurrect a logged-out family`() = testApplication {
         usePostgresTestcontainer()
         val now = System.currentTimeMillis()
