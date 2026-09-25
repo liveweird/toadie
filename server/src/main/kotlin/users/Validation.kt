@@ -10,6 +10,19 @@ internal const val MAX_NAME_LENGTH = 50
  *  logic runs, since no stored account can exceed this length anyway. */
 const val MAX_EMAIL_LENGTH = 254
 
+/**
+ * Service accounts (V41, 2.15.0) live at synthetic `integration-client-<id>@toadie.invalid`
+ * addresses — `.invalid` is the RFC 2606 reserved TLD that can never resolve to a real
+ * mailbox. Reserving the whole domain for service accounts keeps them collision-free against
+ * `uq_users_email_active` without adding grammar rules to the synthetic address itself; a
+ * human email ending in this domain is rejected outright by [validateNameAndEmail] (create/
+ * update). This is deliberately NOT in [validateEmail]: that function is also called by the
+ * public password-reset REQUEST route, which must keep answering its uniform 202 for every
+ * address, service accounts included (they simply fall into the ordinary unknown-account
+ * branch — `findWithIdByEmail` already excludes them).
+ */
+internal const val SERVICE_ACCOUNT_EMAIL_DOMAIN = "toadie.invalid"
+
 /** Canonical email identity: trimmed + case-folded. Applied at EVERY entry point — create,
  *  update, login, and the lookup itself — so one mailbox is one account (`ADMIN@x` cannot
  *  create a second account beside `admin@x`, and a padded/case-variant login matches). A pure
@@ -52,4 +65,10 @@ internal fun validateNameAndEmail(name: String, email: String) {
         throw BadRequestException("Name must be at most $MAX_NAME_LENGTH characters")
     }
     validateEmail(email)
+    // The reserved service-account domain (V41) is checked here, not in validateEmail: this
+    // function backs user create/update only, while validateEmail is also called by the
+    // password-reset request route, which must keep its uniform 202 for every address.
+    if (canonicalEmail(email).endsWith("@$SERVICE_ACCOUNT_EMAIL_DOMAIN")) {
+        throw BadRequestException("Email domain is reserved for service accounts")
+    }
 }

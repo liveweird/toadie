@@ -89,6 +89,20 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    fun `a service account can never receive or consume a reset grant, exactly like a deleted user`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val resets = newPasswordResetService()
+            val name = "svc-${java.util.UUID.randomUUID()}"
+            val serviceAccountId = TestUsers.seedServiceAccount(name = name, email = "$name@toadie.invalid")
+
+            // lockUser (V41's defense-in-depth predicate) refuses a service account exactly
+            // like a soft-deleted or unknown user would — no grant is ever issued.
+            assertNull(resets.issue(serviceAccountId, 0))
+            assertTrue(resetTokenHashes(serviceAccountId).isEmpty())
+        }
+
+    @Test
     fun `competing self-password write cannot overwrite a completed reset`() = testApplication {
         usePostgresTestcontainer()
         val resets = newPasswordResetService()

@@ -74,6 +74,22 @@ class AuthSessionServiceTest {
     }
 
     @Test
+    fun `a service account can never register or renew a session, exactly like a deleted user`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val now = System.currentTimeMillis()
+            val sessions = newAuthSessionService { now }
+            val name = "svc-${UUID.randomUUID()}"
+            val serviceAccountId = TestUsers.seedServiceAccount(name = name, email = "$name@toadie.invalid")
+
+            // lockCurrentUser (V41's defense-in-depth predicate) refuses a service account
+            // exactly like a soft-deleted or unknown user would — no session is ever minted,
+            // so isActive/renew never see one to accept.
+            assertFalse(sessions.create(UUID.randomUUID().toString(), serviceAccountId, 0, now + 60_000))
+            assertFalse(sessions.renew(UUID.randomUUID().toString(), serviceAccountId, 0, now + 60_000))
+        }
+
+    @Test
     fun `concurrent renewal cannot resurrect a logged-out family`() = testApplication {
         usePostgresTestcontainer()
         val now = System.currentTimeMillis()

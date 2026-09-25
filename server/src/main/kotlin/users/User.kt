@@ -46,6 +46,13 @@ data class User(
     val language: String = "en",
     /** Monotonic credential/identity epoch; internal only, never part of UserResponse. */
     val authVersion: Long = 0,
+    /**
+     * Service accounts (V41, 2.15.0): a row that can never authenticate — no login, reset
+     * link, session, role change, or admin password set. Written only by
+     * `IntegrationClientService` so entity writes made through the integration MCP endpoint
+     * carry an ordinary `created_by` attribution. Internal only, never part of UserResponse.
+     */
+    val serviceAccount: Boolean = false,
 ) {
     /** The wire/claim shape: additional roles only — empty for a regular user. */
     val additionalRoles: Set<UserRole>

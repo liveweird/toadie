@@ -9,6 +9,7 @@ import ch.nokillswit.plugins.isUniqueViolation
 import ch.nokillswit.users.User
 import ch.nokillswit.users.UserRole
 import ch.nokillswit.users.UserService
+import ch.nokillswit.users.insertServiceAccountInTransaction
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
@@ -241,11 +242,34 @@ object TestUsers {
         )
     )
 
+    /**
+     * Seeds a service account (V41) directly through [insertServiceAccountInTransaction] — the
+     * only production writer is `IntegrationClientService` (a later change), so tests exercise
+     * this seam the same way. Returns the new row's id.
+     */
+    suspend fun seedServiceAccount(name: String, email: String): UInt =
+        suspendTransaction(sharedTestDatabase) { insertServiceAccountInTransaction(name, email) }
+
     /** Direct soft-delete for fixtures needing to bypass the endpoint's guards. */
     suspend fun softDelete(id: UInt) {
         suspendTransaction(sharedTestDatabase) {
             UserService.Users.update({ UserService.Users.id eq id }) {
                 it[UserService.Users.markedAsDeleted] = true
+            }
+        }
+    }
+
+    /**
+     * A direct, unguarded `UPDATE ... SET role = 'ADMIN'` bypassing every service-side check —
+     * pins the V41 `ck_users_service_account_never_admin` CHECK constraint itself, the last
+     * line of defense against a service account ever holding the management role even if
+     * application code bypassed every other guard. Lets the underlying R2DBC exception
+     * propagate to the caller.
+     */
+    suspend fun forcePromoteToAdmin(id: UInt) {
+        suspendTransaction(sharedTestDatabase) {
+            UserService.Users.update({ UserService.Users.id eq id }) {
+                it[UserService.Users.role] = UserRole.ADMIN.name
             }
         }
     }

@@ -233,6 +233,7 @@ ch.nokillswit
 │                       layout (V30: GET/PUT {id}/entity-graph-layout, same shape/rules over
 │                       an independent table — GraphLayoutService generalized to take its
 │                       Exposed table object, GraphLayouts/EntityGraphLayouts) + Validation.kt
+│                       + service accounts (V41, 2.15.0 — users rows that can never sign in, one per integration client; `human()` hides them from the whole management surface)
 ├── dictionaries/       admin-curated ordered value lists (Lettuce's dictionaries, single-
 │                       valued — no translations): Dictionary.kt (the Dictionary enum whitelist
 │                       + DTOs + validateDictionaryUpdate), Languages.kt (SUPPORTED_LANGUAGES —

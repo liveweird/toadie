@@ -144,6 +144,31 @@ class PasswordResetTest {
     }
 
     @Test
+    fun `a service account's email answers 202 identically and sends nothing`() = testApplication {
+        usePostgresTestcontainer()
+        val name = "svc-${java.util.UUID.randomUUID()}"
+        val email = "$name@toadie.invalid"
+        TestUsers.seedServiceAccount(name = name, email = email)
+        val mail = LogCapture("ch.nokillswit.mail")
+        val auditEvents = LogCapture("ch.nokillswit.audit")
+        try {
+            val response = jsonClient().post("/api/v1/password-reset") {
+                contentType(ContentType.Application.Json)
+                setBody(PasswordResetRequest(email))
+            }
+            assertEquals(HttpStatusCode.Accepted, response.status)
+            val audited = auditEvents.awaitEvent {
+                it.message == "password_reset.unknown_email" && it.hasKeyValue("email", email)
+            }
+            assertNotNull(audited, "a service account must fall into the unknown-email branch")
+            assertNull(mail.events.firstOrNull { "To: $email" in it.formattedMessage })
+        } finally {
+            mail.detach()
+            auditEvents.detach()
+        }
+    }
+
+    @Test
     fun `a second request within the interval is 429, uniformly for unknown emails too`() = testApplication {
         usePostgresTestcontainer()
         val client = jsonClient()
