@@ -139,7 +139,7 @@ class IntegrationGraphQlTest {
         assertEquals(HttpStatusCode.OK, schema.status)
         assertTrue(schema.body<String>().contains("type Query"))
 
-        assertEquals(ch.nokillswit.integration.RevokeOutcome.REVOKED, TestIntegrationClients.service.revoke(clientId))
+        assertEquals(ch.nokillswit.integration.RevokeOutcome.REVOKED, TestIntegrationClients.service.revoke(clientId).outcome)
         assertEquals(HttpStatusCode.Unauthorized, plain.graphql(key, "{ __typename }").status)
     }
 

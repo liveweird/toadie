@@ -89,6 +89,36 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    fun `a service account can never receive or consume a reset grant, exactly like a deleted user`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val resets = newPasswordResetService()
+            val name = "svc-${java.util.UUID.randomUUID()}"
+            val serviceAccountId = TestUsers.seedServiceAccount(name = name, email = "$name@toadie.invalid")
+
+            // lockUser (V41's defense-in-depth predicate) refuses a service account exactly
+            // like a soft-deleted or unknown user would — no grant is ever issued.
+            assertNull(resets.issue(serviceAccountId, 0))
+            assertTrue(resetTokenHashes(serviceAccountId).isEmpty())
+
+            // Since `issue` never mints a grant for a service account, the only way to exercise
+            // `complete`'s own `lockUser` refusal for one is a grant row inserted directly
+            // (the seam `issue` itself would use, were it not already refusing). `complete`
+            // must still refuse it: the row is left in place, and no password is set.
+            // A unique raw token: the shared container's other reset tests probe fixed strings.
+            val rawToken = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(java.util.UUID.randomUUID().toString().toByteArray()).take(43)
+            try {
+                insertRawResetGrant(rawToken, serviceAccountId, authVersion = 0, expiresAt = System.currentTimeMillis() + 900_000)
+                assertFalse(resets.isUsable(rawToken), "isUsable carries the service-account predicate too")
+                assertNull(resets.complete(rawToken, "irrelevant-hash"))
+                assertEquals(1, resetTokenHashes(serviceAccountId).size, "a refused complete must not consume the grant")
+            } finally {
+                deleteRawResetGrants(serviceAccountId)
+            }
+        }
+
+    @Test
     fun `competing self-password write cannot overwrite a completed reset`() = testApplication {
         usePostgresTestcontainer()
         val resets = newPasswordResetService()

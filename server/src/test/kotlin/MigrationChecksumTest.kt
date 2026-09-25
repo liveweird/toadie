@@ -60,6 +60,8 @@ class MigrationChecksumTest {
         "V38__blueprint_source.sql" to 977124289,
         "V39__ontology_revision.sql" to 246056121,
         "V40__catalog_file_revision.sql" to 1121035069,
+        "V41__users_service_accounts.sql" to 1174510165,
+        "V42__integration_client_scope_and_service_user.sql" to -1466097659,
     )
 
     @Test

@@ -233,6 +233,7 @@ ch.nokillswit
 │                       layout (V30: GET/PUT {id}/entity-graph-layout, same shape/rules over
 │                       an independent table — GraphLayoutService generalized to take its
 │                       Exposed table object, GraphLayouts/EntityGraphLayouts) + Validation.kt
+│                       + service accounts (V41, 2.15.0 — users rows that can never sign in, one per integration client; `human()` hides them from the whole management surface)
 ├── dictionaries/       admin-curated ordered value lists (Lettuce's dictionaries, single-
 │                       valued — no translations): Dictionary.kt (the Dictionary enum whitelist
 │                       + DTOs + validateDictionaryUpdate), Languages.kt (SUPPORTED_LANGUAGES —
@@ -453,10 +454,17 @@ ch.nokillswit
 │                       SavedEntityQueryService.kt (the lenses/ clone over V35's `entity_queries`:
 │                       own + PUBLIC list, creator-only mutations via the hybrid 404/403 verdict),
 │                       SavedEntityQueryRoutes.kt (`/api/v1/entity-queries`, any authenticated)
-├── integration/        read-only Port GraphQL adapter (v2.7.0): committed SDL, service-backed
-│                       resolvers, bounded execution and separate machine authentication;
-│                       IntegrationClientService/Routes manage revocable keys under ADMIN-only
-│                       `/api/v1/integration-clients` (V36). See `.claude/docs/integration-api.md`.
+├── integration/        the machine API: the read-only Port GraphQL adapter (v2.7.0 — committed SDL,
+│                       service-backed resolvers, bounded execution, separate machine authentication)
+│                       and, since 2.15.0, the MCP endpoint `POST /integration/mcp` (Mcp.kt — a
+│                       per-request stateless Streamable HTTP `Server` behind the SAME guard chain;
+│                       McpReadTools.kt/McpWriteTools.kt — ten tools for every key, the three
+│                       entity write tools refused with FORBIDDEN for read-scope keys; McpTools.kt —
+│                       `guarded`, the one exception→tool-result mapper, the request-local scope/
+│                       rate-limit gate, + `integration.mcp_call` audit; McpSchemas.kt);
+│                       IntegrationClientService/Routes manage revocable keys with an immutable
+│                       read/write scope and a paired service account (V36, V42) under ADMIN-only
+│                       `/api/v1/integration-clients`. See `.claude/docs/integration-api.md`.
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),
                         CatalogFileValidation.kt (the sanitizer + per-kind required/forbidden

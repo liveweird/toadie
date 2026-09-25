@@ -65,7 +65,8 @@ class AuthSessionService(
         (Sessions innerJoin Users).select(Sessions.id).where {
             (Sessions.id eq id) and (Sessions.userId eq userId) and
                 (Sessions.authVersion eq Users.authVersion) and
-                (Users.markedAsDeleted eq false) and (Sessions.expiresAt greater clock())
+                (Users.markedAsDeleted eq false) and (Users.serviceAccount eq false) and
+                (Sessions.expiresAt greater clock())
         }.count() == 1L
     }
 
@@ -75,8 +76,12 @@ class AuthSessionService(
         }
     }
 
+    // Defense in depth (V41): a service account can never authenticate, so it must never
+    // register or renew a session even if some future caller reached this far. `findWithIdByEmail`
+    // already keeps a service account out of login entirely — this predicate is the backstop.
     private suspend fun lockCurrentUser(userId: UInt, authVersion: Long): Boolean =
         Users.select(Users.id).where {
-            (Users.id eq userId) and (Users.markedAsDeleted eq false) and (Users.authVersion eq authVersion)
+            (Users.id eq userId) and (Users.markedAsDeleted eq false) and (Users.authVersion eq authVersion) and
+                (Users.serviceAccount eq false)
         }.forUpdate().toList().isNotEmpty()
 }

@@ -554,6 +554,33 @@ Terminal `revoked_at` is the documented removal exception to `marked_as_deleted`
 for administrator inspection and cannot be re-enabled. No ontology columns or data change.
 See [integration-api.md](integration-api.md) for transaction/authentication invariants.
 
+**Service accounts (V41).** `ALTER TABLE users ADD COLUMN service_account BOOLEAN NOT NULL
+DEFAULT FALSE` plus the CHECK `ck_users_service_account_never_admin` (`NOT (service_account AND
+"role" = 'ADMIN')`) and `idx_users_service_account` (2.15.0). A service account is a `users` row
+that can never authenticate — no login, reset link, session, role change, or admin password set
+(`.claude/docs/authorization.md` "Service accounts (V41)") — and exists only so entity writes made
+by an integration client through the MCP endpoint carry an ordinary `created_by`. `UserService`
+reads the management surface through `human()` (`active() AND service_account = FALSE`);
+`rotatePasswordIfHashMatches` and `countActiveWithPasswordHash` keep `active()`, since they look
+for the seed admin's hash, which a service account can never carry (`seedNeedsRotation` goes
+through `findWithIdByEmail` and therefore `human()` — harmless, the seed admin is human). Rows
+are inserted by `insertServiceAccountInTransaction` inside the integration client's own create
+transaction (V42, below) and soft-deleted when that client is revoked — never hard-deleted, so
+`entities.created_by` keeps joining and the entity's `creatorDeleted` becomes the honest signal.
+Migration checksums, including V41, are pinned in `MigrationChecksumTest`.
+
+**V42 — key scope and the paired service account (2.15.0).** `ALTER TABLE integration_clients ADD
+COLUMN scope VARCHAR(10) NOT NULL DEFAULT 'read' CHECK (scope IN ('read','write')), ADD COLUMN
+service_user_id BIGINT NULL REFERENCES users(id) ON DELETE RESTRICT, ADD CONSTRAINT
+ck_integration_clients_write_needs_service_user CHECK (scope = 'read' OR service_user_id IS NOT
+NULL)` plus the partial unique index `uq_integration_clients_service_user` over non-null
+`service_user_id`. No backfill: pre-existing rows keep `read` and `NULL`, which the CHECK permits.
+`IntegrationClientService.create` runs ONE transaction — insert the client, insert its service
+account (`insertServiceAccountInTransaction`, V41), link it — and `revoke` soft-deletes the
+service account in the same transaction as the terminal `revoked_at` stamp, so an entity the
+client wrote keeps its `created_by` join and reports `creatorDeleted`. Migration checksums,
+including V42, are pinned in `MigrationChecksumTest`.
+
 ### Entity source references (V37)
 
 `ALTER TABLE entities ADD COLUMN source_url VARCHAR(2048) NULL, ADD COLUMN last_synced_at BIGINT

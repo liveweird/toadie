@@ -9,6 +9,8 @@ import ch.nokillswit.plugins.isUniqueViolation
 import ch.nokillswit.users.User
 import ch.nokillswit.users.UserRole
 import ch.nokillswit.users.UserService
+import ch.nokillswit.users.discardedServiceAccountPasswordHash
+import ch.nokillswit.users.insertServiceAccountInTransaction
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
@@ -28,11 +30,14 @@ import io.ktor.server.config.MapApplicationConfig
 import io.ktor.server.config.mergeWith
 import io.ktor.server.testing.ApplicationTestBuilder
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
+import org.jetbrains.exposed.v1.r2dbc.deleteWhere
+import org.jetbrains.exposed.v1.r2dbc.insert
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
@@ -208,6 +213,38 @@ internal suspend fun resetTokenHashes(userId: UInt): List<String> = suspendTrans
     }
 }
 
+/** [PasswordResetService.complete]'s own digest, duplicated here so a test can insert a raw
+ *  grant row `issue` would never produce (e.g. one targeting a service account) — the only way
+ *  to exercise `complete`'s defense-in-depth `lockUser` check for a row that could never be
+ *  issued in the first place. */
+private fun rawResetTokenDigest(token: String): String =
+    java.security.MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.US_ASCII))
+        .joinToString("") { "%02x".format(it) }
+
+/** Inserts a `password_reset_tokens` row directly, bypassing [ch.nokillswit.auth.PasswordResetService.issue]
+ *  (and the `lockUser` check it applies before ever minting a token) — the `TestUsers.forcePromoteToAdmin`
+ *  idiom applied to reset grants. */
+internal suspend fun deleteRawResetGrants(userId: UInt) {
+    suspendTransaction(sharedTestDatabase) {
+        with(ch.nokillswit.auth.PasswordResetService.Tokens) {
+            deleteWhere { this@with.userId eq userId }
+        }
+    }
+}
+
+internal suspend fun insertRawResetGrant(rawToken: String, userId: UInt, authVersion: Long, expiresAt: Long) {
+    suspendTransaction(sharedTestDatabase) {
+        with(ch.nokillswit.auth.PasswordResetService.Tokens) {
+            insert {
+                it[tokenHash] = rawResetTokenDigest(rawToken)
+                it[this@with.userId] = userId
+                it[this@with.authVersion] = authVersion
+                it[this@with.expiresAt] = expiresAt
+            }
+        }
+    }
+}
+
 private val sharedTestDatabase: R2dbcDatabase by lazy {
     R2dbcDatabase.connect(
         url = PostgresTestSupport.r2dbcUrl,
@@ -241,11 +278,75 @@ object TestUsers {
         )
     )
 
+    /**
+     * Seeds a service account (V41) directly through [insertServiceAccountInTransaction] — the
+     * only production writer is `IntegrationClientService` (a later change), so tests exercise
+     * this seam the same way. Returns the new row's id.
+     */
+    suspend fun seedServiceAccount(name: String, email: String): UInt {
+        val passwordHash = discardedServiceAccountPasswordHash()
+        return suspendTransaction(sharedTestDatabase) {
+            insertServiceAccountInTransaction(name, email, passwordHash)
+        }
+    }
+
+    data class RawRow(
+        val id: UInt,
+        val email: String,
+        val role: UserRole,
+        val serviceAccount: Boolean,
+        val markedAsDeleted: Boolean,
+    )
+
+    /** Direct row read bypassing [UserService]'s human()-only filtering — for asserting on a
+     *  service account (V41), which the whole `/api/v1/users` surface hides. */
+    suspend fun rawRow(id: UInt): RawRow? = suspendTransaction(sharedTestDatabase) {
+        UserService.Users.selectAll().where { UserService.Users.id eq id }.map {
+            RawRow(
+                id = it[UserService.Users.id].value,
+                email = it[UserService.Users.email],
+                role = UserRole.valueOf(it[UserService.Users.role]),
+                serviceAccount = it[UserService.Users.serviceAccount],
+                markedAsDeleted = it[UserService.Users.markedAsDeleted],
+            )
+        }.singleOrNull()
+    }
+
     /** Direct soft-delete for fixtures needing to bypass the endpoint's guards. */
     suspend fun softDelete(id: UInt) {
         suspendTransaction(sharedTestDatabase) {
             UserService.Users.update({ UserService.Users.id eq id }) {
                 it[UserService.Users.markedAsDeleted] = true
+            }
+        }
+    }
+
+    /**
+     * A direct, unguarded `UPDATE ... SET role = 'ADMIN'` bypassing every service-side check —
+     * pins the V41 `ck_users_service_account_never_admin` CHECK constraint itself, the last
+     * line of defense against a service account ever holding the management role even if
+     * application code bypassed every other guard. Lets the underlying R2DBC exception
+     * propagate to the caller.
+     */
+    suspend fun forcePromoteToAdmin(id: UInt) {
+        suspendTransaction(sharedTestDatabase) {
+            UserService.Users.update({ UserService.Users.id eq id }) {
+                it[UserService.Users.role] = UserRole.ADMIN.name
+            }
+        }
+    }
+
+    /**
+     * A direct, unguarded `UPDATE ... SET service_account = TRUE` bypassing every service-side
+     * write path — the [forcePromoteToAdmin] idiom applied the other way, for a USER-role human
+     * the V41 CHECK constraint still permits to flip. Lets a test prove a defense-in-depth
+     * `service_account = FALSE` predicate refuses an ALREADY-ESTABLISHED row (a session, a
+     * reset grant…), not merely a row that never existed for a fresh id.
+     */
+    suspend fun forceServiceAccount(id: UInt) {
+        suspendTransaction(sharedTestDatabase) {
+            UserService.Users.update({ UserService.Users.id eq id }) {
+                it[UserService.Users.serviceAccount] = true
             }
         }
     }

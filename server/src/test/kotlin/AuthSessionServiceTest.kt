@@ -74,6 +74,41 @@ class AuthSessionServiceTest {
     }
 
     @Test
+    fun `a service account can never register or renew a session, exactly like a deleted user`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val now = System.currentTimeMillis()
+            val sessions = newAuthSessionService { now }
+            val name = "svc-${UUID.randomUUID()}"
+            val serviceAccountId = TestUsers.seedServiceAccount(name = name, email = "$name@toadie.invalid")
+
+            // lockCurrentUser (V41's defense-in-depth predicate) refuses a service account
+            // exactly like a soft-deleted or unknown user would — no session is ever minted,
+            // so isActive/renew never see one to accept.
+            assertFalse(sessions.create(UUID.randomUUID().toString(), serviceAccountId, 0, now + 60_000))
+            assertFalse(sessions.renew(UUID.randomUUID().toString(), serviceAccountId, 0, now + 60_000))
+        }
+
+    @Test
+    fun `renewal is refused once the session's user becomes a service account`() = testApplication {
+        usePostgresTestcontainer()
+        val now = System.currentTimeMillis()
+        val sessions = newAuthSessionService { now }
+        val userId = TestUsers.seed(uniqueEmail("session-svc-flip"), "pw", role = UserRole.USER)
+        val id = UUID.randomUUID().toString()
+        try {
+            assertTrue(sessions.create(id, userId, 0, now + 60_000))
+            assertTrue(sessions.renew(id, userId, 0, now + 120_000))
+            // A raw flip past every guard (the CHECK only forbids ADMIN) — the live family must die
+            // with it, because lockCurrentUser carries the V41 predicate on renewal too.
+            TestUsers.forceServiceAccount(userId)
+            assertFalse(sessions.renew(id, userId, 0, now + 180_000))
+        } finally {
+            TestUsers.softDelete(userId)
+        }
+    }
+
+    @Test
     fun `concurrent renewal cannot resurrect a logged-out family`() = testApplication {
         usePostgresTestcontainer()
         val now = System.currentTimeMillis()

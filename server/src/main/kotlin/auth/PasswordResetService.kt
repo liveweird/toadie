@@ -57,7 +57,8 @@ class PasswordResetService(
         return suspendTransaction(database) {
             (Tokens innerJoin Users).select(Tokens.tokenHash).where {
                 (Tokens.tokenHash eq digest(token)) and (Tokens.expiresAt greater clock()) and
-                    (Users.markedAsDeleted eq false) and (Tokens.authVersion eq Users.authVersion)
+                    (Users.markedAsDeleted eq false) and (Users.serviceAccount eq false) and
+                    (Tokens.authVersion eq Users.authVersion)
             }.count() == 1L
         }
     }
@@ -86,9 +87,14 @@ class PasswordResetService(
         suspendTransaction(database) { Tokens.deleteWhere { tokenHash eq digest(token) } }
     }
 
+    // Defense in depth (V41): a service account can never authenticate, so it must never
+    // receive or consume a reset grant even if some future caller reached this far. The
+    // public request route never sees one either — `findWithIdByEmail` excludes it, so the
+    // request falls into the ordinary unknown_email branch.
     private suspend fun lockUser(userId: UInt, version: Long): Boolean =
         Users.select(Users.id).where {
-            (Users.id eq userId) and (Users.markedAsDeleted eq false) and (Users.authVersion eq version)
+            (Users.id eq userId) and (Users.markedAsDeleted eq false) and (Users.authVersion eq version) and
+                (Users.serviceAccount eq false)
         }.forUpdate().toList().isNotEmpty()
 
     private fun digest(token: String): String =

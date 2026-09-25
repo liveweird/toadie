@@ -108,6 +108,23 @@ class LoginTest {
     }
 
     @Test
+    fun `a service account's email answers the uniform 401, audited as unknown_email`() = testApplication {
+        usePostgresTestcontainer()
+        val name = "svc-${java.util.UUID.randomUUID()}"
+        val email = "$name@toadie.invalid"
+        TestUsers.seedServiceAccount(name = name, email = email)
+
+        withAuditCapture { audit ->
+            val response = jsonClient().postJson("/api/v1/login", LoginRequest(email, "any-password-at-all"))
+            assertEquals(HttpStatusCode.Unauthorized, response.status)
+            val audited = audit.awaitEvent {
+                it.message == "login.failure" && it.hasKeyValue("reason", "unknown_email")
+            }
+            assertNotNull(audited, "a service account must be indistinguishable from an unknown email")
+        }
+    }
+
+    @Test
     fun `an over-long email is a plain 400, never the uniform 401`() = testApplication {
         usePostgresTestcontainer()
         // No stored account can exceed MAX_EMAIL_LENGTH, so this must be rejected up front —

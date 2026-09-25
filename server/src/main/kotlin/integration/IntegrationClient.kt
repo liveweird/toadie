@@ -2,11 +2,25 @@ package ch.nokillswit.integration
 
 import ch.nokillswit.infra.paging.PageResponse
 import io.ktor.server.plugins.BadRequestException
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+
+/**
+ * A key's scope (2.15.0): `read` grants the GraphQL API and the MCP read tools; `write`
+ * additionally grants the MCP entity write tools. Immutable once created — rotate by creating
+ * a new client. Every client, regardless of scope, is paired with its own service account
+ * (V41) so an entity write made through the MCP endpoint carries an ordinary `created_by`.
+ */
+@Serializable
+enum class IntegrationScope {
+    @SerialName("read") READ,
+    @SerialName("write") WRITE,
+}
 
 @Serializable
 data class IntegrationClientRequest(
     val name: String,
+    val scope: IntegrationScope = IntegrationScope.READ,
 )
 
 @Serializable
@@ -18,6 +32,7 @@ data class IntegrationClientResponse(
     val lastUsedAt: Long? = null,
     val revoked: Boolean,
     val revokedAt: Long? = null,
+    val scope: IntegrationScope,
 )
 
 /** The one-time create response: only the key's SHA-256 digest is stored. */

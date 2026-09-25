@@ -587,7 +587,7 @@ merely to verify a changeset: use Testcontainers and a disposable Compose projec
 - **Exception:** the log audit sink is post-commit external output; these tests do not promise
   atomic delivery across a process crash or the database-commit/coroutine-return boundary.
 
-### GraphQL integration checks
+### Integration checks
 
 The committed SDL is checked independently of REST OpenAPI. Integration client management
 still uses the ordinary conformance-checked HTTP clients. See
@@ -596,6 +596,23 @@ authentication, revocation-race, scope, cost, cancellation, and one-time-reveal 
 Browser coverage lives in `e2e/scenarios/integration-clients.md`. The Docker-free
 `:server:checkGraphqlCompatibility` gate compares SDL against the relevant Git baseline and
 runs in `check`; see `api-guidelines/GRAPHQL-GUIDELINES.md` for selection and failure policy.
+
+**MCP endpoint (2.15.0).** `IntegrationMcpTest` drives `POST /integration/mcp` with raw JSON-RPC
+2.0 bodies through `jsonClient()` (the conformance plugin ignores non-`/api/` paths; the SDK's
+transport requires `Accept: application/json, text/event-stream`), one stateless POST per call:
+disabled flag → 404; missing key / login JWT → 401 with `integration.auth_failed`; `initialize`
+answers `serverInfo.name == "toadie"`; `tools/list` is the same ten tools for every key,
+regardless of scope; each read tool once (summary vs `full`, `NOT_FOUND`, filters, REST parity for
+`get_entity`, the dry-run storing nothing, the revision equal to `TestOntologyRevision.current()`);
+the write tools end to end — `upsert_entity` CREATED with `created_by` equal to the client's
+service account, the revision advancing by one and `entity.created` carrying that `byUserId` plus
+`clientId`, then UPDATED, `sourceUrl` stamping `lastSyncedAt`, an invalid document as an `INVALID`
+tool result with `findings`, a batch with one `INVALID` row, `delete_entity` then `NOT_FOUND`, and
+the referrer `CONFLICT` naming `referrers`; a `read` key calling a write tool gets a `FORBIDDEN`
+tool result audited `integration.scope_denied` and stores nothing; a JSON-RPC BATCH runs its calls
+serially under one request lock and rate-charges the shared per-client bucket for every call after
+the first, answering `RATE_LIMITED` once it is exhausted; a body over 4 MiB is 413; every call
+audits `integration.mcp_call`. Fixtures are throwaway blueprints/entities removed in `finally`.
 
 **Ontology revision (2.12.0).** `OntologyRevisionTest` covers the V39 monotonic counter
 (`.claude/docs/persistence.md` "Ontology revision (V39)", `.claude/docs/integration-api.md`

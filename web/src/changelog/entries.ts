@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.15.0",
+    date: "2026-09-25",
+    en: `**AI agents can write to the Port ontology through MCP.** A new /integration/mcp endpoint lets an agent list blueprints, read and check entities, and — with a write-scope key — create, replace and delete entities keyed by blueprint and identifier, with the same validation findings the editor shows. Integration clients now carry a read or write scope and act through their own service account, so every change is attributed to the client that made it. Existing keys stay read-only.`,
+    pl: `**Agenty AI mogą zapisywać ontologię Port przez MCP.** Nowy punkt końcowy /integration/mcp pozwala agentowi listować blueprinty, czytać i sprawdzać encje, a z kluczem o zakresie zapisu — tworzyć, zastępować i usuwać encje identyfikowane przez blueprint i identyfikator, z tymi samymi ustaleniami walidacji, które pokazuje edytor. Klienci integracji mają teraz zakres odczytu lub zapisu i działają przez własne konto usługowe, więc każda zmiana jest przypisana klientowi, który ją wykonał. Istniejące klucze pozostają tylko do odczytu.`,
+  },
+  {
     version: "2.14.3",
     date: "2026-09-24",
     en: `**Clearer Port diagnostics and hierarchy graph.** The Errors page keeps broken saved queries visible when every blueprint is hidden. In the Entity Graph, hierarchy emphasis now follows the actual parent links for the selected hierarchy, so an unrelated relation with the same name no longer appears as a hierarchy edge.`,

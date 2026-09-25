@@ -147,6 +147,24 @@ class BlueprintTest {
         }
     }
 
+    // MCP groundwork (release 2.15.0): the case-insensitive identifier lookup a future non-HTTP
+    // caller uses instead of paging through `list()`.
+    @Test
+    fun `BlueprintService findByIdentifier resolves case-insensitively and answers null for an unknown identifier`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val admin = seededClient("bpfind", UserRole.ADMIN)
+            val id = identifier("bpfind")
+            try {
+                val created = admin.postJson("/api/v1/blueprints", simpleRequest(id)).body<BlueprintResponse>()
+
+                assertEquals(created, TestBlueprints.service.findByIdentifier(id.uppercase()))
+                assertEquals(null, TestBlueprints.service.findByIdentifier(identifier("bpfind-unknown")))
+            } finally {
+                TestBlueprints.remove(id)
+            }
+        }
+
     @Test
     fun `a kitchen-sink blueprint touching every optional field round-trips byte-for-byte`() = testApplication {
         usePostgresTestcontainer()

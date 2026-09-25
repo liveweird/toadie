@@ -41,10 +41,13 @@
   nothing (entities have no waiver, so a rejected sync stores nothing to audit),
 - `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail),
-- `integration_client.created` (byUserId/clientId/name) / `integration_client.revoked` (byUserId/clientId),
+- `integration_client.created` (byUserId/clientId/name/scope/serviceUserId — 2.15.0 adds the immutable key scope and the paired service account's user id) / `integration_client.revoked` (byUserId/clientId/serviceUserId — the paired service account soft-deleted with it, null for a pre-2.15.0 row),
 - `integration.auth_failed` (reason: missing_or_malformed/unknown_or_revoked; no credential text),
-- `integration.rate_limited` (clientId/clientName),
+- `integration.rate_limited` (clientId/clientName — the request-level per-client bucket AND, since
+  2.15.0, every MCP tool call within one batch beyond the first that draws the same bucket dry),
 - `integration.request` (clientId/clientName/operationName/rootFields; bounded operation metadata, no query, variables or result data).
+- `integration.mcp_call` (clientId/clientName/tool/ok — every MCP `tools/call`, 2.15.0; never the arguments or the result). An MCP entity write additionally emits the ordinary `entity.created`/`entity.updated` (`import: true`, via `entities/EntityAudit.kt`) or `entity.deleted` event with `byUserId` = the client's service account and `clientId` appended.
+- `integration.scope_denied` (clientId/clientName/tool — a read-scope key calling an MCP write tool, 2.15.0)
 
 **Not audit events.** The entity query engine's (phase 7, v2.0.0) ONE DEBUG line on
 `ch.nokillswit.entityquery` per evaluation-budget miss — the refusal code (`DEADLINE_EXCEEDED`/
@@ -72,7 +75,7 @@ Never log secrets (passwords, tokens); emails/ids are fine. When adding a securi
 
 ### Integration audit
 
-The machine API additionally audits reads as `integration.request`, with bounded client and
+The machine API additionally audits reads as `integration.request` and MCP tool calls as `integration.mcp_call`, with bounded client and
 operation/root metadata only. Client create/revoke, authentication refusal and throttling are
 audited; keys, query text, variables and returned data are never logged. See
 [integration-api.md](integration-api.md) for the exact scope and delivery limitations.

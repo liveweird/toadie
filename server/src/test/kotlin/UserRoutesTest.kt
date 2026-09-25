@@ -2,7 +2,11 @@ package ch.nokillswit
 
 import ch.nokillswit.auth.LoginRequest
 import ch.nokillswit.plugins.ProblemDetail
+import ch.nokillswit.users.GraphLayoutDocument
+import ch.nokillswit.users.PasswordUpdateRequest
 import ch.nokillswit.users.UserCreateRequest
+import ch.nokillswit.users.UserFeaturesUpdateRequest
+import ch.nokillswit.users.UserLanguageUpdateRequest
 import ch.nokillswit.users.UserPageResponse
 import ch.nokillswit.users.UserResponse
 import ch.nokillswit.users.UserRole
@@ -22,6 +26,7 @@ import io.ktor.server.testing.testApplication
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** The user-management surface: ADMIN-only CRUD, the wire roles set, and the two protections. */
@@ -383,5 +388,87 @@ class UserRoutesTest {
             UserUpdateRequest(name = "   ", email = uniqueEmail("updbadgone"), roles = emptyList()),
         )
         assertEquals(HttpStatusCode.BadRequest, invalidAndGone.status)
+    }
+
+    @Test
+    fun `a human email cannot use the reserved service-account domain`() = testApplication {
+        usePostgresTestcontainer()
+        val (client, _) = adminClient()
+
+        val create = client.postJson("/api/v1/users", createRequest("someone-${UUID.randomUUID()}@toadie.invalid"))
+        assertEquals(HttpStatusCode.BadRequest, create.status)
+        assertEquals("Email domain is reserved for service accounts", create.body<ProblemDetail>().detail)
+
+        val target = client.createUser(createRequest(uniqueEmail("svcdomain")))
+        val update = client.putJson(
+            "/api/v1/users/${target.id}",
+            UserUpdateRequest(name = target.name, email = "another-${UUID.randomUUID()}@toadie.invalid", roles = emptyList()),
+        )
+        assertEquals(HttpStatusCode.BadRequest, update.status)
+        assertEquals("Email domain is reserved for service accounts", update.body<ProblemDetail>().detail)
+    }
+
+    @Test
+    fun `a service account is absent from the list and 404s across the whole management surface`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val (client, _) = adminClient()
+            val name = "svc-${UUID.randomUUID()}"
+            val email = "$name@toadie.invalid"
+            val id = TestUsers.seedServiceAccount(name = name, email = email)
+
+            // Absent from the list, even filtered directly by its own email.
+            assertEquals(0L, client.get("/api/v1/users?email=$email").body<UserPageResponse>().total)
+
+            assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/users/$id").status)
+            assertEquals(
+                HttpStatusCode.NotFound,
+                client.putJson(
+                    "/api/v1/users/$id",
+                    // An ordinary human address: the reserved domain would 400 before the id lookup.
+                    UserUpdateRequest(name = name, email = uniqueEmail("svc-put"), roles = emptyList()),
+                ).status,
+            )
+            assertEquals(HttpStatusCode.NotFound, client.delete("/api/v1/users/$id").status)
+            assertEquals(
+                HttpStatusCode.NotFound,
+                client.putJson("/api/v1/users/$id/password", PasswordUpdateRequest(password = "whatever-12345")).status,
+            )
+            assertEquals(
+                HttpStatusCode.NotFound,
+                client.putJson("/api/v1/users/$id/features", UserFeaturesUpdateRequest(disabledFeatures = emptyList())).status,
+            )
+            assertEquals(
+                HttpStatusCode.NotFound,
+                client.putJson("/api/v1/users/$id/language", UserLanguageUpdateRequest(language = "en")).status,
+            )
+            assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/users/$id/graph-layout").status)
+            assertEquals(
+                HttpStatusCode.NotFound,
+                client.putJson("/api/v1/users/$id/graph-layout", GraphLayoutDocument()).status,
+            )
+            assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/users/$id/entity-graph-layout").status)
+            assertEquals(
+                HttpStatusCode.NotFound,
+                client.putJson("/api/v1/users/$id/entity-graph-layout", GraphLayoutDocument()).status,
+            )
+        }
+
+    @Test
+    fun `the database itself refuses to make a service account an admin`() = testApplication {
+        usePostgresTestcontainer()
+        val name = "svc-${UUID.randomUUID()}"
+        val id = TestUsers.seedServiceAccount(name = name, email = "$name@toadie.invalid")
+
+        // The V41 CHECK constraint is the last line of defense — it fires even for a raw
+        // UPDATE that bypasses every application-level guard.
+        // Asserted on the constraint NAME in the cause chain, not on Exposed's wrapper type
+        // (the R2DBC path wraps PostgreSQL's 23514 differently from the JDBC path).
+        val thrown = runCatching { TestUsers.forcePromoteToAdmin(id) }.exceptionOrNull()
+        assertNotNull(thrown, "the CHECK constraint should have refused the promotion")
+        assertTrue(
+            generateSequence(thrown) { it.cause }.any { it.message?.contains("ck_users_service_account_never_admin") == true },
+            "expected ck_users_service_account_never_admin in the cause chain, got: $thrown",
+        )
     }
 }

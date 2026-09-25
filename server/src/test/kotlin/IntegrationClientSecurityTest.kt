@@ -94,7 +94,7 @@ class IntegrationClientSecurityTest {
         assertEquals(GuardedMutation.DONE, TestUsers.service.deleteGuarded(owner))
         assertEquals(id, assertNotNull(service.authenticate(key)).clientId)
         assertEquals("Former administrator", service.read(id)?.createdByName)
-        assertEquals(RevokeOutcome.REVOKED, service.revoke(id))
+        assertEquals(RevokeOutcome.REVOKED, service.revoke(id).outcome)
         assertNull(service.authenticate(key))
     }
 
@@ -121,7 +121,7 @@ class IntegrationClientSecurityTest {
         assertNull(service.authenticate("unknown"))
         assertEquals(id, assertNotNull(service.authenticate(key)).clientId)
         assertNotNull(service.read(id)?.lastUsedAt)
-        assertEquals(RevokeOutcome.REVOKED, service.revoke(id))
+        assertEquals(RevokeOutcome.REVOKED, service.revoke(id).outcome)
         assertNull(service.authenticate(key))
     }
 
@@ -154,7 +154,7 @@ class IntegrationClientSecurityTest {
                 assertNull(authentication.await())
             }
             assertNull(service.read(id)?.lastUsedAt)
-            assertEquals(RevokeOutcome.ALREADY_REVOKED, service.revoke(id))
+            assertEquals(RevokeOutcome.ALREADY_REVOKED, service.revoke(id).outcome)
         } finally {
             withContext(NonCancellable + Dispatchers.IO) { holder.rollback(); holder.close() }
         }

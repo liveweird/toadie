@@ -20,9 +20,12 @@ fun Int.orNotFound(resource: String): Int =
 
 /**
  * Requested action conflicts with the resource's current state (e.g. an invalid status
- * transition, or the last-admin protections) → 409 with the given detail.
+ * transition, or the last-admin protections) → 409 with the given detail. `open` so a caller
+ * needing STRUCTURED fields on top of the message (e.g. [ch.nokillswit.entities.EntityReferencedException])
+ * can subclass it: `plugins/ErrorHandling.kt`'s `exception<ConflictException>` handler matches by
+ * supertype, so a subclass renders through the SAME 409 handler without a new registration.
  */
-class ConflictException(message: String = "Conflict") : RuntimeException(message)
+open class ConflictException(message: String = "Conflict") : RuntimeException(message)
 
 /**
  * Caller-specific throttling (e.g. the per-account login lockout) → 429 with the given detail.

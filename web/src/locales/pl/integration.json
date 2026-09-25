@@ -1,7 +1,11 @@
 {
   "title": "Klienci integracyjni",
-  "hint": "Twórz klucze dające zewnętrznym systemom dostęp do odczytu całej ontologii Port przez GraphQL.",
+  "hint": "Twórz klucze dające systemom zewnętrznym i agentom AI dostęp do ontologii Port — tylko do odczytu przez GraphQL i MCP albo z zapisem przez MCP.",
   "name": "Nazwa klienta",
+  "scope": "Zakres",
+  "scopeRead": "Odczyt",
+  "scopeWrite": "Zapis",
+  "scopeHint": "Odczyt: GraphQL i narzędzia MCP tylko do odczytu. Zapis: dodatkowo tworzenie, zastępowanie i usuwanie encji przez MCP.",
   "addClient": "Dodaj klienta",
   "copyKey": "Kopiuj klucz API",
   "keyPanelTitle": "Klucz API dla „{{name}}” — wyświetlany tylko raz",
@@ -11,6 +15,7 @@
   "neverUsed": "Nigdy nieużyty",
   "column": {
     "status": "Status",
+    "scope": "Zakres",
     "createdBy": "Utworzony przez",
     "lastUsed": "Ostatnio użyty"
   },

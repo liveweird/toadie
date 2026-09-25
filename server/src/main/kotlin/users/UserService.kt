@@ -1,9 +1,13 @@
 package ch.nokillswit.users
 
+import ch.nokillswit.auth.hashPassword
 import ch.nokillswit.infra.db.containsNormalized
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
+import java.security.SecureRandom
+import java.util.Base64
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import org.jetbrains.exposed.v1.core.*
@@ -57,6 +61,9 @@ class UserService(private val database: R2dbcDatabase) {
         // Per-user language (V18): sign-in UI language + the language of every email sent
         // to the user. No CHECK — SUPPORTED_LANGUAGES is the whitelist.
         val language = varchar("language", length = 10).default("en")
+        // Service accounts (V41, 2.15.0): a row that can never authenticate. A CHECK
+        // constraint (V41) forbids service_account=true with role=ADMIN.
+        val serviceAccount = bool("service_account").default(false)
     }
 
     // Per-user feature flags (V12) — the DISABLED set; no row = enabled.
@@ -91,7 +98,7 @@ class UserService(private val database: R2dbcDatabase) {
 
     suspend fun read(id: UInt): User? = suspendTransaction(database) {
         Users.selectAll()
-            .where { (Users.id eq id) and active() }
+            .where { (Users.id eq id) and human() }
             .toList()
             .singleOrNull()
             ?.let { it.toUser(featuresOf(it[Users.id].value)) }
@@ -99,9 +106,10 @@ class UserService(private val database: R2dbcDatabase) {
 
     suspend fun findWithIdByEmail(email: String): Pair<UInt, User>? = suspendTransaction(database) {
         // Stored emails are canonical; folding the argument too is defense-in-depth so a
-        // caller that skipped canonicalEmail still matches.
+        // caller that skipped canonicalEmail still matches. A service account (V41) is never
+        // returned — it falls into the ordinary unknown_email branch at login/reset request.
         Users.selectAll()
-            .where { (Users.email eq canonicalEmail(email)) and active() }
+            .where { (Users.email eq canonicalEmail(email)) and human() }
             .toList()
             .singleOrNull()
             ?.let { it[Users.id].value to it.toUser(featuresOf(it[Users.id].value)) }
@@ -120,7 +128,7 @@ class UserService(private val database: R2dbcDatabase) {
     suspend fun setLanguage(id: UInt, language: String): User? = suspendTransaction(database) {
         validateLanguage(language) // re-checked service-side so direct callers stay guarded
         val previous = lockedUser(id) ?: return@suspendTransaction null
-        Users.update({ (Users.id eq id) and active() }) {
+        Users.update({ (Users.id eq id) and human() }) {
             it[Users.language] = language
         }
         previous
@@ -128,7 +136,7 @@ class UserService(private val database: R2dbcDatabase) {
 
     suspend fun list(filter: UserListFilter, paging: PageRequest): UserListResult =
         suspendTransaction(database) {
-            val predicate: Op<Boolean> = buildPredicate(filter) and active()
+            val predicate: Op<Boolean> = buildPredicate(filter) and human()
             val total = Users.selectAll().where { predicate }.count()
             val rows = Users.selectAll()
                 .where { predicate }
@@ -188,7 +196,7 @@ class UserService(private val database: R2dbcDatabase) {
             if (previous.role == UserRole.ADMIN && !otherAdminExists) {
                 return@suspendTransaction GuardedUpdate.LastAdmin
             }
-            Users.update({ (Users.id eq id) and active() }) {
+            Users.update({ (Users.id eq id) and human() }) {
                 it[Users.name] = name
                 it[Users.email] = canonicalEmail(email)
                 it[Users.role] = role.name
@@ -208,7 +216,7 @@ class UserService(private val database: R2dbcDatabase) {
         if (previous.role == UserRole.ADMIN && !otherAdminExists) {
             return@suspendTransaction GuardedMutation.LAST_ADMIN
         }
-        Users.update({ (Users.id eq id) and active() }) {
+        Users.update({ (Users.id eq id) and human() }) {
             it[markedAsDeleted] = true
         }
         GuardedMutation.DONE
@@ -216,7 +224,7 @@ class UserService(private val database: R2dbcDatabase) {
 
     private suspend fun lockedUser(id: UInt): User? =
         Users.selectAll()
-            .where { (Users.id eq id) and active() }
+            .where { (Users.id eq id) and human() }
             .forUpdate()
             .toList()
             .singleOrNull()
@@ -226,9 +234,11 @@ class UserService(private val database: R2dbcDatabase) {
     // transaction blocks on the first's locks and re-evaluates the predicate after its commit.
     // Record a surviving OTHER admin, not a count that assumes the target was in this snapshot:
     // a concurrent promotion can turn a formerly excluded target into an admin before we lock it.
+    // A service account can never be ADMIN (the V41 CHECK constraint), so human() vs active()
+    // is moot here — kept for consistency with every other management-read predicate.
     private suspend fun lockedOtherAdminExists(targetId: UInt): Boolean =
         Users.selectAll()
-            .where { (Users.role eq UserRole.ADMIN.name) and active() }
+            .where { (Users.role eq UserRole.ADMIN.name) and human() }
             .orderBy(Users.id)
             .forUpdate()
             .toList()
@@ -270,6 +280,18 @@ class UserService(private val database: R2dbcDatabase) {
 
     private fun active(): Op<Boolean> = Users.markedAsDeleted eq false
 
+    /**
+     * Active AND not a service account (V41) — the predicate behind every human-management
+     * read/write: `read`, `findWithIdByEmail`, `list`, and `lockedUser` (and therefore every
+     * mutation built on it — `setLanguage`/`setDisabledFeatures`/`updateGuarded`/
+     * `deleteGuarded`). A service account is 404 across the whole `/api/v1/users` surface and
+     * never counted in the list. `rotatePasswordIfHashMatches` and `countActiveWithPasswordHash`
+     * keep using [active] instead, since they look for the seed admin's hash, which a service
+     * account can never carry (`seedNeedsRotation` goes through `findWithIdByEmail` and
+     * therefore this predicate — harmless, the seed admin is human).
+     */
+    private fun human(): Op<Boolean> = active() and (Users.serviceAccount eq false)
+
     private suspend fun featuresOf(id: UInt): Set<Feature> =
         UserDisabledFeatures.selectAll()
             .where { UserDisabledFeatures.userId eq id }
@@ -293,10 +315,58 @@ class UserService(private val database: R2dbcDatabase) {
         passwordChangedAt = this[Users.passwordChangedAt],
         language = this[Users.language],
         authVersion = this[Users.authVersion],
+        serviceAccount = this[Users.serviceAccount],
     )
 }
 
-/** Caller owns the transaction: reset-token consumption and credentials must commit together. */
+private val serviceAccountSecretRandom = SecureRandom()
+
+/**
+ * A discarded random 256-bit base64url secret nobody holds — hashed once and never verified.
+ * bcrypt is CPU-bound (deliberately, cost 12): callers must compute this BEFORE opening the
+ * service account's insert transaction, never inside it, so the hash never pins a pooled
+ * connection or a table lock (`IntegrationClientService.create`'s V27/V28 lock, this feature's
+ * own `insertServiceAccountInTransaction` callers) for the duration of a bcrypt round.
+ */
+internal suspend fun discardedServiceAccountPasswordHash(): String {
+    val bytes = ByteArray(32).also(serviceAccountSecretRandom::nextBytes)
+    val secret = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    return hashPassword(secret)
+}
+
+/**
+ * Inserts a service account (2.15.0): role USER, never loginable. The caller owns the
+ * transaction — the [updatePasswordInTransaction] precedent — and must supply [passwordHash]
+ * precomputed via [discardedServiceAccountPasswordHash] BEFORE opening it, so bcrypt's CPU work
+ * never runs inside a database transaction/lock. Written only by `IntegrationClientService` so
+ * an integration client's entity writes carry an ordinary `created_by`. The synthetic
+ * `@toadie.invalid` address is NOT validated against the human email rules (`validateEmail`
+ * rejects that whole domain for everything else) — collision-freedom against
+ * `uq_users_email_active` comes from the integration client id baked into the address, not from
+ * the usual grammar checks. `name` still goes through the ordinary ≤50-character rule. No
+ * `user_disabled_features` row: MFA is login-scoped, and a service account never logs in.
+ */
+internal suspend fun insertServiceAccountInTransaction(name: String, email: String, passwordHash: String): UInt {
+    if (name.isBlank()) throw BadRequestException("Name must not be blank")
+    if (name.length > MAX_NAME_LENGTH) throw BadRequestException("Name must be at most $MAX_NAME_LENGTH characters")
+    return with(UserService.Users) {
+        val newRecord = insert {
+            it[UserService.Users.name] = name
+            it[UserService.Users.email] = canonicalEmail(email)
+            it[UserService.Users.passwordHash] = passwordHash
+            it[role] = UserRole.USER.name
+            it[language] = "en"
+            it[serviceAccount] = true
+        }
+        newRecord[id].value
+    }
+}
+
+/**
+ * Caller owns the transaction: reset-token consumption and credentials must commit together.
+ * A service account (V41) is never matched — it has no password to reset and no epoch worth
+ * advancing, so both the admin password PUT and reset confirmation see zero affected rows.
+ */
 internal suspend fun updatePasswordInTransaction(
     id: UInt,
     passwordHash: String,
@@ -304,7 +374,7 @@ internal suspend fun updatePasswordInTransaction(
     changedAt: Long = System.currentTimeMillis(),
 ): Int = with(UserService.Users) {
     update({
-        (UserService.Users.id eq id) and (markedAsDeleted eq false) and
+        (UserService.Users.id eq id) and (markedAsDeleted eq false) and (serviceAccount eq false) and
             (expectedAuthVersion?.let { authVersion eq it } ?: Op.TRUE)
     }) {
         it[UserService.Users.passwordHash] = passwordHash
