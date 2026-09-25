@@ -67,6 +67,11 @@ fun Application.configureIntegration() {
                 call.respondIntegrationGraphQL(clients, limits, retainedLedger, executor, graphQL)
             }
         }
+        post("/integration/mcp") {
+            withAdmission(limits) {
+                call.respondIntegrationMcp(clients, limits, retainedLedger, services)
+            }
+        }
     }
 }
 
@@ -210,7 +215,7 @@ private fun timeoutSpecification(): Map<String, Any?> = mapOf(
     "errors" to listOf(mapOf("message" to "Execution timed out")),
 )
 
-private suspend fun io.ktor.server.routing.RoutingContext.withAdmission(
+internal suspend fun io.ktor.server.routing.RoutingContext.withAdmission(
     limits: IntegrationLimits,
     block: suspend () -> Unit,
 ) {
@@ -234,7 +239,7 @@ private fun integrationBearerToken(call: ApplicationCall): String? {
     return BEARER_PATTERN.matchEntire(header.trim())?.groupValues?.get(1)
 }
 
-private suspend fun ApplicationCall.integrationCaller(
+internal suspend fun ApplicationCall.integrationCaller(
     clients: IntegrationClientService,
 ): IntegrationClientPrincipal {
     val key = integrationBearerToken(this)
@@ -248,7 +253,7 @@ private suspend fun ApplicationCall.integrationCaller(
     }
 }
 
-private fun ApplicationCall.requireRateAllowance(limits: IntegrationLimits, principal: IntegrationClientPrincipal) {
+internal fun ApplicationCall.requireRateAllowance(limits: IntegrationLimits, principal: IntegrationClientPrincipal) {
     if (!limits.allow(principal.clientId)) {
         audit("integration.rate_limited", "clientId" to principal.clientId.toLong(), "clientName" to principal.name)
         throw TooManyRequestsException("Integration client rate limit exceeded — retry later")

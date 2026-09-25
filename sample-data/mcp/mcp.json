@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "toadie": {
+      "type": "http",
+      "url": "http://localhost:8081/integration/mcp",
+      "headers": {
+        "Authorization": "Bearer toadie_int_REPLACE_WITH_YOUR_KEY"
+      }
+    }
+  }
+}
