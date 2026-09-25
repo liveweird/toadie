@@ -23,7 +23,7 @@ describe("integration clients API", () => {
 
   test("creates and revokes a client", async () => {
     const created = {
-      client: { id: 7, name: "warehouse", createdAt: 1, createdByName: "Admin", revoked: false },
+      client: { id: 7, name: "warehouse", createdAt: 1, createdByName: "Admin", revoked: false, scope: "read" },
       apiKey: "toadie_int_secret",
     };
     const fetchMock = vi
@@ -32,12 +32,12 @@ describe("integration clients API", () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(createIntegrationClient("warehouse")).resolves.toEqual(created);
+    await expect(createIntegrationClient("warehouse", "read")).resolves.toEqual(created);
     await expect(revokeIntegrationClient(7)).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "/api/v1/integration-clients",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "warehouse" }) }),
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "warehouse", scope: "read" }) }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,

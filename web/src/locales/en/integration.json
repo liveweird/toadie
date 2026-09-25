@@ -1,7 +1,11 @@
 {
   "title": "Integration clients",
-  "hint": "Create keys that grant external systems read access to the entire Port ontology through GraphQL.",
+  "hint": "Create keys that grant external systems and AI agents access to the Port ontology — read-only through GraphQL and MCP, or read-write over MCP.",
   "name": "Client name",
+  "scope": "Scope",
+  "scopeRead": "Read",
+  "scopeWrite": "Write",
+  "scopeHint": "Read: GraphQL and the MCP read tools. Write: additionally create, replace and delete entities over MCP.",
   "addClient": "Add client",
   "copyKey": "Copy API key",
   "keyPanelTitle": "API key for “{{name}}” — shown only once",
@@ -11,6 +15,7 @@
   "neverUsed": "Never used",
   "column": {
     "status": "Status",
+    "scope": "Scope",
     "createdBy": "Created by",
     "lastUsed": "Last used"
   },

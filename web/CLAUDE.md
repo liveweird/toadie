@@ -25,7 +25,10 @@ Vite + React 19 + TypeScript SPA: the shell + auth plus the full feature surface
   `sessionBoundary`/`ownsCurrentSession`; show a created key before awaiting any list refresh.
   Long secrets wrap in the shared display and the reveal/copy controls stay reachable on narrow
   screens; an Alert containing it needs a shrinkable body. The list uses the shared paging footer
-  and revoked rows have no mutation action.
+  and revoked rows have no mutation action. Since 2.15.0 the create form carries a Scope `Select`
+  (Read default, Write) beside the name field — Read grants GraphQL + the MCP read tools, Write
+  additionally unlocks the MCP entity write tools — and the list shows the immutable per-client
+  scope as a Scope column badge; the `integration.scope*` i18n keys hold its labels and hint.
 
 ### Responsive data layouts
 

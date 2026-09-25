@@ -42,6 +42,7 @@ const CLIENTS = [
     createdByName: "Ada Admin",
     lastUsedAt: 1_700_000_100_000,
     revoked: false,
+    scope: "read" as const,
   },
   {
     id: 2,
@@ -51,6 +52,7 @@ const CLIENTS = [
     lastUsedAt: null,
     revoked: true,
     revokedAt: null,
+    scope: "write" as const,
   },
 ];
 
@@ -61,6 +63,7 @@ const CREATED = {
     createdAt: 1_700_000_200_000,
     createdByName: "Ada Admin",
     revoked: false,
+    scope: "read" as const,
   },
   apiKey: "toadie_int_abcdefghij0123456789abcdefghij0123456789abc",
 };
@@ -132,6 +135,9 @@ describe("IntegrationClients page", () => {
     expect(screen.getByText("Revoked")).toBeInTheDocument();
     expect(screen.getByText("Never used")).toBeInTheDocument();
     expect(screen.getByText("2 total")).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Read")).toBeInTheDocument();
+    expect(within(table).getByText("Write")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/integration-clients?page=1&pageSize=20",
       expect.any(Object),
@@ -158,7 +164,23 @@ describe("IntegrationClients page", () => {
     await user.click(screen.getByRole("button", { name: "Show password" }));
     expect(screen.getByText(CREATED.apiKey)).toBeInTheDocument();
     const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
-    expect(JSON.parse((post?.[1] as RequestInit).body as string)).toEqual({ name: "bi-export" });
+    expect(JSON.parse((post?.[1] as RequestInit).body as string)).toEqual({ name: "bi-export", scope: "read" });
+  });
+
+  test("creates a client with the write scope after choosing it in the Select", async () => {
+    serve();
+    const user = userEvent.setup();
+    renderWithProviders(<IntegrationClients />);
+    await screen.findByText("warehouse-sync");
+
+    await user.type(screen.getByLabelText("Client name"), "bi-export");
+    await user.click(screen.getByLabelText("Scope", { selector: "input" }));
+    await user.click(await screen.findByRole("option", { name: "Write" }));
+    await user.click(screen.getByRole("button", { name: "Add client" }));
+
+    await screen.findByText("API key for “bi-export” — shown only once");
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    expect(JSON.parse((post?.[1] as RequestInit).body as string)).toEqual({ name: "bi-export", scope: "write" });
   });
 
   test("a second create remounts the API-key panel masked", async () => {

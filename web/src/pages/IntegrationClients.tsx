@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { Alert, Badge, Button, Group, Menu, Modal, Paper, Stack, Table, Text, TextInput } from "@mantine/core";
+import { Alert, Badge, Button, Group, Menu, Modal, Paper, Select, Stack, Table, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconKey, IconKeyOff, IconPlus } from "@tabler/icons-react";
@@ -9,6 +9,7 @@ import {
   createIntegrationClient,
   type IntegrationClient,
   type IntegrationClientCreated,
+  type IntegrationScope,
   listIntegrationClients,
   revokeIntegrationClient,
 } from "../api/integrationClients";
@@ -26,7 +27,7 @@ import { formatDateTime } from "../utils/relativeTime";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 
 const MAX_NAME = 100;
-const COLUMN_COUNT = 5;
+const COLUMN_COUNT = 6;
 
 export default function IntegrationClients() {
   const { t, i18n } = useTranslation();
@@ -34,6 +35,7 @@ export default function IntegrationClients() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [name, setName] = useState("");
+  const [scope, setScope] = useState<IntegrationScope>("read");
   const [created, setCreated] = useState<IntegrationClientCreated | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -48,6 +50,7 @@ export default function IntegrationClients() {
     setPage(1);
     setPageSize(20);
     setName("");
+    setScope("read");
     setCreated(null);
     setCreateError(null);
     setCreating(false);
@@ -73,11 +76,12 @@ export default function IntegrationClients() {
     setCreating(true);
     setCreateError(null);
     try {
-      const response = await createIntegrationClient(trimmedName);
+      const response = await createIntegrationClient(trimmedName, scope);
       if (!ownsCurrentSession(owner)) return;
       // Show the only copy immediately. A slow or failed list refresh must never hide it.
       setCreated(response);
       setName("");
+      setScope("read");
       setCreating(false);
       // Ownership was checked immediately before this call. A response arriving after a
       // replacement session never invalidates that session's cache.
@@ -147,6 +151,18 @@ export default function IntegrationClients() {
               description={charCountDescription(name.length, MAX_NAME)}
               w={280}
             />
+            <Select
+              label={t("integration.scope")}
+              description={t("integration.scopeHint")}
+              data={[
+                { value: "read", label: t("integration.scopeRead") },
+                { value: "write", label: t("integration.scopeWrite") },
+              ]}
+              value={scope}
+              onChange={(value) => setScope((value as IntegrationScope | null) ?? "read")}
+              allowDeselect={false}
+              w={280}
+            />
             <Button
               leftSection={<IconPlus size={16} />}
               onClick={() => void addClient()}
@@ -190,6 +206,7 @@ export default function IntegrationClients() {
             <Table.Tr>
               <Table.Th>{t("integration.name")}</Table.Th>
               <Table.Th>{t("integration.column.status")}</Table.Th>
+              <Table.Th>{t("integration.column.scope")}</Table.Th>
               <Table.Th>{t("integration.column.createdBy")}</Table.Th>
               <Table.Th>{t("integration.column.lastUsed")}</Table.Th>
               <Table.Th aria-label={t("common.table.operations")} style={{ width: 1 }} />
@@ -205,6 +222,11 @@ export default function IntegrationClients() {
                   <Table.Td>
                     <Badge variant="light" color={client.revoked ? "gray" : "teal"} size="sm">
                       {t(client.revoked ? "integration.status.revoked" : "integration.status.active")}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Badge variant="light" color={client.scope === "write" ? "violet" : "gray"} size="sm">
+                      {t(client.scope === "write" ? "integration.scopeWrite" : "integration.scopeRead")}
                     </Badge>
                   </Table.Td>
                   <Table.Td>

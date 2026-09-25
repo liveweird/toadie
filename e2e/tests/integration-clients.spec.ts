@@ -12,14 +12,17 @@ test("admin creates a client, its key reads GraphQL, non-admin access is hidden,
     const clientName = uniqueText("e2e-graphql");
     await page.goto("/integration-clients");
     await page.getByRole("textbox", { name: "Client name" }).fill(clientName);
+    await page.getByLabel("Scope", { exact: true }).click();
+    await page.getByRole("option", { name: "Write" }).click();
     const [created] = await Promise.all([
       waitForApi(page, { method: "POST", path: "/api/v1/integration-clients" }),
       page.getByRole("button", { name: "Add client" }).click(),
     ]);
     expect(created.status()).toBe(201);
-    const createdBody = (await created.json()) as { client: { id: number }; apiKey: string };
+    const createdBody = (await created.json()) as { client: { id: number; scope: string }; apiKey: string };
     clientId = createdBody.client.id;
     expect(createdBody.apiKey).toMatch(/^toadie_int_/);
+    expect(createdBody.client.scope).toBe("write");
     await page.getByRole("button", { name: "Show password" }).click();
     await expect(page.locator("code")).toHaveText(createdBody.apiKey);
     const desktop = page.viewportSize();
@@ -54,6 +57,7 @@ test("admin creates a client, its key reads GraphQL, non-admin access is hidden,
     const lastPage = page.getByRole("button", { name: "Last page" });
     if (await lastPage.isEnabled()) await lastPage.click();
     const row = page.getByRole("row").filter({ hasText: clientName });
+    await expect(row.getByText("Write", { exact: true })).toBeVisible();
     await row.getByRole("button", { name: `Operations for ${clientName}` }).click();
     await page.getByRole("menuitem", { name: `Revoke API key for ${clientName}` }).click();
     const dialog = await readyDialog(page, "Revoke this API key?");
