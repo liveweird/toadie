@@ -173,6 +173,10 @@ dependencies {
     implementation(libs.flyway.database.postgresql)
     implementation(libs.jackson.jq)
     implementation(libs.logback.classic)
+    implementation(libs.mcp.kotlin.sdk.server)
+    // Pinned explicitly: the MCP SDK requests an older ktor-server-sse transitively (3.5.1 as of
+    // SDK 0.15.0) — this keeps every Ktor artifact on the repo's 3.6.0 catalog line.
+    implementation(ktorLibs.server.sse)
     implementation(libs.okhttp)
     implementation(libs.opentelemetry.logbackAppender)
     implementation(libs.postgresql)

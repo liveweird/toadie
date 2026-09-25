@@ -12,8 +12,6 @@ import ch.nokillswit.infra.fetch.fetchForCaller
 import ch.nokillswit.infra.fetch.UrlFetcher
 import ch.nokillswit.infra.fetch.UrlFetcherKey
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
-import ch.nokillswit.infra.importing.ImportMutation
-import ch.nokillswit.infra.importing.ImportMutationKind
 import ch.nokillswit.infra.importing.requireBatchSize
 import ch.nokillswit.infra.paging.SortField
 import ch.nokillswit.infra.paging.optionalString
@@ -296,24 +294,3 @@ private fun requireQueryLength(query: String?) {
     }
 }
 
-/** `entity.created`/`entity.updated`, `import: true` — emitted from the committed pass-1 mutation. */
-private fun auditImportedEntityMutation(callerId: UInt, mutation: ImportMutation) {
-    when (mutation.kind) {
-        ImportMutationKind.CREATED -> audit(
-            "entity.created",
-            "byUserId" to callerId.toLong(),
-            "entityId" to mutation.id.toLong(),
-            "blueprint" to mutation.blueprint,
-            "identifier" to mutation.identifier,
-            "import" to true,
-        )
-        ImportMutationKind.UPDATED -> audit(
-            "entity.updated",
-            "byUserId" to callerId.toLong(),
-            "entityId" to mutation.id.toLong(),
-            "blueprint" to mutation.blueprint,
-            "identifier" to mutation.identifier,
-            "import" to true,
-        )
-    }
-}

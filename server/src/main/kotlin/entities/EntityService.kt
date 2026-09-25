@@ -1,6 +1,5 @@
 package ch.nokillswit.entities
 
-import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.BlueprintService
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
@@ -183,7 +182,7 @@ class EntityService(
 
     internal fun active(): Op<Boolean> = Entities.markedAsDeleted eq false
 
-    private fun activeBlueprints(): Op<Boolean> = BlueprintService.Blueprints.markedAsDeleted eq false
+    internal fun activeBlueprints(): Op<Boolean> = BlueprintService.Blueprints.markedAsDeleted eq false
 
     // The sanctioned cross-feature table reads (persistence.md): the creator's display fields
     // and the blueprint's identifier must come from the same transaction as the entity row.
@@ -1020,7 +1019,7 @@ class EntityService(
         val referrers = findReferrers(id, activeBlueprints, blueprintsById, blueprint.identifier, identifier)
         if (referrers.isNotEmpty()) {
             val target = "${blueprint.identifier}/$identifier"
-            throw ConflictException("Entity '$target' is the target of relations in: ${referrers.joinToString()}")
+            throw EntityReferencedException(target, referrers)
         }
         val affected = Entities.update({ (Entities.id eq id) and active() }) { it[markedAsDeleted] = true }
         if (affected > 0) bumpOntologyRevision() // V39

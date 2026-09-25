@@ -16,6 +16,7 @@ import ch.nokillswit.entities.EntityInvalidProblem
 import ch.nokillswit.entities.EntityPageResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
+import ch.nokillswit.entities.findByIdentity
 import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
@@ -292,6 +293,74 @@ class EntityTest {
             TestBlueprints.remove(targetBp, referrerBp, selfBpId)
         }
     }
+
+    // MCP groundwork (release 2.15.0): EntityService.delete's referrer 409 is now a typed
+    // ch.nokillswit.entities.EntityReferencedException (a ConflictException subclass — the
+    // route-level case above already pins that the 409/message rendering is unchanged) so a
+    // future non-HTTP caller can read target/referrers structurally instead of parsing text.
+    @Test
+    fun `EntityService delete throws EntityReferencedException carrying the referrer identity`() = testApplication {
+        usePostgresTestcontainer()
+        val owner = TestUsers.seed(uniqueEmail("ent-del-ref-svc"), "pw")
+        val targetBp = unique("bp-target-svc")
+        val referrerBp = unique("bp-referrer-svc")
+        val targetEnt = unique("ent-target-svc")
+        val referrerEnt = unique("ent-referrer-svc")
+        try {
+            TestBlueprints.service.create(simpleBlueprint(targetBp), owner)
+            TestBlueprints.service.create(
+                BlueprintRequest(
+                    identifier = referrerBp,
+                    title = "T",
+                    schema = BlueprintSchema(),
+                    relations = mapOf("target" to RelationDefinition(title = "Target", target = targetBp, required = false, many = false)),
+                ),
+                owner,
+            )
+            val target = TestEntities.service.create(entityRequest(targetBp, targetEnt), owner)
+            TestEntities.service.create(
+                entityRequest(referrerBp, referrerEnt).copy(relations = buildJsonObject { put("target", targetEnt) }),
+                owner,
+            )
+
+            val thrown = assertFailsWith<ch.nokillswit.entities.EntityReferencedException> {
+                TestEntities.service.delete(target.id)
+            }
+            assertEquals("$targetBp/$targetEnt", thrown.target)
+            assertTrue(thrown.referrers.contains("$referrerBp/$referrerEnt"))
+        } finally {
+            TestEntities.remove(targetEnt, referrerEnt)
+            TestBlueprints.remove(targetBp, referrerBp)
+        }
+    }
+
+    // MCP groundwork (release 2.15.0): the byte-exact-once-lowercased `(blueprint, identifier)`
+    // lookup behind a future non-HTTP caller — the V28 partial unique index's own case-folding
+    // rule, so an unqualified caller can resolve an entity without paging through the list.
+    @Test
+    fun `EntityService findByIdentity resolves case-insensitively and excludes soft-deleted or cross-blueprint matches`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val owner = TestUsers.seed(uniqueEmail("ent-find-identity"), "pw")
+            val bpId = unique("bp-find-identity")
+            val otherBpId = unique("bp-find-identity-other")
+            val entId = unique("ent-find-identity")
+            val deletedEntId = unique("ent-find-identity-deleted")
+            try {
+                TestBlueprints.service.create(simpleBlueprint(bpId), owner)
+                TestBlueprints.service.create(simpleBlueprint(otherBpId), owner)
+                val created = TestEntities.service.create(entityRequest(bpId, entId), owner)
+                val deleted = TestEntities.service.create(entityRequest(bpId, deletedEntId), owner)
+                TestEntities.service.delete(deleted.id)
+
+                assertEquals(created.id, TestEntities.service.findByIdentity(bpId.uppercase(), entId.uppercase()))
+                assertEquals(null, TestEntities.service.findByIdentity(bpId, deletedEntId))
+                assertEquals(null, TestEntities.service.findByIdentity(otherBpId, entId))
+            } finally {
+                TestEntities.remove(entId, deletedEntId)
+                TestBlueprints.remove(bpId, otherBpId)
+            }
+        }
 
     @Test
     fun `rename cascades into the referrer's stored relation, observed on its GET`() = testApplication {

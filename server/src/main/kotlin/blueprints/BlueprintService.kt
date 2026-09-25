@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
 import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.LowerCase
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -29,6 +30,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.UIntIdTable
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.lowerCase
+import org.jetbrains.exposed.v1.core.stringParam
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.R2dbcTransaction
 import org.jetbrains.exposed.v1.r2dbc.insert
@@ -176,6 +178,17 @@ class BlueprintService(internal val database: R2dbcDatabase) {
         joined().selectAll().where { (Blueprints.id eq id) and active() }
             .map { it.toResponse(decodeForRead(it[Blueprints.definition], budget)) }.singleOrNull()
     }
+
+    /**
+     * MCP groundwork (2.15.0): resolve a blueprint by its case-insensitive `identifier` — the
+     * `uq_blueprints_identifier_active` partial index's own case-folding rule — for a caller that
+     * only has the identifier, not the row id.
+     */
+    suspend fun findByIdentifier(identifier: String, budget: OntologyReadBudget? = null): BlueprintResponse? =
+        suspendTransaction(database) {
+            joined().selectAll().where { (LowerCase(Blueprints.identifier) eq stringParam(identifier.lowercase())) and active() }
+                .map { it.toResponse(decodeForRead(it[Blueprints.definition], budget)) }.singleOrNull()
+        }
 
     /**
      * One row's id, identifier, decoded definition, hierarchy relations map, and source-reference

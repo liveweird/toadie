@@ -8,6 +8,7 @@ import ch.nokillswit.entities.EntityImportRequest
 import ch.nokillswit.entities.EntityImportResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
+import ch.nokillswit.entities.ontologyRevision
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.integration.GraphQLHttpRequest
 import ch.nokillswit.users.UserRole
@@ -122,6 +123,32 @@ class OntologyRevisionTest {
                 TestBlueprints.remove(bpId)
             }
         }
+
+    // MCP groundwork (release 2.15.0): EntityService.ontologyRevision() is the same counter a
+    // future non-HTTP caller reads directly, without a GraphQL/REST round trip.
+    @Test
+    fun `EntityService ontologyRevision matches the direct read and advances by one after an entity create`() = testApplication {
+        usePostgresTestcontainer()
+        val owner = TestUsers.seed(uniqueEmail("rev-ent-service"), "pw")
+        val bpId = unique("rev-bp-service")
+        val entId = unique("rev-ent-service")
+        try {
+            TestBlueprints.service.create(BlueprintRequest(identifier = bpId, title = "T", schema = BlueprintSchema()), owner)
+
+            assertEquals(TestOntologyRevision.current(), TestEntities.service.ontologyRevision())
+
+            val before = TestEntities.service.ontologyRevision()
+            TestEntities.service.create(
+                EntityRequest(blueprint = bpId, identifier = entId, title = "T"),
+                owner,
+            )
+            assertEquals(before + 1, TestEntities.service.ontologyRevision())
+            assertEquals(TestOntologyRevision.current(), TestEntities.service.ontologyRevision())
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
 
     @Test
     fun `an entity import batch with no deferrals bumps the ontology revision exactly once per row`() = testApplication {

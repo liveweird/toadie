@@ -1,5 +1,6 @@
 package ch.nokillswit.entities
 
+import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.paging.PageResponse
 import ch.nokillswit.infra.validation.InvalidPayloadException
@@ -88,6 +89,12 @@ class EntityInvalidException(val findings: List<EntityFinding>) :
             EntityInvalidProblem(title = title, status = status, detail = message, instance = instance, findings = findings),
         )
 }
+
+/** The referrer refusal behind `EntityService.delete` (MCP groundwork, 2.15.0): a `ConflictException`
+ *  subclass so REST keeps its 409 through the same handler while a non-HTTP caller reads the
+ *  target and referrers structurally. */
+class EntityReferencedException(val target: String, val referrers: List<String>) :
+    ConflictException("Entity '$target' is the target of relations in: ${referrers.joinToString()}")
 
 /**
  * [ch.nokillswit.plugins.ProblemDetail] plus the full [EntityFinding] list — the entity create/

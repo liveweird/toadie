@@ -17,6 +17,10 @@ jackson-jq = "1.6.5"
 kotlin = "2.4.20"
 kover = "0.9.9"
 logback = "1.6.3"
+# The MCP endpoint groundwork (release 2.15.0): pulls in ktor-server-sse transitively at an
+# older Ktor line — the explicit ktorLibs.server.sse dependency below keeps every Ktor artifact
+# on the repo's own 3.6.0 catalog line (see server/build.gradle.kts).
+mcp-kotlin-sdk = "0.15.0"
 opentelemetry = "1.66.0"
 opentelemetry-ktor = "2.31.1-alpha"
 opentelemetry-semconv = "1.44.0"
@@ -38,6 +42,7 @@ flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 jackson-jq = { module = "net.thisptr:jackson-jq", version.ref = "jackson-jq" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+mcp-kotlin-sdk-server = { module = "io.modelcontextprotocol:kotlin-sdk-server", version.ref = "mcp-kotlin-sdk" }
 opentelemetry-exporterLogging = { module = "io.opentelemetry:opentelemetry-exporter-logging", version.ref = "opentelemetry" }
 opentelemetry-exporterOtlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp", version.ref = "opentelemetry" }
 opentelemetry-logbackAppender = { module = "io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0", version.ref = "opentelemetry-ktor" }
