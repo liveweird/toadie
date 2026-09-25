@@ -9,7 +9,7 @@ a fresh certification of the whole API.
 1. **Medium — API-VER-001/002:** the email workflow changes meaning within `/api/v1`:
    recipients choose a password through a link instead of receiving a generated password.
    The request body and 202 remain compatible, but the workflow is not additive. This is an
-   intentional security remediation, documented in `HARDENING.md`; deploy server/SPA together
+   intentional security remediation; deploy server/SPA together
    and configure `MAIL_APP_URL`. No unsafe legacy reset implementation is retained.
 2. **Low — API-AUTH-002:** literal header-only credential wording does not fit this public
    exchange's `{token,password}` JSON body (nor existing login/refresh exchanges). Protected

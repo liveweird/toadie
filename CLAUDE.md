@@ -104,7 +104,7 @@ the shared helper's suppressed-click regression prevents this without changing a
 
 CI uses the complete Temurin version from `mise.toml` (`21.0.12+8.0.LTS`); keep the build/LTS suffix. `setup-java` cannot resolve the truncated `21.0.12+8` selector. The infrastructure regression suite pins CI/local version parity.
 
-`.github/workflows/ci.yml` runs on pushes, PRs, merge queues, and manual dispatch. Its **Quality gate** requires backend build/coverage, frontend build/lint/knip/coverage + Spectral/schema-drift checks, and the reusable E2E workflow to succeed. After pushing, configure **Quality gate** as a required status in the GitHub repository ruleset; YAML alone cannot enforce merges. E2E owns a disposable `toadie-ci` Compose project on a fresh hosted runner, collects diagnostics, and removes only that project's volume even after setup failures. Local `npm test` preserves the development database. CI fails flaky browser tests and missing Mailpit. See `.claude/docs/testing.md`, `e2e/README.md`, and `HARDENING.md` for the staged follow-up work.
+`.github/workflows/ci.yml` runs on pushes, PRs, merge queues, and manual dispatch. Its **Quality gate** requires backend build/coverage, frontend build/lint/knip/coverage + Spectral/schema-drift checks, and the reusable E2E workflow to succeed. **Quality gate** is required in the current GitHub ruleset; YAML alone cannot enforce merges. E2E owns a disposable `toadie-ci` Compose project on a fresh hosted runner, collects diagnostics, and removes only that project's volume even after setup failures. Local `npm test` preserves the development database. CI fails flaky browser tests and missing Mailpit. See `.claude/docs/testing.md` and `e2e/README.md` for verification details; `HARDENING.md` is the single current backlog.
 
 ## Running the full stack
 
@@ -547,9 +547,10 @@ and retains it only in memory. GET does not consume anything. Success requires n
 keeps MFA enabled, revokes old sessions/challenges, and sends a best-effort notification without
 secrets. Requesting requires mail and a valid `MAIL_APP_URL` origin (HTTPS in production, HTTP
 allowed in development; no path prefix, userinfo, query, or fragment); otherwise 503. V26 itself
-does not sign users out. See the security/persistence docs and `HARDENING.md` for deployment
-and compatibility notes. Lettuce was inspected: its reset still emails a generated password,
-so the existing mail/throttle infrastructure was retained but that weakness was not copied.
+does not sign users out. See the security/persistence docs and
+`api-guidelines/reviews/password-reset.md` for deployment and compatibility notes. Lettuce was
+inspected: its reset still emails a generated password, so the existing mail/throttle
+infrastructure was retained but that weakness was not copied.
 
 ### The OpenAPI contract
 

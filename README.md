@@ -40,8 +40,8 @@ Port's Entity hierarchy; later visits remember your last world.
   Administrator privileges govern management features, not ownership of shared catalog data.
 
 For contributor conventions and the task-specific documentation map, start with
-[AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md). [HARDENING.md](HARDENING.md) records completed
-hardening work as well as explicitly outstanding items.
+[AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md). [HARDENING.md](HARDENING.md) is the current
+backlog of open work.
 
 ## The stack
 
@@ -131,8 +131,8 @@ frontend build/lint/dead-code/coverage, OpenAPI lint and generated-type drift, a
 journeys against a fresh disposable Compose stack. CI fails flaky journeys and requires the
 Mailpit email tests. Reports are retained for seven days.
 
-After pushing the workflow, configure **Quality gate** as a required repository status check.
-Committed workflow YAML alone does not prevent unchecked merges.
+**Quality gate** is required by the repository ruleset; committed workflow YAML alone would
+not prevent unchecked merges.
 
 Local equivalents: `./gradlew build :server:koverXmlReport`; in `web/`, `npm ci --legacy-peer-deps`
 followed by `npm run check:api`, `npm run lint:api`, `npm run build`, `npm run lint`,
@@ -140,7 +140,7 @@ followed by `npm run check:api`, `npm run lint:api`, `npm run build`, `npm run l
 `npm run check:scenarios`, and `npm test` (the local suite still preserves the dev database).
 
 The published API contract is **OpenAPI 3.0.3**, validated without rewriting its version.
-See [HARDENING.md](HARDENING.md) for the remaining staged work.
+See [HARDENING.md](HARDENING.md) for open work.
 
 ## Integration API (read-only, for other apps)
 
