@@ -18,7 +18,8 @@ export interface paths {
          *     committed SDL, not this document). ADMIN only, reads included. Uses the standard page envelope, ordered by id
          *     ascending by default (only `id` is sortable; `-id` reverses the order). Revoked clients stay listed (`revoked: true`) as the audit
          *     trail; keys themselves are never returned (only the one-time create response carries
-         *     the plaintext key).
+         *     the plaintext key). Every client also owns its own service account (never listed under
+         *     `/users`) that its entity writes are attributed to.
          */
         get: operations["listIntegrationClients"];
         put?: never;
@@ -27,7 +28,10 @@ export interface paths {
          * @description ADMIN only. Generates the client's API key server-side (`toadie_int_` + 43 URL-safe
          *     characters, 256 bits) and returns it EXACTLY ONCE in this response — only its SHA-256
          *     digest is stored, so the key cannot be retrieved again (the key is returned only here). The name is a trimmed single-line label (≤ 100
-         *     characters, control characters rejected).
+         *     characters, control characters rejected). The key's `scope` defaults to `read` and is
+         *     immutable — rotate by creating a new client. Every client, regardless of scope, is also
+         *     given its own service account (never listed under `/users`) so an entity write made
+         *     through the client carries an ordinary `created_by`.
          */
         post: operations["createIntegrationClient"];
         delete?: never;
@@ -2172,6 +2176,12 @@ export interface components {
         IntegrationClientRequest: {
             /** @description Single-line display label for the client (trimmed; control characters rejected; blank rejected). */
             name: string;
+            /**
+             * @description `read` grants the GraphQL API and the MCP read tools; `write` additionally grants the MCP entity write tools. Immutable — rotate by creating a new client.
+             * @default read
+             * @enum {string}
+             */
+            scope: "read" | "write";
         };
         IntegrationClientResponse: {
             /** Format: int32 */
@@ -2189,6 +2199,11 @@ export interface components {
             revoked: boolean;
             /** Format: int64 */
             revokedAt?: number | null;
+            /**
+             * @description `read` grants the GraphQL API and the MCP read tools; `write` additionally grants the MCP entity write tools. Immutable.
+             * @enum {string}
+             */
+            scope: "read" | "write";
         };
         IntegrationClientCreateResponse: {
             client: components["schemas"]["IntegrationClientResponse"];

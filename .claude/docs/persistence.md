@@ -568,6 +568,18 @@ Terminal `revoked_at` is the documented removal exception to `marked_as_deleted`
 for administrator inspection and cannot be re-enabled. No ontology columns or data change.
 See [integration-api.md](integration-api.md) for transaction/authentication invariants.
 
+**V42 — key scope and the paired service account (2.15.0).** `ALTER TABLE integration_clients ADD
+COLUMN scope VARCHAR(10) NOT NULL DEFAULT 'read' CHECK (scope IN ('read','write')), ADD COLUMN
+service_user_id BIGINT NULL REFERENCES users(id) ON DELETE RESTRICT, ADD CONSTRAINT
+ck_integration_clients_write_needs_service_user CHECK (scope = 'read' OR service_user_id IS NOT
+NULL)` plus the partial unique index `uq_integration_clients_service_user` over non-null
+`service_user_id`. No backfill: pre-existing rows keep `read` and `NULL`, which the CHECK permits.
+`IntegrationClientService.create` runs ONE transaction — insert the client, insert its service
+account (`insertServiceAccountInTransaction`, V41), link it — and `revoke` soft-deletes the
+service account in the same transaction as the terminal `revoked_at` stamp, so an entity the
+client wrote keeps its `created_by` join and reports `creatorDeleted`. Migration checksums,
+including V42, are pinned in `MigrationChecksumTest`.
+
 ### Entity source references (V37)
 
 `ALTER TABLE entities ADD COLUMN source_url VARCHAR(2048) NULL, ADD COLUMN last_synced_at BIGINT

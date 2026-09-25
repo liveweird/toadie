@@ -92,4 +92,4 @@ per-document `sourceUrl` inside an individual entity is `400` `INVALID` (the sam
 The separate Port GraphQL API requires a dedicated integration key, not a login JWT.
 Keys read the shared Port ontology; they do not grant Backstage, saved-query, account, or
 REST write access. Every integration-client management endpoint is ADMIN-only, including
-reads. See [integration-api.md](integration-api.md) for scope and revocation race semantics.
+reads. See [integration-api.md](integration-api.md) for scope and revocation race semantics. Since 2.15.0 a key carries an immutable `read` or `write` scope and every client owns a paired service account (see "Service accounts (V41)" and `integration-api.md` "Scopes (2.15.0)"); `write` unlocks only the MCP entity write tools, never blueprint writes and never the REST surface.

@@ -41,7 +41,7 @@
   nothing (entities have no waiver, so a rejected sync stores nothing to audit),
 - `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail),
-- `integration_client.created` (byUserId/clientId/name) / `integration_client.revoked` (byUserId/clientId),
+- `integration_client.created` (byUserId/clientId/name/scope/serviceUserId — 2.15.0 adds the immutable key scope and the paired service account's user id) / `integration_client.revoked` (byUserId/clientId),
 - `integration.auth_failed` (reason: missing_or_malformed/unknown_or_revoked; no credential text),
 - `integration.rate_limited` (clientId/clientName),
 - `integration.request` (clientId/clientName/operationName/rootFields; bounded operation metadata, no query, variables or result data).

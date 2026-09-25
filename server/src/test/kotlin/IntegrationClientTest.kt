@@ -1,10 +1,14 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintRequest
+import ch.nokillswit.entities.EntityRequest
+import ch.nokillswit.entities.EntityResponse
 import ch.nokillswit.integration.INTEGRATION_API_KEY_PREFIX
 import ch.nokillswit.integration.IntegrationClientCreateResponse
 import ch.nokillswit.integration.IntegrationClientListResponse
 import ch.nokillswit.integration.IntegrationClientRequest
 import ch.nokillswit.integration.IntegrationClientResponse
+import ch.nokillswit.integration.IntegrationScope
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -39,10 +43,10 @@ class IntegrationClientTest {
     private fun ch.qos.logback.classic.spi.ILoggingEvent.hasLongValue(key: String, value: Long) =
         keyValuePairs?.any { it.key == key && it.value == value } == true
 
-    private suspend fun HttpClient.createClient(name: String): HttpResponse =
+    private suspend fun HttpClient.createClient(name: String, scope: IntegrationScope? = null): HttpResponse =
         post("/api/v1/integration-clients") {
             contentType(ContentType.Application.Json)
-            setBody(IntegrationClientRequest(name = name))
+            setBody(IntegrationClientRequest(name = name, scope = scope ?: IntegrationScope.READ))
         }
 
     @Test
@@ -131,7 +135,7 @@ class IntegrationClientTest {
     }
 
     @Test
-    fun `create and revoke are audited`() = testApplication {
+    fun `create and revoke are audited, including scope and the paired service account`() = testApplication {
         usePostgresTestcontainer()
         val adminEmail = uniqueEmail("intc-audit")
         val adminId = TestUsers.seed(adminEmail, "pw")
@@ -139,7 +143,8 @@ class IntegrationClientTest {
         val appender = LogCapture("ch.nokillswit.audit")
         try {
             val name = uniqueName("intc-audit")
-            val clientId = admin.createClient(name).body<IntegrationClientCreateResponse>().client.id
+            val clientId = admin.createClient(name, IntegrationScope.WRITE)
+                .body<IntegrationClientCreateResponse>().client.id
             admin.post("/api/v1/integration-clients/$clientId/revoke")
 
             val created = appender.events.find {
@@ -148,6 +153,9 @@ class IntegrationClientTest {
             assertNotNull(created, "expected an integration_client.created audit event")
             assertTrue(created.hasLongValue("byUserId", adminId.toLong()))
             assertTrue(created.hasKeyValue("name", name))
+            assertTrue(created.hasKeyValue("scope", "write"))
+            val serviceUserId = created.keyValuePairs?.find { it.key == "serviceUserId" }?.value as? Long
+            assertNotNull(serviceUserId, "expected a serviceUserId on the created audit event")
             val revoked = appender.events.find {
                 it.message == "integration_client.revoked" && it.hasLongValue("clientId", clientId.toLong())
             }
@@ -155,6 +163,99 @@ class IntegrationClientTest {
         } finally {
             appender.detach()
         }
+    }
+
+    @Test
+    fun `key scope defaults to read, is immutable, and rejects an unknown value`() = testApplication {
+        usePostgresTestcontainer()
+        val adminEmail = uniqueEmail("intc-scope")
+        TestUsers.seed(adminEmail, "pw")
+        val admin = authedClient(adminEmail, "pw")
+
+        // Omitted scope defaults to read, and it round-trips on GET/list.
+        val readCreated = admin.createClient(uniqueName("intc-read")).body<IntegrationClientCreateResponse>()
+        assertEquals(IntegrationScope.READ, readCreated.client.scope)
+        val readFetched = admin.get("/api/v1/integration-clients/${readCreated.client.id}")
+            .body<IntegrationClientResponse>()
+        assertEquals(IntegrationScope.READ, readFetched.scope)
+        val readListed = admin.get("/api/v1/integration-clients?pageSize=100&sort=-id")
+            .body<IntegrationClientListResponse>().items.find { it.id == readCreated.client.id }
+        assertEquals(IntegrationScope.READ, assertNotNull(readListed).scope)
+
+        // Explicit write scope.
+        val writeCreated = admin.createClient(uniqueName("intc-write"), IntegrationScope.WRITE)
+            .body<IntegrationClientCreateResponse>()
+        assertEquals(IntegrationScope.WRITE, writeCreated.client.scope)
+        val writeFetched = admin.get("/api/v1/integration-clients/${writeCreated.client.id}")
+            .body<IntegrationClientResponse>()
+        assertEquals(IntegrationScope.WRITE, writeFetched.scope)
+
+        // An unknown scope value is a plain 400 (kotlinx serialization's unknown-enum-value
+        // decode failure, wrapped by the ContentConvertException handler).
+        val invalidScope = admin.post("/api/v1/integration-clients") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"name":"${uniqueName("intc-bad-scope")}","scope":"admin"}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, invalidScope.status)
+    }
+
+    @Test
+    fun `every client is paired with a service account hidden from user management`() = testApplication {
+        usePostgresTestcontainer()
+        val adminEmail = uniqueEmail("intc-svc")
+        TestUsers.seed(adminEmail, "pw")
+        val admin = authedClient(adminEmail, "pw")
+        val name = uniqueName("intc-svc")
+
+        val appender = LogCapture("ch.nokillswit.audit")
+        val clientId: UInt
+        val serviceUserId: UInt
+        try {
+            val created = admin.createClient(name).body<IntegrationClientCreateResponse>()
+            clientId = created.client.id
+            val event = assertNotNull(
+                appender.events.find {
+                    it.message == "integration_client.created" && it.hasLongValue("clientId", clientId.toLong())
+                },
+            )
+            serviceUserId = (event.keyValuePairs?.find { it.key == "serviceUserId" }?.value as Long).toUInt()
+        } finally {
+            appender.detach()
+        }
+
+        // The paired row: a real service account, never a person's row.
+        val raw = assertNotNull(TestUsers.rawRow(serviceUserId), "expected the paired service account to exist")
+        assertEquals("integration-client-$clientId@toadie.invalid", raw.email)
+        assertTrue(raw.serviceAccount)
+        assertEquals(UserRole.USER, raw.role)
+        assertFalse(raw.markedAsDeleted)
+
+        // Invisible to the whole /api/v1/users management surface.
+        assertEquals(
+            0L,
+            admin.get("/api/v1/users?email=${raw.email}").body<ch.nokillswit.users.UserPageResponse>().total,
+        )
+        assertEquals(HttpStatusCode.NotFound, admin.get("/api/v1/users/$serviceUserId").status)
+
+        // An entity the service account creates carries an ordinary, honest creatorDeleted flag —
+        // false while the client is live, true once the client (and its service account) is revoked.
+        val blueprintIdentifier = uniqueName("intc-bp")
+        TestBlueprints.service.create(BlueprintRequest(identifier = blueprintIdentifier, title = "Svc test"), serviceUserId)
+        val entityIdentifier = uniqueName("intc-ent")
+        val entity = TestEntities.service.create(
+            EntityRequest(blueprint = blueprintIdentifier, identifier = entityIdentifier, title = "Svc entity"),
+            serviceUserId,
+        )
+        assertFalse(entity.creatorDeleted)
+
+        assertEquals(HttpStatusCode.NoContent, admin.post("/api/v1/integration-clients/$clientId/revoke").status)
+        val raw2 = assertNotNull(TestUsers.rawRow(serviceUserId))
+        assertTrue(raw2.markedAsDeleted, "revoking a client must soft-delete its service account")
+
+        val entityAfterRevoke = admin.get("/api/v1/entities/${entity.id}").body<EntityResponse>()
+        assertTrue(entityAfterRevoke.creatorDeleted)
+
+        TestBlueprints.remove(blueprintIdentifier)
     }
     @Test
     fun `management listing is paged and rejects invalid paging or sort`() = testApplication {

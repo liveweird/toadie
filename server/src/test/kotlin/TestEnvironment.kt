@@ -29,6 +29,7 @@ import io.ktor.server.config.MapApplicationConfig
 import io.ktor.server.config.mergeWith
 import io.ktor.server.testing.ApplicationTestBuilder
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -249,6 +250,28 @@ object TestUsers {
      */
     suspend fun seedServiceAccount(name: String, email: String): UInt =
         suspendTransaction(sharedTestDatabase) { insertServiceAccountInTransaction(name, email) }
+
+    data class RawRow(
+        val id: UInt,
+        val email: String,
+        val role: UserRole,
+        val serviceAccount: Boolean,
+        val markedAsDeleted: Boolean,
+    )
+
+    /** Direct row read bypassing [UserService]'s human()-only filtering — for asserting on a
+     *  service account (V41), which the whole `/api/v1/users` surface hides. */
+    suspend fun rawRow(id: UInt): RawRow? = suspendTransaction(sharedTestDatabase) {
+        UserService.Users.selectAll().where { UserService.Users.id eq id }.map {
+            RawRow(
+                id = it[UserService.Users.id].value,
+                email = it[UserService.Users.email],
+                role = UserRole.valueOf(it[UserService.Users.role]),
+                serviceAccount = it[UserService.Users.serviceAccount],
+                markedAsDeleted = it[UserService.Users.markedAsDeleted],
+            )
+        }.singleOrNull()
+    }
 
     /** Direct soft-delete for fixtures needing to bypass the endpoint's guards. */
     suspend fun softDelete(id: UInt) {

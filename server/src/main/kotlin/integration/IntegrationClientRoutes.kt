@@ -55,17 +55,22 @@ fun Application.configureIntegrationClientRoutes() {
                 val request = call.receive<IntegrationClientRequest>()
                     .let { it.copy(name = sanitizeSingleLine(it.name, "Client name")) }
                 validateIntegrationClientName(request.name)
-                val (id, apiKey) = clientService.create(request.name, caller.userId)
-                val client = checkNotNull(clientService.read(id)) { "just-created client $id must exist" }
+                val created = clientService.create(request.name, caller.userId, request.scope)
+                val client = checkNotNull(clientService.read(created.id)) { "just-created client ${created.id} must exist" }
                 audit(
                     "integration_client.created",
                     "byUserId" to caller.userId.toLong(),
-                    "clientId" to id.toLong(),
+                    "clientId" to created.id.toLong(),
                     "name" to request.name,
+                    "scope" to request.scope.name.lowercase(),
+                    "serviceUserId" to created.serviceUserId.toLong(),
                 )
-                call.response.header(HttpHeaders.Location, call.application.href(IntegrationClients.Id(id = id)))
+                call.response.header(HttpHeaders.Location, call.application.href(IntegrationClients.Id(id = created.id)))
                 call.response.header(HttpHeaders.CacheControl, "no-store")
-                call.respond(HttpStatusCode.Created, IntegrationClientCreateResponse(client = client, apiKey = apiKey))
+                call.respond(
+                    HttpStatusCode.Created,
+                    IntegrationClientCreateResponse(client = client, apiKey = created.apiKey),
+                )
             }
             get<IntegrationClients.Id> { route ->
                 requireAdmin(call.caller())

@@ -107,6 +107,27 @@ Machine identities are independent of their creating account: changing or deleti
 does not revoke its clients. An administrator must explicitly revoke any client that should
 lose access; the retained creator reference is provenance, not delegated user authorization.
 
+### Scopes (2.15.0)
+
+- **Applies when:** creating an integration client, authenticating a key, or deciding which
+  integration surface a key may use.
+- **Requirement:** every key carries an immutable `scope` — `read` (the GraphQL API and the MCP
+  read tools) or `write` (additionally the MCP entity write tools: create, replace, import,
+  delete entities; never blueprints). Rotate by creating a new client; there is no scope
+  change. Every client, regardless of scope, owns a service account (`.claude/docs/
+  authorization.md` "Service accounts (V41)") named after the client at
+  `integration-client-<id>@toadie.invalid`, created in the same transaction as the client; its
+  id rides the principal as `serviceUserId` and is what MCP entity writes stamp as `created_by`
+  and audit as `byUserId`. Revoking the client soft-deletes the service account in the same
+  transaction (the row stays for attribution; the entity's `creatorDeleted` becomes true). The
+  GraphQL API stays read-only for every scope.
+- **Reference:** `integration/IntegrationClient.kt` (`IntegrationScope`),
+  `integration/IntegrationClientService.kt` (`create`, `revoke`, `authenticate`,
+  `IntegrationClientPrincipal.writerId()`), `V42__integration_client_scope_and_service_user.sql`.
+- **Enforcement:** `IntegrationClientTest`, `MigrationChecksumTest`.
+- **Exception:** rows created before 2.15.0 keep `scope = read` and no service user (the V42
+  CHECK permits it); they cannot be upgraded — create a new client for `write`.
+
 ## Deployment and limits
 
 `INTEGRATION_ENABLED` defaults to false. Disabled integration paths return 404 even when the
