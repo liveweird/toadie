@@ -45,4 +45,14 @@ sample data automatically.
 
 Pinned: direct dependency versions (`gradle/libs.versions.toml`, `web/package.json` + `package-lock.json` installed with `npm ci`), the transitive Gradle graph (dependency locking, `gradle.lockfile` in `core/` and `server/` + the root `settings-gradle.lockfile` and `buildscript-gradle.lockfile` — `./gradlew build --write-locks` after a dependency change, commit the result), the Gradle distribution checksum (`distributionSha256Sum` in `gradle-wrapper.properties`), the toolchains (`mise.toml`: Temurin 21 + Node 24, matching the Dockerfile and the e2e workflow), and base images by minor tag (`node:24-alpine`, `eclipse-temurin:21-jdk/-jre`, `postgres:18-alpine`, `axllent/mailpit:v1.30`).
 
-Deliberately NOT adopted (the 2026-09-05 deployment audit raised them; decided against, don't re-raise without a new reason): Gradle **dependency verification metadata** (per-artifact checksums — a maintenance sink for a repo with no dependency-bump bot), **base images by digest** and a **registry-published release image by digest** (a digest pin without automation freezes security patches; the documented target is OrbStack's shared image store), a **versioned `apk add git`**, and a **`.git`-less build context** (`COPY .git .git` feeds the version stamp; `web/vite.config.ts` already honours `GIT_SHA`/`GIT_COMMIT_TIME` from the environment, so an `ARG` pass-through is the one missing piece — add it only when a source-archive build actually appears).
+Current policy: Dependabot proposes weekly updates across five ecosystems, while CI and
+dependency locks verify each merged change. Base images use maintained tags rather than
+fixed digests; pinning the Docker build's `apk add git` package is also not planned.
+This is separate from the **application release image**: production registry publishing and
+deployment by immutable digest remain open in [HARDENING.md](../../../HARDENING.md). The
+OrbStack shared image store and `toadie-app:latest` are only the local proof path.
+
+Gradle dependency-verification metadata and `.git`-less source-archive builds are not
+planned. `COPY .git .git` feeds the SPA version stamp today; if archive builds become a
+supported target, `web/vite.config.ts` already accepts `GIT_SHA` and `GIT_COMMIT_TIME` from
+the environment, and an explicit build-argument path can be designed then.

@@ -1,9 +1,9 @@
 # Dependency update policy (D4): Dependabot, not Renovate. Weekly, grouped minor/patch PRs
 # per ecosystem so routine bumps land as one reviewable PR instead of a dozen; majors stay
-# separate since they can carry breaking changes worth reviewing on their own. See
-# HARDENING.md's "Dependency updates" paragraph for the reproducibility rationale (tags, not
-# digests, for the docker ecosystem below) and web/CLAUDE.md/CLAUDE.md for the gates every
-# bump must still pass (lint/knip/coverage, detekt, lockfile regeneration).
+# separate since they can carry breaking changes worth reviewing on their own. The docker
+# ecosystem updates base-image tags; publishing the app's own release image by immutable
+# digest is separate open work (HARDENING.md). See web/CLAUDE.md and CLAUDE.md for the gates
+# every bump must pass (lint/knip/coverage, detekt, lockfile regeneration).
 #
 # `web/src/test/infrastructure.test.js` pins this file's existence and its five
 # (directory, ecosystem) pairs — update that test in the same commit as any pair added here.

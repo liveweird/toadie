@@ -45,8 +45,8 @@ subset, semantics, budgets, diagnostics, saved queries, and canvas actions. Upda
 reference in the same change. `api-guidelines/GRAPHQL-GUIDELINES.md` and
 `.claude/docs/integration-api.md` govern the separate
 read-only Port GraphQL API, its SDL contract, machine keys, limits, and admin management.
-`HARDENING.md` contains completed work and outstanding follow-ups;
-it is a historical implementation tracker, not a list of only unfinished tasks.
+`HARDENING.md` is the single current backlog and lists only open work. Completed review
+recommendations belong to Git history, release notes, and the current reference docs.
 
 The playbooks in `.claude/skills/` are useful repository-local references even outside Claude:
 `api-review` covers the two-pass OpenAPI review, `run-stack` covers packaging/deployment, and

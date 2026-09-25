@@ -793,7 +793,8 @@ export interface paths {
          *     A pure computation: nothing is stored, nothing is audited; POST only because the
          *     batch travels in the body. The report is a snapshot — a concurrent write between
          *     the check and the real import can change the actual outcome. The same `400` covers
-         *     only the batch itself (an undecodable body or more than 200 entries).
+         *     only the batch itself (an undecodable body or more than 200 entries). The batch-level
+         *     `sourceUrl` is ignored by this dry run; the real import validates it before storing.
          */
         post: operations["checkCatalogImport"];
         delete?: never;
@@ -1578,7 +1579,8 @@ export interface paths {
          *     computation: no audit events. The report is a snapshot — a concurrent write between
          *     the check and the real import can change the actual outcome. The same `400` covers
          *     only the batch itself (an undecodable body, a non-object element, or more than 200
-         *     documents).
+         *     documents). The batch-level `sourceUrl` is ignored by this dry run; the real import
+         *     validates it before storing.
          */
         post: operations["checkBlueprintImport"];
         delete?: never;
@@ -1998,7 +2000,8 @@ export interface paths {
          *     and `EXISTS`. A pure computation: no audit events. The report is a snapshot — a
          *     concurrent write between the check and the real import can change the actual outcome.
          *     The same `400` covers only the batch itself (an undecodable body, a non-object
-         *     element, or more than 200 documents).
+         *     element, or more than 200 documents). The batch-level `sourceUrl` is ignored by this
+         *     dry run; the real import validates it before storing.
          */
         post: operations["checkEntityImport"];
         delete?: never;
@@ -2414,7 +2417,7 @@ export interface components {
         ImportRequest: {
             /** @description The documents to import, each handled independently (report & skip). */
             files: components["schemas"]["CatalogFileRequest"][];
-            /** @description The URL the batch was fetched from (the import page's fetch-from-URL flow) — every stored row gets it as its source reference AND starts synced (the content IS the repo copy at import time). Omit for pasted/uploaded batches. One URL for the whole request: a multi-document catalog-info.yaml is ONE repo file. Same static guards as a write's `sourceUrl` (absolute https, no credentials), else the whole batch is a `400`. */
+            /** @description The URL the batch was fetched from (the import page's fetch-from-URL flow) — every stored row gets it as its source reference AND starts synced (the content IS the repo copy at import time). Omit for pasted/uploaded batches. One URL for the whole request: a multi-document catalog-info.yaml is ONE repo file. Same static guards as a write's `sourceUrl` (absolute https, no credentials, at most 2048 characters), else the real import rejects the whole batch with `400`. The dry-run check ignores this batch-level value. */
             sourceUrl?: string | null;
         };
         ImportResponse: {
@@ -3172,7 +3175,7 @@ export interface components {
              * @default false
              */
             replaceExisting: boolean;
-            /** @description The URL the batch was fetched from (2.10.0, the `EntityImportRequest.sourceUrl` twin, one level down) — every CREATED/UPDATED blueprint row gets it as its source reference AND starts synced (the document IS the remote copy at import time). Omit for pasted batches. A per-document `sourceUrl` member is `INVALID` for that row — it is row state for the whole request, not one document. A `replaceExisting` batch submitted WITHOUT this keeps an existing row's reference untouched. */
+            /** @description The URL the batch was fetched from (2.10.0, the `EntityImportRequest.sourceUrl` twin, one level down) — every CREATED/UPDATED blueprint row gets it as its source reference AND starts synced (the document IS the remote copy at import time). Omit for pasted batches. A per-document `sourceUrl` member is `INVALID` for that row — it is row state for the whole request, not one document. A `replaceExisting` batch submitted WITHOUT this keeps an existing row's reference untouched. The real import requires an absolute credential-free https URL of at most 2048 characters; the dry-run check ignores this batch-level value. */
             sourceUrl?: string | null;
         };
         BlueprintImportRow: {
@@ -3428,7 +3431,7 @@ export interface components {
              * @default false
              */
             replaceExisting: boolean;
-            /** @description The URL the batch was fetched from (2.9.0, the `ImportRequest.sourceUrl` twin, one level down) — every CREATED/UPDATED entity row gets it as its source reference AND starts synced (the document IS the remote copy at import time); blueprints never carry it. Omit for pasted batches. A per-document `sourceUrl` member is `INVALID` for that row — it is row state for the whole request, not one document. */
+            /** @description The URL the batch was fetched from (2.9.0, the `ImportRequest.sourceUrl` twin, one level down) — every CREATED/UPDATED entity row gets it as its source reference AND starts synced (the document IS the remote copy at import time); blueprints never carry it. Omit for pasted batches. A per-document `sourceUrl` member is `INVALID` for that row — it is row state for the whole request, not one document. The real import requires an absolute credential-free https URL of at most 2048 characters; the dry-run check ignores this batch-level value. */
             sourceUrl?: string | null;
         };
         EntityImportRow: {
