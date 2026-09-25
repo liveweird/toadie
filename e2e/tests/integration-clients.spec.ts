@@ -12,7 +12,7 @@ test("admin creates a client, its key reads GraphQL, non-admin access is hidden,
     const clientName = uniqueText("e2e-graphql");
     await page.goto("/integration-clients");
     await page.getByRole("textbox", { name: "Client name" }).fill(clientName);
-    await page.getByLabel("Scope", { exact: true }).click();
+    await page.getByRole("combobox", { name: "Scope" }).click();
     await page.getByRole("option", { name: "Write" }).click();
     const [created] = await Promise.all([
       waitForApi(page, { method: "POST", path: "/api/v1/integration-clients" }),
