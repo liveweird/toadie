@@ -8,6 +8,7 @@ import ch.nokillswit.entities.EntityInvalidException
 import ch.nokillswit.entities.EntityReferencedException
 import ch.nokillswit.entities.EntityServiceKey
 import ch.nokillswit.integration.IntegrationClientPrincipal
+import ch.nokillswit.integration.IntegrationLimits
 import ch.nokillswit.integration.IntegrationRetainedLedger
 import ch.nokillswit.integration.IntegrationScope
 import ch.nokillswit.integration.IntegrationServices
@@ -43,6 +44,7 @@ import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -194,6 +196,47 @@ class McpToolsTest {
             assertTrue(calls.all { it.hasKeyValue("tool", "t") })
         } finally {
             capture.detach()
+        }
+    }
+
+    @Test
+    fun `a read-scope principal is refused FORBIDDEN before a write tool's block runs`() = testApplication {
+        usePostgresTestcontainer()
+        val services = IntegrationServices(application.attributes[BlueprintServiceKey], application.attributes[EntityServiceKey])
+        val principal = IntegrationClientPrincipal(clientId = 1u, name = "t", scope = IntegrationScope.READ, serviceUserId = null)
+        val capture = LogCapture("ch.nokillswit.audit")
+        try {
+            IntegrationRetainedLedger().open().use { retained ->
+                val context = McpToolContext(principal, services, retained)
+                var ran = false
+                val result = context.guarded("t", write = true) { ran = true; toolResult(buildJsonObject {}) }
+                assertEquals("FORBIDDEN", code(result))
+                assertTrue(ran.not(), "a scope-denied write tool must never run its block")
+            }
+            val denied = assertNotNull(capture.events.find { it.message == "integration.scope_denied" })
+            assertTrue(denied.hasKeyValue("tool", "t"))
+            assertTrue(capture.events.any { it.message == "integration.mcp_call" && it.hasKeyValue("ok", false) })
+        } finally {
+            capture.detach()
+        }
+    }
+
+    @Test
+    fun `the second call in one request draws from the per-client bucket, the first does not`() = testApplication {
+        usePostgresTestcontainer()
+        val services = IntegrationServices(application.attributes[BlueprintServiceKey], application.attributes[EntityServiceKey])
+        val principal = IntegrationClientPrincipal(clientId = 1u, name = "t", scope = IntegrationScope.WRITE, serviceUserId = null)
+        val limits = IntegrationLimits(requestsPerMinute = 1)
+        // The request-level admission check (`requireRateAllowance`, `integration/Integration.kt`)
+        // already draws the request's own token from this SAME bucket before any tool call runs —
+        // simulate that here so the bucket is already exhausted when the SECOND tool call asks.
+        assertTrue(limits.allow(principal.clientId))
+        IntegrationRetainedLedger().open().use { retained ->
+            val context = McpToolContext(principal, services, retained, limits)
+            val first = context.guarded("t") { toolResult(buildJsonObject {}) }
+            assertEquals(null, first.isError)
+            val second = context.guarded("t") { toolResult(buildJsonObject {}) }
+            assertEquals("RATE_LIMITED", code(second))
         }
     }
 }

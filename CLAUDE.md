@@ -458,9 +458,10 @@ ch.nokillswit
 │                       service-backed resolvers, bounded execution, separate machine authentication)
 │                       and, since 2.15.0, the MCP endpoint `POST /integration/mcp` (Mcp.kt — a
 │                       per-request stateless Streamable HTTP `Server` behind the SAME guard chain;
-│                       McpReadTools.kt/McpWriteTools.kt — seven read tools for every key, three
-│                       entity write tools for `write`-scope keys only; McpTools.kt — `guarded`, the
-│                       one exception→tool-result mapper + `integration.mcp_call` audit; McpSchemas.kt);
+│                       McpReadTools.kt/McpWriteTools.kt — ten tools for every key, the three
+│                       entity write tools refused with FORBIDDEN for read-scope keys; McpTools.kt —
+│                       `guarded`, the one exception→tool-result mapper, the request-local scope/
+│                       rate-limit gate, + `integration.mcp_call` audit; McpSchemas.kt);
 │                       IntegrationClientService/Routes manage revocable keys with an immutable
 │                       read/write scope and a paired service account (V36, V42) under ADMIN-only
 │                       `/api/v1/integration-clients`. See `.claude/docs/integration-api.md`.

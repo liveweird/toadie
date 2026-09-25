@@ -14,8 +14,11 @@ import ch.nokillswit.plugins.isUniqueViolation
 import io.ktor.server.plugins.BadRequestException
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -26,17 +29,29 @@ import org.slf4j.LoggerFactory
 
 /**
  * The per-call context every tool handler closes over: the authenticated
- * [IntegrationClientPrincipal] (its `scope` decides which tools were even registered), the shared
- * domain [IntegrationServices], and the SAME [IntegrationRetainedLedger.Reservation] the whole
- * MCP request holds open (`integration/Mcp.kt`) — one reservation covers every tool call made
- * within one `POST /integration/mcp` request, exactly like one GraphQL request's reservation
- * covers every root field.
+ * [IntegrationClientPrincipal] (its `scope` gates the WRITE tools inside [guarded], since all ten
+ * tools are now registered for every key), the shared domain [IntegrationServices], the SAME
+ * [IntegrationRetainedLedger.Reservation] the whole MCP request holds open (`integration/Mcp.kt`)
+ * — one reservation covers every tool call made within one `POST /integration/mcp` request,
+ * exactly like one GraphQL request's reservation covers every root field — and [limits], the
+ * SAME per-client rate bucket the request-level admission already drew from once. A JSON-RPC
+ * BATCH dispatches its calls concurrently on the SDK transport, so [requestLock] serializes every
+ * call within one POST to one at a time, and [callCount] charges [limits] for every call after
+ * the first (M1 — the first call is already covered by the request's own admission check).
  */
 internal class McpToolContext(
     val principal: IntegrationClientPrincipal,
     val services: IntegrationServices,
     val retained: IntegrationRetainedLedger.Reservation,
-)
+    val limits: IntegrationLimits = IntegrationLimits(),
+) {
+    private val requestLock = Mutex()
+    private val callCount = AtomicInteger(0)
+
+    internal suspend fun <T> withRequestLock(block: suspend () -> T): T = requestLock.withLock { block() }
+
+    internal fun isFirstCallInRequest(): Boolean = callCount.getAndIncrement() == 0
+}
 
 private val mcpLogger = LoggerFactory.getLogger("ch.nokillswit.integration.mcp")
 
@@ -44,10 +59,18 @@ private val mcpLogger = LoggerFactory.getLogger("ch.nokillswit.integration.mcp")
 internal const val MCP_READ_TOOL_TIMEOUT_MILLIS = EXECUTION_TIMEOUT_MILLIS
 
 /**
- * The ONE outcome mapper every tool handler runs through: maps a domain exception to a structured
+ * The ONE outcome mapper every tool handler runs through: serializes every call made within one
+ * MCP POST to one at a time ([McpToolContext.withRequestLock] — a JSON-RPC batch dispatches its
+ * calls concurrently on the SDK transport, so without this a batch would multiply work under the
+ * request's single admission permit, M1); charges [McpToolContext.limits] for every call AFTER
+ * the first in the request (the first is already covered by the request-level admission check),
+ * answering `RATE_LIMITED` once the per-client bucket is exhausted; refuses a WRITE tool
+ * (`write = true`) for a caller whose key does not carry [IntegrationScope.WRITE] with
+ * `FORBIDDEN`, audited `integration.scope_denied` (L1 — all ten tools are registered for every
+ * key, so this is where the scope gate actually lives); maps a domain exception to a structured
  * [CallToolResult] (never a JSON-RPC protocol error — a rejected write is a normal MCP tool
- * failure, not a broken call), enforces the per-result response-memory budget against the
- * request's shared [McpToolContext.retained] reservation, and audits exactly once as
+ * failure, not a broken call); enforces the per-result response-memory budget against the
+ * request's shared [McpToolContext.retained] reservation; and audits exactly once as
  * `integration.mcp_call`. [CancellationException] (other than a per-tool [TimeoutCancellationException])
  * always propagates unswallowed — the request's own deadline, or caller disconnect, must still
  * cancel the coroutine.
@@ -55,36 +78,57 @@ internal const val MCP_READ_TOOL_TIMEOUT_MILLIS = EXECUTION_TIMEOUT_MILLIS
 // The MCP tool boundary — every failure must answer a CallToolResult, never crash the session
 // (the EntityImport.kt/UrlFetch.kt best-effort-boundary precedent, `.claude/docs/testing.md`).
 @Suppress("TooGenericExceptionCaught")
-internal suspend fun McpToolContext.guarded(tool: String, block: suspend () -> CallToolResult): CallToolResult {
-    var result = try {
-        block()
-    } catch (e: TimeoutCancellationException) {
-        toolError("TIMEOUT", e.message ?: "Tool call timed out")
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: EntityInvalidException) {
-        toolError("INVALID", e.message ?: "Invalid entity", buildJsonObject { put("findings", findingsJson(e.findings)) })
-    } catch (e: EntityReferencedException) {
-        toolError(
-            "CONFLICT",
-            e.message ?: "Entity is referenced",
-            buildJsonObject {
-                put("target", e.target)
-                put("referrers", JsonArray(e.referrers.map(::JsonPrimitive)))
-            },
-        )
-    } catch (e: BadRequestException) {
-        toolError("BAD_REQUEST", e.message ?: "Bad request")
-    } catch (e: NotFoundException) {
-        toolError("NOT_FOUND", e.message ?: "Not found")
-    } catch (e: TooManyRequestsException) {
-        toolError("BUDGET_EXCEEDED", e.message ?: "Budget exceeded — retry shortly")
-    } catch (e: Exception) {
-        if (e.isUniqueViolation()) {
-            toolError("CONFLICT", "Conflicting write")
-        } else {
-            mcpLogger.warn("mcp tool call failed ({})", tool)
-            toolError("INTERNAL", "Internal error")
+internal suspend fun McpToolContext.guarded(
+    tool: String,
+    write: Boolean = false,
+    block: suspend () -> CallToolResult,
+): CallToolResult = withRequestLock {
+    val rateLimited = !isFirstCallInRequest() && !limits.allow(principal.clientId)
+    val scopeDenied = write && principal.scope != IntegrationScope.WRITE
+    var result = when {
+        rateLimited -> {
+            audit("integration.rate_limited", "clientId" to principal.clientId.toLong(), "clientName" to principal.name)
+            toolError("RATE_LIMITED", "Integration client rate limit exceeded — retry later")
+        }
+        scopeDenied -> {
+            audit(
+                "integration.scope_denied",
+                "clientId" to principal.clientId.toLong(),
+                "clientName" to principal.name,
+                "tool" to tool,
+            )
+            toolError("FORBIDDEN", "This key has read scope; write tools require a write-scope key")
+        }
+        else -> try {
+            block()
+        } catch (e: TimeoutCancellationException) {
+            toolError("TIMEOUT", e.message ?: "Tool call timed out")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: EntityInvalidException) {
+            toolError("INVALID", e.message ?: "Invalid entity", buildJsonObject { put("findings", findingsJson(e.findings)) })
+        } catch (e: EntityReferencedException) {
+            toolError(
+                "CONFLICT",
+                e.message ?: "Entity is referenced",
+                buildJsonObject {
+                    put("target", e.target)
+                    put("referrers", JsonArray(e.referrers.map(::JsonPrimitive)))
+                },
+            )
+        } catch (e: BadRequestException) {
+            toolError("BAD_REQUEST", e.message ?: "Bad request")
+        } catch (e: NotFoundException) {
+            toolError("NOT_FOUND", e.message ?: "Not found")
+        } catch (e: TooManyRequestsException) {
+            toolError("BUDGET_EXCEEDED", e.message ?: "Budget exceeded — retry shortly")
+        } catch (e: Exception) {
+            if (e.isUniqueViolation()) {
+                toolError("CONFLICT", "Conflicting write")
+            } else {
+                mcpLogger.warn("mcp tool call failed ({}): {}", tool, e.javaClass.name)
+                toolError("INTERNAL", "Internal error")
+            }
         }
     }
     if (result.isError != true) {
@@ -97,7 +141,7 @@ internal suspend fun McpToolContext.guarded(tool: String, block: suspend () -> C
         "tool" to tool,
         "ok" to (result.isError != true),
     )
-    return result
+    result
 }
 
 /** Renders [EntityFinding]s as plain JSON objects — no serializer import needed for one small shape; shared with `McpReadTools.kt`. */

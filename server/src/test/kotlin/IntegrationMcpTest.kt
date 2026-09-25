@@ -97,6 +97,27 @@ class IntegrationMcpTest {
         put("arguments", arguments)
     }
 
+    /** A top-level JSON-RPC 2.0 BATCH (an array of request objects) — the SDK transport dispatches
+     *  its calls concurrently, which is exactly the shape M1's serialization/rate-charge guard covers. */
+    private suspend fun HttpClient.mcpBatch(key: String?, calls: List<Pair<String, JsonObject>>): HttpResponse {
+        val body = JsonArray(
+            calls.mapIndexed { index, (method, params) ->
+                buildJsonObject {
+                    put("jsonrpc", "2.0")
+                    put("id", index + 1)
+                    put("method", method)
+                    put("params", params)
+                }
+            },
+        )
+        return post("/integration/mcp") {
+            contentType(ContentType.Application.Json)
+            header(HttpHeaders.Accept, "application/json, text/event-stream")
+            key?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            setBody(body.toString())
+        }
+    }
+
     private suspend fun HttpResponse.rpc(): JsonObject {
         val text = bodyAsText()
         check(status == HttpStatusCode.OK) { "MCP answered $status: $text" }
@@ -168,28 +189,84 @@ class IntegrationMcpTest {
     }
 
     @Test
-    fun `tools list is scoped to the key's read or write grant`() = testApplication {
+    fun `tools list is the same ten tools for every key regardless of scope`() = testApplication {
         enabledApp()
         val owner = TestUsers.seed(uniqueEmail("mcp-toolslist"), "pw")
         val (readId, readKey) = TestIntegrationClients.service.create("mcp-read-${UUID.randomUUID()}", owner, IntegrationScope.READ)
         val (writeId, writeKey) = TestIntegrationClients.service.create("mcp-write-${UUID.randomUUID()}", owner, IntegrationScope.WRITE)
+        val expected = setOf(
+            "check_entities", "get_blueprint", "get_entity", "get_ontology_revision",
+            "list_blueprints", "list_entities", "ontology_errors",
+            "upsert_entity", "import_entities", "delete_entity",
+        )
         try {
             val readTools = jsonClient().mcp(readKey, "tools/list").rpc()["result"]!!
                 .jsonObject["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }.toSet()
-            assertEquals(
-                setOf(
-                    "check_entities", "get_blueprint", "get_entity", "get_ontology_revision",
-                    "list_blueprints", "list_entities", "ontology_errors",
-                ),
-                readTools,
-            )
+            assertEquals(expected, readTools, "a read-scope key must still see all ten tools listed")
 
             val writeTools = jsonClient().mcp(writeKey, "tools/list").rpc()["result"]!!
                 .jsonObject["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }.toSet()
-            assertEquals(readTools + setOf("upsert_entity", "import_entities", "delete_entity"), writeTools)
+            assertEquals(expected, writeTools)
         } finally {
             TestIntegrationClients.service.revoke(readId)
             TestIntegrationClients.service.revoke(writeId)
+        }
+    }
+
+    @Test
+    fun `a JSON-RPC batch runs every tools call and answers one result per call`() = testApplication {
+        enabledApp()
+        val owner = TestUsers.seed(uniqueEmail("mcp-batch"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("mcp-batch-${UUID.randomUUID()}", owner)
+        try {
+            val response = jsonClient().mcpBatch(
+                key,
+                List(3) { "tools/call" to toolCallParams("get_ontology_revision") },
+            )
+            assertEquals(HttpStatusCode.OK, response.status)
+            val results = Json.parseToJsonElement(response.bodyAsText()).jsonArray
+            assertEquals(3, results.size)
+            val byId = results.associateBy { it.jsonObject["id"]!!.jsonPrimitive.content }
+            assertEquals(setOf("1", "2", "3"), byId.keys)
+            byId.values.forEach { entry ->
+                val result = entry.jsonObject["result"]!!.jsonObject
+                assertEquals(null, result["isError"]?.jsonPrimitive?.booleanOrNull)
+                assertNotNull(result["structuredContent"]!!.jsonObject["revision"])
+            }
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
+        }
+    }
+
+    @Test
+    fun `a batch call beyond the exhausted per-client bucket answers RATE_LIMITED`() = testApplication {
+        enabledApp()
+        val owner = TestUsers.seed(uniqueEmail("mcp-batchrate"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("mcp-batchrate-${UUID.randomUUID()}", owner)
+        try {
+            val client = jsonClient()
+            // Warm up the shared per-client bucket (120/min) to exactly one token short of the
+            // request this test itself is about to make, so that request's own top-level admission
+            // consumes the LAST token — leaving the batch's second tool call with none.
+            repeat(119) {
+                val warmup = client.get("/integration/graphql/schema") { header(HttpHeaders.Authorization, "Bearer $key") }
+                assertEquals(HttpStatusCode.OK, warmup.status)
+            }
+            val response = client.mcpBatch(
+                key,
+                listOf(
+                    "tools/call" to toolCallParams("get_ontology_revision"),
+                    "tools/call" to toolCallParams("get_ontology_revision"),
+                ),
+            )
+            assertEquals(HttpStatusCode.OK, response.status)
+            val results = Json.parseToJsonElement(response.bodyAsText()).jsonArray.map { it.jsonObject["result"]!!.jsonObject }
+            val outcomes = results.map { it["isError"]?.jsonPrimitive?.booleanOrNull == true }
+            assertEquals(listOf(false, true).sorted(), outcomes.sorted(), "exactly one call must succeed and one must be rate-limited")
+            val rateLimited = results.first { it["isError"]?.jsonPrimitive?.booleanOrNull == true }
+            assertEquals("RATE_LIMITED", rateLimited["structuredContent"]!!.jsonObject["code"]!!.jsonPrimitive.content)
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
         }
     }
 
@@ -607,17 +684,19 @@ class IntegrationMcpTest {
         val entId = unique("ent-mcp-readonly")
         try {
             TestBlueprints.service.create(simpleBlueprint(bpId), owner)
-            val response = jsonClient().mcp(
-                key,
-                "tools/call",
-                toolCallParams("upsert_entity", buildJsonObject { put("document", entityDocument(bpId, entId)) }),
-            ).rpc()
-            // The SDK answers either a JSON-RPC protocol-level error, or a tool result whose
-            // `isError` names the unknown tool — a read-scope key never even sees `upsert_entity`
-            // registered (`registerWriteTools` runs only for `IntegrationScope.WRITE`).
-            val rpcError = response["error"]
-            val toolError = (response["result"] as? JsonObject)?.get("isError")?.jsonPrimitive?.boolean
-            assertTrue(rpcError != null || toolError == true, "expected a protocol error or a failed tool result: $response")
+            withAuditCapture { capture ->
+                val response = jsonClient().mcp(
+                    key,
+                    "tools/call",
+                    toolCallParams("upsert_entity", buildJsonObject { put("document", entityDocument(bpId, entId)) }),
+                ).rpc()
+                val result = response["result"]!!.jsonObject
+                assertEquals(true, result["isError"]!!.jsonPrimitive.boolean)
+                assertEquals("FORBIDDEN", result["structuredContent"]!!.jsonObject["code"]!!.jsonPrimitive.content)
+                val denied = assertNotNull(capture.awaitEvent { it.message == "integration.scope_denied" })
+                assertTrue(denied.hasKeyValue("clientId", clientId.toLong()))
+                assertTrue(denied.hasKeyValue("tool", "upsert_entity"))
+            }
             assertEquals(null, TestEntities.service.findByIdentity(bpId, entId), "a read-scope key must never store an entity")
         } finally {
             TestIntegrationClients.service.revoke(clientId)

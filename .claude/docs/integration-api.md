@@ -116,8 +116,10 @@ lose access; the retained creator reference is provenance, not delegated user au
   integration surface a key may use.
 - **Requirement:** every key carries an immutable `scope` — `read` (the GraphQL API and the MCP
   read tools) or `write` (additionally the MCP entity write tools: create, replace, import,
-  delete entities; never blueprints). Rotate by creating a new client; there is no scope
-  change. Every client, regardless of scope, owns a service account (`.claude/docs/
+  delete entities; never blueprints). All ten MCP tools are visible to every key in `tools/list`;
+  a `read` key calling a write tool is refused with the tool result `FORBIDDEN` (audited
+  `integration.scope_denied`), never a missing-tool error. Rotate by creating a new client; there
+  is no scope change. Every client, regardless of scope, owns a service account (`.claude/docs/
   authorization.md` "Service accounts (V41)") named after the client at
   `integration-client-<id>@toadie.invalid`, created in the same transaction as the client; its
   id rides the principal as `serviceUserId` and is what MCP entity writes stamp as `created_by`
@@ -192,27 +194,36 @@ post-operation log, not a transactional outbox.
 ## MCP endpoint (2.15.0)
 
 `POST /integration/mcp` serves the Port ontology to AI agents over the Model Context Protocol
-(`io.modelcontextprotocol:kotlin-sdk-server` 0.15.0) as **stateless Streamable HTTP**: one POST
-carries one JSON-RPC 2.0 message (`initialize`, `tools/list`, `tools/call`), the answer is
-`application/json`, no session id is issued and no SSE stream is opened (clients must send
-`Accept: application/json, text/event-stream`, the transport's rule). It is registered beside
+(`io.modelcontextprotocol:kotlin-sdk-server` 0.15.0) as **stateless Streamable HTTP**: a POST
+carries one JSON-RPC 2.0 message (`initialize`, `tools/list`, `tools/call`) OR a top-level BATCH
+(an array of such messages — the SDK transport dispatches a batch's calls concurrently), the
+answer is `application/json`, no session id is issued and no SSE stream is opened (clients must
+send `Accept: application/json, text/event-stream`, the transport's rule). It is registered beside
 `/integration/graphql` — same `integration.enabled` flag, same `integration/Integration.kt` guard
 chain: admission (4 concurrent), `integrationCaller` (the bearer key), the 120/min per-client
 bucket, the 5-second authentication deadline (408). A `Server` is built PER REQUEST after
-authentication (`integration/Mcp.kt`), so its tool handlers close over the principal and
-`tools/list` differs by scope: the seven read tools are registered for every key, the three write
-tools only for `write` scope — a `read` key never sees them and calling one answers the SDK's
-JSON-RPC unknown-tool error (structural enforcement; no `scope_denied` audit exists because the
-SDK owns that path). The SDK's own Ktor helpers are deliberately NOT used: they install a second
-`ContentNegotiation` (clashing with `plugins/Serialization.kt`) and cannot run the suspending key
-lookup; the transport reads the body itself. DNS-rebinding protection stays off on this raw
-transport — Host handling is the reverse proxy's concern (`HTTP_BEHIND_PROXY`), as for GraphQL.
+authentication (`integration/Mcp.kt`), so its tool handlers close over the principal; ALL TEN
+tools are registered for every key regardless of scope, so `tools/list` always shows the same
+catalogue — the scope gate lives inside `guarded` (`McpTools.kt`): a `read` key calling a write
+tool (`write = true`) is refused with the tool result `FORBIDDEN`, audited
+`integration.scope_denied`, never even reaching the tool's block. `guarded` also serializes every
+call made within one POST to one at a time (a request-local `Mutex`) and charges the SAME 120/min
+per-client bucket for every call AFTER THE FIRST in the request — the first is already covered by
+the request-level admission check above — answering `RATE_LIMITED` once the bucket is exhausted;
+without this a batch would otherwise multiply one admission permit into unbounded concurrent work.
+The SDK's own Ktor helpers are deliberately NOT used: they install a second `ContentNegotiation`
+(clashing with `plugins/Serialization.kt`) and cannot run the suspending key lookup; the transport
+reads the body itself. DNS-rebinding protection stays off on this raw transport — Host handling is
+the reverse proxy's concern (`HTTP_BEHIND_PROXY`), as for GraphQL.
 
 Tools (`integration/McpReadTools.kt`, `McpWriteTools.kt`; schemas in `McpSchemas.kt`). Paging is
 one-based, `pageSize` 1..100 (default 20); inputs name Port identifiers, outputs carry numeric ids
 as decimal strings (the GraphQL rule); every read takes a fresh `OntologyReadBudget()` and every
 result is charged to the request's shared `IntegrationRetainedLedger` reservation, exactly like a
 GraphQL root field.
+
+Every tool is registered for both scopes; `Scope` below names which scope a call actually needs —
+a `read` key calling a `write`-scoped tool gets `FORBIDDEN` from `guarded`, never a missing-tool error.
 
 | Tool | Scope | Annotations | Input | Output |
 |---|---|---|---|---|
@@ -232,9 +243,13 @@ Every write is attributed to the client's service account (`created_by = service
 the V28 lock protocol, `entityFindings`, and the V39 revision bump are the REST surface's.
 Failures inside a tool are TOOL RESULTS (`isError: true`, `structuredContent = {code, message,
 …}`), never JSON-RPC protocol errors, so the model can self-correct: `INVALID` (+ `findings`),
-`NOT_FOUND`, `CONFLICT` (+ `target`, `referrers`), `BAD_REQUEST`, `BUDGET_EXCEEDED` (a read-budget
-or retained-memory refusal, or a result over the 4 MiB response cap), `TIMEOUT` (a read tool past
-the 5-second deadline), `INTERNAL` (logged with the tool name only). Only authentication, rate
+`NOT_FOUND`, `CONFLICT` (+ `target`, `referrers`), `BAD_REQUEST` (a read whose OWN row set exceeds
+the read budget answers this, exactly like REST — never `BUDGET_EXCEEDED`), `BUDGET_EXCEEDED` (the
+retained-memory refusal, the response-size cap, OR read-budget CONTENTION — another in-flight
+request currently holds the room), `FORBIDDEN` (a read-scope key calling a write tool),
+`RATE_LIMITED` (a batched call beyond the first draining the exhausted per-client bucket),
+`TIMEOUT` (a read tool past the 5-second deadline), `INTERNAL` (logged with the tool name AND the
+exception class only, never its message). Only authentication, rate
 limiting, admission, the 4 MiB request-body cap (413) and the deadlines stay HTTP-level. The whole
 request — receive plus tool run — has one 30-second deadline (`MCP_REQUEST_TIMEOUT_MILLIS`), longer
 than GraphQL's because a 200-document import is a legitimate slow call; a deadline mid-import

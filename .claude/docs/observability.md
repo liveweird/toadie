@@ -43,9 +43,11 @@
 - `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail),
 - `integration_client.created` (byUserId/clientId/name/scope/serviceUserId — 2.15.0 adds the immutable key scope and the paired service account's user id) / `integration_client.revoked` (byUserId/clientId/serviceUserId — the paired service account soft-deleted with it, null for a pre-2.15.0 row),
 - `integration.auth_failed` (reason: missing_or_malformed/unknown_or_revoked; no credential text),
-- `integration.rate_limited` (clientId/clientName),
+- `integration.rate_limited` (clientId/clientName — the request-level per-client bucket AND, since
+  2.15.0, every MCP tool call within one batch beyond the first that draws the same bucket dry),
 - `integration.request` (clientId/clientName/operationName/rootFields; bounded operation metadata, no query, variables or result data).
 - `integration.mcp_call` (clientId/clientName/tool/ok — every MCP `tools/call`, 2.15.0; never the arguments or the result). An MCP entity write additionally emits the ordinary `entity.created`/`entity.updated` (`import: true`, via `entities/EntityAudit.kt`) or `entity.deleted` event with `byUserId` = the client's service account and `clientId` appended.
+- `integration.scope_denied` (clientId/clientName/tool — a read-scope key calling an MCP write tool, 2.15.0)
 
 **Not audit events.** The entity query engine's (phase 7, v2.0.0) ONE DEBUG line on
 `ch.nokillswit.entityquery` per evaluation-budget miss — the refusal code (`DEADLINE_EXCEEDED`/

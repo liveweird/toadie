@@ -37,8 +37,10 @@ A typical first session:
 
 Tool failures come back as tool results with `isError` and a structured `{code, message, …}`
 body (`INVALID` with `findings`, `NOT_FOUND`, `CONFLICT` with `referrers`, `BAD_REQUEST`,
-`BUDGET_EXCEEDED`, `TIMEOUT`), so the agent can correct itself. Rate limits and authentication
-failures are HTTP-level, exactly as for the GraphQL endpoint.
+`BUDGET_EXCEEDED`, `FORBIDDEN`, `RATE_LIMITED`, `TIMEOUT`), so the agent can correct itself.
+`FORBIDDEN` means a read-scope key called a write tool; `RATE_LIMITED` means a batched call
+beyond the first drained the exhausted per-client bucket. Authentication failures, and the
+first call's own admission, stay HTTP-level, exactly as for the GraphQL endpoint.
 
 The baseline blueprints the sample ontology ships (`../port/commerce-payments/`) are a good
 target for a first scan: a `service` with `provides_apis`/`consumes_apis`, its `api`s, the

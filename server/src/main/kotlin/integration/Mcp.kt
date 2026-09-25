@@ -27,10 +27,11 @@ internal const val MCP_MAX_BODY_BYTES = 4L * 1024 * 1024
  * [respondIntegrationGraphQL] — [integrationCaller] then [requireRateAllowance], both under the
  * existing [EXECUTION_TIMEOUT_MILLIS] admission deadline — then the whole receive+tool-run gets
  * its own, longer [MCP_REQUEST_TIMEOUT_MILLIS] budget, since a bulk entity import is a legitimate
- * slow tool call this endpoint must not starve. Read tools are registered for every scope; write
- * tools ([registerWriteTools]) only when the caller's key carries [IntegrationScope.WRITE]
- * (`.claude/docs/authorization.md` "Machine integration clients") — a read-scope caller sees them
- * neither in `tools/list` nor callable at all.
+ * slow tool call this endpoint must not starve. All ten tools ([registerReadTools],
+ * [registerWriteTools]) are registered for every key regardless of scope, so `tools/list` always
+ * shows the same catalogue; a `read`-scope key calling a write tool is refused inside `guarded`
+ * (`FORBIDDEN`, audited `integration.scope_denied` — `.claude/docs/authorization.md` "Machine
+ * integration clients").
  */
 internal suspend fun ApplicationCall.respondIntegrationMcp(
     clients: IntegrationClientService,
@@ -54,11 +55,9 @@ internal suspend fun ApplicationCall.respondIntegrationMcp(
             Implementation(name = MCP_SERVER_NAME, version = MCP_SERVER_VERSION),
             ServerOptions(ServerCapabilities(tools = ServerCapabilities.Tools(listChanged = false))),
         )
-        val context = McpToolContext(principal, services, retained)
+        val context = McpToolContext(principal, services, retained, limits)
         server.registerReadTools(context)
-        if (principal.scope == IntegrationScope.WRITE) {
-            server.registerWriteTools(context)
-        }
+        server.registerWriteTools(context)
         val session = server.createSession(transport)
         try {
             val handled = withTimeoutOrNull(MCP_REQUEST_TIMEOUT_MILLIS) { transport.handleRequest(null, call) }

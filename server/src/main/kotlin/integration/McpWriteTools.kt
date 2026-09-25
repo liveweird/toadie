@@ -15,12 +15,14 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * The three WRITE tools — registered only for a `write`-scope integration key
- * (`.claude/docs/authorization.md` "Machine integration clients"). Every write is attributed to
- * the client's paired service account ([ch.nokillswit.integration.writerId], V41), never to a
- * human `users` row, and reuses the ordinary [ch.nokillswit.entities.EntityService] entry points
- * (`import`/`delete`) so it runs under the SAME V28 lock protocol, findings rules, and
- * ontology-revision bump as the REST surface — there is no separate write path for MCP.
+ * The three WRITE tools — registered for EVERY integration key (2.15.0+) so `tools/list` always
+ * shows the full ten-tool catalogue, but refused with `FORBIDDEN` inside `guarded`'s `write = true`
+ * gate unless the caller's key carries `write` scope (`.claude/docs/authorization.md` "Machine
+ * integration clients"). Every write is attributed to the client's paired service account
+ * ([ch.nokillswit.integration.writerId], V41), never to a human `users` row, and reuses the
+ * ordinary [ch.nokillswit.entities.EntityService] entry points (`import`/`delete`) so it runs
+ * under the SAME V28 lock protocol, findings rules, and ontology-revision bump as the REST
+ * surface — there is no separate write path for MCP.
  */
 internal fun Server.registerWriteTools(context: McpToolContext) {
     addUpsertEntity(context)
@@ -42,7 +44,7 @@ private fun Server.addUpsertEntity(context: McpToolContext) {
         ),
         toolAnnotations = ToolAnnotations(readOnlyHint = false, destructiveHint = false, idempotentHint = true),
     ) { request ->
-        context.guarded("upsert_entity") {
+        context.guarded("upsert_entity", write = true) {
             val document = request.requireObject("document")
             val sourceUrl = request.argString("sourceUrl")
             val callerId = context.principal.writerId()
@@ -92,7 +94,7 @@ private fun Server.addImportEntities(context: McpToolContext) {
         ),
         toolAnnotations = ToolAnnotations(readOnlyHint = false, destructiveHint = false, idempotentHint = true),
     ) { request ->
-        context.guarded("import_entities") {
+        context.guarded("import_entities", write = true) {
             val documents = request.argObjects("documents", 1, MAX_IMPORT_DOCUMENTS)
             val replaceExisting = request.argBool("replaceExisting")
             val sourceUrl = request.argString("sourceUrl")
@@ -118,7 +120,7 @@ private fun Server.addDeleteEntity(context: McpToolContext) {
         ),
         toolAnnotations = ToolAnnotations(readOnlyHint = false, destructiveHint = true, idempotentHint = false),
     ) { request ->
-        context.guarded("delete_entity") {
+        context.guarded("delete_entity", write = true) {
             val blueprint = request.requireString("blueprint")
             val identifier = request.requireString("identifier")
             val callerId = context.principal.writerId()

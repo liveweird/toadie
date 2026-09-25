@@ -601,16 +601,18 @@ runs in `check`; see `api-guidelines/GRAPHQL-GUIDELINES.md` for selection and fa
 2.0 bodies through `jsonClient()` (the conformance plugin ignores non-`/api/` paths; the SDK's
 transport requires `Accept: application/json, text/event-stream`), one stateless POST per call:
 disabled flag → 404; missing key / login JWT → 401 with `integration.auth_failed`; `initialize`
-answers `serverInfo.name == "toadie"`; `tools/list` is the seven read tools for a `read` key and
-ten for `write`; each read tool once (summary vs `full`, `NOT_FOUND`, filters, REST parity for
+answers `serverInfo.name == "toadie"`; `tools/list` is the same ten tools for every key,
+regardless of scope; each read tool once (summary vs `full`, `NOT_FOUND`, filters, REST parity for
 `get_entity`, the dry-run storing nothing, the revision equal to `TestOntologyRevision.current()`);
 the write tools end to end — `upsert_entity` CREATED with `created_by` equal to the client's
 service account, the revision advancing by one and `entity.created` carrying that `byUserId` plus
 `clientId`, then UPDATED, `sourceUrl` stamping `lastSyncedAt`, an invalid document as an `INVALID`
 tool result with `findings`, a batch with one `INVALID` row, `delete_entity` then `NOT_FOUND`, and
-the referrer `CONFLICT` naming `referrers`; a `read` key calling a write tool gets the SDK's
-unknown-tool error and stores nothing; a body over 4 MiB is 413; every call audits
-`integration.mcp_call`. Fixtures are throwaway blueprints/entities removed in `finally`.
+the referrer `CONFLICT` naming `referrers`; a `read` key calling a write tool gets a `FORBIDDEN`
+tool result audited `integration.scope_denied` and stores nothing; a JSON-RPC BATCH runs its calls
+serially under one request lock and rate-charges the shared per-client bucket for every call after
+the first, answering `RATE_LIMITED` once it is exhausted; a body over 4 MiB is 413; every call
+audits `integration.mcp_call`. Fixtures are throwaway blueprints/entities removed in `finally`.
 
 **Ontology revision (2.12.0).** `OntologyRevisionTest` covers the V39 monotonic counter
 (`.claude/docs/persistence.md` "Ontology revision (V39)", `.claude/docs/integration-api.md`
