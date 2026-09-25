@@ -99,10 +99,10 @@ kover {
         }
         verify {
             rule {
-                // Line-coverage floor (actual 97.46% locally, 2026-09-20 2.13.1 re-measure after the Tier 2 extractions — the CI runner
+                // Line-coverage floor (actual 97.45% locally, 2026-09-25 2.15.0 re-measure after the MCP endpoint — the CI runner
                 // historically lands within ~0.05pp; keep the margin below a full point in mind).
                 minBound(97)
-                // Branch-coverage floor (actual 78.87% locally, 2026-09-20 2.13.1 re-measure after the Tier 2 extractions, with the blueprint
+                // Branch-coverage floor (actual 78.57% locally, 2026-09-25 2.15.0 re-measure after the MCP endpoint, with the blueprint
                 // DTO exclusion above — the margin has eroded to ~0.5pp since the 2026-09-08 ~79.3%; the remaining
                 // gap to 100% is dominated by kotlinx-serialization synthetic branches in the other @Serializable
                 // data classes. A red branch gate with no code change means re-measure, then either add the
