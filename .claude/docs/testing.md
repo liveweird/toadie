@@ -612,7 +612,9 @@ the referrer `CONFLICT` naming `referrers`; a `read` key calling a write tool ge
 tool result audited `integration.scope_denied` and stores nothing; a JSON-RPC BATCH runs its calls
 serially under one request lock and rate-charges the shared per-client bucket for every call after
 the first, answering `RATE_LIMITED` once it is exhausted; a body over 4 MiB is 413; every call
-audits `integration.mcp_call`. Fixtures are throwaway blueprints/entities removed in `finally`.
+audits `integration.mcp_call`; since 2.15.1 the raw `initialize`/`tools/list`/`tools/call`/batch bodies carry
+NO `null` member (the TypeScript client rejects explicit nulls — `.claude/docs/integration-api.md`).
+Fixtures are throwaway blueprints/entities removed in `finally`.
 
 **Ontology revision (2.12.0).** `OntologyRevisionTest` covers the V39 monotonic counter
 (`.claude/docs/persistence.md` "Ontology revision (V39)", `.claude/docs/integration-api.md`

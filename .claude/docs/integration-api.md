@@ -211,9 +211,22 @@ call made within one POST to one at a time (a request-local `Mutex`) and charges
 per-client bucket for every call AFTER THE FIRST in the request — the first is already covered by
 the request-level admission check above — answering `RATE_LIMITED` once the bucket is exhausted;
 without this a batch would otherwise multiply one admission permit into unbounded concurrent work.
-The SDK's own Ktor helpers are deliberately NOT used: they install a second `ContentNegotiation`
-(clashing with `plugins/Serialization.kt`) and cannot run the suspending key lookup; the transport
-reads the body itself. DNS-rebinding protection stays off on this raw transport — Host handling is
+The SDK's own Ktor helpers are deliberately NOT used: they install an application-wide second
+`ContentNegotiation` (clashing with `plugins/Serialization.kt`) and cannot run the suspending key
+lookup; the transport reads the body itself. It does NOT write the response itself, though: in
+JSON-response mode it answers through Ktor's `call.respond(message)`, i.e. through
+ContentNegotiation, and the application-wide serializer wrote every unset optional as an explicit
+`null` (`"resources":null`, `"title":null`, `"_meta":null`, `"$schema":null`), which the official
+TypeScript MCP client rejects outright (`invalid_union` on the first `initialize` response —
+Claude Code could not connect at all). Ktor forbids a second, route-scoped `ContentNegotiation`
+beside the application-level one (`DuplicatePluginException` at boot), so `Mcp.kt`'s
+`encodeMcpResponsesWithMcpJson` (2.15.1) intercepts the `/integration/mcp` route's own send
+pipeline in the `Before` phase and turns a `JSONRPCMessage` — or a batch of them — into finished
+`TextContent` encoded with the SDK's `McpJson` (`explicitNulls = false`, what its SSE path already
+uses) ahead of ContentNegotiation's `Transform`-phase interceptor; problem details and bare status
+codes pass through untouched. `IntegrationMcpTest` walks the raw `initialize`/`tools/list`/
+`tools/call`/batch bodies and fails on any `null` member.
+DNS-rebinding protection stays off on this raw transport — Host handling is
 the reverse proxy's concern (`HTTP_BEHIND_PROXY`), as for GraphQL.
 
 Tools (`integration/McpReadTools.kt`, `McpWriteTools.kt`; schemas in `McpSchemas.kt`). Paging is
