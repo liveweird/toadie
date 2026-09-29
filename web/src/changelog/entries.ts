@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.15.1",
+    date: "2026-09-30",
+    en: `**MCP clients can connect again.** The /integration/mcp endpoint answered every response with explicit null members, which the official TypeScript MCP client — and therefore Claude Code and Claude Desktop — rejected before the first tool call. Responses now omit unset fields, as the protocol expects.`,
+    pl: `**Klienci MCP znów mogą się połączyć.** Punkt końcowy /integration/mcp zwracał każdą odpowiedź z jawnymi wartościami null, które oficjalny klient MCP w TypeScript — a więc także Claude Code i Claude Desktop — odrzucał jeszcze przed pierwszym wywołaniem narzędzia. Odpowiedzi pomijają teraz nieustawione pola, tak jak oczekuje tego protokół.`,
+  },
+  {
     version: "2.15.0",
     date: "2026-09-25",
     en: `**AI agents can write to the Port ontology through MCP.** A new /integration/mcp endpoint lets an agent list blueprints, read and check entities, and — with a write-scope key — create, replace and delete entities keyed by blueprint and identifier, with the same validation findings the editor shows. Integration clients now carry a read or write scope and act through their own service account, so every change is attributed to the client that made it. Existing keys stay read-only.`,

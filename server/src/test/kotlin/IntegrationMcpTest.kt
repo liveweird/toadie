@@ -30,6 +30,7 @@ import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.booleanOrNull
@@ -185,6 +186,46 @@ class IntegrationMcpTest {
             assertNotNull(result["capabilities"]!!.jsonObject["tools"])
         } finally {
             TestIntegrationClients.service.revoke(clientId)
+        }
+    }
+
+    @Test
+    fun `responses carry no null members so the TypeScript client accepts them`() = testApplication {
+        // 2.15.1: JSON-response mode goes through Ktor's ContentNegotiation; the application-wide
+        // serializer wrote `"resources":null`, `"title":null`, `"_meta":null`, `"$schema":null`, which
+        // the official TypeScript SDK's schemas reject (`invalid_union`) — the route now negotiates
+        // with the SDK's own `McpJson`. Assert on the RAW bodies, the BlueprintTest posture.
+        enabledApp()
+        val owner = TestUsers.seed(uniqueEmail("mcp-nulls"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("mcp-nulls-${UUID.randomUUID()}", owner)
+        try {
+            val client = jsonClient()
+            val bodies = listOf(
+                client.mcp(key, "initialize", initializeRpc(1)["params"]!!.jsonObject).bodyAsText(),
+                client.mcp(key, "tools/list").bodyAsText(),
+                client.mcp(key, "tools/call", toolCallParams("get_ontology_revision")).bodyAsText(),
+                client.mcpBatch(
+                    key,
+                    listOf("get_ontology_revision" to buildJsonObject {}, "list_blueprints" to buildJsonObject { put("pageSize", 1) }),
+                ).bodyAsText(),
+            )
+            bodies.forEach { body ->
+                assertTrue(body.isNotBlank())
+                assertNoNullMembers(Json.parseToJsonElement(body), "$")
+            }
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
+        }
+    }
+
+    private fun assertNoNullMembers(element: JsonElement, path: String) {
+        when (element) {
+            is JsonObject -> element.forEach { (k, v) ->
+                assertTrue(v !is JsonNull, "null member at $path.$k — the TypeScript MCP client rejects explicit nulls")
+                assertNoNullMembers(v, "$path.$k")
+            }
+            is JsonArray -> element.forEachIndexed { i, v -> assertNoNullMembers(v, "$path[$i]") }
+            else -> Unit
         }
     }
 

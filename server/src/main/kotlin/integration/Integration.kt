@@ -24,6 +24,7 @@ import io.ktor.server.request.contentType
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import java.util.function.Consumer
 import java.io.ByteArrayOutputStream
@@ -67,9 +68,12 @@ fun Application.configureIntegration() {
                 call.respondIntegrationGraphQL(clients, limits, retainedLedger, executor, graphQL)
             }
         }
-        post("/integration/mcp") {
-            withAdmission(limits) {
-                call.respondIntegrationMcp(clients, limits, retainedLedger, services)
+        route("/integration/mcp") {
+            encodeMcpResponsesWithMcpJson()
+            post {
+                withAdmission(limits) {
+                    call.respondIntegrationMcp(clients, limits, retainedLedger, services)
+                }
             }
         }
     }
