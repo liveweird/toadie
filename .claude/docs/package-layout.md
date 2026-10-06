@@ -30,7 +30,10 @@ ch.nokillswit
 │                       paged blueprint/entity materialization; writer locks stay READ
 │                       COMMITTED — see `.claude/docs/integration-api.md` "Ontology revision")
 ├── infra/paging/       the shared list-endpoint machinery (PageRequest/parsePaging/applyPaging/
-│                       PageResponse + the strict query-param readers) — Lettuce's, ported verbatim
+│                       PageResponse + the strict query-param readers) — Lettuce's, ported verbatim;
+│                       plus `validatedPage` (the 1..100 bound check) and `inMemoryPage` (the slice
+│                       over an already-materialized list), shared by `integration/Fetchers.kt`'s
+│                       GraphQL pages and `McpReadTools.kt`'s `ontology_errors`
 ├── infra/validation/   cross-feature input helpers (sanitizeSingleLine — trim + control-char 400,
 │                       requireNoDuplicates, requireNoDocumentSourceUrl — 2.13.1, the one guard
 │                       shared by `entities/Entity.kt` and `blueprints/Blueprint.kt`'s bulk-import/

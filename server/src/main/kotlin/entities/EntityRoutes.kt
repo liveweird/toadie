@@ -228,13 +228,7 @@ fun Application.configureEntityRoutes() {
                 val caller = call.caller()
                 val result = entityService.delete(route.id)
                 result.affected.orNotFound("Entity")
-                audit(
-                    "entity.deleted",
-                    "byUserId" to caller.userId.toLong(),
-                    "entityId" to route.id.toLong(),
-                    "blueprint" to result.blueprint,
-                    "identifier" to result.identifier,
-                )
+                auditEntityDeleted(caller.userId, route.id, result)
                 call.respond(HttpStatusCode.NoContent)
             }
             // Bulk import (phase 6, v1.28.0): the same shared-workspace posture as the rest of

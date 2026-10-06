@@ -11,10 +11,10 @@ import ch.nokillswit.entities.EntityService
 import ch.nokillswit.entities.OntologyErrorsReport
 import ch.nokillswit.entities.OntologyReadBudget
 import ch.nokillswit.entities.ontologyErrors
-import ch.nokillswit.infra.paging.DEFAULT_PAGE_SIZE
-import ch.nokillswit.infra.paging.MAX_PAGE_SIZE
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.SortField
+import ch.nokillswit.infra.paging.inMemoryPage
+import ch.nokillswit.infra.paging.validatedPage
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
 import graphql.schema.idl.TypeRuntimeWiring
@@ -177,13 +177,8 @@ internal fun TypeRuntimeWiring.Builder.errorReportFetchers(): TypeRuntimeWiring.
     .dataFetcher("checkedBlueprints") { environment -> checkNotNull(environment.getSource<ErrorReportView>()).checkedBlueprints }
     .dataFetcher("revision") { environment -> checkNotNull(environment.getSource<ErrorReportView>()).revision }
 
-internal fun DataFetchingEnvironment.pageRequest(): PageRequest {
-    val page = getArgument<Int>("page") ?: 1
-    val pageSize = getArgument<Int>("pageSize") ?: DEFAULT_PAGE_SIZE
-    if (page < 1) throw BadRequestException("page must be >= 1")
-    if (pageSize !in 1..MAX_PAGE_SIZE) throw BadRequestException("pageSize must be between 1 and $MAX_PAGE_SIZE")
-    return PageRequest(page, pageSize, listOf(SortField("id", descending = false)))
-}
+internal fun DataFetchingEnvironment.pageRequest(): PageRequest =
+    validatedPage(getArgument<Int>("page"), getArgument<Int>("pageSize"))
 
 private fun DataFetchingEnvironment.uintId(name: String): UInt {
     val raw = getArgument<String>(name)
@@ -198,15 +193,7 @@ private fun DataFetchingEnvironment.memo(): RequestMemo =
 
 private fun DataFetchingEnvironment.selectedPages(fieldName: String): Set<PageKey> =
     selectionSet.getImmediateFields().filter { it.name == fieldName }.map { field ->
-        PageKey(
-            page = (field.arguments["page"] as? Int) ?: 1,
-            pageSize = (field.arguments["pageSize"] as? Int) ?: DEFAULT_PAGE_SIZE,
-        ).also {
-            if (it.page < 1) throw BadRequestException("page must be >= 1")
-            if (it.pageSize !in 1..MAX_PAGE_SIZE) {
-                throw BadRequestException("pageSize must be between 1 and $MAX_PAGE_SIZE")
-            }
-        }
+        validatedPage(field.arguments["page"] as? Int, field.arguments["pageSize"] as? Int).toPageKey()
     }.toSet()
 
 private fun pageEnvelope(
@@ -215,11 +202,9 @@ private fun pageEnvelope(
     total: Long,
 ): Map<String, Any?> = mapOf("items" to items, "page" to paging.page, "pageSize" to paging.pageSize, "total" to total)
 
-private fun <T> inMemoryPage(items: List<T>, paging: PageRequest, mapper: (T) -> Map<String, Any?>): Map<String, Any?> {
-    val offset = ((paging.page - 1).toLong() * paging.pageSize).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-    val end = (offset.toLong() + paging.pageSize).coerceAtMost(items.size.toLong()).toInt()
-    val pageItems = if (offset >= items.size) emptyList() else items.subList(offset, end).map(mapper)
-    return pageEnvelope(pageItems, paging, items.size.toLong())
+private fun <T> inMemoryEnvelope(items: List<T>, paging: PageRequest, mapper: (T) -> Map<String, Any?>): Map<String, Any?> {
+    val (pageItems, total) = inMemoryPage(items, paging.page, paging.pageSize)
+    return pageEnvelope(pageItems.map(mapper), paging, total)
 }
 
 private fun PageRequest.toPageKey() = PageKey(page, pageSize)
@@ -227,11 +212,11 @@ private fun PageRequest.toPageKey() = PageKey(page, pageSize)
 private fun OntologyErrorsReport.toView(entityPages: Set<PageKey>, blueprintPages: Set<PageKey>) = ErrorReportView(
     entityPages = entityPages.associateWith { key ->
         val paging = PageRequest(key.page, key.pageSize, listOf(SortField("id", false)))
-        inMemoryPage(entities, paging, ::entityErrorMap)
+        inMemoryEnvelope(entities, paging, ::entityErrorMap)
     },
     blueprintPages = blueprintPages.associateWith { key ->
         val paging = PageRequest(key.page, key.pageSize, listOf(SortField("id", false)))
-        inMemoryPage(blueprints, paging, ::blueprintErrorMap)
+        inMemoryEnvelope(blueprints, paging, ::blueprintErrorMap)
     },
     checkedEntities = checkedEntities,
     checkedBlueprints = checkedBlueprints,

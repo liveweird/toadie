@@ -6,6 +6,7 @@ import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.entities.EntityFinding
 import ch.nokillswit.entities.EntityInvalidException
 import ch.nokillswit.entities.EntityReferencedException
+import ch.nokillswit.entities.OntologyReadBudget
 import ch.nokillswit.infra.paging.DEFAULT_PAGE_SIZE
 import ch.nokillswit.infra.paging.MAX_PAGE_SIZE
 import ch.nokillswit.infra.paging.PageRequest
@@ -19,6 +20,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -57,6 +59,15 @@ private val mcpLogger = LoggerFactory.getLogger("ch.nokillswit.integration.mcp")
 
 /** One deadline per READ tool call — a slow read must not consume the whole request's [MCP_REQUEST_TIMEOUT_MILLIS] budget. */
 internal const val MCP_READ_TOOL_TIMEOUT_MILLIS = EXECUTION_TIMEOUT_MILLIS
+
+/**
+ * Runs one READ tool's domain call under its own [MCP_READ_TOOL_TIMEOUT_MILLIS] deadline, with the
+ * fresh per-call [OntologyReadBudget] every ontology read takes (a read that needs no budget
+ * ignores it — constructing one is free). The deadline's [TimeoutCancellationException] is what
+ * [guarded] maps to the `TIMEOUT` tool error.
+ */
+internal suspend fun <T> McpToolContext.readBounded(block: suspend (OntologyReadBudget) -> T): T =
+    withTimeout(MCP_READ_TOOL_TIMEOUT_MILLIS) { block(OntologyReadBudget()) }
 
 /**
  * The ONE outcome mapper every tool handler runs through: serializes every call made within one
@@ -227,12 +238,4 @@ internal fun CallToolRequest.mcpPageRequest(sort: List<SortField>): PageRequest 
     val page = argInt("page", default = 1, min = 1, max = Int.MAX_VALUE)
     val pageSize = argInt("pageSize", default = DEFAULT_PAGE_SIZE, min = 1, max = MAX_PAGE_SIZE)
     return PageRequest(page, pageSize, sort)
-}
-
-/** [ch.nokillswit.entities.EntityService.ontologyErrors]/`Fetchers.kt`'s `inMemoryPage` idiom, over a plain in-memory list. */
-internal fun <T> mcpInMemoryPage(items: List<T>, page: Int, pageSize: Int): Pair<List<T>, Long> {
-    val offset = ((page - 1).toLong() * pageSize).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-    val end = (offset.toLong() + pageSize).coerceAtMost(items.size.toLong()).toInt()
-    val pageItems = if (offset >= items.size) emptyList() else items.subList(offset, end)
-    return pageItems to items.size.toLong()
 }
