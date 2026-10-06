@@ -70,6 +70,7 @@ fun Application.configureIntegration() {
         }
         route("/integration/mcp") {
             encodeMcpResponsesWithMcpJson()
+            replayMcpPreReadBody()
             post {
                 withAdmission(limits) {
                     call.respondIntegrationMcp(clients, limits, retainedLedger, services)
