@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.15.2",
+    date: "2026-10-06",
+    en: `**MCP requests are bounded per batch.** One JSON-RPC request may now carry at most 64 messages; a larger batch is refused before anything runs, closing a way for any integration key to exhaust the server's memory. The audit trail now also records a tool call that the request deadline cancelled.`,
+    pl: `**Żądania MCP mają ograniczony rozmiar partii.** Jedno żądanie JSON-RPC może teraz zawierać najwyżej 64 wiadomości; większą partię serwer odrzuca, zanim cokolwiek się wykona, co zamyka możliwość wyczerpania pamięci serwera dowolnym kluczem integracji. Ślad audytu odnotowuje teraz także wywołanie narzędzia, które przerwał limit czasu żądania.`,
+  },
+  {
     version: "2.15.1",
     date: "2026-09-30",
     en: `**MCP clients can connect again.** The /integration/mcp endpoint answered every response with explicit null members, which the official TypeScript MCP client — and therefore Claude Code and Claude Desktop — rejected before the first tool call. Responses now omit unset fields, as the protocol expects.`,
