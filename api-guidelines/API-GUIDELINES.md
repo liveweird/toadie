@@ -660,7 +660,7 @@ gap"**, not as findings.
 Accepted, registered non-conformances of the reference implementation (Kotlin/Ktor). Each is
 prescribed by a rule above, deliberately not implemented yet, and cheap to adopt when
 prioritized. Reviewers cite these as "registered gap"; the Spectral ruleset carries them at
-`hint`/`warn` severity so they never fail a lint. Remove an entry when the gap is closed.
+`hint` severity so they never fail a lint. Remove an entry when the gap is closed.
 
 | Rule | Gap | Adoption pointer |
 |---|---|---|

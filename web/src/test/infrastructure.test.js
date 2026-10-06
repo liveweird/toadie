@@ -55,6 +55,14 @@ describe("deployment and verification safety defaults", () => {
     }
   });
 
+  it("fails the API lint on warnings for both the contract and the conformant fixture", () => {
+    const lintApi = JSON.parse(readFileSync(resolve(repoRoot, "web/package.json"), "utf8")).scripts["lint:api"];
+    expect(lintApi).toContain("--fail-severity=warn");
+    const invocations = lintApi.split("&&").map((part) => part.trim());
+    expect(invocations).toHaveLength(2); // the contract and the fixture
+    for (const invocation of invocations) expect(invocation).toContain("--fail-severity=warn");
+  });
+
   it("supplies the pre-change GraphQL schema baseline with full Git history", () => {
     const backend = parse(ciSource).jobs.backend;
     const checkout = backend.steps.find((step) => step.uses?.startsWith("actions/checkout@"));

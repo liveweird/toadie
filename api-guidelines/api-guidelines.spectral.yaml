@@ -9,11 +9,11 @@
 #
 # Severity model:
 #   error — a violation of the standard; must be fixed. A conformant spec lints with 0 errors.
-#   warn  — a SHOULD-level rule, or a known-gaps-register item that fires once per document
-#           (x-sla, termsOfService, Retry-After). Warnings should map onto the register.
-#   hint  — known-gaps-register items that would otherwise fire on every operation
-#           (X-Request-Id, ETag, Idempotency-Key). Informational until the gap is closed;
-#           promote to warn/error when adopting the header.
+#   warn  — reserved for a new SHOULD-level rule while it is being adopted. No rule uses it
+#           today, and CI runs Spectral with --fail-severity=warn, so a warning fails the build.
+#   hint  — known-gaps-register items (X-Request-Id, ETag, Idempotency-Key, Retry-After,
+#           x-sla, termsOfService). Informational until the gap is closed; promote to
+#           warn/error when adopting the header or extension.
 #
 # The conformant reference fixture lives at examples/conformant.yaml (lints fully clean,
 # including warnings and hints).
@@ -95,7 +95,7 @@ rules:
       starting with a CRUD verb (getUsers / list-users) is an anti-pattern. Curated list to
       avoid flagging legitimate nouns (e.g. /posts); extend as needed.
     message: "{{property}} looks like it puts a verb in the path (API-RES-003)."
-    severity: warn
+    severity: error
     given: $.paths
     then:
       field: "@key"
@@ -106,7 +106,7 @@ rules:
   get-and-delete-have-no-request-body:
     description: "API-RES-004: GET is safe and DELETE idempotent — neither takes a request body."
     message: "GET/DELETE must not declare a requestBody (API-RES-004)."
-    severity: warn
+    severity: error
     given:
       - $.paths[*].get
       - $.paths[*].delete
@@ -117,7 +117,7 @@ rules:
   no-patch-operations:
     description: "API-RES-004: updates are PUT full-document replaces; PATCH is not used."
     message: "PATCH is not part of this standard — updates use PUT (API-RES-004)."
-    severity: warn
+    severity: error
     given: $.paths[*]
     then:
       field: patch
@@ -143,7 +143,7 @@ rules:
       API-RES-006: keep nesting shallow (parent instance + child). Three or more {param}
       segments is too deep.
     message: "{{property}} nests too deeply (3+ path params) (API-RES-006)."
-    severity: warn
+    severity: error
     given: $.paths
     then:
       field: "@key"
@@ -154,7 +154,7 @@ rules:
   deprecated-item-has-migration-note:
     description: "API-VER-004: anything deprecated: true carries a description with the migration path."
     message: "Deprecated item needs a `description` with the migration path (API-VER-004)."
-    severity: warn
+    severity: error
     given: $..[?(@.deprecated == true)]
     then:
       field: description
@@ -181,7 +181,7 @@ rules:
       API-NAME-003 / API-LIST-002 / API-LIST-003: the shared paging/sort params (page,
       pageSize, sort, q) must be $ref'd from #/components/parameters, never inlined.
     message: "Parameter `{{value}}` must be a $ref to #/components/parameters (API-NAME-003)."
-    severity: warn
+    severity: error
     resolved: false # inspect the raw doc: a $ref param has no inline `name`
     given: $.paths[*][*].parameters[?(@.name)]
     then:
@@ -195,7 +195,7 @@ rules:
   created-response-sets-location:
     description: "API-OK-001: a 201 Created response points at the new resource via Location."
     message: "201 response should declare a `Location` header (API-OK-001)."
-    severity: warn
+    severity: error
     given: $.paths[*].post.responses.201
     then:
       field: headers.Location
@@ -204,7 +204,7 @@ rules:
   no-content-response-has-no-body:
     description: "API-OK-004: a 204 No Content response must not carry a body."
     message: "204 response must not declare `content` (API-OK-004)."
-    severity: warn
+    severity: error
     given: $.paths[*][get,post,put,delete].responses.204
     then:
       field: content
@@ -215,7 +215,7 @@ rules:
   operation-declares-500:
     description: "API-ERR-005: every operation declares a 500 response."
     message: "Operation is missing a 500 response (API-ERR-005)."
-    severity: warn
+    severity: error
     given: $.paths[*][get,post,put,delete]
     then:
       field: responses.500
@@ -224,7 +224,7 @@ rules:
   input-operation-declares-400:
     description: "API-ERR-005: operations that take a request body declare a 400 response."
     message: "Body-taking operation is missing a 400 response (API-ERR-005)."
-    severity: warn
+    severity: error
     given: $.paths[*][post,put][?(@.requestBody)]
     then:
       field: responses.400
@@ -330,7 +330,7 @@ rules:
   sla-extension-present:
     description: "API-META-001: publish machine-readable SLA as an x-sla extension. KNOWN-GAPS REGISTER item."
     message: "Document should declare an `x-sla` extension (API-META-001, registered gap)."
-    severity: warn
+    severity: hint
     given: $
     then:
       field: x-sla
@@ -339,7 +339,7 @@ rules:
   terms-of-service-present:
     description: "API-META-002: link the legal terms via info.termsOfService. KNOWN-GAPS REGISTER item."
     message: "`info.termsOfService` should be set (API-META-002, registered gap)."
-    severity: warn
+    severity: hint
     given: $.info
     then:
       field: termsOfService
