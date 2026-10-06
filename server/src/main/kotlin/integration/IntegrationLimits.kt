@@ -25,7 +25,7 @@ private const val CLIENT_BUCKET_CAPACITY = 1_024
 private const val WINDOW_MILLIS = 60_000L
 internal const val MAX_RETAINED_GRAPHQL_HEAP_BYTES = 32L * 1024 * 1024
 
-/** Bounded admission before authentication and a bounded, authenticated-client-only rate map.
+/** Bounded admission (taken after authentication since 2.16.0) and a bounded, authenticated-client-only rate map.
  * Invalid credentials never become map keys, and saturation never queues a coroutine. */
 internal class IntegrationLimits(
     private val nowMillis: () -> Long = System::currentTimeMillis,

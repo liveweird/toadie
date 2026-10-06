@@ -39,6 +39,7 @@ import kotlin.time.Duration.Companion.seconds
 private const val LOGIN_RATE_LIMIT = "login"
 private const val REFRESH_RATE_LIMIT = "refresh"
 private const val MFA_RATE_LIMIT = "mfa"
+internal const val INTEGRATION_RATE_LIMIT = "integration"
 
 private const val DEFAULT_REFRESH_LIMIT_PER_MINUTE = 30
 
@@ -184,6 +185,14 @@ fun Application.configureAuthRoutes() {
         ?.getString()?.takeIf { it.isNotBlank() }?.toInt()
         ?: if (developmentMode) 100 else 5
 
+    // The per-IP bucket on /integration/* follows the mode like the login bucket (300/min
+    // production, 3000/min development — the e2e GraphQL smoke and the Playwright suite drive
+    // from one host); a number pins it. Blank is the default in application.yaml.
+    val integrationLimit = integrationRateLimit(
+        environment.config.propertyOrNull("security.rateLimit.integrationPerMinute")?.getString(),
+        developmentMode,
+    )
+
     // Throttle login to blunt password brute-forcing, and refresh to blunt token abuse: a token
     // bucket per client host.
     install(RateLimit) {
@@ -205,6 +214,12 @@ fun Application.configureAuthRoutes() {
         }
         register(RateLimitName(PASSWORD_RESET_CONFIRM_RATE_LIMIT)) {
             rateLimiter(limit = 10, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
+        // The integration provider lives here because Ktor allows the RateLimit plugin to be
+        // installed only once; it is applied to the /integration/* routes in Integration.kt.
+        register(RateLimitName(INTEGRATION_RATE_LIMIT)) {
+            rateLimiter(limit = integrationLimit, refillPeriod = 60.seconds)
             requestKey { call -> call.request.origin.remoteHost }
         }
     }
@@ -388,3 +403,7 @@ fun Application.configureAuthRoutes() {
         }
     }
 }
+
+// The per-IP integration limit: a configured number pins it; blank follows the mode.
+internal fun integrationRateLimit(configured: String?, developmentMode: Boolean): Int =
+    configured?.takeIf { it.isNotBlank() }?.toInt() ?: if (developmentMode) 3000 else 300

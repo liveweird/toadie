@@ -51,9 +51,9 @@ internal const val MCP_MAX_BATCH_SIZE = 64
  * The MCP (Model Context Protocol) server over stateless Streamable HTTP (2.15.0, `POST
  * /integration/mcp`) — one [Server] + one [StreamableHttpServerTransport] PER REQUEST, no session
  * persisted across requests (`setSessionIdGenerator(null)`, the stateless posture: every call is
- * a fresh `initialize`). Authenticated exactly like [respondIntegrationSchema]/
- * [respondIntegrationGraphQL] — [integrationCaller] then [requireRateAllowance], both under the
- * existing [EXECUTION_TIMEOUT_MILLIS] admission deadline — then the whole receive+tool-run gets
+ * a fresh `initialize`). The route authenticates FIRST (`authenticateIntegration` in Integration.kt:
+ * [integrationCaller] then [requireRateAllowance] under the [EXECUTION_TIMEOUT_MILLIS] deadline,
+ * before any admission permit) and hands the principal in; the whole receive+tool-run then gets
  * its own, longer [MCP_REQUEST_TIMEOUT_MILLIS] budget, since a bulk entity import is a legitimate
  * slow tool call this endpoint must not starve. All ten tools ([registerReadTools],
  * [registerWriteTools]) are registered for every key regardless of scope, so `tools/list` always
@@ -62,19 +62,12 @@ internal const val MCP_MAX_BATCH_SIZE = 64
  * integration clients").
  */
 internal suspend fun ApplicationCall.respondIntegrationMcp(
-    clients: IntegrationClientService,
+    principal: IntegrationClientPrincipal,
     limits: IntegrationLimits,
     retainedLedger: IntegrationRetainedLedger,
     services: IntegrationServices,
 ) {
     val call = this
-    val principal = withTimeoutOrNull(EXECUTION_TIMEOUT_MILLIS) {
-        call.integrationCaller(clients).also { call.requireRateAllowance(limits, it) }
-    }
-    if (principal == null) {
-        call.respondProblem(HttpStatusCode.RequestTimeout, "Integration request timed out")
-        return
-    }
     retainedLedger.open().use { retained ->
         var session: ServerSession? = null
         try {

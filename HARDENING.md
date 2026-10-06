@@ -25,10 +25,13 @@ here when it becomes scheduled work, and remove its register entry only when it 
 
 ## Scaling constraint
 
-- [ ] **Remove instance-local authentication state before allowing multiple app replicas.** MFA
-  challenges and login/reset throttles are per-process, and the extra token-blocklist cache
-  can delay cross-instance revocation. Move or redesign those stores, test cross-replica
-  behavior, and only then change `k8s/app-deployment.yaml` from one replica and `Recreate`.
+- [ ] **Remove instance-local state before allowing multiple app replicas.** Every one of these
+  is per-process: MFA challenges; login/reset throttles; the token-blocklist cache (it can delay
+  cross-instance revocation); the `IntegrationLimits` admission semaphore, per-client buckets and
+  the retained-value ledger (`integration/IntegrationLimits.kt`); the Ktor per-IP buckets
+  (login, refresh, password-reset, MFA and integration); the jq quarantine set
+  (`entities/JqCalculation.kt`); and the entity read ledger. Move or redesign those stores, test
+  cross-replica behavior, and only then change `k8s/app-deployment.yaml` from one replica and `Recreate`.
   Until then, one replica is an intentional deployment rule, not a broken rollout.
 
 ## Unscheduled candidate

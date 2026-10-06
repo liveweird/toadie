@@ -160,6 +160,50 @@ class IntegrationClientSecurityTest {
         }
     }
 
+    /**
+     * Admission follows authentication (2.16.0): with ZERO admission permits an unauthenticated
+     * request still answers 401 and is audited (authentication ran, the semaphore was never
+     * consulted), while a valid key reaches admission and answers 429 on every integration route.
+     */
+    @Test
+    fun `admission is consulted only after authentication`() = testApplication {
+        configureApp("integration.enabled" to "true", "integration.admissionPermits" to "0")
+        startApplication()
+        TestRefTargets.ensure()
+        val owner = TestUsers.seed(uniqueEmail("int-admission"), "pw")
+        val (_, key) = TestIntegrationClients.service.create("Admission order probe", owner)
+        val plain = jsonClient()
+
+        suspend fun graphql(token: String?) = plain.post("/integration/graphql") {
+            contentType(ContentType.Application.Json)
+            token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            setBody(GraphQLHttpRequest("{ __typename }"))
+        }
+        suspend fun mcp(token: String?) = plain.post("/integration/mcp") {
+            contentType(ContentType.Application.Json)
+            header(HttpHeaders.Accept, "application/json, text/event-stream")
+            token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            setBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}")
+        }
+        suspend fun schema(token: String?) = plain.get("/integration/graphql/schema") {
+            token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+        }
+
+        withAuditCapture { capture ->
+            assertEquals(HttpStatusCode.Unauthorized, graphql(null).status)
+            assertNotNull(capture.awaitEvent { it.message == "integration.auth_failed" })
+        }
+        withAuditCapture { capture ->
+            assertEquals(HttpStatusCode.Unauthorized, mcp(null).status)
+            assertNotNull(capture.awaitEvent { it.message == "integration.auth_failed" })
+        }
+        assertEquals(HttpStatusCode.Unauthorized, schema(null).status)
+
+        assertEquals(HttpStatusCode.TooManyRequests, graphql(key).status)
+        assertEquals(HttpStatusCode.TooManyRequests, mcp(key).status)
+        assertEquals(HttpStatusCode.TooManyRequests, schema(key).status)
+    }
+
     private suspend fun blockedBy(pid: Int): Boolean = withContext(Dispatchers.IO) {
         connection().use { db ->
             db.prepareStatement("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE ? = ANY(pg_blocking_pids(pid)))")

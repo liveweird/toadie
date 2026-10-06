@@ -70,6 +70,11 @@ security:
     # production, 100/min in development — the loginPerMinute rationale); a number pins it.
     # The per-EMAIL reset throttle below is the actual abuse defence in both modes.
     passwordResetPerMinute: "$PASSWORD_RESET_RATE_LIMIT_PER_MINUTE:"
+    # Per-IP bucket on /integration/* (GraphQL + MCP). Blank FOLLOWS THE MODE (300/min in
+    # production, 3000/min in development — the e2e GraphQL smoke and the Playwright suite drive
+    # from one host); a number pins it. Sits above the 120/min per-key bucket, so several keys
+    # behind one NAT can still collide — raise it in that deployment.
+    integrationPerMinute: "$INTEGRATION_RATE_LIMIT_PER_MINUTE:"
   # Self-service password reset: at most one request per submitted email per interval,
   # uniformly whether or not the account exists. In-memory, per-instance, like the lockout.
   passwordReset:
