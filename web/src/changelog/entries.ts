@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.16.0",
+    date: "2026-10-06",
+    en: `**The integration API resists unauthenticated floods.** Requests to the GraphQL and MCP endpoints are now authenticated before they take one of the server's integration slots, so a caller without a valid key can no longer crowd out real clients, and every client address gets its own request allowance (300 per minute by default, configurable).`,
+    pl: `**API integracyjne odpiera nieuwierzytelnione zalewy żądań.** Żądania do punktów końcowych GraphQL i MCP przechodzą teraz uwierzytelnienie, zanim zajmą jeden ze slotów integracyjnych serwera, więc wywołujący bez ważnego klucza nie wypiera już prawdziwych klientów, a każdy adres klienta dostaje własny limit żądań (domyślnie 300 na minutę, konfigurowalny).`,
+  },
+  {
     version: "2.15.2",
     date: "2026-10-06",
     en: `**MCP requests are bounded per batch.** One JSON-RPC request may now carry at most 64 messages; a larger batch is refused before anything runs, closing a way for any integration key to exhaust the server's memory. The audit trail now also records a tool call that the request deadline cancelled.`,
