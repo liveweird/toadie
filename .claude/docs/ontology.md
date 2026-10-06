@@ -41,7 +41,7 @@ default shape (service / environment / workload / `_team` / `_user`) with the us
 | Layer | Blueprint | Backstage kind | `hierarchyRelations` (parent) |
 |---|---|---|---|
 | A organisation | `_team` | Group (type `team`/`org-unit`/`org-division`), Port system blueprint | composition: `parent` → team |
-| | `_user` | User, Port system blueprint | none (team relation, many) |
+| | `_user` | User, Port system blueprint | none (team relation, many; `employment_type` Port-only, 2.17.0) |
 | | `domain` | Domain | composition: `parent_domain` → domain |
 | | `product` | — Port-only (the commercial offering; Backstage has no Product kind), dropped on export | composition: `parent_product` → product |
 | | `system` | System | composition: `domain` → domain |
@@ -93,10 +93,10 @@ link properties where the link has one meaning (`repository`, `docs`, `ci_pipeli
 boolean` on `system`/`api` preserves the `external` namespace (third parties). `product_manager` (format: `user`) is the first `format: user` property — validated against `_user` entities on write, `USER_TARGET_MISSING` finding on read, renaming a `_user` cascades. `declared_by`
 (`api_adoption`/`dataset_adoption`, 2.13.0) is the second `format: user` property, validated the
 same way; `notes` (the same two blueprints) is the first `format: markdown` property — free
-text, no further validation. No secrets,
+text, no further validation. **Regulatory flags (2.17.0)** are plain `boolean` properties, never yes/no enums: `gdpr`/`pci_dss`/`banking_outsourcing` on `service`, `api`, `resource` and `dataset` (on the first three ↔ the `yes`/`no` labels `gdpr`/`pci-dss`/`banking-outsourcing` on Component/API/Resource — widened from Resource-only by V43; `dataset` is Port-only, no label) and `cash_flow_impact`/`dora_cif` on `service` (↔ `cash-flow-impact`/`dora-cif` on Component). `_user.employment_type` (`employee`/`contractor`) is a Port-only enum — Backstage User has no twin. No secrets,
 connection strings or hostnames as properties, ever.
 
-**Computed properties (phase 5, v1.27.0).** Twenty mirror/calculation/aggregation properties
+**Computed properties (phase 5, v1.27.0).** Twenty-two mirror/calculation/aggregation properties
 across ten blueprints, evaluated at entity read time (`.claude/docs/port-data-model.md`
 "Computed properties"); `SampleEntitiesTest` derives every expected value from the sample
 entity files rather than hardcoding them.
@@ -109,6 +109,8 @@ entity files rather than hardcoding them.
 | `product` | `critical_systems` | aggregation | target `system`, `entities/count`, query `criticality = critical` — direct, inbound via `system.products` |
 | `product` | `service_count` | aggregation | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [system, products]}]` (reverse: service → system → product — `fromBlueprint` is the target, the `workload_replicas` shape) |
 | `system` | `service_count` | aggregation | target `service`, `entities/count` — direct, via `service.system` |
+| `system` | `cif_services` | aggregation (2.17.0) | target `service`, `entities/count`, query `dora_cif = true` — direct, via `service.system` |
+| `system` | `cash_flow_services` | aggregation (2.17.0) | target `service`, `entities/count`, query `cash_flow_impact = true` — direct, via `service.system` |
 | `system` | `workload_replicas` | aggregation | target `workload`, `property/sum` of `replicas`, `pathFilter [{fromBlueprint: workload, path: [service, system]}]` (reverse: workload → service → system) |
 | `system` | `deploys_per_week` | aggregation | target `workload`, `entities/average` per `week`, `measureTimeBy: last_deployed`, the same reverse `pathFilter` — time-dependent (**assumption**, see `port-data-model.md`) |
 | `dataset` | `producer_count` | aggregation (2.13.0) | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [produces_datasets]}]` — reverse, one hop, distinguished from `consumer_count` by relation key |
@@ -128,7 +130,7 @@ blueprint extension (`_team` may add aggregation properties like any other field
 aggregation's `target` must already be an ACTIVE blueprint, `domain.critical_systems`, `product`'s three aggregations,
 `dataset`'s three aggregations (`producer_count`/`consumer_count` target `service`,
 `adoption_count` target `dataset_adoption`), `api.adoption_count` (target `api_adoption`), and
-`system`'s three aggregations name a blueprint that loads LATER in the numbered set — the
+`system`'s five aggregations name a blueprint that loads LATER in the numbered set — the
 loader (`sample-data/port/commerce-payments/blueprints/load.sh`, `SampleData.loadBlueprints`) applies these in TWO
 passes: every file first, with `aggregationProperties` stripped, then a second pass PUTs the
 full file back onto every blueprint that declares one, once every target exists.
@@ -139,7 +141,9 @@ full file back onto every blueprint that declares one, once every target exists.
   `links` → `metadata.links`; `external: true` → namespace `external`, else `default`.
 - Kind + `spec.type`: per the table; `service.type` is the Component type, `library` → `library`.
 - Labels ← `criticality` (`criticality-tier`), `support_mode`, `exposure`, `hosting_model`,
-  `technology_status`, `data_classification`, and the booleans `gdpr`/`pci_dss` (→ `yes`/`no`).
+  `technology_status`, `data_classification`, and the booleans `gdpr`/`pci_dss`/`banking_outsourcing`
+  (Component/API/Resource) and `cash_flow_impact`/`dora_cif` (`cash-flow-impact`/`dora-cif`, Component)
+  → `yes`/`no`; `dataset`'s booleans and `_user.employment_type` have no label (Port-only).
 - Tags ← `languages` ∪ `frameworks` (Component), `engine` (Resource: Database ∪ Events).
 - Annotations ← `repository` (`backstage.io/source-location`), `docs` (`techdocs-ref`),
   `kubernetes_id`, `kubernetes_label_selector`.

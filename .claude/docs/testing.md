@@ -210,7 +210,8 @@ is executable documentation for `sample-data/port/commerce-payments/blueprints/`
 v1.25.3 the baseline
 ontology in `.claude/docs/ontology.md`: it POSTs the fifteen files in dependency order, pins the
 round trip, and asserts the model contracts — every registry-mirroring enum
-(per-kind types, lifecycles, label value lists, tag categories) equals the seeded registry read
+(per-kind types, lifecycles, label value lists, tag categories, and — 2.17.0 — the yes/no label
+booleans, whose label must allow the blueprint's Backstage kind) equals the seeded registry read
 back through the API, the `hierarchyRelations` map defines the `composition` and `deployment`
 forests, direct and inherited ownership match the declared model, and the protected system
 blueprints remain the seeded rows. (The

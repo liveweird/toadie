@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.17.0",
+    date: "2026-10-07",
+    en: `**Regulatory flags join the baseline ontology.** The Port sample now records, on every service, API, resource and dataset, whether it processes personal data under GDPR, handles cardholder data under PCI DSS and falls under the outsourcing of banking activities; services also say whether they can move money or change what is charged, and whether they support a DORA critical or important function. Systems count their DORA and cash-flow services. The label registry gains the matching yes/no labels for Components, APIs and Resources, the Backstage sample carries them, and both sample users state their employment type.`,
+    pl: `**Flagi regulacyjne dołączają do bazowej ontologii.** Przykład Port zapisuje teraz dla każdego serwisu, API, zasobu i zbioru danych, czy przetwarza dane osobowe w rozumieniu RODO, czy obsługuje dane kart pod PCI DSS i czy podlega outsourcingowi czynności bankowych; serwisy mówią też, czy mogą przesuwać pieniądze lub zmieniać to, co jest naliczane, oraz czy wspierają krytyczną lub istotną funkcję w rozumieniu DORA. Systemy zliczają swoje serwisy DORA i serwisy wpływające na przepływy pieniężne. Rejestr etykiet zyskuje odpowiadające etykiety tak/nie dla komponentów, API i zasobów, przykład Backstage je nosi, a oboje przykładowych użytkowników podają formę zatrudnienia.`,
+  },
+  {
     version: "2.16.1",
     date: "2026-10-06",
     en: `**Every data table announces its name.** Screen readers now hear which list a table holds on all fourteen table pages. Under the hood this release pins more of the documented behaviour with tests (the ontology revision counter on sync, deferred import and MCP writes; the catalog registry reader), shares the paging and audit helpers between the GraphQL and MCP adapters, and brings the reference docs, the sample MCP configuration and the API description up to date with the integration surface.`,
