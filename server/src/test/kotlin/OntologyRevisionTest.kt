@@ -3,14 +3,18 @@ package ch.nokillswit
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.RelationDefinition
+import ch.nokillswit.blueprints.SyncBlueprintRequest
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.entities.EntityImportRequest
 import ch.nokillswit.entities.EntityImportResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
+import ch.nokillswit.entities.SyncEntityRequest
 import ch.nokillswit.entities.ontologyRevision
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.integration.GraphQLHttpRequest
+import ch.nokillswit.integration.IntegrationScope
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -19,6 +23,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -33,11 +38,15 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 /**
  * The V39 monotonic ontology-revision counter (`.claude/docs/persistence.md` "V39",
@@ -47,10 +56,10 @@ import kotlinx.serialization.json.jsonPrimitive
  * (`TestEnvironment.kt`) reads the counter directly — it has no REST surface of its own, only a
  * GraphQL `revision` field on `BlueprintPage`/`EntityPage`/`OntologyErrors`.
  *
- * Sync is deliberately NOT exercised with a real HTTP fixture here: `BlueprintSync.syncFromSource`
- * and `EntitySync.syncFromSource` both call straight into `applyUpdate` — the SAME function an
- * ordinary PUT calls, and case 1/2 below already prove that function bumps exactly once — so a
- * sync-specific case would only re-prove the same code path through a heavier fixture.
+ * Sync is exercised on the real `POST …/{id}/sync` routes with a local fixture document: both
+ * routes take the remote copy in the request body (`SyncEntityRequest`/`SyncBlueprintRequest`),
+ * so no network fetch is involved. The MCP write tools and a deferring entity import are pinned
+ * here too, since they reach the counter through their own call paths.
  */
 class OntologyRevisionTest {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().substring(0, 8)}"
@@ -328,5 +337,172 @@ class OntologyRevisionTest {
             TestBlueprints.remove(bpId)
             clientId?.let { TestIntegrationClients.service.revoke(it) }
         }
+    }
+
+    @Test
+    fun `an entity sync bumps the ontology revision exactly once`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("rev-ent-sync", UserRole.ADMIN)
+        val bpId = unique("rev-bp-esync")
+        val entId = unique("rev-ent-esync")
+        try {
+            admin.postJson("/api/v1/blueprints", simpleBlueprint(bpId))
+            val created = admin.postJson(
+                "/api/v1/entities",
+                entityRequest(bpId, entId).copy(sourceUrl = "https://example.com/$entId/entity.json"),
+            ).body<EntityResponse>()
+
+            val before = TestOntologyRevision.current()
+            val synced = admin.postJson(
+                "/api/v1/entities/${created.id}/sync",
+                SyncEntityRequest(document = entityRequest(bpId, entId, title = "From remote")),
+            )
+            assertEquals(HttpStatusCode.NoContent, synced.status)
+            assertEquals(before + 1, TestOntologyRevision.current())
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `a blueprint sync bumps the ontology revision exactly once`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("rev-bp-sync", UserRole.ADMIN)
+        val bpId = unique("rev-bp-bsync")
+        try {
+            val created = admin.postJson(
+                "/api/v1/blueprints",
+                simpleBlueprint(bpId).copy(sourceUrl = "https://example.com/$bpId/blueprint.json"),
+            ).body<BlueprintResponse>()
+
+            val before = TestOntologyRevision.current()
+            val synced = admin.postJson(
+                "/api/v1/blueprints/${created.id}/sync",
+                SyncBlueprintRequest(document = simpleBlueprint(bpId, title = "From remote")),
+            )
+            assertEquals(HttpStatusCode.NoContent, synced.status)
+            assertEquals(before + 1, TestOntologyRevision.current())
+        } finally {
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `an entity import that defers a mutual optional relation bumps once per stored row and once per pass-two restoration`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val admin = seededClient("rev-ent-import-defer", UserRole.ADMIN)
+            val bpId = unique("rev-bp-defer")
+            val a = unique("rev-ent-defer-a")
+            val b = unique("rev-ent-defer-b")
+            try {
+                admin.postJson(
+                    "/api/v1/blueprints",
+                    BlueprintRequest(
+                        identifier = bpId,
+                        title = "T",
+                        schema = BlueprintSchema(),
+                        relations = mapOf("peer" to RelationDefinition(title = "Peer", target = bpId, required = false, many = false)),
+                    ),
+                )
+                fun document(identifier: String, peer: String) = blueprintJson.encodeToJsonElement(
+                    EntityRequest(
+                        blueprint = bpId,
+                        identifier = identifier,
+                        title = "T",
+                        relations = buildJsonObject { put("peer", peer) },
+                    ),
+                ).jsonObject
+
+                val before = TestOntologyRevision.current()
+                val response = admin.postJson(
+                    "/api/v1/entities/import",
+                    EntityImportRequest(documents = listOf(document(a, b), document(b, a))),
+                ).body<EntityImportResponse>()
+                assertTrue(response.results.all { it.status == OntologyImportStatus.CREATED }, response.results.toString())
+
+                // The mutual cycle forces ONE sibling reference to be deferred: both rows are stored
+                // on pass one (2 bumps), then the deferred row's relation is restored by a pass-two
+                // UPDATE (1 more). A fourth bump would mean a restoration ran for a row that deferred
+                // nothing; a missing one, that pass two did not write through the bumping update.
+                assertEquals(before + 3, TestOntologyRevision.current())
+            } finally {
+                TestEntities.remove(a, b)
+                TestBlueprints.remove(bpId)
+            }
+        }
+
+    @Test
+    fun `MCP import_entities bumps once per stored row and delete_entity once`() = testApplication {
+        configureApp("integration.enabled" to "true")
+        startApplication()
+        TestRefTargets.ensure()
+        val owner = TestUsers.seed(uniqueEmail("rev-mcp"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("rev-mcp-${UUID.randomUUID()}", owner, IntegrationScope.WRITE)
+        val bpId = unique("rev-bp-mcp")
+        val rows = (1..3).map { unique("rev-ent-mcp") }
+        try {
+            TestBlueprints.service.create(simpleBlueprint(bpId), owner)
+            val plain = jsonClient()
+            val documents = JsonArray(rows.map { blueprintJson.encodeToJsonElement(entityRequest(bpId, it)).jsonObject })
+
+            val beforeImport = TestOntologyRevision.current()
+            val imported = plain.mcpToolCall(key, "import_entities", buildJsonObject { put("documents", documents) })
+            assertEquals(rows.size, imported["summary"]!!.jsonObject["CREATED"]!!.jsonPrimitive.content.toInt())
+            assertEquals(beforeImport + rows.size, TestOntologyRevision.current())
+
+            val beforeDelete = TestOntologyRevision.current()
+            val deleted = plain.mcpToolCall(
+                key,
+                "delete_entity",
+                buildJsonObject { put("blueprint", bpId); put("identifier", rows.first()) },
+            )
+            assertEquals("true", deleted["deleted"]!!.jsonPrimitive.content)
+            assertEquals(beforeDelete + 1, TestOntologyRevision.current())
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
+            TestEntities.remove(*rows.toTypedArray())
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `a lifecycles dictionary replace never bumps the ontology revision`() = testApplication {
+        usePostgresTestcontainer()
+        val lifecycle = unique("rev-lc")
+        try {
+            val beforeAdd = TestOntologyRevision.current()
+            TestLifecycles.ensure(lifecycle)
+            assertEquals(beforeAdd, TestOntologyRevision.current())
+
+            val beforeRemove = TestOntologyRevision.current()
+            TestLifecycles.remove(lifecycle)
+            assertEquals(beforeRemove, TestOntologyRevision.current())
+        } finally {
+            TestLifecycles.remove(lifecycle)
+        }
+    }
+
+    /** One stateless MCP `tools/call` POST; returns the tool result's `structuredContent`. */
+    private suspend fun HttpClient.mcpToolCall(key: String, tool: String, arguments: JsonObject): JsonObject {
+        val response = post("/integration/mcp") {
+            contentType(ContentType.Application.Json)
+            header(HttpHeaders.Accept, "application/json, text/event-stream")
+            header(HttpHeaders.Authorization, "Bearer $key")
+            setBody(
+                buildJsonObject {
+                    put("jsonrpc", "2.0")
+                    put("id", 1)
+                    put("method", "tools/call")
+                    put("params", buildJsonObject { put("name", tool); put("arguments", arguments) })
+                }.toString(),
+            )
+        }
+        val text = response.bodyAsText()
+        assertEquals(HttpStatusCode.OK, response.status, text)
+        val result = Json.parseToJsonElement(text).jsonObject["result"]!!.jsonObject
+        assertTrue(result["isError"]?.jsonPrimitive?.content != "true", text)
+        return result["structuredContent"]!!.jsonObject
     }
 }
