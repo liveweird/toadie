@@ -128,6 +128,7 @@ describe("Blueprints page", () => {
     renderBlueprints();
 
     expect(await screen.findByText("microservice")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Blueprints" })).toBeInTheDocument();
     expect(screen.getByText("Microservice")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /new blueprint/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Operations for/ })).not.toBeInTheDocument();

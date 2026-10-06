@@ -59,6 +59,7 @@ describe("Annotations page", () => {
     renderWithProviders(<Annotations />);
 
     expect(await screen.findByText("github.com/project-slug")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Annotations" })).toBeInTheDocument();
     expect(screen.getByText("API")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /new annotation key/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /edit/i })).not.toBeInTheDocument();

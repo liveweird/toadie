@@ -15,6 +15,7 @@ import {
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import { IconPlus, IconTag } from "@tabler/icons-react";
 import { ApiError } from "../api/http";
 import { isAdmin } from "../api/session";
@@ -86,7 +87,7 @@ export default function Labels() {
           />
         ) : (
           <Table.ScrollContainer minWidth={680}>
-            <Table>
+            <DataTable label={t("labels.title")}>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>{t("labels.column.key")}</Table.Th>
@@ -131,7 +132,7 @@ export default function Labels() {
                   </Table.Tr>
                 ))}
               </Table.Tbody>
-            </Table>
+            </DataTable>
           </Table.ScrollContainer>
         )}
       </Stack>

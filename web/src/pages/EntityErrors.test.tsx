@@ -134,6 +134,7 @@ describe("EntityErrors page", () => {
     renderPage();
 
     expect(await screen.findByText("Entities checked")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Errors" })).toBeInTheDocument();
     await waitFor(() => expect(tileValue("Entities checked")).toBe("2"));
     expect(tileValue("Blueprints checked")).toBe("2");
     expect(tileValue("Errors")).toBe("4");

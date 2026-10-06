@@ -3,6 +3,7 @@ import { Alert, Anchor, Badge, Button, Group, Menu, Select, Stack, Table, Text }
 import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import { Link as RouterLink } from "react-router-dom";
 import { IconBox, IconDownload, IconFileImport, IconPencil, IconPlus, IconRefresh, IconTrash } from "@tabler/icons-react";
 import type { Blueprint } from "../api/blueprints";
@@ -253,7 +254,7 @@ export default function Entities() {
       )}
 
       <Table.ScrollContainer minWidth={tableMinWidth}>
-        <Table layout="fixed">
+        <DataTable label={t("entities.title")} layout="fixed">
           <Table.Thead>
             <Table.Tr>
               <SortHeader
@@ -417,7 +418,7 @@ export default function Entities() {
               </Table.Tr>
             ) : null}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       </Table.ScrollContainer>
 
       {blueprint && <PaginationBar total={total} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}

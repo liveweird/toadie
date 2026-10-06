@@ -158,6 +158,7 @@
     "statusHeader": "Wynik",
     "messageHeader": "Szczegóły",
     "resultSummary": "Zaimportowano {{created}} z {{total}} dokumentów.",
+    "resultsTableLabel": "Wyniki importu",
     "checkResultSummary": "{{created}} z {{total}} dokumentów zostałoby zaimportowanych.",
     "status": {
       "CREATED": "Utworzony",

@@ -28,6 +28,7 @@
     "importButton": "Importuj",
     "progress": "Wysyłanie partii {{current}} z {{total}}…",
     "resultSummary": "Zaimportowano {{stored}} z {{total}} — {{created}} utworzonych, {{updated}} zaktualizowanych, {{unchanged}} bez zmian",
+    "resultsTableLabel": "Wyniki importu",
     "checkResultSummary": "Zaimportowałoby {{stored}} z {{total}} — {{created}} utworzonych, {{updated}} zaktualizowanych, {{unchanged}} bez zmian",
     "column": {
       "kind": "Rodzaj",

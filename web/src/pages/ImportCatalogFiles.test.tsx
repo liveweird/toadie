@@ -109,6 +109,7 @@ describe("ImportCatalogFiles page", () => {
 
     // Both stored statuses count as imported; the waived row carries its finding message.
     expect(await screen.findByText("Imported 2 of 2 documents.")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Import results" })).toBeInTheDocument();
     expect(screen.getByText("Created")).toBeInTheDocument();
     expect(screen.getByText("Created with findings")).toBeInTheDocument();
     expect(

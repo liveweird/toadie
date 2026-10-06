@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import { Anchor, Badge, Group, Stack, Table, Text } from "@mantine/core";
 import { useTranslation } from "react-i18next";
+import DataTable from "./DataTable";
 import type { TFunction } from "i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { editBlueprintPath } from "../utils/blueprintLinks";
@@ -146,7 +147,7 @@ export default function OntologyImportResults({
         })}
       </Text>
       <Table.ScrollContainer minWidth={760}>
-        <Table>
+        <DataTable label={t("ontology.import.resultsTableLabel")}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t("ontology.import.column.kind")}</Table.Th>
@@ -212,7 +213,7 @@ export default function OntologyImportResults({
               );
             })}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       </Table.ScrollContainer>
     </Stack>
   );

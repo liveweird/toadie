@@ -40,6 +40,7 @@ describe("OntologyImportResults", () => {
     renderWithProviders(<OntologyImportResults rows={[BLUEPRINT_ROW, ENTITY_ROW]} mode="import" showSource={false} />);
 
     expect(screen.getByText("Blueprint")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Import results" })).toBeInTheDocument();
     expect(screen.getByText("Entity")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Edit service" })).toHaveAttribute("href", "/blueprints/10/edit");
     expect(screen.getByRole("link", { name: "Edit service / checkout" })).toHaveAttribute(

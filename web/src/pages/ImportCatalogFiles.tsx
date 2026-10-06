@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import {
   Alert,
   Badge,
@@ -230,7 +231,7 @@ export default function ImportCatalogFiles() {
             )}
           </Text>
           <Table.ScrollContainer minWidth={760}>
-            <Table>
+            <DataTable label={t("catalog.import.resultsTableLabel")}>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>{t("catalog.field.kind")}</Table.Th>
@@ -278,7 +279,7 @@ export default function ImportCatalogFiles() {
                   </Table.Tr>
                 ))}
               </Table.Tbody>
-            </Table>
+            </DataTable>
           </Table.ScrollContainer>
         </Stack>
       )}

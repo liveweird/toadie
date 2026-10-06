@@ -26,6 +26,7 @@
     "importButton": "Import",
     "progress": "Sending chunk {{current}} of {{total}}…",
     "resultSummary": "Imported {{stored}} of {{total}} — {{created}} created, {{updated}} updated, {{unchanged}} unchanged",
+    "resultsTableLabel": "Import results",
     "checkResultSummary": "Would import {{stored}} of {{total}} — {{created}} created, {{updated}} updated, {{unchanged}} unchanged",
     "column": {
       "kind": "Kind",
