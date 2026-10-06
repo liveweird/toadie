@@ -1,6 +1,7 @@
 package ch.nokillswit.integration
 
 import ch.nokillswit.audit.audit
+import ch.nokillswit.auth.INTEGRATION_RATE_LIMIT
 import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.authz.UnauthorizedException
 import ch.nokillswit.blueprints.BlueprintServiceKey
@@ -22,6 +23,8 @@ import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receiveChannel
 import io.ktor.server.request.contentType
 import io.ktor.server.response.respondText
+import io.ktor.server.plugins.ratelimit.RateLimitName
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
@@ -52,61 +55,71 @@ fun Application.configureIntegration() {
         "graphql/schema.graphqls missing from the classpath"
     }.readText()
     val graphQL = buildIntegrationGraphQL(sdl, services)
-    val limits = IntegrationLimits()
+    // Admission-permit count is a test seam only (never set in application.yaml): zero permits
+    // prove admission runs AFTER authentication, which no real configuration can show. Honoured
+    // in development mode only and never negative, so production keeps the fixed bound.
+    val limits = environment.config.propertyOrNull("integration.admissionPermits")?.getString()?.toInt()
+        ?.takeIf { developmentMode }
+        ?.also { require(it >= 0) { "integration.admissionPermits must be >= 0" } }
+        ?.let { IntegrationLimits(concurrentRequests = it) } ?: IntegrationLimits()
     val retainedLedger = IntegrationRetainedLedger()
     val executor = IntegrationExecutor()
     monitor.subscribe(ApplicationStopped) { executor.close() }
 
     routing {
-        get("/integration/graphql/schema") {
-            withAdmission(limits) {
-                call.respondIntegrationSchema(clients, limits, sdl)
-            }
-        }
-        post("/integration/graphql") {
-            withAdmission(limits) {
-                call.respondIntegrationGraphQL(clients, limits, retainedLedger, executor, graphQL)
-            }
-        }
-        route("/integration/mcp") {
-            encodeMcpResponsesWithMcpJson()
-            replayMcpPreReadBody()
-            post {
+        // The per-IP bucket (registered in configureAuthRoutes, where the plugin is installed)
+        // fronts every integration route; authentication then precedes admission on each of them.
+        rateLimit(RateLimitName(INTEGRATION_RATE_LIMIT)) {
+            get("/integration/graphql/schema") {
+                call.authenticateIntegration(clients, limits) ?: return@get
                 withAdmission(limits) {
-                    call.respondIntegrationMcp(clients, limits, retainedLedger, services)
+                    call.respondText(sdl, ContentType.Text.Plain)
+                }
+            }
+            post("/integration/graphql") {
+                val principal = call.authenticateIntegration(clients, limits) ?: return@post
+                withAdmission(limits) {
+                    call.respondIntegrationGraphQL(principal, retainedLedger, executor, graphQL)
+                }
+            }
+            route("/integration/mcp") {
+                encodeMcpResponsesWithMcpJson()
+                replayMcpPreReadBody()
+                post {
+                    val principal = call.authenticateIntegration(clients, limits) ?: return@post
+                    withAdmission(limits) {
+                        call.respondIntegrationMcp(principal, limits, retainedLedger, services)
+                    }
                 }
             }
         }
     }
 }
 
-private suspend fun ApplicationCall.respondIntegrationSchema(
+/** Authentication and the per-client allowance under the five-second deadline, BEFORE any
+ * admission permit is taken: an unauthenticated flood must never touch the shared semaphore.
+ * Answers the 408 itself and returns null when the deadline passes. */
+private suspend fun ApplicationCall.authenticateIntegration(
     clients: IntegrationClientService,
     limits: IntegrationLimits,
-    sdl: String,
-) {
+): IntegrationClientPrincipal? {
     val principal = withTimeoutOrNull(EXECUTION_TIMEOUT_MILLIS) {
         integrationCaller(clients).also { requireRateAllowance(limits, it) }
     }
-    if (principal == null) {
-        respondProblem(HttpStatusCode.RequestTimeout, "Integration request timed out")
-    } else {
-        respondText(sdl, ContentType.Text.Plain)
-    }
+    if (principal == null) respondProblem(HttpStatusCode.RequestTimeout, "Integration request timed out")
+    return principal
 }
 
 private suspend fun ApplicationCall.respondIntegrationGraphQL(
-    clients: IntegrationClientService,
-    limits: IntegrationLimits,
+    principal: IntegrationClientPrincipal,
     retainedLedger: IntegrationRetainedLedger,
     executor: IntegrationExecutor,
     graphQL: GraphQL,
 ) {
-    val authenticated = receiveAuthenticatedRequest(clients, limits) ?: run {
+    val body = receiveGraphQLRequest() ?: run {
         respondProblem(HttpStatusCode.RequestTimeout, "Integration request timed out")
         return
     }
-    val (principal, body) = authenticated
     if (body.query.utf8Size() > MAX_QUERY_SOURCE_BYTES) {
         respondProblem(HttpStatusCode.PayloadTooLarge, "GraphQL query exceeds the size limit")
         return
@@ -123,24 +136,19 @@ private suspend fun ApplicationCall.respondIntegrationGraphQL(
     }
 }
 
-private suspend fun ApplicationCall.receiveAuthenticatedRequest(
-    clients: IntegrationClientService,
-    limits: IntegrationLimits,
-): AuthenticatedRequest? = withTimeoutOrNull(EXECUTION_TIMEOUT_MILLIS) {
-    val principal = integrationCaller(clients)
-    requireRateAllowance(limits, principal)
-    if (request.contentType().withoutParameters() != ContentType.Application.Json) {
-        throw BadRequestException("Content-Type must be application/json")
+private suspend fun ApplicationCall.receiveGraphQLRequest(): GraphQLHttpRequest? =
+    withTimeoutOrNull(EXECUTION_TIMEOUT_MILLIS) {
+        if (request.contentType().withoutParameters() != ContentType.Application.Json) {
+            throw BadRequestException("Content-Type must be application/json")
+        }
+        val rawBody = receiveBoundedBody()
+        validateGraphQLBodyStructure(rawBody)
+        try {
+            integrationHttpJson.decodeFromString<GraphQLHttpRequest>(rawBody)
+        } catch (_: SerializationException) {
+            throw BadRequestException("Request body is missing or not valid JSON")
+        }
     }
-    val rawBody = receiveBoundedBody()
-    validateGraphQLBodyStructure(rawBody)
-    val body = try {
-        integrationHttpJson.decodeFromString<GraphQLHttpRequest>(rawBody)
-    } catch (_: SerializationException) {
-        throw BadRequestException("Request body is missing or not valid JSON")
-    }
-    AuthenticatedRequest(principal, body)
-}
 
 private suspend fun executeBounded(
     graphQL: GraphQL,
@@ -186,11 +194,6 @@ private fun auditIntegrationRequest(
     "clientName" to principal.name,
     "operationName" to body.operationName?.take(MAX_AUDITED_OPERATION_NAME),
     "rootFields" to responseRootKeys(specification),
-)
-
-private data class AuthenticatedRequest(
-    val principal: IntegrationClientPrincipal,
-    val body: GraphQLHttpRequest,
 )
 
 private val integrationHttpJson = Json

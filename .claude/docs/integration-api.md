@@ -174,11 +174,37 @@ result cache or dynamic schema generation exists. This first schema has no neste
 lookups, so it does not need DataLoaders; add request-scoped batching before introducing them.
 
 The authenticated body reader caps input at 256 KiB before JSON decoding, including variables;
-the structural scan additionally limits JSON depth and node count. Authentication/body receipt
-has a five-second deadline (HTTP 408), followed by a separate five-second cooperative execution
-deadline (a GraphQL error). Four requests may be admitted at once; authenticated clients may
+the structural scan additionally limits JSON depth and node count. Authentication has a
+five-second deadline and the body read, inside admission, its own five-second deadline (both HTTP
+408, 2.16.0), followed by a separate five-second cooperative execution deadline (a GraphQL error). Four requests may be admitted at once; authenticated clients may
 make 120 requests per minute. Shared retained GraphQL values are capped at 32 MiB, in addition
 to per-request encoded-value and response caps of 4 MiB.
+
+**Admission follows authentication (2.16.0).** Every integration route (`GET
+/integration/graphql/schema`, `POST /integration/graphql`, `POST /integration/mcp`) first runs
+`integrationCaller` + `requireRateAllowance` under the five-second deadline (`authenticateIntegration`
+in `Integration.kt`) and only then takes one of the four `withAdmission` permits around the actual
+work with the authenticated principal. An unauthenticated request never touches the semaphore or the
+retained ledger, so a bearer-less flood cannot crowd out real clients. The trade-off, stated: a
+WELL-FORMED unknown key still costs one SHA-256 and one indexed SELECT on the shared R2DBC pool per
+attempt (a malformed bearer costs nothing), bounded only by the per-IP bucket below rather than by the
+four permits as before — at thousands of addresses that is pool pressure on the whole app, not just
+on the integration surface; and a valid key refused by a saturated admission has already spent one
+per-client token and its `lastUsedAt` UPDATE. Two status changes follow from the order: a saturated
+admission with no or an invalid key answers `401` + `integration.auth_failed` (was `429`), and a valid
+key over its own bucket answers the per-client `429` + `integration.rate_limited` (was the admission
+`429`). `IntegrationClientSecurityTest` pins the order with zero admission permits (the test-only
+`integration.admissionPermits` config seam — honoured in development mode only, never negative; never
+set it in a deployment).
+
+**Per-IP bucket.** A Ktor `RateLimit` provider (`INTEGRATION_RATE_LIMIT`, registered in
+`configureAuthRoutes` because the plugin installs once) fronts all three routes, keyed by client
+address (`HTTP_BEHIND_PROXY` makes that the real client IP). `security.rateLimit.integrationPerMinute`
+(`$INTEGRATION_RATE_LIMIT_PER_MINUTE`): blank follows the mode — 300/min in production, 3000/min in
+development — and a number pins it. The bodiless 429 gets its problem body from the `status(TooManyRequests)`
+handler and is NOT audited (Ktor's, like the login IP bucket); `integration.rate_limited` still covers
+only the per-client 120/min bucket. 300/min per IP sits above that per-key bucket, so several keys
+behind one NAT can still collide: raise `INTEGRATION_RATE_LIMIT_PER_MINUTE` in that deployment.
 
 Transport/authentication/admission failures use RFC 7807 ProblemDetail. Parsed GraphQL documents
 answer HTTP 200 with data and/or sanitized errors. Body/query/response-size refusal is an HTTP 413.
@@ -200,8 +226,8 @@ carries one JSON-RPC 2.0 message (`initialize`, `tools/list`, `tools/call`) OR a
 answer is `application/json`, no session id is issued and no SSE stream is opened (clients must
 send `Accept: application/json, text/event-stream`, the transport's rule). It is registered beside
 `/integration/graphql` — same `integration.enabled` flag, same `integration/Integration.kt` guard
-chain: admission (4 concurrent), `integrationCaller` (the bearer key), the 120/min per-client
-bucket, the 5-second authentication deadline (408). A `Server` is built PER REQUEST after
+chain (2.16.0 order): the per-IP bucket, then `integrationCaller` (the bearer key) and the 120/min
+per-client bucket under the 5-second authentication deadline (408), then admission (4 concurrent). A `Server` is built PER REQUEST after
 authentication (`integration/Mcp.kt`), so its tool handlers close over the principal; ALL TEN
 tools are registered for every key regardless of scope, so `tools/list` always shows the same
 catalogue — the scope gate lives inside `guarded` (`McpTools.kt`): a `read` key calling a write
