@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import { Alert, Badge, Code, Group, Stack, Table, Text } from "@mantine/core";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { IconListCheck } from "@tabler/icons-react";
@@ -78,7 +79,7 @@ export default function Errors() {
       )}
 
       <Table.ScrollContainer minWidth={760}>
-        <Table>
+        <DataTable label={t("errors.title")}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t("errors.field.file")}</Table.Th>
@@ -144,7 +145,7 @@ export default function Errors() {
               </Table.Tr>
             ) : null}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       </Table.ScrollContainer>
     </Stack>
   );

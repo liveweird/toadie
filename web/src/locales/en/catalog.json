@@ -154,6 +154,7 @@
     "statusHeader": "Result",
     "messageHeader": "Detail",
     "resultSummary": "Imported {{created}} of {{total}} documents.",
+    "resultsTableLabel": "Import results",
     "checkResultSummary": "{{created}} of {{total}} documents would import.",
     "status": {
       "CREATED": "Created",

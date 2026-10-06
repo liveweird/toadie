@@ -5,6 +5,7 @@ import { notifications } from "@mantine/notifications";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconKey, IconKeyOff, IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import {
   createIntegrationClient,
   type IntegrationClient,
@@ -201,7 +202,7 @@ export default function IntegrationClients() {
       )}
 
       <Table.ScrollContainer minWidth={760}>
-        <Table>
+        <DataTable label={t("integration.title")}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t("integration.name")}</Table.Th>
@@ -267,7 +268,7 @@ export default function IntegrationClients() {
               </Table.Tr>
             ) : null}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       </Table.ScrollContainer>
 
       <PaginationBar

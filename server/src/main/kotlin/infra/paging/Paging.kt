@@ -66,3 +66,34 @@ fun Query.applyPaging(req: PageRequest, columns: Map<String, Column<*>>): Query 
         .limit(req.pageSize)
         .offset(((req.page - 1).toLong()) * req.pageSize)
 }
+
+/**
+ * The bound-checked page request for callers that already hold their `page`/`pageSize` as numbers
+ * (the GraphQL fetchers' arguments) rather than raw query parameters [parsePaging] reads: `null`
+ * means the default (`1` / [DEFAULT_PAGE_SIZE]); `page` must be at least 1 and `pageSize` within
+ * `1..`[MAX_PAGE_SIZE], else a 400 with the same messages [parsePaging] speaks.
+ */
+fun validatedPage(
+    page: Int?,
+    pageSize: Int?,
+    sort: List<SortField> = listOf(SortField("id", descending = false)),
+): PageRequest {
+    val resolvedPage = page ?: 1
+    val resolvedPageSize = pageSize ?: DEFAULT_PAGE_SIZE
+    if (resolvedPage < 1) throw BadRequestException("page must be >= 1")
+    if (resolvedPageSize !in 1..MAX_PAGE_SIZE) throw BadRequestException("pageSize must be between 1 and $MAX_PAGE_SIZE")
+    return PageRequest(resolvedPage, resolvedPageSize, sort)
+}
+
+/**
+ * One one-based page of an already materialized list, with the full list's size as the total —
+ * the shared slice for the integration adapters (GraphQL's `errors` report pages, MCP's list
+ * tools), whose rows are computed in memory rather than paged by SQL. A page past the end is
+ * empty, never an error; the offset arithmetic is `Long` so a huge `page` cannot overflow.
+ */
+fun <T> inMemoryPage(items: List<T>, page: Int, pageSize: Int): Pair<List<T>, Long> {
+    val offset = ((page - 1).toLong() * pageSize).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    val end = (offset.toLong() + pageSize).coerceAtMost(items.size.toLong()).toInt()
+    val pageItems = if (offset >= items.size) emptyList() else items.subList(offset, end)
+    return pageItems to items.size.toLong()
+}

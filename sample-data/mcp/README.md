@@ -17,9 +17,13 @@ entities the agent writes show the client's name as their creator.
 ## 2. Point the agent at Toadie
 
 Claude Code: copy [`mcp.json`](mcp.json) to the root of the repository the agent will scan as
-`.mcp.json` and paste the key. Claude Desktop uses the same block under `mcpServers` in its
-`claude_desktop_config.json`. Any MCP client that speaks Streamable HTTP with a bearer header
-works the same way.
+`.mcp.json`. It reads the key from the `TOADIE_MCP_KEY` environment variable through Claude
+Code's `${VAR}` expansion in headers (`"Authorization": "Bearer ${TOADIE_MCP_KEY}"`), so export
+the key in your shell and the file itself carries no secret. If you instead paste the key
+literally into `.mcp.json`, keep that file out of version control (add it to `.gitignore`).
+Claude Desktop uses the same block under `mcpServers` in its `claude_desktop_config.json`
+(it does not expand variables, so paste the key there). Any MCP client that speaks Streamable
+HTTP with a bearer header works the same way.
 
 ## 3. Scan a repository, write what you find
 

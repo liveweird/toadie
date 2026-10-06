@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.16.1",
+    date: "2026-10-06",
+    en: `**Every data table announces its name.** Screen readers now hear which list a table holds on all fourteen table pages. Under the hood this release pins more of the documented behaviour with tests (the ontology revision counter on sync, deferred import and MCP writes; the catalog registry reader), shares the paging and audit helpers between the GraphQL and MCP adapters, and brings the reference docs, the sample MCP configuration and the API description up to date with the integration surface.`,
+    pl: `**Każda tabela danych ogłasza swoją nazwę.** Czytniki ekranu słyszą teraz, jaką listę zawiera tabela, na wszystkich czternastu stronach z tabelami. Pod maską to wydanie przypina testami więcej udokumentowanych zachowań (licznik rewizji ontologii przy synchronizacji, odroczonym imporcie i zapisach MCP; czytnik rejestru katalogu), współdzieli pomocniki stronicowania i audytu między adapterami GraphQL i MCP oraz uzgadnia dokumentację referencyjną, przykładową konfigurację MCP i opis API z powierzchnią integracyjną.`,
+  },
+  {
     version: "2.16.0",
     date: "2026-10-06",
     en: `**The integration API resists unauthenticated floods.** Requests to the GraphQL and MCP endpoints are now authenticated before they take one of the server's integration slots, so a caller without a valid key can no longer crowd out real clients, and every client address gets its own request allowance (300 per minute by default, configurable).`,

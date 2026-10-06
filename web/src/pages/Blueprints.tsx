@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Alert, Anchor, Badge, Button, Group, Menu, Stack, Table, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import { Link as RouterLink } from "react-router-dom";
 import {
   IconDownload,
@@ -89,7 +90,7 @@ export default function Blueprints() {
           <EmptyState icon={IconSchema} label={t("blueprints.empty")} />
         ) : (
           <Table.ScrollContainer minWidth={900}>
-            <Table>
+            <DataTable label={t("blueprints.title")}>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>{t("blueprints.column.identifier")}</Table.Th>
@@ -171,7 +172,7 @@ export default function Blueprints() {
                   </Table.Tr>
                 ))}
               </Table.Tbody>
-            </Table>
+            </DataTable>
           </Table.ScrollContainer>
         )}
       </Stack>

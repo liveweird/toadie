@@ -59,6 +59,7 @@ describe("Types page", () => {
     renderWithProviders(<Types />);
 
     expect(await screen.findByText("Component")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Types" })).toBeInTheDocument();
     expect(screen.getByText("service")).toBeInTheDocument();
     expect(screen.getByText("team")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /new dictionary/i })).not.toBeInTheDocument();

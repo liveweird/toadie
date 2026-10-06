@@ -7,6 +7,7 @@ import ch.nokillswit.entities.EntityFinding
 import ch.nokillswit.entities.EntityInvalidException
 import ch.nokillswit.entities.EntityReferencedException
 import ch.nokillswit.entities.EntityServiceKey
+import ch.nokillswit.infra.paging.inMemoryPage
 import ch.nokillswit.integration.IntegrationClientPrincipal
 import ch.nokillswit.integration.IntegrationLimits
 import ch.nokillswit.integration.IntegrationRetainedLedger
@@ -19,7 +20,6 @@ import ch.nokillswit.integration.argObject
 import ch.nokillswit.integration.argObjects
 import ch.nokillswit.integration.argString
 import ch.nokillswit.integration.guarded
-import ch.nokillswit.integration.mcpInMemoryPage
 import ch.nokillswit.integration.mcpPageRequest
 import ch.nokillswit.integration.requireObject
 import ch.nokillswit.integration.requireString
@@ -31,8 +31,13 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -142,10 +147,10 @@ class McpToolsTest {
         assertTrue(badRequest { request("page" to 0).mcpPageRequest(emptyList()) }.startsWith("page must be between"))
 
         val items = (1..5).toList()
-        assertEquals(listOf(1, 2) to 5L, mcpInMemoryPage(items, page = 1, pageSize = 2))
-        assertEquals(listOf(5) to 5L, mcpInMemoryPage(items, page = 3, pageSize = 2))
-        assertEquals(emptyList<Int>() to 5L, mcpInMemoryPage(items, page = 4, pageSize = 2))
-        assertEquals(emptyList<Int>() to 0L, mcpInMemoryPage(emptyList<Int>(), page = 1, pageSize = 2))
+        assertEquals(listOf(1, 2) to 5L, inMemoryPage(items, page = 1, pageSize = 2))
+        assertEquals(listOf(5) to 5L, inMemoryPage(items, page = 3, pageSize = 2))
+        assertEquals(emptyList<Int>() to 5L, inMemoryPage(items, page = 4, pageSize = 2))
+        assertEquals(emptyList<Int>() to 0L, inMemoryPage(emptyList<Int>(), page = 1, pageSize = 2))
     }
 
     @Test
@@ -259,6 +264,51 @@ class McpToolsTest {
             assertEquals(null, first.isError)
             val second = context.guarded("t") { toolResult(buildJsonObject {}) }
             assertEquals("RATE_LIMITED", code(second))
+        }
+    }
+
+    /**
+     * The request lock (M1): a JSON-RPC batch dispatches its calls concurrently on the SDK
+     * transport, so `guarded` must run one call's block at a time per context. Deterministic, no
+     * sleeps: both calls run on ONE serial dispatcher (`limitedParallelism(1)`), so after the
+     * second call is launched a single `yield()` lets it run to its first suspension point — which
+     * is the mutex while the first block still holds the latch, and would be the end of its whole
+     * block if the lock did not exist. The latches then release the first and the order is read back.
+     */
+    @Test
+    fun `two concurrent guarded calls on one context run strictly one after the other`() = testApplication {
+        usePostgresTestcontainer()
+        val services = IntegrationServices(application.attributes[BlueprintServiceKey], application.attributes[EntityServiceKey])
+        val principal = IntegrationClientPrincipal(clientId = 1u, name = "t", scope = IntegrationScope.WRITE, serviceUserId = null)
+        IntegrationRetainedLedger().open().use { retained ->
+            val context = McpToolContext(principal, services, retained)
+            val order = mutableListOf<String>()
+            val firstEntered = CompletableDeferred<Unit>()
+            val releaseFirst = CompletableDeferred<Unit>()
+            withContext(Dispatchers.Default.limitedParallelism(1)) {
+                val first = async {
+                    context.guarded("first") {
+                        order += "first-start"
+                        firstEntered.complete(Unit)
+                        releaseFirst.await()
+                        order += "first-end"
+                        toolResult(buildJsonObject {})
+                    }
+                }
+                firstEntered.await()
+                val second = async {
+                    context.guarded("second") {
+                        order += "second-start"
+                        toolResult(buildJsonObject {})
+                    }
+                }
+                yield() // the second call runs up to the request lock (or, without one, through its whole block)
+                assertEquals(listOf("first-start"), order.toList(), "the second call must wait for the first to release the lock")
+                releaseFirst.complete(Unit)
+                assertEquals(null, first.await().isError)
+                assertEquals(null, second.await().isError)
+            }
+            assertEquals(listOf("first-start", "first-end", "second-start"), order)
         }
     }
 }

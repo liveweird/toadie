@@ -94,6 +94,7 @@ describe("Errors page", () => {
     renderPage();
 
     expect(await screen.findByText("Files checked")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Errors" })).toBeInTheDocument();
     await waitFor(() => expect(tileValue("Files checked")).toBe("3"));
     expect(tileValue("References checked")).toBe("5");
     expect(tileValue("Errors")).toBe("4");

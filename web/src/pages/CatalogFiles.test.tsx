@@ -141,6 +141,7 @@ describe("CatalogFiles page", () => {
     renderPage();
 
     expect(await screen.findByText("payments-svc")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Files" })).toBeInTheDocument();
     expect(screen.getByText("Payments")).toBeInTheDocument();
     // The tags, type/lifecycle, owner, and created-by columns were deliberately removed
     // (tags remain a FILTER — the rows just don't spend width on the badges any more).

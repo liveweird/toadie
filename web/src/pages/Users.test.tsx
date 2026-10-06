@@ -85,6 +85,7 @@ describe("Users page", () => {
     renderPage();
 
     expect(await screen.findByText("Alice Admin")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Users" })).toBeInTheDocument();
     expect(screen.getByText("Bob Basic")).toBeInTheDocument();
     expect(screen.getByText("Admin")).toBeInTheDocument();
     expect(screen.getByText("You")).toBeInTheDocument();

@@ -614,6 +614,14 @@ serially under one request lock and rate-charges the shared per-client bucket fo
 the first, answering `RATE_LIMITED` once it is exhausted; a body over 4 MiB is 413; every call
 audits `integration.mcp_call`, including a cancelled call (`ok=false`, the cancellation still rethrown — pinned in `McpToolsTest`); the body caps (`integration/Mcp.kt`, `integration/McpBodyScan.kt`) are pinned by the pure `McpBodyScanTest` (the 512-level depth cap with early stop, 64 vs 65 messages, early stop proven by a garbage tail, a 150 000-element `arguments` array, strings with structural characters, nested arrays counting as values, malformed input passing), by `IntegrationMcpTest` — a batch of 65 `tools/call` messages is a `400` problem with NO `integration.mcp_call` event (so no tool ran), exactly 64 `tools/list` is answered in full (pinning the replay), a malformed JSON body is the transport's `400`, never a `500`, a body over 4 MiB is a `413` problem, a 4 MiB body within the byte limit holding ~2M values is a `400` values-message problem, and a streaming body that writes 4 MiB + 1 byte and then never completes still gets its `413` promptly (the pre-read never keeps buffering) — and by `McpToolsTest` (a cancelled call audits `ok=false`, rethrows, and the same context serves the next call); since 2.15.1 the raw `initialize`/`tools/list`/`tools/call`/batch bodies carry
 NO `null` member (the TypeScript client rejects explicit nulls — `.claude/docs/integration-api.md`).
+`McpToolsTest` also pins the request lock below the route (two concurrent `guarded` calls on one
+`McpToolContext` run strictly in order — the first holds a `CompletableDeferred` latch while the
+second is launched on the same single-parallelism dispatcher and given one `yield()`, so the
+assertion that it has not started needs no sleep); the 30 s request deadline firing mid-import has
+no deterministic hold on an import row, so it is covered by the cancelled-call case above rather
+than a timing test. The pure `PagingHelpersTest` pins the in-memory pager and the 1..100 bound
+check (`infra/paging/Paging.kt`) the MCP list tools and the GraphQL fetchers share, and
+`CatalogRegistryReaderTest` reads `catalog/CatalogRegistryReader.kt` directly.
 Fixtures are throwaway blueprints/entities removed in `finally`.
 
 **Ontology revision (2.12.0).** `OntologyRevisionTest` covers the V39 monotonic counter
@@ -622,8 +630,12 @@ Fixtures are throwaway blueprints/entities removed in `finally`.
 query — the counter has no REST surface of its own): blueprint create/update/delete each bump
 exactly once, including a byte-identical PUT (the "D2" posture — a write always bumps,
 never diffed first); the same for entities, plus an entity-import batch with no deferrals
-bumping exactly once per row; a rejected blueprint/entity write (409/400) never bumps; a
-NAMESPACE dictionary replace never bumps while a HIERARCHY replace adding a value bumps once;
+bumping exactly once per row; `POST /api/v1/entities/{id}/sync` and `POST /api/v1/blueprints/{id}/sync`
+(the remote copy posted as the body, no fetch) bumping exactly once; a two-document import with a
+mutual optional relation bumping once per stored row plus once for the pass-two restoration; MCP
+`import_entities` bumping once per stored row and `delete_entity` once; a rejected blueprint/entity
+write (409/400) never bumping; a NAMESPACE or LIFECYCLE dictionary replace never bumping while a
+HIERARCHY replace adding a value bumps once;
 the GraphQL `entities` page's `revision` matches a direct read and advances by exactly one after
 a PUT; and the uncommitted-writer case — a raw JDBC connection holds the SAME `entities` SHARE
 ROW EXCLUSIVE lock a real write would, performs both the row update and the counter bump, and

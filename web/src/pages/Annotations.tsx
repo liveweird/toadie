@@ -3,6 +3,7 @@ import { Alert, Button, Group, Modal, MultiSelect, Stack, Table, Text, TextInput
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import { IconNote, IconPlus } from "@tabler/icons-react";
 import { ApiError } from "../api/http";
 import { isAdmin } from "../api/session";
@@ -80,7 +81,7 @@ export default function Annotations() {
           />
         ) : (
           <Table.ScrollContainer minWidth={520}>
-            <Table>
+            <DataTable label={t("annotations.title")}>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>{t("annotations.column.key")}</Table.Th>
@@ -115,7 +116,7 @@ export default function Annotations() {
                   </Table.Tr>
                 ))}
               </Table.Tbody>
-            </Table>
+            </DataTable>
           </Table.ScrollContainer>
         )}
       </Stack>

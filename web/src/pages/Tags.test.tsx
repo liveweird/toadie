@@ -59,6 +59,7 @@ describe("Tags page", () => {
     renderWithProviders(<Tags />);
 
     expect(await screen.findByText("Languages")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Tags" })).toBeInTheDocument();
     expect(screen.getByText("java")).toBeInTheDocument();
     expect(screen.getByText("Group")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /new category/i })).not.toBeInTheDocument();

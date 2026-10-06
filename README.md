@@ -112,6 +112,12 @@ Requesting/opening a link does not change credentials. Only confirmation sets th
 password and signs out existing sessions; MFA stays enabled. Deploy the matching server and
 SPA together. V26 adds the reset-grant table without otherwise signing users out.
 
+Outbound mail is configured through environment variables: `MAIL_TRANSPORT` (`log` in dev,
+`smtp`, or `disabled`), `SMTP_HOST`, `SMTP_PORT` (default `587`), `SMTP_STARTTLS` (default
+`true`; the bundled Mailpit needs `false`), `SMTP_USER`/`SMTP_PASSWORD` (optional), `MAIL_FROM`
+(sender address, default `toadie@localhost`) and `MAIL_APP_URL`. A blank `SMTP_HOST` refuses
+startup under the `smtp` transport.
+
 ## Local development
 
 Three processes:
@@ -142,7 +148,7 @@ followed by `npm run check:api`, `npm run lint:api`, `npm run build`, `npm run l
 The published API contract is **OpenAPI 3.0.3**, validated without rewriting its version.
 See [HARDENING.md](HARDENING.md) for open work.
 
-## Integration API (read-only, for other apps)
+## Integration API (GraphQL and MCP, for other apps)
 
 Toadie also exposes Port blueprints, entities, and ontology errors through a separate GraphQL
 API, following Lettuce's machine-client architecture. It is disabled by default; set
@@ -163,6 +169,11 @@ ownership. Errors expose entity/blueprint findings; login accounts, Backstage da
 mutations and subscriptions are outside this API. IDs are GraphQL decimal strings and dynamic
 Port fields are JSON values. Query/response budgets may refuse expensive reads; request smaller
 pages. Key administration is JWT-authenticated REST and remains available while GraphQL is disabled.
+
+The same keys also authenticate the MCP endpoint `POST /integration/mcp` (since 2.15.0, stateless
+Streamable HTTP) for AI agents. Each key carries an immutable scope chosen at creation: `read`
+(GraphQL and the MCP read tools) or `write` (additionally the MCP entity write tools; blueprints
+are never writable, and GraphQL stays read-only). See the [MCP guide](sample-data/mcp/README.md).
 
 See the [integration reference](.claude/docs/integration-api.md),
 [GraphQL rules](api-guidelines/GRAPHQL-GUIDELINES.md), and

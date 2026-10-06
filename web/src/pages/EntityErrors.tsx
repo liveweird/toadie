@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { Alert, Anchor, Badge, Button, Group, Stack, Table, Text } from "@mantine/core";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -141,7 +142,7 @@ export default function EntityErrors() {
       )}
 
       <Table.ScrollContainer minWidth={860}>
-        <Table>
+        <DataTable label={t("entityErrors.title")}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t("entityErrors.field.subject")}</Table.Th>
@@ -173,7 +174,7 @@ export default function EntityErrors() {
               </Table.Tr>
             ) : null}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       </Table.ScrollContainer>
     </Stack>
   );

@@ -32,3 +32,19 @@ internal fun auditImportedEntityMutation(callerId: UInt, mutation: ImportMutatio
         )
     }
 }
+
+/**
+ * `entity.deleted` — the one field set shared by `DELETE /api/v1/entities/{id}` and the MCP
+ * `delete_entity` tool (which appends `"clientId" to <id>` as [extra]). Call it only after the
+ * delete's [EntityDeleteResult.affected] was verified, exactly as both callers do.
+ */
+internal fun auditEntityDeleted(callerId: UInt, entityId: UInt, result: EntityDeleteResult, vararg extra: Pair<String, Any?>) {
+    audit(
+        "entity.deleted",
+        "byUserId" to callerId.toLong(),
+        "entityId" to entityId.toLong(),
+        "blueprint" to result.blueprint,
+        "identifier" to result.identifier,
+        *extra,
+    )
+}

@@ -3,6 +3,7 @@ import { Alert, Badge, Button, Group, Modal, Select, Stack, Table, TagsInput } f
 import { useForm } from "@mantine/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import { IconCategory, IconPlus } from "@tabler/icons-react";
 import { ApiError } from "../api/http";
 import { isAdmin } from "../api/session";
@@ -79,7 +80,7 @@ export default function Types() {
           />
         ) : (
           <Table.ScrollContainer minWidth={520}>
-            <Table>
+            <DataTable label={t("types.title")}>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>{t("types.column.kind")}</Table.Th>
@@ -114,7 +115,7 @@ export default function Types() {
                   </Table.Tr>
                 ))}
               </Table.Tbody>
-            </Table>
+            </DataTable>
           </Table.ScrollContainer>
         )}
       </Stack>

@@ -5,6 +5,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconUsers } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmActionModal from "../components/ConfirmActionModal";
 import EmptyState from "../components/EmptyState";
@@ -267,7 +268,7 @@ export default function FeatureFlags() {
       )}
 
       <Table.ScrollContainer minWidth={640}>
-        <Table>
+        <DataTable label={t("users.featureFlags.title")}>
           <Table.Thead>
             <Table.Tr>
               <SortHeader
@@ -338,7 +339,7 @@ export default function FeatureFlags() {
               </Table.Tr>
             ) : null}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       </Table.ScrollContainer>
 
       <PaginationBar

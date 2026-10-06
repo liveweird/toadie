@@ -83,6 +83,7 @@ describe("FeatureFlags page", () => {
       name: "Toggle Email MFA for Alice Admin",
     })) as HTMLInputElement;
     expect(aliceSwitch.checked).toBe(true);
+    expect(screen.getByRole("table", { name: "Feature flags" })).toBeInTheDocument();
     expect(
       (screen.getByRole("switch", { name: "Toggle Email MFA for Bob Basic" }) as HTMLInputElement)
         .checked,

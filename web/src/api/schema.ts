@@ -14,8 +14,10 @@ export interface paths {
         /**
          * List integration clients
          * @description Lists a page of integration clients — the technical identities holding API keys for the
-         *     read-only integration GraphQL API at `/integration/graphql` (whose own contract is the
-         *     committed SDL, not this document). ADMIN only, reads included. Uses the standard page envelope, ordered by id
+         *     integration surface: the read-only GraphQL API at `/integration/graphql` (whose own
+         *     contract is the committed SDL, not this document) and, since 2.15.0, the MCP endpoint
+         *     `POST /integration/mcp`. A key's immutable `scope` (`read` or `write`) decides whether
+         *     the MCP entity write tools are available; GraphQL is read-only for every scope. ADMIN only, reads included. Uses the standard page envelope, ordered by id
          *     ascending by default (only `id` is sortable; `-id` reverses the order). Revoked clients stay listed (`revoked: true`) as the audit
          *     trail; keys themselves are never returned (only the one-time create response carries
          *     the plaintext key). Every client also owns its own service account (never listed under

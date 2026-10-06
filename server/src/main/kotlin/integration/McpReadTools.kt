@@ -9,7 +9,6 @@ import ch.nokillswit.entities.EntityFilter
 import ch.nokillswit.entities.EntityGraphFilter
 import ch.nokillswit.entities.EntityImportRow
 import ch.nokillswit.entities.EntityResponse
-import ch.nokillswit.entities.OntologyReadBudget
 import ch.nokillswit.entities.findByIdentity
 import ch.nokillswit.entities.importCheck
 import ch.nokillswit.entities.ontologyErrors
@@ -19,9 +18,9 @@ import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.infra.paging.DEFAULT_PAGE_SIZE
 import ch.nokillswit.infra.paging.MAX_PAGE_SIZE
 import ch.nokillswit.infra.paging.SortField
+import ch.nokillswit.infra.paging.inMemoryPage
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
-import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -61,7 +60,7 @@ private fun Server.addListBlueprints(context: McpToolContext) {
         context.guarded("list_blueprints") {
             val paging = request.mcpPageRequest(listOf(SortField("id", false)))
             val full = request.argBool("full")
-            val result = withTimeout(MCP_READ_TOOL_TIMEOUT_MILLIS) { context.services.blueprints.listPage(paging) }
+            val result = context.readBounded { context.services.blueprints.listPage(paging) }
             val items = result.items.map { if (full) blueprintFullJson(it) else blueprintSummaryJson(it) }
             toolResult(
                 buildJsonObject {
@@ -88,8 +87,8 @@ private fun Server.addGetBlueprint(context: McpToolContext) {
     ) { request ->
         context.guarded("get_blueprint") {
             val identifier = request.requireString("identifier")
-            val blueprint = withTimeout(MCP_READ_TOOL_TIMEOUT_MILLIS) {
-                context.services.blueprints.findByIdentifier(identifier, OntologyReadBudget())
+            val blueprint = context.readBounded { budget ->
+                context.services.blueprints.findByIdentifier(identifier, budget)
             } ?: throw NotFoundException("Blueprint not found")
             toolResult(blueprintFullJson(blueprint))
         }
@@ -120,9 +119,7 @@ private fun Server.addListEntities(context: McpToolContext) {
             )
             val paging = request.mcpPageRequest(listOf(SortField("identifier", false), SortField("id", false)))
             val includeProperties = request.argBool("includeProperties")
-            val result = withTimeout(MCP_READ_TOOL_TIMEOUT_MILLIS) {
-                context.services.entities.list(filter, paging, OntologyReadBudget())
-            }
+            val result = context.readBounded { budget -> context.services.entities.list(filter, paging, budget) }
             toolResult(
                 buildJsonObject {
                     put("items", JsonArray(result.items.map { entitySummaryJson(it, includeProperties) }))
@@ -152,9 +149,9 @@ private fun Server.addGetEntity(context: McpToolContext) {
         context.guarded("get_entity") {
             val blueprint = request.requireString("blueprint")
             val identifier = request.requireString("identifier")
-            val entity = withTimeout(MCP_READ_TOOL_TIMEOUT_MILLIS) {
+            val entity = context.readBounded { budget ->
                 val id = context.services.entities.findByIdentity(blueprint, identifier) ?: throw NotFoundException("Entity not found")
-                context.services.entities.read(id, OntologyReadBudget())
+                context.services.entities.read(id, budget)
             } ?: throw NotFoundException("Entity not found")
             toolResult(blueprintJson.encodeToJsonElement(EntityResponse.serializer(), entity) as JsonObject)
         }
@@ -179,11 +176,9 @@ private fun Server.addOntologyErrors(context: McpToolContext) {
             val page = request.argInt("page", 1, 1, Int.MAX_VALUE)
             val pageSize = request.argInt("pageSize", DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE)
             val filter = EntityGraphFilter(blueprints = listOfNotNull(blueprint), q = null)
-            val report = withTimeout(MCP_READ_TOOL_TIMEOUT_MILLIS) {
-                context.services.entities.ontologyErrors(filter, OntologyReadBudget())
-            }
-            val (entityItems, entityTotal) = mcpInMemoryPage(report.entities, page, pageSize)
-            val (blueprintItems, blueprintTotal) = mcpInMemoryPage(report.blueprints, page, pageSize)
+            val report = context.readBounded { budget -> context.services.entities.ontologyErrors(filter, budget) }
+            val (entityItems, entityTotal) = inMemoryPage(report.entities, page, pageSize)
+            val (blueprintItems, blueprintTotal) = inMemoryPage(report.blueprints, page, pageSize)
             toolResult(
                 buildJsonObject {
                     put("revision", report.revision.toString())
@@ -231,7 +226,7 @@ private fun Server.addCheckEntities(context: McpToolContext) {
         context.guarded("check_entities") {
             val documents = request.argObjects("documents", 1, MAX_IMPORT_DOCUMENTS)
             val replaceExisting = request.argBool("replaceExisting")
-            val rows = withTimeout(MCP_READ_TOOL_TIMEOUT_MILLIS) { context.services.entities.importCheck(documents, replaceExisting) }
+            val rows = context.readBounded { context.services.entities.importCheck(documents, replaceExisting) }
             toolResult(importResultJson(rows))
         }
     }
@@ -245,7 +240,7 @@ private fun Server.addGetOntologyRevision(context: McpToolContext) {
         toolAnnotations = ToolAnnotations(readOnlyHint = true, idempotentHint = true),
     ) { _ ->
         context.guarded("get_ontology_revision") {
-            val revision = withTimeout(MCP_READ_TOOL_TIMEOUT_MILLIS) { context.services.entities.ontologyRevision() }
+            val revision = context.readBounded { context.services.entities.ontologyRevision() }
             toolResult(buildJsonObject { put("revision", revision.toString()) })
         }
     }

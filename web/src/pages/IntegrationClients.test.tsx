@@ -130,6 +130,7 @@ describe("IntegrationClients page", () => {
     renderWithProviders(<IntegrationClients />);
 
     expect(await screen.findByText("warehouse-sync")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Integration clients" })).toBeInTheDocument();
     expect(screen.getByText("old-reporting")).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.getByText("Revoked")).toBeInTheDocument();

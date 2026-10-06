@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import { Link as RouterLink, Navigate } from "react-router-dom";
 import { Alert, Badge, Button, Group, Menu, Modal, Select, Stack, Table, Text } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
@@ -122,7 +123,7 @@ export default function Users() {
       )}
 
       <Table.ScrollContainer minWidth={700}>
-        <Table>
+        <DataTable label={t("users.title")}>
           <Table.Thead>
             <Table.Tr>
               <SortHeader
@@ -233,7 +234,7 @@ export default function Users() {
               </Table.Tr>
             ) : null}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       </Table.ScrollContainer>
 
       <PaginationBar

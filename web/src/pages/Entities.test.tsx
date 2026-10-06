@@ -227,6 +227,7 @@ describe("Entities page", () => {
 
     const editLink = await screen.findByRole("link", { name: "Edit checkout" });
     expect(editLink).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Entities" })).toBeInTheDocument();
     const findingsBadge = screen.getByText("1 finding");
     expect(findingsBadge).toBeInTheDocument();
     // The findings badge rides the same identity cell as the identifier link (2.8.1 —

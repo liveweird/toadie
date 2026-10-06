@@ -253,6 +253,12 @@ private val sharedTestDatabase: R2dbcDatabase by lazy {
     )
 }
 
+/**
+ * One transaction on the shared container database — for tests that call a transaction-less
+ * reader directly (`CatalogRegistryReader`), which leaves the transaction to its caller.
+ */
+internal suspend fun <T> inTestTransaction(block: suspend () -> T): T = suspendTransaction(sharedTestDatabase) { block() }
+
 object TestIntegrationClients {
     val service: ch.nokillswit.integration.IntegrationClientService by lazy {
         ch.nokillswit.integration.IntegrationClientService(sharedTestDatabase)

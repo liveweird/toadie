@@ -59,6 +59,7 @@ describe("Labels page", () => {
     renderWithProviders(<Labels />);
 
     expect(await screen.findByText("example.com/tier")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Labels" })).toBeInTheDocument();
     expect(screen.getByText("backend")).toBeInTheDocument();
     expect(screen.getByText("Group")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /new label/i })).not.toBeInTheDocument();

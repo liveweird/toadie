@@ -1,8 +1,8 @@
 package ch.nokillswit.integration
 
-import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.entities.EntityImportRow
+import ch.nokillswit.entities.auditEntityDeleted
 import ch.nokillswit.entities.auditImportedEntityMutation
 import ch.nokillswit.entities.findByIdentity
 import ch.nokillswit.entities.import
@@ -127,14 +127,7 @@ private fun Server.addDeleteEntity(context: McpToolContext) {
             val id = context.services.entities.findByIdentity(blueprint, identifier).orNotFound("Entity")
             val result = context.services.entities.delete(id)
             result.affected.orNotFound("Entity")
-            audit(
-                "entity.deleted",
-                "byUserId" to callerId.toLong(),
-                "entityId" to id.toLong(),
-                "blueprint" to result.blueprint,
-                "identifier" to result.identifier,
-                "clientId" to context.principal.clientId.toLong(),
-            )
+            auditEntityDeleted(callerId, id, result, "clientId" to context.principal.clientId.toLong())
             toolResult(
                 buildJsonObject {
                     put("id", id.toString())

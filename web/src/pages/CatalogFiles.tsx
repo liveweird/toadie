@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import DataTable from "../components/DataTable";
 import { Link as RouterLink } from "react-router-dom";
 import { Alert, Button, Stack, Table, Text } from "@mantine/core";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -126,7 +127,7 @@ export default function CatalogFiles() {
       )}
 
       <Table.ScrollContainer minWidth={760}>
-      <Table layout="fixed">
+      <DataTable label={t("catalog.title")} layout="fixed">
         <Table.Thead>
           <Table.Tr>
             <SortHeader
@@ -228,7 +229,7 @@ export default function CatalogFiles() {
             </Table.Tr>
           ) : null}
         </Table.Tbody>
-      </Table>
+      </DataTable>
       </Table.ScrollContainer>
 
       <PaginationBar
