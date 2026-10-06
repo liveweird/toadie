@@ -1,7 +1,7 @@
 {
   "identifier": "api",
   "title": "API",
-  "description": "A contract other software calls or subscribes to: a REST/GraphQL/gRPC/WebSocket interface, or a Kafka topic described by an AsyncAPI document. The service that implements it lists it under provides_apis; callers under consumes_apis. Backstage kind: API (type → spec.type, definition_url → spec.definition via $text, system → spec.system, the team field → spec.owner; exposure/hosting_model → labels).",
+  "description": "A contract other software calls or subscribes to: a REST/GraphQL/gRPC/WebSocket interface, or a Kafka topic described by an AsyncAPI document. The service that implements it lists it under provides_apis; callers under consumes_apis. Backstage kind: API (type → spec.type, definition_url → spec.definition via $text, system → spec.system, the team field → spec.owner; exposure/hosting_model/gdpr/pci_dss/banking_outsourcing → labels).",
   "icon": "Link",
   "hierarchyRelations": {"composition": "system"},
   "schema": {
@@ -45,6 +45,21 @@
         "description": "Label hosting-model.",
         "enum": ["public-cloud", "on-premise"],
         "enumColors": { "public-cloud": "blue", "on-premise": "bronze" }
+      },
+      "gdpr": {
+        "type": "boolean",
+        "title": "Processes personal data (GDPR)",
+        "description": "Processes, stores or publishes personal data in the GDPR sense. Label gdpr (yes/no)."
+      },
+      "pci_dss": {
+        "type": "boolean",
+        "title": "In PCI DSS scope",
+        "description": "Handles cardholder data under PCI DSS. Label pci-dss (yes/no)."
+      },
+      "banking_outsourcing": {
+        "type": "boolean",
+        "title": "Banking outsourcing",
+        "description": "Processes data covered by the outsourcing of banking activities (KNF; Polish Banking Law art. 6a-6d). Label banking-outsourcing (yes/no)."
       },
       "external": {
         "type": "boolean",

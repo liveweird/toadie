@@ -11,6 +11,7 @@
       "data_classification": "public",
       "gdpr": false,
       "pci_dss": false,
+      "banking_outsourcing": false,
       "hosting_model": "public-cloud",
       "exposure": "internal",
       "technology_status": "white-list",
@@ -29,6 +30,7 @@
       "data_classification": "confidential",
       "gdpr": true,
       "pci_dss": false,
+      "banking_outsourcing": false,
       "hosting_model": "public-cloud",
       "technology_status": "white-list",
       "runbook": "https://runbooks.example.com/orders-db"
@@ -46,6 +48,7 @@
       "data_classification": "restricted",
       "gdpr": true,
       "pci_dss": true,
+      "banking_outsourcing": true,
       "hosting_model": "on-premise",
       "exposure": "internal",
       "technology_status": "white-list",
@@ -64,6 +67,7 @@
       "engine": "kafka",
       "data_classification": "internal",
       "gdpr": false,
+      "banking_outsourcing": false,
       "hosting_model": "on-premise",
       "technology_status": "white-list",
       "kubernetes_id": "order-bus",
@@ -83,7 +87,9 @@
     "properties": {
       "type": "transaction-log",
       "data_classification": "restricted",
+      "gdpr": true,
       "pci_dss": true,
+      "banking_outsourcing": true,
       "hosting_model": "on-premise",
       "technology_status": "grey-zone"
     },
@@ -102,6 +108,8 @@
       "engine": "clickhouse",
       "data_classification": "confidential",
       "gdpr": true,
+      "pci_dss": true,
+      "banking_outsourcing": true,
       "hosting_model": "on-premise",
       "technology_status": "white-list"
     },
@@ -120,6 +128,7 @@
       "engine": "redis",
       "data_classification": "internal",
       "gdpr": true,
+      "banking_outsourcing": false,
       "hosting_model": "public-cloud",
       "technology_status": "white-list",
       "kubernetes_id": "session-cache",
@@ -138,6 +147,7 @@
       "data_classification": "internal",
       "gdpr": false,
       "pci_dss": false,
+      "banking_outsourcing": false,
       "hosting_model": "on-premise",
       "technology_status": "white-list"
     },

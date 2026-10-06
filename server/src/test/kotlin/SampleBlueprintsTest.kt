@@ -48,7 +48,9 @@ import kotlin.test.assertTrue
  * 1. **Vocabulary**: every enum that mirrors a V22-seeded registry (the per-kind type
  *    dictionaries, the lifecycles dictionary, the labels' closed value lists, the tag
  *    categories) carries EXACTLY the registry's values, read back from the running app — so a
- *    Backstage export is a copy and a registry edit that forgets the blueprint fails here.
+ *    Backstage export is a copy and a registry edit that forgets the blueprint fails here; the
+ *    yes/no regulatory booleans (2.17.0) must also be boolean properties whose label applies to
+ *    the blueprint's Backstage kind.
  * 2. **Hierarchy**: `hierarchyRelations` (v1.32.0, a map — several PARALLEL hierarchies) names
  *    TWO forests: `composition` — the org tree (`_team` → `_team`) and the architecture tree
  *    (domain → system → service/library/api/resource/dataset → workload, cluster → environment,
@@ -305,7 +307,8 @@ class SampleBlueprintsTest {
     private suspend fun assertVocabulary(admin: HttpClient, requests: Map<String, BlueprintRequest>) {
         val types = admin.get("/api/v1/entity-types").body<EntityTypesList>().items.associate { it.kind to it.types.toSet() }
         val lifecycles = admin.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items.map { it.value }.toSet()
-        val labels = admin.get("/api/v1/labels").body<LabelList>().items.associate { it.key to it.values.toSet() }
+        val labelRows = admin.get("/api/v1/labels").body<LabelList>().items.associateBy { it.key }
+        val labels = labelRows.mapValues { it.value.values.toSet() }
         val tags = admin.get("/api/v1/tag-categories").body<TagCategoryList>().items.associate { it.name to it.tags.toSet() }
 
         fun enumOf(blueprint: String, property: String): Set<String> {
@@ -328,15 +331,28 @@ class SampleBlueprintsTest {
         // the Port-only `dataset` (2.13.0), whose `type` stays uncompared (no Backstage twin).
         listOf("service", "library", "api", "dataset").forEach { assertEquals(lifecycles, enumOf(it, "lifecycle"), "$it.lifecycle") }
 
-        // Labels: closed value lists, verbatim; the yes/no ones are booleans.
+        // Labels: closed value lists, verbatim (the yes/no label twins are checked as booleans below).
         LABEL_PROPERTIES.forEach { (label, sites) ->
             sites.forEach { (blueprint, property) ->
                 assertEquals(labels.getValue(label), enumOf(blueprint, property), "$blueprint.$property ↔ label $label")
             }
         }
-        listOf("gdpr", "pci_dss").forEach { property ->
-            assertEquals("boolean", requests.getValue("resource").schema.properties.getValue(property).type, "resource.$property")
+        // The regulatory flags (2.17.0): plain booleans on the Port side, closed yes/no labels in
+        // the registry, and the label must apply to the blueprint's Backstage kind.
+        BOOLEAN_LABEL_PROPERTIES.forEach { (label, sites) ->
+            val row = labelRows.getValue(label)
+            assertEquals(setOf("yes", "no"), row.values.toSet(), "label $label values")
+            sites.forEach { (blueprint, property) ->
+                assertEquals("boolean", requests.getValue(blueprint).schema.properties.getValue(property).type, "$blueprint.$property")
+                val kind = BACKSTAGE_KIND.getValue(blueprint)
+                assertTrue(kind in row.kinds, "label $label must apply to $blueprint's Backstage kind $kind")
+            }
         }
+        // Port-only twins: dataset has no label and no Backstage kind; employment_type has no Backstage field.
+        listOf("gdpr", "pci_dss", "banking_outsourcing").forEach { property ->
+            assertEquals("boolean", requests.getValue("dataset").schema.properties.getValue(property).type, "dataset.$property")
+        }
+        assertEquals(setOf("employee", "contractor"), enumOf("_user", "employment_type"))
 
         // Tag categories: languages/frameworks as unique-item arrays, engine as the Database ∪ Events union.
         listOf("service", "library").forEach { blueprint ->
@@ -430,7 +446,7 @@ class SampleBlueprintsTest {
             "_team" to setOf("member_count"),
             "domain" to setOf("critical_systems"),
             "product" to setOf("system_count", "critical_systems", "service_count"),
-            "system" to setOf("service_count", "workload_replicas", "deploys_per_week"),
+            "system" to setOf("service_count", "cif_services", "cash_flow_services", "workload_replicas", "deploys_per_week"),
             "dataset" to setOf("producer_count", "consumer_count", "adoption_count"),
             "api" to setOf("adoption_count"),
             "service" to setOf("domain_title", "stack", "risk"),
@@ -453,5 +469,19 @@ class SampleBlueprintsTest {
             ),
             "data-classification" to listOf("resource" to "data_classification"),
         )
+
+        /** yes/no label key → the (blueprint, property) booleans that mirror it (2.17.0). */
+        val BOOLEAN_LABEL_PROPERTIES = mapOf(
+            "gdpr" to listOf("service" to "gdpr", "api" to "gdpr", "resource" to "gdpr"),
+            "pci-dss" to listOf("service" to "pci_dss", "api" to "pci_dss", "resource" to "pci_dss"),
+            "banking-outsourcing" to listOf(
+                "service" to "banking_outsourcing", "api" to "banking_outsourcing", "resource" to "banking_outsourcing",
+            ),
+            "cash-flow-impact" to listOf("service" to "cash_flow_impact"),
+            "dora-cif" to listOf("service" to "dora_cif"),
+        )
+
+        /** blueprint → the Backstage kind its labels are written on. */
+        val BACKSTAGE_KIND = mapOf("service" to "Component", "api" to "API", "resource" to "Resource")
     }
 }

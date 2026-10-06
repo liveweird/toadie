@@ -9,7 +9,9 @@
       "type": "table",
       "lifecycle": "production",
       "classification": "internal",
-      "pii": false,
+      "gdpr": false,
+      "pci_dss": false,
+      "banking_outsourcing": false,
       "freshness": "hourly",
       "contract_url": "https://contracts.example.com/contracts/product-catalog",
       "docs": "https://docs.example.com/datasets/product-catalog"
@@ -25,7 +27,9 @@
       "type": "table",
       "lifecycle": "production",
       "classification": "confidential",
-      "pii": true,
+      "gdpr": true,
+      "pci_dss": false,
+      "banking_outsourcing": false,
       "freshness": "real-time",
       "retention_days": 3650
     },
@@ -40,7 +44,9 @@
       "type": "event-stream",
       "lifecycle": "production",
       "classification": "restricted",
-      "pii": true,
+      "gdpr": true,
+      "pci_dss": true,
+      "banking_outsourcing": true,
       "freshness": "real-time",
       "links": [
         { "title": "Ledger schema", "url": "https://wiki.example.com/payments-ledger/schema" }
@@ -57,7 +63,9 @@
       "type": "file-export",
       "lifecycle": "sunsetting",
       "classification": "confidential",
-      "pii": false,
+      "gdpr": false,
+      "pci_dss": true,
+      "banking_outsourcing": true,
       "freshness": "daily",
       "retention_days": 2555
     },
@@ -72,7 +80,9 @@
       "type": "view",
       "lifecycle": "experimental",
       "classification": "public",
-      "pii": false,
+      "gdpr": false,
+      "pci_dss": false,
+      "banking_outsourcing": false,
       "freshness": "weekly"
     },
     "relations": { "system": "storefront", "stored_in": "catalog-db" }

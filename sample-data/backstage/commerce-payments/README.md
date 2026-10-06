@@ -17,7 +17,7 @@ prerequisite.
 
 Thirty-two documents use the `default` namespace and two use `external`. Every structural shape,
 namespace, and registry-backed value is valid against the seeded vocabulary. The file uses all
-seeded type values except Domain `auxiliary`, all four lifecycles, both namespaces, all eight
+seeded type values except Domain `auxiliary`, all four lifecycles, both namespaces, all eleven
 label keys, all four annotation keys, and all four tag categories.
 
 The catalog is intentionally not reference-clean. Four soft reference findings in two documents
@@ -46,8 +46,7 @@ Importing the unchanged file again reports 34 `CONFLICT` rows and stores nothing
 rows from the Files page when finished. Catalog deletion is soft deletion, and there is no sample
 loader that restores a prior workspace state.
 
-`apiVersion` is discarded on input and emitted again by YAML preview and export. Keep the
-`gdpr` and `pci-dss` values quoted as `"yes"` or `"no"`: YAML 1.1 tooling can parse the
+`apiVersion` is discarded on input and emitted again by YAML preview and export. Keep the yes/no label values (`gdpr`, `pci-dss`, `banking-outsourcing`, `cash-flow-impact`, `dora-cif`) quoted as `"yes"` or `"no"`: YAML 1.1 tooling can parse the
 unquoted words as booleans, while the SPA uses YAML 1.2 strings.
 
 When editing the fixture, stay within the strict per-kind shape. In particular,

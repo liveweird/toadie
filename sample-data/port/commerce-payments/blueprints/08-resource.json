@@ -1,7 +1,7 @@
 {
   "identifier": "resource",
   "title": "Resource",
-  "description": "A logical piece of infrastructure a service depends on — a database, a cache, a broker, a transaction log. One entity across environments (orders-db, not orders-db-staging). Backstage kind: Resource (type → spec.type, engine → a tag, system → spec.system, the team field → spec.owner, depends_on → spec.dependsOn, hosted_on Port-only — dropped with the cluster it points at; data_classification/gdpr/pci_dss/hosting_model/exposure/technology_status → the labels of the same name).",
+  "description": "A logical piece of infrastructure a service depends on — a database, a cache, a broker, a transaction log. One entity across environments (orders-db, not orders-db-staging). Backstage kind: Resource (type → spec.type, engine → a tag, system → spec.system, the team field → spec.owner, depends_on → spec.dependsOn, hosted_on Port-only — dropped with the cluster it points at; data_classification/gdpr/pci_dss/banking_outsourcing/hosting_model/exposure/technology_status → the labels of the same name).",
   "icon": "Database",
   "hierarchyRelations": {"composition": "system"},
   "schema": {
@@ -36,6 +36,11 @@
         "type": "boolean",
         "title": "In PCI DSS scope",
         "description": "Label pci-dss (yes/no)."
+      },
+      "banking_outsourcing": {
+        "type": "boolean",
+        "title": "Banking outsourcing",
+        "description": "Processes data covered by the outsourcing of banking activities (KNF; Polish Banking Law art. 6a-6d). Label banking-outsourcing (yes/no)."
       },
       "hosting_model": {
         "type": "string",

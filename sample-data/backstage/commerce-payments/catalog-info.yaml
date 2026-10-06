@@ -1,7 +1,7 @@
 # Toadie Backstage demo — a small e-commerce/payments software catalog.
 #
 # Every value in this file comes from the ADMIN-curated registries seeded by V22:
-# the two namespaces, the four lifecycles, each kind's type dictionary, the eight
+# the two namespaces, the four lifecycles, each kind's type dictionary, the eleven
 # label keys with their closed value lists, the four tag categories, and the four
 # annotation keys. Registry values are valid, but four deliberate reference findings
 # in catalog-service and legacy-invoicing require the import waiver; see README.md.
@@ -16,7 +16,8 @@
 #   * annotations→ never on Group or User
 #   * lifecycle  → Component and API only
 #   * labels     → per-key: criticality-tier/support-mode are System-only,
-#                  data-classification/gdpr/pci-dss are Resource-only
+#                  data-classification is Resource-only, gdpr/pci-dss/banking-outsourcing
+#                  span Component/API/Resource, cash-flow-impact/dora-cif are Component-only
 #
 # Four references are deliberately broken or unresolvable — see README.md.
 #
@@ -243,6 +244,11 @@ metadata:
     exposure: public
     hosting-model: public-cloud
     technology-status: white-list
+    gdpr: "yes"
+    pci-dss: "no"
+    banking-outsourcing: "no"
+    cash-flow-impact: "yes"
+    dora-cif: "no"
   annotations:
     backstage.io/source-location: url:https://github.com/acme/storefront-web
     backstage.io/techdocs-ref: dir:.
@@ -277,6 +283,11 @@ metadata:
     exposure: internal
     hosting-model: public-cloud
     technology-status: white-list
+    gdpr: "no"
+    pci-dss: "no"
+    banking-outsourcing: "no"
+    cash-flow-impact: "yes"
+    dora-cif: "no"
   annotations:
     backstage.io/source-location: url:https://github.com/acme/catalog-service
     backstage.io/kubernetes-label-selector: app=catalog-service
@@ -307,6 +318,11 @@ metadata:
     exposure: internal
     hosting-model: public-cloud
     technology-status: white-list
+    gdpr: "yes"
+    pci-dss: "no"
+    banking-outsourcing: "no"
+    cash-flow-impact: "yes"
+    dora-cif: "no"
   annotations:
     backstage.io/source-location: url:https://github.com/acme/checkout-service
 spec:
@@ -335,6 +351,11 @@ metadata:
   labels:
     exposure: public
     hosting-model: public-cloud
+    gdpr: "yes"
+    pci-dss: "no"
+    banking-outsourcing: "no"
+    cash-flow-impact: "no"
+    dora-cif: "no"
 spec:
   type: service
   lifecycle: experimental
@@ -359,6 +380,11 @@ metadata:
     exposure: partner
     hosting-model: on-premise
     technology-status: white-list
+    gdpr: "yes"
+    pci-dss: "yes"
+    banking-outsourcing: "yes"
+    cash-flow-impact: "yes"
+    dora-cif: "yes"
   annotations:
     backstage.io/kubernetes-id: payments-gateway
 spec:
@@ -405,6 +431,11 @@ metadata:
   labels:
     exposure: internal
     hosting-model: on-premise
+    gdpr: "yes"
+    pci-dss: "yes"
+    banking-outsourcing: "yes"
+    cash-flow-impact: "yes"
+    dora-cif: "yes"
 spec:
   type: job
   lifecycle: production
@@ -428,6 +459,11 @@ metadata:
   labels:
     exposure: internal
     technology-status: grey-zone
+    gdpr: "yes"
+    pci-dss: "yes"
+    banking-outsourcing: "yes"
+    cash-flow-impact: "yes"
+    dora-cif: "yes"
 spec:
   type: data-pipeline
   lifecycle: sunsetting
@@ -452,6 +488,11 @@ metadata:
     - symphony
   labels:
     technology-status: black-list
+    gdpr: "yes"
+    pci-dss: "no"
+    banking-outsourcing: "no"
+    cash-flow-impact: "yes"
+    dora-cif: "no"
 spec:
   type: service
   lifecycle: deprecated
@@ -479,6 +520,9 @@ metadata:
   labels:
     exposure: internal
     hosting-model: public-cloud
+    gdpr: "no"
+    pci-dss: "no"
+    banking-outsourcing: "no"
   annotations:
     backstage.io/techdocs-ref: dir:.
 spec:
@@ -508,6 +552,9 @@ metadata:
   description: Cart-to-order conversion used by the storefront.
   labels:
     exposure: public
+    gdpr: "yes"
+    pci-dss: "no"
+    banking-outsourcing: "no"
 spec:
   type: openapi
   lifecycle: production
@@ -537,6 +584,9 @@ metadata:
   description: Cart and stock updates pushed to an open browser session.
   labels:
     exposure: public
+    gdpr: "yes"
+    pci-dss: "no"
+    banking-outsourcing: "no"
 spec:
   type: web-sockets
   lifecycle: experimental
@@ -560,6 +610,9 @@ metadata:
     consumer and the relationship view has a loose end.
   labels:
     exposure: internal
+    gdpr: "no"
+    pci-dss: "no"
+    banking-outsourcing: "no"
 spec:
   type: asyncapi
   lifecycle: experimental
@@ -590,6 +643,9 @@ metadata:
   labels:
     exposure: partner
     hosting-model: on-premise
+    gdpr: "yes"
+    pci-dss: "yes"
+    banking-outsourcing: "yes"
 spec:
   type: grpc
   lifecycle: production
@@ -622,6 +678,9 @@ metadata:
   description: The acquirer's authorisation endpoint. We consume it; we do not own it.
   labels:
     exposure: partner
+    gdpr: "yes"
+    pci-dss: "yes"
+    banking-outsourcing: "yes"
 spec:
   type: openapi
   lifecycle: production
@@ -644,8 +703,9 @@ spec:
 ---
 # ---------------------------------------------------------------------------
 # Resources — spec.type database/message-broker/transaction-log/
-# analytical-database/cache. data-classification, gdpr and pci-dss are
-# Resource-only labels; tags come from Database + Events. No lifecycle.
+# analytical-database/cache. data-classification is the Resource-only label; gdpr,
+# pci-dss and banking-outsourcing apply here as on Components and APIs; tags come from
+# Database + Events. No lifecycle.
 # ---------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -660,6 +720,7 @@ metadata:
     data-classification: internal
     gdpr: "no"
     pci-dss: "no"
+    banking-outsourcing: "no"
     hosting-model: public-cloud
 spec:
   type: database
@@ -679,6 +740,7 @@ metadata:
     data-classification: confidential
     gdpr: "yes"
     pci-dss: "no"
+    banking-outsourcing: "no"
     hosting-model: public-cloud
 spec:
   type: database
@@ -698,6 +760,7 @@ metadata:
     data-classification: restricted
     gdpr: "yes"
     pci-dss: "yes"
+    banking-outsourcing: "yes"
     hosting-model: on-premise
     exposure: internal
 spec:
@@ -717,6 +780,7 @@ metadata:
   labels:
     data-classification: internal
     gdpr: "no"
+    banking-outsourcing: "no"
 spec:
   type: message-broker
   owner: group:default/platform-tribe
@@ -731,7 +795,9 @@ metadata:
   description: The immutable booking log behind the ledger worker.
   labels:
     data-classification: restricted
+    gdpr: "yes"
     pci-dss: "yes"
+    banking-outsourcing: "yes"
     hosting-model: on-premise
 spec:
   type: transaction-log
@@ -750,6 +816,8 @@ metadata:
   labels:
     data-classification: confidential
     gdpr: "yes"
+    pci-dss: "yes"
+    banking-outsourcing: "yes"
 spec:
   type: analytical-database
   owner: group:default/payments-squad
@@ -767,6 +835,7 @@ metadata:
   labels:
     data-classification: internal
     gdpr: "yes"
+    banking-outsourcing: "no"
     hosting-model: public-cloud
 spec:
   type: cache
