@@ -38,24 +38,34 @@ class LabelTest {
     private suspend fun HttpClient.readLabels(): LabelList = get("/api/v1/labels").body()
 
     @Test
-    fun `the V22 seed registers the curated label keys with their closed value lists`() = testApplication {
+    fun `the V22 and V43 seeds register the curated label keys with their closed value lists`() = testApplication {
         usePostgresTestcontainer()
         val byKey = seededClient("lblseed").readLabels().items.associateBy { it.key }
         // The registry shipped EMPTY until V22, so before it no file could carry a label at
-        // all. Spot-check the two shapes that matter: a Resource-only key and a spanning one.
+        // all. Spot-check the shapes that matter: a Resource-only key (data-classification),
+        // the V43-widened gdpr, a spanning key (exposure) and a Component-only V43 key (dora-cif).
         assertEquals(listOf("yes", "no"), byKey.getValue("gdpr").values)
-        assertEquals(listOf("Resource"), byKey.getValue("gdpr").kinds)
+        assertEquals(listOf("Resource"), byKey.getValue("data-classification").kinds)
+        listOf("gdpr", "pci-dss").forEach { key ->
+            assertEquals(
+                listOf("Component", "API", "Resource"),
+                byKey.getValue(key).kinds,
+                "V43 widens $key to Component and API, canonical order",
+            )
+        }
         assertEquals(
             listOf("Component", "API", "System", "Resource"),
             byKey.getValue("exposure").kinds,
             "allowed kinds are stored in canonical SUPPORTED_KINDS order",
         )
+        assertEquals(listOf("Component"), byKey.getValue("dora-cif").kinds)
         assertTrue("24-7" in byKey.getValue("support-mode").values)
         val seeded = listOf(
-            "criticality-tier", "data-classification", "exposure", "gdpr",
-            "hosting-model", "pci-dss", "support-mode", "technology-status",
+            "banking-outsourcing", "cash-flow-impact", "criticality-tier", "data-classification",
+            "dora-cif", "exposure", "gdpr", "hosting-model", "pci-dss", "support-mode",
+            "technology-status",
         )
-        assertTrue(seeded.all { it in byKey }, "V22 must seed all eight keys: ${byKey.keys}")
+        assertTrue(seeded.all { it in byKey }, "V22 + V43 must seed all eleven keys: ${byKey.keys}")
     }
 
     @Test

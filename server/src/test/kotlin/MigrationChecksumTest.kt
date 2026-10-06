@@ -62,6 +62,7 @@ class MigrationChecksumTest {
         "V40__catalog_file_revision.sql" to 1121035069,
         "V41__users_service_accounts.sql" to 1174510165,
         "V42__integration_client_scope_and_service_user.sql" to -1466097659,
+        "V43__labels_regulatory_flags.sql" to 1085084521,
     )
 
     @Test
