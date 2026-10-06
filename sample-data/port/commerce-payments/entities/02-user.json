@@ -5,6 +5,7 @@
     "title": "Anna Kowalska",
     "properties": {
       "email": "anna.kowalska@toadie.local",
+      "employment_type": "employee",
       "picture": "https://avatars.example.com/anna.kowalska.png",
       "links": [
         { "title": "GitHub", "url": "https://github.com/anna-kowalska" }
@@ -17,7 +18,8 @@
     "identifier": "marek.nowak",
     "title": "Marek Nowak",
     "properties": {
-      "email": "marek.nowak@toadie.local"
+      "email": "marek.nowak@toadie.local",
+      "employment_type": "contractor"
     },
     "relations": { "team": ["retail-tribe"] }
   }

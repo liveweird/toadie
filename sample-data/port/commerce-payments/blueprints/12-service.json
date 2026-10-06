@@ -1,7 +1,7 @@
 {
   "identifier": "service",
   "title": "Service",
-  "description": "Every deployable runtime unit a team builds and runs: a backend service, a web front-end (SPA or server-rendered), a scheduled job, a data pipeline. The most-touched blueprint. Backstage kind: Component (type → spec.type, lifecycle → spec.lifecycle, system → spec.system, the team field → spec.owner, subcomponent_of → spec.subcomponentOf, depends_on + uses + uses_libraries → spec.dependsOn, provides_apis/consumes_apis → the same, languages/frameworks → tags, exposure/hosting_model/technology_status → labels, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref, kubernetes_* → the two kubernetes annotations); produces_datasets/consumes_datasets are Port-only, the data-side twin of provides_apis/consumes_apis.",
+  "description": "Every deployable runtime unit a team builds and runs: a backend service, a web front-end (SPA or server-rendered), a scheduled job, a data pipeline. The most-touched blueprint. Backstage kind: Component (type → spec.type, lifecycle → spec.lifecycle, system → spec.system, the team field → spec.owner, subcomponent_of → spec.subcomponentOf, depends_on + uses + uses_libraries → spec.dependsOn, provides_apis/consumes_apis → the same, languages/frameworks → tags, exposure/hosting_model/technology_status/gdpr/pci_dss/banking_outsourcing/cash_flow_impact/dora_cif → labels, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref, kubernetes_* → the two kubernetes annotations); produces_datasets/consumes_datasets are Port-only, the data-side twin of provides_apis/consumes_apis.",
   "icon": "Microservice",
   "hierarchyRelations": {"composition": "system"},
   "schema": {
@@ -62,6 +62,31 @@
         "description": "Label technology-status: the technology radar verdict on its stack.",
         "enum": ["white-list", "black-list", "grey-zone"],
         "enumColors": { "white-list": "green", "black-list": "red", "grey-zone": "yellow" }
+      },
+      "gdpr": {
+        "type": "boolean",
+        "title": "Processes personal data (GDPR)",
+        "description": "Processes, stores or publishes personal data in the GDPR sense. Label gdpr (yes/no)."
+      },
+      "pci_dss": {
+        "type": "boolean",
+        "title": "In PCI DSS scope",
+        "description": "Handles cardholder data under PCI DSS. Label pci-dss (yes/no)."
+      },
+      "banking_outsourcing": {
+        "type": "boolean",
+        "title": "Banking outsourcing",
+        "description": "Processes data covered by the outsourcing of banking activities (KNF; Polish Banking Law art. 6a-6d). Label banking-outsourcing (yes/no)."
+      },
+      "cash_flow_impact": {
+        "type": "boolean",
+        "title": "Cash-flow impact",
+        "description": "The service's behaviour can move money or change what is charged, paid out or settled. Label cash-flow-impact (yes/no)."
+      },
+      "dora_cif": {
+        "type": "boolean",
+        "title": "DORA critical or important function",
+        "description": "Implements or supports a critical or important function under DORA (Regulation (EU) 2022/2554, Art. 3(22)). Label dora-cif (yes/no)."
       },
       "repository": {
         "type": "string",

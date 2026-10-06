@@ -37,6 +37,10 @@ every entity validates without findings. The entity set covers every value of th
 and lifecycle dictionaries, direct and inherited ownership, relation arrays, and an explicit
 null relation.
 
+Since 2.17.0 every service, API, resource and dataset carries the regulatory flags (`gdpr`,
+`pci_dss`, `banking_outsourcing`; services additionally `cash_flow_impact` and `dora_cif`, which
+the `system` blueprint counts), and both users carry an `employment_type`.
+
 ## Load with the scripts
 
 The scripts need `bash`, `curl`, and `jq`. They log in with the seed admin by default; override
@@ -110,14 +114,14 @@ the matching definitions; reimporting unchanged entities with replacement disabl
 | `api_adoption` | 4 declared API consumptions, one major-line-less |
 | `dataset_adoption` | 3 declared dataset consumptions, one contract-version-less |
 
-Ten blueprints define twenty computed properties evaluated on reads:
+Ten blueprints define twenty-two computed properties evaluated on reads:
 
 | Blueprint | Computed properties |
 |---|---|
 | `_team` | aggregation `member_count` |
 | `domain` | aggregation `critical_systems` |
 | `product` | aggregations `system_count`, `critical_systems`, `service_count` |
-| `system` | aggregations `service_count`, `workload_replicas`, `deploys_per_week` |
+| `system` | aggregations `service_count`, `cif_services`, `cash_flow_services`, `workload_replicas`, `deploys_per_week` |
 | `dataset` | aggregations `producer_count`, `consumer_count`, `adoption_count` |
 | `api` | aggregation `adoption_count` |
 | `service` | mirror `domain_title`; calculations `stack`, `risk` |

@@ -27,10 +27,20 @@
         "enum": ["public", "internal", "confidential", "restricted"],
         "enumColors": { "public": "green", "internal": "blue", "confidential": "orange", "restricted": "red" }
       },
-      "pii": {
+      "gdpr": {
         "type": "boolean",
-        "title": "Contains PII",
-        "description": "Carries personal data (drives GDPR handling of every consumer)."
+        "title": "Contains personal data (GDPR)",
+        "description": "Carries personal data in the GDPR sense, drives the GDPR handling of every consumer. Port-only: no Backstage Dataset kind, no label."
+      },
+      "pci_dss": {
+        "type": "boolean",
+        "title": "In PCI DSS scope",
+        "description": "Carries cardholder data under PCI DSS. Port-only: no Backstage Dataset kind, no label."
+      },
+      "banking_outsourcing": {
+        "type": "boolean",
+        "title": "Banking outsourcing",
+        "description": "Holds data covered by the outsourcing of banking activities (KNF; Polish Banking Law art. 6a-6d). Port-only: no Backstage Dataset kind, no label."
       },
       "freshness": {
         "type": "string",

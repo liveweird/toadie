@@ -509,6 +509,34 @@ class SampleEntitiesTest {
         }
 
         assertDeclaredUsageComputedProperties(allRequests, responseByKey)
+        assertRegulatoryAggregations(allRequests, responseByKey)
+    }
+
+    /**
+     * The 2.17.0 `system.cif_services` / `cash_flow_services` aggregations: a direct count over
+     * `service.system`, filtered to the boolean flag `= true` (structural JSON equality) — split
+     * out of [assertComputedProperties] to keep it under detekt's cyclomatic-complexity threshold.
+     */
+    private fun assertRegulatoryAggregations(
+        allRequests: List<EntityRequest>,
+        responseByKey: Map<String, EntityResponse>,
+    ) {
+        val services = allRequests.filter { it.blueprint == "service" }
+        var nonZeroSeen = false
+        allRequests.filter { it.blueprint == "system" }.forEach { system ->
+            mapOf("cif_services" to "dora_cif", "cash_flow_services" to "cash_flow_impact").forEach { (aggregation, flag) ->
+                val expected = services.count { service ->
+                    system.identifier in teamValuesOf(service.relations["system"]) && service.properties[flag] == JsonPrimitive(true)
+                }
+                if (expected > 0) nonZeroSeen = true
+                assertEquals(
+                    JsonPrimitive(expected.toLong()),
+                    responseByKey.getValue("system/${system.identifier}").properties[aggregation],
+                    "system/${system.identifier}.$aggregation",
+                )
+            }
+        }
+        assertTrue(nonZeroSeen, "at least one system must count a flagged service")
     }
 
     /**

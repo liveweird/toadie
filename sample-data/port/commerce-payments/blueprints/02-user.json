@@ -1,7 +1,7 @@
 {
   "identifier": "_user",
   "title": "User",
-  "description": "A person. Kept minimal on purpose: teams own things, people belong to teams. Backstage kind: User (team → spec.memberOf, email → spec.profile.email).",
+  "description": "A person. Kept minimal on purpose: teams own things, people belong to teams. Backstage kind: User (team → spec.memberOf, email → spec.profile.email; employment_type is Port-only, dropped on export).",
   "icon": "User",
   "schema": {
     "properties": {
@@ -9,6 +9,13 @@
         "type": "string",
         "title": "Email",
         "format": "email"
+      },
+      "employment_type": {
+        "type": "string",
+        "title": "Employment type",
+        "description": "An employee on an employment contract or an external contractor. Port-only: Backstage User has no field for it, dropped on export.",
+        "enum": ["employee", "contractor"],
+        "enumColors": { "employee": "green", "contractor": "orange" }
       },
       "picture": {
         "type": "string",

@@ -87,6 +87,28 @@
       "target": "service",
       "calculationSpec": { "calculationBy": "entities", "func": "count" }
     },
+    "cif_services": {
+      "title": "CIF services",
+      "target": "service",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "query": {
+        "combinator": "and",
+        "rules": [
+          { "property": "dora_cif", "operator": "=", "value": true }
+        ]
+      }
+    },
+    "cash_flow_services": {
+      "title": "Cash-flow services",
+      "target": "service",
+      "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "query": {
+        "combinator": "and",
+        "rules": [
+          { "property": "cash_flow_impact", "operator": "=", "value": true }
+        ]
+      }
+    },
     "workload_replicas": {
       "title": "Workload replicas",
       "target": "workload",
