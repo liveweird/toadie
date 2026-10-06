@@ -73,7 +73,9 @@ internal const val MCP_READ_TOOL_TIMEOUT_MILLIS = EXECUTION_TIMEOUT_MILLIS
  * request's shared [McpToolContext.retained] reservation; and audits exactly once as
  * `integration.mcp_call`. [CancellationException] (other than a per-tool [TimeoutCancellationException])
  * always propagates unswallowed — the request's own deadline, or caller disconnect, must still
- * cancel the coroutine.
+ * cancel the coroutine — but the call is still audited, `ok=false`, on its way out (a cancelled bulk
+ * import may already have committed rows, so every call that STARTED leaves exactly one event; a
+ * batched call cancelled while still waiting for the request lock never started and leaves none).
  */
 // The MCP tool boundary — every failure must answer a CallToolResult, never crash the session
 // (the EntityImport.kt/UrlFetch.kt best-effort-boundary precedent, `.claude/docs/testing.md`).
@@ -104,6 +106,9 @@ internal suspend fun McpToolContext.guarded(
         } catch (e: TimeoutCancellationException) {
             toolError("TIMEOUT", e.message ?: "Tool call timed out")
         } catch (e: CancellationException) {
+            // The call still audits (ok=false) — a deadline-cancelled import may have committed rows —
+            // and the cancellation then propagates unswallowed.
+            auditMcpCall(tool, ok = false)
             throw e
         } catch (e: EntityInvalidException) {
             toolError("INVALID", e.message ?: "Invalid entity", buildJsonObject { put("findings", findingsJson(e.findings)) })
@@ -134,14 +139,18 @@ internal suspend fun McpToolContext.guarded(
     if (result.isError != true) {
         result = chargeOrRefuse(result)
     }
+    auditMcpCall(tool, ok = result.isError != true)
+    result
+}
+
+private fun McpToolContext.auditMcpCall(tool: String, ok: Boolean) {
     audit(
         "integration.mcp_call",
         "clientId" to principal.clientId.toLong(),
         "clientName" to principal.name,
         "tool" to tool,
-        "ok" to (result.isError != true),
+        "ok" to ok,
     )
-    result
 }
 
 /** Renders [EntityFinding]s as plain JSON objects — no serializer import needed for one small shape; shared with `McpReadTools.kt`. */

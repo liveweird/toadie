@@ -157,6 +157,28 @@ class McpToolsTest {
     private fun code(result: CallToolResult): String = result.structuredContent!!["code"]!!.jsonPrimitive.content
 
     @Test
+    fun `a cancelled tool call still audits integration mcp_call ok false exactly once and rethrows`() = testApplication {
+        usePostgresTestcontainer()
+        val services = IntegrationServices(application.attributes[BlueprintServiceKey], application.attributes[EntityServiceKey])
+        val principal = IntegrationClientPrincipal(clientId = 1u, name = "t", scope = IntegrationScope.WRITE, serviceUserId = null)
+        withAuditCapture { capture ->
+            IntegrationRetainedLedger().open().use { retained ->
+                val context = McpToolContext(principal, services, retained)
+                assertFailsWith<CancellationException> {
+                    context.guarded("cancelled_tool") { throw CancellationException("deadline") }
+                }
+                val calls = capture.events.filter { it.message == "integration.mcp_call" }
+                val event = calls.single()
+                assertTrue(event.hasKeyValue("tool", "cancelled_tool"))
+                assertTrue(event.hasKeyValue("ok", false))
+                // The request lock was released by the cancelled call: the same context still serves.
+                val next = context.guarded("after_cancel") { toolResult(buildJsonObject { put("k", "v") }) }
+                assertTrue(next.isError != true)
+            }
+        }
+    }
+
+    @Test
     fun `guarded maps every domain failure to a structured tool error and rethrows cancellation`() = testApplication {
         usePostgresTestcontainer()
         val services = IntegrationServices(application.attributes[BlueprintServiceKey], application.attributes[EntityServiceKey])

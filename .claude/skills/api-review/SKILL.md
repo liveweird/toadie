@@ -26,12 +26,12 @@ Interpret by severity (the model is documented in `api-guidelines/README.md`):
 - **error** — a real violation; report it as a finding, citing the rule ID from the message.
   A conformant spec (including the current project spec) has **0 errors** — any error on the
   project spec is new drift.
-- **warning** — expected only from known-gaps-register items that fire once per document
-  (`x-sla`, `info.termsOfService`). Report unexpected warnings as findings; expected ones as
-  "registered gap".
-- **hint** — registered noisy gaps (`X-Request-Id`, `ETag`, `Idempotency-Key`,
-  `Retry-After`). Do not report them individually; one summary line ("N hints from
-  registered gaps") suffices.
+- **warning** — none expected: no rule is warn-severity today, and CI runs Spectral with
+  `--fail-severity=warn`, so any warning on the project spec or the conformant fixture is a
+  failing finding — report it as new drift.
+- **hint** — registered gaps (`X-Request-Id`, `ETag`, `Idempotency-Key`, `Retry-After`, and
+  the once-per-document `x-sla` and `info.termsOfService`). Do not report them individually;
+  one summary line ("N hints from registered gaps") suffices.
 
 ## Pass 2 — review (LLM checklist)
 

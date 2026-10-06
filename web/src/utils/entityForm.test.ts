@@ -623,3 +623,154 @@ describe("entitySaveErrorMessage / entityDeleteErrorMessage", () => {
     expect(entityDeleteErrorMessage(new ApiError(409, null), t)).toBe("entities.deleteConflict");
   });
 });
+
+// A third fixture for the defensive/edge branches: a type the widget table does not know, an
+// invalid `pattern`, a labeled-url object, and an array of objects.
+const EDGE_BLUEPRINT = {
+  id: 3,
+  identifier: "edge",
+  title: "Edge",
+  schema: {
+    properties: {
+      mystery: { type: "mystery", title: "Mystery" },
+      flag: { type: "boolean", title: "Flag" },
+      badPattern: { type: "string", title: "Bad pattern", pattern: "(" },
+      ip: { type: "string", title: "Ip", format: "ipv4" },
+      link: { type: "object", title: "Link", format: "labeled-url" },
+      rows: { type: "array", title: "Rows", items: { type: "object" } },
+      name: { type: "string", title: "Name" },
+    },
+    required: [],
+  },
+  relations: {
+    parent: { title: "Parent", target: "edge", required: true, many: false },
+    kids: { title: "Kids", target: "edge", required: true, many: true },
+  },
+  mirrorProperties: {},
+  calculationProperties: {},
+  aggregationProperties: {},
+  createdBy: 1,
+  creatorName: "Alice",
+  creatorDeleted: false,
+  createdAt: 0,
+  updatedAt: 0,
+} as unknown as Blueprint;
+
+function edgeForm(overrides: Partial<EntityFormValues> = {}): EntityFormValues {
+  return { ...emptyEntityForm(EDGE_BLUEPRINT), identifier: "e", title: "E", ...overrides };
+}
+
+function editIndex(form: EntityFormValues, id: string): number {
+  return form.properties.findIndex((p) => p.id === id);
+}
+
+describe("entityForm — defensive and edge branches", () => {
+  const validate = entityFormValidation(t, EDGE_BLUEPRINT);
+
+  test("a property whose declared type is unknown seeds a blank draft and is omitted on the wire", () => {
+    const form = edgeForm();
+    expect(form.properties.find((p) => p.id === "mystery")).toEqual({
+      id: "mystery",
+      text: "",
+      bool: "",
+      list: [],
+      json: "",
+      unknown: false,
+    });
+    const withValue = withProp(form, "mystery", { text: "ignored", json: "{}" });
+    expect(toEntityRequest(withValue, EDGE_BLUEPRINT).properties).toEqual({});
+  });
+
+  test("a non-unknown draft whose id the schema does not declare is dropped from the request", () => {
+    const form = edgeForm({
+      properties: [
+        ...edgeForm().properties,
+        { id: "ghost", text: "boo", bool: "", list: [], json: "", unknown: false },
+      ],
+    });
+    expect(toEntityRequest(form, EDGE_BLUEPRINT).properties).not.toHaveProperty("ghost");
+  });
+
+  test("a relation draft whose id the blueprint does not declare is dropped from the request", () => {
+    const form = edgeForm({ relations: [{ id: "ghost", single: "x", many: [] }] });
+    expect(toEntityRequest(form, EDGE_BLUEPRINT).relations).toEqual({});
+  });
+
+  test("an array-of-objects draft is parsed from its json slot", () => {
+    const form = withProp(edgeForm(), "rows", { json: '[{"a":1}]' });
+    expect(toEntityRequest(form, EDGE_BLUEPRINT).properties).toEqual({ rows: [{ a: 1 }] });
+  });
+
+  test("ipv4 rejects a wrong segment count and a non-numeric segment", () => {
+    const form = edgeForm();
+    const path = `properties.${editIndex(form, "ip")}.text`;
+    expect(validate.properties.text("1.2.3", withProp(form, "ip", { text: "1.2.3" }), path)).toBe(
+      "entities.validation.ipv4",
+    );
+    expect(validate.properties.text("1.2.x.4", withProp(form, "ip", { text: "1.2.x.4" }), path)).toBe(
+      "entities.validation.ipv4",
+    );
+  });
+
+  test("an uncompilable pattern never blocks the client (the server is the gate)", () => {
+    const form = withProp(edgeForm(), "badPattern", { text: "anything" });
+    const path = `properties.${editIndex(form, "badPattern")}.text`;
+    expect(validate.properties.text("anything", form, path)).toBeNull();
+  });
+
+  test("labeled-url: a non-object value and a non-string displayText are shape errors", () => {
+    const form = edgeForm();
+    const path = `properties.${editIndex(form, "link")}.json`;
+    const asArray = withProp(form, "link", { json: "[1]" });
+    expect(validate.properties.json("[1]", asArray, path)).toBe("entities.validation.objectShape");
+    const asString = withProp(form, "link", { json: '"text"' });
+    expect(validate.properties.json('"text"', asString, path)).toBe("entities.validation.objectShape");
+    const badText = withProp(form, "link", { json: '{"url":"https://example.com","displayText":3}' });
+    expect(validate.properties.json("", badText, path)).toBe("entities.validation.objectShape");
+  });
+
+  test("an unknown (raw JSON) row: blank passes, broken JSON is flagged", () => {
+    const base = edgeForm();
+    const unknownRow: PropertyValueDraft = { id: "old", text: "", bool: "", list: [], json: "", unknown: true };
+    const blank = { ...base, properties: [...base.properties, unknownRow] };
+    const index = blank.properties.length - 1;
+    expect(validate.properties.json("", blank, `properties.${index}.json`)).toBeNull();
+    const broken = { ...base, properties: [...base.properties, { ...unknownRow, json: "{nope" }] };
+    expect(validate.properties.json("", broken, `properties.${index}.json`)).toBe("entities.validation.jsonInvalid");
+  });
+
+  test("text/json rules ignore a draft the schema no longer declares or of another widget type", () => {
+    const base = edgeForm();
+    const ghost: PropertyValueDraft = { id: "ghost", text: "x", bool: "", list: ["x"], json: "{}", unknown: false };
+    const withGhost = { ...base, properties: [...base.properties, ghost] };
+    const ghostPath = (field: string) => `properties.${withGhost.properties.length - 1}.${field}`;
+    expect(validate.properties.text("", withGhost, ghostPath("text"))).toBeNull();
+    expect(validate.properties.json("", withGhost, ghostPath("json"))).toBeNull();
+
+    // A boolean property on the text rule; a string property on the json rule.
+    expect(validate.properties.text("", base, `properties.${editIndex(base, "flag")}.text`)).toBeNull();
+    expect(validate.properties.json("", base, `properties.${editIndex(base, "name")}.json`)).toBeNull();
+  });
+
+  test("list/json rules skip an unknown row and a row index past the end", () => {
+    const base = edgeForm();
+    const unknownRow: PropertyValueDraft = { id: "old", text: "", bool: "", list: ["a"], json: "{}", unknown: true };
+    const withUnknown = { ...base, properties: [...base.properties, unknownRow] };
+    const index = withUnknown.properties.length - 1;
+    expect(validate.properties.list([], withUnknown, `properties.${index}.list`)).toBeNull();
+    expect(validate.properties.list([], base, "properties.999.list")).toBeNull();
+    expect(validate.properties.json("", base, "properties.999.json")).toBeNull();
+  });
+
+  test("relation rules ignore a draft the blueprint no longer declares and the wrong-arity slot", () => {
+    const base = edgeForm();
+    const withGhost = { ...base, relations: [...base.relations, { id: "ghost", single: "", many: [] }] };
+    const last = withGhost.relations.length - 1;
+    expect(validate.relations.single("", withGhost, `relations.${last}.single`)).toBeNull();
+    // `kids` is many: its `single` slot is never validated; `parent` is single: its `many` slot neither.
+    const kidsIndex = base.relations.findIndex((r) => r.id === "kids");
+    const parentIndex = base.relations.findIndex((r) => r.id === "parent");
+    expect(validate.relations.single("", base, `relations.${kidsIndex}.single`)).toBeNull();
+    expect(validate.relations.many([], base, `relations.${parentIndex}.many`)).toBeNull();
+  });
+});

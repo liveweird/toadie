@@ -46,11 +46,12 @@ Violations cite the guideline ID (e.g. *"...(API-ERR-001)"*). Severity model:
 
 - **error** — a real violation of the standard; must be fixed. **A conformant spec lints
   with 0 errors** (the project spec does).
-- **warn** — SHOULD-level rules plus once-per-document known-gap items (`x-sla`,
-  `info.termsOfService`). Expected warnings map 1:1 onto the gaps register.
-- **hint** — known-gap items that would otherwise fire on every operation (`X-Request-Id`,
-  `ETag`, `Idempotency-Key`, `Retry-After`). Informational until the gap is closed; promote
-  the rule's severity when adopting the header.
+- **warn** — reserved for a new SHOULD-level rule while it is being adopted; no rule uses it
+  today. CI runs Spectral with `--fail-severity=warn` (`npm run lint:api`), so a warning on
+  the project spec or the conformant fixture fails the build exactly like an error.
+- **hint** — known-gap items (`X-Request-Id`, `ETag`, `Idempotency-Key`, `Retry-After`
+  on every operation; `x-sla` and `info.termsOfService` once per document). Informational
+  and never fail a lint; promote the rule's severity when adopting the header or extension.
 
 > **Transport & protocol rules are review-only.** `API-SEC` (HTTPS/TLS, injection, XSS) and
 > `API-HTTP` (HTTP/2 & HTTP/3) describe runtime behavior a spec linter cannot see — there

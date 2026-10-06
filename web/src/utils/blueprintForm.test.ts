@@ -15,6 +15,7 @@ import {
   fromBlueprintResponse,
   isValidBlueprintIdentifier,
   propertyFieldApplies,
+  rowsWithErrors,
   safeJsonParse,
   toBlueprintRequest,
   type BlueprintFormValues,
@@ -758,5 +759,167 @@ describe("blueprintSaveErrorMessage / blueprintDeleteErrorMessage", () => {
     expect(blueprintSaveErrorMessage(new ApiError(403, null), t)).toBe("blueprints.saveForbidden");
     expect(blueprintDeleteErrorMessage(new ApiError(409, null), t)).toBe("blueprints.deleteConflict");
     expect(blueprintDeleteErrorMessage(new Error("network"), t)).toBe("common.error.actionFailed");
+  });
+});
+
+describe("rowsWithErrors", () => {
+  test("dedupes per row and orders family-then-index, ignoring non-row error keys", () => {
+    const errors = {
+      "aggregationProperties.0.func": "x",
+      "relations.0.target": "x",
+      "properties.2.title": "x",
+      "properties.1.id": "x",
+      "properties.1.title": "x",
+      "mirrorProperties.3.path": "x",
+      identifier: "x",
+      ownershipPath: "x",
+    };
+    expect(rowsWithErrors(errors)).toEqual([
+      { family: "properties", index: 1 },
+      { family: "properties", index: 2 },
+      { family: "relations", index: 0 },
+      { family: "mirrorProperties", index: 3 },
+      { family: "aggregationProperties", index: 0 },
+    ]);
+  });
+
+  test("no row errors -> no rows", () => {
+    expect(rowsWithErrors({ identifier: "x" })).toEqual([]);
+    expect(rowsWithErrors({})).toEqual([]);
+  });
+});
+
+describe("toBlueprintRequest — embedded-url spec without authentication", () => {
+  test("an embedded-url string property carrying no auth fields omits specAuthentication", () => {
+    const draft = { ...emptyPropertyDraft(), id: "docs", type: "string" as const, spec: "embedded-url" };
+    const request = toBlueprintRequest(values({ properties: [draft] }));
+    expect(request.schema!.properties.docs.specAuthentication).toBeUndefined();
+  });
+});
+
+describe("blueprintFormValidation — remaining rule branches", () => {
+  const validate = blueprintFormValidation(t);
+  const forProps = (...properties: ReturnType<typeof emptyPropertyDraft>[]) => values({ properties });
+
+  test("a property id with an illegal charset is rejected", () => {
+    expect(validate.properties.id("has space", forProps(), "properties.0.id")).toBe("blueprints.validation.propertyId");
+  });
+
+  test("a property title is required", () => {
+    expect(validate.properties.title("  ")).toBe("blueprints.validation.required");
+    expect(validate.properties.title("Name")).toBeNull();
+  });
+
+  test("pattern: skipped for a non-string row or a blank value, rejected past the length cap", () => {
+    const numberRow = { ...emptyPropertyDraft(), type: "number" as const };
+    const stringRow = { ...emptyPropertyDraft(), type: "string" as const };
+    expect(validate.properties.pattern("(", forProps(numberRow), "properties.0.pattern")).toBeNull();
+    expect(validate.properties.pattern("  ", forProps(stringRow), "properties.0.pattern")).toBeNull();
+    expect(validate.properties.pattern("(", values(), "properties.0.pattern")).toBeNull();
+    expect(validate.properties.pattern("a".repeat(501), forProps(stringRow), "properties.0.pattern")).toBe(
+      "blueprints.validation.patternLength",
+    );
+    expect(validate.properties.pattern("^ok$", forProps(stringRow), "properties.0.pattern")).toBeNull();
+  });
+
+  test("minimum/maximum and minItems/maxItems pairs: fail inverted, pass blank or ordered", () => {
+    const number = { ...emptyPropertyDraft(), type: "number" as const, minimum: "5", maximum: "3" };
+    expect(validate.properties.minimum("5", forProps(number), "properties.0.minimum")).toBe(
+      "blueprints.validation.minMax",
+    );
+    const openEnded = { ...number, maximum: "" };
+    expect(validate.properties.minimum("5", forProps(openEnded), "properties.0.minimum")).toBeNull();
+    const ordered = { ...number, maximum: "9" };
+    expect(validate.properties.minimum("5", forProps(ordered), "properties.0.minimum")).toBeNull();
+
+    const array = { ...emptyPropertyDraft(), type: "array" as const, minItems: "4", maxItems: "2" };
+    expect(validate.properties.minItems("4", forProps(array), "properties.0.minItems")).toBe(
+      "blueprints.validation.minMax",
+    );
+    expect(validate.properties.minItems("4", values(), "properties.0.minItems")).toBeNull();
+  });
+
+  test("exclusiveMinimum conflicts with minimum and is ordered against exclusiveMaximum", () => {
+    const both = { ...emptyPropertyDraft(), type: "number" as const, minimum: "1", exclusiveMinimum: "0" };
+    expect(validate.properties.exclusiveMinimum("0", forProps(both), "properties.0.exclusiveMinimum")).toBe(
+      "blueprints.validation.exclusiveConflict",
+    );
+    const inverted = {
+      ...emptyPropertyDraft(),
+      type: "number" as const,
+      exclusiveMinimum: "9",
+      exclusiveMaximum: "2",
+    };
+    expect(validate.properties.exclusiveMinimum("9", forProps(inverted), "properties.0.exclusiveMinimum")).toBe(
+      "blueprints.validation.minMax",
+    );
+    const notNumber = { ...emptyPropertyDraft(), type: "string" as const, minimum: "1" };
+    expect(validate.properties.exclusiveMinimum("0", forProps(notNumber), "properties.0.exclusiveMinimum")).toBeNull();
+  });
+
+  test("exclusiveMaximum conflicts with maximum only on a number row", () => {
+    const both = { ...emptyPropertyDraft(), type: "number" as const, maximum: "10" };
+    expect(validate.properties.exclusiveMaximum("5", forProps(both), "properties.0.exclusiveMaximum")).toBe(
+      "blueprints.validation.exclusiveConflict",
+    );
+    expect(validate.properties.exclusiveMaximum("", forProps(both), "properties.0.exclusiveMaximum")).toBeNull();
+    const notNumber = { ...emptyPropertyDraft(), type: "string" as const, maximum: "10" };
+    expect(validate.properties.exclusiveMaximum("5", forProps(notNumber), "properties.0.exclusiveMaximum")).toBeNull();
+  });
+
+  test("enum values: capped in count, duplicates flagged after trimming, skipped for other types", () => {
+    const stringRow = { ...emptyPropertyDraft(), type: "string" as const };
+    const tooMany = Array.from({ length: 201 }, (_, i) => `v${i}`);
+    expect(validate.properties.enumValues(tooMany, forProps(stringRow), "properties.0.enumValues")).toBe(
+      "blueprints.validation.enumCount",
+    );
+    expect(validate.properties.enumValues(["a", " a "], forProps(stringRow), "properties.0.enumValues")).toBe(
+      "blueprints.validation.enumDuplicate",
+    );
+    expect(validate.properties.enumValues(["a", "b"], forProps(stringRow), "properties.0.enumValues")).toBeNull();
+    const boolRow = { ...emptyPropertyDraft(), type: "boolean" as const };
+    expect(validate.properties.enumValues(["a", "a"], forProps(boolRow), "properties.0.enumValues")).toBeNull();
+    expect(validate.properties.enumValues(["a"], values(), "properties.0.enumValues")).toBeNull();
+  });
+
+  test("default text: blank or rowless is fine, a number must be numeric, an object default must be JSON", () => {
+    const numberRow = { ...emptyPropertyDraft(), type: "number" as const };
+    const objectRow = { ...emptyPropertyDraft(), type: "object" as const };
+    const stringRow = { ...emptyPropertyDraft(), type: "string" as const };
+    expect(validate.properties.defaultText("x", values(), "properties.0.defaultText")).toBeNull();
+    expect(validate.properties.defaultText("  ", forProps(numberRow), "properties.0.defaultText")).toBeNull();
+    expect(validate.properties.defaultText("abc", forProps(numberRow), "properties.0.defaultText")).toBe(
+      "blueprints.validation.defaultNumber",
+    );
+    expect(validate.properties.defaultText("12", forProps(numberRow), "properties.0.defaultText")).toBeNull();
+    expect(validate.properties.defaultText("{nope", forProps(objectRow), "properties.0.defaultText")).toBe(
+      "blueprints.validation.jsonInvalid",
+    );
+    expect(validate.properties.defaultText('{"a":1}', forProps(objectRow), "properties.0.defaultText")).toBeNull();
+    expect(validate.properties.defaultText("free", forProps(stringRow), "properties.0.defaultText")).toBeNull();
+  });
+
+  test("a relation needs a title and a target", () => {
+    expect(validate.relations.title(" ")).toBe("blueprints.validation.required");
+    expect(validate.relations.title("Owner")).toBeNull();
+    expect(validate.relations.target(" ")).toBe("blueprints.validation.targetRequired");
+    expect(validate.relations.target("team")).toBeNull();
+  });
+
+  test("a mirror property id is grammar-checked", () => {
+    expect(validate.mirrorProperties.id("has space", values(), "mirrorProperties.0.id")).toBe(
+      "blueprints.validation.propertyId",
+    );
+  });
+
+  test("an aggregation's property slot: set when counting entities and blank when measuring a property are both fine", () => {
+    const byProperty = { ...emptyAggregationDraft(), calculationBy: "property" as const, func: "sum", property: "size" };
+    const byEntities = { ...emptyAggregationDraft(), calculationBy: "entities" as const, property: "" };
+    expect(
+      validate.aggregationProperties.property("size", values({ aggregationProperties: [byProperty] }), "aggregationProperties.0.property"),
+    ).toBeNull();
+    expect(
+      validate.aggregationProperties.property("", values({ aggregationProperties: [byEntities] }), "aggregationProperties.0.property"),
+    ).toBeNull();
   });
 });

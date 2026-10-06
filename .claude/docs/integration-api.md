@@ -211,6 +211,26 @@ call made within one POST to one at a time (a request-local `Mutex`) and charges
 per-client bucket for every call AFTER THE FIRST in the request — the first is already covered by
 the request-level admission check above — answering `RATE_LIMITED` once the bucket is exhausted;
 without this a batch would otherwise multiply one admission permit into unbounded concurrent work.
+The request body is bounded by THREE caps (2.15.2), all enforced before anything is parsed or built:
+at most `MCP_MAX_BATCH_SIZE` = 64 top-level messages, at most `MCP_MAX_JSON_VALUES` = 100 000 JSON
+values (every scalar, object and array; keys excluded — ~7 MiB of tree at ~70 B/value per request,
+bounded again by the four admission permits, and far above a legitimate 200-document `import_entities`
+call), and at most `MCP_MAX_JSON_DEPTH` = 512 nesting levels (kotlinx parses deeper documents on the
+heap, but the recursive encoders downstream of a tool call would overflow the stack). `respondIntegrationMcp` makes the pre-read the FIRST thing after authentication: it reads the raw
+engine channel once, bounded at 4 MiB + 1 byte, and runs the pure streaming scan `scanMcpBody`
+(`integration/McpBodyScan.kt`) over the bytes — a tiny tokenizer tracking nesting and string state that
+allocates nothing, builds NO JSON tree and stops the moment a cap is exceeded — before the SDK
+`Server`/transport is even constructed. A body over 4 MiB is a `413`, more than 64 messages, 100 000
+values or 512 levels a `400`, and an upload the client aborts mid-body is a `400` rather than a logged
+`500`; every refusal is `application/problem+json`, nothing is dispatched, no tool runs,
+and nothing further is read from the request. A body the scan cannot make sense of passes (the SDK's
+own parse answers its `400`). The pre-read bytes are stored on the call and replayed to the transport
+by a route-scoped receive interceptor (`replayMcpPreReadBody`, the receive-side twin of
+`encodeMcpResponsesWithMcpJson`) — deliberately NOT Ktor's `DoubleReceive`, whose cache keeps copying an
+oversized body into memory after the refusal. The SDK answers `initialize`, `tools/list` and `ping`
+itself, OUTSIDE `guarded`, so those methods stay uncharged by the retained-memory ledger and the rate
+bucket; they are bounded only by these two caps (without a cap ~90k bare `tools/list` requests in 4 MiB
+were buffered whole, a heap exhaustion on any valid key; and a 4 MiB `[0,0,...]` parsed to a ~154 MiB tree).
 The SDK's own Ktor helpers are deliberately NOT used: they install an application-wide second
 `ContentNegotiation` (clashing with `plugins/Serialization.kt`) and cannot run the suspending key
 lookup; the transport reads the body itself. It does NOT write the response itself, though: in
@@ -311,7 +331,7 @@ and the Claude Code `.mcp.json` shape live in `sample-data/mcp/`.
 - **Requirement:** preserve key/JWT separation, ADMIN-before-validation, revocation races,
   private-query exclusion, Port/REST parity, exact JSON numerics, bounded work and cancellation,
   and one-time reveal. No table access from GraphQL resolvers or MCP tools. The MCP endpoint's
-  scope gate (write tools absent for `read` keys), service-account attribution of every write,
+  scope gate (all ten tools are registered for every key; a `read` key calling a write tool gets a `FORBIDDEN` tool result), service-account attribution of every write,
   tool-result error codes, and the shared budgets are pinned by `IntegrationMcpTest`.
 - **Reference:** `IntegrationClientTest`, `IntegrationClientSecurityTest`,
   `IntegrationGraphQlTest`, `IntegrationMcpTest`, `IntegrationSchemaContractTest`, `IntegrationLimitsTest`,

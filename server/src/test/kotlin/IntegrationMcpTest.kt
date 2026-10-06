@@ -7,6 +7,9 @@ import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.findByIdentity
 import ch.nokillswit.integration.IntegrationScope
+import ch.nokillswit.integration.MCP_MAX_BATCH_SIZE
+import ch.nokillswit.integration.MCP_MAX_BODY_BYTES
+import ch.nokillswit.integration.MCP_MAX_JSON_VALUES
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -18,7 +21,10 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
 import io.ktor.http.contentType
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.writeFully
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import java.util.UUID
@@ -27,6 +33,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -759,6 +767,111 @@ class IntegrationMcpTest {
                 setBody("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"padding":"$padding"}}""")
             }
             assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
+            // Our problem body, not the SDK transport's JSON-RPC error.
+            assertEquals(ContentType.Application.ProblemJson, response.contentType()?.withoutParameters())
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
+        }
+    }
+
+    @Test
+    fun `a batch of tools call messages over the cap is refused with 400 and no tool ran`() = testApplication {
+        enabledApp()
+        val owner = TestUsers.seed(uniqueEmail("mcp-batchcap"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("mcp-batchcap-${UUID.randomUUID()}", owner)
+        try {
+            withAuditCapture { capture ->
+                val calls = List(MCP_MAX_BATCH_SIZE + 1) { "tools/call" to toolCallParams("get_ontology_revision") }
+                val response = jsonClient().mcpBatch(key, calls)
+                assertEquals(HttpStatusCode.BadRequest, response.status)
+                assertEquals(ContentType.Application.ProblemJson, response.contentType()?.withoutParameters())
+                assertTrue(response.bodyAsText().contains("MCP batch exceeds $MCP_MAX_BATCH_SIZE messages"))
+                assertTrue(capture.events.none { it.message == "integration.mcp_call" }, "no tool may have run")
+            }
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
+        }
+    }
+
+    @Test
+    fun `a 4 MiB body of JSON values within the byte limit is refused with the values message`() = testApplication {
+        enabledApp()
+        val owner = TestUsers.seed(uniqueEmail("mcp-values"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("mcp-values-${UUID.randomUUID()}", owner)
+        try {
+            // ~2M elements nested inside ONE message: the message cap passes, the value cap must refuse it.
+            val tail = "0,".repeat(2_000_000) + "0"
+            val body = """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"x","arguments":{"a":[$tail]}}}"""
+            val response = jsonClient().post("/integration/mcp") {
+                contentType(ContentType.Application.Json)
+                header(HttpHeaders.Accept, "application/json, text/event-stream")
+                header(HttpHeaders.Authorization, "Bearer $key")
+                setBody(body)
+            }
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals(ContentType.Application.ProblemJson, response.contentType()?.withoutParameters())
+            assertTrue(response.bodyAsText().contains("MCP request exceeds $MCP_MAX_JSON_VALUES JSON values"))
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
+        }
+    }
+
+    @Test
+    fun `an oversized streaming body that never completes is refused promptly`() = testApplication {
+        enabledApp()
+        val owner = TestUsers.seed(uniqueEmail("mcp-hang"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("mcp-hang-${UUID.randomUUID()}", owner)
+        try {
+            val never = CompletableDeferred<Unit>()
+            val response = withTimeout(5_000) {
+                jsonClient().post("/integration/mcp") {
+                    header(HttpHeaders.Accept, "application/json, text/event-stream")
+                    header(HttpHeaders.Authorization, "Bearer $key")
+                    setBody(object : OutgoingContent.WriteChannelContent() {
+                        override val contentType = ContentType.Application.Json
+                        override suspend fun writeTo(channel: ByteWriteChannel) {
+                            channel.writeFully(ByteArray(MCP_MAX_BODY_BYTES.toInt() + 1) { ' '.code.toByte() })
+                            channel.flush()
+                            never.await()
+                        }
+                    })
+                }
+            }
+            never.complete(Unit)
+            assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
+            assertEquals(ContentType.Application.ProblemJson, response.contentType()?.withoutParameters())
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
+        }
+    }
+
+    @Test
+    fun `a batch of exactly the cap is answered in full`() = testApplication {
+        enabledApp()
+        val owner = TestUsers.seed(uniqueEmail("mcp-batchmax"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("mcp-batchmax-${UUID.randomUUID()}", owner)
+        try {
+            val response = jsonClient().mcpBatch(key, List(MCP_MAX_BATCH_SIZE) { "tools/list" to buildJsonObject {} })
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals(MCP_MAX_BATCH_SIZE, Json.parseToJsonElement(response.bodyAsText()).jsonArray.size)
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
+        }
+    }
+
+    @Test
+    fun `a malformed JSON body is the transport's 400 not a 500`() = testApplication {
+        enabledApp()
+        val owner = TestUsers.seed(uniqueEmail("mcp-malformed"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("mcp-malformed-${UUID.randomUUID()}", owner)
+        try {
+            val response = jsonClient().post("/integration/mcp") {
+                contentType(ContentType.Application.Json)
+                header(HttpHeaders.Accept, "application/json, text/event-stream")
+                header(HttpHeaders.Authorization, "Bearer $key")
+                setBody("""[{"jsonrpc":"2.0","id":1,"method":""")
+            }
+            assertEquals(HttpStatusCode.BadRequest, response.status)
         } finally {
             TestIntegrationClients.service.revoke(clientId)
         }

@@ -175,6 +175,115 @@ describe("EntityPropertyField", () => {
     expect(screen.getByTestId("value")).toHaveTextContent('https://example.com');
   });
 
+  test("number with enum -> Select offering the enum values as strings, picking one fills the text slot", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Harness
+        initial={draft()}
+        definition={{ type: "number", title: "Size", enum: [1, 5] } as PropertyDefinitionWire}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Size" }));
+    await user.click(await screen.findByRole("option", { name: "5" }));
+    expect(screen.getByTestId("value")).toHaveTextContent('"text":"5"');
+  });
+
+  test("array with items.enum -> MultiSelect over the enum values", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Harness
+        initial={draft()}
+        definition={
+          { type: "array", title: "Regions", items: { type: "string", enum: ["eu", "us"] } } as PropertyDefinitionWire
+        }
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Regions" }));
+    await user.click(await screen.findByRole("option", { name: "eu" }));
+    expect(screen.getByTestId("value")).toHaveTextContent('"list":["eu"]');
+  });
+
+  test("string with a markdown format -> a monospace multi-line Textarea", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Harness
+        initial={draft()}
+        definition={{ type: "string", title: "Notes", format: "markdown" } as PropertyDefinitionWire}
+      />,
+    );
+    const box = screen.getByRole("textbox", { name: "Notes" });
+    expect(box.tagName).toBe("TEXTAREA");
+    await user.type(box, "hi");
+    expect(screen.getByTestId("value")).toHaveTextContent('"text":"hi"');
+  });
+
+  test("string with format team -> a single Select over the _team pool", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Harness
+        initial={draft()}
+        definition={{ type: "string", title: "Squad", format: "team" } as PropertyDefinitionWire}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Squad" }));
+    await user.click(await screen.findByRole("option", { name: "platform — Platform" }));
+    expect(screen.getByTestId("value")).toHaveTextContent('"text":"platform"');
+    expect(mockFetch.mock.calls.some(([url]) => String(url).includes("blueprint=_team"))).toBe(true);
+  });
+
+  test("array of format user items -> a MultiSelect over the _user pool", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Harness
+        initial={draft()}
+        definition={
+          { type: "array", title: "Reviewers", items: { type: "string", format: "user" } } as PropertyDefinitionWire
+        }
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Reviewers" }));
+    await user.click(await screen.findByRole("option", { name: "platform — Platform" }));
+    expect(screen.getByTestId("value")).toHaveTextContent('"list":["platform"]');
+    expect(mockFetch.mock.calls.some(([url]) => String(url).includes("blueprint=_user"))).toBe(true);
+  });
+
+  test("a failed _team pool on a scalar team property shows the team hint", async () => {
+    mockFetch.mockResolvedValue(jsonResponse(500, { title: "boom", status: 500 }));
+    renderWithProviders(
+      <Harness
+        initial={draft()}
+        definition={{ type: "string", title: "Squad", format: "team" } as PropertyDefinitionWire}
+      />,
+    );
+    expect(await screen.findByText("Could not load the teams")).toBeInTheDocument();
+  });
+
+  test("a failed _user pool on a scalar user property shows the user hint", async () => {
+    mockFetch.mockResolvedValue(jsonResponse(500, { title: "boom", status: 500 }));
+    renderWithProviders(
+      <Harness
+        initial={draft()}
+        definition={{ type: "string", title: "Lead", format: "user" } as PropertyDefinitionWire}
+      />,
+    );
+    expect(await screen.findByText("Could not load the users")).toBeInTheDocument();
+  });
+
+  test("labeled-url: typing display text stores it, clearing both parts empties the json slot", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Harness
+        initial={draft({ json: '{"url":"https://example.com"}' })}
+        definition={{ type: "object", title: "Link", format: "labeled-url" } as PropertyDefinitionWire}
+      />,
+    );
+    await user.type(screen.getByLabelText("Display text"), "Home");
+    expect(screen.getByTestId("value")).toHaveTextContent('displayText');
+    await user.clear(screen.getByLabelText("URL"));
+    await user.clear(screen.getByLabelText("Display text"));
+    expect(screen.getByTestId("value")).toHaveTextContent('"json":""');
+  });
+
   test("a stored key the blueprint no longer declares renders as an unknown JSON row", () => {
     renderWithProviders(<Harness initial={draft({ id: "gone", json: "{}", unknown: true })} definition={undefined} />);
     expect(screen.getByRole("textbox", { name: "gone" }).tagName).toBe("TEXTAREA");
