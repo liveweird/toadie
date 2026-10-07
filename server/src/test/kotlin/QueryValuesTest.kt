@@ -10,6 +10,7 @@ import ch.nokillswit.entityquery.Operand
 import ch.nokillswit.entityquery.Span
 import ch.nokillswit.entityquery.StringOperator
 import ch.nokillswit.entityquery.Truth
+import ch.nokillswit.entityquery.candidateLookup
 import ch.nokillswit.entityquery.compare
 import ch.nokillswit.entityquery.evaluate
 import ch.nokillswit.entityquery.inList
@@ -196,34 +197,35 @@ class QueryValuesTest {
     fun `evaluate resolves operands off a candidateOf lookup, unbound variables resolve to null`() {
         val bound = candidate(properties = buildJsonObject { put("age", 30); put("active", true) })
         val candidateOf: (String) -> QueryCandidate? = { v -> if (v == "a") bound else null }
+        val lookup = candidateLookup(candidateOf)
 
         // a.age = 30 AND a.active -> TRUE and TRUE -> TRUE
         val left = Expr.Compare(ComparisonOp.EQUAL, prop("a", "age"), value(JsonPrimitive(30)), span)
         val right = Expr.Truthy(prop("a", "active"), span)
-        assertEquals(Truth.TRUE, evaluate(Expr.And(left, right, span), candidateOf))
+        assertEquals(Truth.TRUE, evaluate(Expr.And(left, right, span), lookup))
 
         // b.age = 30 -> UNKNOWN (b is unbound); OR'd with TRUE -> TRUE; AND'd with TRUE -> TRUE
         val unboundCompare = Expr.Compare(ComparisonOp.EQUAL, prop("b", "age"), value(JsonPrimitive(30)), span)
         val orExpr = Expr.Or(unboundCompare, right, span)
-        assertEquals(Truth.TRUE, evaluate(orExpr, candidateOf))
-        assertEquals(Truth.UNKNOWN, evaluate(unboundCompare, candidateOf))
+        assertEquals(Truth.TRUE, evaluate(orExpr, lookup))
+        assertEquals(Truth.UNKNOWN, evaluate(unboundCompare, lookup))
 
         // NOT (a.age = 30) -> FALSE
-        assertEquals(Truth.FALSE, evaluate(Expr.Not(left, span), candidateOf))
+        assertEquals(Truth.FALSE, evaluate(Expr.Not(left, span), lookup))
 
         // a.age IN [10, 30] -> TRUE
         val inExpr = Expr.In(prop("a", "age"), value(JsonArray(listOf(JsonPrimitive(10), JsonPrimitive(30)))), span)
-        assertEquals(Truth.TRUE, evaluate(inExpr, candidateOf))
+        assertEquals(Truth.TRUE, evaluate(inExpr, lookup))
 
         // a.missing IS NULL -> TRUE (always decidable, never UNKNOWN)
         val isNullExpr = Expr.IsNull(prop("a", "missing"), negated = false, span = span)
-        assertEquals(Truth.TRUE, evaluate(isNullExpr, candidateOf))
+        assertEquals(Truth.TRUE, evaluate(isNullExpr, lookup))
         val isNotNullExpr = Expr.IsNull(prop("a", "age"), negated = true, span = span)
-        assertEquals(Truth.TRUE, evaluate(isNotNullExpr, candidateOf))
+        assertEquals(Truth.TRUE, evaluate(isNotNullExpr, lookup))
 
         // a.$identifier CONTAINS 'id' -> TRUE (meta resolution shares AggregationQuery's candidateValue)
         val stringOpExpr = Expr.StringOp(StringOperator.CONTAINS, prop("a", "\$identifier"), value(JsonPrimitive("id")), span)
-        assertEquals(Truth.TRUE, evaluate(stringOpExpr, candidateOf))
+        assertEquals(Truth.TRUE, evaluate(stringOpExpr, lookup))
     }
 
     @Test

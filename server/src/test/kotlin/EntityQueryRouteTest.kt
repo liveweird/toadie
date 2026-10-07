@@ -3,7 +3,9 @@ package ch.nokillswit
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.OwnershipDefinition
+import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.authz.TooManyRequestsException
@@ -248,6 +250,57 @@ class EntityQueryRouteTest {
         } finally {
             TestEntities.remove(parentEnt, childEnt, grandEnt)
             TestBlueprints.remove(parentBp, childBp, grandBp)
+        }
+    }
+
+    @Test
+    fun `tier metas query stored blueprint tiers, r tier reads the relation tier and a bad r tier is a diagnostic`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-eq-tiers", UserRole.ADMIN)
+        val targetBp = unique("bp-eq-tier-t")
+        val sourceBp = unique("bp-eq-tier-s")
+        val target = unique("ent-eq-tier-t")
+        val filled = unique("ent-eq-tier-f")
+        val empty = unique("ent-eq-tier-e")
+        try {
+            client.createBlueprint(simpleBlueprint(targetBp))
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = sourceBp, title = "T",
+                    schema = BlueprintSchema(properties = mapOf("note" to PropertyDefinition(type = "string"))),
+                    relations = mapOf("rel" to RelationDefinition(title = "Rel", target = targetBp, required = false, many = false)),
+                    tiers = BlueprintTiers(blueprint = 2, properties = mapOf("note" to 1), relations = mapOf("rel" to 3)),
+                ),
+            )
+            client.postJson("/api/v1/entities", entityRequest(targetBp, target))
+            client.postJson(
+                "/api/v1/entities",
+                entityRequest(sourceBp, filled).copy(
+                    properties = buildJsonObject { put("note", "x") },
+                    relations = buildJsonObject { put("rel", target) },
+                ),
+            )
+            client.postJson("/api/v1/entities", entityRequest(sourceBp, empty))
+
+            suspend fun ids(query: String): Set<String> =
+                client.get("/api/v1/entities/graph?blueprint=$sourceBp&blueprint=$targetBp&query=${query.urlEncoded()}")
+                    .body<EntityGraph>().nodes.map { it.id }.toSet()
+
+            assertEquals(setOf("$sourceBp|$filled", "$sourceBp|$empty"), ids("MATCH (n:`$sourceBp`) WHERE n.\$tier = 2 RETURN n"))
+            assertEquals(setOf("$sourceBp|$empty"), ids("MATCH (n:`$sourceBp`) WHERE n.\$fillTier = 0 RETURN n"))
+            assertEquals(setOf("$sourceBp|$filled"), ids("MATCH (n:`$sourceBp`) WHERE n.\$fillTier = 4 RETURN n"))
+            assertEquals(
+                setOf("$sourceBp|$filled", "$targetBp|$target"),
+                ids("MATCH (n:`$sourceBp`)-[r:rel]->(t) WHERE r.\$tier = 3 RETURN n, t"),
+            )
+            assertEquals(emptySet(), ids("MATCH (n:`$sourceBp`)-[r:rel]->(t) WHERE r.\$tier = 1 RETURN n, t"))
+
+            val bad = client.get("/api/v1/entities/graph?query=${"MATCH (a)-[r*1..2]->(b) WHERE r.\$tier = 1 RETURN a".urlEncoded()}")
+            assertEquals(HttpStatusCode.BadRequest, bad.status)
+            assertEquals(QueryDiagnosticCodes.RELATIONSHIP_VARIABLE_REFERENCE, bad.body<EntityQueryProblem>().diagnostics.single().code)
+        } finally {
+            TestEntities.remove(target, filled, empty)
+            TestBlueprints.remove(sourceBp, targetBp)
         }
     }
 

@@ -324,6 +324,63 @@ class QueryValidatorTest {
         assertEquals(9, finding.line)
     }
 
+    // --- tier metas (2.18.0) -------------------------------------------------------------------------
+
+    @Test
+    fun `the tier metas are valid node properties in WHERE and in inline maps, with the tier meta suggested for a typo`() {
+        val tierMap = mapOf("\$fillTier" to Literal(JsonPrimitive(2), span(2)))
+        val a = node("a", listOf("service"), properties = tierMap, line = 2)
+        val where = Expr.Compare(ComparisonOp.EQUAL, prop("a", "\$tier"), lit("1"), span(1))
+        val q = query(listOf(match(singlePattern(a), where = where)), returns = returnVars("a"))
+        assertTrue(validateEntityQuery(q, baseSchema()).isEmpty())
+
+        val typo = Expr.Compare(ComparisonOp.EQUAL, prop("a", "\$tie"), lit("1"), span(1))
+        val typoQuery = query(listOf(match(singlePattern(node("a", listOf("service"))), where = typo)), returns = returnVars("a"))
+        val finding = validateEntityQuery(typoQuery, baseSchema()).single()
+        assertEquals(QueryDiagnosticCodes.UNKNOWN_PROPERTY, finding.code)
+        assertEquals("\$tier", finding.suggestion)
+    }
+
+    @Test
+    fun `a single-hop edge variable read as dollar-tier is accepted and gets an edge slot`() {
+        val e = edge(variable = "r", types = listOf("owner"))
+        val where = Expr.Compare(ComparisonOp.EQUAL, prop("r", "\$tier"), lit("1"), span(1))
+        val q = query(listOf(match(chain(node("a", listOf("service")), e, node("b")), where = where)), returns = returnVars("a", "b"))
+        val (diagnostics, slots) = validateAndBind(q, baseSchema())
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+        assertEquals(mapOf("r" to 0), slots.edges)
+    }
+
+    @Test
+    fun `an edge variable never read as dollar-tier gets no edge slot`() {
+        val e = edge(variable = "r", types = listOf("owner"))
+        val q = query(listOf(match(chain(node("a", listOf("service")), e, node("b")))), returns = returnVars("a", "b"))
+        val (diagnostics, slots) = validateAndBind(q, baseSchema())
+        assertTrue(diagnostics.isEmpty())
+        assertTrue(slots.edges.isEmpty())
+    }
+
+    @Test
+    fun `dollar-tier on a variable-length edge variable is RELATIONSHIP_VARIABLE_REFERENCE naming the hop`() {
+        val e = edge(variable = "r", types = listOf("owner"), range = 1..3)
+        val where = Expr.Truthy(prop("r", "\$tier", line = 5), span(5))
+        val q = query(listOf(match(chain(node("a", listOf("service")), e, node("b")), where = where)), returns = returnVars("a", "b"))
+        val finding = validateEntityQuery(q, baseSchema()).single()
+        assertEquals(QueryDiagnosticCodes.RELATIONSHIP_VARIABLE_REFERENCE, finding.code)
+        assertEquals(5, finding.line)
+        assertTrue(finding.message.contains("variable-length"), finding.message)
+    }
+
+    @Test
+    fun `any other key on a single-hop edge variable is RELATIONSHIP_VARIABLE_REFERENCE naming dollar-tier`() {
+        val e = edge(variable = "r")
+        val where = Expr.Truthy(prop("r", "\$fillTier"), span(1))
+        val q = query(listOf(match(chain(node("a"), e, node("b")), where = where)), returns = returnVars("a", "b"))
+        val finding = validateEntityQuery(q, baseSchema()).single()
+        assertEquals(QueryDiagnosticCodes.RELATIONSHIP_VARIABLE_REFERENCE, finding.code)
+        assertTrue(finding.message.contains("only exposes `\$tier`"), finding.message)
+    }
+
     // --- DUPLICATE_VARIABLE ------------------------------------------------------------------------
 
     @Test

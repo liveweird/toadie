@@ -30,7 +30,9 @@ const OPERATOR_KEYWORDS = [
 /** Literal keywords — tokenized/highlighted as atoms, not plain keywords. */
 const LITERAL_KEYWORDS = ["NULL", "TRUE", "FALSE"] as const;
 
-/** The seven meta-properties (`$identifier` etc., without their leading `$`). */
+/** The nine meta-properties (`$identifier` etc., without their leading `$`): the seven shared
+ *  with aggregation rules plus the query-only fill-in tier metas `$tier` / `$fillTier` (2.18.0).
+ *  On an edge variable the only meta is `$tier` — see `EDGE_METAS`. */
 export const METAS = [
   "identifier",
   "title",
@@ -39,7 +41,12 @@ export const METAS = [
   "icon",
   "createdAt",
   "updatedAt",
+  "tier",
+  "fillTier",
 ] as const;
+
+/** The one meta a relationship variable exposes (`r.$tier`, single-hop edges only). */
+export const EDGE_METAS = ["tier"] as const;
 
 const ALL_KEYWORDS = new Set<string>([...CLAUSE_KEYWORDS.flatMap((k) => k.split(" ")), ...OPERATOR_KEYWORDS]);
 const ALL_LITERALS = new Set<string>(LITERAL_KEYWORDS);

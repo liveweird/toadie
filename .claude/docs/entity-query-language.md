@@ -8,7 +8,7 @@ cooperative budget. The implementation is the flat package `server/src/main/kotl
 (`package ch.nokillswit.entityquery`): `QueryLexer.kt` → `QueryParser.kt`/`PatternParser.kt`/
 `ExpressionParser.kt` (`parseEntityQuery`) → `QueryValidator.kt` (`validateEntityQuery`,
 `Suggestions.kt`) → `QueryEvaluator.kt` (`InMemoryQueryExecutor` over `QueryGraph.kt`'s
-`InMemoryQueryGraph`, values in `QueryValues.kt`, the budget in `QueryBudget.kt`); the caps,
+`InMemoryQueryGraph`, values in `QueryValues.kt`, the tier metas in `QueryTiers.kt`, the budget in `QueryBudget.kt`); the caps,
 diagnostic codes and wire DTOs live in `EntityQuery.kt`. Every one of those files is pure —
 no database, no Ktor — so their tests run without Docker. Consult this file when changing the
 grammar, a semantic rule, a cap, or a diagnostic; update it in the same change.
@@ -31,10 +31,14 @@ Decisions, all taken 2026-09-12 and pinned here:
   arrive later without touching the parser, the validator or the service.
 - **RETURN yields entities only** — the variables listed (or `*`) bind entities; those entities
   become the SHOWN set. No projections, no aggregates, no functions.
-- **WHERE sees STORED properties + the seven metas only** (`$identifier`, `$title`, `$blueprint`,
-  `$team`, `$icon`, `$createdAt`, `$updatedAt`): mirror/calculation/aggregation values are
+- **WHERE sees STORED properties + the nine metas only** (`$identifier`, `$title`, `$blueprint`,
+  `$team`, `$icon`, `$createdAt`, `$updatedAt` — and, since 2.18.0, the query-only tier metas
+  `$tier` and `$fillTier`): mirror/calculation/aggregation values are
   evaluated per response (phase 5) and never stored, exactly as the list's `q`/sort/filter never
-  see them (`.claude/docs/list-endpoints.md`).
+  see them (`.claude/docs/list-endpoints.md`). The two tier metas are DERIVED from the blueprint's
+  stored `tiers` and the entity's stored fields; they live ONLY in the query language
+  (`QUERY_NODE_META_PROPERTIES`) — never in `QUERY_META_PROPERTIES`, which aggregation rules and
+  mirror-terminal checks share, so tiers can never feed a computed value.
 - **Surfaces**: the Entity graph and Entity hierarchy canvases share ONE query bar (one stored
   draft, one applied query, one open state per account — stored under
   `entityQuery.account.<userId>.{text,applied,open}`); the Entities list keeps its pills only.
@@ -57,7 +61,7 @@ Decisions, all taken 2026-09-12 and pinned here:
 - Keywords are case-insensitive (`match`, `MATCH`). `IDENT = [A-Za-z_][A-Za-z0-9_]*`; any other
   name — one with `-`, `.`, `:`, `/`, a leading digit — is backticked: `` `web-service` ``
   (a backtick inside is doubled). Backticked names are byte-exact.
-- `META = $IDENT` — accepted only after `.` (`v.$title`), as a property-map key
+- `META = $IDENT` — accepted only after `.` (`v.$title`, `r.$tier`), as a property-map key
   (`{$identifier: 'x'}`), or as an edge type (`$team`).
 - Strings `'…'` or `"…"` with the escapes `\\ \' \" \n \t \r \uXXXX` (exactly four hex digits).
 - Numbers: integers and decimals; a `-` immediately before a number in operand position is a
@@ -88,7 +92,7 @@ notExpr        := NOT notExpr | predicate
 predicate      := '(' expression ')' | operand comparison?                    -- bare operand: TRUE iff JSON true
 comparison     := ('=' | '<>' | '!=' | '<' | '<=' | '>' | '>=') operand | IN operand | CONTAINS operand
                 | STARTS WITH operand | ENDS WITH operand | IS NULL | IS NOT NULL
-operand        := variable '.' propertyKey | literal
+operand        := variable '.' propertyKey | literal              -- an EDGE variable's only operand is r.$tier (single-hop)
 propertyKey    := name | META
 literal        := STRING | '-'? NUMBER | TRUE | FALSE | NULL | '[' (literal (',' literal)*)? ']'
 returnClause   := RETURN DISTINCT? ('*' | variable (',' variable)*)            -- DISTINCT accepted as a no-op
@@ -119,7 +123,9 @@ MATCH (a:api) OPTIONAL MATCH (a)<-[:provides_api]-(s:service) RETURN a, s LIMIT 
 | projections, `AS`, aggregates in RETURN | `RETURN yields entities only — list variables or use *` |
 | a plain `MATCH` after an `OPTIONAL MATCH` | `a plain MATCH after OPTIONAL MATCH is not supported — put every plain MATCH first` |
 | regex `=~` | a `SYNTAX` error at the operator (use `CONTAINS` / `STARTS WITH` / `ENDS WITH`) |
-| an edge variable in WHERE / RETURN | `RELATIONSHIP_VARIABLE_REFERENCE` — `relations carry no properties in Toadie` |
+| an edge variable in RETURN | `RELATIONSHIP_VARIABLE_REFERENCE` — `relations carry no properties in Toadie` |
+| an edge variable in WHERE with any key but `$tier` (`r.name`, `r.$identifier`, `r.$fillTier`) | `RELATIONSHIP_VARIABLE_REFERENCE` — `only exposes $tier — relations carry no other properties in Toadie` (2.18.0) |
+| `r.$tier` on a variable-length edge (`-[r*1..3]->`) | `RELATIONSHIP_VARIABLE_REFERENCE` — `spans a variable-length hop — needs a single-hop relationship` (2.18.0) |
 
 Every reserved word (accepted or rejected) is refused as a variable or property name — backtick
 it if a blueprint really is called `` `order` ``.
@@ -139,6 +145,35 @@ pseudo-edge when it is `$team` (entity → its `_team` entities, the canvases' `
 bare arrow (`-->`, `<--`, `--`) is every declared relation of the source PLUS `$team` — exactly
 what the canvas draws. Direction `IN` resolves the type against the NEIGHBOUR's blueprint;
 `UNDIRECTED` is outgoing ∪ incoming.
+
+**Tier metas (2.18.0).** Tiers are a Toadie-only 1–4 fill-in priority stored beside the blueprint
+document (`.claude/docs/port-data-model.md` "Tiers") and change no logic; the query language reads
+them through three metas, none of which exist for aggregation rules:
+
+- `n.$tier` — the node's BLUEPRINT tier, JSON number 1..4, or null (UNKNOWN in WHERE) when unset.
+- `n.$fillTier` — the highest T in 0..4 such that every tiered property AND relation of the
+  node's blueprint with tier <= T is filled; tiers that carry no field count as satisfied, and it
+  is null when the blueprint has no tiered property or relation at all (untiered is not complete).
+  So `WHERE n.$fillTier < 1` finds entities missing a tier-1 field and `n.$fillTier < 4` every
+  entity that has anything left to fill. A PROPERTY is filled when present and not JSON `null`, a
+  blank/whitespace string, `[]` or `{}` (`false` and `0` ARE filled); a RELATION is filled when its
+  value is a non-blank string or an array with at least one non-blank string element (whether the
+  target resolves is the findings' job, not the tier's). The row's `properties` are decoded LAZILY
+  — only when the blueprint has a tiered property, once per row, under the existing per-row read
+  charge (`QueryRow.fillTier`, `computeFillTier`) — so a `$tier`-only query, or a blueprint with
+  only tiered relations, never touches the document.
+- `r.$tier` — on a SINGLE-hop edge variable (`-[r:owned_by]->`) in WHERE: the tier of the concrete
+  relation key on the SOURCE entity's blueprint (the direction the relation is declared, so an
+  incoming or undirected edge still reads the neighbour's blueprint when it is the source). A
+  hierarchy virtual edge type resolves, per source blueprint, to that blueprint's
+  `hierarchyRelations` relation and reads ITS tier; the `$team` ownership pseudo-edge has no tier
+  (null). It is the ONLY operand an edge variable accepts; an inline property map on an edge
+  (`-[r:x {$tier: 1}]->`) is a `SYNTAX` error — filter in `WHERE` instead. To make it well-defined an edge variable
+  that is tier-referenced binds the traversed relationship: two distinct relation keys from one
+  source to the same target stay TWO edges (`peer` and `alias` to the same target are two
+  bindings, so `WHERE NOT (r.$tier = 2)` can hold for one of them). Queries WITHOUT a
+  tier-referenced edge variable keep the original binding and dedupe — neighbours collapse per row,
+  edge variables hold no slot (`VariableSlots.edges` stays empty).
 
 **`$team` is the EFFECTIVE team as an array** — the stored value for Direct/absent ownership,
 the value computed along `ownership.path` for Inherited ownership (`entities/EntityOwnership.kt`'s
@@ -221,10 +256,11 @@ above), `UNKNOWN_LABEL` (with a `suggestion` from `Suggestions.kt` — case-fold
 max(2, len/3) or a prefix/substring match, alphabetical tie-break, over identifiers AND titles —
 always the IDENTIFIER, and never embedded in `message`: the SPA renders "Did you mean `x`?" once
 from the field), `UNKNOWN_RELATION` (direction-aware, target-aware when both
-ends are labelled), `UNKNOWN_PROPERTY` (the label's `schema.properties` ∪ the seven metas; the
+ends are labelled), `UNKNOWN_PROPERTY` (the label's `schema.properties` ∪ the nine metas; the
 union when unlabelled; suppressed when the label itself is unknown), `UNKNOWN_VARIABLE`,
 `DUPLICATE_VARIABLE` (re-bound with different labels, or as a different kind),
-`RELATIONSHIP_VARIABLE_REFERENCE`, `RANGE_INVALID`, `LIMIT_INVALID`, `DISCONNECTED_PATTERN`,
+`RELATIONSHIP_VARIABLE_REFERENCE` (an edge variable returned, read with any key but `$tier`, or
+`$tier` on a variable-length edge — three messages, one code), `RANGE_INVALID`, `LIMIT_INVALID`, `DISCONNECTED_PATTERN`,
 `TOO_MANY_PATTERNS`, `TOO_MANY_VARIABLES`, `QUERY_TOO_LONG`, and the three positionless
 evaluation refusals `DEADLINE_EXCEEDED`/`BINDING_LIMIT`/`WORKSPACE_TOO_LARGE` (2.4.0 — the
 combined shown-plus-lookup-target row set exceeds the process-wide entity read budget before any
@@ -261,7 +297,7 @@ CodeMirror 6 (`@codemirror/*`, MIT, bundled same-origin — the CSP's `script-sr
 its injected styles ride the existing `style-src 'unsafe-inline'`): `utils/queryLanguage.ts` is
 a `StreamLanguage` tokenizer for highlighting (no Lezer grammar build step), `utils/
 queryCompletion.ts` the schema-aware completion source (blueprints by title after `(v:`, relation
-keys ∪ hierarchy ids ∪ `$team` in an edge body, properties + metas after `v.`, `enum` values after
+keys ∪ hierarchy ids ∪ `$team` in an edge body, properties + the nine metas after `v.` (after a single-hop edge variable only `$tier`, after a variable-length one nothing — `EDGE_METAS`), `enum` values after
 `v.prop =`/`IN [`, clause keywords at clause starts, backticks via `quoteIfNeeded`), `utils/
 queryDiagnostics.ts` the server-diagnostic → lint-marker mapping; `components/QueryEditor.tsx`
 wraps the `EditorView`, `components/EntityQueryBar.tsx` adds Run (Mod+Enter), Clear and the
@@ -290,7 +326,7 @@ closing the query section, switching pages, or reloading can discard that form s
 while an accepted text draft retains the existing shared query-state behavior.
 
 The first version supports one starting blueprint, up to eight AND-combined conditions on stored
-primitive properties or supported scalar metadata, one optional connection step,
+primitive properties or supported scalar metadata (`$identifier`, `$title`, and since 2.18.0 the number metas `$tier` and `$fillTier`), one optional connection step,
 result selection, and an optional entity limit. Available operators follow the selected
 property's primitive type; enum choices preserve their actual primitive values, and
 boolean values are emitted as booleans rather than quoted strings. Computed properties
@@ -356,6 +392,13 @@ At the caps: 10 000 rows → one `SELECT` plus 10 000 `blueprintJson` decodes (~
 unfiltered graph already loads whole blueprints' rows), index build O(rows × relations), BFS ≤ 10
 levels × degree, joins bounded by `MAX_QUERY_BINDINGS` — well inside the 2 s budget;
 `QueryEvaluatorScaleTest` pins correctness at 10k rows under a GENEROUS bound, never a timing.
+**The tier metas add no database work and almost no CPU** (2.18.0): `$tier` is a field read off the
+blueprint; `$fillTier` is memoized per row and decodes `properties` only for a blueprint with a
+tiered property (the per-row read charge already covers it). Every single-hop traversal now wraps
+its neighbours in a small `Hop` (a per-hop allocation, even for queries that never mention a
+tier); only a tier-referenced edge variable additionally keeps the `EdgeRef` and skips the
+dedupe by row, and that fan-out is still bounded by `MAX_QUERY_BINDINGS` after every produced row.
+
 **No snapshot cache in 2.0.0.** The documented trigger for adding one: a measured p95 above
 ~500 ms for `GET …/graph?query=` on the real workspace where the DB read + decode dominates →
 a version-stamped per-instance cache keyed on `(count, max(updated_at))` of the active rows.
@@ -372,7 +415,14 @@ memory admission gate, evaluated ONCE per read before any row is materialized, o
 
 Pure, no Docker: `QueryLexerTest`, `QueryParserTest` (one case per production, EVERY rejection
 message, every cap), `QueryValidatorTest` (each code with position + suggestion), `SuggestionsTest`,
-`QueryValuesTest` (the Kleene table, mixed types, `IN` both ways, `1 = 1.0`), `QueryEvaluatorTest`
+`QueryValuesTest` (the Kleene table, mixed types, `IN` both ways, `1 = 1.0`),
+`QueryTiersTest` (2.18.0 — the filled-property and filled-relation tables, the `$fillTier` matrix:
+untiered → null, empty tier-1 → 0, only tier-2 empty → 1, all filled → 4, and the lazy
+`properties` provider), `QueryTierEvaluatorTest` (`$tier`/`$fillTier`/`r.$tier` end to end: a
+throwing-properties row proving laziness, two relation keys to one target binding separately, a
+hierarchy virtual edge across blueprints, `$team` → UNKNOWN, every direction and anchor side,
+unmatched OPTIONAL), the tier cases in `QueryValidatorTest` and `EntityQueryRouteTest`, and
+`AggregationQueryTest` pinning `$tier`/`$fillTier` as ABSENT in an aggregation rule, `QueryEvaluatorTest`
 (direction, undirected, bare arrow incl. `$team`, `*` bounds incl. `*0..` and the shortest-level
 case, hierarchy virtual edges across two blueprints with DIFFERENT keys, ownership incl. an
 Inherited effective team, inline props, WHERE operators, joins, OPTIONAL null-keeping incl. a

@@ -400,7 +400,8 @@ by both lazy pages): `utils/queryLanguage.ts#cypherStream` is a `StreamLanguage`
 Lezer grammar build step) mapped to highlight tags; `utils/queryCompletion.ts#queryCompletions`
 is a PURE, best-effort completion source over the text before the cursor — blueprints by title
 after `(v:`/`|`, the left node's relation keys ∪ hierarchy ids ∪ `$team` in an edge body,
-properties + the seven `$` metas after `v.`, a property's `enum` values after `v.prop =`/`IN [`,
+properties + the nine `$` metas after `v.` (after an edge variable only `$tier`, single-hop edges only),
+a property's `enum` values after `v.prop =`/`IN [`,
 clause keywords at clause starts, every name through `quoteIfNeeded` (bracket scanning skips
 quoted runs, so a `(` inside a string is text); `toLintDiagnostics` maps 1-based/end-exclusive
 server positions to clamped offsets (positionless → the whole doc). External `value` changes are

@@ -74,6 +74,23 @@ const val OWNERSHIP_EDGE_TYPE = "\$team"
 val QUERY_META_PROPERTIES: Set<String> =
     setOf("\$identifier", "\$title", "\$blueprint", "\$team", "\$icon", "\$createdAt", "\$updatedAt")
 
+/** The blueprint tier meta (`n.$tier`, and `r.$tier` on a single-hop relationship variable) — 2.18.0. */
+const val TIER_META = "\$tier"
+
+/** The highest fully filled tier meta (`n.$fillTier`) — 2.18.0. */
+const val FILL_TIER_META = "\$fillTier"
+
+/**
+ * The two fill-in tier metas (2.18.0, `.claude/docs/entity-query-language.md`). They are QUERY-ONLY
+ * and therefore deliberately NOT part of [QUERY_META_PROPERTIES]: that set is shared with
+ * aggregation rules and mirror-terminal checks (`entities/AggregationQuery.kt`,
+ * `entities/EntityErrors.kt`), and tiers must never feed a computed value.
+ */
+val QUERY_TIER_META_PROPERTIES: Set<String> = setOf(TIER_META, FILL_TIER_META)
+
+/** Every meta a NODE operand or inline map may address: the seven shared metas plus the two tier metas. */
+val QUERY_NODE_META_PROPERTIES: Set<String> = QUERY_META_PROPERTIES + QUERY_TIER_META_PROPERTIES
+
 /**
  * Stable diagnostic codes — the wire contract the SPA switches on. Every code is an ERROR:
  * a query is either accepted whole or refused, the strict posture of every registry check.
@@ -91,7 +108,11 @@ object QueryDiagnosticCodes {
     const val UNKNOWN_VARIABLE = "UNKNOWN_VARIABLE"
     const val DUPLICATE_VARIABLE = "DUPLICATE_VARIABLE"
 
-    /** An edge variable used in WHERE/RETURN — relations carry no properties in Toadie. */
+    /**
+     * An edge variable used where it is not allowed: in RETURN, with any key other than `$tier`,
+     * or `r.$tier` on a variable-length edge (2.18.0 — `r.$tier` on a SINGLE-hop edge variable
+     * is the one accepted use; relations carry no other properties in Toadie).
+     */
     const val RELATIONSHIP_VARIABLE_REFERENCE = "RELATIONSHIP_VARIABLE_REFERENCE"
     const val RANGE_INVALID = "RANGE_INVALID"
     const val LIMIT_INVALID = "LIMIT_INVALID"

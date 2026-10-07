@@ -108,11 +108,13 @@ describe("queryCompletions", () => {
     expect(result?.options.map((o) => o.label)).toEqual(["depends_on"]);
   });
 
-  test("property: after 'v.' suggests the declared label's properties plus the seven metas", () => {
+  test("property: after 'v.' suggests the declared label's properties plus the nine metas", () => {
     const result = queryCompletions("MATCH (a:service) WHERE a.", schema);
     expect(result?.from).toBe("MATCH (a:service) WHERE a.".length);
     const labels = result?.options.map((o) => o.label);
-    expect(labels).toEqual(["lifecycle", "name", "$identifier", "$title", "$blueprint", "$team", "$icon", "$createdAt", "$updatedAt"]);
+    expect(labels).toEqual([
+      "lifecycle", "name", "$identifier", "$title", "$blueprint", "$team", "$icon", "$createdAt", "$updatedAt", "$tier", "$fillTier",
+    ]);
   });
 
   test("property: filters by the partial word after the dot", () => {
@@ -120,9 +122,25 @@ describe("queryCompletions", () => {
     expect(result?.options).toEqual([{ label: "lifecycle", detail: undefined, apply: "lifecycle" }]);
   });
 
-  test("property: an unresolved variable falls back to the seven metas only", () => {
+  test("property: an unresolved variable falls back to the nine metas only", () => {
     const result = queryCompletions("MATCH (a) WHERE a.", schema);
-    expect(result?.options.map((o) => o.label)).toEqual(["$identifier", "$title", "$blueprint", "$team", "$icon", "$createdAt", "$updatedAt"]);
+    expect(result?.options.map((o) => o.label)).toEqual([
+      "$identifier", "$title", "$blueprint", "$team", "$icon", "$createdAt", "$updatedAt", "$tier", "$fillTier",
+    ]);
+  });
+
+  test("property: after a single-hop edge variable offers only $tier", () => {
+    const text = "MATCH (a:service)-[r:depends_on]->(b) WHERE r.";
+    const result = queryCompletions(text, schema);
+    expect(result?.from).toBe(text.length);
+    expect(result?.options.map((o) => o.label)).toEqual(["$tier"]);
+    expect(queryCompletions("MATCH (a)-[r]->(b) WHERE r.ti", schema)?.options.map((o) => o.label)).toEqual(["$tier"]);
+    expect(queryCompletions("MATCH (a)-[r]->(b) WHERE r.fi", schema)?.options).toEqual([]);
+  });
+
+  test("property: a variable-length edge variable offers nothing", () => {
+    const result = queryCompletions("MATCH (a)-[r:depends_on*1..3]->(b) WHERE r.", schema);
+    expect(result?.options).toEqual([]);
   });
 
   test("enum literal: after 'v.prop =' suggests the property's enum values as string literals", () => {

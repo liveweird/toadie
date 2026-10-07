@@ -25,12 +25,17 @@ data class QuerySchema(val blueprints: Map<String, GraphBlueprint>, val hierarch
     val foldedHierarchies: Set<String> by lazy { hierarchies.map { it.lowercase() }.toSet() }
 }
 
-/** Node-variable name -> slot index, assigned in first-appearance order — what the evaluator binds against. */
-internal data class VariableSlots(val nodes: Map<String, Int>)
+/**
+ * Node-variable name -> slot index, assigned in first-appearance order — what the evaluator binds
+ * against. [edges] (2.18.0) holds ONLY the single-hop edge variables a WHERE reads as `r.$tier`:
+ * every other edge variable has no slot, so a query without a tier-referenced edge variable binds
+ * and dedupes exactly as before.
+ */
+internal data class VariableSlots(val nodes: Map<String, Int>, val edges: Map<String, Int> = emptyMap())
 
 private enum class VariableKind { NODE, EDGE }
 
-private data class VariableBinding(val kind: VariableKind, val labels: List<String>)
+private data class VariableBinding(val kind: VariableKind, val labels: List<String>, val variableLength: Boolean = false)
 
 /** Every finding [validateEntityQuery] can report, discarding the [VariableSlots] a caller doesn't need. */
 fun validateEntityQuery(query: Query, schema: QuerySchema): List<QueryDiagnostic> = validateAndBind(query, schema).first
@@ -46,6 +51,7 @@ internal fun validateAndBind(query: Query, schema: QuerySchema): Pair<List<Query
 private class QueryValidation(private val schema: QuerySchema) {
     private val diagnostics = mutableListOf<QueryDiagnostic>()
     private val nodeSlots = LinkedHashMap<String, Int>()
+    private val edgeSlots = LinkedHashMap<String, Int>()
     private val bindings = mutableMapOf<String, VariableBinding>()
     private val boundNodeVars = mutableSetOf<String>()
 
@@ -80,7 +86,7 @@ private class QueryValidation(private val schema: QuerySchema) {
         // Source order regardless of which pass found what (the disconnection check runs after
         // every plain clause, so its span can precede a later clause's WHERE finding).
         val ordered = diagnostics.sortedWith(compareBy({ it.line ?: Int.MAX_VALUE }, { it.column ?: Int.MAX_VALUE }))
-        return ordered to VariableSlots(nodeSlots.toMap())
+        return ordered to VariableSlots(nodeSlots.toMap(), edgeSlots.toMap())
     }
 
     private fun checkCaps(query: Query) {
@@ -124,13 +130,13 @@ private class QueryValidation(private val schema: QuerySchema) {
     private fun processEdge(edge: EdgePattern, left: NodePattern, right: NodePattern) {
         validateEdge(edge, left, right)
         val variable = edge.variable ?: return
-        trackVariable(variable, VariableKind.EDGE, emptyList(), edge.span)
+        trackVariable(variable, VariableKind.EDGE, emptyList(), edge.span, variableLength = edge.range != null)
     }
 
-    private fun trackVariable(name: String, kind: VariableKind, labels: List<String>, span: Span) {
+    private fun trackVariable(name: String, kind: VariableKind, labels: List<String>, span: Span, variableLength: Boolean = false) {
         val existing = bindings[name]
         if (existing == null) {
-            bindings[name] = VariableBinding(kind, labels)
+            bindings[name] = VariableBinding(kind, labels, variableLength)
             return
         }
         if (existing.kind != kind) {
@@ -184,7 +190,7 @@ private class QueryValidation(private val schema: QuerySchema) {
     }
 
     private fun validatePropertyKey(key: String, labels: List<String>, span: Span) {
-        if (key in QUERY_META_PROPERTIES) return
+        if (key in QUERY_NODE_META_PROPERTIES) return
         // A label that failed to resolve already carries its own UNKNOWN_LABEL — skip the
         // property check rather than piling on a guaranteed-wrong "unknown property" too.
         val candidates = resolvedBlueprintsFor(labels)?.flatMap { it.definition.schema.properties.keys }?.toSet() ?: return
@@ -193,7 +199,7 @@ private class QueryValidation(private val schema: QuerySchema) {
                 QueryDiagnosticCodes.UNKNOWN_PROPERTY,
                 "Unknown property `$key`",
                 span,
-                suggestion = suggest(key, candidates + QUERY_META_PROPERTIES),
+                suggestion = suggest(key, candidates + QUERY_NODE_META_PROPERTIES),
             )
         }
     }
@@ -319,12 +325,29 @@ private class QueryValidation(private val schema: QuerySchema) {
                 operand.span,
                 suggestion = suggest(operand.variable, bindings.keys),
             )
-            binding.kind == VariableKind.EDGE -> diagnostics += diag(
-                QueryDiagnosticCodes.RELATIONSHIP_VARIABLE_REFERENCE,
-                "Relationship variable `${operand.variable}` cannot be used — relations carry no properties in Toadie",
-                operand.span,
-            )
+            binding.kind == VariableKind.EDGE -> validateEdgeOperand(operand, binding)
             else -> validatePropertyKey(operand.key, binding.labels, operand.span)
+        }
+    }
+
+    /**
+     * An edge variable exposes exactly one key, `$tier`, and only on a SINGLE-hop edge (2.18.0):
+     * a variable-length edge binds no single relationship. The accepted use assigns the variable
+     * its evaluator slot; every refusal reuses RELATIONSHIP_VARIABLE_REFERENCE.
+     */
+    private fun validateEdgeOperand(operand: Operand.Property, binding: VariableBinding) {
+        val name = operand.variable
+        val message = when {
+            operand.key != TIER_META ->
+                "Relationship variable `$name` only exposes `$TIER_META` — relations carry no other properties in Toadie"
+            binding.variableLength ->
+                "Relationship variable `$name` spans a variable-length hop — `$name.$TIER_META` needs a single-hop relationship"
+            else -> null
+        }
+        if (message == null) {
+            edgeSlots.putIfAbsent(name, edgeSlots.size)
+        } else {
+            diagnostics += diag(QueryDiagnosticCodes.RELATIONSHIP_VARIABLE_REFERENCE, message, operand.span)
         }
     }
 

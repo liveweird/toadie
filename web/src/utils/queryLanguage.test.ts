@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { StringStream } from "@codemirror/language";
-import { cypherStream, quoteIfNeeded, stringLiteral, type CypherStreamState } from "./queryLanguage";
+import { cypherStream, EDGE_METAS, METAS, quoteIfNeeded, stringLiteral, type CypherStreamState } from "./queryLanguage";
 
 /** Tokenizes one line through the real `StreamParser`, returning `{text, tag}` per token
  *  (`tag` is `cypherStream.token`'s own return value, i.e. the token-table key). */
@@ -56,6 +56,14 @@ describe("cypherStream", () => {
       { text: ".", tag: "punctuation" },
       { text: "$title", tag: "meta" },
     ]);
+  });
+
+  test("tokenizes the tier metas, and lists nine node metas but only $tier on an edge", () => {
+    expect(tokenize("n.$fillTier")[2]).toEqual({ text: "$fillTier", tag: "meta" });
+    expect(tokenize("r.$tier")[2]).toEqual({ text: "$tier", tag: "meta" });
+    expect([...METAS]).toHaveLength(9);
+    expect([...METAS.slice(-2)]).toEqual(["tier", "fillTier"]);
+    expect([...EDGE_METAS]).toEqual(["tier"]);
   });
 
   test("tokenizes $team as a meta (edge type position)", () => {

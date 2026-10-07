@@ -553,6 +553,10 @@ after the entity hierarchies):
   clears them (ordinary full-replace). Free on the `_team`/`_user` system blueprints. Surfaced
   by `GET` blueprint, the MCP blueprint tools and the GraphQL `Blueprint.tiers: JSON`; the SPA
   carries them on the form rows (a rename carries, a delete drops) and in the JSON export.
+  The entity query language reads them through the query-only metas `n.$tier` (the blueprint
+  tier), `n.$fillTier` (the highest tier an entity has fully filled) and `r.$tier` (a relation's
+  tier on a single-hop edge variable) — see `.claude/docs/entity-query-language.md` "Tier metas";
+  aggregation rules and mirror terminals never see them.
 
 - **Entity graph** — `GET /api/v1/entities/graph` renders entities and their relations together
   (`entities/EntityGraph.kt`, the `catalog/Graph.kt` counterpart one level down). Each node's id
@@ -585,7 +589,9 @@ after the entity hierarchies):
   child → parent edge each blueprint's `hierarchyRelations` names for that hierarchy) or the
   `$team` ownership pseudo-edge (entity → its EFFECTIVE `_team`), and whose `WHERE` sees the
   STORED `properties` plus the seven meta-properties `$identifier`/`$title`/`$blueprint`/`$team`/
-  `$icon`/`$createdAt`/`$updatedAt` — never a mirror/calculation/aggregation value (those are
+  `$icon`/`$createdAt`/`$updatedAt` and, since 2.18.0, the query-only tier metas `$tier`/
+  `$fillTier` (and `r.$tier` on a single-hop edge variable — the "Tiers" entry above) — never a
+  mirror/calculation/aggregation value (those are
   computed per response and never stored, so they are unsearchable everywhere). Nothing about the
   stored Port document or the wire shapes changes: a query is a filter over instances, not a model
   feature, and Port has no equivalent.

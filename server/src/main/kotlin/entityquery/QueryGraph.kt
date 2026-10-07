@@ -58,6 +58,13 @@ class QueryRow internal constructor(
         )
     }
 
+    /**
+     * `n.$fillTier` (2.18.0, `QueryTiers.kt`): lazy and memoized. The row's `properties` are decoded
+     * (and charged under the read budget) only when the blueprint has a tiered property — a
+     * blueprint with only tiered relations, or none, never touches the document.
+     */
+    val fillTier: Int? by lazy { computeFillTier(blueprint.tiers, row.relations) { row.properties } }
+
     /** Identity is [key] alone — the evaluator dedupes/joins on it regardless of which cached instance it holds. */
     override fun equals(other: Any?): Boolean = other is QueryRow && other.key == key
 

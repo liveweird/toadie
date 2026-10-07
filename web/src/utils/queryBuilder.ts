@@ -76,6 +76,8 @@ export type QueryBuilderResult = { query: string; errors: QueryBuilderIssue[] };
 const META_PROPERTIES: QueryBuilderProperty[] = [
   { id: "$identifier", title: "$identifier", source: "meta", type: "string", enumValues: [] },
   { id: "$title", title: "$title", source: "meta", type: "string", enumValues: [] },
+  { id: "$tier", title: "$tier", source: "meta", type: "number", enumValues: [] },
+  { id: "$fillTier", title: "$fillTier", source: "meta", type: "number", enumValues: [] },
 ];
 
 const STRING_OPERATORS: QueryBuilderOperator[] = [

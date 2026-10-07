@@ -305,7 +305,9 @@ ch.nokillswit
 │                       workspace's IndexedRows: per-blueprint/incoming/ownership indexes built once
 │                       or lazily, `$team` = the EFFECTIVE team, byte-exact), QueryBudget.kt (the
 │                       cooperative deadline observed at EVERY checkpoint + binding cap; per-candidate
-│                       work capped by the string-operand ceilings), QueryEvaluator.kt (`InMemoryQueryExecutor`
+│                       work capped by the string-operand ceilings), QueryTiers.kt (2.18.0 — the
+│                       query-only `$tier`/`$fillTier`/`r.$tier` metas: filled tables, lazy
+│                       `computeFillTier`, `EdgeRef`, `nodeValue`), QueryEvaluator.kt (`InMemoryQueryExecutor`
 │                       behind the `QueryExecutor` interface — anchored joins, level-set BFS for
 │                       `*n..m`, trailing OPTIONAL MATCH, RETURN as a node SET, LIMIT after dedupe).
 │                       Pure — no database, no Ktor; consumed by entities/EntityService.graph
