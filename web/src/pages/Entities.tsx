@@ -21,12 +21,16 @@ import SortHeader from "../components/SortHeader";
 import SyncEntityModal from "../components/SyncEntityModal";
 import SyncStateText, { syncStateSource } from "../components/SyncStateText";
 import TableLoadingRow from "../components/TableLoadingRow";
+import TierDot from "../components/TierDot";
+import { renderTierOption } from "../components/renderTierOption";
+import TierFocusSelect from "../components/TierFocusSelect";
 import { useBlueprintParam, useQParam, useTeamParam } from "../hooks/useBlueprintParam";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useEntities } from "../hooks/useEntities";
 import { useEntityOptions } from "../hooks/useEntityOptions";
 import { usePagedSort } from "../hooks/usePagedSort";
+import { useTierFocus } from "../hooks/useTierFocus";
 import { previewComputedColumns, type ComputedDefinition } from "../utils/computedProperties";
 import { entityDeleteErrorMessage, teamValuesOf } from "../utils/entityForm";
 import { toSyncTarget, type EntitySyncTarget } from "../utils/entitySync";
@@ -36,6 +40,7 @@ import { ontologyImportPath } from "../utils/ontologyLinks";
 import { formatDateTime, relativeTimeAgo } from "../utils/relativeTime";
 import { loadErrorMessage } from "../utils/saveError";
 import { TEAM_BLUEPRINT } from "../utils/systemBlueprints";
+import { blueprintTier, blueprintTierLookup, byTier, propertyTier, withinFocus, type Tier } from "../utils/tiers";
 
 const SORT_FIELDS = ["identifier", "title", "updatedAt", "lastSyncedAt"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
@@ -53,7 +58,7 @@ const OPERATIONS_COLUMN_WIDTH = 48;
 // since its output shape isn't limited to the three schema scalar types). `enum` (schema only)
 // drives the type-aware preview width below (2.8.1).
 type PreviewColumn =
-  | { kind: "schema"; id: string; label: string; type: "string" | "number" | "boolean"; enum: boolean }
+  | { kind: "schema"; id: string; label: string; type: "string" | "number" | "boolean"; enum: boolean; tier: Tier | null }
   | { kind: "computed"; definition: ComputedDefinition };
 
 /** Type-aware preview column width (2.8.1 — the compact-table pass): booleans and numbers are
@@ -89,6 +94,25 @@ function previewColumnLabel(column: PreviewColumn): string {
   return column.kind === "schema" ? column.label : column.definition.title;
 }
 
+/** A preview column's fill-in tier (2.18.0): schema properties carry theirs, computed ones
+ *  never do (nobody fills them in). */
+function previewColumnTier(column: PreviewColumn): Tier | null {
+  return column.kind === "schema" ? column.tier : null;
+}
+
+/** The preview columns of [blueprint] (2.18.0): ordered by property tier (tiered ascending,
+ *  untiered last, otherwise the schema order), then cut to [max]. An active Focus first
+ *  narrows the schema columns to the in-focus properties and drops the computed ones — they
+ *  carry no tier, so the Focus (which excludes untiered items) leaves them out. */
+function previewColumnsOf(blueprint: Blueprint, focus: Tier | null, max: number): PreviewColumn[] {
+  const schema = schemaPreviewColumns(blueprint).filter((column) => withinFocus(column.tier, focus));
+  const computed =
+    focus === null
+      ? previewComputedColumns(blueprint).map((definition) => ({ kind: "computed" as const, definition }))
+      : [];
+  return [...schema, ...computed].sort((a, b) => byTier(previewColumnTier(a), previewColumnTier(b))).slice(0, max);
+}
+
 /** A schema-property preview cell's value — booleans as a Badge, everything else as truncated
  *  text, a dash when unset (the pre-v1.27.0 behavior, unchanged). Computed columns render
  *  through `EntityComputedValue` directly at the call site instead, since "Not available" reads
@@ -109,7 +133,7 @@ function schemaPreviewCell(value: unknown, type: "string" | "number" | "boolean"
   );
 }
 
-function schemaPreviewColumns(blueprint: Blueprint): PreviewColumn[] {
+function schemaPreviewColumns(blueprint: Blueprint): Extract<PreviewColumn, { kind: "schema" }>[] {
   return Object.entries(blueprint.schema.properties)
     .filter(([, def]) => def.type === "string" || def.type === "number" || def.type === "boolean")
     .map(([id, def]) => ({
@@ -118,6 +142,7 @@ function schemaPreviewColumns(blueprint: Blueprint): PreviewColumn[] {
       label: def.title ?? id,
       type: def.type as "string" | "number" | "boolean",
       enum: Array.isArray(def.enum),
+      tier: propertyTier(blueprint, id),
     }));
 }
 
@@ -147,6 +172,7 @@ export default function Entities() {
   const { options: teamOptions } = useEntityOptions(TEAM_BLUEPRINT);
   const selectedBlueprint = blueprint ? blueprints.find((b) => b.identifier === blueprint) : undefined;
   const { q, setQ } = useQParam();
+  const [focus, setFocus] = useTierFocus("entities.filter.focusTier");
   const [syncTarget, setSyncTarget] = useState<EntitySyncTarget | null>(null);
 
   const { page, setPage, pageSize, setPageSize, sortField, sortDir, sortParam, toggleSort } =
@@ -172,11 +198,15 @@ export default function Entities() {
   });
 
   const previewColumns: PreviewColumn[] = selectedBlueprint
-    ? [
-        ...schemaPreviewColumns(selectedBlueprint),
-        ...previewComputedColumns(selectedBlueprint).map((definition) => ({ kind: "computed" as const, definition })),
-      ].slice(0, MAX_COLUMN_PROPERTIES)
+    ? previewColumnsOf(selectedBlueprint, focus, MAX_COLUMN_PROPERTIES)
     : [];
+
+  // The Blueprint Select narrows to the Focus (2.18.0), but the current pick always stays an
+  // option — an out-of-focus selection must keep displaying instead of going blank.
+  const tierOfBlueprint = blueprintTierLookup(blueprints);
+  const blueprintOptions = blueprints
+    .filter((b) => b.identifier === blueprint || withinFocus(blueprintTier(b), focus))
+    .map((b) => ({ value: b.identifier, label: b.identifier }));
 
   const total = data?.total ?? 0;
   const columnCount = 2 + previewColumns.length + 3;
@@ -217,14 +247,15 @@ export default function Entities() {
         toolbar={
           <FilterPanel
             storageKey="entities"
-            activeFilterCount={(team ? 1 : 0) + (q ? 1 : 0)}
+            activeFilterCount={(team ? 1 : 0) + (q ? 1 : 0) + (focus !== null ? 1 : 0)}
             aside={
               <Select
                 aria-label={t("entities.field.blueprint")}
                 placeholder={t("entities.pickBlueprint")}
-                data={blueprints.map((b) => ({ value: b.identifier, label: b.identifier }))}
+                data={blueprintOptions}
                 value={blueprint}
                 onChange={setBlueprint}
+                renderOption={renderTierOption(tierOfBlueprint)}
                 searchable
                 clearable
                 w={280}
@@ -242,6 +273,7 @@ export default function Entities() {
               clearButtonProps={{ "aria-label": t("entities.filter.clearTeam") }}
               w={240}
             />
+            <TierFocusSelect value={focus} onChange={setFocus} />
             <ClearableTextInput label={t("entities.filter.q")} value={q} onChange={setQ} clearLabel={t("entities.filter.clearQ")} />
           </FilterPanel>
         }
@@ -273,7 +305,14 @@ export default function Entities() {
                   w={previewColumnWidth(column)}
                   style={{ overflowWrap: "anywhere", whiteSpace: "normal" }}
                 >
-                  {previewColumnLabel(column)}
+                  {previewColumnTier(column) === null ? (
+                    previewColumnLabel(column)
+                  ) : (
+                    <Group gap={6} wrap="nowrap">
+                      <TierDot tier={previewColumnTier(column)} />
+                      <span>{previewColumnLabel(column)}</span>
+                    </Group>
+                  )}
                 </Table.Th>
               ))}
               <SortHeader

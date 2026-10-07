@@ -5,6 +5,7 @@ import type { FormErrors } from "@mantine/form";
 import type { ParseKeys } from "i18next";
 import { IconChevronDown, IconChevronRight, IconChevronsDown, IconChevronsUp, IconPlus } from "@tabler/icons-react";
 import RowControls from "./RowControls";
+import TierDot from "./TierDot";
 import classes from "../theme.module.css";
 
 /** A drafts row shape every family shares: the stable local `key` (React identity across
@@ -71,6 +72,7 @@ export default function EditorRowList<T extends EditorRowListRow>({
   badge,
   isRequired,
   isLocked,
+  tier,
   renderBody,
   onAdd,
   addLabel,
@@ -93,6 +95,9 @@ export default function EditorRowList<T extends EditorRowListRow>({
   /** A system-seeded row (Phase 4, v1.26.0): shows the "Seeded" badge and disables Remove;
    *  move stays allowed. Absent for families with no locking concept. */
   isLocked?: (row: T) => boolean;
+  /** The row's fill-in tier (2.18.0): its dot shows in the always-visible header, before the
+   *  identifier. Absent for the computed families, which carry no tier. */
+  tier?: (row: T) => number | null;
   renderBody: (row: T, index: number) => ReactNode;
   onAdd: () => void;
   addLabel: string;
@@ -184,6 +189,7 @@ export default function EditorRowList<T extends EditorRowListRow>({
                   onClick={() => expansion.toggle(rowId)}
                 >
                   {expanded ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+                  {tier && <TierDot tier={tier(row)} />}
                   <Text ff="monospace" size="sm" fw={500} style={{ flexShrink: 0 }}>
                     {displayName}
                   </Text>

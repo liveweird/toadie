@@ -16,6 +16,7 @@ import {
 import { type UseFormReturnType } from "@mantine/form";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import TierSelect from "./TierSelect";
 import {
   ARRAY_ITEM_TYPES,
   DATE_FORMATS,
@@ -382,6 +383,7 @@ export default function BlueprintPropertyRow({
   locked?: boolean;
 }) {
   const { t } = useTranslation();
+  const row = form.values.properties[index];
   return (
     <Stack gap="sm">
       <Group align="flex-start" gap="sm" wrap="wrap">
@@ -406,6 +408,13 @@ export default function BlueprintPropertyRow({
           maxLength={MAX_TITLE_LENGTH}
           required
           {...form.getInputProps(`properties.${index}.title`)}
+        />
+        <TierSelect
+          label={t("common.tier.label")}
+          ariaLabel={t("common.tier.selectAria", { id: row.id.trim() || t("blueprints.rows.new.properties") })}
+          value={row.tier}
+          onChange={(tier) => form.setFieldValue(`properties.${index}.tier`, tier)}
+          w={110}
         />
         <Switch
           mt={26}

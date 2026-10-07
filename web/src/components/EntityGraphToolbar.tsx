@@ -103,6 +103,8 @@ export default function EntityGraphToolbar({
             active={filters.blueprintPills.active}
             hidden={filters.blueprintPills.hidden}
             onChange={filters.blueprintPills.setHidden}
+            tierOf={filters.blueprintPills.tierOf}
+            focus={filters.blueprintPills.focus}
           />
           {pills}
         </>

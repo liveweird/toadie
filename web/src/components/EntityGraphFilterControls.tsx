@@ -4,6 +4,7 @@ import { useEntityOptions } from "../hooks/useEntityOptions";
 import type { EntityGraphFilterControlsState } from "../hooks/useEntityGraphFilterState";
 import { TEAM_BLUEPRINT } from "../utils/systemBlueprints";
 import ClearableTextInput from "./ClearableTextInput";
+import TierFocusSelect from "./TierFocusSelect";
 
 /**
  * The Entity graph/hierarchy pages' filter controls (v1.25.0, + the Phase 4 Team select,
@@ -11,8 +12,9 @@ import ClearableTextInput from "./ClearableTextInput";
  * Team `Select` fed by `useEntityOptions(TEAM_BLUEPRINT)` (the `_team` system blueprint's own
  * entities, labelled `identifier — title`; a stored value the pool doesn't currently carry is
  * appended so it keeps displaying — the registry-Select idiom). The blueprint slot moved OUT of
- * this panel to the always-visible `BlueprintPills` row (`EntityGraphToolbar.tsx`). Rendered
- * inside the Filters section via `EntityGraphToolbar.tsx`.
+ * this panel to the always-visible `BlueprintPills` row (`EntityGraphToolbar.tsx`). Since
+ * 2.18.0 the tier Focus (`TierFocusSelect`, "up to tier N") sits beside them; the hook folds it
+ * into the visible blueprints. Rendered inside the Filters section via `EntityGraphToolbar.tsx`.
  */
 export default function EntityGraphFilterControls({
   controls,
@@ -48,6 +50,7 @@ export default function EntityGraphFilterControls({
         clearButtonProps={{ "aria-label": t("entityGraph.filter.clearTeam") }}
         w={240}
       />
+      <TierFocusSelect value={controls.focus} onChange={controls.setFocus} />
     </>
   );
 }

@@ -2,6 +2,7 @@
   "title": "Blueprints",
   "intro": "User-definable entity kinds (Port compatibility, phase 1): typed properties, relations, mirror/calculation/aggregation properties and ownership. Administrators define blueprints; everyone can read them.",
   "empty": "No blueprints defined yet",
+  "emptyFocus": "No blueprints are tiered inside this focus.",
   "loadFailed": "Could not load the blueprints",
   "newBlueprint": "New blueprint",
   "viewEntities": "Entities",
@@ -105,6 +106,7 @@
     "clearAria": "Clear {{hierarchy}}"
   },
   "hint": {
+    "fillTier": "How early this blueprint is filled in, 1 (first) to 4 — a visual hint only; it changes no validation.",
     "icon": "The NAME of a Port icon (e.g. Microservice) — a free string, not a picture.",
     "pattern": "A regular expression the value must match.",
     "enumValues": "The closed list a property may pick from — press Enter to add each value.",

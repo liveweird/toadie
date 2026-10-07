@@ -22,8 +22,11 @@ import PageHeader from "../components/PageHeader";
 import RowActionsMenu from "../components/RowActionsMenu";
 import SyncBlueprintModal from "../components/SyncBlueprintModal";
 import SyncStateText, { syncStateSource } from "../components/SyncStateText";
+import TierDot from "../components/TierDot";
+import TierFocusSelect from "../components/TierFocusSelect";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
+import { useTierFocus } from "../hooks/useTierFocus";
 import { blueprintDeleteErrorMessage } from "../utils/blueprintForm";
 import { editBlueprintPath, newBlueprintPath } from "../utils/blueprintLinks";
 import { toBlueprintSyncTarget, type BlueprintSyncTarget } from "../utils/blueprintSync";
@@ -31,6 +34,7 @@ import { entitiesPath } from "../utils/entityLinks";
 import { blueprintsExportJson, downloadJson } from "../utils/ontologyExport";
 import { ontologyImportPath } from "../utils/ontologyLinks";
 import { loadErrorMessage } from "../utils/saveError";
+import { blueprintTier, withinFocus } from "../utils/tiers";
 
 /**
  * The blueprint registry (`/blueprints`): everyone gets the read-only list, including the
@@ -39,13 +43,17 @@ import { loadErrorMessage } from "../utils/saveError";
  * Sync from source, disabled without a `sourceUrl` · a divider · Delete, disabled for a system
  * blueprint) — the labels/tags/types registries' pattern, except the editor is a full page
  * (BlueprintEditor) rather than a modal, since a blueprint definition is far larger than one
- * label row. Export stays a header action, unchanged.
+ * label row. Export stays a header action, unchanged. Since 2.18.0 each identifier carries the
+ * blueprint's fill-in `TierDot`, and a persisted Focus ("up to tier N", untiered excluded)
+ * narrows the rows client-side — the export always covers the whole registry.
  */
 export default function Blueprints() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { blueprints, loading, error, loadError } = useBlueprints();
   const [syncTarget, setSyncTarget] = useState<BlueprintSyncTarget | null>(null);
+  const [focus, setFocus] = useTierFocus("blueprints.focusTier");
+  const rows = blueprints.filter((blueprint) => withinFocus(blueprintTier(blueprint), focus));
 
   const remove = useDeleteConfirm<Blueprint>({
     mutationFn: (blueprint) => deleteBlueprint(blueprint.id),
@@ -58,6 +66,7 @@ export default function Blueprints() {
       <PageHeader
         title={t("blueprints.title")}
         description={t("blueprints.intro")}
+        toolbar={<TierFocusSelect value={focus} onChange={setFocus} />}
         actions={
           <Group gap="sm">
             <Button component={RouterLink} to={ontologyImportPath} variant="default" leftSection={<IconFileImport size={16} />}>
@@ -86,8 +95,11 @@ export default function Blueprints() {
           </Alert>
         ) : loading ? (
           <LoadingBlock />
-        ) : blueprints.length === 0 ? (
-          <EmptyState icon={IconSchema} label={t("blueprints.empty")} />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={IconSchema}
+            label={blueprints.length === 0 ? t("blueprints.empty") : t("blueprints.emptyFocus")}
+          />
         ) : (
           <Table.ScrollContainer minWidth={900}>
             <DataTable label={t("blueprints.title")}>
@@ -103,10 +115,11 @@ export default function Blueprints() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {blueprints.map((blueprint) => (
+                {rows.map((blueprint) => (
                   <Table.Tr key={blueprint.id}>
                     <Table.Td>
                       <Group gap="xs" wrap="nowrap">
+                        <TierDot tier={blueprintTier(blueprint)} />
                         <Text size="sm" ff="monospace">
                           {blueprint.identifier}
                         </Text>

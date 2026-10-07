@@ -13,6 +13,8 @@ function controls(overrides: Partial<EntityGraphFilterControlsState> = {}): Enti
     setQ: vi.fn(),
     team: "",
     setTeam: vi.fn(),
+    focus: null,
+    setFocus: vi.fn(),
     ...overrides,
   };
 }
@@ -79,5 +81,24 @@ describe("EntityGraphFilterControls", () => {
 
     await user.click(screen.getByLabelText("Clear team filter"));
     expect(setTeam).toHaveBeenCalledWith("");
+  });
+
+  test("the tier Focus select reports a picked range", async () => {
+    const setFocus = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<EntityGraphFilterControls controls={controls({ setFocus })} />);
+
+    await user.click(screen.getByRole("combobox", { name: "Focus" }));
+    await user.click(await screen.findByRole("option", { name: "Tiers 1–2" }));
+    expect(setFocus).toHaveBeenCalledWith(2);
+  });
+
+  test("clearing the tier Focus calls setFocus with null", async () => {
+    const setFocus = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<EntityGraphFilterControls controls={controls({ focus: 3, setFocus })} />);
+
+    await user.click(screen.getByLabelText("Clear focus"));
+    expect(setFocus).toHaveBeenCalledWith(null);
   });
 });

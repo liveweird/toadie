@@ -1,31 +1,17 @@
-import { useTranslation } from "react-i18next";
 import { Group, type ComboboxItem } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
 import { kindTier } from "../utils/catalogFileForm";
-import classes from "../theme.module.css";
+import TierDot from "./TierDot";
 
 /**
  * The kind's tier (fill-in priority 1–4) as a small circled numeral — a purely VISUAL
  * marker rendered before the kind name everywhere kinds appear. aria-hidden on purpose:
  * pills/badges keep their bare-kind accessible names, and the kind text stays its own
- * text node beside this element. Unknown kinds render nothing.
+ * text node beside this element. Unknown kinds render nothing. The rendering itself is the
+ * shared `TierDot` (the blueprint tiers use the same marker).
  */
 export default function KindTierDot({ kind }: { kind: string }) {
-  const { t } = useTranslation();
-  const tier = kindTier(kind);
-  if (tier === undefined) {
-    return null;
-  }
-  // The numeral is CSS content (::before over data-tier), NOT a text node — text locators
-  // (getByText exact, Playwright included) must keep seeing the bare kind beside the dot.
-  return (
-    <span
-      aria-hidden="true"
-      data-tier={tier}
-      className={classes.tierDot}
-      title={t("catalog.tier.tooltip", { tier })}
-    />
-  );
+  return <TierDot tier={kindTier(kind)} />;
 }
 
 /**

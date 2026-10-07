@@ -161,4 +161,45 @@ describe("BlueprintPropertyRow", () => {
     expect(screen.getByLabelText("Icon")).toBeInTheDocument();
     expect(screen.getByLabelText("Description")).toBeInTheDocument();
   });
+
+  describe("fill-in tier", () => {
+    function TierHarness({ id, tier }: { id: string; tier: number | null }) {
+      const form = useForm<BlueprintFormValues>({
+        initialValues: {
+          ...emptyBlueprintForm(),
+          properties: [{ ...emptyPropertyDraft(), id, type: "string", tier }],
+        },
+      });
+      return (
+        <>
+          <BlueprintPropertyRow form={form} index={0} />
+          <output data-testid="tier">{String(form.values.properties[0].tier)}</output>
+        </>
+      );
+    }
+
+    test("the tier Select is named after the row and shows the stored tier", () => {
+      renderWithProviders(<TierHarness id="language" tier={2} />);
+      expect(screen.getByRole("combobox", { name: "Tier for language" })).toHaveValue("Tier 2");
+    });
+
+    test("an unnamed row falls back to the new-row label", () => {
+      renderWithProviders(<TierHarness id="" tier={null} />);
+      const select = screen.getByRole("combobox", { name: "Tier for New property" });
+      expect(select).toHaveValue("No tier");
+    });
+
+    test("picking a tier writes it to the draft and No tier clears it", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<TierHarness id="language" tier={null} />);
+
+      await user.click(screen.getByRole("combobox", { name: "Tier for language" }));
+      await user.click(await screen.findByRole("option", { name: "Tier 3" }));
+      expect(screen.getByTestId("tier")).toHaveTextContent("3");
+
+      await user.click(screen.getByRole("combobox", { name: "Tier for language" }));
+      await user.click(await screen.findByRole("option", { name: "No tier" }));
+      expect(screen.getByTestId("tier")).toHaveTextContent("null");
+    });
+  });
 });

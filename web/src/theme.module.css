@@ -465,3 +465,9 @@
     flex-basis: 100%;
   }
 }
+
+/* A blueprint pill outside the active tier Focus (BlueprintPills): dimmed, never disabled — it
+   still toggles, the Focus only narrows what is fetched. */
+.outOfFocus {
+  opacity: 0.5;
+}

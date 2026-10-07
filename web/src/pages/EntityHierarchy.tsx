@@ -13,6 +13,7 @@ import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import HierarchyPicker from "../components/HierarchyPicker";
 import RowActionsMenu from "../components/RowActionsMenu";
+import TierDot from "../components/TierDot";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 import { useEntityQuery } from "../hooks/useEntityQuery";
@@ -26,6 +27,7 @@ import { entityDeleteErrorMessage } from "../utils/entityForm";
 import { findPlacement, type HierarchyNode } from "../utils/hierarchy";
 import { loadErrorMessage } from "../utils/saveError";
 import { queryProblemDiagnostics } from "../utils/queryDiagnostics";
+import { blueprintTierLookup, type Tier } from "../utils/tiers";
 import LoadingBlock from "../components/LoadingBlock";
 import classes from "../theme.module.css";
 
@@ -54,6 +56,7 @@ function TreeItem({
   onDelete,
   hierarchyId,
   onRunQuery,
+  tierOf,
 }: {
   item: HierarchyNode<EntityGraphNode>;
   path: string;
@@ -64,10 +67,13 @@ function TreeItem({
   onDelete: (node: EntityGraphNode) => void;
   hierarchyId: string;
   onRunQuery: (query: string) => void;
+  /** Blueprint identifier → its fill-in tier (2.18.0), for the dot in the blueprint badge. */
+  tierOf: (identifier: string) => Tier | null;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { node, children } = item;
+  const nodeTier = tierOf(node.blueprint);
   const key = pathKey(path, node);
   const isCollapsed = collapsed.has(key);
   return (
@@ -86,7 +92,12 @@ function TreeItem({
           <Box w={18} style={{ flexShrink: 0 }} />
         )}
         <Group gap="xs" wrap="wrap" className={classes.treeIdentity}>
-          <Badge variant="light" color="gray" size="xs">
+          <Badge
+            variant="light"
+            color="gray"
+            size="xs"
+            leftSection={nodeTier === null ? undefined : <TierDot tier={nodeTier} />}
+          >
             {node.blueprintTitle}
           </Badge>
           <Text size="sm" fw={500} className={classes.treeIdentityText}>
@@ -138,6 +149,7 @@ function TreeItem({
               onDelete={onDelete}
               hierarchyId={hierarchyId}
               onRunQuery={onRunQuery}
+              tierOf={tierOf}
             />
           ))}
         </Box>
@@ -159,7 +171,8 @@ export default function EntityHierarchy() {
   const queryClient = useQueryClient();
   const { blueprints, loading: blueprintsLoading } = useBlueprints();
   const activeBlueprints = useMemo(() => blueprints.map((b) => b.identifier), [blueprints]);
-  const filters = useEntityGraphFilterState("entityHierarchy", activeBlueprints, blueprintsLoading);
+  const tierOf = useMemo(() => blueprintTierLookup(blueprints), [blueprints]);
+  const filters = useEntityGraphFilterState("entityHierarchy", activeBlueprints, blueprintsLoading, tierOf);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [pinnedId, setPinnedId] = useStoredState("entityHierarchy.pinnedNodeId", "", isString);
   const { hierarchies } = useHierarchies();
@@ -299,6 +312,7 @@ export default function EntityHierarchy() {
               onDelete={(node) => deleteConfirm.requestDelete(node)}
               hierarchyId={hierarchyId}
               onRunQuery={query.runText}
+              tierOf={tierOf}
             />
           ))
         ) : !isError ? (

@@ -189,6 +189,47 @@ describe("EntityGraph page", () => {
     expect(screen.getByText(/solo \[service\]/)).toBeInTheDocument();
   });
 
+  describe("tier Focus (2.18.0)", () => {
+    const TIERED = [
+      blueprintResponse({ id: 1, identifier: "team", title: "Team", tiers: { blueprint: 1 } }),
+      blueprintResponse({
+        id: 2,
+        identifier: "service",
+        title: "Service",
+        tiers: { blueprint: 1, relations: { peer: 1, team: 2 } },
+      }),
+    ];
+
+    test("a Focus thins relation edges by the relation's tier on the source blueprint, keeping every node", async () => {
+      localStorage.setItem("toadie.viewSettings.entityGraph.filter.focusTier", "1");
+      mockGraph(mockFetch, GRAPH, 200, undefined, undefined, [], TIERED);
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      expect(screen.getByTestId("edge:service|checkout->service|solo:peer")).toBeInTheDocument();
+      expect(screen.queryByTestId("edge:service|checkout->team|platform:team")).not.toBeInTheDocument();
+      expect(screen.getByText(/platform \[team\]/)).toBeInTheDocument();
+    });
+
+    test("a wider Focus brings the tier-2 edge back", async () => {
+      localStorage.setItem("toadie.viewSettings.entityGraph.filter.focusTier", "2");
+      mockGraph(mockFetch, GRAPH, 200, undefined, undefined, [], TIERED);
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      expect(screen.getByTestId("edge:service|checkout->team|platform:team")).toBeInTheDocument();
+      expect(screen.getByTestId("edge:service|checkout->service|solo:peer")).toBeInTheDocument();
+    });
+
+    test("without a Focus every edge draws", async () => {
+      mockGraph(mockFetch, GRAPH, 200, undefined, undefined, [], TIERED);
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      expect(screen.getByTestId("edge:service|checkout->team|platform:team")).toBeInTheDocument();
+    });
+  });
+
   test("clicking a node navigates to its editor", async () => {
     mockGraph(mockFetch);
     const user = userEvent.setup();

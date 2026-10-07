@@ -200,7 +200,8 @@ from Lettuce, that any new or edited spec must satisfy:
   `responsive-layout.spec.ts` (`e2e-layout-*`; one self-related blueprint and six entities),
   `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries),
   `entity-errors.spec.ts` (`e2e-ee-*` — the Ontology Errors report, v2.5.0), and
-  `entity-sync.spec.ts` (`e2e-esync-*` — entity source references & re-sync, 2.9.0); the
+  `entity-sync.spec.ts` (`e2e-esync-*` — entity source references & re-sync, 2.9.0), and
+  `tiers.spec.ts` (`e2e-tier-*` — fill-in tiers, 2.18.0); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
   what makes their concurrent creates safe — the same rule the other registries' single
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
@@ -531,6 +532,13 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`tags.spec.ts`](scenarios/tags.md) — the tag categories: modal validation → create a
   category (tags + kinds) → edit → the regular user's read-only view → the editor's grouped
   tags picker on a new Component → cleanup; the tag-category registry's only in-run writer.
+- [`tiers.spec.ts`](scenarios/tiers.md) — fill-in tiers (2.18.0): two throwaway blueprints and one
+  entity each seeded via the API → the blueprint editor's Fill-in tier and "Tier for alpha"
+  Selects tier one of them (the JSON preview shows `tiers`) → the Blueprints list's dot and
+  Focus "Tier 1" hiding the untiered row → the entity editor's field dots, "Tier 1 incomplete"
+  badge and live "Filled through tier 4", and the Focus folding the untiered field behind "Show
+  1 more field" → the Entity graph's `$fillTier < 1` query and graph Focus leaving only the
+  tiered blueprint's node → cleanup; owns only its own `e2e-tier-*` rows.
 - [`types.spec.ts`](scenarios/types.md) — the per-kind type dictionaries: seeded rows → modal
   validation → append a unique type to the Domain dictionary → the regular user's read-only
   view → the editor's Type Select on a new Domain file → restore; the type registry's only

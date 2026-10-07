@@ -529,4 +529,118 @@ describe("Entities page", () => {
     await user.click(await screen.findByRole("menuitem", { name: "Sync billing-synced from source" }));
     expect(await screen.findByRole("dialog", { name: "Sync from source — billing-synced" })).toBeInTheDocument();
   });
+
+  describe("fill-in tiers (2.18.0)", () => {
+    // `service`: blueprint tier 1, three scalar properties with tiers 3 / none / 1, one
+    // computed mirror; `plain` has no tiers at all.
+    const TIERED = {
+      ...BLUEPRINTS[0],
+      schema: {
+        properties: {
+          language: { type: "string", title: "Language" },
+          active: { type: "boolean", title: "Active" },
+          owner: { type: "string", title: "Owner" },
+        },
+        required: [],
+      },
+      tiers: { blueprint: 1, properties: { language: 3, owner: 1 } },
+    };
+    const PLAIN = { ...BLUEPRINTS[0], id: 3, identifier: "plain", title: "Plain", tiers: undefined };
+    const TIER_2 = { ...BLUEPRINTS[0], id: 4, identifier: "workload", title: "Workload", tiers: { blueprint: 2 } };
+
+    function mockTiered() {
+      mockFetch.mockImplementation((url: string) => {
+        if (url === "/api/v1/blueprints") {
+          return Promise.resolve(jsonResponse(200, { items: [TIERED, PLAIN, TIER_2] }));
+        }
+        if (url.startsWith("/api/v1/entities?")) {
+          return Promise.resolve(
+            jsonResponse(200, {
+              items: [{ ...ENTITY, findings: [], properties: { language: "kotlin", active: true, owner: "ann" } }],
+              page: 1,
+              pageSize: 20,
+              total: 1,
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse(404, {}));
+      });
+    }
+
+    function headerNames() {
+      return screen.getAllByRole("columnheader").map((header) => header.textContent);
+    }
+
+    test("preview columns are ordered by property tier (untiered last, schema order within) and carry a dot", async () => {
+      mockTiered();
+      renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+      await screen.findByRole("link", { name: "Edit checkout" });
+      const names = headerNames();
+      // owner (tier 1) < language (tier 3) < active (untiered); the mirror is cut by the cap.
+      expect(names.indexOf("Owner")).toBeLessThan(names.indexOf("Language"));
+      expect(names.indexOf("Language")).toBeLessThan(names.indexOf("Active"));
+      expect(names).not.toContain("Sibling title");
+      const ownerHeader = screen.getByRole("columnheader", { name: "Owner" });
+      expect(ownerHeader.querySelector('[data-tier="1"]')).not.toBeNull();
+      expect(screen.getByRole("columnheader", { name: "Language" }).querySelector('[data-tier="3"]')).not.toBeNull();
+      expect(screen.getByRole("columnheader", { name: "Active" }).querySelector("[data-tier]")).toBeNull();
+    });
+
+    test("a stored Focus narrows the columns to in-focus properties and drops the computed ones", async () => {
+      localStorage.setItem("toadie.viewSettings.entities.filter.focusTier", "1");
+      mockTiered();
+      renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+      await screen.findByRole("link", { name: "Edit checkout" });
+      const names = headerNames();
+      expect(names).toContain("Owner");
+      expect(names).not.toContain("Language");
+      expect(names).not.toContain("Active");
+      expect(names).not.toContain("Sibling title");
+    });
+
+    test("the Blueprint options carry dots and the Focus narrows them, keeping the current selection", async () => {
+      localStorage.setItem("toadie.viewSettings.entities.filter.focusTier", "1");
+      mockTiered();
+      const user = userEvent.setup();
+      // `plain` (untiered) and `workload` (tier 2) are out of a Tier 1 focus; picking `plain`
+      // through the URL must keep it selectable.
+      renderWithProviders(<Entities />, { route: "/entities?blueprint=plain" });
+
+      await screen.findByRole("link", { name: "Edit checkout" });
+      await user.click(screen.getByRole("combobox", { name: "Blueprint" }));
+      const listbox = await screen.findByRole("listbox");
+      const options = within(listbox).getAllByRole("option");
+      expect(options.map((option) => option.textContent)).toEqual(["service", "plain"]);
+      expect(options[0].querySelector('[data-tier="1"]')).not.toBeNull();
+      expect(options[1].querySelector("[data-tier]")).toBeNull();
+    });
+
+    test("without a Focus every blueprint is an option", async () => {
+      mockTiered();
+      const user = userEvent.setup();
+      renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+      await screen.findByRole("link", { name: "Edit checkout" });
+      await user.click(screen.getByRole("combobox", { name: "Blueprint" }));
+      const listbox = await screen.findByRole("listbox");
+      expect(within(listbox).getAllByRole("option")).toHaveLength(3);
+    });
+
+    test("the Focus select lives in the Filters drawer, persists, and counts as an active filter", async () => {
+      mockTiered();
+      const user = userEvent.setup();
+      renderWithProviders(<Entities />, { route: "/entities?blueprint=service" });
+
+      await screen.findByRole("link", { name: "Edit checkout" });
+      expect(screen.getByRole("button", { name: /^Filters/ }).textContent).toBe("Filters");
+      await user.click(screen.getByRole("button", { name: /^Filters/ }));
+      await user.click(screen.getByRole("combobox", { name: "Focus" }));
+      await user.click(await screen.findByRole("option", { name: "Tiers 1–2" }));
+
+      await waitFor(() => expect(screen.getByRole("button", { name: /^Filters/ }).textContent).toBe("Filters1"));
+      expect(localStorage.getItem("toadie.viewSettings.entities.filter.focusTier")).toBe("2");
+    });
+  });
 });

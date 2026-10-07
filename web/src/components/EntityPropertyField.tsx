@@ -1,7 +1,9 @@
 import { MultiSelect, NumberInput, Select, Stack, TagsInput, Text, Textarea, TextInput } from "@mantine/core";
 import type { UseFormReturnType } from "@mantine/form";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import EntityOptionsSelect from "./EntityOptionsSelect";
+import TierLabel from "./TierLabel";
 import { safeJsonParse } from "../utils/blueprintForm";
 import { entityFindingProps } from "../utils/entityFieldFindings";
 import type { EntityFinding } from "../api/entities";
@@ -39,7 +41,7 @@ function ReferencePropertyField({
   index: number;
   target: string;
   many: boolean;
-  label: string;
+  label: ReactNode;
   description?: string;
   required: boolean;
   findingProps: FindingProps;
@@ -100,6 +102,7 @@ export default function EntityPropertyField({
   definition,
   required,
   findings = [],
+  tier = null,
 }: {
   form: Form;
   index: number;
@@ -107,10 +110,12 @@ export default function EntityPropertyField({
   definition?: PropertyDefinitionWire;
   required: boolean;
   findings?: readonly EntityFinding[];
+  /** The property's fill-in tier (2.18.0) — a dot before the label, nothing else. */
+  tier?: number | null;
 }) {
   const { t } = useTranslation();
   const draft = form.values.properties[index];
-  const label = definition?.title ?? draft.id;
+  const label = <TierLabel tier={tier}>{definition?.title ?? draft.id}</TierLabel>;
 
   if (!definition || draft.unknown) {
     return (
@@ -303,7 +308,7 @@ function LabeledUrlFields({
 }: {
   form: Form;
   index: number;
-  label: string;
+  label: ReactNode;
   description?: string;
   required: boolean;
 }) {

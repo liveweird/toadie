@@ -29,6 +29,7 @@ import { editBlueprintPath } from "../utils/blueprintLinks";
 import { classOfEntityCode, colorOfEntityClass, ENTITY_ERROR_CLASSES } from "../utils/entityErrorClasses";
 import { editEntityPath, entityGraphPath } from "../utils/entityLinks";
 import { loadErrorMessage } from "../utils/saveError";
+import { blueprintTierLookup } from "../utils/tiers";
 
 const COLUMN_COUNT = 4;
 // `blueprint` is an any-of filter, while an empty array means "no filter". `!` cannot be a
@@ -56,7 +57,8 @@ export default function EntityErrors() {
   const navigate = useNavigate();
   const { blueprints, loading: blueprintsLoading } = useBlueprints();
   const activeBlueprints = useMemo(() => blueprints.map((b) => b.identifier), [blueprints]);
-  const filters = useEntityGraphFilterState("entityErrors", activeBlueprints, blueprintsLoading);
+  const tierOf = useMemo(() => blueprintTierLookup(blueprints), [blueprints]);
+  const filters = useEntityGraphFilterState("entityErrors", activeBlueprints, blueprintsLoading, tierOf);
   const [classes, setClasses] = useStoredState<string[]>(
     "entityErrors.filter.classes",
     [...ENTITY_ERROR_CLASSES],
@@ -118,6 +120,8 @@ export default function EntityErrors() {
                   active={filters.blueprintPills.active}
                   hidden={filters.blueprintPills.hidden}
                   onChange={filters.blueprintPills.setHidden}
+                  tierOf={filters.blueprintPills.tierOf}
+                  focus={filters.blueprintPills.focus}
                 />
               }
             >

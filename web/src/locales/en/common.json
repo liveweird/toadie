@@ -81,5 +81,28 @@
     "collapseAria": "Collapse {{name}}",
     "expandAria": "Expand {{name}} ({{count}} hidden)"
   },
+  "tier": {
+    "tooltip": "Tier {{tier}} — fill lower tiers first",
+    "label": "Tier",
+    "none": "No tier",
+    "option": "Tier {{tier}}",
+    "selectAria": "Tier for {{id}}",
+    "fillIn": "Fill-in tier",
+    "outOfFocus": "Outside the selected tier focus",
+    "filledThrough": "Filled through tier {{tier}}",
+    "incomplete": "Tier 1 incomplete",
+    "moreFields_one": "Show {{count}} more field",
+    "moreFields_other": "Show {{count}} more fields",
+    "hideFields": "Hide the extra fields",
+    "focus": {
+      "label": "Focus",
+      "placeholder": "All tiers",
+      "clear": "Clear focus",
+      "upTo1": "Tier 1",
+      "upTo2": "Tiers 1–2",
+      "upTo3": "Tiers 1–3",
+      "upTo4": "Tiers 1–4"
+    }
+  },
   "loading": "Loading…"
 }

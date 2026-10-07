@@ -9,6 +9,7 @@ import BlueprintRelationRow from "./BlueprintRelationRow";
 import EditorRowList, { rowDomId } from "./EditorRowList";
 import LoadingBlock from "./LoadingBlock";
 import SourceFieldset from "./SourceFieldset";
+import TierSelect from "./TierSelect";
 import { type BlueprintRowExpansion } from "../hooks/useBlueprintRowExpansion";
 import { useHierarchies } from "../hooks/useHierarchies";
 import { BELOW_INPUT, charCountDescription } from "../utils/charCount";
@@ -90,6 +91,13 @@ function IdentityFields({ form, system }: { form: Form; system: boolean }) {
         description={t("blueprints.hint.icon")}
         {...form.getInputProps("icon")}
       />
+      <TierSelect
+        label={t("common.tier.fillIn")}
+        description={t("blueprints.hint.fillTier")}
+        value={form.values.tier}
+        onChange={(tier) => form.setFieldValue("tier", tier)}
+        w={200}
+      />
     </Stack>
   );
 }
@@ -109,6 +117,7 @@ function PropertiesFieldset({ form, expansion }: { form: Form; expansion: Bluepr
         badge={propertyBadge}
         isRequired={(row) => row.required}
         isLocked={(row) => lockedRowIds(form.values.identifier, "properties").has(row.id)}
+        tier={(row) => row.tier}
         renderBody={(row, index) => (
           <BlueprintPropertyRow
             form={form}
@@ -145,6 +154,7 @@ function RelationsFieldset({ form, expansion }: { form: Form; expansion: Bluepri
         badge={relationBadge}
         isRequired={(row) => row.required}
         isLocked={(row) => lockedRowIds(form.values.identifier, "relations").has(row.id)}
+        tier={(row) => row.tier}
         renderBody={(row, index) => (
           <BlueprintRelationRow
             form={form}

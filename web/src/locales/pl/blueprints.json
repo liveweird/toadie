@@ -2,6 +2,7 @@
   "title": "Blueprinty",
   "intro": "Rodzaje encji definiowane przez użytkowników i użytkowniczki (zgodność z Port, etap 1): typowane właściwości, relacje, właściwości lustrzane/obliczane/agregowane oraz własność. Administratorzy/ki definiują blueprinty, wszyscy mogą je odczytywać.",
   "empty": "Nie zdefiniowano jeszcze żadnych blueprintów",
+  "emptyFocus": "Żaden blueprint nie mieści się w tym zakresie poziomów.",
   "loadFailed": "Nie udało się wczytać blueprintów",
   "newBlueprint": "Nowy blueprint",
   "viewEntities": "Encje",
@@ -105,6 +106,7 @@
     "clearAria": "Wyczyść {{hierarchy}}"
   },
   "hint": {
+    "fillTier": "Jak wcześnie uzupełniać ten blueprint, od 1 (najpierw) do 4 — tylko wskazówka wizualna, nie zmienia żadnej walidacji.",
     "icon": "NAZWA ikony Port (np. Microservice) — wolny tekst, nie obraz.",
     "pattern": "Wyrażenie regularne, które musi pasować do wartości.",
     "enumValues": "Zamknięta lista, z której może wybierać właściwość — naciśnij Enter, aby dodać każdą wartość.",

@@ -316,6 +316,47 @@ describe("EntityErrors page", () => {
     expect(tileValue("Errors")).toBe("1");
   });
 
+  describe("tier Focus (2.18.0)", () => {
+    function serveTiered(tiers: Record<string, number | undefined>) {
+      const blueprints = BLUEPRINTS.map((bp) => {
+        const tier = tiers[bp.identifier];
+        return tier === undefined ? bp : { ...bp, tiers: { blueprint: tier } };
+      });
+      mockFetch.mockImplementation((url: string) => {
+        if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: blueprints }));
+        if (url.startsWith("/api/v1/entities/errors")) return Promise.resolve(jsonResponse(200, REPORT));
+        return Promise.resolve(jsonResponse(404, {}));
+      });
+    }
+
+    function reportUrls(): string[] {
+      return mockFetch.mock.calls
+        .map(([url]) => url as string)
+        .filter((url) => url.startsWith("/api/v1/entities/errors"));
+    }
+
+    test("a stored Focus narrows the report to the blueprints within it and dims the other pills", async () => {
+      localStorage.setItem("toadie.viewSettings.entityErrors.filter.focusTier", "1");
+      serveTiered({ service: 1 });
+      renderPage();
+
+      await waitFor(() => expect(reportUrls().length).toBeGreaterThan(0));
+      expect(reportUrls().every((url) => url.includes("blueprint=service") && !url.includes("blueprint=team"))).toBe(true);
+      expect(screen.getByRole("checkbox", { name: "team" }).closest("[data-out-of-focus]")).not.toBeNull();
+      expect(screen.getByRole("checkbox", { name: "service" }).closest("[data-out-of-focus]")).toBeNull();
+    });
+
+    test("a Focus that excludes every blueprint asks for the match-nothing scope", async () => {
+      localStorage.setItem("toadie.viewSettings.entityErrors.filter.focusTier", "1");
+      serveTiered({ service: 3 });
+      renderPage();
+
+      await waitFor(() => expect(reportUrls().some((url) => url.includes("blueprint=%21"))).toBe(true));
+      expect(await screen.findByText("Unknown blueprint")).toBeInTheDocument();
+      expect(screen.queryByText("Required property missing")).not.toBeInTheDocument();
+    });
+  });
+
   test("shows an alert when the report fails to load", async () => {
     mockReport(mockFetch, { title: "boom", status: 500 }, 500);
     renderPage();

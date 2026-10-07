@@ -347,6 +347,43 @@ describe("EntityHierarchy page", () => {
     });
   });
 
+  describe("fill-in tiers (2.18.0)", () => {
+    const TIERED = [
+      blueprintResponse({ id: 1, identifier: "team", title: "Team", tiers: { blueprint: 1 } }),
+      blueprintResponse({ id: 2, identifier: "service", title: "Service", tiers: { blueprint: 3 } }),
+    ];
+
+    test("the blueprint badge leads with the blueprint's tier dot", async () => {
+      mockGraph(mockFetch, GRAPH, 200, HIERARCHIES, [], TIERED);
+      renderPage();
+
+      const teamBadge = (await screen.findByText("Team", { exact: true })).closest(".mantine-Badge-root")!;
+      expect(teamBadge.querySelector('[data-tier="1"]')).not.toBeNull();
+      const serviceBadge = screen.getAllByText("Service", { exact: true })[0].closest(".mantine-Badge-root")!;
+      expect(serviceBadge.querySelector('[data-tier="3"]')).not.toBeNull();
+    });
+
+    test("a stored Focus narrows the graph request to the blueprints within it and dims the rest of the pills", async () => {
+      localStorage.setItem("toadie.viewSettings.entityHierarchy.filter.focusTier", "1");
+      mockGraph(mockFetch, GRAPH, 200, HIERARCHIES, [], TIERED);
+      const user = userEvent.setup();
+      renderPage();
+
+      await waitFor(() => {
+        const graphCalls = mockFetch.mock.calls
+          .map(([url]) => url as string)
+          .filter((url) => url.startsWith("/api/v1/entities/graph"));
+        expect(graphCalls.length).toBeGreaterThan(0);
+        expect(graphCalls.every((url) => url.includes("blueprint=team") && !url.includes("blueprint=service"))).toBe(true);
+      });
+
+      await user.click(screen.getByRole("button", { name: /^Visibility/ }));
+      const pills = screen.getByRole("group", { name: "Blueprints" });
+      expect(within(pills).getByRole("checkbox", { name: "service" }).closest("[data-out-of-focus]")).not.toBeNull();
+      expect(within(pills).getByRole("checkbox", { name: "team" }).closest("[data-out-of-focus]")).toBeNull();
+    });
+  });
+
   describe("entity query bar (phase 7, v2.0.0)", () => {
     test("typing debounces a live check request against /api/v1/entities/query/check", async () => {
       mockGraph(mockFetch);
