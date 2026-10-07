@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.18.0",
+    date: "2026-10-07",
+    en: `**Tiers show what to fill in first.** An administrator can give a blueprint, each of its properties and each of its relations a tier from 1 to 4 in the blueprint editor. Tiers are only a hint and never change validation. A small numbered dot marks them on the Blueprints list, the blueprint pills, the Entity graph and hierarchy, the Entities columns and the entity editor's fields. A Focus picker on those views narrows them to tier 1, tiers 1–2 and so on. The entity editor shows how far an entity is filled in and folds the fields outside the focus. Queries can use the tiers too: \`n.$tier\` is the blueprint's tier, \`n.$fillTier\` the highest tier whose fields are all filled, and \`r.$tier\` a relation's tier.`,
+    pl: `**Poziomy pokazują, co wypełnić najpierw.** Administrator/ka może nadać blueprintowi, każdej jego właściwości i każdej relacji poziom od 1 do 4 w edytorze blueprintu. Poziomy są tylko wskazówką i nigdy nie zmieniają walidacji. Mała numerowana kropka oznacza je na liście blueprintów, w pigułkach blueprintów, na grafie i w hierarchii encji, w kolumnach listy encji oraz przy polach edytora encji. Wybór zakresu w tych widokach zawęża je do poziomu 1, poziomów 1–2 i tak dalej. Edytor encji pokazuje, jak daleko encja jest wypełniona, i zwija pola spoza zakresu. Poziomów można też używać w zapytaniach: \`n.$tier\` to poziom blueprintu, \`n.$fillTier\` najwyższy poziom, którego pola są w pełni wypełnione, a \`r.$tier\` poziom relacji.`,
+  },
+  {
     version: "2.17.0",
     date: "2026-10-07",
     en: `**Regulatory flags join the baseline ontology.** The Port sample now records, on every service, API, resource and dataset, whether it processes personal data under GDPR, handles cardholder data under PCI DSS and falls under the outsourcing of banking activities; services also say whether they can move money or change what is charged, and whether they support a DORA critical or important function. Systems count their DORA and cash-flow services. The label registry gains the matching yes/no labels for Components, APIs and Resources, the Backstage sample carries them, and both sample users state their employment type.`,
