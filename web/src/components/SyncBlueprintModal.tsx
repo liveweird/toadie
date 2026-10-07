@@ -136,6 +136,7 @@ function SyncModalBody({
       // or cleared it since the last sync (a cleared map is ABSENT on the wire, so a baseline
       // fallback would resurrect it), and the server merges from the live row too.
       hierarchyRelations: detail.data.hierarchyRelations,
+      tiers: detail.data.tiers,
     });
   }, [sourceFetch.data, syncState.data, detail.data]);
 
@@ -292,6 +293,12 @@ function SyncModalBody({
           {picked?.hierarchyKept && (
             <Text size="sm" c="dimmed">
               {t("blueprints.sync.hierarchyKept")}
+            </Text>
+          )}
+
+          {picked?.tiersKept && (
+            <Text size="sm" c="dimmed">
+              {t("blueprints.sync.tiersKept")}
             </Text>
           )}
 

@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { EntityGraph, EntityGraphEdge, EntityGraphNode } from "../api/entities";
+import { blueprintResponse } from "../test/fixtures";
 import { foldGraph } from "./graphFold";
 import {
   buildEntityHierarchy,
   effectiveHierarchyId,
   entityGraphEdgeKey,
+  filterEdgesByTierFocus,
   filterEntityGraph,
   hierarchyEdgeKeys,
   relationsOf,
@@ -45,6 +47,55 @@ describe("filterEntityGraph", () => {
       edges: [edge("team|a", "team|a", "self")],
     };
     expect(filterEntityGraph(graph, new Set()).edges).toEqual(graph.edges);
+  });
+});
+
+describe("filterEdgesByTierFocus", () => {
+  const blueprints = [
+    blueprintResponse({ identifier: "service", tiers: { relations: { system: 1, owner: 3 } } }),
+    blueprintResponse({ identifier: "system", tiers: { relations: { domain: 2 } } }),
+    blueprintResponse({ identifier: "bare" }),
+  ];
+  const nodes = [node("service", "a"), node("system", "s"), node("bare", "b")];
+  const edges = [
+    edge("service|a", "system|s", "system"),
+    edge("service|a", "system|s", "owner"),
+    edge("service|a", "system|s", "untiered"),
+    edge("system|s", "service|a", "domain"),
+    edge("bare|b", "service|a", "system"),
+    edge("service|a", "system|s", "$team", [], true),
+  ];
+  const summary = (list: EntityGraphEdge[]) => list.map((e) => `${e.sourceId}:${e.relation}`);
+
+  test("no focus returns every edge", () => {
+    expect(filterEdgesByTierFocus(edges, nodes, blueprints, null)).toEqual(edges);
+  });
+
+  test("keeps edges whose relation tier on the SOURCE blueprint is within the focus; untiered ones drop", () => {
+    expect(summary(filterEdgesByTierFocus(edges, nodes, blueprints, 1))).toEqual([
+      "service|a:system",
+      "service|a:$team",
+    ]);
+    expect(summary(filterEdgesByTierFocus(edges, nodes, blueprints, 2))).toEqual([
+      "service|a:system",
+      "system|s:domain",
+      "service|a:$team",
+    ]);
+    expect(summary(filterEdgesByTierFocus(edges, nodes, blueprints, 3))).toEqual([
+      "service|a:system",
+      "service|a:owner",
+      "system|s:domain",
+      "service|a:$team",
+    ]);
+  });
+
+  test("ownership edges are always kept, even when the source blueprint is unknown", () => {
+    const ownership = edge("ghost|x", "team|t", "$team", [], true);
+    expect(filterEdgesByTierFocus([ownership], nodes, blueprints, 1)).toEqual([ownership]);
+  });
+
+  test("an edge whose source node or blueprint is unknown is dropped under a focus", () => {
+    expect(filterEdgesByTierFocus([edge("ghost|x", "service|a", "system")], nodes, blueprints, 4)).toEqual([]);
   });
 });
 

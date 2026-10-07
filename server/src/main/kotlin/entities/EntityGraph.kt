@@ -1,6 +1,7 @@
 package ch.nokillswit.entities
 
 import ch.nokillswit.blueprints.BlueprintDefinition
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -77,6 +78,8 @@ data class GraphBlueprint(
     val definition: BlueprintDefinition,
     /** Hierarchy identifier -> relation key (V34); empty when this blueprint roots no hierarchy relation. */
     val hierarchyRelations: Map<String, String>,
+    /** Fill-in tiers (2.18.0, V44) for the query engine's `$tier`/`$fillTier` (commit 2); `BlueprintTiers()` when untiered. */
+    val tiers: BlueprintTiers,
 )
 
 /**

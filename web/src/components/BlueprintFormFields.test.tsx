@@ -434,4 +434,76 @@ describe("BlueprintFormFields", () => {
     );
     expect(await screen.findByRole("combobox", { name: /^composition$/i })).toHaveValue("");
   });
+
+  describe("fill-in tiers", () => {
+    function TierHarness({ initial }: { initial: Partial<BlueprintFormValues> }) {
+      const form = useForm<BlueprintFormValues>({ initialValues: { ...emptyBlueprintForm(), ...initial } });
+      const expansion = useBlueprintRowExpansion(form);
+      return (
+        <>
+          <BlueprintFormFields form={form} expansion={expansion} />
+          <output data-testid="blueprint-tier">{String(form.values.tier)}</output>
+        </>
+      );
+    }
+
+    test("the identity block carries a Fill-in tier Select wired to the blueprint tier", async () => {
+      serveBlueprintList(mockFetch);
+      const user = userEvent.setup();
+      renderWithProviders(<TierHarness initial={{ identifier: "service" }} />);
+
+      const select = screen.getByRole("combobox", { name: "Fill-in tier" });
+      expect(select).toHaveValue("No tier");
+      await user.click(select);
+      await user.click(await screen.findByRole("option", { name: "Tier 2" }));
+      expect(screen.getByTestId("blueprint-tier")).toHaveTextContent("2");
+    });
+
+    test("collapsed property and relation headers lead with the row's tier dot; untiered rows show none", () => {
+      serveBlueprintList(mockFetch);
+      renderWithProviders(
+        <TierHarness
+          initial={{
+            properties: [
+              { ...emptyPropertyDraft(), id: "language", title: "Language", tier: 1 },
+              { ...emptyPropertyDraft(), id: "priority", title: "Priority", tier: null },
+              { ...emptyPropertyDraft(), id: "notes", title: "Notes", tier: 3 },
+            ],
+            relations: [
+              { ...emptyRelationDraft(), id: "system", title: "System", target: "system", tier: 4 },
+              { ...emptyRelationDraft(), id: "owner", title: "Owner", target: "team", tier: null },
+            ],
+          }}
+        />,
+      );
+
+      const header = (name: string) => screen.getByRole("button", { name: `Toggle ${name}` });
+      expect(header("language").querySelector('[data-tier="1"]')).not.toBeNull();
+      expect(header("priority").querySelector("[data-tier]")).toBeNull();
+      // Collapsed rows (all but the first) still show the dot in the always-visible header.
+      expect(header("notes")).toHaveAttribute("aria-expanded", "false");
+      expect(header("notes").querySelector('[data-tier="3"]')).not.toBeNull();
+      expect(header("system").querySelector('[data-tier="4"]')).not.toBeNull();
+      expect(header("owner").querySelector("[data-tier]")).toBeNull();
+      // The header's accessible name is unchanged by the aria-hidden dot.
+      expect(screen.getByRole("button", { name: "Toggle language" })).toBeInTheDocument();
+    });
+
+    test("computed rows carry no tier editor and no dot", async () => {
+      serveBlueprintList(mockFetch);
+      const user = userEvent.setup();
+      renderWithProviders(
+        <TierHarness
+          initial={{
+            calculationProperties: [{ ...emptyCalculationDraft(), id: "score", title: "Score" }],
+            aggregationProperties: [{ ...emptyAggregationDraft(), id: "total", title: "Total" }],
+          }}
+        />,
+      );
+      await user.click(screen.getByRole("button", { name: "Toggle score" }));
+      expect(screen.queryByRole("combobox", { name: /^Tier for / })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Toggle score" }).querySelector("[data-tier]")).toBeNull();
+      expect(screen.getByRole("button", { name: "Toggle total" }).querySelector("[data-tier]")).toBeNull();
+    });
+  });
 });

@@ -294,4 +294,63 @@ describe("Blueprints page", () => {
     await waitFor(() => expect(findCall(mockFetch, "DELETE", "/api/v1/blueprints/2")).toBeDefined());
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
+
+  describe("fill-in tiers", () => {
+    function serveTiered() {
+      const tiered = REGISTRY.items.map((item) =>
+        item.identifier === "microservice"
+          ? { ...item, tiers: { blueprint: 1 } }
+          : item.identifier === "team"
+            ? { ...item, tiers: { blueprint: 3 } }
+            : item,
+      );
+      mockFetch.mockImplementation((url: string) =>
+        Promise.resolve(
+          url === "/api/v1/blueprints"
+            ? jsonResponse(200, { items: tiered })
+            : jsonResponse(404, { title: "x", status: 404 }),
+        ),
+      );
+    }
+
+    test("each identifier leads with its blueprint's tier dot; untiered rows show none", async () => {
+      serveTiered();
+      renderBlueprints();
+
+      const row = (identifier: string) => screen.getByText(identifier, { exact: true }).closest("tr")!;
+      await screen.findByText("microservice");
+      expect(row("microservice").querySelector('[data-tier="1"]')).not.toBeNull();
+      expect(row("team").querySelector('[data-tier="3"]')).not.toBeNull();
+      expect(row("_team").querySelector("[data-tier]")).toBeNull();
+    });
+
+    test("Focus narrows the rows client-side (untiered excluded), persists, and clears back to all", async () => {
+      serveTiered();
+      const user = userEvent.setup();
+      renderBlueprints();
+      await screen.findByText("microservice");
+
+      await user.click(screen.getByRole("combobox", { name: "Focus" }));
+      await user.click(await screen.findByRole("option", { name: "Tier 1" }));
+      expect(screen.getByText("microservice")).toBeInTheDocument();
+      expect(screen.queryByText("team", { exact: true })).not.toBeInTheDocument();
+      expect(screen.queryByText("_team", { exact: true })).not.toBeInTheDocument();
+      expect(localStorage.getItem("toadie.viewSettings.blueprints.focusTier")).toBe("1");
+
+      await user.click(screen.getByLabelText("Clear focus"));
+      expect(screen.getByText("team", { exact: true })).toBeInTheDocument();
+      expect(screen.getByText("_team", { exact: true })).toBeInTheDocument();
+    });
+
+    test("a stored Focus that matches nothing says so instead of the empty-registry state", async () => {
+      localStorage.setItem("toadie.viewSettings.blueprints.focusTier", "1");
+      const team = { ...REGISTRY.items[1], tiers: { blueprint: 3 } };
+      mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(200, { items: [team] })));
+      renderBlueprints();
+
+      expect(await screen.findByText("No blueprints are tiered inside this focus.")).toBeInTheDocument();
+      expect(screen.queryByText("No blueprints defined yet")).not.toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Focus" })).toHaveValue("Tier 1");
+    });
+  });
 });

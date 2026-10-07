@@ -134,4 +134,88 @@ describe("useEntityGraphFilterState", () => {
     act(() => result.current.blueprintPills.setHidden(["service"]));
     expect(result.current.activeFilterCount).toBe(0);
   });
+
+  describe("tier Focus", () => {
+    const TIERS: Record<string, 1 | 2 | 3 | 4 | null> = { team: 1, service: 2, domain: 4, scratch: null };
+    const tierOf = (id: string) => TIERS[id] ?? null;
+    const ACTIVE = ["team", "service", "domain", "scratch"];
+
+    test("no focus leaves the blueprint param alone", () => {
+      const { result } = renderHook(() => useEntityGraphFilterState(`${VIEW_KEY}-focus-none`, ACTIVE, false, tierOf));
+      expect(result.current.controls.focus).toBeNull();
+      expect(result.current.values.blueprints).toBeUndefined();
+      expect(result.current.activeFilterCount).toBe(0);
+      expect(result.current.blueprintPills.focus).toBeNull();
+    });
+
+    test("a focus narrows the visible blueprints to tier <= N, excluding untiered, and counts as a filter", () => {
+      const viewKey = `${VIEW_KEY}-focus-narrow`;
+      const { result } = renderHook(() => useEntityGraphFilterState(viewKey, ACTIVE, false, tierOf));
+      act(() => result.current.controls.setFocus(2));
+      expect(result.current.values.blueprints).toEqual(["team", "service"]);
+      expect(result.current.activeFilterCount).toBe(1);
+      expect(result.current.noBlueprints).toBe(false);
+      expect(result.current.blueprintPills.focus).toBe(2);
+      expect(localStorage.getItem(`toadie.viewSettings.${viewKey}.filter.focusTier`)).toBe("2");
+
+      // Focus 4 still drops the untiered blueprint, so the param is sent.
+      act(() => result.current.controls.setFocus(4));
+      expect(result.current.values.blueprints).toEqual(["team", "service", "domain"]);
+
+      act(() => result.current.controls.setFocus(null));
+      expect(result.current.values.blueprints).toBeUndefined();
+      expect(result.current.activeFilterCount).toBe(0);
+    });
+
+    test("a focus that excludes nothing sends no blueprint param but still counts as active", () => {
+      const { result } = renderHook(() =>
+        useEntityGraphFilterState(`${VIEW_KEY}-focus-all`, ["team", "service"], false, tierOf),
+      );
+      act(() => result.current.controls.setFocus(2));
+      expect(result.current.values.blueprints).toBeUndefined();
+      expect(result.current.activeFilterCount).toBe(1);
+    });
+
+    test("the focus intersects with hidden pills", () => {
+      const { result } = renderHook(() =>
+        useEntityGraphFilterState(`${VIEW_KEY}-focus-hidden`, ACTIVE, false, tierOf),
+      );
+      act(() => result.current.blueprintPills.setHidden(["team"]));
+      act(() => result.current.controls.setFocus(2));
+      expect(result.current.values.blueprints).toEqual(["service"]);
+      // Pills keep their own hidden list, which the Focus never edits.
+      expect(result.current.blueprintPills.hidden).toEqual(["team"]);
+    });
+
+    test("an empty intersection reports noBlueprints", () => {
+      const { result } = renderHook(() =>
+        useEntityGraphFilterState(`${VIEW_KEY}-focus-empty`, ["domain", "scratch"], false, tierOf),
+      );
+      act(() => result.current.controls.setFocus(1));
+      expect(result.current.noBlueprints).toBe(true);
+      expect(result.current.values.blueprints).toEqual([]);
+    });
+
+    test("without a tier lookup every blueprint is untiered, so any focus empties the set", () => {
+      const { result } = renderHook(() => useEntityGraphFilterState(`${VIEW_KEY}-focus-nolookup`, ["team"]));
+      act(() => result.current.controls.setFocus(4));
+      expect(result.current.noBlueprints).toBe(true);
+    });
+
+    test("a stored focus makes ready wait for the registry", () => {
+      const viewKey = `${VIEW_KEY}-focus-ready`;
+      localStorage.setItem(`toadie.viewSettings.${viewKey}.filter.focusTier`, "3");
+      const { result: loading } = renderHook(() => useEntityGraphFilterState(viewKey, [], true, tierOf));
+      expect(loading.current.ready).toBe(false);
+      const { result: loaded } = renderHook(() => useEntityGraphFilterState(viewKey, ACTIVE, false, tierOf));
+      expect(loaded.current.ready).toBe(true);
+    });
+
+    test("junk in storage falls back to all tiers", () => {
+      const viewKey = `${VIEW_KEY}-focus-junk`;
+      localStorage.setItem(`toadie.viewSettings.${viewKey}.filter.focusTier`, JSON.stringify(9));
+      const { result } = renderHook(() => useEntityGraphFilterState(viewKey, ACTIVE, false, tierOf));
+      expect(result.current.controls.focus).toBeNull();
+    });
+  });
 });

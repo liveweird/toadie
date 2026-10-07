@@ -157,33 +157,43 @@ internal fun truthy(value: JsonElement?): Truth {
 }
 
 /**
- * `variable.key` resolved off whatever [candidateOf] currently binds that variable to — an
- * unbound [Operand.Property] variable (no active binding, e.g. inside an unmatched OPTIONAL
- * MATCH extension) resolves to `null`, same as a missing property. [Operand.Value] is already
- * in JSON shape.
+ * How [evaluate] reads `variable.key`: the value a bound variable currently holds under [key], or
+ * `null` when the variable is unbound (no active binding, e.g. inside an unmatched OPTIONAL MATCH
+ * extension) or the key does not resolve. The evaluator resolves node variables through
+ * `QueryTiers.kt`'s [nodeValue] and tier-referenced edge variables through their `EdgeRef`.
  */
-internal fun resolveOperand(operand: Operand, candidateOf: (variable: String) -> QueryCandidate?): JsonElement? =
+internal typealias PropertyLookup = (variable: String, key: String) -> JsonElement?
+
+/** The pre-2.18.0 resolution as a [PropertyLookup]: a variable's [QueryCandidate], keys through `candidateValue`. */
+internal fun candidateLookup(candidateOf: (variable: String) -> QueryCandidate?): PropertyLookup =
+    { variable, key -> candidateOf(variable)?.let { candidateValue(key, it) } }
+
+/**
+ * `variable.key` resolved through [lookup]; an unresolved variable or key is `null`, same as a
+ * missing property. [Operand.Value] is already in JSON shape.
+ */
+internal fun resolveOperand(operand: Operand, lookup: PropertyLookup): JsonElement? =
     when (operand) {
-        is Operand.Property -> candidateOf(operand.variable)?.let { candidateValue(operand.key, it) }
+        is Operand.Property -> lookup(operand.variable, operand.key)
         is Operand.Value -> operand.literal.value
     }
 
 /**
- * The full recursive WHERE evaluator over one binding (`candidateOf` resolves a bound
- * variable's current [QueryCandidate]): `And`/`Or`/`Not` are Kleene ([Truth.and]/[Truth.or]/
- * [Truth.not]); [Expr.IsNull] is always decidable — TRUE or FALSE, never UNKNOWN, unlike a
- * comparison against a possibly-absent value.
+ * The full recursive WHERE evaluator over one binding ([lookup] resolves a bound variable's
+ * current value): `And`/`Or`/`Not` are Kleene ([Truth.and]/[Truth.or]/[Truth.not]);
+ * [Expr.IsNull] is always decidable — TRUE or FALSE, never UNKNOWN, unlike a comparison against
+ * a possibly-absent value.
  */
-internal fun evaluate(expr: Expr, candidateOf: (variable: String) -> QueryCandidate?): Truth = when (expr) {
-    is Expr.And -> evaluate(expr.left, candidateOf) and evaluate(expr.right, candidateOf)
-    is Expr.Or -> evaluate(expr.left, candidateOf) or evaluate(expr.right, candidateOf)
-    is Expr.Not -> evaluate(expr.operand, candidateOf).not()
-    is Expr.Compare -> compare(expr.op, resolveOperand(expr.left, candidateOf), resolveOperand(expr.right, candidateOf))
-    is Expr.In -> inList(resolveOperand(expr.left, candidateOf), resolveOperand(expr.right, candidateOf))
-    is Expr.StringOp -> stringOp(expr.op, resolveOperand(expr.left, candidateOf), resolveOperand(expr.right, candidateOf))
+internal fun evaluate(expr: Expr, lookup: PropertyLookup): Truth = when (expr) {
+    is Expr.And -> evaluate(expr.left, lookup) and evaluate(expr.right, lookup)
+    is Expr.Or -> evaluate(expr.left, lookup) or evaluate(expr.right, lookup)
+    is Expr.Not -> evaluate(expr.operand, lookup).not()
+    is Expr.Compare -> compare(expr.op, resolveOperand(expr.left, lookup), resolveOperand(expr.right, lookup))
+    is Expr.In -> inList(resolveOperand(expr.left, lookup), resolveOperand(expr.right, lookup))
+    is Expr.StringOp -> stringOp(expr.op, resolveOperand(expr.left, lookup), resolveOperand(expr.right, lookup))
     is Expr.IsNull -> {
-        val absent = isNull(resolveOperand(expr.operand, candidateOf))
+        val absent = isNull(resolveOperand(expr.operand, lookup))
         boolTruth(if (expr.negated) !absent else absent)
     }
-    is Expr.Truthy -> truthy(resolveOperand(expr.operand, candidateOf))
+    is Expr.Truthy -> truthy(resolveOperand(expr.operand, lookup))
 }

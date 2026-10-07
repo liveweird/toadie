@@ -426,6 +426,107 @@ describe("hierarchyRelations — derive, don't clear, per entry (v1.25.0, multi-
   });
 });
 
+describe("tiers (2.18.0) — a Toadie-only hint stored beside the Port document", () => {
+  const prop = (id: string, tier: number | null) => ({ ...emptyPropertyDraft(), id, tier });
+  const rel = (id: string, tier: number | null) => ({ ...emptyRelationDraft(), id, target: "team", tier });
+
+  test("an untiered form emits no tiers field at all", () => {
+    const r = toBlueprintRequest(values({ properties: [prop("language", null)], relations: [rel("owner", null)] }));
+    expect(r.tiers).toBeUndefined();
+  });
+
+  test("emits the blueprint, property and relation tiers keyed by id", () => {
+    const r = toBlueprintRequest(
+      values({ tier: 1, properties: [prop("language", 2), prop("repo", null)], relations: [rel("owner", 3)] }),
+    );
+    expect(r.tiers).toEqual({ blueprint: 1, properties: { language: 2 }, relations: { owner: 3 } });
+  });
+
+  test("a blank-id row contributes nothing, and a lone blueprint tier is enough", () => {
+    expect(toBlueprintRequest(values({ properties: [prop("  ", 4)] })).tiers).toBeUndefined();
+    expect(toBlueprintRequest(values({ tier: 4 })).tiers).toEqual({ blueprint: 4, properties: {}, relations: {} });
+  });
+
+  test("the tier lives on the row: a renamed id carries it, a removed row drops it", () => {
+    const response = {
+      id: 1,
+      createdBy: 1,
+      creatorName: "Alice",
+      creatorDeleted: false,
+      createdAt: 1,
+      updatedAt: 1,
+      identifier: "service",
+      title: "Service",
+      schema: { properties: { language: { type: "string" }, repo: { type: "string" } }, required: [] },
+      relations: {
+        owner: { title: "Owner", target: "team", required: false, many: false },
+        peer: { title: "Peer", target: "service", required: false, many: false },
+      },
+      mirrorProperties: {},
+      calculationProperties: {},
+      aggregationProperties: {},
+      tiers: { blueprint: 1, properties: { language: 2, repo: 3 }, relations: { owner: 1, peer: 4 } },
+    } as unknown as Blueprint;
+
+    const form = fromBlueprintResponse(response);
+    form.properties[0].id = "lang";
+    form.relations.splice(0, 1);
+
+    expect(toBlueprintRequest(form).tiers).toEqual({
+      blueprint: 1,
+      properties: { lang: 2, repo: 3 },
+      relations: { peer: 4 },
+    });
+  });
+
+  test("fromBlueprintResponse maps tiers onto the rows and toBlueprintRequest round-trips them", () => {
+    const response = {
+      id: 1,
+      createdBy: 1,
+      creatorName: "Alice",
+      creatorDeleted: false,
+      createdAt: 1,
+      updatedAt: 1,
+      identifier: "service",
+      title: "Service",
+      schema: { properties: { language: { type: "string" }, repo: { type: "string" } }, required: [] },
+      relations: { owner: { title: "Owner", target: "team", required: false, many: false } },
+      mirrorProperties: {},
+      calculationProperties: {},
+      aggregationProperties: {},
+      tiers: { blueprint: 2, properties: { language: 1 }, relations: { owner: 4 } },
+    } as unknown as Blueprint;
+
+    const form = fromBlueprintResponse(response);
+    expect(form.tier).toBe(2);
+    expect(form.properties.map((p) => [p.id, p.tier])).toEqual([["language", 1], ["repo", null]]);
+    expect(form.relations.map((r) => [r.id, r.tier])).toEqual([["owner", 4]]);
+    expect(toBlueprintRequest(form).tiers).toEqual({ blueprint: 2, properties: { language: 1 }, relations: { owner: 4 } });
+  });
+
+  test("fromBlueprintResponse leaves every tier null when the response carries none", () => {
+    const response = {
+      id: 1,
+      createdBy: 1,
+      creatorName: "Alice",
+      creatorDeleted: false,
+      createdAt: 1,
+      updatedAt: 1,
+      identifier: "service",
+      title: "Service",
+      schema: { properties: { language: { type: "string" } }, required: [] },
+      relations: {},
+      mirrorProperties: {},
+      calculationProperties: {},
+      aggregationProperties: {},
+    } as unknown as Blueprint;
+    const form = fromBlueprintResponse(response);
+    expect(form.tier).toBeNull();
+    expect(form.properties[0].tier).toBeNull();
+    expect(toBlueprintRequest(form).tiers).toBeUndefined();
+  });
+});
+
 describe("fromBlueprintResponse edge branches", () => {
   function responseWith(overrides: Record<string, unknown>): Blueprint {
     return {

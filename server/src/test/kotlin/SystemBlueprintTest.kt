@@ -5,6 +5,7 @@ import ch.nokillswit.blueprints.BlueprintList
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_BLUEPRINT_BASES
@@ -47,6 +48,7 @@ class SystemBlueprintTest {
         aggregationProperties = aggregationProperties,
         ownership = ownership,
         hierarchyRelations = hierarchyRelations,
+        tiers = tiers,
     )
 
     @Test
@@ -196,6 +198,8 @@ class SystemBlueprintTest {
                     )
                 ),
                 hierarchyRelations = mapOf("composition" to "manager"),
+                // Tiers are free on a system blueprint (they touch no part of the protected base shape).
+                tiers = BlueprintTiers(blueprint = 2, properties = mapOf("email" to 1, "nickname" to 3), relations = mapOf("team" to 2)),
             )
             val response = admin.putJson("/api/v1/blueprints/${user.id}", extended)
             assertEquals(HttpStatusCode.NoContent, response.status)
@@ -205,6 +209,7 @@ class SystemBlueprintTest {
             assertTrue(reread.schema.properties.containsKey("nickname"))
             assertTrue(reread.relations.containsKey("manager"))
             assertEquals(mapOf("composition" to "manager"), reread.hierarchyRelations)
+            assertEquals(extended.tiers, reread.tiers)
             // The base shape survives the extension.
             assertEquals("string", reread.schema.properties.getValue("email").type)
             assertEquals(SYSTEM_TEAM_BLUEPRINT, reread.relations.getValue("team").target)

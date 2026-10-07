@@ -33,6 +33,13 @@ import {
   type QueryBuilderProperty,
 } from "../utils/queryBuilder";
 
+const META_LABEL_KEYS: Record<string, ParseKeys> = {
+  $identifier: "entityQuery.builder.metaIdentifier",
+  $title: "entityQuery.builder.metaTitle",
+  $tier: "entityQuery.builder.metaTier",
+  $fillTier: "entityQuery.builder.metaFillTier",
+};
+
 const OPERATOR_KEYS: Record<QueryBuilderOperator, ParseKeys> = {
   eq: "entityQuery.builder.operatorEq",
   neq: "entityQuery.builder.operatorNeq",
@@ -216,9 +223,7 @@ function ConditionsEditor({
                 searchable
                 data={disambiguateChoices(properties.map((candidate) => ({
                   value: candidate.id,
-                  label: candidate.source === "meta"
-                    ? t(candidate.id === "$identifier" ? "entityQuery.builder.metaIdentifier" : "entityQuery.builder.metaTitle")
-                    : candidate.title,
+                  label: candidate.source === "meta" ? t(META_LABEL_KEYS[candidate.id]) : candidate.title,
                 })))}
                 value={condition.property || null}
                 error={errorText(`${prefix}.property`)}

@@ -279,7 +279,7 @@ that row's create/update audit before another row or pass two begins. Final ERRO
 later cancellation cannot erase this event; pass two emits no duplicate. Audit logs remain
 post-commit external output, not an atomic database outbox or a process-crash delivery guarantee.
 
-Current migrations are `V1`–`V43` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32) — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V44` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32; V44, an additive column, follows V43's paragraph) — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -448,6 +448,19 @@ read back exclusively through `Json.decodeFromString` (`LabelService.kt`,
 `CatalogRegistryReader.kt`) and never string-compared, so PostgreSQL's `jsonb` round-trip
 re-serializing the array with spaces is immaterial. Migration checksums, including V43, are
 pinned in `MigrationChecksumTest`; `LabelTest` pins the widened kinds and the eleven keys.
+
+**V44 — blueprint tiers (2.18.0).** One additive column, `blueprints.tiers TEXT NOT NULL DEFAULT
+'{}'` — the `hierarchy_relations` (V34) idiom: a Toadie-only JSON object stored BESIDE the Port
+`definition`, never inside it (`{"blueprint":n,"properties":{..},"relations":{..}}`, see
+`port-data-model.md` "Tiers"). No existing row changes (every row reads as "no tiers"), no
+backfill, no index, and no CHECK: the 1..4 range and the key-existence rules are
+request-validation (`blueprints/BlueprintTiers.kt`), the registry-is-the-whitelist posture.
+The column is written by exactly the paths that write `hierarchy_relations` — `insertRow` and
+`BlueprintSync.replaceRow`, under the V27 lock — and read by `toResponse`, `activeRows` and
+`EntityService.loadActiveBlueprints` (for the query engine); it is never part of the V39
+ontology-revision inputs beyond the bump every blueprint write already does. Decoded
+exclusively through `blueprintJson.decodeFromString`, never string-compared. The checksum is
+pinned in `MigrationChecksumTest`.
 
 - `V33__seed_hierarchies` — seeds the new `HIERARCHY` dictionary (V7's table, a third `Dictionary`
   enum value) with the single value `composition` (position 0, the V8/V16 conflict idiom). NO
@@ -658,15 +671,19 @@ entities, unlike the catalog, which only bumps on an actual content change), so 
 changes" badge means "saved in Toadie since the sync", not "the document differs from the
 baseline". `synced_content` is the baseline a blueprint's sync diffs against: the submitted
 `BlueprintRequest` re-encoded through `blueprintJson` (request-shaped, `sourceUrl` itself never
-inside it), INCLUDING the request's merged `hierarchyRelations` — the map actually stored, never
-whatever the remote document happened to carry. **The one deliberate departure from V37's rule**:
+inside it), INCLUDING the request's merged `hierarchyRelations` and `tiers` — the maps actually stored, never
+whatever the remote document happened to carry. **The two deliberate departures from V37's rule**
+(both Toadie-only extensions with no Port-native representation to omit-by-absence against):
 when the synced request omits `hierarchyRelations`, `syncFromSource` merges in the CURRENTLY
 stored map before validation rather than treating absence as "clear it" (entities' own rule) —
 the Toadie-only extension has no Port-native representation to omit-by-absence against, so
 syncing from a genuine Port export (which never carries `hierarchyRelations` at all) would
 otherwise silently wipe it on every sync. A present, non-empty `hierarchyRelations` in the synced
 request still REPLACES the stored map; clearing the map remains an ordinary editor PUT action — a
-sync can never clear it. A changed or cleared `sourceUrl` on an ordinary PUT resets
+sync can never clear it. The second departure is `tiers` (2.18.0, V44): an omitted or empty
+`tiers` keeps the stored ones, but PRUNED to the synced document's own property/relation keys
+rather than refused (a tier is only a hint, so a remote that dropped a tiered field never fails
+the sync) — see `port-data-model.md` "Tiers". A changed or cleared `sourceUrl` on an ordinary PUT resets
 `last_synced_at` to `0` and `synced_content` to `null`, exactly like V37. Import-from-URL (a batch
 `sourceUrl` on `POST …/blueprints/import`) stamps the reference and the sync baseline on BOTH the
 pass-one write and, for a row deferred through the two-pass ontology-import protocol, the

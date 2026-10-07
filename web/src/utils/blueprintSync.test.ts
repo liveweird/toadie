@@ -111,17 +111,17 @@ describe("pickSourceBlueprintDocument", () => {
       TARGET,
       {},
     );
-    expect(result).toEqual({ document: null, error: "noMatch", hierarchyKept: false });
+    expect(result).toEqual({ document: null, error: "noMatch", hierarchyKept: false, tiersKept: false });
   });
 
   test("zero candidate documents is a noMatch", () => {
     const result = pickSourceBlueprintDocument(JSON.stringify({ blueprints: [] }), TARGET, {});
-    expect(result).toEqual({ document: null, error: "noMatch", hierarchyKept: false });
+    expect(result).toEqual({ document: null, error: "noMatch", hierarchyKept: false, tiersKept: false });
   });
 
   test("invalid JSON is a parse error", () => {
     const result = pickSourceBlueprintDocument("{not json", TARGET, {});
-    expect(result).toEqual({ document: null, error: "parse", hierarchyKept: false });
+    expect(result).toEqual({ document: null, error: "parse", hierarchyKept: false, tiersKept: false });
   });
 
   test("a null description/icon reads as unset, the same as an omitted key", () => {
@@ -211,5 +211,67 @@ describe("pickSourceBlueprintDocument", () => {
         hierarchyRelations: { composition: "parent" },
       });
     });
+  });
+});
+
+describe("the tiers keep-when-absent mirror (2.18.0)", () => {
+  const STORED = { blueprint: 1, properties: { a: 1, b: 2 }, relations: { parent: 3 } };
+  const SOURCE = {
+    identifier: "service",
+    title: "Service",
+    schema: { properties: { a: { type: "string" } } },
+    relations: { parent: { title: "Parent", target: "service", required: false, many: false } },
+  };
+
+  test("a picked document without tiers keeps the stored ones, pruned to its own keys", () => {
+    const result = pickSourceBlueprintDocument(JSON.stringify(SOURCE), TARGET, { tiers: STORED });
+    expect(result.tiersKept).toBe(true);
+    expect(result.document?.tiers).toEqual({ blueprint: 1, properties: { a: 1 }, relations: { parent: 3 } });
+  });
+
+  test("a picked document with its OWN tiers is used as-is", () => {
+    const own = { blueprint: 2, properties: { a: 4 }, relations: { parent: 1 } };
+    const result = pickSourceBlueprintDocument(JSON.stringify({ ...SOURCE, tiers: own }), TARGET, { tiers: STORED });
+    expect(result.tiersKept).toBe(false);
+    expect(result.document?.tiers).toEqual(own);
+  });
+
+  test("an empty tiers object still triggers the keep", () => {
+    const result = pickSourceBlueprintDocument(
+      JSON.stringify({ ...SOURCE, tiers: { properties: {}, relations: {} } }),
+      TARGET,
+      { tiers: STORED },
+    );
+    expect(result.tiersKept).toBe(true);
+  });
+
+  test("nothing stored, or nothing left after pruning, leaves the document without tiers", () => {
+    expect(pickSourceBlueprintDocument(JSON.stringify(SOURCE), TARGET, {}).tiersKept).toBe(false);
+    const bare = JSON.stringify({ identifier: "service", title: "Service" });
+    const pruned = pickSourceBlueprintDocument(bare, TARGET, { tiers: { properties: { a: 1 }, relations: { parent: 2 } } });
+    expect(pruned.tiersKept).toBe(false);
+    expect(pruned.document).toEqual({ identifier: "service", title: "Service" });
+  });
+
+  test("a partial remote tiers object is normalized to the stored shape so a synced copy compares equal", () => {
+    const result = pickSourceBlueprintDocument(
+      JSON.stringify({ ...SOURCE, tiers: { properties: { a: 4 } } }),
+      TARGET,
+      { tiers: STORED },
+    );
+    expect(result.tiersKept).toBe(false);
+    expect(result.document?.tiers).toEqual({ properties: { a: 4 }, relations: {} });
+  });
+
+  test("a remote tiers: {} with nothing stored is dropped, not a spurious diff", () => {
+    const result = pickSourceBlueprintDocument(JSON.stringify({ ...SOURCE, tiers: {} }), TARGET, {});
+    expect(result.tiersKept).toBe(false);
+    expect(result.document).toEqual(SOURCE);
+    expect(result.document).not.toHaveProperty("tiers");
+  });
+
+  test("canonical rendering places tiers after hierarchyRelations", () => {
+    const text = canonicalBlueprintDocumentJson({ tiers: { blueprint: 1 }, hierarchyRelations: { c: "p" }, title: "T", identifier: "i" });
+    expect(text.indexOf("hierarchyRelations")).toBeLessThan(text.indexOf("tiers"));
   });
 });

@@ -214,6 +214,11 @@ data class BlueprintRequest(
     // may legitimately share one relation value.
     val hierarchyRelations: Map<String, String>? = null,
     /**
+     * Fill-in tiers (2.18.0, V44) — a Toadie-only 1-4 priority hint stored beside the Port
+     * document like [hierarchyRelations]; absent when empty. Rules: `blueprints/BlueprintTiers.kt`.
+     */
+    val tiers: BlueprintTiers? = null,
+    /**
      * The blueprint's source reference (2.10.0, the `entities.source_url` twin, one level up) —
      * the https URL of its canonical remote copy (a Port blueprint export or a Toadie export).
      * Row state, never part of [toDefinition] or a bulk-import DOCUMENT
@@ -223,6 +228,18 @@ data class BlueprintRequest(
      * `sourceUrl`/`POST …/blueprints/{id}/sync`.
      */
     val sourceUrl: String? = null,
+)
+
+/**
+ * The Toadie-only fill-in tiers (1-4) at three levels: the [blueprint] itself, its schema
+ * [properties] and its [relations], keyed by the property/relation key. Pure data — the rules
+ * (range, key existence, pruning, the column codec) live in `BlueprintTiers.kt`.
+ */
+@Serializable
+data class BlueprintTiers(
+    val blueprint: Int? = null,
+    val properties: Map<String, Int> = emptyMap(),
+    val relations: Map<String, Int> = emptyMap(),
 )
 
 /** The flattened request/response shape: identity columns + [BlueprintDefinition]'s fields. */
@@ -240,6 +257,7 @@ data class BlueprintResponse(
     val aggregationProperties: Map<String, AggregationPropertyDefinition> = emptyMap(),
     val ownership: OwnershipDefinition? = null,
     val hierarchyRelations: Map<String, String>? = null,
+    val tiers: BlueprintTiers? = null,
     val createdBy: UInt,
     val creatorName: String,
     val creatorDeleted: Boolean,
@@ -304,6 +322,7 @@ fun sanitizedBlueprintRequest(request: BlueprintRequest): BlueprintRequest = req
     aggregationProperties = request.aggregationProperties.mapValues { (_, agg) -> sanitizedAggregation(agg) },
     ownership = request.ownership?.let { sanitizedOwnership(it) },
     hierarchyRelations = sanitizedHierarchyRelations(request.hierarchyRelations),
+    tiers = sanitizedTiers(request.tiers),
 )
 
 /**

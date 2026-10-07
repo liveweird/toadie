@@ -15,6 +15,8 @@
     "property": "Property",
     "metaIdentifier": "Identifier",
     "metaTitle": "Title",
+    "metaTier": "Blueprint tier",
+    "metaFillTier": "Filled through tier",
     "operator": "Operator",
     "value": "Value",
     "connection": "Connection",

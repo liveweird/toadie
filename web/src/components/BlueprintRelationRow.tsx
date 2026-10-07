@@ -2,6 +2,7 @@ import { Group, Switch, TextInput } from "@mantine/core";
 import { type UseFormReturnType } from "@mantine/form";
 import { useTranslation } from "react-i18next";
 import BlueprintTargetSelect from "./BlueprintTargetSelect";
+import TierSelect from "./TierSelect";
 import { MAX_TITLE_LENGTH, type BlueprintFormValues } from "../utils/blueprintForm";
 
 type Form = UseFormReturnType<BlueprintFormValues>;
@@ -50,6 +51,13 @@ export default function BlueprintRelationRow({
         ownIdentifier={form.values.identifier}
         error={form.getInputProps(`relations.${index}.target`).error}
         label={t("blueprints.field.target")}
+      />
+      <TierSelect
+        label={t("common.tier.label")}
+        ariaLabel={t("common.tier.selectAria", { id: row.id.trim() || t("blueprints.rows.new.relations") })}
+        value={row.tier}
+        onChange={(tier) => form.setFieldValue(`relations.${index}.tier`, tier)}
+        w={110}
       />
       <Switch
         mt={26}

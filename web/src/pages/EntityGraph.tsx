@@ -52,6 +52,7 @@ import {
   buildEntityHierarchy,
   entityGraphEdgeKey,
   effectiveHierarchyId,
+  filterEdgesByTierFocus,
   filterEntityGraph,
   hierarchyEdgeKeys,
   OWNERSHIP_EDGE_STYLE,
@@ -68,6 +69,7 @@ import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 import { editEntityPath } from "../utils/entityLinks";
 import { OWNERSHIP_RELATION } from "../utils/systemBlueprints";
 import { queryProblemDiagnostics } from "../utils/queryDiagnostics";
+import { blueprintTierLookup } from "../utils/tiers";
 import LoadingBlock from "../components/LoadingBlock";
 import classes from "../theme.module.css";
 import { useGraphLayout } from "../hooks/useGraphLayout";
@@ -115,7 +117,9 @@ export default function EntityGraph() {
   const colorScheme = useComputedColorScheme("light");
   const { blueprints, loading: blueprintsLoading } = useBlueprints();
   const activeBlueprints = useMemo(() => blueprints.map((b) => b.identifier), [blueprints]);
-  const filters = useEntityGraphFilterState("entityGraph", activeBlueprints, blueprintsLoading);
+  const tierOf = useMemo(() => blueprintTierLookup(blueprints), [blueprints]);
+  const filters = useEntityGraphFilterState("entityGraph", activeBlueprints, blueprintsLoading, tierOf);
+  const focus = filters.controls.focus;
   const { hierarchies } = useHierarchies();
   const [storedHierarchyId, setStoredHierarchyId] = useStoredState("entityGraph.hierarchy", "", isString);
   const hierarchyId = effectiveHierarchyId(storedHierarchyId, hierarchies.map((h) => h.value));
@@ -178,7 +182,15 @@ export default function EntityGraph() {
   );
   const baseLayout = useMemo(() => {
     if (!graph) return { nodes: [] as LaidOutNode<EntityGraphNodeApi>[], edges: [] as Edge[], anyCollapsed: false };
-    const filtered = filterEntityGraph(graph, disabled);
+    const chipFiltered = filterEntityGraph(graph, disabled);
+    // The tier Focus also thins relation edges (by the relation's tier on its source
+    // blueprint) — BEFORE the fold and dagre, so a hidden edge neither stands in for a
+    // collapsed subtree nor takes part in the layout. The containment forest below still
+    // reads the full payload, so an entity stays collapsible under any Focus.
+    const filtered = {
+      nodes: chipFiltered.nodes,
+      edges: filterEdgesByTierFocus(chipFiltered.edges, chipFiltered.nodes, blueprints, focus),
+    };
     const selectedHierarchyEdges = hierarchyEdgeKeys(graph, hierarchyId);
     const folded = foldGraph(toFoldable(filtered), forest, new Set(collapsed));
     const laidOut = layoutGraph(folded, ENTITY_CLUSTER);
@@ -203,17 +215,17 @@ export default function EntityGraph() {
       );
     const nodes = laidOut.nodes.map((n) => {
       const info = folded.info.get(n.id);
-      return info ? {
+      const tiered = { ...n.data, tier: tierOf(n.data.apiNode.blueprint) };
+      return {
         ...n,
-        data: {
-          ...n.data,
-          fold: { ...info, disabled: !layoutReady, onToggle: () => toggleRef.current(n.id) },
-        },
-      } : n;
+        data: info
+          ? { ...tiered, fold: { ...info, disabled: !layoutReady, onToggle: () => toggleRef.current(n.id) } }
+          : tiered,
+      };
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges, anyCollapsed };
-  }, [graph, disabled, forest, collapsed, layoutReady, hierarchyId]);
+  }, [graph, disabled, forest, collapsed, layoutReady, hierarchyId, blueprints, focus, tierOf]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode<EntityGraphNodeApi>>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);

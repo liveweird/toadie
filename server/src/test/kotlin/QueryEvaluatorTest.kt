@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.OwnershipDefinition
@@ -73,20 +74,21 @@ class QueryEvaluatorTest {
         team = team,
     )
 
-    private val teamBp = GraphBlueprint(SYSTEM_TEAM_BLUEPRINT, "Team", BlueprintDefinition(), emptyMap())
-    private val environmentBp = GraphBlueprint("environment", "Environment", BlueprintDefinition(), emptyMap())
+    private val teamBp = GraphBlueprint(SYSTEM_TEAM_BLUEPRINT, "Team", BlueprintDefinition(), emptyMap(), BlueprintTiers())
+    private val environmentBp = GraphBlueprint("environment", "Environment", BlueprintDefinition(), emptyMap(), BlueprintTiers())
     private val clusterDefinition = BlueprintDefinition(relations = mapOf("environment" to relation("environment")))
     private val clusterBp = GraphBlueprint(
         "cluster",
         "Cluster",
         clusterDefinition,
         mapOf("composition" to "environment", "deployment" to "environment"),
+        BlueprintTiers(),
     )
     private val workloadDefinition = BlueprintDefinition(
         relations = mapOf("cluster" to relation("cluster")),
         ownership = OwnershipDefinition(type = "Inherited", path = "cluster"),
     )
-    private val workloadBp = GraphBlueprint("workload", "Workload", workloadDefinition, mapOf("deployment" to "cluster"))
+    private val workloadBp = GraphBlueprint("workload", "Workload", workloadDefinition, mapOf("deployment" to "cluster"), BlueprintTiers())
     private val serviceDefinition = BlueprintDefinition(
         schema = BlueprintSchema(
             properties = mapOf(
@@ -101,7 +103,7 @@ class QueryEvaluatorTest {
             "shortcut" to relation("service"),
         ),
     )
-    private val serviceBp = GraphBlueprint("service", "Service", serviceDefinition, emptyMap())
+    private val serviceBp = GraphBlueprint("service", "Service", serviceDefinition, emptyMap(), BlueprintTiers())
 
     private val blueprints = listOf(teamBp, environmentBp, clusterBp, workloadBp, serviceBp).associateBy { it.identifier }
 
@@ -301,8 +303,8 @@ class QueryEvaluatorTest {
         val nodeDefinition = BlueprintDefinition(
             relations = mapOf("composition" to relation("target"), "parent" to relation("target")),
         )
-        val nodeBp = GraphBlueprint("node", "Node", nodeDefinition, mapOf("composition" to "parent"))
-        val targetBp = GraphBlueprint("target", "Target", BlueprintDefinition(), emptyMap())
+        val nodeBp = GraphBlueprint("node", "Node", nodeDefinition, mapOf("composition" to "parent"), BlueprintTiers())
+        val targetBp = GraphBlueprint("target", "Target", BlueprintDefinition(), emptyMap(), BlueprintTiers())
         val t1 = row("target", "shadow-t1")
         val t2 = row("target", "shadow-t2")
         val n1 = row(

@@ -202,6 +202,11 @@ ch.nokillswit
 │                       `POST …/{id}/sync` (ADMIN) and `POST …/blueprints/fetch` (ADMIN), an
 │                       ordinary replace under the same V27 lock that KEEPS the stored
 │                       `hierarchyRelations` map when the remote document omits it
+│                       (and, since 2.18.0, the stored `tiers` pruned to the synced keys);
+│                       BlueprintTiers.kt (2.18.0, V44) — the Toadie-only fill-in `tiers` rules:
+│                       the 1..4 bounds, `sanitizedTiers`, `validateTiers`, `prunedTo` and the
+│                       `blueprints.tiers` column codec (the `BlueprintTiers` DTO itself sits
+│                       in Blueprint.kt, Kover-excluded with the other wire DTOs)
 ├── entities/           instances of a blueprint (v1.24.0, Phase 2 of the Port data-model
 │                       move): Entity.kt (the wire DTOs — EntityRequest/Entity/EntityFinding,
 │                       reusing `blueprintJson` for the stored `document` = {properties,
@@ -300,7 +305,9 @@ ch.nokillswit
 │                       workspace's IndexedRows: per-blueprint/incoming/ownership indexes built once
 │                       or lazily, `$team` = the EFFECTIVE team, byte-exact), QueryBudget.kt (the
 │                       cooperative deadline observed at EVERY checkpoint + binding cap; per-candidate
-│                       work capped by the string-operand ceilings), QueryEvaluator.kt (`InMemoryQueryExecutor`
+│                       work capped by the string-operand ceilings), QueryTiers.kt (2.18.0 — the
+│                       query-only `$tier`/`$fillTier`/`r.$tier` metas: filled tables, lazy
+│                       `computeFillTier`, `EdgeRef`, `nodeValue`), QueryEvaluator.kt (`InMemoryQueryExecutor`
 │                       behind the `QueryExecutor` interface — anchored joins, level-set BFS for
 │                       `*n..m`, trailing OPTIONAL MATCH, RETURN as a node SET, LIMIT after dedupe).
 │                       Pure — no database, no Ktor; consumed by entities/EntityService.graph

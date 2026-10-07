@@ -80,6 +80,9 @@ class BlueprintService(internal val database: R2dbcDatabase) {
         // stay byte-identical. One JSON object in TEXT (the `definition` column's own idiom),
         // hierarchy identifier -> relation key; "{}" when unset.
         val hierarchyRelations = text("hierarchy_relations").default("{}")
+        // Fill-in tiers (V44): the same beside-the-document idiom — one JSON object in TEXT
+        // ({"blueprint":n,"properties":{..},"relations":{..}}); "{}" when unset.
+        val tiers = text("tiers").default("{}")
         // Phase 4 (V31): `_team`/`_user`, seeded by the migration — never set by application
         // code (see blueprints/SystemBlueprints.kt for the protections this flag gates).
         val isSystem = bool("is_system").default(false)
@@ -136,6 +139,7 @@ class BlueprintService(internal val database: R2dbcDatabase) {
             aggregationProperties = definition.aggregationProperties,
             ownership = definition.ownership,
             hierarchyRelations = decodeHierarchyRelations(this[Blueprints.hierarchyRelations]).ifEmpty { null },
+            tiers = decodeTiers(this[Blueprints.tiers]),
             createdBy = this[Blueprints.createdBy].value,
             creatorName = this[UserService.Users.name],
             creatorDeleted = this[UserService.Users.markedAsDeleted],
@@ -202,6 +206,7 @@ class BlueprintService(internal val database: R2dbcDatabase) {
         val identifier: String,
         val definition: BlueprintDefinition,
         val hierarchyRelations: Map<String, String>,
+        val tiers: BlueprintTiers?,
         val isSystem: Boolean,
         val sourceUrl: String?,
         val lastSyncedAt: Long,
@@ -215,6 +220,7 @@ class BlueprintService(internal val database: R2dbcDatabase) {
                 it[Blueprints.identifier],
                 blueprintJson.decodeFromString<BlueprintDefinition>(it[Blueprints.definition]),
                 decodeHierarchyRelations(it[Blueprints.hierarchyRelations]),
+                decodeTiers(it[Blueprints.tiers]),
                 it[Blueprints.isSystem],
                 it[Blueprints.sourceUrl],
                 it[Blueprints.lastSyncedAt],
@@ -313,6 +319,7 @@ class BlueprintService(internal val database: R2dbcDatabase) {
             it[icon] = request.icon
             it[Blueprints.definition] = blueprintJson.encodeToString(definition)
             it[hierarchyRelations] = encodeHierarchyRelations(request.hierarchyRelations)
+            it[tiers] = encodeTiers(request.tiers)
             it[createdBy] = callerId
             it[createdAt] = now
             it[updatedAt] = now

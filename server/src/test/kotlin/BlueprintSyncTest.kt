@@ -6,6 +6,8 @@ import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.BlueprintSyncStateResponse
+import ch.nokillswit.blueprints.BlueprintTiers
+import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SyncBlueprintRequest
@@ -331,6 +333,64 @@ class BlueprintSyncTest {
                 SampleData.restoreHierarchies(hierarchiesBefore)
             }
         }
+
+    @Test
+    fun `tiers trio - kept and pruned when absent, replaced when present, recorded in the baseline`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("bpsync-tiers", UserRole.ADMIN)
+        val bpId = unique("bp-bpsync-tiers")
+        try {
+            val stored = BlueprintRequest(
+                identifier = bpId, title = "T",
+                schema = BlueprintSchema(
+                    properties = mapOf("a" to PropertyDefinition(type = "string"), "b" to PropertyDefinition(type = "string")),
+                ),
+                relations = mapOf("parent" to RelationDefinition(title = "Parent", target = bpId, required = false, many = false)),
+                tiers = BlueprintTiers(blueprint = 1, properties = mapOf("a" to 1, "b" to 2), relations = mapOf("parent" to 3)),
+                sourceUrl = sourceUrl(bpId),
+            )
+            val created = client.createBlueprint(stored)
+
+            // (a) A remote copy OMITTING tiers keeps the stored ones, PRUNED to the keys the remote
+            // still has: `b` is gone from the remote, so its tier is dropped silently (no 400).
+            val remote = stored.copy(
+                title = "Kept", sourceUrl = null, tiers = null,
+                schema = BlueprintSchema(properties = mapOf("a" to PropertyDefinition(type = "string"))),
+            )
+            assertEquals(HttpStatusCode.NoContent, client.sync(created.id, remote).status)
+            val afterKeep = client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>()
+            assertEquals(BlueprintTiers(blueprint = 1, properties = mapOf("a" to 1), relations = mapOf("parent" to 3)), afterKeep.tiers)
+            // ...and the baseline records the merged, pruned map.
+            assertEquals(afterKeep.tiers, client.syncState(created.id).syncedDocument!!.tiers)
+
+            // (b) A remote copy carrying its own tiers REPLACES the stored ones.
+            val remoteTiered = remote.copy(tiers = BlueprintTiers(properties = mapOf("a" to 4)))
+            assertEquals(HttpStatusCode.NoContent, client.sync(created.id, remoteTiered).status)
+            val afterReplace = client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>()
+            assertEquals(BlueprintTiers(properties = mapOf("a" to 4)), afterReplace.tiers)
+            assertEquals(afterReplace.tiers, client.syncState(created.id).syncedDocument!!.tiers)
+
+            // (c) A remote copy naming a tier for a key it does not declare is an ordinary 400.
+            val orphan = remote.copy(tiers = BlueprintTiers(properties = mapOf("zzz" to 1)))
+            assertEquals(HttpStatusCode.BadRequest, client.sync(created.id, orphan).status)
+
+            // (c2) An explicit empty `tiers: {}` is sanitized to null, so it keeps (and prunes) the stored ones too.
+            val remoteEmpty = remote.copy(title = "Empty", tiers = BlueprintTiers())
+            assertEquals(HttpStatusCode.NoContent, client.sync(created.id, remoteEmpty).status)
+            assertEquals(
+                BlueprintTiers(properties = mapOf("a" to 4)),
+                client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>().tiers,
+            )
+
+            // (d) A kept map that prunes to nothing leaves the blueprint untiered.
+            val untiered = client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>()
+            val bare = remote.copy(schema = BlueprintSchema(), relations = emptyMap(), title = "Bare")
+            assertEquals(HttpStatusCode.NoContent, client.sync(untiered.id, bare).status)
+            assertNull(client.get("/api/v1/blueprints/${created.id}").body<BlueprintResponse>().tiers)
+        } finally {
+            TestBlueprints.remove(bpId)
+        }
+    }
 
     @Test
     fun `_team extended via sync succeeds and audits system true`() = testApplication {

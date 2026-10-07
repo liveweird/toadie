@@ -40,6 +40,17 @@ describe("EntityGraphNode", () => {
     expect(screen.getByLabelText("Open Checkout")).toBeInTheDocument();
   });
 
+  test("the blueprint badge leads with the tier dot stamped on the node data, and none without one", () => {
+    const tiered = nodeProps();
+    (tiered.data as Record<string, unknown>).tier = 2;
+    const { container, unmount } = renderWithProviders(<EntityGraphNode {...tiered} />);
+    expect(container.querySelector('.mantine-Badge-root [data-tier="2"]')).not.toBeNull();
+    unmount();
+
+    const { container: untiered } = renderWithProviders(<EntityGraphNode {...nodeProps()} />);
+    expect(untiered.querySelector("[data-tier]")).toBeNull();
+  });
+
   test("shows nothing extra when there are no findings, and the count badge when there are", () => {
     renderWithProviders(<EntityGraphNode {...nodeProps({ findings: 3 })} />);
     expect(screen.getByText("3 findings")).toBeInTheDocument();

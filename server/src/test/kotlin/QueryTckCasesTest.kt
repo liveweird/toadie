@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.PropertyDefinition
@@ -55,8 +56,8 @@ class QueryTckCasesTest {
     )
 
     private val blueprints = mapOf(
-        "person" to GraphBlueprint("person", "Person", personDefinition, emptyMap()),
-        "company" to GraphBlueprint("company", "Company", companyDefinition, emptyMap()),
+        "person" to GraphBlueprint("person", "Person", personDefinition, emptyMap(), BlueprintTiers()),
+        "company" to GraphBlueprint("company", "Company", companyDefinition, emptyMap(), BlueprintTiers()),
     )
 
     private fun props(vararg pairs: Pair<String, Any>): JsonObject = buildJsonObject {

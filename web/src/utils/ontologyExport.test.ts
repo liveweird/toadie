@@ -81,6 +81,14 @@ describe("blueprintExportDocument", () => {
     expect(doc.hierarchyRelations).toEqual({ composition: "owningTeam" });
   });
 
+  test("carries tiers when any level is set and omits them when absent or empty", () => {
+    const tiered: Blueprint = { ...BLUEPRINT, tiers: { blueprint: 1, properties: { language: 2 }, relations: {} } };
+    expect(blueprintExportDocument(tiered).tiers).toEqual({ blueprint: 1, properties: { language: 2 }, relations: {} });
+    expect(blueprintExportDocument({ ...BLUEPRINT, tiers: { properties: {}, relations: {} } })).not.toHaveProperty("tiers");
+    expect(blueprintExportDocument({ ...BLUEPRINT, tiers: { relations: { owningTeam: 3 } } })).toHaveProperty("tiers");
+    expect(blueprintExportDocument(BLUEPRINT)).not.toHaveProperty("tiers");
+  });
+
   test("omits hierarchyRelations when the map is present but empty", () => {
     const withEmptyMap: Blueprint = { ...BLUEPRINT, hierarchyRelations: {} };
     const doc = blueprintExportDocument(withEmptyMap);

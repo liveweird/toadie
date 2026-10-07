@@ -1,6 +1,8 @@
 import type { CSSProperties } from "react";
-import type { EntityGraph, EntityGraphNode } from "../api/entities";
+import type { EntityGraph, EntityGraphEdge, EntityGraphNode } from "../api/entities";
+import type { Blueprint } from "../api/blueprints";
 import type { HierarchyNode } from "./hierarchy";
+import { relationTier, withinFocus, type Tier } from "./tiers";
 
 /**
  * Pure shaping for the Entity graph/hierarchy pages (Port migration phase 3, v1.25.0; Phase 4
@@ -25,6 +27,30 @@ export const OWNERSHIP_EDGE_STYLE: CSSProperties = {
  *  relation chip governs relations, not which entities exist. */
 export function filterEntityGraph(graph: EntityGraph, disabledRelations: ReadonlySet<string>): EntityGraph {
   return { nodes: graph.nodes, edges: graph.edges.filter((e) => !disabledRelations.has(e.relation)) };
+}
+
+/**
+ * The tier Focus applied to relation EDGES (2.18.0, Entity graph only): with a Focus set, an
+ * edge survives when its relation's tier on the SOURCE node's blueprint is within it (untiered
+ * relations are excluded, like every untiered item). `$team` ownership edges are not blueprint
+ * relations and are always kept; nodes are untouched here (the hook already narrows the shown
+ * blueprints). No Focus returns [edges] unchanged. The Hierarchy deliberately skips this:
+ * dropping a parent link would re-root its trees.
+ */
+export function filterEdgesByTierFocus(
+  edges: readonly EntityGraphEdge[],
+  nodes: readonly EntityGraphNode[],
+  blueprints: readonly Pick<Blueprint, "identifier" | "tiers">[],
+  focus: Tier | null,
+): EntityGraphEdge[] {
+  if (focus === null) return [...edges];
+  const blueprintOf = new Map(nodes.map((node) => [node.id, node.blueprint]));
+  const byIdentifier = new Map(blueprints.map((blueprint) => [blueprint.identifier, blueprint]));
+  return edges.filter((edge) => {
+    if (edge.ownership) return true;
+    const source = byIdentifier.get(blueprintOf.get(edge.sourceId) ?? "");
+    return withinFocus(relationTier(source, edge.relation), focus);
+  });
 }
 
 /** The distinct relation identifiers present in the graph, sorted — the relation chips'

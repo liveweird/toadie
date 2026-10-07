@@ -3,9 +3,11 @@ package ch.nokillswit
 import ch.nokillswit.blueprints.BlueprintPlanVerdict
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.MAX_BLUEPRINTS
 import ch.nokillswit.blueprints.MirrorPropertyDefinition
 import ch.nokillswit.blueprints.OwnershipDefinition
+import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RegistryBlueprint
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
@@ -221,6 +223,35 @@ class BlueprintImportPlanTest {
         assertTrue(storeA.pass1.mirrorProperties.isEmpty(), "a mirror path starting with the dropped relation must be stripped too")
         assertNull(storeA.pass1.ownership, "an Inherited ownership path starting with the dropped relation must be stripped too")
         assertNull(storeA.pass1.hierarchyRelations, "a hierarchyRelations entry naming the dropped relation must be stripped too")
+    }
+
+    @Test
+    fun `deferring a relation drops its tier from pass 1 and keeps the full map for pass 2`() {
+        val a = BlueprintRequest(
+            identifier = "a",
+            title = "A",
+            schema = BlueprintSchema(properties = mapOf("p" to PropertyDefinition(type = "string"))),
+            relations = mapOf("toB" to relationTo("b"), "self" to relationTo("a")),
+            tiers = BlueprintTiers(blueprint = 2, properties = mapOf("p" to 1), relations = mapOf("toB" to 3, "self" to 4)),
+        )
+        val b = simple("b", relations = mapOf("peer" to relationTo("a")))
+        val result = plan(listOf(doc(a), doc(b)))
+        val storeA = result.verdicts[0] as BlueprintPlanVerdict.Store
+        assertEquals(setOf("b"), storeA.deferred)
+        assertEquals(
+            BlueprintTiers(blueprint = 2, properties = mapOf("p" to 1), relations = mapOf("self" to 4)),
+            storeA.pass1.tiers,
+            "the dropped relation's tier goes with it; every other tier stays",
+        )
+        assertEquals(a.tiers, storeA.request.tiers, "the full request keeps every tier for pass 2")
+    }
+
+    @Test
+    fun `a tier outside 1-4 is INVALID`() {
+        val bad = simple("a").copy(tiers = BlueprintTiers(blueprint = 7))
+        val rejected = plan(listOf(doc(bad))).verdicts[0] as BlueprintPlanVerdict.Rejected
+        assertEquals(OntologyImportStatus.INVALID, rejected.row.status)
+        assertTrue(rejected.row.message!!.contains("tiers.blueprint"))
     }
 
     @Test

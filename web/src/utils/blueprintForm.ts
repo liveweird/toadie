@@ -101,6 +101,8 @@ export type PropertyDraft = {
   description: string;
   icon: string;
   required: boolean;
+  /** Fill-in tier 1-4 (2.18.0, a Toadie-only hint); null = untiered. Lives on the row, so a rename carries it and a delete drops it. */
+  tier: number | null;
   format: string;
   dateFormat: string;
   pattern: string;
@@ -138,6 +140,8 @@ export type RelationDraft = {
   target: string;
   required: boolean;
   many: boolean;
+  /** Fill-in tier 1-4 (2.18.0); null = untiered. */
+  tier: number | null;
 };
 
 export type MirrorDraft = {
@@ -201,6 +205,8 @@ export type BlueprintFormValues = {
    * to clear it explicitly, rather than the client silently dropping evidence of the problem.
    */
   hierarchyRelations: Record<string, string>;
+  /** The blueprint's own fill-in tier 1-4 (2.18.0); null = untiered. */
+  tier: number | null;
   /** The blueprint's source reference (2.10.0) — row state for the whole request, never part
    *  of the Port document `toBlueprintRequest` builds; sent separately by `useBlueprintSave.ts`,
    *  the `EntityFormValues.sourceUrl` idiom one level down. "" = unset. */
@@ -265,6 +271,7 @@ export function emptyPropertyDraft(): PropertyDraft {
     description: "",
     icon: "",
     required: false,
+    tier: null,
     format: "",
     dateFormat: "",
     pattern: "",
@@ -296,7 +303,7 @@ export function emptyPropertyDraft(): PropertyDraft {
 }
 
 export function emptyRelationDraft(): RelationDraft {
-  return { key: newDraftKey("rel"), id: "", title: "", description: "", target: "", required: false, many: false };
+  return { key: newDraftKey("rel"), id: "", title: "", description: "", target: "", required: false, many: false, tier: null };
 }
 
 export function emptyMirrorDraft(): MirrorDraft {
@@ -348,6 +355,7 @@ export function emptyBlueprintForm(): BlueprintFormValues {
     ownershipTitle: "",
     ownershipPath: "",
     hierarchyRelations: {},
+    tier: null,
     sourceUrl: "",
   };
 }
@@ -526,6 +534,26 @@ function ownershipFor(values: BlueprintFormValues): OwnershipWire | undefined {
   } as OwnershipWire;
 }
 
+/** The Toadie-only `tiers` object: tiers live on the rows, so a row with a blank id (dropped
+ *  above) contributes nothing; the whole field is omitted once no tier is set (the server's
+ *  "empty means absent" rule). Computed rows carry no tier. */
+function tiersFor(values: BlueprintFormValues): BlueprintBody["tiers"] {
+  const rowTiers = (rows: { id: string; tier: number | null }[]): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const row of rows) {
+      const id = row.id.trim();
+      if (id && row.tier != null) out[id] = row.tier;
+    }
+    return out;
+  };
+  const properties = rowTiers(values.properties);
+  const relations = rowTiers(values.relations);
+  if (values.tier == null && Object.keys(properties).length === 0 && Object.keys(relations).length === 0) {
+    return undefined;
+  }
+  return { blueprint: values.tier ?? undefined, properties, relations };
+}
+
 /** Form values -> the Port-shaped wire request; blank-id rows are dropped (the submit path
  *  never sends a half-typed row — the field validators block submit on a blank REQUIRED id
  *  before this ever runs, but the preview calls this on every keystroke). */
@@ -584,6 +612,7 @@ export function toBlueprintRequest(values: BlueprintFormValues): BlueprintBody {
     aggregationProperties,
     ownership: ownershipFor(values),
     hierarchyRelations,
+    tiers: tiersFor(values),
   } as BlueprintBody;
 }
 
@@ -624,11 +653,17 @@ function asPropertyType(value: string): PropertyType {
   return (PROPERTY_TYPES as readonly string[]).includes(value) ? (value as PropertyType) : "string";
 }
 
-function propertyDraftFrom(id: string, def: PropertyDefinitionWire, required: Set<string>): PropertyDraft {
+function propertyDraftFrom(
+  id: string,
+  def: PropertyDefinitionWire,
+  required: Set<string>,
+  tier: number | null,
+): PropertyDraft {
   const type = asPropertyType(def.type);
   return {
     key: newDraftKey("prop"),
     id,
+    tier,
     type,
     title: def.title ?? "",
     description: def.description ?? "",
@@ -664,7 +699,7 @@ function propertyDraftFrom(id: string, def: PropertyDefinitionWire, required: Se
   };
 }
 
-function relationDraftFrom(id: string, def: RelationDefinitionWire): RelationDraft {
+function relationDraftFrom(id: string, def: RelationDefinitionWire, tier: number | null): RelationDraft {
   return {
     key: newDraftKey("rel"),
     id,
@@ -673,6 +708,7 @@ function relationDraftFrom(id: string, def: RelationDefinitionWire): RelationDra
     target: def.target,
     required: def.required,
     many: def.many,
+    tier,
   };
 }
 
@@ -720,9 +756,11 @@ export function fromBlueprintResponse(blueprint: Blueprint): BlueprintFormValues
     description: blueprint.description ?? "",
     icon: blueprint.icon ?? "",
     properties: Object.entries(blueprint.schema.properties ?? {}).map(([id, def]) =>
-      propertyDraftFrom(id, def, required),
+      propertyDraftFrom(id, def, required, blueprint.tiers?.properties?.[id] ?? null),
     ),
-    relations: Object.entries(blueprint.relations ?? {}).map(([id, def]) => relationDraftFrom(id, def)),
+    relations: Object.entries(blueprint.relations ?? {}).map(([id, def]) =>
+      relationDraftFrom(id, def, blueprint.tiers?.relations?.[id] ?? null),
+    ),
     mirrorProperties: Object.entries(blueprint.mirrorProperties ?? {}).map(([id, def]) =>
       mirrorDraftFrom(id, def),
     ),
@@ -736,6 +774,7 @@ export function fromBlueprintResponse(blueprint: Blueprint): BlueprintFormValues
     ownershipTitle: blueprint.ownership?.title ?? "",
     ownershipPath: blueprint.ownership?.path ?? "",
     hierarchyRelations: { ...(blueprint.hierarchyRelations ?? {}) },
+    tier: blueprint.tiers?.blueprint ?? null,
     sourceUrl: blueprint.sourceUrl ?? "",
   };
 }

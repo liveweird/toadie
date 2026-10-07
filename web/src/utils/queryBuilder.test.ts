@@ -69,7 +69,7 @@ describe("query builder schema model", () => {
     });
   });
 
-  test("offers only stored scalar properties plus identifier and title metadata", () => {
+  test("offers only stored scalar properties plus identifier, title and tier metadata", () => {
     expect(getQueryBuilderProperties(schema, "service")).toEqual([
       { id: "lifecycle", title: "Lifecycle", source: "stored", type: "string", enumValues: ["production", "deprecated"] },
       { id: "score", title: "Score", source: "stored", type: "number", enumValues: [] },
@@ -77,6 +77,8 @@ describe("query builder schema model", () => {
       { id: "order", title: "Order", source: "stored", type: "string", enumValues: [] },
       { id: "$identifier", title: "$identifier", source: "meta", type: "string", enumValues: [] },
       { id: "$title", title: "$title", source: "meta", type: "string", enumValues: [] },
+      { id: "$tier", title: "$tier", source: "meta", type: "number", enumValues: [] },
+      { id: "$fillTier", title: "$fillTier", source: "meta", type: "number", enumValues: [] },
     ]);
     expect(getQueryBuilderProperties(schema, "missing")).toEqual([]);
   });
@@ -104,6 +106,18 @@ describe("buildQuery", () => {
       limit: "25",
     }), schema)).toEqual({
       query: "MATCH (n:service) WHERE n.`order` = 'it\\'s\\\\live' AND n.score >= -2.5 AND n.enabled = TRUE AND n.$title IS NOT NULL RETURN n LIMIT 25",
+      errors: [],
+    });
+  });
+
+  test("serializes the tier metas as numbers with the number operators", () => {
+    expect(buildQuery(model({
+      conditions: [
+        { property: "$tier", operator: "lte", value: "2" },
+        { property: "$fillTier", operator: "eq", value: "0" },
+      ],
+    }), schema)).toEqual({
+      query: "MATCH (n:service) WHERE n.$tier <= 2 AND n.$fillTier = 0 RETURN n",
       errors: [],
     });
   });

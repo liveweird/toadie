@@ -1,6 +1,7 @@
 import type { UseFormReturnType } from "@mantine/form";
 import { useTranslation } from "react-i18next";
 import EntityOptionsSelect from "./EntityOptionsSelect";
+import TierLabel from "./TierLabel";
 import type { EntityFormValues, RelationDefinitionWire } from "../utils/entityForm";
 
 type Form = UseFormReturnType<EntityFormValues>;
@@ -15,13 +16,17 @@ export default function EntityRelationField({
   index,
   definition,
   required,
+  tier = null,
 }: {
   form: Form;
   index: number;
   definition: RelationDefinitionWire;
   required: boolean;
+  /** The relation's fill-in tier (2.18.0) — a dot before the label, nothing else. */
+  tier?: number | null;
 }) {
   const { t } = useTranslation();
+  const label = <TierLabel tier={tier}>{definition.title}</TierLabel>;
   const hints = { failedHint: t("entities.field.relationOptionsFailed"), emptyHint: t("entities.editor.noTargets") };
 
   if (definition.many) {
@@ -29,7 +34,7 @@ export default function EntityRelationField({
       <EntityOptionsSelect
         mode="multi"
         target={definition.target}
-        label={definition.title}
+        label={label}
         description={definition.description}
         required={required}
         inputProps={form.getInputProps(`relations.${index}.many`)}
@@ -42,7 +47,7 @@ export default function EntityRelationField({
     <EntityOptionsSelect
       mode="single"
       target={definition.target}
-      label={definition.title}
+      label={label}
       description={definition.description}
       required={required}
       clearable={!required}

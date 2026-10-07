@@ -81,5 +81,30 @@
     "collapseAria": "Zwiń {{name}}",
     "expandAria": "Rozwiń {{name}} (ukrytych: {{count}})"
   },
+  "tier": {
+    "tooltip": "Poziom {{tier}} — najpierw uzupełnij niższe poziomy",
+    "label": "Poziom",
+    "none": "Brak poziomu",
+    "option": "Poziom {{tier}}",
+    "selectAria": "Poziom dla {{id}}",
+    "fillIn": "Poziom uzupełniania",
+    "outOfFocus": "Poza wybranym zakresem poziomów",
+    "filledThrough": "Wypełnione do poziomu {{tier}}",
+    "incomplete": "Poziom 1 niekompletny",
+    "moreFields_one": "Pokaż jeszcze {{count}} pole",
+    "moreFields_few": "Pokaż jeszcze {{count}} pola",
+    "moreFields_many": "Pokaż jeszcze {{count}} pól",
+    "moreFields_other": "Pokaż jeszcze {{count}} pola",
+    "hideFields": "Ukryj dodatkowe pola",
+    "focus": {
+      "label": "Zakres poziomów",
+      "placeholder": "Wszystkie poziomy",
+      "clear": "Wyczyść zakres poziomów",
+      "upTo1": "Poziom 1",
+      "upTo2": "Poziomy 1–2",
+      "upTo3": "Poziomy 1–3",
+      "upTo4": "Poziomy 1–4"
+    }
+  },
   "loading": "Ładowanie…"
 }

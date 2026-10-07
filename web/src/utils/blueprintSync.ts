@@ -46,6 +46,7 @@ const BLUEPRINT_TOP_LEVEL_KEY_ORDER = [
   "aggregationProperties",
   "ownership",
   "hierarchyRelations",
+  "tiers",
 ] as const;
 
 /** Renders a blueprint document with a stable key order for comparison — see
@@ -88,6 +89,59 @@ function hasNonEmptyHierarchyRelations(body: Record<string, unknown>): boolean {
   return isPlainObject(map) && Object.keys(map).length > 0;
 }
 
+type StoredTiers = {
+  blueprint?: number;
+  properties?: Record<string, number>;
+  relations?: Record<string, number>;
+};
+
+function hasNonEmptyTiers(body: Record<string, unknown>): boolean {
+  const tiers = body.tiers;
+  if (!isPlainObject(tiers)) return false;
+  return ["blueprint", "properties", "relations"].some((member) => {
+    const value = tiers[member];
+    return isPlainObject(value) ? Object.keys(value).length > 0 : value != null;
+  });
+}
+
+/**
+ * Puts a picked document's `tiers` in the server's stored shape before it is compared or sent: the
+ * missing `properties`/`relations` maps become `{}` (the wire always carries all three members,
+ * so a partial remote `{"properties":{"a":4}}` is in sync once stored), and an all-empty object
+ * is dropped (the server folds it to "no tiers"). A non-object value is left for the server to refuse.
+ */
+function normalizeTiers(doc: Record<string, unknown>): Record<string, unknown> {
+  const tiers = doc.tiers;
+  if (!isPlainObject(tiers)) return doc;
+  const properties = isPlainObject(tiers.properties) ? tiers.properties : {};
+  const relations = isPlainObject(tiers.relations) ? tiers.relations : {};
+  const rest = { ...doc };
+  delete rest.tiers;
+  if (tiers.blueprint == null && Object.keys(properties).length === 0 && Object.keys(relations).length === 0) {
+    return rest;
+  }
+  return { ...rest, tiers: { ...tiers, properties, relations } };
+}
+
+function pickKeys(map: Record<string, number> | undefined, source: unknown): Record<string, number> {
+  const keys = isPlainObject(source) ? new Set(Object.keys(source)) : new Set<string>();
+  return Object.fromEntries(Object.entries(map ?? {}).filter(([key]) => keys.has(key)));
+}
+
+/** The stored tiers pruned to the picked document's own property/relation keys — the server's
+ *  `BlueprintTiers.prunedTo`, mirrored so the preview shows what a sync would actually keep.
+ *  `undefined` when nothing is left. */
+function prunedStoredTiers(stored: StoredTiers | undefined, body: Record<string, unknown>): StoredTiers | undefined {
+  if (!stored) return undefined;
+  const schema = isPlainObject(body.schema) ? body.schema : {};
+  const properties = pickKeys(stored.properties, schema.properties);
+  const relations = pickKeys(stored.relations, body.relations);
+  if (stored.blueprint == null && Object.keys(properties).length === 0 && Object.keys(relations).length === 0) {
+    return undefined;
+  }
+  return { blueprint: stored.blueprint, properties, relations };
+}
+
 type PickedSourceDocumentError = "parse" | "noMatch";
 
 export type PickedSourceBlueprintDocument = {
@@ -101,10 +155,16 @@ export type PickedSourceBlueprintDocument = {
    * "removed", and the confirm never submits a document that would silently clear it.
    */
   hierarchyKept: boolean;
+  /**
+   * The `tiers` twin of [hierarchyKept] (2.18.0): the picked document carried no tiers, so the
+   * stored ones — PRUNED to the picked document's own property/relation keys, never refused —
+   * were copied onto it, exactly as the server's `syncFromSource` does.
+   */
+  tiersKept: boolean;
 };
 
 function failure(error: PickedSourceDocumentError): PickedSourceBlueprintDocument {
-  return { document: null, error, hierarchyKept: false };
+  return { document: null, error, hierarchyKept: false, tiersKept: false };
 }
 
 /**
@@ -120,12 +180,13 @@ function failure(error: PickedSourceDocumentError): PickedSourceBlueprintDocumen
  * `hierarchyRelations` is a Toadie-only extension most blueprint exports never carry at all:
  * when the picked document has no non-empty map, `stored.hierarchyRelations` (the CURRENTLY
  * SAVED one) is copied onto it before the document is returned, so a sync can never silently
- * clear it.
+ * clear it. `tiers` (2.18.0) follows the same keep-when-absent rule, except that the carried-over
+ * stored tiers are pruned to the picked document's own property/relation keys.
  */
 export function pickSourceBlueprintDocument(
   text: string,
   target: { identifier: string },
-  stored: { hierarchyRelations?: Record<string, string> },
+  stored: { hierarchyRelations?: Record<string, string>; tiers?: StoredTiers },
 ): PickedSourceBlueprintDocument {
   let parsed: unknown;
   try {
@@ -147,10 +208,12 @@ export function pickSourceBlueprintDocument(
     picked = match;
   }
 
-  const dropped = dropNullTopLevelKeys(picked);
+  const dropped = normalizeTiers(dropNullTopLevelKeys(picked));
   const storedHierarchyRelations = stored.hierarchyRelations ?? {};
   const hierarchyKept = !hasNonEmptyHierarchyRelations(dropped) && Object.keys(storedHierarchyRelations).length > 0;
-  const document = hierarchyKept ? { ...dropped, hierarchyRelations: storedHierarchyRelations } : dropped;
+  const withHierarchy = hierarchyKept ? { ...dropped, hierarchyRelations: storedHierarchyRelations } : dropped;
+  const keptTiers = hasNonEmptyTiers(withHierarchy) ? undefined : prunedStoredTiers(stored.tiers, withHierarchy);
+  const document = keptTiers ? { ...withHierarchy, tiers: keptTiers } : withHierarchy;
 
-  return { document, error: null, hierarchyKept };
+  return { document, error: null, hierarchyKept, tiersKept: keptTiers != null };
 }

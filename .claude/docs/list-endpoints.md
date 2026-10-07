@@ -40,7 +40,8 @@ filtered on.
 one more filter, evaluated in memory over the whole active workspace and intersected with the
 `blueprint`/`q`/`team` set (`.claude/docs/entity-query-language.md`). Like `q`, sort and every
 other filter it sees the entity's STORED fields only — `WHERE` addresses stored `properties` and
-the seven `$` meta-properties, never a computed value. Its `LIMIT` caps the returned node SET
+the seven `$` meta-properties (plus, since 2.18.0, the query-only tier metas `$tier`/`$fillTier`), never
+a computed value. Its `LIMIT` caps the returned node SET
 (1..`MAX_ENTITIES_TOTAL`), a query-language construct rather than paging: there is no `page`/
 `pageSize`, and the graph's node count is bounded by the workspace cap.
 

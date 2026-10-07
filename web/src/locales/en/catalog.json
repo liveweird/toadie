@@ -194,9 +194,6 @@
     "intro": "A strict save rejects this document for the findings below. You can save it anyway and fix them later — the Cross-check page tracks every finding until it is resolved.",
     "confirm": "Save anyway"
   },
-  "tier": {
-    "tooltip": "Tier {{tier}} — fill lower tiers first"
-  },
   "diff": {
     "tooLarge": "These documents are too large for a detailed line comparison. Review the complete stored and replacement YAML below.",
     "storedLabel": "Complete stored YAML",

@@ -3,6 +3,7 @@ package ch.nokillswit
 import ch.nokillswit.blueprints.AggregationQuery
 import ch.nokillswit.entities.QueryCandidate
 import ch.nokillswit.entities.matchesQuery
+import ch.nokillswit.entityquery.QUERY_META_PROPERTIES
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -10,6 +11,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -102,6 +104,20 @@ class AggregationQueryTest {
         assertTrue(matchesQuery(AggregationQuery("and", listOf(rule("\$createdAt", "=", JsonPrimitive(10)))), c))
         assertTrue(matchesQuery(AggregationQuery("and", listOf(rule("\$updatedAt", "=", JsonPrimitive(20)))), c))
         assertTrue(matchesQuery(AggregationQuery("and", listOf(rule("\$team", "contains", JsonPrimitive("payments")))), c))
+    }
+
+    @Test
+    fun `the query-only tier metas resolve absent in an aggregation rule`() {
+        // 2.18.0: `$tier`/`$fillTier` belong to the entity query language alone — tiers must never feed a computed value.
+        val c = candidate(properties = buildJsonObject { put("x", 1) })
+        listOf("\$tier", "\$fillTier").forEach { meta ->
+            assertFalse(matchesQuery(AggregationQuery("and", listOf(rule(meta, "=", JsonPrimitive(1)))), c), meta)
+            assertTrue(matchesQuery(AggregationQuery("and", listOf(rule(meta, "isEmpty"))), c), meta)
+        }
+        assertEquals(
+            setOf("\$identifier", "\$title", "\$blueprint", "\$team", "\$icon", "\$createdAt", "\$updatedAt"),
+            QUERY_META_PROPERTIES,
+        )
     }
 
     @Test

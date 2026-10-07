@@ -25,6 +25,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 
 /**
@@ -299,6 +300,7 @@ private fun blueprintSummaryJson(value: BlueprintResponse): JsonObject = buildJs
     value.hierarchyRelations?.let { hierarchyRelations ->
         put("hierarchyRelations", JsonObject(hierarchyRelations.mapValues { JsonPrimitive(it.value) }))
     }
+    value.tiers?.let { put("tiers", blueprintJson.encodeToJsonElement(it)) }
 }
 
 private fun entitySummaryJson(value: EntityResponse, includeProperties: Boolean): JsonObject = buildJsonObject {

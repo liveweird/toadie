@@ -269,12 +269,15 @@ private fun withDeferredStripped(request: BlueprintRequest, deferred: Set<String
     // hierarchyRelations values are relation KEYS of this SAME row (never another blueprint's
     // identity), so a deferred entry is any whose relation VALUE got dropped above.
     val hierarchyRelations = request.hierarchyRelations?.filterValues { it !in droppedRelations }?.ifEmpty { null }
+    // A dropped relation's tier goes with it; pass 2 writes the full request (tiers included).
+    val tiers = request.tiers?.copy(relations = request.tiers.relations - droppedRelations)?.let(::sanitizedTiers)
     return request.copy(
         relations = relations,
         aggregationProperties = aggregationProperties,
         mirrorProperties = mirrorProperties,
         ownership = ownership,
         hierarchyRelations = hierarchyRelations,
+        tiers = tiers,
     )
 }
 

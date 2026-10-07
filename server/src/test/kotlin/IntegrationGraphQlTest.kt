@@ -159,6 +159,7 @@ class IntegrationGraphQlTest {
                     schema = BlueprintSchema(
                         properties = mapOf("precise" to PropertyDefinition(type = "number", title = "Precise")),
                     ),
+                    tiers = ch.nokillswit.blueprints.BlueprintTiers(blueprint = 2, properties = mapOf("precise" to 1)),
                 ),
                 creator,
             )
@@ -187,7 +188,7 @@ class IntegrationGraphQlTest {
                   first: entity(id: "${entity.id}") { id blueprint identifier properties createdBy createdAt }
                   again: entity(id: "${entity.id}") { title }
                   missing: entity(id: "4294967295") { id }
-                  blueprint(id: "${blueprint.id}") { id identifier }
+                  blueprint(id: "${blueprint.id}") { id identifier tiers }
                   missingBlueprint: blueprint(id: "4294967295") { id }
                   blueprints(page: 1, pageSize: 1) { items { id schema hierarchyRelations } page pageSize total }
                   entities(page: 1, pageSize: 20, blueprint: "$blueprintIdentifier", q: "$entityIdentifier") {
@@ -213,6 +214,9 @@ class IntegrationGraphQlTest {
             assertEquals("GraphQL entity", data["again"]!!.jsonObject["title"]!!.jsonPrimitive.content)
             assertEquals(kotlinx.serialization.json.JsonNull, data["missing"])
             assertEquals(blueprint.id.toString(), data["blueprint"]!!.jsonObject["id"]!!.jsonPrimitive.content)
+            val tiers = data["blueprint"]!!.jsonObject["tiers"]!!.jsonObject
+            assertEquals("2", tiers["blueprint"]!!.jsonPrimitive.content)
+            assertEquals("1", tiers["properties"]!!.jsonObject["precise"]!!.jsonPrimitive.content)
             assertEquals(kotlinx.serialization.json.JsonNull, data["missingBlueprint"])
             assertEquals("1", data["entities"]!!.jsonObject["total"]!!.jsonPrimitive.content)
             assertTrue(data["errors"]!!.jsonObject["entities"]!!.jsonObject["items"]!!.jsonArray.isEmpty())

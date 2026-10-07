@@ -2,6 +2,7 @@ package ch.nokillswit
 
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.entities.EntityRequest
@@ -343,6 +344,43 @@ class IntegrationMcpTest {
         } finally {
             TestIntegrationClients.service.revoke(clientId)
             TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `blueprint tools emit tiers only when set`() = testApplication {
+        enabledApp()
+        val owner = TestUsers.seed(uniqueEmail("mcp-tiers"), "pw")
+        val (clientId, key) = TestIntegrationClients.service.create("mcp-tiers-${UUID.randomUUID()}", owner)
+        val tieredId = unique("bp-mcp-tiered")
+        val plainId = unique("bp-mcp-plain")
+        try {
+            TestBlueprints.service.create(
+                simpleBlueprint(tieredId).copy(tiers = BlueprintTiers(blueprint = 1, properties = mapOf("note" to 2))),
+                owner,
+            )
+            TestBlueprints.service.create(simpleBlueprint(plainId), owner)
+            suspend fun structured(identifier: String) =
+                jsonClient().mcp(key, "tools/call", toolCallParams("get_blueprint", buildJsonObject { put("identifier", identifier) }))
+            val tiered = structured(tieredId).rpc()["result"]!!.jsonObject["structuredContent"]!!.jsonObject["tiers"]!!.jsonObject
+            assertEquals("1", tiered["blueprint"]!!.jsonPrimitive.content)
+            assertEquals("2", tiered["properties"]!!.jsonObject["note"]!!.jsonPrimitive.content)
+            assertEquals(null, structured(plainId).rpc()["result"]!!.jsonObject["structuredContent"]!!.jsonObject["tiers"])
+
+            // The summary shape (no `full`) carries tiers too; an untiered row has none.
+            val summary = jsonClient().mcp(key, "tools/call", toolCallParams("list_blueprints")).rpc()
+            val summaryItems = summary["result"]!!.jsonObject["structuredContent"]!!.jsonObject["items"]!!.jsonArray
+            val summaryRow = summaryItems.first { it.jsonObject["identifier"]!!.jsonPrimitive.content == tieredId }.jsonObject
+            assertEquals("1", summaryRow["tiers"]!!.jsonObject["blueprint"]!!.jsonPrimitive.content)
+            assertEquals(null, summaryItems.first { it.jsonObject["identifier"]!!.jsonPrimitive.content == plainId }.jsonObject["tiers"])
+
+            val full = jsonClient().mcp(key, "tools/call", toolCallParams("list_blueprints", buildJsonObject { put("full", true) })).rpc()
+            val fullRow = full["result"]!!.jsonObject["structuredContent"]!!.jsonObject["items"]!!.jsonArray
+                .first { it.jsonObject["identifier"]!!.jsonPrimitive.content == tieredId }.jsonObject
+            assertNotNull(fullRow["tiers"])
+        } finally {
+            TestIntegrationClients.service.revoke(clientId)
+            TestBlueprints.remove(tieredId, plainId)
         }
     }
 

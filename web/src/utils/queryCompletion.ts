@@ -8,7 +8,7 @@
 
 import type { Completion } from "@codemirror/autocomplete";
 import type { Blueprint } from "../api/blueprints";
-import { CLAUSE_KEYWORDS, METAS, quoteIfNeeded, stringLiteral } from "./queryLanguage";
+import { CLAUSE_KEYWORDS, EDGE_METAS, METAS, quoteIfNeeded, stringLiteral } from "./queryLanguage";
 
 export type QueryCompletionSchema = {
   blueprints: Blueprint[];
@@ -95,6 +95,15 @@ function labelOfVariable(text: string, varName: string): string | null {
   return match ? unquote(match[1]) : null;
 }
 
+/** The declaration of an EDGE variable anywhere earlier in the text — `[r]`, `[r:type]`,
+ *  `[r:type*1..3]` — or `null` when `varName` is not one. The matched text lets the caller tell a
+ *  single-hop edge (`r.$tier` allowed) from a variable-length one (`*` inside the brackets). */
+function edgeVariableDeclaration(text: string, varName: string): string | null {
+  const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\[\\s*${escaped}\\s*(?:[:*][^\\]]*)?\\]`);
+  return re.exec(text)?.[0] ?? null;
+}
+
 const IDENT_CHAR_RE = /\w/;
 const LETTER_RE = /[A-Za-z]/;
 const IDENT_RE = /^[A-Za-z_]\w*$/;
@@ -154,16 +163,21 @@ function enumLiteralCompletions(text: string, schema: QueryCompletionSchema): Qu
 }
 
 /** After `v.` → the properties of the label `v` was declared with (or none, if unlabelled/
- *  unknown) union the seven metas. */
+ *  unknown) union the nine metas. After an EDGE variable `r.` → only `$tier`, and only on a
+ *  single-hop edge (a relationship carries no properties, and a variable-length edge binds no
+ *  single relationship). */
 function propertyCompletions(text: string, schema: QueryCompletionSchema): QueryCompletionResult | null {
   const access = splitTrailingDotAccess(text);
   if (!access) return null;
   const { object: varName, partial } = access;
-  const label = labelOfVariable(text, varName);
+  const edge = edgeVariableDeclaration(text, varName);
+  const label = edge === null ? labelOfVariable(text, varName) : null;
   const blueprint = label ? schema.blueprints.find((b) => b.identifier === label) : undefined;
   const propertyNames = blueprint ? Object.keys(blueprint.schema.properties) : [];
   const propertyOptions = propertyNames.filter((p) => startsWithFold(p, partial)).map((p) => nameOption(p));
-  const metaOptions = METAS.filter((m) => startsWithFold(m, partial)).map((m) => ({
+  let metas: readonly string[] = METAS;
+  if (edge !== null) metas = edge.includes("*") ? [] : EDGE_METAS;
+  const metaOptions = metas.filter((m) => startsWithFold(m, partial)).map((m) => ({
     label: `$${m}`,
     apply: `$${m}`,
   }));

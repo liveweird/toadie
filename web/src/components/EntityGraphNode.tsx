@@ -4,9 +4,11 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
 import type { EntityGraphNode as EntityGraphNodeApi } from "../api/entities";
 import type { LaidOutNode } from "../utils/graphLayout";
+import { asTier } from "../utils/tiers";
 import { COLLAPSED_FACE_STYLE, GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH, STATUS_STYLE } from "../utils/graphLayout";
 import EntityFindingsBadge from "./EntityFindingsBadge";
 import GraphFoldToggle from "./GraphFoldToggle";
+import TierDot from "./TierDot";
 
 /** What the fixed-width node cannot show: the identifier, blueprint, and icon. */
 function NodeTooltipLabel({ node }: { node: EntityGraphNodeApi }) {
@@ -43,6 +45,8 @@ function EntityGraphNode({ data }: NodeProps<LaidOutNode<EntityGraphNodeApi>>) {
   const { t } = useTranslation();
   const node = data.apiNode;
   const fold = data.fold;
+  // The owning blueprint's fill-in tier, stamped on the node data by the page (2.18.0).
+  const tier = asTier(data.tier);
   return (
     <div style={{ position: "relative", width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT }}>
       <Handle type="target" position={Position.Left} />
@@ -76,7 +80,13 @@ function EntityGraphNode({ data }: NodeProps<LaidOutNode<EntityGraphNodeApi>>) {
           <Text size="xs" ff="monospace" truncate style={{ flex: 1, minWidth: 0 }}>
             {node.identifier}
           </Text>
-          <Badge variant="light" color="gray" size="xs" style={{ flex: "0 0 auto" }}>
+          <Badge
+            variant="light"
+            color="gray"
+            size="xs"
+            style={{ flex: "0 0 auto" }}
+            leftSection={tier === null ? undefined : <TierDot tier={tier} />}
+          >
             {node.blueprintTitle}
           </Badge>
           <EntityFindingsBadge findings={node.findings} />

@@ -2,6 +2,8 @@ package ch.nokillswit.entities
 
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.BlueprintService
+import ch.nokillswit.blueprints.BlueprintTiers
+import ch.nokillswit.blueprints.decodeTiers
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
@@ -200,6 +202,8 @@ class EntityService(
         val definition: BlueprintDefinition,
         /** Hierarchy identifier -> relation key (V34) — decoded from `blueprints.hierarchy_relations`. */
         val hierarchyRelations: Map<String, String>,
+        /** Fill-in tiers (2.18.0, V44) — threaded through for the query engine; never read by validation or findings. */
+        val tiers: BlueprintTiers,
         /** The blueprint's source reference (2.10.0, V38) — threaded through for `entities/EntityErrors.kt`'s `SOURCE_MISSING`. */
         val sourceUrl: String?,
     )
@@ -213,6 +217,7 @@ class EntityService(
                     it[BlueprintService.Blueprints.title],
                     decodeForRead<BlueprintDefinition>(it[BlueprintService.Blueprints.definition], budget),
                     blueprintJson.decodeFromString<Map<String, String>>(it[BlueprintService.Blueprints.hierarchyRelations]),
+                    decodeTiers(it[BlueprintService.Blueprints.tiers]) ?: BlueprintTiers(),
                     it[BlueprintService.Blueprints.sourceUrl],
                 )
             }
@@ -230,7 +235,7 @@ class EntityService(
     /** One read of the active blueprints + `HIERARCHY` values as the validator's [QuerySchema] — no entity rows. */
     private suspend fun loadQuerySchema(): QuerySchema {
         val graphBlueprintsByIdentifier = loadActiveBlueprints().associate {
-            it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations)
+            it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations, it.tiers)
         }
         return QuerySchema(graphBlueprintsByIdentifier, loadActiveHierarchies())
     }
@@ -524,7 +529,7 @@ class EntityService(
         val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
         val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
         val graphBlueprintsByIdentifier = activeBlueprints.associate {
-            it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations)
+            it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations, it.tiers)
         }
 
         val scope = shownScope(filter, activeBlueprints) ?: return null
@@ -559,7 +564,7 @@ class EntityService(
         }
 
         val graphBlueprintsById = blueprintsById.mapValues {
-            GraphBlueprint(it.value.identifier, it.value.title, it.value.definition, it.value.hierarchyRelations)
+            GraphBlueprint(it.value.identifier, it.value.title, it.value.definition, it.value.hierarchyRelations, it.value.tiers)
         }
         return GraphMaterialized(
             sources = sources,

@@ -68,6 +68,7 @@ fun validateBlueprintRequest(request: BlueprintRequest) {
     validateAggregationProperties(request.aggregationProperties)
     request.ownership?.let { validateOwnership(it, request.relations.keys) }
     validateHierarchyRelations(request)
+    validateTiers(request)
     validateDefinitionSize(request)
 }
 
