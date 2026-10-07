@@ -8,6 +8,7 @@ import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.CalculationPropertyDefinition
 import ch.nokillswit.blueprints.OwnershipDefinition
 import ch.nokillswit.blueprints.PropertyDefinition
@@ -399,6 +400,12 @@ class BlueprintWireNamesTest {
             isObject,
         )
         assertOnlyOptional(
+            BlueprintRequest(identifier = "bp", title = "T", tiers = BlueprintTiers(blueprint = 1)),
+            alwaysPresent,
+            "tiers",
+            isObject,
+        )
+        assertOnlyOptional(
             BlueprintRequest(identifier = "bp", title = "T", sourceUrl = "https://x/y"),
             alwaysPresent,
             "sourceUrl",
@@ -483,6 +490,16 @@ class BlueprintWireNamesTest {
             ),
             alwaysPresent,
             "hierarchyRelations",
+            isObject,
+        )
+        assertOnlyOptional(
+            BlueprintResponse(
+                id = 1u, identifier = "bp", title = "T", createdBy = 2u, creatorName = "Creator",
+                creatorDeleted = false, createdAt = 1L, updatedAt = 2L, system = false, lastSyncedAt = 0L,
+                tiers = BlueprintTiers(properties = mapOf("p" to 2)),
+            ),
+            alwaysPresent,
+            "tiers",
             isObject,
         )
         assertOnlyOptional(

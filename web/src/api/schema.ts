@@ -1452,7 +1452,10 @@ export interface paths {
          *     of this blueprint's `many: false` relations, so several PARALLEL entity hierarchies may
          *     each root at a different relation (two hierarchy identifiers may legitimately share one
          *     relation); naming an unknown hierarchy identifier or an unknown/many-valued relation is
-         *     `400`. Identifiers starting with `_` are reserved for Port's own system blueprints
+         *     `400`. Optionally carries `tiers` (2.18.0), a second Toadie-only extension — fill-in
+         *     tiers 1-4 for the blueprint, its schema properties and its relations; a value outside
+         *     1-4, or a key naming no schema property/relation of this request, is `400`.
+         *     Identifiers starting with `_` are reserved for Port's own system blueprints
          *     (`_team`/`_user`) and are rejected with `400`. Optionally carries `sourceUrl` (2.10.0)
          *     — the blueprint's source reference, set from the start.
          */
@@ -1487,7 +1490,8 @@ export interface paths {
          *     system blueprint (`_team`/`_user`, `system: true`) additionally rejects an identifier
          *     rename and any removal or retyping of its base properties/relations with `400`;
          *     everything else about it (titles, extra properties/relations, `hierarchyRelations`,
-         *     `ownership`) remains an ordinary admin edit. Full-replace semantics for `sourceUrl`
+         *     `tiers`, `ownership`) remains an ordinary admin edit. Full-replace semantics for
+         *     `tiers` too: omitted clears them. Full-replace semantics for `sourceUrl`
          *     (2.10.0) too: omitted or blank CLEARS the stored reference, and any change resets the
          *     sync state (`lastSyncedAt`/`syncedDocument`).
          */
@@ -1679,6 +1683,12 @@ export interface paths {
          *     field at all; clearing the map remains an ordinary editor PUT. Merging happens before
          *     validation, so a remote that dropped the very relation the stored map still names is
          *     refused `400` naming that key, exactly as an ordinary PUT would be.
+         *
+         *     **`tiers` keep-when-absent** (2.18.0): the same rule, except that the carried-over
+         *     stored tiers are PRUNED to the synced document's own `schema.properties`/`relations`
+         *     keys instead of refused — a tier is only a visual hint, so a remote that dropped a
+         *     tiered property or relation never makes the sync fail. Tiers the document itself
+         *     carries replace the stored ones.
          */
         post: operations["syncBlueprint"];
         delete?: never;
@@ -3103,6 +3113,22 @@ export interface components {
             /** @description Required (and only meaningful) when type is Inherited — 1-10 dot-separated segments, the first naming a relation of this blueprint. Forbidden when type is Direct. */
             path?: string;
         };
+        /** @description Toadie-only extension (2.18.0, not part of Port's blueprint document): the fill-in TIERS (1-4, 1 = fill first) of the blueprint itself, its schema properties and its relations. A visual priority hint only — tiers change no validation, finding or computed value. Absent on a blueprint when empty; on a write every member is optional and an all-empty object is stored as no tiers. Computed (mirror/calculation/ aggregation) properties carry no tier. */
+        BlueprintTiers: {
+            /**
+             * Format: int32
+             * @description The blueprint's own tier.
+             */
+            blueprint?: number;
+            /** @description Tier per `schema.properties` key. A key that is not a schema property of the SAME request (a computed property included) is `400`. */
+            properties?: {
+                [key: string]: number;
+            };
+            /** @description Tier per `relations` key. A key that is not a relation of the SAME request is `400`. */
+            relations?: {
+                [key: string]: number;
+            };
+        };
         /** @description A registered blueprint (Phase 1 of the Port data-model move — see `.claude/docs/port-data-model.md`). Every optional field is simply ABSENT when unset (never `null`). */
         Blueprint: {
             /** Format: int32 */
@@ -3131,6 +3157,7 @@ export interface components {
             hierarchyRelations?: {
                 [key: string]: string;
             };
+            tiers?: components["schemas"]["BlueprintTiers"];
             /**
              * Format: int32
              * @description The creator's user id.
@@ -3227,6 +3254,7 @@ export interface components {
             hierarchyRelations?: {
                 [key: string]: string;
             };
+            tiers?: components["schemas"]["BlueprintTiers"];
             /** @description The blueprint's source reference (2.10.0) — the https URL of its canonical remote copy. Row state for the WHOLE request, not part of the Port document: a bulk-import document carrying this is `INVALID` (see `BlueprintImportRequest.sourceUrl`), and the sync body's own `document.sourceUrl` is refused (`400`). Absent when unset. On PUT, full-replace semantics: omitted or blank CLEARS the stored reference; any change resets the sync state. */
             sourceUrl?: string;
         };
@@ -3402,7 +3430,7 @@ export interface components {
              * @description Epoch millis of the last HTTP→DB sync; 0 = never.
              */
             lastSyncedAt: number;
-            /** @description The document as stored at the last sync (including the merged `hierarchyRelations` — see `syncBlueprint`'s keep-when-absent rule) — the baseline the sync modal compares the current DB document and the fetched remote copy against; absent = never synced. */
+            /** @description The document as stored at the last sync (including the merged `hierarchyRelations` and `tiers` — see `syncBlueprint`'s keep-when-absent rule) — the baseline the sync modal compares the current DB document and the fetched remote copy against; absent = never synced. */
             syncedDocument?: components["schemas"]["BlueprintRequest"];
         };
         SyncBlueprintRequest: {

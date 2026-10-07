@@ -20,6 +20,8 @@ Where Port's documentation states no explicit rule, the assumption Toadie made i
   "ontology" layer: descriptions and semantic relation titles are what give the schema meaning.
 - **Entity** — an instance of a blueprint (phase 2, v1.24.0 — the `entities/` package; see
   "Entities" below).
+- **Tiers (Toadie, 2.18.0)** — an optional per-blueprint 1–4 fill-in priority for the blueprint, its properties and its relations
+  (a visual hint only; see "Toadie extensions" below).
 - **Hierarchy relations (Toadie, v1.32.0)** — an optional per-blueprint map of hierarchy identifiers (active `HIERARCHY` dictionary values) to keys of this blueprint's own
   `many: false` relations, naming the entity hierarchy's parent link (phase 3, v1.25.0 — not a
   Port concept; see "Toadie extensions" below).
@@ -502,8 +504,10 @@ concurrency (V28)" for the lock the aggregate is read under.
 
 ## Toadie extensions (not Port)
 
-Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's own model, and phase 7
-(v2.0.0) one Toadie-only READ surface over the model (the second bullet):
+Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's own model (the
+**Hierarchy relations** bullet), phase 7 (v2.0.0) one Toadie-only READ surface over the model (the
+**Entity graph** bullet and its successors), and 2.18.0 the fill-in `tiers` (the **Tiers** bullet,
+after the entity hierarchies):
 
 - **Hierarchy relations** — `Blueprint.hierarchyRelations: Map<String, String>?`, an optional
   map of hierarchy identifiers to relation keys. The keys are active values from the `HIERARCHY`
@@ -529,6 +533,26 @@ Phase 3 (v1.25.0) adds one Toadie-only field that has no equivalent in Port's ow
   value with `hierarchies: [<hierarchy-ids-that-name-this-relation>]`, so each hierarchy tree
   and the general relation graph are two views over the same data, never separately stored
   parent pointers.
+
+- **Tiers (2.18.0, V44)** — `Blueprint.tiers: BlueprintTiers?`, an optional Toadie-only object
+  `{blueprint?: 1..4, properties?: {<schema property key>: 1..4}, relations?: {<relation key>: 1..4}}`:
+  the fill-in PRIORITY of the blueprint, each of its schema properties and each of its
+  relations (1 = fill first; the Backstage world's per-kind `KIND_TIERS` idea, per field). A
+  visual hint only — tiers change NO logic: no validation, finding, computed value or
+  ownership rule ever reads them. Stored BESIDE the Port document in its own `tiers` TEXT
+  column (`'{}'` = none, the `hierarchy_relations` idiom), so `definition` and any Port export
+  stay byte-identical; ABSENT on the wire when empty (an all-empty object sanitizes to `null`).
+  Rules (`blueprints/BlueprintTiers.kt`): every value an integer 1..4; `tiers.properties` keys
+  must be keys of the SAME request's `schema.properties` (mirror/calculation/aggregation ids
+  are rejected — nobody fills a computed value in); `tiers.relations` keys must be keys of its
+  `relations`; a violation is `400`, as for `hierarchyRelations`. Maps the SERVER carries over
+  are pruned silently instead, so a stored tier can never make a write fail: a sync whose
+  document omits `tiers` keeps the stored ones pruned to the synced document's keys (so the
+  sync baseline records the merged, pruned map), and import pass 1 drops a deferred relation's
+  tier while pass 2 writes the full map. A PUT or a `replaceExisting` import without `tiers`
+  clears them (ordinary full-replace). Free on the `_team`/`_user` system blueprints. Surfaced
+  by `GET` blueprint, the MCP blueprint tools and the GraphQL `Blueprint.tiers: JSON`; the SPA
+  carries them on the form rows (a rename carries, a delete drops) and in the JSON export.
 
 - **Entity graph** — `GET /api/v1/entities/graph` renders entities and their relations together
   (`entities/EntityGraph.kt`, the `catalog/Graph.kt` counterpart one level down). Each node's id

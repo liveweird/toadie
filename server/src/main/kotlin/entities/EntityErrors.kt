@@ -344,7 +344,7 @@ private suspend fun EntityService.readErrorReport(
                 }
                 val querySchema = if (callerId == null) null else QuerySchema(
                     activeBlueprints.associate {
-                        it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations)
+                        it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations, it.tiers)
                     },
                     loadActiveHierarchies(),
                 )

@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.AggregationCalculationSpec
 import ch.nokillswit.blueprints.AggregationPropertyDefinition
 import ch.nokillswit.blueprints.BlueprintDefinition
@@ -407,7 +408,8 @@ class EntityErrorsCheckTest {
 
     @Test
     fun `savedQueryDiagnostics reports an unknown label with a suggestion`() {
-        val schema = QuerySchema(mapOf("service" to GraphBlueprint("service", "Service", BlueprintDefinition(), emptyMap())), emptySet())
+        val service = GraphBlueprint("service", "Service", BlueprintDefinition(), emptyMap(), BlueprintTiers())
+        val schema = QuerySchema(mapOf("service" to service), emptySet())
         val diagnostics = savedQueryDiagnostics("MATCH (a:`servics`) RETURN a", schema)
         val finding = diagnostics.single { it.code == QueryDiagnosticCodes.UNKNOWN_LABEL }
         assertEquals("service", finding.suggestion)
@@ -415,7 +417,8 @@ class EntityErrorsCheckTest {
 
     @Test
     fun `savedQueryDiagnostics is empty for a valid query`() {
-        val schema = QuerySchema(mapOf("service" to GraphBlueprint("service", "Service", BlueprintDefinition(), emptyMap())), emptySet())
+        val service = GraphBlueprint("service", "Service", BlueprintDefinition(), emptyMap(), BlueprintTiers())
+        val schema = QuerySchema(mapOf("service" to service), emptySet())
         assertTrue(savedQueryDiagnostics("MATCH (a:`service`) RETURN a", schema).isEmpty())
     }
 

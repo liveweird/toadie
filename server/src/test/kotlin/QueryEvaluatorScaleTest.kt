@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
@@ -37,7 +38,7 @@ class QueryEvaluatorScaleTest {
 
     private fun identifierOf(blueprintIndex: Int, n: Int) = "b$blueprintIndex-${n.toString().padStart(4, '0')}"
 
-    private val teamBp = GraphBlueprint(SYSTEM_TEAM_BLUEPRINT, "Team", BlueprintDefinition(), emptyMap())
+    private val teamBp = GraphBlueprint(SYSTEM_TEAM_BLUEPRINT, "Team", BlueprintDefinition(), emptyMap(), BlueprintTiers())
 
     private val blueprints: Map<String, GraphBlueprint> = buildMap {
         put(SYSTEM_TEAM_BLUEPRINT, teamBp)
@@ -47,7 +48,8 @@ class QueryEvaluatorScaleTest {
                 put("hub", relation("b0"))
             }
             val identifier = "b$i"
-            put(identifier, GraphBlueprint(identifier, identifier, BlueprintDefinition(relations = relations), emptyMap()))
+            val definition = BlueprintDefinition(relations = relations)
+            put(identifier, GraphBlueprint(identifier, identifier, definition, emptyMap(), BlueprintTiers()))
         }
     }
 

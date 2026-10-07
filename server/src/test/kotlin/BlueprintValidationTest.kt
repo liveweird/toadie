@@ -6,12 +6,15 @@ import ch.nokillswit.blueprints.AggregationQuery
 import ch.nokillswit.blueprints.ArrayItems
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.CalculationPropertyDefinition
 import ch.nokillswit.blueprints.MirrorPropertyDefinition
 import ch.nokillswit.blueprints.OwnershipDefinition
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SpecAuthentication
+import ch.nokillswit.blueprints.prunedTo
+import ch.nokillswit.blueprints.sanitizedBlueprintRequest
 import ch.nokillswit.blueprints.validateBlueprintRequest
 import ch.nokillswit.blueprints.validateProperty
 import io.ktor.server.plugins.BadRequestException
@@ -19,7 +22,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 /**
  * The pure Port-blueprint rule table — no DB, one case per rule in the plan's "Port rules"
@@ -171,6 +176,55 @@ class BlueprintValidationTest {
             hierarchyRelations = mapOf("composition" to "r", "deployment" to "r"),
         )
         assertValid(request)
+    }
+
+    // ─── tiers (Toadie-only extension, V44) ─────────────────────────────────────────────────
+
+    private fun tiered(tiers: BlueprintTiers?) = base(
+        schema = BlueprintSchema(properties = mapOf("p" to PropertyDefinition(type = "string"))),
+        relations = mapOf("r" to relation()),
+        mirrorProperties = mapOf("m" to MirrorPropertyDefinition("M", "r.x")),
+    ).copy(tiers = tiers)
+
+    @Test
+    fun `every tier at every level must be an integer between 1 and 4`() {
+        assertValid(tiered(null))
+        for (valid in 1..4) {
+            assertValid(tiered(BlueprintTiers(blueprint = valid, properties = mapOf("p" to valid), relations = mapOf("r" to valid))))
+        }
+        for (invalid in listOf(0, 5, -1, Int.MAX_VALUE)) {
+            assertInvalid(tiered(BlueprintTiers(blueprint = invalid)))
+            assertInvalid(tiered(BlueprintTiers(properties = mapOf("p" to invalid))))
+            assertInvalid(tiered(BlueprintTiers(relations = mapOf("r" to invalid))))
+        }
+    }
+
+    @Test
+    fun `tiers keys must name schema properties and relations of the same request, never computed ids`() {
+        assertInvalid(tiered(BlueprintTiers(properties = mapOf("nope" to 1))))
+        assertInvalid(tiered(BlueprintTiers(properties = mapOf("m" to 1)))) // a mirror property
+        assertInvalid(tiered(BlueprintTiers(properties = mapOf("r" to 1)))) // a relation is not a property
+        assertInvalid(tiered(BlueprintTiers(relations = mapOf("nope" to 1))))
+        assertInvalid(tiered(BlueprintTiers(relations = mapOf("p" to 1)))) // a property is not a relation
+    }
+
+    @Test
+    fun `an all-empty tiers object sanitizes to null`() {
+        assertNull(sanitizedBlueprintRequest(tiered(BlueprintTiers())).tiers)
+        assertNull(sanitizedBlueprintRequest(tiered(null)).tiers)
+        val kept = BlueprintTiers(blueprint = 3)
+        assertEquals(kept, sanitizedBlueprintRequest(tiered(kept)).tiers)
+    }
+
+    @Test
+    fun `prunedTo keeps only the named keys and folds an empty result to null`() {
+        val tiers = BlueprintTiers(blueprint = 2, properties = mapOf("a" to 1, "b" to 2), relations = mapOf("x" to 3))
+        assertEquals(
+            BlueprintTiers(blueprint = 2, properties = mapOf("a" to 1), relations = emptyMap()),
+            tiers.prunedTo(setOf("a"), emptySet()),
+        )
+        assertEquals(BlueprintTiers(blueprint = 2), tiers.prunedTo(emptySet(), emptySet()))
+        assertNull(BlueprintTiers(properties = mapOf("a" to 1)).prunedTo(emptySet(), emptySet()))
     }
 
     // ─── mirror properties ───────────────────────────────────────────────────────────────

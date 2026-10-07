@@ -195,6 +195,7 @@
     "noMatch": "The source document no longer contains this blueprint.",
     "refusedBody": "Syncing would fail — the source copy does not satisfy the blueprint rules. Fix it at the source before syncing again.",
     "hierarchyKept": "Hierarchy relations are a Toadie-only extension; the source document does not carry them, so the stored map is kept.",
+    "tiersKept": "Tiers are a Toadie-only extension; the source document does not carry them, so the stored tiers are kept (those naming a property or relation the source no longer has are dropped).",
     "overwriteWarning": "Syncing overwrites the stored copy with the source version shown above. Changes made only in Toadie will be lost."
   }
 }

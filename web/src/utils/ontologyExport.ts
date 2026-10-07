@@ -28,6 +28,10 @@ export function blueprintExportDocument(bp: Blueprint): Record<string, unknown> 
   if (bp.hierarchyRelations && Object.keys(bp.hierarchyRelations).length > 0) {
     out.hierarchyRelations = bp.hierarchyRelations;
   }
+  const tiers = bp.tiers;
+  if (tiers && (tiers.blueprint != null || Object.keys(tiers.properties ?? {}).length > 0 || Object.keys(tiers.relations ?? {}).length > 0)) {
+    out.tiers = tiers;
+  }
   return out;
 }
 

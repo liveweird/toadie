@@ -65,6 +65,7 @@ kover {
                     "ch.nokillswit.blueprints.BlueprintRequest", "ch.nokillswit.blueprints.BlueprintRequest$*",
                     "ch.nokillswit.blueprints.BlueprintResponse", "ch.nokillswit.blueprints.BlueprintResponse$*",
                     "ch.nokillswit.blueprints.BlueprintList", "ch.nokillswit.blueprints.BlueprintList$*",
+                    "ch.nokillswit.blueprints.BlueprintTiers", "ch.nokillswit.blueprints.BlueprintTiers$*",
                     // The same idiom for entities/Entity.kt (Port migration phase 2, v1.24.0) — the wire
                     // DTOs are logic-free @Serializable data classes; every rule lives in EntityValidation.kt.
                     "ch.nokillswit.entities.EntityRequest", "ch.nokillswit.entities.EntityRequest$*",

@@ -7,6 +7,7 @@ import ch.nokillswit.blueprints.BlueprintImportResponse
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
@@ -186,6 +187,39 @@ class BlueprintImportTest {
 
             val aRead: BlueprintResponse = admin.get("/api/v1/blueprints/$aId").body()
             assertEquals(1, aRead.aggregationProperties.size, "pass 2 must have restored the deferred aggregation")
+        } finally {
+            TestBlueprints.remove(a, b)
+        }
+    }
+
+    @Test
+    fun `tiers survive a deferred relation cycle via pass 2 and a replaceExisting without tiers clears them`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("bp-import-admin"), UserRole.ADMIN)
+        val a = identifier("bp-a")
+        val b = identifier("bp-b")
+        try {
+            fun cycleMember(self: String, other: String, tiers: BlueprintTiers?) = BlueprintRequest(
+                identifier = self, title = self,
+                schema = BlueprintSchema(properties = mapOf("p" to PropertyDefinition(type = "string"))),
+                relations = mapOf("peer" to RelationDefinition(title = "Peer", target = other, required = false, many = false)),
+                tiers = tiers,
+            )
+            val aTiers = BlueprintTiers(blueprint = 1, properties = mapOf("p" to 2), relations = mapOf("peer" to 3))
+            val bTiers = BlueprintTiers(properties = mapOf("p" to 4), relations = mapOf("peer" to 1))
+            val request = BlueprintImportRequest(documents = listOf(doc(cycleMember(a, b, aTiers)), doc(cycleMember(b, a, bTiers))))
+
+            val importResponse = admin.import(request).body<BlueprintImportResponse>()
+            assertEquals(listOf(OntologyImportStatus.CREATED, OntologyImportStatus.CREATED), importResponse.results.map { it.status })
+            // Pass 1 stripped the deferred relation AND its tier; pass 2 restored both.
+            assertEquals(aTiers, admin.get("/api/v1/blueprints/${importResponse.results[0].id}").body<BlueprintResponse>().tiers)
+            assertEquals(bTiers, admin.get("/api/v1/blueprints/${importResponse.results[1].id}").body<BlueprintResponse>().tiers)
+
+            // replaceExisting is an ordinary full PUT: a document without tiers clears the stored ones.
+            val replace = BlueprintImportRequest(documents = listOf(doc(cycleMember(a, b, null))), replaceExisting = true)
+            val replaced = admin.import(replace).body<BlueprintImportResponse>()
+            assertEquals(OntologyImportStatus.UPDATED, replaced.results[0].status)
+            assertNull(admin.get("/api/v1/blueprints/${importResponse.results[0].id}").body<BlueprintResponse>().tiers)
         } finally {
             TestBlueprints.remove(a, b)
         }

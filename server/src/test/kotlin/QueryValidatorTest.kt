@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.PropertyDefinition
@@ -94,6 +95,7 @@ class QueryValidatorTest {
         title = title,
         definition = BlueprintDefinition(relations = relations, schema = BlueprintSchema(properties = properties)),
         hierarchyRelations = emptyMap(),
+        tiers = BlueprintTiers(),
     )
 
     private fun schema(vararg entries: Pair<String, GraphBlueprint>, hierarchies: Set<String> = emptySet()) =

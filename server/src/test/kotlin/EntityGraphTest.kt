@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.entities.EntityGraphEdge
@@ -38,6 +39,7 @@ class EntityGraphTest {
         title = title,
         definition = BlueprintDefinition(relations = relations),
         hierarchyRelations = hierarchyRelations,
+        tiers = BlueprintTiers(),
     )
 
     private fun source(

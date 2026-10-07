@@ -91,6 +91,8 @@ type Blueprint {
   ownership: JSON
   "Optional hierarchy identifier to relation-key mapping."
   hierarchyRelations: JSON
+  "Optional Toadie-only fill-in tiers (1-4, visual priority hint): {blueprint, properties, relations}."
+  tiers: JSON
   "Identifier of the account that created the blueprint, encoded as a decimal string."
   createdBy: ID!
   "Current or retained display name of the creating account."

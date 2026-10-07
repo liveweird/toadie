@@ -233,6 +233,7 @@ private fun BlueprintResponse.jsonFields(): Map<String, Any?> = mapOf(
     "aggregationProperties" to mappingJson.encodeToJsonElement(aggregationProperties),
     "ownership" to ownership?.let { mappingJson.encodeToJsonElement(it) },
     "hierarchyRelations" to hierarchyRelations?.let { mappingJson.encodeToJsonElement(it) },
+    "tiers" to tiers?.let { mappingJson.encodeToJsonElement(it) },
 )
 
 private fun blueprintMap(value: BlueprintResponse): Map<String, Any?> = mapOf(

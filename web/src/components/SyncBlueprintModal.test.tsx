@@ -366,6 +366,31 @@ describe("SyncBlueprintModal", () => {
     expect(body.document).toEqual({ ...remoteDoc("New title"), hierarchyRelations: { composition: "parent" } });
   });
 
+  test("a remote document without tiers keeps the stored tiers pruned to its own keys and shows the hint", async () => {
+    const remote = { ...remoteDoc("New title"), schema: { properties: { language: { type: "string" } }, required: [] } };
+    mockRoutes(mockFetch, {
+      fetch: jsonResponse(200, { content: JSON.stringify(remote) }),
+      detail: jsonResponse(200, { ...DETAIL, tiers: { blueprint: 2, properties: { language: 1, gone: 3 } } }),
+    });
+    const user = userEvent.setup();
+    renderModal();
+
+    expect(
+      await screen.findByText(/Tiers are a Toadie-only extension; the source document does not carry them/),
+    ).toBeInTheDocument();
+
+    const confirm = screen.getByRole("button", { name: "Overwrite stored copy" });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const syncCall = mockFetch.mock.calls.find(
+      ([url, init]) => url === "/api/v1/blueprints/1/sync" && (init as RequestInit)?.method === "POST",
+    );
+    const body = JSON.parse((syncCall![1] as RequestInit).body as string) as { document: Record<string, unknown> };
+    expect(body.document).toEqual({ ...remote, tiers: { blueprint: 2, properties: { language: 1 }, relations: {} } });
+  });
+
   test("prefers the current definition over the stale baseline when deciding whether a hierarchy map is kept", async () => {
     mockRoutes(mockFetch, {
       state: jsonResponse(200, {

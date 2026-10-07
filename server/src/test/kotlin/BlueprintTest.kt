@@ -8,12 +8,15 @@ import ch.nokillswit.blueprints.BlueprintList
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.CalculationPropertyDefinition
 import ch.nokillswit.blueprints.MirrorPropertyDefinition
 import ch.nokillswit.blueprints.OwnershipDefinition
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SpecAuthentication
+import ch.nokillswit.entities.EntityRequest
+import ch.nokillswit.entities.EntityResponse
 import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
@@ -387,6 +390,117 @@ class BlueprintTest {
             assertEquals(HttpStatusCode.NoContent, cleared.status)
             assertFalse(admin.get("/api/v1/blueprints/${plainCreated.id}").bodyAsText().contains("hierarchyRelations"))
         } finally {
+            TestBlueprints.remove(id)
+        }
+    }
+
+    @Test
+    fun `tiers round-trip, are absent when unset, clear on a PUT without them and are validated`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("bptier", UserRole.ADMIN)
+        val id = identifier("bptier")
+        try {
+            val plain = admin.postJson("/api/v1/blueprints", simpleRequest(id))
+            assertFalse(plain.bodyAsText().contains("tiers"), "unset tiers are absent, never an explicit null")
+            val plainCreated = plain.body<BlueprintResponse>()
+            assertEquals(null, plainCreated.tiers)
+
+            val tiered = microserviceRequest(id).copy(
+                relations = mapOf("parent" to relationTo(id)),
+                tiers = BlueprintTiers(
+                    blueprint = 1,
+                    properties = mapOf("language" to 1, "repository" to 3),
+                    relations = mapOf("parent" to 2),
+                ),
+            )
+            assertEquals(HttpStatusCode.NoContent, admin.putJson("/api/v1/blueprints/${plainCreated.id}", tiered).status)
+            val read = admin.get("/api/v1/blueprints/${plainCreated.id}")
+            assertEquals(tiered.tiers, read.body<BlueprintResponse>().tiers)
+            assertTrue(read.bodyAsText().contains("\"tiers\":{"))
+            // The Port document members are untouched by the beside-the-document column.
+            assertEquals(tiered.schema, read.body<BlueprintResponse>().schema)
+
+            // Each level is range-checked 1..4 and the keys must exist in the SAME request.
+            suspend fun rejected(tiers: BlueprintTiers) = admin.putJson("/api/v1/blueprints/${plainCreated.id}", tiered.copy(tiers = tiers))
+            assertEquals(HttpStatusCode.BadRequest, rejected(BlueprintTiers(blueprint = 0)).status)
+            assertEquals(HttpStatusCode.BadRequest, rejected(BlueprintTiers(blueprint = 5)).status)
+            assertEquals(HttpStatusCode.BadRequest, rejected(BlueprintTiers(properties = mapOf("language" to -1))).status)
+            assertEquals(HttpStatusCode.BadRequest, rejected(BlueprintTiers(relations = mapOf("parent" to 5))).status)
+            val orphanProperty = rejected(BlueprintTiers(properties = mapOf("nope" to 1)))
+            assertEquals(HttpStatusCode.BadRequest, orphanProperty.status)
+            assertTrue(orphanProperty.body<ProblemDetail>().detail!!.contains("tiers.properties.nope must name a schema property"))
+            val orphanRelation = rejected(BlueprintTiers(relations = mapOf("nope" to 1)))
+            assertEquals(HttpStatusCode.BadRequest, orphanRelation.status)
+            assertTrue(orphanRelation.body<ProblemDetail>().detail!!.contains("tiers.relations.nope must name a relation"))
+            // A failed PUT changed nothing.
+            assertEquals(tiered.tiers, admin.get("/api/v1/blueprints/${plainCreated.id}").body<BlueprintResponse>().tiers)
+
+            // An all-empty object is stored as no tiers; a PUT omitting them clears them (full replace).
+            val emptied = admin.putJson("/api/v1/blueprints/${plainCreated.id}", tiered.copy(tiers = BlueprintTiers()))
+            assertEquals(HttpStatusCode.NoContent, emptied.status)
+            assertFalse(admin.get("/api/v1/blueprints/${plainCreated.id}").bodyAsText().contains("tiers"))
+            assertEquals(HttpStatusCode.NoContent, admin.putJson("/api/v1/blueprints/${plainCreated.id}", tiered).status)
+            assertEquals(HttpStatusCode.NoContent, admin.putJson("/api/v1/blueprints/${plainCreated.id}", tiered.copy(tiers = null)).status)
+            assertFalse(admin.get("/api/v1/blueprints/${plainCreated.id}").bodyAsText().contains("tiers"))
+
+            // A computed property id is not a schema property: nobody fills it in.
+            val computed = microserviceRequest(id).copy(
+                relations = mapOf("parent" to relationTo(id)),
+                mirrorProperties = mapOf("parentLanguage" to MirrorPropertyDefinition(title = "Parent language", path = "parent.language")),
+                tiers = BlueprintTiers(properties = mapOf("parentLanguage" to 1)),
+            )
+            assertEquals(HttpStatusCode.BadRequest, admin.putJson("/api/v1/blueprints/${plainCreated.id}", computed).status)
+            // The same rules guard create.
+            val badBody = simpleRequest(identifier("bptier")).copy(tiers = BlueprintTiers(blueprint = 9))
+            val badCreate = admin.postJson("/api/v1/blueprints", badBody)
+            assertEquals(HttpStatusCode.BadRequest, badCreate.status)
+        } finally {
+            TestBlueprints.remove(id)
+        }
+    }
+
+    @Test
+    fun `tiers change no logic - an entity with an empty tier-1 property saves with no findings`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient("bptierlogic", UserRole.ADMIN)
+        val id = identifier("bptierlogic")
+        val entityA = identifier("ent-a")
+        val entityB = identifier("ent-b")
+        try {
+            val untiered = BlueprintRequest(
+                identifier = id,
+                title = "Logic",
+                schema = BlueprintSchema(
+                    properties = mapOf(
+                        "language" to PropertyDefinition(type = "string", title = "Language"),
+                        "repository" to PropertyDefinition(type = "string", format = "url", title = "Repository"),
+                    ),
+                ),
+            )
+            val created = admin.postJson("/api/v1/blueprints", untiered).body<BlueprintResponse>()
+            val before = admin.postJson(
+                "/api/v1/entities",
+                EntityRequest(blueprint = id, identifier = entityA, title = "A"),
+            ).body<EntityResponse>()
+            assertTrue(before.findings.isEmpty())
+
+            // Tier-1 fields, left empty on the stored entity, produce no finding after the blueprint edit.
+            val tiered = untiered.copy(
+                tiers = BlueprintTiers(blueprint = 1, properties = mapOf("language" to 1, "repository" to 1)),
+            )
+            assertEquals(HttpStatusCode.NoContent, admin.putJson("/api/v1/blueprints/${created.id}", tiered).status)
+            assertTrue(admin.get("/api/v1/entities/${before.id}").body<EntityResponse>().findings.isEmpty())
+
+            // ...and a strict create/replace of an entity leaving them empty is still accepted.
+            val after = admin.postJson("/api/v1/entities", EntityRequest(blueprint = id, identifier = entityB, title = "B"))
+            assertEquals(HttpStatusCode.Created, after.status)
+            assertTrue(after.body<EntityResponse>().findings.isEmpty())
+            val replace = admin.putJson("/api/v1/entities/${before.id}", EntityRequest(blueprint = id, identifier = entityA, title = "A2"))
+            assertEquals(HttpStatusCode.NoContent, replace.status)
+            assertTrue(admin.get("/api/v1/entities/${before.id}").body<EntityResponse>().findings.isEmpty())
+        } finally {
+            TestEntities.remove(entityA)
+            TestEntities.remove(entityB)
             TestBlueprints.remove(id)
         }
     }

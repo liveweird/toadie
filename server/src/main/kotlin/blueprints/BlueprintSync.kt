@@ -36,7 +36,9 @@ private typealias BlueprintRows = BlueprintService.Blueprints
  * clearing is an editor-only action. An empty map (`{}}`) folds to "keep" too, matching
  * [sanitizedHierarchyRelations]'s own "empty means absent" normalization. Merging before
  * validation means a remote that dropped the very relation the stored map still names is refused
- * `400` naming that key, exactly as an ordinary PUT would be.
+ * `400` naming that key, exactly as an ordinary PUT would be. `tiers` (2.18.0, V44) is kept the
+ * same way when absent, except that the carried-over map is PRUNED to the synced document's
+ * property/relation keys instead of refused — see [prunedTo].
  */
 internal suspend fun BlueprintService.syncFromSource(
     id: UInt,
@@ -47,11 +49,12 @@ internal suspend fun BlueprintService.syncFromSource(
     val current = rows.firstOrNull { it.id == id } ?: return@writeTransaction BlueprintUpdateResult(0, emptyList(), null, false)
     requireExpectedSourceUrl(expectedSourceUrl, current.sourceUrl)
     val sourceUrl = current.sourceUrl ?: throw BadRequestException("This blueprint has no source reference — set one before syncing")
-    val merged = if (request.hierarchyRelations == null) {
-        request.copy(hierarchyRelations = current.hierarchyRelations.ifEmpty { null })
-    } else {
-        request
-    }
+    val merged = request
+        .let { if (it.hierarchyRelations == null) it.copy(hierarchyRelations = current.hierarchyRelations.ifEmpty { null }) else it }
+        // Tiers keep-when-absent too, but PRUNED to the synced document's own keys: unlike
+        // hierarchyRelations a stale tier is only a visual hint, so a remote that dropped the
+        // property/relation it named must never make the sync fail.
+        .let { it.copy(tiers = it.tiers ?: current.tiers?.prunedTo(it.schema.properties.keys, it.relations.keys)) }
     applyUpdate(id, rows, current, merged, SourceWrite.Synced(sourceUrl))
 }
 
@@ -94,6 +97,7 @@ internal suspend fun BlueprintService.replaceRow(
         it[icon] = request.icon
         it[BlueprintRows.definition] = blueprintJson.encodeToString(definition)
         it[hierarchyRelations] = encodeHierarchyRelations(request.hierarchyRelations)
+        it[tiers] = encodeTiers(request.tiers)
         it[updatedAt] = now
         it[BlueprintRows.sourceUrl] = resolved.sourceUrl
         it[BlueprintRows.lastSyncedAt] = resolved.lastSyncedAt

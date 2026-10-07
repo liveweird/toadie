@@ -195,6 +195,7 @@
     "noMatch": "Dokument źródłowy nie zawiera już tego blueprintu.",
     "refusedBody": "Synchronizacja zakończyłaby się niepowodzeniem — kopia ze źródła nie spełnia reguł blueprintu. Popraw ją u źródła przed ponowną synchronizacją.",
     "hierarchyKept": "Relacje hierarchii to rozszerzenie Toadie; dokument źródłowy ich nie zawiera, więc zapisana mapa zostaje zachowana.",
+    "tiersKept": "Poziomy to rozszerzenie Toadie; dokument źródłowy ich nie zawiera, więc zapisane poziomy zostają zachowane (te, które wskazują właściwość lub relację nieobecną już w źródle, są pomijane).",
     "overwriteWarning": "Synchronizacja nadpisze zapisaną kopię wersją źródłową pokazaną powyżej. Zmiany wprowadzone tylko w Toadie zostaną utracone."
   }
 }
