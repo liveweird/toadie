@@ -9,20 +9,20 @@ detekt = "1.23.8"
 # likely connection-release regression; fine in isolation). Re-try at the next release
 # with a full :server:test --rerun-tasks.
 exposed = "1.5.0"
-flyway = "13.8.1"
+flyway = "13.9.0"
 # jq 1.6 semantics for `calculationProperties` (Phase 5, `.claude/docs/port-data-model.md`);
 # Apache 2 licensed. Brings jackson-databind onto the compile classpath (previously runtime/test
 # only, via com.auth0:java-jwt) plus org.jruby.joni — see `--write-locks` diff.
 jackson-jq = "1.6.5"
 kotlin = "2.4.20"
 kover = "0.9.11"
-logback = "1.6.4"
+logback = "1.6.5"
 # The MCP endpoint groundwork (release 2.15.0): pulls in ktor-server-sse transitively at an
 # older Ktor line — the explicit ktorLibs.server.sse dependency below keeps every Ktor artifact
 # on the repo's own 3.6.0 catalog line (see server/build.gradle.kts).
 mcp-kotlin-sdk = "0.15.0"
 opentelemetry = "1.66.0"
-opentelemetry-ktor = "2.31.1-alpha"
+opentelemetry-ktor = "2.32.0-alpha"
 opentelemetry-semconv = "1.44.0"
 okhttp = "5.5.0"
 r2dbc-postgresql = "1.1.3.RELEASE"
