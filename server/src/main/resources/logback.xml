@@ -21,4 +21,6 @@
     <logger name="org.eclipse.jetty" level="INFO"/>
     <logger name="io.netty" level="INFO"/>
     <logger name="io.modelcontextprotocol" level="WARN"/>
+    <!-- Ktor's JWT provider logs JWTDecodeException throwables (which can embed the decoded token segment) at DEBUG/TRACE. -->
+    <logger name="io.ktor.auth.jwt" level="INFO"/>
 </configuration>

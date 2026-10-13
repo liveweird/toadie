@@ -73,4 +73,47 @@ class ForwardedHeadersTest {
         }
         assertEquals(HttpStatusCode.TooManyRequests, client.login("10.9.99.1"))
     }
+
+    @Test
+    fun `a junk X-Forwarded-Port header is ignored instead of failing the request`() = testApplication {
+        // Ktor's own port handler would throw a NumberFormatException from CallSetup (a 500 before
+        // any route runs); the plugin's port headers are cleared, so the value is never parsed.
+        configureApp("http.behindProxy" to "true")
+        startApplication()
+        val status = jsonClient().post("/api/v1/login") {
+            contentType(ContentType.Application.Json)
+            header("X-Forwarded-Port", "x")
+            setBody(LoginRequest(uniqueEmail("xfp"), "wrong"))
+        }.status
+        assertEquals(HttpStatusCode.Unauthorized, status)
+    }
+
+    @Test
+    fun `more proxyHops than X-Forwarded-For entries falls back to the last value`() = testApplication {
+        configureApp(
+            "http.behindProxy" to "true",
+            "http.proxyHops" to "3",
+            "security.rateLimit.loginPerMinute" to "10",
+        )
+        startApplication()
+        val client = jsonClient()
+        // Only two entries for three trusted hops: no exception, the last value keys the bucket.
+        repeat(10) { i ->
+            assertEquals(HttpStatusCode.Unauthorized, client.login("10.9.$i.1, 203.0.113.7"))
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, client.login("10.9.99.1, 203.0.113.7"))
+        assertEquals(HttpStatusCode.Unauthorized, client.login("10.9.99.1, 203.0.113.8"))
+    }
+
+    @Test
+    fun `an all-blank X-Forwarded-For leaves the direct client address as the bucket key`() = testApplication {
+        configureApp("http.behindProxy" to "true", "security.rateLimit.loginPerMinute" to "10")
+        startApplication()
+        val client = jsonClient()
+        // No usable hop: the header is ignored, so blank-header and header-less requests share
+        // the direct TCP address's bucket.
+        repeat(10) { assertEquals(HttpStatusCode.Unauthorized, client.login(" , ")) }
+        assertEquals(HttpStatusCode.TooManyRequests, client.login(" , "))
+        assertEquals(HttpStatusCode.TooManyRequests, client.login(null))
+    }
 }
