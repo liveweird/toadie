@@ -376,14 +376,22 @@ fun Application.configureAuthRoutes() {
                     null
                 } catch (cause: CannotTransformContentToTypeException) {
                     // A body-less/Content-Type-less POST never enters ContentNegotiation.
-                    call.application.log.debug("Logout sent no body — skipping refresh-token revocation", cause)
+                    call.application.log.debug(
+                        "Logout sent no body — skipping refresh-token revocation ({})",
+                        cause.javaClass.simpleName,
+                    )
                     null
                 }
                 body?.refreshToken?.let { rt ->
                     val decoded = try {
                         refreshVerifier.verify(rt)
                     } catch (cause: JWTVerificationException) {
-                        call.application.log.debug("Logout refresh token invalid — nothing to revoke", cause)
+                        // auth0's JWTDecodeException message can embed the decoded token segment — the
+                        // exception CLASS NAME only, never the throwable (observability.md).
+                        call.application.log.debug(
+                            "Logout refresh token invalid — nothing to revoke ({})",
+                            cause.javaClass.simpleName,
+                        )
                         null
                     }
                     // An optional body must never revoke a different login/device/user.
