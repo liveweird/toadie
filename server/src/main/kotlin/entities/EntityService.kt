@@ -98,7 +98,7 @@ class EntityService(
     internal val querySlots = Semaphore(queryPermits)
 
     init {
-        // The pool ([QUERY_DISPATCHER]) has exactly MAX_CONCURRENT_ENTITY_QUERIES threads: more
+        // The `entity-query` pool (QUERY_DISPATCHER, private to EntityGraphRead.kt) has exactly MAX_CONCURRENT_ENTITY_QUERIES threads: more
         // permits than threads would queue evaluations, each holding a decoded workspace.
         require(queryPermits in 1..MAX_CONCURRENT_ENTITY_QUERIES) { "queryPermits must be between 1 and $MAX_CONCURRENT_ENTITY_QUERIES" }
         require(workspaceDocumentBytes > 0) { "workspaceDocumentBytes must be positive" }

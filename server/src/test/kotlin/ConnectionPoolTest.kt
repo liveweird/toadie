@@ -48,6 +48,18 @@ class ConnectionPoolTest {
             }
         }
 
+    /** Whether backend [pid] still exists — a plain JDBC read, never through the pool under test. */
+    private fun backendExists(pid: Int): Boolean =
+        DriverManager.getConnection(PostgresTestSupport.jdbcUrl, PostgresTestSupport.user, PostgresTestSupport.password).use { conn ->
+            conn.prepareStatement("SELECT count(*) FROM pg_stat_activity WHERE pid = ?").use { stmt ->
+                stmt.setInt(1, pid)
+                stmt.executeQuery().use { rs ->
+                    rs.next()
+                    rs.getInt(1) > 0
+                }
+            }
+        }
+
     /** A trivial query — just enough to make the transaction actually acquire a pooled connection. */
     private suspend fun org.jetbrains.exposed.v1.r2dbc.R2dbcTransaction.touchDatabase() {
         UserService.Users.selectAll().limit(1).toList()
@@ -221,5 +233,40 @@ class ConnectionPoolTest {
         // virtual time would not advance it (hence Dispatchers.IO, not the test scheduler).
         withContext(Dispatchers.IO) { delay(2_500) }
         assertNotEquals(first, backendPid(), "a connection past maxLifeTimeSeconds must be replaced by a fresh backend")
+    }
+
+    @Test
+    fun `an idle connection past maxLifeTimeSeconds is closed by the background sweep with no further acquire`() = testApplication {
+        // The sweep interval is min(60 s, maxIdle, maxLife) = 1 s here. Without the explicit
+        // backgroundEvictionInterval it would default to maxIdle (an hour), so the idle backend would
+        // stay open for the whole poll window. No acquire happens after the first transaction, so
+        // acquire-time eviction cannot be what closes it.
+        configureApp(
+            "postgres.pool.maxSize" to "1",
+            "postgres.pool.initialSize" to "0",
+            "postgres.pool.maxIdleTimeSeconds" to "3600",
+            "postgres.pool.maxLifeTimeSeconds" to "1",
+            "postgres.pool.applicationName" to "toadie-test-${UUID.randomUUID()}",
+        )
+        startApplication()
+        val db = application.attributes[DatabaseKey]
+
+        val pid = suspendTransaction(db) {
+            exec("SELECT pg_backend_pid()", explicitStatementType = StatementType.SELECT) { row ->
+                row.get(0, java.lang.Integer::class.java)!!.toInt()
+            }?.toList()?.single()
+        } ?: error("pg_backend_pid() returned no row")
+        assertTrue(backendExists(pid), "the pooled backend must exist right after the transaction")
+
+        val gone = withContext(Dispatchers.IO) {
+            val deadline = System.nanoTime() + 10_000_000_000L
+            var closed = false
+            while (!closed && System.nanoTime() < deadline) {
+                closed = !backendExists(pid)
+                if (!closed) delay(250)
+            }
+            closed
+        }
+        assertTrue(gone, "the idle backend $pid must be closed by the background sweep within 10 s of exceeding maxLifeTimeSeconds")
     }
 }

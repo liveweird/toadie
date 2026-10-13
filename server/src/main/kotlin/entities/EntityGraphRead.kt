@@ -21,7 +21,6 @@ import ch.nokillswit.entityquery.validateAndBind
 import ch.nokillswit.entityquery.validateEntityQuery
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.slf4j.LoggerFactory
@@ -84,9 +83,9 @@ private data class GraphMaterialized(
  * contribute a node or an edge (`catalog/Graph.kt`'s rule, one level down) — with no
  * users join (the graph never needs creator display fields). Ownership edges follow the
  * SAME both-ends rule via [EntityGraphSource.team], the EFFECTIVE team. `team` matches that
- * SAME effective value (v1.30.0) — [inheritedTeamMatches] resolves the Inherited half over
+ * SAME effective value (v1.30.0) — [EntityService.inheritedTeamMatches] resolves the Inherited half over
  * the candidate blueprints the `blueprints` filter already narrowed to, folded into the ONE
- * SQL predicate the same way [list] does.
+ * SQL predicate the same way [EntityService.list] does.
  *
  * Phase 7 (2.0.0 — `.claude/docs/entity-query-language.md`): when [EntityGraphFilter.query]
  * is set, the query is parsed/validated OUTSIDE any transaction against one committed read
@@ -277,7 +276,7 @@ private fun logQueryBudgetMiss(code: String, textLength: Int) {
 }
 
 /**
- * `.claude/docs/security.md` "Entity read memory budget": [list]/[read]'s refusal mapping —
+ * `.claude/docs/security.md` "Entity read memory budget": [EntityService.list]/[EntityService.read]'s refusal mapping —
  * [ReadBudgetExceeded.ownRequest] means THIS call's own workspace read is too large for the
  * budget on its own (a plain `400`); otherwise other in-flight reads hold the room (a `429`
  * naming contention, not this caller's fault).

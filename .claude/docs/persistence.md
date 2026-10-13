@@ -34,8 +34,8 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   20, 1..1000), `initialSize` (`POSTGRES_POOL_INITIAL_SIZE`, default 2, 0..maxSize),
   `maxAcquireTimeSeconds` (`POSTGRES_POOL_MAX_ACQUIRE_SECONDS`, default 10, 1..600) and
   `maxIdleTimeSeconds` (`POSTGRES_POOL_MAX_IDLE_SECONDS`, default 600, 1..86400) and
-  `maxLifeTimeSeconds` (`POSTGRES_POOL_MAX_LIFE_SECONDS`, default 1800, 1..86400 — no connection
-  outlives it). Every pooled connection carries `application_name = toadie` (`postgres.pool.applicationName`), so operators
+  `maxLifeTimeSeconds` (`POSTGRES_POOL_MAX_LIFE_SECONDS`, default 1800, 1..86400 — a connection is not
+  reused past it). Every pooled connection carries `application_name = toadie` (`postgres.pool.applicationName`), so operators
   count this instance's backends with `SELECT count(*) FROM pg_stat_activity WHERE
   application_name = 'toadie'`. Size it as `maxSize × replicas + 1` (Flyway's short-lived JDBC
   connection) well under the server's `max_connections`. A caller that waits past the acquire
@@ -55,11 +55,12 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
 - **Enforcement:** `ConnectionPoolTest` — concurrent transactions never exceed `maxSize` in
   `pg_stat_activity`, a saturated pool times out an acquire instead of hanging, the pool releases
   every connection when the application stops, out-of-range bounds fail startup, and a connection
-  older than `maxLifeTimeSeconds` is replaced (a different backend pid).
+  older than `maxLifeTimeSeconds` is replaced (a different backend pid), and an idle one past it is closed by the background
+  sweep alone, with no further acquire.
 - **Exception:** the pool validates liveness with r2dbc-pool's default `ValidationDepth.LOCAL`
   (a client-side check only). A connection killed server-side between uses (restart, failover, an
   idle killer or proxy) can therefore still be handed out once and fail that request with a 500, but
-  no connection outlives `maxLifeTimeSeconds`. `ValidationDepth.REMOTE` would cost a round trip on
+  no connection is reused past `maxLifeTimeSeconds`; an expired idle one is closed by the background sweep within a minute. `ValidationDepth.REMOTE` would cost a round trip on
   every acquire, which is why it is not used. r2dbc-pool 1.0.2 (verified from its bytecode)
   evaluates the idle/lifetime eviction predicate on acquire and release, and also in a background
   sweep whose `backgroundEvictionInterval` defaults to `maxIdleTime`; `Database.kt` pins that sweep

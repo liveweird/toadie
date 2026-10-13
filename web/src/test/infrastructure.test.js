@@ -13,6 +13,7 @@ const toolchainSource = readFileSync(resolve(repoRoot, "mise.toml"), "utf8");
 const dockerfileSource = readFileSync(resolve(repoRoot, "Dockerfile"), "utf8");
 const dependabotSource = readFileSync(resolve(repoRoot, ".github/dependabot.yml"), "utf8");
 const appDeploymentSource = readFileSync(resolve(repoRoot, "k8s/app-deployment.yaml"), "utf8");
+const openTelemetrySource = readFileSync(resolve(repoRoot, "core/src/commonMain/kotlin/OpenTelemetry.kt"), "utf8");
 const postgresDeploymentSource = readFileSync(resolve(repoRoot, "k8s/postgres-deployment.yaml"), "utf8");
 
 describe("deployment and verification safety defaults", () => {
@@ -135,26 +136,24 @@ describe("deployment and verification safety defaults", () => {
     expect(healthcheck).toContain("/readyz");
   });
 
-  it("passes the OpenTelemetry settings through compose and the k8s Deployment with the code's defaults", () => {
-    const expectedCompose = {
-      OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-none}",
-      OTEL_METRICS_EXPORTER: "${OTEL_METRICS_EXPORTER:-none}",
-      OTEL_LOGS_EXPORTER: "${OTEL_LOGS_EXPORTER:-console}",
-    };
-    const environment = parse(composeSource).services.app.environment;
-    for (const [name, value] of Object.entries(expectedCompose)) expect(environment[name]).toBe(value);
-    expect(environment.OTEL_EXPORTER_OTLP_ENDPOINT).toMatch(/^\$\{OTEL_EXPORTER_OTLP_ENDPOINT:-https?:\/\/\S+\}$/);
+  it("passes the OpenTelemetry exporter selectors through compose and the k8s Deployment with the code's defaults, and no endpoint", () => {
+    // The defaults are parsed from the code, never restated here.
+    const defaults = Object.fromEntries(
+      [...openTelemetrySource.matchAll(/"otel\.(\w+)\.exporter"\s+to\s+"([^"]+)"/g)].map(([, signal, value]) => [signal, value]),
+    );
+    expect(Object.keys(defaults).sort()).toEqual(["logs", "metrics", "traces"]);
 
-    const expectedK8s = {
-      OTEL_TRACES_EXPORTER: "none",
-      OTEL_METRICS_EXPORTER: "none",
-      OTEL_LOGS_EXPORTER: "console",
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318",
-    };
+    const environment = parse(composeSource).services.app.environment;
     const env = parse(appDeploymentSource).spec.template.spec.containers[0].env;
-    for (const [name, value] of Object.entries(expectedK8s)) {
+    for (const [signal, value] of Object.entries(defaults)) {
+      const name = `OTEL_${signal.toUpperCase()}_EXPORTER`;
+      expect(environment[name]).toBe(`\${${name}:-${value}}`);
       expect(env.find((entry) => entry.name === name)?.value).toBe(value);
     }
+
+    // A default endpoint is not neutral for gRPC, so the operator adds it.
+    expect(environment).not.toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
+    expect(env.find((entry) => entry.name === "OTEL_EXPORTER_OTLP_ENDPOINT")).toBeUndefined();
   });
 
   it("gives the compose app service a container healthcheck", () => {
