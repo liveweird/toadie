@@ -1,3 +1,9 @@
+// Plugin classpath locking - see the root build.gradle.kts and `.claude/docs/dependency-reproducibility.md`.
+buildscript {
+    configurations.classpath {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)

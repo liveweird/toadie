@@ -43,7 +43,7 @@ sample data automatically.
 
 ## Reproducibility — what is pinned, and what deliberately is not
 
-Pinned: direct dependency versions (`gradle/libs.versions.toml`, `web/package.json` + `package-lock.json` installed with `npm ci`), the transitive Gradle graph (dependency locking, `gradle.lockfile` in `core/` and `server/` + the root `settings-gradle.lockfile` and `buildscript-gradle.lockfile` — `./gradlew build --write-locks` after a dependency change, commit the result), the Gradle distribution checksum (`distributionSha256Sum` in `gradle-wrapper.properties`), the toolchains (`mise.toml`: Temurin 21 + Node 26, matching the Dockerfile and the e2e workflow), the Dockerfile's three base images by tag AND multi-arch digest (`node:26-alpine@sha256:…`, `eclipse-temurin:21.0.12_8-jdk/-jre@sha256:…`; Dependabot bumps the pair), and compose's `postgres:18-alpine` / `axllent/mailpit:v1.30` by tag only.
+Pinned: direct dependency versions (`gradle/libs.versions.toml`, `web/package.json` + `package-lock.json` installed with `npm ci`), the transitive Gradle graph (dependency locking, `gradle.lockfile` and `buildscript-gradle.lockfile` in each of `core/` and `server/`, plus the root `gradle.lockfile`, `settings-gradle.lockfile` and `buildscript-gradle.lockfile`), the SHA-256 of every resolved Gradle artifact and POM (`gradle/verification-metadata.xml`, enforced automatically by Gradle whenever the file exists — CI runs `--dependency-verification strict`, and the Docker build's `installDist` is checked too) — both regenerated together from an empty `GRADLE_USER_HOME` after a dependency change, see `.claude/docs/dependency-reproducibility.md`; HIGH/CRITICAL advisories in the locks fail the CI Gradle advisory scan, the Gradle distribution checksum (`distributionSha256Sum` in `gradle-wrapper.properties`), the toolchains (`mise.toml`: Temurin 21 + Node 26, matching the Dockerfile and the e2e workflow), the Dockerfile's three base images by tag AND multi-arch digest (`node:26-alpine@sha256:…`, `eclipse-temurin:21.0.12_8-jdk/-jre@sha256:…`; Dependabot bumps the pair), and compose's `postgres:18-alpine` / `axllent/mailpit:v1.30` by tag only.
 
 Current policy: Dependabot proposes weekly updates across five ecosystems, while CI and
 dependency locks verify each merged change. The Dockerfile base images are digest-pinned (see above);
@@ -52,7 +52,6 @@ This is separate from the **application release image**: production registry pub
 deployment by immutable digest remain open in [BACKLOG.md](../../../BACKLOG.md). The
 OrbStack shared image store and `toadie-app:latest` are only the local proof path.
 
-Gradle dependency-verification metadata and `.git`-less source-archive builds are not
-planned. `COPY .git .git` feeds the SPA version stamp today; if archive builds become a
+`.git`-less source-archive builds are not planned. `COPY .git .git` feeds the SPA version stamp today; if archive builds become a
 supported target, `web/vite.config.ts` already accepts `GIT_SHA` and `GIT_COMMIT_TIME` from
 the environment, and an explicit build-argument path can be designed then.
