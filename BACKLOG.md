@@ -43,12 +43,6 @@ promotes it. A finished item is removed, not ticked.
 Found by the Flow project's audit of Toadie at `3d975a5` (2026-09-26); each was re-checked as
 still open on 2026-10-14. Flow's and Lettuce's fixes are the reference to port.
 
-- [new] **Answer a failing revocation lookup with 500, not 401.** `plugins/Security.kt:84` calls
-  `isRevoked(jti)` inside `validate {}`, so a throwing lookup (a database or pool outage) becomes a
-  plain 401 challenge that reads as "session expired" (Lettuce measured 7 of 120 burst requests
-  doing this). Port Lettuce's `catchingFailures` + `BlocklistFailureKey` (`plugins/Security.kt`,
-  `infra/Failures.kt`) while keeping Toadie's rejection of a token without `jti`; Flow's
-  `BlocklistOutageTest`/`CatchingFailuresTest` show the regressions.
 - [new] **Drop the vulnerable FreeMarker from the build classpath.** `buildscript-gradle.lockfile`
   pins `org.freemarker:freemarker:2.3.32` (through Kover), which carries a path-traversal CVE.
   Build-time only, never in the runtime image. Covenant's fix: a root `buildscript` constraint on
@@ -58,19 +52,6 @@ still open on 2026-10-14. Flow's and Lettuce's fixes are the reference to port.
 - [new] **Verify Gradle dependencies.** Add `gradle/verification-metadata.xml` generated from an
   empty `GRADLE_USER_HOME`, run CI with `--dependency-verification strict`, and fail on lock or
   verification drift, following Lettuce's `quality.yml` and its dependency-reproducibility doc.
-- [new] **Fold multi-line `X-Forwarded-For` before choosing the client address.** Ktor 3.6's
-  `XForwardedHeaders` reads only the first header line (`plugins/Http.kt:85`), so a proxy that
-  appends a separate line (HAProxy `option forwardedfor`) leaves the client-supplied first line as
-  the rate-limit key; ingress-nginx sends one line, so the reference setup is unaffected. Fold
-  every line in hop order with the same trust-from-the-end rule, and clear `portHeaders` too (a
-  junk `X-Forwarded-Port` is a 500 today). Test with raw socket bytes against the real engine,
-  since ktor-client folds repeated headers (Flow's `RawForwardedForLinesTest`).
-- [new] **Redact the two JDBC URL forms the log still leaks.** `infra/db/Flyway.kt`'s
-  URI-based `jdbcUrlForLogging` keeps `;password=…` parameters in the path and an unescaped
-  `user:pass@host` form; port Lettuce's string-based `jdbcTarget()` and add both cases to the test.
-- [new] **Log the exception class only on logout's invalid-token branches.**
-  `auth/AuthRoutes.kt:379,386` pass the throwable to `debug`, and auth0's `JWTDecodeException`
-  message can embed a decoded token segment.
 
 ## Product
 
