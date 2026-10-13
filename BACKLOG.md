@@ -38,20 +38,14 @@ promotes it. A finished item is removed, not ticked.
   cross-replica behavior, and only then change `k8s/app-deployment.yaml` from one replica and `Recreate`.
   Until then, one replica is an intentional deployment rule, not a broken rollout.
 
-## Security hardening
+## Reliability
 
-Found by the Flow project's audit of Toadie at `3d975a5` (2026-09-26); each was re-checked as
-still open on 2026-10-14. Flow's and Lettuce's fixes are the reference to port.
-
-- [new] **Drop the vulnerable FreeMarker from the build classpath.** `buildscript-gradle.lockfile`
-  pins `org.freemarker:freemarker:2.3.32` (through Kover), which carries a path-traversal CVE.
-  Build-time only, never in the runtime image. Covenant's fix: a root `buildscript` constraint on
-  2.3.35 plus `./gradlew buildEnvironment --write-locks`.
-- [new] **Scan dependencies for advisories in CI.** Add a job that runs Trivy over the Gradle
-  lockfiles and fails on HIGH/CRITICAL, as Covenant and Flow do (it caught the FreeMarker CVE there).
-- [new] **Verify Gradle dependencies.** Add `gradle/verification-metadata.xml` generated from an
-  empty `GRADLE_USER_HOME`, run CI with `--dependency-verification strict`, and fail on lock or
-  verification drift, following Lettuce's `quality.yml` and its dependency-reproducibility doc.
+- [new] **Fail fast when the database hangs.** With PostgreSQL paused (connections open, nothing
+  answering), an authenticated request waited past 40 s instead of failing: the pool bounds only
+  the acquire, and no statement or socket timeout bounds a query on a connection already held.
+  Found while proving 2.18.2's outage handling (a stopped database correctly answers 500 in
+  milliseconds). Decide on a statement timeout and/or r2dbc-postgresql socket timeout, with a
+  regression that pauses the container.
 
 ## Product
 
@@ -83,3 +77,7 @@ still open on 2026-10-14. Flow's and Lettuce's fixes are the reference to port.
   at 0.15.0; `integration/Mcp.kt` relies on its stateless mode needing no `initialize`, on the
   Accept-header pair and on unknown tools being tool results. Re-verify those with the real
   TypeScript MCP client before merging the bump.
+- [new] **Automate the Gradle Dependabot fix-up.** Dependabot's Gradle PRs edit only
+  `libs.versions.toml`; the lockfiles and `gradle/verification-metadata.xml` must be regenerated
+  by hand from an empty Gradle home ([dependency-reproducibility.md](.claude/docs/dependency-reproducibility.md))
+  before strict verification passes. Consider a small fix-up workflow if the weekly cadence hurts.
