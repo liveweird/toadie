@@ -2,7 +2,7 @@
 # per ecosystem so routine bumps land as one reviewable PR instead of a dozen; majors stay
 # separate since they can carry breaking changes worth reviewing on their own. The docker
 # ecosystem updates base-image tags; publishing the app's own release image by immutable
-# digest is separate open work (HARDENING.md). See web/CLAUDE.md and CLAUDE.md for the gates
+# digest is separate open work (BACKLOG.md). See web/CLAUDE.md and CLAUDE.md for the gates
 # every bump must pass (lint/knip/coverage, detekt, lockfile regeneration).
 #
 # `web/src/test/infrastructure.test.js` pins this file's existence and its five
@@ -77,8 +77,9 @@ updates:
   # Docker: the two base images ARE the toolchain — `eclipse-temurin` must equal mise.toml's Java
   # (jvmToolchain(21), the CI setup-java version; `infrastructure.test.js` pins the parity) and
   # `node` mise.toml's Node major. A major bump there is a toolchain decision taken in mise.toml
-  # first, never a dependency PR (the first run proposed Temurin 24 and Node 26 against the
-  # pinned 21/24), so majors are ignored here; patch/minor tag moves (21.0.12, 24.x-alpine) flow.
+  # first, never a dependency PR (the first run proposed Temurin 24 against the pinned 21), so
+  # majors are ignored here; patch/minor tag moves (21.0.12, 26.x-alpine) flow. The Dockerfile
+  # FROMs are tag@sha256 digest pins, so Dependabot bumps the tag and its digest together.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

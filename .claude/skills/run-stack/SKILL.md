@@ -43,13 +43,13 @@ sample data automatically.
 
 ## Reproducibility — what is pinned, and what deliberately is not
 
-Pinned: direct dependency versions (`gradle/libs.versions.toml`, `web/package.json` + `package-lock.json` installed with `npm ci`), the transitive Gradle graph (dependency locking, `gradle.lockfile` in `core/` and `server/` + the root `settings-gradle.lockfile` and `buildscript-gradle.lockfile` — `./gradlew build --write-locks` after a dependency change, commit the result), the Gradle distribution checksum (`distributionSha256Sum` in `gradle-wrapper.properties`), the toolchains (`mise.toml`: Temurin 21 + Node 24, matching the Dockerfile and the e2e workflow), and base images by minor tag (`node:24-alpine`, `eclipse-temurin:21-jdk/-jre`, `postgres:18-alpine`, `axllent/mailpit:v1.30`).
+Pinned: direct dependency versions (`gradle/libs.versions.toml`, `web/package.json` + `package-lock.json` installed with `npm ci`), the transitive Gradle graph (dependency locking, `gradle.lockfile` in `core/` and `server/` + the root `settings-gradle.lockfile` and `buildscript-gradle.lockfile` — `./gradlew build --write-locks` after a dependency change, commit the result), the Gradle distribution checksum (`distributionSha256Sum` in `gradle-wrapper.properties`), the toolchains (`mise.toml`: Temurin 21 + Node 26, matching the Dockerfile and the e2e workflow), the Dockerfile's three base images by tag AND multi-arch digest (`node:26-alpine@sha256:…`, `eclipse-temurin:21.0.12_8-jdk/-jre@sha256:…`; Dependabot bumps the pair), and compose's `postgres:18-alpine` / `axllent/mailpit:v1.30` by tag only.
 
 Current policy: Dependabot proposes weekly updates across five ecosystems, while CI and
-dependency locks verify each merged change. Base images use maintained tags rather than
-fixed digests; pinning the Docker build's `apk add git` package is also not planned.
+dependency locks verify each merged change. The Dockerfile base images are digest-pinned (see above);
+compose's postgres/mailpit stay tag-pinned; pinning the Docker build's `apk add git` package is also not planned.
 This is separate from the **application release image**: production registry publishing and
-deployment by immutable digest remain open in [HARDENING.md](../../../HARDENING.md). The
+deployment by immutable digest remain open in [BACKLOG.md](../../../BACKLOG.md). The
 OrbStack shared image store and `toadie-app:latest` are only the local proof path.
 
 Gradle dependency-verification metadata and `.git`-less source-archive builds are not

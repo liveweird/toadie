@@ -203,6 +203,10 @@ postgres:
     maxAcquireTimeSeconds: "$POSTGRES_POOL_MAX_ACQUIRE_SECONDS:10"
     # How long an idle pooled connection may sit before the pool recycles it.
     maxIdleTimeSeconds: "$POSTGRES_POOL_MAX_IDLE_SECONDS:600"
+    # The longest a pooled connection lives before the pool replaces it (checked on acquire, on
+    # release and by the background sweep), so a backend killed or restarted server-side is not
+    # kept for the lifetime of the process.
+    maxLifeTimeSeconds: "$POSTGRES_POOL_MAX_LIFE_SECONDS:1800"
 
 # Read-only Port integration API; admin key management remains available when disabled.
 integration:

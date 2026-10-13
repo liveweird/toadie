@@ -517,7 +517,6 @@ class QueryEvaluatorTest {
         assertFailsWith<CancellationException> {
             withTimeout(50) {
                 withContext(Dispatchers.Default) {
-                    @Suppress("ControlFlowWithEmptyBody")
                     while (true) {
                         budget.checkpoint()
                     }

@@ -13,6 +13,7 @@ const toolchainSource = readFileSync(resolve(repoRoot, "mise.toml"), "utf8");
 const dockerfileSource = readFileSync(resolve(repoRoot, "Dockerfile"), "utf8");
 const dependabotSource = readFileSync(resolve(repoRoot, ".github/dependabot.yml"), "utf8");
 const appDeploymentSource = readFileSync(resolve(repoRoot, "k8s/app-deployment.yaml"), "utf8");
+const openTelemetrySource = readFileSync(resolve(repoRoot, "core/src/commonMain/kotlin/OpenTelemetry.kt"), "utf8");
 const postgresDeploymentSource = readFileSync(resolve(repoRoot, "k8s/postgres-deployment.yaml"), "utf8");
 
 describe("deployment and verification safety defaults", () => {
@@ -100,9 +101,59 @@ describe("deployment and verification safety defaults", () => {
     // mise.toml spells "21.0.11+10.0.LTS"; Docker Hub's eclipse-temurin tags spell the same
     // build as "21.0.11_10" (underscore, LTS suffix dropped) — reduce both to that form.
     const dockerTag = localVersion.replace("+", "_").replace(/\.\d+\.LTS$/, "");
-    const buildTags = [...dockerfileSource.matchAll(/eclipse-temurin:(\S+)-(?:jdk|jre)/g)].map((m) => m[1]);
+    const buildTags = [...dockerfileSource.matchAll(/eclipse-temurin:(\S+?)-(?:jdk|jre)(?:@sha256:[0-9a-f]{64})?\b/g)].map((m) => m[1]);
     expect(buildTags).toHaveLength(2); // the server build stage and the runtime stage
     for (const tag of buildTags) expect(tag).toBe(dockerTag);
+  });
+
+  it("pins every Dockerfile base image by sha256 digest", () => {
+    const froms = dockerfileSource.split("\n").filter((line) => /^FROM\s/.test(line));
+    expect(froms).toHaveLength(3);
+    for (const line of froms) expect(line).toMatch(/^FROM\s+\S+@sha256:[0-9a-f]{64}(\s+AS\s+\S+)?$/);
+  });
+
+  it("keeps the Node major identical across mise.toml, the Dockerfile and both workflows", () => {
+    const miseMajor = toolchainSource.match(/^node = "(\d+)/m)?.[1];
+    expect(miseMajor).toBeTruthy();
+    expect(dockerfileSource.match(/^FROM node:(\d+)-alpine/m)?.[1]).toBe(miseMajor);
+    const setupNodeVersions = (source) =>
+      Object.values(parse(source).jobs)
+        .flatMap((job) => job.steps ?? [])
+        .filter((step) => step.uses?.startsWith("actions/setup-node@"))
+        .map((step) => String(step.with["node-version"]));
+    for (const source of [ciSource, e2eSource]) {
+      const versions = setupNodeVersions(source);
+      expect(versions.length).toBeGreaterThan(0);
+      for (const version of versions) expect(version).toBe(miseMajor);
+    }
+  });
+
+  it("gives the image its own HEALTHCHECK probing /readyz", () => {
+    const runtimeStage = dockerfileSource.slice(dockerfileSource.indexOf("AS runtime"));
+    const healthcheck = runtimeStage.match(/^HEALTHCHECK\s.*$/m)?.[0];
+    expect(healthcheck).toBeTruthy();
+    expect(healthcheck).toContain("CMD");
+    expect(healthcheck).toContain("/readyz");
+  });
+
+  it("passes the OpenTelemetry exporter selectors through compose and the k8s Deployment with the code's defaults, and no endpoint", () => {
+    // The defaults are parsed from the code, never restated here.
+    const defaults = Object.fromEntries(
+      [...openTelemetrySource.matchAll(/"otel\.(\w+)\.exporter"\s+to\s+"([^"]+)"/g)].map(([, signal, value]) => [signal, value]),
+    );
+    expect(Object.keys(defaults).sort()).toEqual(["logs", "metrics", "traces"]);
+
+    const environment = parse(composeSource).services.app.environment;
+    const env = parse(appDeploymentSource).spec.template.spec.containers[0].env;
+    for (const [signal, value] of Object.entries(defaults)) {
+      const name = `OTEL_${signal.toUpperCase()}_EXPORTER`;
+      expect(environment[name]).toBe(`\${${name}:-${value}}`);
+      expect(env.find((entry) => entry.name === name)?.value).toBe(value);
+    }
+
+    // A default endpoint is not neutral for gRPC, so the operator adds it.
+    expect(environment).not.toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
+    expect(env.find((entry) => entry.name === "OTEL_EXPORTER_OTLP_ENDPOINT")).toBeUndefined();
   });
 
   it("gives the compose app service a container healthcheck", () => {

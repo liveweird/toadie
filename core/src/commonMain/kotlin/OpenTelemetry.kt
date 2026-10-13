@@ -1,10 +1,11 @@
 package ch.nokillswit
 
-import io.opentelemetry.api.OpenTelemetry
+import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk
 import io.opentelemetry.semconv.ServiceAttributes
 
-fun getOpenTelemetry(serviceName: String): OpenTelemetry =
+// Typed as the concrete SDK (it implements OpenTelemetry) so the caller can shut it down on stop.
+fun getOpenTelemetry(serviceName: String): OpenTelemetrySdk =
     AutoConfiguredOpenTelemetrySdk.builder()
         // Defaults via addPropertiesSupplier (lowest precedence) so OTEL_* env vars can override —
         // e.g. flip OTEL_LOGS_EXPORTER=otlp later to ship logs to a collector with no code change.
