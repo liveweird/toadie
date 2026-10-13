@@ -17,6 +17,7 @@ import ch.nokillswit.entityquery.EntityQueryInvalidException
 import ch.nokillswit.entities.EntityImportRequest
 import ch.nokillswit.entities.EntityImportResponse
 import ch.nokillswit.entities.EntityRequest
+import ch.nokillswit.entities.graph
 import ch.nokillswit.entityquery.EntityQueryCheckRequest
 import ch.nokillswit.entityquery.EntityQueryCheckResponse
 import ch.nokillswit.entityquery.EntityQueryProblem

@@ -234,7 +234,7 @@ internal suspend fun loadVisibleSavedQueries(callerId: UInt): List<SavedQueryCan
 }
 
 /**
- * [EntityService.materializeGraph]/[EntityService.errors]'s shared shown-scope resolution — the
+ * `materializeGraph` (`EntityGraphRead.kt`)/[EntityService.errors]'s shared shown-scope resolution — the
  * `catalog/CatalogFileFilter.kt` one-filter-parser rule.
  */
 internal data class ShownScope(val predicate: Op<Boolean>, val candidates: List<ErrorsActiveBlueprint>)
@@ -242,7 +242,7 @@ internal data class ShownScope(val predicate: Op<Boolean>, val candidates: List<
 /**
  * [EntityGraphFilter.blueprints]/[EntityGraphFilter.q]/[EntityGraphFilter.team] resolved against
  * [activeBlueprints] into ONE SQL predicate plus the candidate blueprint set the filter narrowed
- * to — shared by `EntityService.materializeGraph` and [errors]. `null` only when
+ * to — shared by `materializeGraph` (`EntityGraphRead.kt`) and [errors]. `null` only when
  * [EntityGraphFilter.blueprints] names EXCLUSIVELY unknown identifiers (an empty graph/report,
  * never "no predicate"). An EXTENSION on [EntityService] (the `entities/EntityFilter.kt`
  * `inheritedTeamMatches` idiom) so it can reach [EntityService.active] and chain into that same
@@ -683,7 +683,7 @@ internal fun ownershipFinding(definition: BlueprintDefinition, team: List<String
 internal fun sourceMissingFinding(sourceUrl: String?, subject: String): EntityFinding? =
     if (sourceUrl.isNullOrBlank()) EntityFinding(SOURCE_MISSING, "source", "This $subject has no source reference") else null
 
-/** [text]'s parse+validate diagnostics against [schema] — [EntityService.checkQuery]'s posture, never evaluated. */
+/** [text]'s parse+validate diagnostics against [schema] — [checkQuery]'s posture, never evaluated. */
 internal fun savedQueryDiagnostics(text: String, schema: QuerySchema): List<QueryDiagnostic> = try {
     validateEntityQuery(parseEntityQuery(text), schema)
 } catch (e: QueryException) {
