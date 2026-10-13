@@ -123,8 +123,10 @@ Packages declare `ch.nokillswit.<area>` while files stay directly under `<area>/
 - `./gradlew :server:checkGraphqlCompatibility`: compare SDL against its Git baseline; included
   in `check`. See `api-guidelines/GRAPHQL-GUIDELINES.md` for baseline selection and break policy.
 - `./gradlew detekt`: static analysis over `core` + `server` — zero-findings gate, no baseline.
-- After a Gradle dependency change, run `./gradlew build --write-locks` and include the updated
-  module/root lockfiles. Never delete a lockfile to bypass a stale-lock resolution failure.
+- After a Gradle dependency change, regenerate the lockfiles AND `gradle/verification-metadata.xml`
+  together from an empty Gradle home (the command is in
+  `.claude/docs/dependency-reproducibility.md`; `./gradlew build --write-locks` alone is not
+  enough) and include them. Never delete a lockfile to bypass a stale-lock resolution failure.
 - `cd web && npm run dev`: start Vite on port 5174, proxying `/api` to Ktor on :8081.
 - `cd web && npm run build && npm run lint && npm test`: type-check, bundle, lint, and run Vitest.
 - `cd web && npm run test:coverage`: run frontend coverage gates. `npm run knip`: dead-code gate.
@@ -389,8 +391,8 @@ page reads a URL fragment and removes it from history. Reset requests need confi
 mail and a valid `MAIL_APP_URL` origin (HTTPS in production); otherwise they return 503.
 
 Pushes, PRs, and merge groups run `.github/workflows/ci.yml`. Require its **Quality gate**
-status in the repository ruleset after pushing: backend, frontend/contract, and reusable E2E
-jobs must all succeed. E2E owns a disposable `toadie-ci` project on a fresh hosted runner;
+status in the repository ruleset after pushing: backend (strict dependency verification),
+frontend/contract, the Gradle advisory scan, and reusable E2E jobs must all succeed. E2E owns a disposable `toadie-ci` project on a fresh hosted runner;
 cleanup removes only its data. Local E2E preserves the dev volume. CI fails flaky browser
 tests and missing Mailpit rather than silently reducing coverage.
 
