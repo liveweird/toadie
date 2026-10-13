@@ -32,8 +32,12 @@ jobs:
           distribution: temurin
           java-version: '21.0.12+8.0.LTS'
           cache: gradle
+      # Strict: a missing or mismatched artifact checksum fails the build instead of warning.
       - name: Build, test, static analysis, and coverage
-        run: ./gradlew build :server:koverXmlReport --no-daemon
+        run: ./gradlew build :server:koverXmlReport --dependency-verification strict --no-daemon
+      # Locks and checksums must already be what the build resolves (CLAUDE.md "Dependency locking").
+      - name: Confirm lockfiles and verification metadata match the committed graph
+        run: git diff --exit-code -- gradle/verification-metadata.xml gradle.lockfile settings-gradle.lockfile buildscript-gradle.lockfile core/gradle.lockfile server/gradle.lockfile
       - name: Upload backend reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
@@ -77,6 +81,55 @@ jobs:
           path: web/coverage/
           retention-days: 7
 
+  gradle-vulnerability-scan:
+    # Scan the resolved project and plugin classpaths (the committed lockfiles), build and test
+    # dependencies included. A flagged module gets a version floor, never a gate exception
+    # (.claude/docs/testing.md "Gradle advisory scan").
+    name: Gradle advisory scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Scan Gradle lockfiles
+        run: |
+          mkdir -p "$RUNNER_TEMP/gradle-locks/core" "$RUNNER_TEMP/gradle-locks/server" "$RUNNER_TEMP/trivy-cache"
+          cp gradle.lockfile settings-gradle.lockfile buildscript-gradle.lockfile "$RUNNER_TEMP/gradle-locks/"
+          cp core/gradle.lockfile "$RUNNER_TEMP/gradle-locks/core/"
+          cp server/gradle.lockfile "$RUNNER_TEMP/gradle-locks/server/"
+          docker run --rm \
+            -v "$RUNNER_TEMP/gradle-locks:/scan:ro" \
+            -v "$RUNNER_TEMP/trivy-cache:/cache" \
+            -v "$RUNNER_TEMP:/out" \
+            ghcr.io/aquasecurity/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
+            fs --scanners vuln --include-dev-deps --format json \
+            --output /out/gradle-vulnerabilities.json --cache-dir /cache --no-progress /scan
+          python3 - <<'PY'
+          import collections
+          import json
+          import os
+
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "gradle-vulnerabilities.json")) as report:
+              results = json.load(report)["Results"]
+          counts = collections.Counter(
+              vulnerability["Severity"]
+              for result in results
+              for vulnerability in result.get("Vulnerabilities") or []
+          )
+          print("Gradle dependency advisories:", dict(counts))
+          if counts["CRITICAL"] or counts["HIGH"]:
+              raise SystemExit("HIGH or CRITICAL Gradle dependency advisory")
+          PY
+      - name: Upload advisory report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: gradle-vulnerabilities
+          path: ${{ runner.temp }}/gradle-vulnerabilities.json
+          retention-days: 7
+          if-no-files-found: ignore
+
   e2e:
     name: Browser journeys
     uses: ./.github/workflows/e2e.yml
@@ -86,7 +139,7 @@ jobs:
     # dependency must never turn a required check green or leave a documentation PR pending.
     name: Quality gate
     if: ${{ always() }}
-    needs: [backend, frontend, e2e]
+    needs: [backend, frontend, gradle-vulnerability-scan, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -94,5 +147,6 @@ jobs:
         env:
           BACKEND: ${{ needs.backend.result }}
           FRONTEND: ${{ needs.frontend.result }}
+          GRADLE_SCAN: ${{ needs.gradle-vulnerability-scan.result }}
           E2E: ${{ needs.e2e.result }}
-        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$E2E" = success
+        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$GRADLE_SCAN" = success && test "$E2E" = success

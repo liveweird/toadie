@@ -183,6 +183,23 @@ dependencies {
     implementation(libs.postgresql)
     implementation(libs.r2dbc.pool)
     implementation(libs.r2dbc.postgresql)
+    // Reactor alignment - see the `reactor-bom` comment in gradle/libs.versions.toml: the BOM pins
+    // reactor-core/-pool/-netty to one release train (they carry different version numbers), so
+    // these two declarations carry no version of their own.
+    implementation(platform(libs.reactor.bom))
+    implementation(libs.reactor.pool)
+    // Netty alignment - see the `netty` comment in gradle/libs.versions.toml: the BOM pins every
+    // io.netty module to one version, and reactor-netty (versioned by the Reactor BOM above) wins
+    // over the driver's older transitive request (Gradle picks the highest).
+    implementation(platform(libs.netty.bom))
+    implementation(libs.reactor.netty.core)
+    // Advisory floors - see the `jackson-bom`/`scram` comment in gradle/libs.versions.toml. Both
+    // families arrive transitively only; the platform/constraints raise them to the fixed versions.
+    implementation(platform(libs.jackson.bom))
+    constraints {
+        implementation(libs.scram.client) { because("CVE-2026-53712 (r2dbc-postgresql pulls 3.2)") }
+        implementation(libs.scram.common) { because("CVE-2026-53712 (r2dbc-postgresql pulls 3.2)") }
+    }
 
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.client.contentNegotiation)

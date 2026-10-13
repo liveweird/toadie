@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -39,10 +39,10 @@ describe("deployment and verification safety defaults", () => {
       expect(ci.on).toHaveProperty(event, null); // no path/branch skips on a required gate
     }
     expect(ci.permissions).toEqual({ contents: "read" });
-    expect(ci.jobs["quality-gate"].needs).toEqual(["backend", "frontend", "e2e"]);
+    expect(ci.jobs["quality-gate"].needs).toEqual(["backend", "frontend", "gradle-vulnerability-scan", "e2e"]);
     expect(ci.jobs["quality-gate"].if).toBe("${{ always() }}");
     const gate = ci.jobs["quality-gate"].steps?.[0].run;
-    for (const job of ["BACKEND", "FRONTEND", "E2E"]) expect(gate).toContain(`test "$${job}" = success`);
+    for (const job of ["BACKEND", "FRONTEND", "GRADLE_SCAN", "E2E"]) expect(gate).toContain(`test "$${job}" = success`);
     expect(ci.jobs.e2e.uses).toBe("./.github/workflows/e2e.yml");
   });
 
@@ -51,9 +51,25 @@ describe("deployment and verification safety defaults", () => {
     const backend = ci.jobs.backend.steps?.map((step) => step.run ?? "").join("\n");
     const frontend = ci.jobs.frontend.steps?.map((step) => step.run ?? "").join("\n");
     expect(backend).toContain("./gradlew build :server:koverXmlReport");
+    // Strict dependency verification: a missing or mismatched artifact checksum fails the build.
+    expect(backend).toContain("--dependency-verification strict");
+    expect(backend).toContain("git diff --exit-code -- gradle/verification-metadata.xml");
     for (const script of ["lint:api", "check:api", "build", "lint", "knip", "test:coverage"]) {
       expect(frontend).toContain(`npm run ${script}`);
     }
+  });
+
+  it("scans the Gradle lockfiles for HIGH/CRITICAL advisories with a digest-pinned Trivy", () => {
+    const ci = parse(ciSource);
+    const scan = ci.jobs["gradle-vulnerability-scan"].steps.map((step) => step.run ?? "").join("\n");
+    expect(scan).toMatch(/ghcr\.io\/aquasecurity\/trivy:[\d.]+@sha256:[0-9a-f]{64}/);
+    expect(scan).toContain('counts["CRITICAL"] or counts["HIGH"]');
+    // Every committed Gradle lockfile must be copied into the scanned tree.
+    for (const lock of ["gradle.lockfile", "settings-gradle.lockfile", "buildscript-gradle.lockfile", "core/gradle.lockfile", "server/gradle.lockfile"]) {
+      expect(existsSync(resolve(repoRoot, lock))).toBe(true);
+      expect(scan).toContain(lock);
+    }
+    expect(existsSync(resolve(repoRoot, "gradle/verification-metadata.xml"))).toBe(true);
   });
 
   it("fails the API lint on warnings for both the contract and the conformant fixture", () => {

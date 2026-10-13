@@ -12,11 +12,18 @@ plugins {
 // catalog pins DIRECT versions; the lockfiles pin the TRANSITIVE graph, so two checkouts resolve
 // byte-identical classpaths. DEFAULT lock mode: a resolved version outside the lock state fails
 // the build. After ANY dependency change run `./gradlew build --write-locks` and commit the
-// lockfiles — never delete a lockfile to get past a "lock state" error. Verification metadata
-// (checksums per artifact) is deliberately NOT adopted — a maintenance sink with no bump bot.
+// lockfiles AND the verification metadata (see CLAUDE.md "Dependency locking") — never delete a
+// lockfile to get past a "lock state" error.
 buildscript {
     dependencyLocking {
         lockAllConfigurations()
+    }
+    dependencies {
+        constraints {
+            // Keep the root plugin classpath (Kover's reporter) above the FreeMarker path-traversal
+            // advisory floor.
+            classpath("org.freemarker:freemarker:2.3.35")
+        }
     }
 }
 
