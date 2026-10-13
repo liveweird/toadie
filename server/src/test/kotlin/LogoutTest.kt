@@ -16,6 +16,7 @@ import io.ktor.server.testing.testApplication
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertNotNull
@@ -96,6 +97,58 @@ class LogoutTest {
                         event.throwableProxy?.message?.contains(marker) == true
                 }
                 assertFalse(leaked, "the malformed body's content must never reach the application log")
+            } finally {
+                logger.level = originalLevel
+                appLog.detach()
+            }
+        }
+
+    @Test
+    fun `an invalid refresh token in the logout body never logs the throwable or the token text`() =
+        testApplication {
+            usePostgresTestcontainer()
+            val email = uniqueEmail("logout-badrt")
+            TestUsers.seed(email = email, password = "pw")
+            val client = jsonClient()
+            val session = client.login(email, "pw").body<LoginResponse>()
+
+            // auth0's JWTDecodeException message embeds the BASE64-DECODED token segment; the
+            // exception CLASS NAME is all the debug line may carry. The marker is therefore
+            // sent base64url-encoded, so it reappears verbatim in the decode error's message —
+            // asserted below, so the leak check cannot pass vacuously.
+            val marker = "zzzmarker${UUID.randomUUID().toString().take(8).filter { it.isLetterOrDigit() }}"
+            val segment = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(marker.toByteArray())
+            val badToken = "$segment.$segment.$segment"
+            val decodeError = assertFailsWith<com.auth0.jwt.exceptions.JWTVerificationException> {
+                com.auth0.jwt.JWT.decode(badToken)
+            }
+            assertTrue(decodeError.message?.contains(marker) == true, "premise: the library message embeds the marker")
+            val loggerName = application.log.name
+            val logger = LoggerFactory.getLogger(loggerName) as Logger
+            val originalLevel = logger.level
+            logger.level = Level.DEBUG
+            val appLog = LogCapture(loggerName)
+            try {
+                val response = client.post("/api/v1/logout") {
+                    header(HttpHeaders.Authorization, "Bearer ${session.token}")
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"refreshToken":"$badToken"}""")
+                }
+                assertEquals(HttpStatusCode.NoContent, response.status)
+
+                val debugLine = appLog.events.firstOrNull { it.formattedMessage.startsWith("Logout refresh token invalid") }
+                assertNotNull(debugLine, "expected the invalid-refresh-token debug line to be captured")
+                assertTrue(debugLine.throwableProxy == null, "the throwable itself must not be logged")
+                assertTrue(debugLine.formattedMessage.contains("Exception"), "the exception class name is logged")
+
+                val leaked = appLog.events.any { event ->
+                    event.formattedMessage?.contains(marker) == true ||
+                        event.argumentArray?.any { it?.toString()?.contains(marker) == true } == true ||
+                        event.throwableProxy?.message?.contains(marker) == true
+                }
+                assertFalse(leaked, "the refresh token text must never reach the application log")
+                // The real guarantee is structural: no throwable (and so no exception message) on any event.
+                assertTrue(appLog.events.none { it.throwableProxy != null }, "no logged throwable")
             } finally {
                 logger.level = originalLevel
                 appLog.detach()

@@ -52,7 +52,8 @@ exceptions:
   # (catalog/UrlFetch.kt: every failure a safe 502), the mail-send boundaries (auth/MfaEmail.kt,
   # auth/PasswordResetEmail.kt: a delivery failure must never crash the request), and the jq
   # evaluation boundary (entities/JqCalculation.kt: an admin-authored expression's failure
-  # answers absent). Every such site rethrows cancellation first and logs or classifies the
+  # answers absent), and the cancellation-safe wrapper itself (infra/Failures.kt `catchingFailures`:
+  # the JWT validate outage-500 rule). Every such site rethrows cancellation first and logs or classifies the
   # exception rather than swallowing it. A NEW generic catch is a finding until it earns its
   # own justified suppression — the rule stays on so the list cannot grow silently.
   TooGenericExceptionCaught:
