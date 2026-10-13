@@ -284,7 +284,11 @@ ch.nokillswit
 │                       GET …/entities/errors, reporting all five classes — stale entities,
 │                       unresolved ownership, broken saved queries, computed-property health, source-less
 │                       entities (`SOURCE_MISSING`, 2.9.1) — as
-│                       report-only findings/diagnostics, no audit)
+│                       report-only findings/diagnostics, no audit), EntityGraphRead.kt (the Entity
+│                       graph read and query orchestration as `EntityService` extension
+│                       functions — `graph`, `checkQuery`, the query validate/evaluate/budget
+│                       helpers and the read-budget HTTP mapping — split out of `EntityService.kt`
+│                       to keep it under detekt's `LargeClass`, the `BlueprintSync.kt` shape)
 ├── entityquery/        the entity query language (phase 7, v2.0.0 — Toadie-first, Lettuce has
 │                       none; `.claude/docs/entity-query-language.md`): EntityQuery.kt (the caps —
 │                       MAX_QUERY_LENGTH 2000, 32 patterns/variables, 10 hops, 100k bindings, the
@@ -310,7 +314,7 @@ ch.nokillswit
 │                       `computeFillTier`, `EdgeRef`, `nodeValue`), QueryEvaluator.kt (`InMemoryQueryExecutor`
 │                       behind the `QueryExecutor` interface — anchored joins, level-set BFS for
 │                       `*n..m`, trailing OPTIONAL MATCH, RETURN as a node SET, LIMIT after dedupe).
-│                       Pure — no database, no Ktor; consumed by entities/EntityService.graph
+│                       Pure — no database, no Ktor; consumed by entities/EntityGraphRead.kt (`EntityService.graph`)
 │                       (schema read → parse+validate OUTSIDE any transaction → workspace read →
 │                       a permit (4, `429` beyond) → decode+evaluate on the dedicated `entity-query` pool)
 │                       and `checkQuery`. Since v2.1.0 the package also holds the SAVED queries —

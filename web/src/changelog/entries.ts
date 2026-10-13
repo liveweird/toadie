@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.18.1",
+    date: "2026-10-14",
+    en: `**Steadier runtime.** Toadie's build now runs on Node 26, its container image reports its own health, OpenTelemetry telemetry is flushed cleanly when the server shuts down, and database connections are recycled after 30 minutes. No change to how you use Toadie.`,
+    pl: `**Stabilniejsze środowisko uruchomieniowe.** Kompilacja Toadie działa teraz na Node 26, obraz kontenera sam raportuje swój stan zdrowia, telemetria OpenTelemetry jest poprawnie opróżniana przy zatrzymaniu serwera, a połączenia z bazą danych są odnawiane po 30 minutach. Sposób korzystania z Toadie się nie zmienia.`,
+  },
+  {
     version: "2.18.0",
     date: "2026-10-07",
     en: `**Tiers show what to fill in first.** An administrator can give a blueprint, each of its properties and each of its relations a tier from 1 to 4 in the blueprint editor. Tiers are only a hint and never change validation. A small numbered dot marks them on the Blueprints list, the blueprint pills, the Entity graph and hierarchy, the Entities columns and the entity editor's fields. A Focus picker on those views narrows them to tier 1, tiers 1–2 and so on. The entity editor shows how far an entity is filled in and folds the fields outside the focus. Queries can use the tiers too: \`n.$tier\` is the blueprint's tier, \`n.$fillTier\` the highest tier whose fields are all filled, and \`r.$tier\` a relation's tier.`,

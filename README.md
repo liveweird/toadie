@@ -40,7 +40,7 @@ Port's Entity hierarchy; later visits remember your last world.
   Administrator privileges govern management features, not ownership of shared catalog data.
 
 For contributor conventions and the task-specific documentation map, start with
-[AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md). [HARDENING.md](HARDENING.md) is the current
+[AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md). [BACKLOG.md](BACKLOG.md) is the current
 backlog of open work.
 
 ## The stack
@@ -146,7 +146,7 @@ followed by `npm run check:api`, `npm run lint:api`, `npm run build`, `npm run l
 `npm run check:scenarios`, and `npm test` (the local suite still preserves the dev database).
 
 The published API contract is **OpenAPI 3.0.3**, validated without rewriting its version.
-See [HARDENING.md](HARDENING.md) for open work.
+See [BACKLOG.md](BACKLOG.md) for open work.
 
 ## Integration API (GraphQL and MCP, for other apps)
 

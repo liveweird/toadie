@@ -64,6 +64,13 @@ services:
       # The URL password-reset / MFA emails link to. localhost is right for the one-machine
       # demo only — set MAIL_APP_URL to the address other people reach the stack at.
       MAIL_APP_URL: "${MAIL_APP_URL:-http://localhost:8081}"
+      # OpenTelemetry passthrough (.claude/docs/observability.md). The defaults equal the code's own
+      # (core/.../OpenTelemetry.kt), so leaving these unset changes nothing. To ship to a collector,
+      # also set OTEL_EXPORTER_OTLP_ENDPOINT (and OTEL_EXPORTER_OTLP_PROTOCOL when not http/protobuf)
+      # — deliberately not defaulted here, a default endpoint is not neutral for gRPC.
+      OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-none}"
+      OTEL_METRICS_EXPORTER: "${OTEL_METRICS_EXPORTER:-none}"
+      OTEL_LOGS_EXPORTER: "${OTEL_LOGS_EXPORTER:-console}"
     ports:
       - "127.0.0.1:8081:8081"
     # Ceiling for the tuned JVM (SerialGC + -Xmx256m + C1, baked into bin/server): ~270 MiB RSS

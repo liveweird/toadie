@@ -45,6 +45,8 @@ internal class RequestMemo(
     private val loadMutex = Mutex()
     private var retainedBytes = 0
 
+    // The memo stores Deferred<Any?> across all key shapes; each RootRequestKey subtype is only ever loaded
+    // by one resolver with one result type T, so the cast back to T cannot see a foreign type.
     @Suppress("UNCHECKED_CAST")
     suspend fun <T> get(key: RootRequestKey, load: suspend () -> T): T {
         val deferred = synchronized(values) {
