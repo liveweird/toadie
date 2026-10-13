@@ -11,13 +11,16 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.jetbrains.exposed.v1.core.statements.StatementType
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import java.sql.DriverManager
 import java.util.UUID
 import java.util.concurrent.TimeoutException
 import kotlin.test.Test
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -180,5 +183,43 @@ class ConnectionPoolTest {
     fun `postgres pool initialSize above maxSize fails startup`() = testApplication {
         configureApp("postgres.pool.initialSize" to "5", "postgres.pool.maxSize" to "2")
         assertStartupFails("postgres.pool.initialSize") { startApplication() }
+    }
+
+    @Test
+    fun `postgres pool maxLifeTimeSeconds out of range fails startup`() {
+        for (bad in listOf("0", "86401")) {
+            testApplication {
+                configureApp("postgres.pool.maxLifeTimeSeconds" to bad)
+                assertStartupFails("postgres.pool.maxLifeTimeSeconds") { startApplication() }
+            }
+        }
+    }
+
+    @Test
+    fun `a connection older than maxLifeTimeSeconds is replaced rather than reused`() = testApplication {
+        // maxSize 1 forces both reads onto the SAME pool slot; the second acquire can only get a
+        // different backend if the pool evicted the expired connection (r2dbc-pool checks the
+        // eviction predicate on acquire as well as in its background sweep, so this holds whichever
+        // fires first). The wait only has to exceed the 1-second lifetime — a lower bound, not a race.
+        configureApp(
+            "postgres.pool.maxSize" to "1",
+            "postgres.pool.initialSize" to "0",
+            "postgres.pool.maxLifeTimeSeconds" to "1",
+            "postgres.pool.applicationName" to "toadie-test-${UUID.randomUUID()}",
+        )
+        startApplication()
+        val db = application.attributes[DatabaseKey]
+
+        suspend fun backendPid(): Int = suspendTransaction(db) {
+            exec("SELECT pg_backend_pid()", explicitStatementType = StatementType.SELECT) { row ->
+                row.get(0, java.lang.Integer::class.java)!!.toInt()
+            }?.toList()?.single()
+        } ?: error("pg_backend_pid() returned no row")
+
+        val first = backendPid()
+        // Real time is required here: the pool's lifetime clock is the system clock, and runTest-style
+        // virtual time would not advance it (hence Dispatchers.IO, not the test scheduler).
+        withContext(Dispatchers.IO) { delay(2_500) }
+        assertNotEquals(first, backendPid(), "a connection past maxLifeTimeSeconds must be replaced by a fresh backend")
     }
 }

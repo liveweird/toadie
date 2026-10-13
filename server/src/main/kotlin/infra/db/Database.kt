@@ -68,6 +68,7 @@ private data class PoolBounds(
     val initialSize: Int,
     val maxAcquireTimeSeconds: Long,
     val maxIdleTimeSeconds: Long,
+    val maxLifeTimeSeconds: Long,
     val applicationName: String,
 )
 
@@ -80,12 +81,14 @@ private fun readPoolBounds(config: ApplicationConfig): PoolBounds {
         .also { require(it in 1..600) { "postgres.pool.maxAcquireTimeSeconds must be between 1 and 600" } }
     val maxIdleTimeSeconds = config.property("postgres.pool.maxIdleTimeSeconds").getString().toLong()
         .also { require(it in 1..86400) { "postgres.pool.maxIdleTimeSeconds must be between 1 and 86400" } }
+    val maxLifeTimeSeconds = config.property("postgres.pool.maxLifeTimeSeconds").getString().toLong()
+        .also { require(it in 1..86400) { "postgres.pool.maxLifeTimeSeconds must be between 1 and 86400" } }
     // application_name = toadie on every pooled connection by default (deliberate — ops can
     // count Toadie's own connections in pg_stat_activity, and ConnectionPoolTest relies on
     // it); overridable per test application instance so overlapping test apps sharing the
     // Testcontainer never share one count.
     val applicationName = config.propertyOrNull("postgres.pool.applicationName")?.getString() ?: "toadie"
-    return PoolBounds(maxSize, initialSize, maxAcquireTimeSeconds, maxIdleTimeSeconds, applicationName)
+    return PoolBounds(maxSize, initialSize, maxAcquireTimeSeconds, maxIdleTimeSeconds, maxLifeTimeSeconds, applicationName)
 }
 
 /**
@@ -124,6 +127,13 @@ private fun Application.connectPooled(): R2dbcDatabase {
             .initialSize(bounds.initialSize)
             .maxAcquireTime(Duration.ofSeconds(bounds.maxAcquireTimeSeconds))
             .maxIdleTime(Duration.ofSeconds(bounds.maxIdleTimeSeconds))
+            // No connection outlives this, so a long-lived backend cannot linger past a server-side
+            // restart/failover/idle-killer (the pool validates LOCALLY only — see persistence.md).
+            .maxLifeTime(Duration.ofSeconds(bounds.maxLifeTimeSeconds))
+            // r2dbc-pool 1.0.2 evicts on acquire/release regardless; its background sweep defaults to
+            // an interval of maxIdleTime (10 min here) — pinned to at most a minute so an idle,
+            // expired connection is released promptly instead of waiting for the next acquire.
+            .backgroundEvictionInterval(Duration.ofSeconds(minOf(60L, bounds.maxIdleTimeSeconds, bounds.maxLifeTimeSeconds)))
             .build(),
     )
     monitor.subscribe(ApplicationStopped) { pool.dispose() }
