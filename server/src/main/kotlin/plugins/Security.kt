@@ -4,6 +4,7 @@ import ch.nokillswit.auth.TOKEN_TYPE_ACCESS
 import ch.nokillswit.auth.TokenBlocklistServiceKey
 import ch.nokillswit.auth.AuthSessionServiceKey
 import ch.nokillswit.auth.sessionUserId
+import ch.nokillswit.infra.catchingFailures
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.http.HttpStatusCode
@@ -21,6 +22,14 @@ data class JwtConfig(
     val accessExpiresInSeconds: Long,
     val refreshExpiresInSeconds: Long,
 )
+
+/**
+ * Set on the call when the revocation/session lookup inside `validate` threw: the challenge answers
+ * the catch-all's 500 instead of the 401 a missing principal would otherwise produce — an outage
+ * must never read as an invalid bearer token (ported from Lettuce/Flow; see "An outage reads as 500, never 401" in
+ * `.claude/docs/security.md`).
+ */
+private val BlocklistFailureKey = AttributeKey<Throwable>("BlocklistFailure")
 
 val JwtConfigKey = AttributeKey<JwtConfig>("JwtConfig")
 
@@ -80,17 +89,35 @@ fun Application.configureSecurity() {
                 val typOk = credential.payload.getClaim("typ").asString() == TOKEN_TYPE_ACCESS
                 // Every server-minted token carries a jti; one without it could never be
                 // blocklisted, so it is rejected outright rather than skipping the check.
-                val jti = credential.payload.id
-                val revocable = jti != null && !application.attributes[TokenBlocklistServiceKey].isRevoked(jti)
+                val jti = credential.payload.id ?: return@validate null
                 val userId = credential.payload.sessionUserId()
                 val sessionId = credential.payload.getClaim("sid").asString()
-                val active = audOk && typOk && revocable && userId != null && sessionId != null &&
-                    application.attributes[AuthSessionServiceKey].isActive(sessionId, userId)
-                if (active) JWTPrincipal(credential.payload) else null
+                // Structurally invalid tokens (claims, jti, user, session) never reach the database.
+                if (!audOk || !typOk || userId == null || sessionId == null) return@validate null
+                // A cancelled call (client gone) mid-lookup unwinds — catchingFailures never
+                // swallows cancellation.
+                val live = catchingFailures({
+                    !application.attributes[TokenBlocklistServiceKey].isRevoked(jti) &&
+                        application.attributes[AuthSessionServiceKey].isActive(sessionId, userId)
+                }) { cause ->
+                    // The lookup itself failed (database unreachable, pool acquire timeout) — that
+                    // is an outage, not an invalid token. Ktor's JWT provider turns ANY throw out
+                    // of validate into a plain challenge, so the cause is stashed on the call for
+                    // the challenge below to answer with the catch-all's 500 instead of a 401
+                    // (which the SPA reads as session expiry).
+                    attributes.put(BlocklistFailureKey, cause)
+                    return@validate null
+                }
+                if (live) JWTPrincipal(credential.payload) else null
             }
             // The challenge runs outside StatusPages, so emit the RFC 7807 body here too.
             challenge { _, _ ->
-                call.respondProblem(HttpStatusCode.Unauthorized, "Missing or invalid bearer token")
+                val failure = call.attributes.getOrNull(BlocklistFailureKey)
+                if (failure != null) {
+                    call.respondInternalError(failure)
+                } else {
+                    call.respondProblem(HttpStatusCode.Unauthorized, "Missing or invalid bearer token")
+                }
             }
         }
     }

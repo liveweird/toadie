@@ -135,7 +135,10 @@ private suspend fun ApplicationCall.respondDbFailure(cause: Throwable) = when {
     else -> respondInternalError(cause)
 }
 
-private suspend fun ApplicationCall.respondInternalError(cause: Throwable) {
+// Internal (not private): the JWT `validate`/`challenge` pair in plugins/Security.kt answers a
+// revocation-lookup failure with this same catch-all 500 instead of a 401 (the 500-not-401 rule —
+// see "An outage reads as 500, never 401" in .claude/docs/security.md).
+internal suspend fun ApplicationCall.respondInternalError(cause: Throwable) {
     application.log.error("Unhandled exception while processing ${request.local.method.value} ${request.local.uri}", cause)
     respondProblem(HttpStatusCode.InternalServerError, "An unexpected error occurred")
 }

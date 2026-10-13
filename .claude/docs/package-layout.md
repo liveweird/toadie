@@ -10,6 +10,9 @@ ch.nokillswit
 │                       ErrorHandling (RFC 7807), OpenTelemetry, AutoHeadResponse, Resources,
 │                       Routing (SPA catch-all), Health (/healthz liveness + /readyz readiness —
 │                       the k8s probes; unauthenticated, outside /api/, registered after the infra group)
+├── infra/Failures.kt   `catchingFailures` — the cancellation-safe catch (2.18.2, ported from Lettuce/
+│                       Flow): rethrows `CancellationException`, hands any other `Exception` to the
+│                       caller; used by the JWT `validate` outage-500 rule in `plugins/Security.kt`
 ├── infra/mail/         outbound email (Lettuce's, ported): Mailer/SmtpMailer/LogMailer +
 │                       LocalizedText (the recipient-language content layer) +
 │                       configureMail — MAIL_TRANSPORT log/smtp/disabled, the log-transport
