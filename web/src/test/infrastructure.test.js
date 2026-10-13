@@ -100,9 +100,61 @@ describe("deployment and verification safety defaults", () => {
     // mise.toml spells "21.0.11+10.0.LTS"; Docker Hub's eclipse-temurin tags spell the same
     // build as "21.0.11_10" (underscore, LTS suffix dropped) — reduce both to that form.
     const dockerTag = localVersion.replace("+", "_").replace(/\.\d+\.LTS$/, "");
-    const buildTags = [...dockerfileSource.matchAll(/eclipse-temurin:(\S+)-(?:jdk|jre)/g)].map((m) => m[1]);
+    const buildTags = [...dockerfileSource.matchAll(/eclipse-temurin:(\S+?)-(?:jdk|jre)(?:@sha256:[0-9a-f]{64})?\b/g)].map((m) => m[1]);
     expect(buildTags).toHaveLength(2); // the server build stage and the runtime stage
     for (const tag of buildTags) expect(tag).toBe(dockerTag);
+  });
+
+  it("pins every Dockerfile base image by sha256 digest", () => {
+    const froms = dockerfileSource.split("\n").filter((line) => /^FROM\s/.test(line));
+    expect(froms).toHaveLength(3);
+    for (const line of froms) expect(line).toMatch(/^FROM\s+\S+@sha256:[0-9a-f]{64}(\s+AS\s+\S+)?$/);
+  });
+
+  it("keeps the Node major identical across mise.toml, the Dockerfile and both workflows", () => {
+    const miseMajor = toolchainSource.match(/^node = "(\d+)/m)?.[1];
+    expect(miseMajor).toBeTruthy();
+    expect(dockerfileSource.match(/^FROM node:(\d+)-alpine/m)?.[1]).toBe(miseMajor);
+    const setupNodeVersions = (source) =>
+      Object.values(parse(source).jobs)
+        .flatMap((job) => job.steps ?? [])
+        .filter((step) => step.uses?.startsWith("actions/setup-node@"))
+        .map((step) => String(step.with["node-version"]));
+    for (const source of [ciSource, e2eSource]) {
+      const versions = setupNodeVersions(source);
+      expect(versions.length).toBeGreaterThan(0);
+      for (const version of versions) expect(version).toBe(miseMajor);
+    }
+  });
+
+  it("gives the image its own HEALTHCHECK probing /readyz", () => {
+    const runtimeStage = dockerfileSource.slice(dockerfileSource.indexOf("AS runtime"));
+    const healthcheck = runtimeStage.match(/^HEALTHCHECK\s.*$/m)?.[0];
+    expect(healthcheck).toBeTruthy();
+    expect(healthcheck).toContain("CMD");
+    expect(healthcheck).toContain("/readyz");
+  });
+
+  it("passes the OpenTelemetry settings through compose and the k8s Deployment with the code's defaults", () => {
+    const expectedCompose = {
+      OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-none}",
+      OTEL_METRICS_EXPORTER: "${OTEL_METRICS_EXPORTER:-none}",
+      OTEL_LOGS_EXPORTER: "${OTEL_LOGS_EXPORTER:-console}",
+    };
+    const environment = parse(composeSource).services.app.environment;
+    for (const [name, value] of Object.entries(expectedCompose)) expect(environment[name]).toBe(value);
+    expect(environment.OTEL_EXPORTER_OTLP_ENDPOINT).toMatch(/^\$\{OTEL_EXPORTER_OTLP_ENDPOINT:-https?:\/\/\S+\}$/);
+
+    const expectedK8s = {
+      OTEL_TRACES_EXPORTER: "none",
+      OTEL_METRICS_EXPORTER: "none",
+      OTEL_LOGS_EXPORTER: "console",
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318",
+    };
+    const env = parse(appDeploymentSource).spec.template.spec.containers[0].env;
+    for (const [name, value] of Object.entries(expectedK8s)) {
+      expect(env.find((entry) => entry.name === name)?.value).toBe(value);
+    }
   });
 
   it("gives the compose app service a container healthcheck", () => {

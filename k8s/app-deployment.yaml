@@ -105,6 +105,18 @@ spec:
                   name: toadie-config
                   key: MAIL_APP_URL
                   optional: true
+            # OpenTelemetry passthrough (.claude/docs/observability.md). The literals equal the code's
+            # own defaults (core/.../OpenTelemetry.kt) and the SDK's http/protobuf OTLP endpoint, so
+            # they change nothing until edited; point the logs/traces exporter at `otlp` plus a real
+            # collector endpoint to ship telemetry.
+            - name: OTEL_TRACES_EXPORTER
+              value: "none"
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            - name: OTEL_LOGS_EXPORTER
+              value: "console"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://localhost:4318"
             - name: SMTP_USER
               valueFrom:
                 secretKeyRef:

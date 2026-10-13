@@ -70,7 +70,7 @@ The smoke runner builds the current checkout and creates its own randomly named 
 PostgreSQL volume. It never accepts an existing application URL, project, or namespace. Compose
 uses loopback ports chosen at runtime. The Kubernetes target is explicitly limited to OrbStack,
 whose cluster shares Docker's local image store; it uses two production-mode app replicas in a
-new namespace. Requirements: Node 24, Docker/Compose, bash, curl, jq; Kubernetes also needs kubectl
+new namespace. Requirements: Node 26, Docker/Compose, bash, curl, jq; Kubernetes also needs kubectl
 and the running OrbStack cluster.
 
 It loads the existing Port sample with the normal loaders (fifteen blueprints, 76 entities),
