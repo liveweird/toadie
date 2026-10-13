@@ -24,7 +24,7 @@ RUN GIT_SHA=$(git rev-parse --short HEAD) \
 # Java build, not just "21-jdk"/"21-jre" floating tags that can drift apart between pulls.
 # Every FROM is also pinned by multi-arch index digest (tag@sha256:...): the tag stays readable
 # and Dependabot's docker ecosystem bumps tag and digest together.
-FROM eclipse-temurin:21.0.12_8-jdk@sha256:92a2a4d7a928d057e7bd999c418d66c26a34eb9a0442f3ab67721c3f88110b2d AS server
+FROM eclipse-temurin:21.0.12.1_1-jdk@sha256:3e3c176ffed168beb42c607be9bc1639b466cf00261a0fb04425562c9d0c5c2b AS server
 WORKDIR /src
 # Copy build scripts + wrapper first so the Gradle distribution download caches.
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
@@ -45,7 +45,7 @@ RUN ./gradlew :server:installDist --no-daemon
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
 # The same pinned JDK/JRE build as the build stage (mise.toml and jvmToolchain(21)): one Java
 # version everywhere, tag-and-digest-pinned rather than trusting "21-jre" to keep meaning the same bytes.
-FROM eclipse-temurin:21.0.12_8-jre@sha256:49e21e16e3c86eb7816a44a67549910ed090fbeb40c29c525d58bf5e02e91b0f AS runtime
+FROM eclipse-temurin:21.0.12.1_1-jre@sha256:cff19e6215689161eb6162c11b86b0c60ddf802164f2eaf48d570f8fb79a36c5 AS runtime
 # Non-root runtime user: the base image's default user is root, and the application never
 # needs to bind a privileged port (8081) or write outside its own install directory. Created
 # BEFORE the COPYs so `--chown` sets ownership in the copy layers themselves — a trailing
