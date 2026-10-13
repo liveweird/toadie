@@ -32,9 +32,9 @@ COPY gradle/ gradle/
 RUN ./gradlew --version --no-daemon
 # Module build files + the dependency lockfiles (locking is ON — a missing lockfile fails the
 # resolution, which is the point), then sources.
-COPY settings-gradle.lockfile buildscript-gradle.lockfile ./
-COPY core/build.gradle.kts core/gradle.lockfile core/
-COPY server/build.gradle.kts server/gradle.lockfile server/
+COPY gradle.lockfile settings-gradle.lockfile buildscript-gradle.lockfile ./
+COPY core/build.gradle.kts core/gradle.lockfile core/buildscript-gradle.lockfile core/
+COPY server/build.gradle.kts server/gradle.lockfile server/buildscript-gradle.lockfile server/
 COPY core/src/ core/src/
 COPY server/src/ server/src/
 # installDist keeps every dependency as its own JAR, so Flyway's ServiceLoader

@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.18.3",
+    date: "2026-10-14",
+    en: `**Checked dependencies.** Every build now verifies each downloaded library against a recorded checksum and fails on a known high or critical vulnerability. The libraries that carried such advisories were raised to fixed versions. No change to how you use Toadie.`,
+    pl: `**Sprawdzone zależności.** Każda kompilacja sprawdza teraz każdą pobraną bibliotekę z zapisaną sumą kontrolną i kończy się błędem przy znanej podatności o wysokiej lub krytycznej wadze. Biblioteki, których dotyczyły takie ostrzeżenia, podniesiono do poprawionych wersji. Sposób korzystania z Toadie się nie zmienia.`,
+  },
+  {
+    version: "2.18.2",
+    date: "2026-10-14",
+    en: `**Safer sign-in checks.** When Toadie cannot reach its database to check whether your session is still valid, it now reports a server error instead of signing you out as if the session had expired. Behind a reverse proxy, the client address used for rate limiting can no longer be spoofed with an extra header line, and connection details and invalid tokens no longer reach the server log.`,
+    pl: `**Bezpieczniejsze sprawdzanie sesji.** Gdy Toadie nie może połączyć się z bazą danych, aby sprawdzić, czy Twoja sesja jest nadal ważna, zgłasza teraz błąd serwera zamiast wylogowywać Cię tak, jakby sesja wygasła. Za odwrotnym proxy adresu klienta używanego do ograniczania liczby żądań nie da się już podrobić dodatkowym wierszem nagłówka, a szczegóły połączenia i nieprawidłowe tokeny nie trafiają już do logu serwera.`,
+  },
+  {
     version: "2.18.1",
     date: "2026-10-14",
     en: `**Steadier runtime.** Toadie's build now runs on Node 26, its container image reports its own health, OpenTelemetry telemetry is flushed cleanly when the server shuts down, and database connections are recycled after 30 minutes. No change to how you use Toadie.`,

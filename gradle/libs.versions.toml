@@ -14,6 +14,10 @@ flyway = "13.10.0"
 # Apache 2 licensed. Brings jackson-databind onto the compile classpath (previously runtime/test
 # only, via com.auth0:java-jwt) plus org.jruby.joni — see `--write-locks` diff.
 jackson-jq = "1.6.5"
+# Advisory floor (CVE-2026-68494/-68497/-89407/-89425/-91776/-91777, -54512/-54513): Jackson arrives
+# only transitively; the platform in server/build.gradle.kts raises it. Policy and the shaded-SCRAM
+# gap: .claude/docs/dependency-reproducibility.md.
+jackson-bom = "2.22.3"
 kotlin = "2.4.21"
 kover = "0.9.11"
 logback = "1.6.5"
@@ -21,6 +25,15 @@ logback = "1.6.5"
 # older Ktor line — the explicit ktorLibs.server.sse dependency below keeps every Ktor artifact
 # on the repo's own 3.6.0 catalog line (see server/build.gradle.kts).
 mcp-kotlin-sdk = "0.15.0"
+# Netty alignment: Ktor's engine ships Netty 4.2 while r2dbc-postgresql 1.1.3 asks for reactor-netty
+# 1.1.22 (built on 4.1.112) - Gradle lifted the shared modules to 4.2 and left the DNS/proxy modules
+# only reactor-netty uses at 4.1.112 (CVE-2026-42579/-45674/-47691), a mixed classpath under the
+# driver's hostname resolution. reactor-netty 1.3.x is built on Netty 4.2 (1.3.7 -> 4.2.17), and the
+# BOM FLOORS every io.netty module at one version, Ktor's included (a floor, not a pin: a Ktor bump
+# needing a newer Netty lifts only ITS modules - `:server:checkDependencyAlignment` fails on that
+# drift). Keep the two in step: reactor-netty is versioned by the `reactor-bom` line below (read
+# its Netty version off reactor-netty's pom).
+netty = "4.2.17.Final"
 opentelemetry = "1.67.0"
 opentelemetry-ktor = "2.32.0-alpha"
 opentelemetry-semconv = "1.44.0"
@@ -29,6 +42,15 @@ r2dbc-postgresql = "1.1.3.RELEASE"
 # Bounded connection pooling over the plain R2DBC connection factory (Database.kt) — compatible
 # with the r2dbc-spi 1.0.0.RELEASE already pulled in transitively by r2dbc-postgresql.
 r2dbc-pool = "1.0.2.RELEASE"
+# Reactor alignment: reactor-core, reactor-pool and reactor-netty legitimately carry DIFFERENT version
+# numbers (3.8.7 / 1.2.7 / 1.3.7), so the Reactor BOM (upstream's pairing table) pins every
+# io.projectreactor* module to one release train. r2dbc-pool 1.0.2 alone would pull reactor-pool 1.0.8
+# (a reactor-core 3.5-era pairing). Moving this line moves reactor-netty - keep it in step with the
+# `netty` pin above.
+reactor-bom = "2025.0.7"
+# Advisory floor (CVE-2026-53712, authentication downgrade via TLS channel binding): the SCRAM client
+# arrives via r2dbc-postgresql; see the constraints in server/build.gradle.kts.
+scram = "3.3"
 swagger-request-validator = "3.0.0"
 testcontainers = "2.0.5"
 
@@ -40,6 +62,7 @@ exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "e
 exposed-r2dbc = { module = "org.jetbrains.exposed:exposed-r2dbc", version.ref = "exposed" }
 flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
+jackson-bom = { module = "com.fasterxml.jackson:jackson-bom", version.ref = "jackson-bom" }
 jackson-jq = { module = "net.thisptr:jackson-jq", version.ref = "jackson-jq" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 mcp-kotlin-sdk-server = { module = "io.modelcontextprotocol:kotlin-sdk-server", version.ref = "mcp-kotlin-sdk" }
@@ -49,11 +72,18 @@ opentelemetry-logbackAppender = { module = "io.opentelemetry.instrumentation:ope
 opentelemetry-ktorInstrumentation = { module = "io.opentelemetry.instrumentation:opentelemetry-ktor-3.0", version.ref = "opentelemetry-ktor" }
 opentelemetry-sdkAutoconfigure = { module = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure", version.ref = "opentelemetry" }
 opentelemetry-semconv = { module = "io.opentelemetry.semconv:opentelemetry-semconv", version.ref = "opentelemetry-semconv" }
+netty-bom = { module = "io.netty:netty-bom", version.ref = "netty" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-tls = { module = "com.squareup.okhttp3:okhttp-tls", version.ref = "okhttp" }
+# Shades its own scram-client 3.2 (invisible to the lockfile scan): .claude/docs/dependency-reproducibility.md.
 postgresql = { module = "org.postgresql:postgresql", version = "42.7.14" }
 r2dbc-pool = { module = "io.r2dbc:r2dbc-pool", version.ref = "r2dbc-pool" }
 r2dbc-postgresql = { module = "org.postgresql:r2dbc-postgresql", version.ref = "r2dbc-postgresql" }
+reactor-bom = { module = "io.projectreactor:reactor-bom", version.ref = "reactor-bom" }
+reactor-netty-core = { module = "io.projectreactor.netty:reactor-netty-core" }
+reactor-pool = { module = "io.projectreactor.addons:reactor-pool" }
+scram-client = { module = "com.ongres.scram:scram-client", version.ref = "scram" }
+scram-common = { module = "com.ongres.scram:scram-common", version.ref = "scram" }
 swagger-request-validator-core = { module = "com.atlassian.oai:openapi-request-validator-core", version.ref = "swagger-request-validator" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
 

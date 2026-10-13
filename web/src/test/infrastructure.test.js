@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,6 +15,17 @@ const dependabotSource = readFileSync(resolve(repoRoot, ".github/dependabot.yml"
 const appDeploymentSource = readFileSync(resolve(repoRoot, "k8s/app-deployment.yaml"), "utf8");
 const openTelemetrySource = readFileSync(resolve(repoRoot, "core/src/commonMain/kotlin/OpenTelemetry.kt"), "utf8");
 const postgresDeploymentSource = readFileSync(resolve(repoRoot, "k8s/postgres-deployment.yaml"), "utf8");
+
+// Every Gradle lockfile in the repository, as repo-relative POSIX paths (build outputs, installed
+// packages and agent worktrees are not part of the repository).
+function lockfiles(root, dir = "") {
+  const skipped = new Set(["node_modules", "build", ".git", ".gradle", ".kotlin", ".claude"]);
+  return readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((entry) => {
+    const path = dir ? `${dir}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) return skipped.has(entry.name) ? [] : lockfiles(root, path);
+    return entry.name.endsWith("gradle.lockfile") ? [path] : [];
+  });
+}
 
 describe("deployment and verification safety defaults", () => {
   it("uses the full Temurin version from the local toolchain in CI", () => {
@@ -39,10 +50,10 @@ describe("deployment and verification safety defaults", () => {
       expect(ci.on).toHaveProperty(event, null); // no path/branch skips on a required gate
     }
     expect(ci.permissions).toEqual({ contents: "read" });
-    expect(ci.jobs["quality-gate"].needs).toEqual(["backend", "frontend", "e2e"]);
+    expect(ci.jobs["quality-gate"].needs).toEqual(["backend", "frontend", "gradle-vulnerability-scan", "e2e"]);
     expect(ci.jobs["quality-gate"].if).toBe("${{ always() }}");
     const gate = ci.jobs["quality-gate"].steps?.[0].run;
-    for (const job of ["BACKEND", "FRONTEND", "E2E"]) expect(gate).toContain(`test "$${job}" = success`);
+    for (const job of ["BACKEND", "FRONTEND", "GRADLE_SCAN", "E2E"]) expect(gate).toContain(`test "$${job}" = success`);
     expect(ci.jobs.e2e.uses).toBe("./.github/workflows/e2e.yml");
   });
 
@@ -51,9 +62,39 @@ describe("deployment and verification safety defaults", () => {
     const backend = ci.jobs.backend.steps?.map((step) => step.run ?? "").join("\n");
     const frontend = ci.jobs.frontend.steps?.map((step) => step.run ?? "").join("\n");
     expect(backend).toContain("./gradlew build :server:koverXmlReport");
+    // Strict dependency verification: a missing or mismatched artifact checksum fails the build.
+    expect(backend).toContain("--dependency-verification strict");
+    expect(backend).toContain("git diff --exit-code -- gradle/verification-metadata.xml");
     for (const script of ["lint:api", "check:api", "build", "lint", "knip", "test:coverage"]) {
       expect(frontend).toContain(`npm run ${script}`);
     }
+  });
+
+  it("scans every Gradle lockfile for HIGH/CRITICAL advisories with a digest-pinned Trivy", () => {
+    const ci = parse(ciSource);
+    const scan = ci.jobs["gradle-vulnerability-scan"].steps.map((step) => step.run ?? "").join("\n");
+    expect(scan).toMatch(/ghcr\.io\/aquasecurity\/trivy:[\d.]+@sha256:[0-9a-f]{64}/);
+    expect(scan).toContain('row[0] in ("HIGH", "CRITICAL")');
+    expect(scan).toContain("Lockfiles missing from the scan");
+    expect(existsSync(resolve(repoRoot, "gradle/verification-metadata.xml"))).toBe(true);
+
+    // A lockfile is only covered when it appears as a WHOLE whitespace-delimited token: a plain
+    // substring check would let "gradle.lockfile" hide inside "settings-gradle.lockfile". The
+    // lockfiles are globbed from the repository, so a newly added one is demanded automatically.
+    const tokens = (text) => new Set(text.split(/\s+/).map((token) => token.replace(/^["']|["']$/g, "")));
+    const copied = tokens(scan.split("\n").filter((line) => line.trim().startsWith("cp ")).join("\n"));
+    const backend = ci.jobs.backend.steps.map((step) => step.run ?? "").find((run) => run.includes("git diff --exit-code"));
+    const tripwire = tokens(backend ?? "");
+    const dockerCopies = tokens(dockerfileSource.split("\n").filter((line) => line.startsWith("COPY ")).join("\n"));
+    const locks = lockfiles(repoRoot);
+    expect(locks).toContain("gradle.lockfile");
+    expect(locks).toContain("server/buildscript-gradle.lockfile");
+    for (const lock of locks) {
+      expect(copied, `Trivy cp lines miss ${lock}`).toContain(lock);
+      expect(tripwire, `CI git diff list misses ${lock}`).toContain(lock);
+      expect(dockerCopies, `Dockerfile COPY lines miss ${lock}`).toContain(lock);
+    }
+    expect(tripwire).toContain("gradle/verification-metadata.xml");
   });
 
   it("fails the API lint on warnings for both the contract and the conformant fixture", () => {
