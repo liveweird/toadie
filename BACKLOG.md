@@ -6,26 +6,30 @@ Git history, release notes, tests, and the current reference docs. The API guide
 canonical record of accepted API deviations, not a second implementation plan. Promote a gap
 here when it becomes scheduled work, and remove its register entry only when it is resolved.
 
+Each top-level item carries one status tag: `[next]`, `[todo]`, `[new]` (proposed, not yet
+confirmed), `[parked]` or `[blocked]`. A proposed item enters as `[new]`; only the maintainer
+promotes it. A finished item is removed, not ticked.
+
 ## Deployment
 
-- [ ] **Replace the ingress-nginx reference with a maintained Traefik deployment.** Inventory
+- [new] **Replace the ingress-nginx reference with a maintained Traefik deployment.** Inventory
   other workloads using the current controller before cutover. Verify TLS, HTTP-to-HTTPS
   redirects, HSTS, forwarded-header trust and client IPs, rate limits, body limits, health
   probes, and rollback against the replacement. Set the public `MAIL_APP_URL`, configure
   production SMTP if reset/MFA email is needed, and test email links through that origin.
   Update `k8s/templates/app-ingress.yaml` and the run-stack guide together; do not retire a
   controller used by another application.
-- [ ] **Deploy an immutable application image.** Publish each release to a registry the target
+- [new] **Deploy an immutable application image.** Publish each release to a registry the target
   cluster can reach, deploy by digest instead of `toadie-app:latest`, and document the update
   and rollback procedure. Verify that the running pod's digest is the reviewed release.
-- [ ] **Set production recovery targets and capacity from real measurements.** An operator must
+- [new] **Set production recovery targets and capacity from real measurements.** An operator must
   choose RPO/RTO, monitor PostgreSQL size and growth, set alerts, and confirm the backup
   schedule and retention against those targets. The 10 GiB initial claim and isolated restore
   drill are already implemented; the procedure is in [k8s/BACKUP-RESTORE.md](k8s/BACKUP-RESTORE.md).
 
 ## Scaling constraint
 
-- [ ] **Remove instance-local state before allowing multiple app replicas.** Every one of these
+- [new] **Remove instance-local state before allowing multiple app replicas.** Every one of these
   is per-process: MFA challenges; login/reset throttles; the token-blocklist cache (it can delay
   cross-instance revocation); the `IntegrationLimits` admission semaphore, per-client buckets and
   the retained-value ledger (`integration/IntegrationLimits.kt`); the Ktor per-IP buckets
@@ -34,11 +38,33 @@ here when it becomes scheduled work, and remove its register entry only when it 
   cross-replica behavior, and only then change `k8s/app-deployment.yaml` from one replica and `Recreate`.
   Until then, one replica is an intentional deployment rule, not a broken rollout.
 
-## Unscheduled candidate
+## Product
 
-- [ ] **Decide whether import dry runs should validate batch `sourceUrl` like real imports.**
+- [new] **Decide whether import dry runs should validate batch `sourceUrl` like real imports.**
   `/files/import/check`, `/blueprints/import/check`, and `/entities/import/check` currently
   ignore an invalid batch-level source URL that the corresponding import rejects. The
   published contract documents this difference. If changed, update the shared preflight,
   OpenAPI/generated types, and focused regressions together. This is a product-consistency
   improvement, not an authorization or data-integrity defect.
+- [new] **Sample saved queries for the newer Port blueprints.** The Port demo ships no saved
+  queries for `product`, `dataset`, `api_adoption` or `dataset_adoption`; add a few PUBLIC ones
+  (sample data only, under `sample-data/port/commerce-payments/`) that show the adoption
+  relations and the regulatory flags on the Entity graph and hierarchy canvases.
+
+## Tests
+
+- [new] **Click through a successful blueprint sync in the browser.** The e2e suite stops at the
+  loopback refusal by design, since the SSRF guard rejects every address a local fixture server
+  could use. A success journey needs a fixture source the guard accepts and the browser suite can
+  reach; until then the server suite owns the success path.
+
+## Housekeeping
+
+- [new] **Align Temurin with the `21.0.12.1` respin (Dependabot #116).** The PR bumps both Docker
+  stages to `eclipse-temurin:21.0.12.1_1`, but `mise.toml` and CI's `setup-java` must name the same
+  build (`infrastructure.test.js` pins the parity) and mise does not list `21.0.12.1` yet. Once it
+  does, push the `mise.toml` + `ci.yml` alignment onto the Dependabot branch.
+- [new] **Re-check the MCP transport facts on the first MCP Kotlin SDK bump.** The SDK is pinned
+  at 0.15.0; `integration/Mcp.kt` relies on its stateless mode needing no `initialize`, on the
+  Accept-header pair and on unknown tools being tool results. Re-verify those with the real
+  TypeScript MCP client before merging the bump.

@@ -49,7 +49,7 @@ Current policy: Dependabot proposes weekly updates across five ecosystems, while
 dependency locks verify each merged change. Base images use maintained tags rather than
 fixed digests; pinning the Docker build's `apk add git` package is also not planned.
 This is separate from the **application release image**: production registry publishing and
-deployment by immutable digest remain open in [HARDENING.md](../../../HARDENING.md). The
+deployment by immutable digest remain open in [BACKLOG.md](../../../BACKLOG.md). The
 OrbStack shared image store and `toadie-app:latest` are only the local proof path.
 
 Gradle dependency-verification metadata and `.git`-less source-archive builds are not
