@@ -8,8 +8,8 @@ detekt = "1.23.8"
 # Exposed pinned at 1.3.1: 1.4.0 stalls R2DBC work under full-suite load in Lettuce (a
 # likely connection-release regression; fine in isolation). Re-try at the next release
 # with a full :server:test --rerun-tasks.
-exposed = "1.5.0"
-flyway = "13.9.0"
+exposed = "1.5.1"
+flyway = "13.10.0"
 # jq 1.6 semantics for `calculationProperties` (Phase 5, `.claude/docs/port-data-model.md`);
 # Apache 2 licensed. Brings jackson-databind onto the compile classpath (previously runtime/test
 # only, via com.auth0:java-jwt) plus org.jruby.joni — see `--write-locks` diff.
@@ -18,7 +18,7 @@ jackson-jq = "1.6.5"
 # only transitively; the platform in server/build.gradle.kts raises it. Policy and the shaded-SCRAM
 # gap: .claude/docs/dependency-reproducibility.md.
 jackson-bom = "2.22.3"
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 kover = "0.9.11"
 logback = "1.6.5"
 # The MCP endpoint groundwork (release 2.15.0): pulls in ktor-server-sse transitively at an
@@ -34,7 +34,7 @@ mcp-kotlin-sdk = "0.15.0"
 # drift). Keep the two in step: reactor-netty is versioned by the `reactor-bom` line below (read
 # its Netty version off reactor-netty's pom).
 netty = "4.2.17.Final"
-opentelemetry = "1.66.0"
+opentelemetry = "1.67.0"
 opentelemetry-ktor = "2.32.0-alpha"
 opentelemetry-semconv = "1.44.0"
 okhttp = "5.5.0"
@@ -50,7 +50,7 @@ r2dbc-pool = "1.0.2.RELEASE"
 reactor-bom = "2025.0.7"
 # Advisory floor (CVE-2026-53712, authentication downgrade via TLS channel binding): the SCRAM client
 # arrives via r2dbc-postgresql; see the constraints in server/build.gradle.kts.
-scram = "3.3"
+scram = "3.4"
 swagger-request-validator = "3.0.0"
 testcontainers = "2.0.5"
 
@@ -76,7 +76,7 @@ netty-bom = { module = "io.netty:netty-bom", version.ref = "netty" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-tls = { module = "com.squareup.okhttp3:okhttp-tls", version.ref = "okhttp" }
 # Shades its own scram-client 3.2 (invisible to the lockfile scan): .claude/docs/dependency-reproducibility.md.
-postgresql = { module = "org.postgresql:postgresql", version = "42.7.13" }
+postgresql = { module = "org.postgresql:postgresql", version = "42.7.14" }
 r2dbc-pool = { module = "io.r2dbc:r2dbc-pool", version.ref = "r2dbc-pool" }
 r2dbc-postgresql = { module = "org.postgresql:r2dbc-postgresql", version.ref = "r2dbc-postgresql" }
 reactor-bom = { module = "io.projectreactor:reactor-bom", version.ref = "reactor-bom" }

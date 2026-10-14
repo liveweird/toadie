@@ -20,11 +20,11 @@ buildscript {
             classpath("com.fasterxml.jackson.core:jackson-core:2.22.3")
             classpath("com.fasterxml.jackson.core:jackson-annotations:2.22")
             classpath("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.22.3")
-            classpath("org.codehaus.plexus:plexus-utils:4.0.3")
+            classpath("org.codehaus.plexus:plexus-utils:4.1.0")
             // log4j 2.25.1 carries MEDIUM advisories (below the scan's gate), cleared anyway so
             // the report starts at zero.
-            classpath("org.apache.logging.log4j:log4j-core:2.25.5")
-            classpath("org.apache.logging.log4j:log4j-api:2.25.5")
+            classpath("org.apache.logging.log4j:log4j-core:2.26.1")
+            classpath("org.apache.logging.log4j:log4j-api:2.26.1")
         }
     }
 }
