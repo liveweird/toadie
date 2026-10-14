@@ -28,13 +28,16 @@ mcp-kotlin-sdk = "0.15.0"
 # Netty alignment: Ktor's engine ships Netty 4.2 while r2dbc-postgresql 1.1.3 asks for reactor-netty
 # 1.1.22 (built on 4.1.112) - Gradle lifted the shared modules to 4.2 and left the DNS/proxy modules
 # only reactor-netty uses at 4.1.112 (CVE-2026-42579/-45674/-47691), a mixed classpath under the
-# driver's hostname resolution. reactor-netty 1.3.x is built on Netty 4.2 (1.3.7 -> 4.2.17), and the
+# driver's hostname resolution. reactor-netty 1.3.x is built on Netty 4.2 (1.3.7 -> 4.2.17; the floor
+# may sit a patch release above that, as 4.2.19 does), and the
 # BOM FLOORS every io.netty module at one version, Ktor's included (a floor, not a pin: a Ktor bump
 # needing a newer Netty lifts only ITS modules - `:server:checkDependencyAlignment` fails on that
 # drift). Keep the two in step: reactor-netty is versioned by the `reactor-bom` line below (read
 # its Netty version off reactor-netty's pom).
-netty = "4.2.17.Final"
-opentelemetry = "1.67.0"
+netty = "4.2.19.Final"
+# Held at 1.66.0: opentelemetry-ktor-3.0 2.32.0-alpha pairs with SDK 1.66 (its api-incubator 1.66.0-alpha
+# breaks a 1.67 SDK at startup); bump together with the next instrumentation release.
+opentelemetry = "1.66.0"
 opentelemetry-ktor = "2.32.0-alpha"
 opentelemetry-semconv = "1.44.0"
 okhttp = "5.5.0"
