@@ -34,7 +34,8 @@ mcp-kotlin-sdk = "0.15.0"
 # drift). Keep the two in step: reactor-netty is versioned by the `reactor-bom` line below (read
 # its Netty version off reactor-netty's pom).
 netty = "4.2.17.Final"
-opentelemetry = "1.67.0"
+# Held at 1.66.0: opentelemetry-ktor-3.0 2.32.0-alpha pairs with SDK 1.66 (its api-incubator 1.66.0-alpha breaks a 1.67 SDK at startup); bump together with the next instrumentation release.
+opentelemetry = "1.66.0"
 opentelemetry-ktor = "2.32.0-alpha"
 opentelemetry-semconv = "1.44.0"
 okhttp = "5.5.0"

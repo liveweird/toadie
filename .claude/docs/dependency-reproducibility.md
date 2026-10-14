@@ -90,7 +90,7 @@ this on 2026-09-30. Move that constraint deliberately, together with a regenerat
   `:server:checkDependencyAlignment` (in `check`) fails when a floor leaves a Netty, Jackson or
   Reactor family on several versions, because `platform()` only floors.
 - **Exception:** the scan reads lockfile coordinates only, so a library a jar SHADES is invisible
-  to it and to every floor. Today: the PostgreSQL JDBC driver 42.7.13 (Flyway's boot connection)
+  to it and to every floor. Today: the PostgreSQL JDBC driver 42.7.14 (Flyway's boot connection)
   bundles scram-client 3.2 under `org/postgresql/shaded/` (CVE-2026-53712 is fixed only on the R2DBC
   path); the exposure needs TLS to PostgreSQL (the compose and Kubernetes stacks connect in plain
   text in-cluster). On every driver bump, look in the jar's `META-INF/licenses/com.ongres.scram/`
