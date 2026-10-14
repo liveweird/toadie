@@ -46,6 +46,10 @@ promotes it. A finished item is removed, not ticked.
   Found while proving 2.18.2's outage handling (a stopped database correctly answers 500 in
   milliseconds). Decide on a statement timeout and/or r2dbc-postgresql socket timeout, with a
   regression that pauses the container.
+- [new] **Smoke the Kubernetes deployment on the new Netty/Reactor line.** 2.18.3 moved
+  r2dbc-postgresql onto reactor-netty 1.3 / Netty 4.2, whose DNS resolver now answers the database
+  hostname. Compose (Docker DNS, `postgres`) is covered by e2e; the k8s short name with search
+  domains and `ndots` is not. Deploy to the OrbStack `toadie` namespace once and confirm `/readyz`.
 
 ## Product
 
@@ -69,10 +73,11 @@ promotes it. A finished item is removed, not ticked.
 
 ## Housekeeping
 
-- [new] **Align Temurin with the `21.0.12.1` respin (Dependabot #116).** The PR bumps both Docker
-  stages to `eclipse-temurin:21.0.12.1_1`, but `mise.toml` and CI's `setup-java` must name the same
-  build (`infrastructure.test.js` pins the parity) and mise does not list `21.0.12.1` yet. Once it
-  does, push the `mise.toml` + `ci.yml` alignment onto the Dependabot branch.
+- [new] **Align Temurin with the `21.0.12.1` respin.** Dependabot proposed `eclipse-temurin:21.0.12.1_1`
+  (#116, closed by Dependabot once the Dockerfile moved to tag@digest pins), but `mise.toml` and CI's
+  `setup-java` must name the same build (`infrastructure.test.js` pins the parity) and mise does not
+  list `21.0.12.1` yet. When Dependabot reopens the bump and mise lists the build, align `mise.toml`
+  and `ci.yml` on that branch.
 - [new] **Re-check the MCP transport facts on the first MCP Kotlin SDK bump.** The SDK is pinned
   at 0.15.0; `integration/Mcp.kt` relies on its stateless mode needing no `initialize`, on the
   Accept-header pair and on unknown tools being tool results. Re-verify those with the real
