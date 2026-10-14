@@ -5,9 +5,9 @@ bcrypt = "0.10.2"
 # detekt 1.23.x embeds a pre-2.x Kotlin compiler — fine for the plain rule sets we run
 # (no type resolution); revisit the detekt 2.x line once it has a stable release.
 detekt = "1.23.8"
-# Exposed pinned at 1.3.1: 1.4.0 stalls R2DBC work under full-suite load in Lettuce (a
-# likely connection-release regression; fine in isolation). Re-try at the next release
-# with a full :server:test --rerun-tasks.
+# Exposed 1.4.0 stalled R2DBC work under full-suite load in Lettuce (a likely
+# connection-release regression; fine in isolation). The 1.5 line passes Toadie's full
+# suite. Re-verify every Exposed bump with a full :server:test --rerun-tasks.
 exposed = "1.5.1"
 flyway = "13.10.0"
 # jq 1.6 semantics for `calculationProperties` (Phase 5, `.claude/docs/port-data-model.md`);
