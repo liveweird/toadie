@@ -32,7 +32,7 @@ export default function VirtualTreeList<N extends { id: string }>({
           <div
             key={row.key}
             ref={measureRow}
-            data-index={index}
+            data-index={enabled ? index : undefined}
             className={enabled ? `${classes.treeLine} ${classes.virtualRow}` : classes.treeLine}
             style={style}
           >

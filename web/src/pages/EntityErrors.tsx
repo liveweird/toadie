@@ -20,11 +20,14 @@ import EntityGraphFilterControls from "../components/EntityGraphFilterControls";
 import FilterPanel from "../components/FilterPanel";
 import PageHeader from "../components/PageHeader";
 import TableLoadingRow from "../components/TableLoadingRow";
+import VirtualSpacerRow from "../components/VirtualSpacerRow";
+import VirtualTableFrame from "../components/VirtualTableFrame";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 import { useEntityQuery } from "../hooks/useEntityQuery";
 import { useEntityQueryStoredState } from "../hooks/useEntityQueryStoredState";
 import { isStringArray, useStoredState } from "../hooks/useStoredState";
+import { useVirtualRows } from "../hooks/useVirtualRows";
 import { editBlueprintPath } from "../utils/blueprintLinks";
 import { classOfEntityCode, colorOfEntityClass, ENTITY_ERROR_CLASSES } from "../utils/entityErrorClasses";
 import { editEntityPath, entityGraphPath } from "../utils/entityLinks";
@@ -36,6 +39,18 @@ const COLUMN_COUNT = 4;
 // blueprint identifier, so it asks the server for no entity/blueprint rows while preserving
 // the saved-query diagnostics that deliberately ignore these filters.
 const NO_BLUEPRINTS_FILTER = ["!"] as const;
+
+/** What a windowed row needs to measure itself (see useVirtualRows); both absent when every row renders. */
+interface MeasureProps {
+  measureRef: ((node: Element | null) => void) | undefined;
+  index: number;
+}
+
+/** The three row kinds, concatenated into ONE indexed list (entities, blueprints, saved queries) so it can be windowed. */
+type ErrorTableRow =
+  | { type: "entity"; key: string; row: EntityErrorRow }
+  | { type: "blueprint"; key: string; row: BlueprintErrorRow }
+  | { type: "savedQuery"; key: string; row: SavedQueryErrorRow };
 
 /**
  * The Port-world Errors report at /ontology/errors (v2.5.0) — `pages/Errors.tsx`'s twin one
@@ -98,7 +113,18 @@ export default function EntityErrors() {
     entityRows.reduce((sum, row) => sum + row.findings.length, 0) +
     blueprintRows.reduce((sum, row) => sum + row.findings.length, 0) +
     savedQueryRows.reduce((sum, row) => sum + row.diagnostics.length, 0);
-  const rowCount = entityRows.length + blueprintRows.length + savedQueryRows.length;
+  const tableRows: ErrorTableRow[] = [
+    ...entityRows.map((row): ErrorTableRow => ({ type: "entity", key: `entity-${row.id}`, row })),
+    ...blueprintRows.map((row): ErrorTableRow => ({ type: "blueprint", key: `blueprint-${row.id}`, row })),
+    ...savedQueryRows.map((row): ErrorTableRow => ({ type: "savedQuery", key: `savedQuery-${row.id}`, row })),
+  ];
+  const rowCount = tableRows.length;
+  // Above the virtualization threshold only the rows in view are mounted (see useVirtualRows);
+  // below it every row renders and the table is exactly the plain one.
+  const { attachList, measureRow, enabled: virtualized, items, paddingTop, paddingBottom } =
+    useVirtualRows<HTMLTableSectionElement>(rowCount, 72);
+  // A fixed layout keeps the columns from reflowing as different rows mount.
+  const fixedWidth = (width: string) => (virtualized ? { width } : undefined);
 
   function openInGraph(row: SavedQueryErrorRow) {
     setPickedQuery(String(row.id));
@@ -145,30 +171,41 @@ export default function EntityErrors() {
         </Alert>
       )}
 
-      <Table.ScrollContainer minWidth={860}>
-        <DataTable label={t("entityErrors.title")}>
+      <VirtualTableFrame virtualized={virtualized} minWidth={860}>
+        <DataTable
+          label={t("entityErrors.title")}
+          stickyHeader={virtualized}
+          stickyHeaderOffset={48}
+          layout={virtualized ? "fixed" : undefined}
+          miw={virtualized ? 860 : undefined}
+        >
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>{t("entityErrors.field.subject")}</Table.Th>
-              <Table.Th>{t("entityErrors.field.blueprint")}</Table.Th>
-              <Table.Th>{t("entityErrors.field.team")}</Table.Th>
+              <Table.Th style={fixedWidth("30%")}>{t("entityErrors.field.subject")}</Table.Th>
+              <Table.Th style={fixedWidth("16%")}>{t("entityErrors.field.blueprint")}</Table.Th>
+              <Table.Th style={fixedWidth("14%")}>{t("entityErrors.field.team")}</Table.Th>
               <Table.Th>{t("entityErrors.field.findings")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
-          <Table.Tbody>
+          <Table.Tbody ref={attachList}>
             {isPending && !data ? (
               <TableLoadingRow colSpan={COLUMN_COUNT} />
             ) : rowCount > 0 ? (
               <>
-                {entityRows.map((row) => (
-                  <EntityRow key={`entity-${row.id}`} row={row} />
-                ))}
-                {blueprintRows.map((row) => (
-                  <BlueprintRow key={`blueprint-${row.id}`} row={row} />
-                ))}
-                {savedQueryRows.map((row) => (
-                  <SavedQueryRow key={`savedQuery-${row.id}`} row={row} onOpenInGraph={openInGraph} />
-                ))}
+                {paddingTop > 0 && <VirtualSpacerRow height={paddingTop} colSpan={COLUMN_COUNT} />}
+                {items.map(({ index }) => {
+                  const entry = tableRows[index];
+                  const measure = { measureRef: measureRow, index };
+                  switch (entry.type) {
+                    case "entity":
+                      return <EntityRow key={entry.key} row={entry.row} {...measure} />;
+                    case "blueprint":
+                      return <BlueprintRow key={entry.key} row={entry.row} {...measure} />;
+                    case "savedQuery":
+                      return <SavedQueryRow key={entry.key} row={entry.row} onOpenInGraph={openInGraph} {...measure} />;
+                  }
+                })}
+                {paddingBottom > 0 && <VirtualSpacerRow height={paddingBottom} colSpan={COLUMN_COUNT} />}
               </>
             ) : !isError ? (
               <Table.Tr>
@@ -179,7 +216,7 @@ export default function EntityErrors() {
             ) : null}
           </Table.Tbody>
         </DataTable>
-      </Table.ScrollContainer>
+      </VirtualTableFrame>
     </Stack>
   );
 }
@@ -209,10 +246,10 @@ function FindingsList({ findings }: { findings: readonly EntityFinding[] }) {
   );
 }
 
-function EntityRow({ row }: { row: EntityErrorRow }) {
+function EntityRow({ row, measureRef, index }: { row: EntityErrorRow } & MeasureProps) {
   const { t } = useTranslation();
   return (
-    <Table.Tr>
+    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined}>
       <Table.Td style={{ verticalAlign: "top" }}>
         <Group gap={6} wrap="nowrap">
           <Anchor
@@ -252,10 +289,10 @@ function EntityRow({ row }: { row: EntityErrorRow }) {
   );
 }
 
-function BlueprintRow({ row }: { row: BlueprintErrorRow }) {
+function BlueprintRow({ row, measureRef, index }: { row: BlueprintErrorRow } & MeasureProps) {
   const { t } = useTranslation();
   return (
-    <Table.Tr>
+    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined}>
       <Table.Td style={{ verticalAlign: "top" }}>
         <Group gap={6} wrap="nowrap">
           {isAdmin() ? (
@@ -294,14 +331,16 @@ function BlueprintRow({ row }: { row: BlueprintErrorRow }) {
 function SavedQueryRow({
   row,
   onOpenInGraph,
+  measureRef,
+  index,
 }: {
   row: SavedQueryErrorRow;
   onOpenInGraph: (row: SavedQueryErrorRow) => void;
-}) {
+} & MeasureProps) {
   const { t } = useTranslation();
   const mine = row.createdBy === getUserId();
   return (
-    <Table.Tr>
+    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined}>
       <Table.Td style={{ verticalAlign: "top" }}>
         <Group gap={6} wrap="nowrap">
           <Text size="sm">{row.name}</Text>

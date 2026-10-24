@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import Errors from "./Errors";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import { stubVirtualLayout } from "../test/virtualLayout";
 
 const TOKEN_KEY = "toadie.auth.token";
 
@@ -191,5 +192,58 @@ describe("Errors page", () => {
     renderPage();
 
     expect(await screen.findByText("Failed to load the errors report")).toBeInTheDocument();
+  });
+
+  describe("a long report (above the virtualization threshold)", () => {
+    const BIG_REPORT = {
+      findings: Array.from({ length: 400 }, (_, i) => ({
+        fileId: i + 1,
+        fileKind: "Component",
+        fileName: `svc-${String(i).padStart(3, "0")}`,
+        fileNamespace: "default",
+        field: "spec.dependsOn",
+        reference: "component:ghost",
+        status: "MISSING",
+        message: null,
+      })),
+      checkedFiles: 400,
+      checkedReferences: 400,
+    };
+
+    beforeEach(() => {
+      stubVirtualLayout(48);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test("mounts only the rows in view, with a sticky header and hidden spacers", async () => {
+      mockReport(mockFetch, BIG_REPORT);
+      renderPage();
+
+      expect(await screen.findByText("svc-000")).toBeInTheDocument();
+      const table = screen.getByRole("table", { name: "Errors" });
+      expect(table.querySelector("thead")).toHaveAttribute("data-sticky");
+      // The header row plus the windowed body rows — nowhere near the 400 reported files.
+      const rendered = within(table).getAllByRole("row").length;
+      expect(rendered).toBeGreaterThan(5);
+      expect(rendered).toBeLessThan(100);
+      expect(screen.queryByText("svc-399")).not.toBeInTheDocument();
+      // The spacer standing in for the unmounted tail is presentation only (aria-hidden, so it is
+      // not among the rows above either).
+      const spacers = table.querySelectorAll("tbody > tr[aria-hidden='true']");
+      expect(spacers.length).toBeGreaterThan(0);
+    });
+
+    test("a short report keeps the plain table (no sticky header, no spacers)", async () => {
+      mockReport(mockFetch);
+      renderPage();
+
+      await screen.findByText("orders-api");
+      const table = screen.getByRole("table", { name: "Errors" });
+      expect(table.querySelector("thead")).not.toHaveAttribute("data-sticky");
+      expect(table.querySelectorAll("tr[aria-hidden='true']")).toHaveLength(0);
+    });
   });
 });

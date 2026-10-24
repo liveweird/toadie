@@ -288,6 +288,15 @@
   scroll-margin-top: 56px;
 }
 
+/* A windowed Errors table's frame (VirtualTableFrame): the page itself scrolls, so the sticky
+   header sticks; only where the canvas is narrower than the table's minimum width does the
+   frame become its own horizontal scroller (and the header then simply scrolls with the rows). */
+@media (max-width: 75em) {
+  .virtualTableFrame {
+    overflow-x: auto;
+  }
+}
+
 /* A windowed list: a box as tall as every row, the mounted rows positioned inside it. */
 .virtualList {
   position: relative;

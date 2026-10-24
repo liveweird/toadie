@@ -11,11 +11,14 @@ import EmptyState from "../components/EmptyState";
 import TableLoadingRow from "../components/TableLoadingRow";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { isStringArray, useStoredState } from "../hooks/useStoredState";
+import { useVirtualRows } from "../hooks/useVirtualRows";
 import { loadErrorMessage } from "../utils/saveError";
 import { ERROR_CLASSES, classOfStatus, colorOfStatus } from "../utils/errorClasses";
 import { groupFindingsByFile } from "../utils/errorGroups";
 import KindBadge from "../components/KindBadge";
 import PageHeader from "../components/PageHeader";
+import VirtualSpacerRow from "../components/VirtualSpacerRow";
+import VirtualTableFrame from "../components/VirtualTableFrame";
 
 /**
  * The Errors page at /errors: every error in the stored files — reference resolution,
@@ -55,6 +58,12 @@ export default function Errors() {
   // filter-narrowed), an order of magnitude fewer than findings.
   const rows = groupFindingsByFile(shown);
   const columnCount = 4;
+  // Above the virtualization threshold only the rows in view are mounted (see useVirtualRows);
+  // below it every row renders and the table is exactly the plain one.
+  const { attachList, measureRow, enabled: virtualized, items, paddingTop, paddingBottom } =
+    useVirtualRows<HTMLTableSectionElement>(rows.length, 64);
+  // A fixed layout keeps the columns from reflowing as different rows mount.
+  const fixedWidth = (width: string | number) => (virtualized ? { width } : undefined);
 
   return (
     <Stack gap="md">
@@ -78,62 +87,75 @@ export default function Errors() {
         </Alert>
       )}
 
-      <Table.ScrollContainer minWidth={760}>
-        <DataTable label={t("errors.title")}>
+      <VirtualTableFrame virtualized={virtualized} minWidth={760}>
+        <DataTable
+          label={t("errors.title")}
+          stickyHeader={virtualized}
+          stickyHeaderOffset={48}
+          layout={virtualized ? "fixed" : undefined}
+          miw={virtualized ? 760 : undefined}
+        >
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>{t("errors.field.file")}</Table.Th>
-              <Table.Th>{t("errors.field.kind")}</Table.Th>
-              <Table.Th>{t("errors.field.namespace")}</Table.Th>
+              <Table.Th style={fixedWidth("28%")}>{t("errors.field.file")}</Table.Th>
+              <Table.Th style={fixedWidth(130)}>{t("errors.field.kind")}</Table.Th>
+              <Table.Th style={fixedWidth(160)}>{t("errors.field.namespace")}</Table.Th>
               <Table.Th>{t("errors.field.findings")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
-          <Table.Tbody>
+          <Table.Tbody ref={attachList}>
             {/* A disabled (noKinds) query stays pending forever — fall through to the empty state. */}
             {isPending && !data && !noKinds ? (
               <TableLoadingRow colSpan={columnCount} />
             ) : rows.length > 0 ? (
-              rows.map((row) => (
-                <Table.Tr key={row.fileId}>
-                  <Table.Td style={{ verticalAlign: "top" }}>
-                    <CatalogFileNameLink id={row.fileId} name={row.fileName} />
-                  </Table.Td>
-                  <Table.Td style={{ verticalAlign: "top", width: 130 }}>
-                    <KindBadge kind={row.fileKind} />
-                  </Table.Td>
-                  <Table.Td style={{ verticalAlign: "top", width: 160 }}>
-                    <Text size="sm">{row.fileNamespace}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Stack gap={4}>
-                      {row.findings.map((f, index) => (
-                        <Group gap={6} wrap="nowrap" key={`${f.field}-${f.reference}-${index}`}>
-                          <Badge
-                            variant="light"
-                            size="xs"
-                            color={colorOfStatus(f.status)}
-                            title={f.message ?? t(`errors.message.${f.status}`)}
-                            style={{ flexShrink: 0 }}
-                          >
-                            {t(`errors.status.${f.status}`)}
-                          </Badge>
-                          {f.field !== "document" && f.field !== "source" && (
-                            <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
-                              {f.field}
-                            </Text>
-                          )}
-                          {f.reference !== "" && <Code>{f.reference}</Code>}
-                          {f.status === "STRUCTURE_INVALID" && f.message && (
-                            <Text size="xs" truncate>
-                              {f.message}
-                            </Text>
-                          )}
-                        </Group>
-                      ))}
-                    </Stack>
-                  </Table.Td>
-                </Table.Tr>
-              ))
+              <>
+                {paddingTop > 0 && <VirtualSpacerRow height={paddingTop} colSpan={columnCount} />}
+                {items.map(({ index }) => {
+                  const row = rows[index];
+                  return (
+                    <Table.Tr key={row.fileId} ref={measureRow} data-index={measureRow ? index : undefined}>
+                      <Table.Td style={{ verticalAlign: "top" }}>
+                        <CatalogFileNameLink id={row.fileId} name={row.fileName} />
+                      </Table.Td>
+                      <Table.Td style={{ verticalAlign: "top", width: 130 }}>
+                        <KindBadge kind={row.fileKind} />
+                      </Table.Td>
+                      <Table.Td style={{ verticalAlign: "top", width: 160 }}>
+                        <Text size="sm">{row.fileNamespace}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Stack gap={4}>
+                          {row.findings.map((f, index) => (
+                            <Group gap={6} wrap="nowrap" key={`${f.field}-${f.reference}-${index}`}>
+                              <Badge
+                                variant="light"
+                                size="xs"
+                                color={colorOfStatus(f.status)}
+                                title={f.message ?? t(`errors.message.${f.status}`)}
+                                style={{ flexShrink: 0 }}
+                              >
+                                {t(`errors.status.${f.status}`)}
+                              </Badge>
+                              {f.field !== "document" && f.field !== "source" && (
+                                <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                                  {f.field}
+                                </Text>
+                              )}
+                              {f.reference !== "" && <Code>{f.reference}</Code>}
+                              {f.status === "STRUCTURE_INVALID" && f.message && (
+                                <Text size="xs" truncate>
+                                  {f.message}
+                                </Text>
+                              )}
+                            </Group>
+                          ))}
+                        </Stack>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
+                {paddingBottom > 0 && <VirtualSpacerRow height={paddingBottom} colSpan={columnCount} />}
+              </>
             ) : !isError ? (
               <Table.Tr>
                 <Table.Td colSpan={columnCount}>
@@ -146,7 +168,7 @@ export default function Errors() {
             ) : null}
           </Table.Tbody>
         </DataTable>
-      </Table.ScrollContainer>
+      </VirtualTableFrame>
     </Stack>
   );
 }
