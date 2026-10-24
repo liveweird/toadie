@@ -219,7 +219,8 @@ describe("EntityGraph layout", () => {
       renderPage();
       await screen.findByText("Laying out the graph…");
       await waitFor(() => expect(FakeWorker.instances.at(-1)?.posted.length).toBeGreaterThan(0));
-      act(() => FakeWorker.instances.at(-1)!.fail());
+      const worker = FakeWorker.instances.at(-1)!;
+      act(() => worker.reply({ id: worker.posted[0].id, error: "boom" }));
 
       expect(await screen.findByText("The graph layout did not finish")).toBeInTheDocument();
       expect(screen.getByText(/Narrow the filters or try again/)).toBeInTheDocument();

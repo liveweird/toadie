@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { layoutPositions, type GraphPositions, type LayoutRequest } from "../utils/graphLayout";
 import type { LayoutWorkerMessage, LayoutWorkerReply } from "../utils/graphLayoutWorker";
 
@@ -9,6 +9,8 @@ import type { LayoutWorkerMessage, LayoutWorkerReply } from "../utils/graphLayou
 export const SUPERSEDE_GRACE_MS = 300;
 /** The most one layout may run before it is abandoned and the user is offered a retry. */
 export const LAYOUT_DEADLINE_MS = 30_000;
+
+const NO_POSITIONS: GraphPositions = {};
 
 export type LayoutStatus = "idle" | "pending" | "ready" | "timeout" | "error";
 
@@ -115,8 +117,9 @@ class LayoutRunner<S extends { request: LayoutRequest }> {
     try {
       const worker = this.createWorker();
       worker.addEventListener("message", (event: MessageEvent<LayoutWorkerReply>) => this.onReply(worker, event.data));
-      // A script that cannot load or a runtime fault outside the layout's own try/catch.
-      worker.addEventListener("error", () => this.onReply(worker, { id: this.running?.id ?? -1, error: "worker" }));
+      // A script that cannot load (CSP block, 404, a stale hashed chunk after a deploy) or a
+      // fault outside the layout's own try/catch: the worker is dead, whatever it was doing.
+      worker.addEventListener("error", () => this.onFault(worker));
       return worker;
     } catch {
       this.synchronous = true;
@@ -143,6 +146,22 @@ class LayoutRunner<S extends { request: LayoutRequest }> {
     }
     // else: a stale result — dropped; the newer job below is the one that matters.
     this.startQueued();
+  }
+
+  /**
+   * The worker itself failed (its own `error` event — layout failures come back as replies, not
+   * as events). A dead worker never answers again, so retrying against it would just wait out
+   * the deadline: drop it, switch THIS runner to the synchronous path for good, and re-run the
+   * job that was in flight (or the newer one waiting behind it) on the calling thread.
+   */
+  private onFault(from: Worker): void {
+    if (from !== this.worker) return;
+    const running = this.running;
+    this.clearRunning();
+    this.terminate();
+    this.synchronous = true;
+    if (this.queued) this.startQueued();
+    else if (running && running.id === this.seq) this.start({ id: running.id, source: running.source });
   }
 
   /** The running job overstayed while a newer one waits: kill the worker, start the newer. */
@@ -203,14 +222,19 @@ export function useGraphLayoutWorker<S extends { request: LayoutRequest }>(
       ),
   );
 
+  // An empty graph has nothing to lay out: answered in render (no worker, no pending flash).
+  const empty = job !== null && job.request.nodes.length === 0;
+  const emptyResult = useMemo(() => (empty && job ? { source: job, positions: NO_POSITIONS } : null), [empty, job]);
+
   useEffect(() => {
-    if (job) runner.submit(job);
+    if (job && !empty) runner.submit(job);
     else runner.cancel();
-  }, [job, runner]);
+  }, [job, empty, runner]);
   useEffect(() => () => runner.cancel(), [runner]);
 
-  // No job = nothing to show or to resurrect later (derived state, reset during render).
-  if (job === null && (state.outcome !== null || state.ready !== null)) {
+  // No job (or an empty one) = nothing to show or to resurrect later (derived state, reset
+  // during render).
+  if ((job === null || empty) && (state.outcome !== null || state.ready !== null)) {
     setState({ outcome: null, ready: null });
   }
 
@@ -220,6 +244,7 @@ export function useGraphLayoutWorker<S extends { request: LayoutRequest }>(
   }, [runner]);
 
   if (job === null) return { result: null, status: "idle", retry };
+  if (emptyResult) return { result: emptyResult, status: "ready", retry };
   const status = state.outcome?.source === job ? state.outcome.kind : "pending";
   return { result: state.ready, status, retry };
 }

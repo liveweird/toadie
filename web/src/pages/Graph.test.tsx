@@ -560,6 +560,15 @@ describe("Graph page", () => {
       });
     });
 
+    test("an empty graph shows the empty state at once, never the layout status", async () => {
+      mockGraph(mockFetch, { nodes: [], edges: [] });
+      renderPage();
+
+      expect(await screen.findByText(/nothing to render/i)).toBeInTheDocument();
+      expect(screen.queryByText("Laying out the graph…")).not.toBeInTheDocument();
+      expect(FakeWorker.instances).toHaveLength(0);
+    });
+
     test("keeps the previous nodes while a newer layout computes", async () => {
       mockGraph(mockFetch);
       const user = userEvent.setup();
@@ -580,13 +589,26 @@ describe("Graph page", () => {
       await waitFor(() => expect(screen.queryByText(/team-x/)).not.toBeInTheDocument());
     });
 
-    test("a timed-out or failed layout offers a retry", async () => {
+    test("a worker that fails to load falls back to laying out on the main thread", async () => {
+      mockGraph(mockFetch);
+      renderPage();
+      await screen.findByText("Laying out the graph…");
+      await waitFor(() => expect(FakeWorker.instances.at(-1)?.posted.length).toBeGreaterThan(0));
+      act(() => FakeWorker.instances.at(-1)!.fail());
+
+      // No error, no waiting out the deadline: the nodes arrive from the synchronous fallback.
+      expect(await screen.findByText(/svc-a \[STORED\]/)).toBeInTheDocument();
+      expect(screen.queryByText("The graph layout did not finish")).not.toBeInTheDocument();
+    });
+
+    test("a failed layout offers a retry", async () => {
       mockGraph(mockFetch);
       const user = userEvent.setup();
       renderPage();
       await screen.findByText("Laying out the graph…");
       await waitFor(() => expect(FakeWorker.instances.at(-1)?.posted.length).toBeGreaterThan(0));
-      act(() => FakeWorker.instances.at(-1)!.fail());
+      const worker = FakeWorker.instances.at(-1)!;
+      act(() => worker.reply({ id: worker.posted[0].id, error: "boom" }));
 
       expect(await screen.findByText("The graph layout did not finish")).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Try again" }));

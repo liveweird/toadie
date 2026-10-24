@@ -17,6 +17,8 @@ export class FakeWorker {
   /** Every request posted to THIS worker, in order. */
   posted: LayoutWorkerMessage[] = [];
   terminated = false;
+  /** A worker that failed (see [fail]) stays dead and silent, like a real one. */
+  private dead = false;
   private listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {};
 
   constructor(..._args: unknown[]) {
@@ -39,7 +41,7 @@ export class FakeWorker {
 
   /** The worker answers (a terminated worker is silent, like a real one). */
   reply(reply: LayoutWorkerReply): void {
-    if (this.terminated) return;
+    if (this.terminated || this.dead) return;
     for (const listener of this.listeners.message ?? []) listener({ data: reply });
   }
 
@@ -56,9 +58,11 @@ export class FakeWorker {
     while (this.answered < this.posted.length) this.answer(this.answered++);
   }
 
-  /** The worker script failing to load / a fault outside the layout's own try/catch. */
+  /** The worker script failing to load / a fault outside the layout's own try/catch: an
+   *  `error` event, after which the worker never answers again. */
   fail(): void {
     if (this.terminated) return;
+    this.dead = true;
     for (const listener of this.listeners.error ?? []) listener({});
   }
 }

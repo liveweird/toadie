@@ -164,7 +164,7 @@ describe("useGraphLayoutWorker", () => {
     expect(worker(0).terminated).toBe(false);
   });
 
-  test("an error reply and a worker fault both surface as an error with a working retry", () => {
+  test("an error reply surfaces as an error, and retry resubmits to the same worker", () => {
     const job = jobOf("a");
     const { result } = mount(job);
 
@@ -173,8 +173,56 @@ describe("useGraphLayoutWorker", () => {
 
     act(() => result.current.retry());
     expect(result.current.status).toBe("pending");
+    expect(worker(0).posted).toHaveLength(2);
+    act(() => worker(0).answer(1));
+    expect(result.current.status).toBe("ready");
+    expect(result.current.result?.source).toBe(job);
+  });
+
+  test("a worker that fails to load is dropped and the job re-runs on the calling thread, no deadline wait", () => {
+    vi.useFakeTimers();
+    const job = jobOf("a", "b");
+    const { result, rerender } = mount(job);
+
+    // The load failure is an async `error` event; the dead worker never answers.
     act(() => worker(0).fail());
-    expect(result.current.status).toBe("error");
+
+    expect(worker(0).terminated).toBe(true);
+    expect(result.current.status).toBe("ready");
+    expect(result.current.result?.source).toBe(job);
+    expect(Object.keys(result.current.result?.positions ?? {})).toEqual(["a", "b"]);
+
+    // Later jobs stay on the synchronous path: no second worker is ever spawned.
+    const next = jobOf("c");
+    rerender({ job: next });
+    expect(result.current.status).toBe("ready");
+    expect(result.current.result?.source).toBe(next);
+    expect(FakeWorker.instances).toHaveLength(1);
+  });
+
+  test("a load failure with a newer job waiting runs the newer one, not the stale one", () => {
+    const { result, rerender } = mount(jobOf("old"));
+    const newest = jobOf("new");
+    rerender({ job: newest });
+
+    act(() => worker(0).fail());
+
+    expect(result.current.status).toBe("ready");
+    expect(result.current.result?.source).toBe(newest);
+  });
+
+  test("an empty request is answered at once: no worker, no pending state", () => {
+    const empty = jobOf();
+    const { result, rerender } = mount(empty);
+
+    expect(result.current).toMatchObject({ status: "ready" });
+    expect(result.current.result?.source).toBe(empty);
+    expect(result.current.result?.positions).toEqual({});
+    expect(FakeWorker.instances).toHaveLength(0);
+
+    // Back to a real graph: pending with nothing resurrected from before the empty spell.
+    rerender({ job: jobOf("a") });
+    expect(result.current).toMatchObject({ status: "pending", result: null });
   });
 
   test("no job terminates the worker and forgets the result", () => {
