@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { Badge, Group, Stack, Text, Tooltip } from "@mantine/core";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { useTranslation } from "react-i18next";
 import type { EntityGraphNode as EntityGraphNodeApi } from "../api/entities";
 import type { LaidOutNode } from "../utils/graphLayout";
 import { asTier } from "../utils/tiers";
@@ -42,7 +41,6 @@ function NodeTooltipLabel({ node }: { node: EntityGraphNodeApi }) {
  * child — the same axe `nested-interactive` rule.
  */
 function EntityGraphNode({ data }: NodeProps<LaidOutNode<EntityGraphNodeApi>>) {
-  const { t } = useTranslation();
   const node = data.apiNode;
   const fold = data.fold;
   // The owning blueprint's fill-in tier, stamped on the node data by the page (2.18.0).
@@ -50,6 +48,8 @@ function EntityGraphNode({ data }: NodeProps<LaidOutNode<EntityGraphNodeApi>>) {
   return (
     <div style={{ position: "relative", width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT }}>
       <Handle type="target" position={Position.Left} />
+      {/* Named by its visible face (title, identifier, blueprint), not an "Open …" label that would
+          not contain that text (WCAG 2.5.3, axe label-content-name-mismatch). */}
       <div
         role="button"
         tabIndex={0}
@@ -69,7 +69,6 @@ function EntityGraphNode({ data }: NodeProps<LaidOutNode<EntityGraphNodeApi>>) {
           ...STATUS_STYLE.STORED,
           ...(fold?.collapsed ? COLLAPSED_FACE_STYLE.STORED : {}),
         }}
-        aria-label={t("entityGraph.nodeAria", { name: node.title })}
       >
         <Tooltip label={<NodeTooltipLabel node={node} />} multiline w={240} withArrow position="top">
           <Text size="sm" fw={600} truncate>

@@ -35,6 +35,5 @@
     "retrySave": "Ponów zapisywanie układu"
   },
   "empty": "Nie ma czego renderować — żadna encja nie pasuje.",
-  "nodeAria": "Otwórz {{name}}",
   "expandAll": "Rozwiń wszystko"
 }

@@ -42,7 +42,7 @@ describe("UserMenu", () => {
     stubFetch((url) => (url === "/api/v1/users/7" ? Response.json(ME) : undefined));
     const user = userEvent.setup();
     renderMenu();
-    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
     expect(await screen.findByText("alice@toadie.local")).toBeInTheDocument();
     expect(screen.getAllByText("Alice Admin").length).toBeGreaterThan(0);
     expect(screen.getByText("Admin")).toBeInTheDocument();
@@ -50,11 +50,27 @@ describe("UserMenu", () => {
     expect(screen.getByRole("menuitem", { name: /Changelog/ })).toHaveAttribute("href", "/changelog");
   });
 
+  test("names the trigger by its visible text: the user's name first, the initials as CSS content", async () => {
+    stubFetch((url) => (url === "/api/v1/users/7" ? Response.json(ME) : undefined));
+    renderMenu();
+    const trigger = await screen.findByRole("button", { name: "Alice Admin – Account menu" });
+    expect(trigger.querySelector("[data-initials]")).toHaveAttribute("data-initials", "AA");
+    expect(screen.queryByText("AA")).not.toBeInTheDocument();
+  });
+
+  test("before the identity loads the trigger is the plain Account menu with the placeholder avatar", () => {
+    stubFetch(() => undefined);
+    renderMenu();
+    const trigger = screen.getByRole("button", { name: "Account menu" });
+    expect(trigger.querySelector("[data-initials]")).toBeNull();
+    expect(trigger.querySelector(".mantine-Avatar-placeholder svg")).not.toBeNull();
+  });
+
   test("lists every language by its native name; a pick switches the UI and saves server-side", async () => {
     const mockFetch = stubFetch((url) => (url === "/api/v1/users/7" ? Response.json(ME) : undefined));
     const user = userEvent.setup();
     renderMenu();
-    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
     expect(await screen.findByRole("menuitem", { name: "English" })).toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Polski" }));
     expect(i18n.resolvedLanguage).toBe("pl");
@@ -71,7 +87,7 @@ describe("UserMenu", () => {
     const mockFetch = stubFetch(() => undefined);
     const user = userEvent.setup();
     renderMenu();
-    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
     await user.click(await screen.findByRole("menuitem", { name: "Polski" }));
     expect(i18n.resolvedLanguage).toBe("pl");
     expect(mockFetch).not.toHaveBeenCalled();
@@ -81,7 +97,7 @@ describe("UserMenu", () => {
     stubFetch(() => undefined);
     const user = userEvent.setup();
     renderMenu();
-    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
     await user.click(await screen.findByRole("radio", { name: "Dark" }));
     await waitFor(() =>
       expect(document.documentElement.getAttribute("data-mantine-color-scheme")).toBe("dark"),
@@ -93,7 +109,7 @@ describe("UserMenu", () => {
     stubFetch(() => undefined);
     const user = userEvent.setup();
     renderMenu();
-    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
     await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(localStorage.getItem("toadie.auth.token")).toBeNull());
     expect(await screen.findByText("login page")).toBeInTheDocument();
