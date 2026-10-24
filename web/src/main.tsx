@@ -21,7 +21,7 @@ import { bindQueryCacheToAuthBoundary } from "./auth";
 import { theme } from "./theme";
 
 const queryClient = new QueryClient({
-  // Never retry a 4xx; up to two retries for transient failures (see shouldRetryQuery).
+  // Never retry a 4xx except a 429; up to two retries for transient failures (see shouldRetryQuery).
   defaultOptions: { queries: { retry: shouldRetryQuery } },
 });
 // Every auth boundary (a definitive refresh rejection, sign-in, cross-tab session

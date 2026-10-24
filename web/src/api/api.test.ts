@@ -134,11 +134,18 @@ describe("ApiError and helpers", () => {
     expect(new ApiError(500, null).detail).toBeUndefined();
   });
 
-  test("shouldRetryQuery never retries a 4xx and caps transient retries at two", () => {
+  test("shouldRetryQuery never retries a 4xx other than 429 and caps transient retries at two", () => {
     expect(shouldRetryQuery(0, new ApiError(403, null))).toBe(false);
+    expect(shouldRetryQuery(0, new ApiError(400, null))).toBe(false);
     expect(shouldRetryQuery(0, new ApiError(500, null))).toBe(true);
     expect(shouldRetryQuery(1, new Error("network"))).toBe(true);
     expect(shouldRetryQuery(2, new Error("network"))).toBe(false);
+  });
+
+  test("shouldRetryQuery retries a 429 (the read budget's contention answer) up to twice", () => {
+    expect(shouldRetryQuery(0, new ApiError(429, null))).toBe(true);
+    expect(shouldRetryQuery(1, new ApiError(429, null))).toBe(true);
+    expect(shouldRetryQuery(2, new ApiError(429, null))).toBe(false);
   });
 
   test("safeJson returns null for a non-JSON body", async () => {
