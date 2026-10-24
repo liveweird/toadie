@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Route, Routes } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import { stubVirtualLayout } from "../test/virtualLayout";
 import Hierarchy from "./Hierarchy";
 
 const TOKEN_KEY = "toadie.auth.token";
@@ -272,5 +273,63 @@ describe("Hierarchy page", () => {
     // The view's own controls are the `children` — rendered regardless.
     expect(screen.getByRole("button", { name: "Expand all" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Collapse all" })).toBeInTheDocument();
+  });
+
+  describe("a long forest (above the virtualization threshold)", () => {
+    // One system holding 400 components, the first of which has a subcomponent: 402 flat rows.
+    const names = Array.from({ length: 400 }, (_, i) => `comp-${String(i).padStart(3, "0")}`);
+    const BIG_GRAPH = {
+      nodes: [
+        { id: "system:default/root", kind: "system", namespace: "default", name: "root", title: null, fileId: 1, revision: 1, status: "STORED" },
+        ...names.map((name, i) => ({
+          id: `component:default/${name}`, kind: "component", namespace: "default", name, title: null, fileId: 100 + i, revision: 1, status: "STORED",
+        })),
+        { id: "component:default/deep", kind: "component", namespace: "default", name: "deep", title: null, fileId: 999, revision: 1, status: "STORED" },
+      ],
+      edges: [
+        ...names.map((name) => ({ sourceId: `component:default/${name}`, targetId: "system:default/root", field: "spec.system" })),
+        { sourceId: "component:default/deep", targetId: "component:default/comp-000", field: "spec.subcomponentOf" },
+      ],
+    };
+
+    beforeEach(() => {
+      stubVirtualLayout();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test("mounts only the rows in view, not the whole forest", async () => {
+      mockGraph(mockFetch, BIG_GRAPH);
+      renderPage();
+      await screen.findByText("root");
+
+      const mounted = screen.getAllByRole("button", { name: /^Operations for / });
+      expect(mounted.length).toBeGreaterThan(5);
+      expect(mounted.length).toBeLessThan(100);
+      expect(screen.queryByText("comp-399")).not.toBeInTheDocument();
+    });
+
+    test("collapsing the root removes its descendants and the window collapses with it", async () => {
+      mockGraph(mockFetch, BIG_GRAPH);
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("root");
+      expect(screen.getByText("comp-000")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Toggle children of root" }));
+
+      expect(screen.queryByText("comp-000")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /^Operations for / })).toHaveLength(1);
+    });
+
+    test("a nested row's Operations menu opens inside the window", async () => {
+      mockGraph(mockFetch, BIG_GRAPH);
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByRole("button", { name: "Operations for deep" }));
+      expect(await screen.findByRole("menuitem", { name: "Quick view" })).toBeInTheDocument();
+    });
   });
 });

@@ -69,6 +69,23 @@
    the second hierarchy value from the `hierarchies` dictionary after every spec finishes, by
    which point no blueprint still references it.)
 
+## Scenario: a 320-row Entity hierarchy renders only the rows in view
+
+1. The admin signs in, creates one throwaway blueprint (a single `parent` self-relation flagged
+   as the `composition` hierarchy) and seeds 320 entities of it through the batched entity
+   import (`seedEntityChain`): eight chains of 40, so rows nest up to 40 deep.
+   - *Expected*: the blueprint is created (`201`) and every import row is `CREATED`.
+2. They open the Entity hierarchy, narrow it to this run with the search filter, pick the
+   `composition` hierarchy and press **Expand all**.
+   - *Expected*: the first entity's row (its Operations button) is on screen, yet only a window
+     of the 320 rows is in the DOM — more than a handful, fewer than half.
+3. They run the shared axe scan (WCAG A/AA, the colour-contrast waiver) over the main area.
+   - *Expected*: no violations — spacer-free absolute rows add no roles and no hidden focusables.
+4. They scroll the WINDOW to the bottom.
+   - *Expected*: the first entity's row unmounts, the list's last mounted row is visible and the
+     DOM is still bounded; its Operations menu opens (an **Edit** item) and closes on Escape.
+5. Cleanup (API): every entity newest first (a referrer before its target), then the blueprint.
+
 ## Not covered here (and why)
 
 - **The forest-shaping rule matrix** (multiple hierarchy roots, cycle-island promotion, a
@@ -92,3 +109,8 @@
   differently per hierarchy)** — this journey's two hierarchies deliberately share ONE
   relation (`parent`) to keep the second value's only in-run consumer simple; the underlying
   per-hierarchy parent-resolution rule is pinned by `entityGraph.test.ts`.
+- **The windowing mechanics and the sub-threshold identity** (the 300-row boundary, measured
+  heights, overscan, collapsed-branch removal, Pin/Collapse-all keys over the flat rows) — pinned
+  by `useVirtualRows.test.tsx`, `treeRows.test.ts` and `EntityHierarchy.test.tsx`; the journey
+  proves one real window scroll in a real browser. A spec asserting a row is ABSENT on a large
+  list must narrow with a filter first: an unmounted row also has count zero.

@@ -66,6 +66,29 @@ The stub's `onInit` hands the page a fake instance whose `fitView` records the n
   `EntityGraph.layout.test.tsx`, plus the `entity-graph.spec.ts` large-graph journey.
 - **Exception:** none.
 
+**Virtualized long lists (2.20.1).**
+
+- **Applies when:** changing the Hierarchy, Entity hierarchy or either Errors page
+  (`Hierarchy.tsx`, `EntityHierarchy.tsx`, `Errors.tsx`, `EntityErrors.tsx`),
+  `hooks/useVirtualRows.ts`, `utils/treeRows.ts`, or the `VirtualTreeList` / `VirtualTableFrame` /
+  `VirtualSpacerRow` components.
+- **Requirement:** one render path with the 300-row threshold: at or below it every row renders and
+  tables are exactly the plain table (no spacers, no sticky header, no `data-index`/`aria-rowindex`) and tree rows differ from the pre-2.20.1 markup only by their flat `.treeLine` wrappers; above it only the
+  rows in view plus overscan are mounted, with MEASURED heights, a size cache keyed by row identity (`getKey`, so a collapse above the window cannot leave a stale height on a shifted row), a scroll margin re-measured when content above grows, and the window as the scroller.
+  Table rows stay `<tr>`s in flow between `aria-hidden` spacer rows; tree rows are flattened with
+  the recursive renderer's `pathKey` chain, so collapse keys and the pin do not change. Unit
+  tests stub the layout the way `test/virtualLayout.ts` does (happy-dom measures every element at
+  0px, which would let the virtualizer mount everything). A spec asserting a row is ABSENT on a
+  large list must narrow with a filter first: an unmounted row has count zero too, so
+  `getByText(name)` + `toHaveCount(0)` false-passes.
+- **Reference:** `web/CLAUDE.md` "The hierarchy view", "Entity graph & hierarchy", the Errors bullet
+  in the list-page template and "Entity errors".
+- **Enforcement:** `useVirtualRows.test.tsx` (incl. the index-shift and scroll-margin cases), `treeRows.test.ts`, the "long forest" / "long
+  report" cases in `Hierarchy.test.tsx`, `EntityHierarchy.test.tsx`, `Errors.test.tsx` and
+  `EntityErrors.test.tsx`, plus the `entity-hierarchy.spec.ts` 320-row journey.
+- **Exception:** the Entities list is server-paged (its DOM is bounded by the page size) and is
+  not virtualized.
+
 **Refresh crossing sign-out.** Use held responses to exercise the shared transport after an
 old protected request receives 401: hold refresh, perform the real best-effort logout with
 its revoke request failing, then release refresh. The browser session must remain cleared

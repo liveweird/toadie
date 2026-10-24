@@ -5,6 +5,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
 import { blueprintResponse } from "../test/fixtures";
+import { stubVirtualLayout } from "../test/virtualLayout";
 
 // The entity query bar's real CodeMirror editor is covered by its own QueryEditor.test.tsx
 // (a real mount) and EntityQueryBar.test.tsx — page tests drive a plain textarea stand-in.
@@ -566,6 +567,64 @@ describe("EntityHierarchy page", () => {
 
       await user.click(screen.getByRole("button", { name: "Operations for Platform" }));
       expect(await screen.findByRole("menuitem", { name: "Owned by this team" })).toBeInTheDocument();
+    });
+  });
+
+  describe("a long forest (above the virtualization threshold)", () => {
+    // One team holding 400 services, the first of which has a child of its own: 402 flat rows.
+    const ids = Array.from({ length: 400 }, (_, i) => String(i).padStart(3, "0"));
+    const BIG_GRAPH = {
+      nodes: [
+        { id: "team|root", entityId: 1, blueprint: "team", blueprintTitle: "Team", identifier: "root", title: "Root", findings: 0 },
+        ...ids.map((n, i) => ({
+          id: `service|svc-${n}`, entityId: 100 + i, blueprint: "service", blueprintTitle: "Service", identifier: `svc-${n}`, title: `Svc ${n}`, findings: 0,
+        })),
+        { id: "service|deep", entityId: 999, blueprint: "service", blueprintTitle: "Service", identifier: "deep", title: "Deep", findings: 0 },
+      ],
+      edges: [
+        ...ids.map((n) => ({ sourceId: `service|svc-${n}`, targetId: "team|root", relation: "team", hierarchies: ["composition"] })),
+        { sourceId: "service|deep", targetId: "service|svc-000", relation: "team", hierarchies: ["composition"] },
+      ],
+    };
+
+    beforeEach(() => {
+      stubVirtualLayout();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test("mounts only the rows in view, not the whole forest", async () => {
+      mockGraph(mockFetch, BIG_GRAPH);
+      renderPage();
+      await screen.findByText("Root");
+
+      const mounted = screen.getAllByRole("button", { name: /^Operations for / });
+      expect(mounted.length).toBeGreaterThan(5);
+      expect(mounted.length).toBeLessThan(100);
+      expect(screen.queryByText("Svc 399")).not.toBeInTheDocument();
+    });
+
+    test("collapsing the root removes its descendants and the window collapses with it", async () => {
+      mockGraph(mockFetch, BIG_GRAPH);
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("Root");
+      expect(screen.getByText("Svc 000")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Toggle children of Root" }));
+
+      expect(screen.queryByText("Svc 000")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /^Operations for / })).toHaveLength(1);
+    });
+
+    test("a nested row's Operations menu opens inside the window", async () => {
+      mockGraph(mockFetch, BIG_GRAPH);
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByRole("button", { name: "Operations for Deep" }));
+      expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
     });
   });
 });

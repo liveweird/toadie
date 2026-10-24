@@ -66,10 +66,6 @@ Backstage sample to 10k files, on a disposable stack).
   worker, but "Show everything" on 1,000 entities still costs two main-thread tasks (414 ms and
   230 ms) when React Flow mounts 1,000 nodes and 3,435 edges. Measure React Flow's
   `onlyRenderVisibleElements` (and its effect on the fit-view and fold behaviour) on both canvases.
-- [new] **Virtualize the long lists.** At 10k rows the Entity hierarchy froze 2.3 s with 160k DOM
-  elements, the Port Errors report 2.8 s (all 9,974 rows rendered), the Backstage Hierarchy (the
-  home page) 2.6 s and the Backstage Errors page 1.9 s. Render only the visible rows, keeping tree
-  expand/collapse, row menus, keyboard navigation and the axe checks intact.
 
 ## Product
 
@@ -86,6 +82,11 @@ Backstage sample to 10k files, on a disposable stack).
 
 ## Tests
 
+- [new] **Make two parallel-run e2e flakes deterministic.** Local full runs (4 workers) failed
+  `annotations.spec.ts` intermittently (the edit step's "Applies to kinds" option never appeared;
+  2 of 3 isolated reruns failed on 2026-10-25) and `catalog-files.spec.ts`, which expects the
+  global "No catalog files" empty state while other files' specs are writing files. Both pass in
+  CI and on rerun; neither touches the pages changed by 2.19–2.20.
 - [new] **Click through a successful blueprint sync in the browser.** The e2e suite stops at the
   loopback refusal by design, since the SSRF guard rejects every address a local fixture server
   could use. A success journey needs a fixture source the guard accepts and the browser suite can

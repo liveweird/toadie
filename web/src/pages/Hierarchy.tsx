@@ -27,10 +27,12 @@ import { useQuickViewParam } from "../hooks/useQuickViewParam";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useStoredState, isString } from "../hooks/useStoredState";
-import { buildHierarchy, findPlacement, type HierarchyNode } from "../utils/hierarchy";
+import { buildHierarchy, findPlacement } from "../utils/hierarchy";
+import { branchKeys, flattenTree, type TreeRow } from "../utils/treeRows";
 import { catalogMutationErrorMessage, isCatalogRevisionConflict, loadErrorMessage } from "../utils/saveError";
 import LoadingBlock from "../components/LoadingBlock";
 import KindBadge from "../components/KindBadge";
+import VirtualTreeList from "../components/VirtualTreeList";
 import classes from "../theme.module.css";
 
 /** The delete confirm's target — the tree row's identity, shaped like a list row. */
@@ -41,93 +43,56 @@ interface DeleteTarget {
   revision: number;
 }
 
-/** Collapse-state keys are PATHS, not node ids — a User under two Groups folds independently. */
-function pathKey(path: string, node: GraphNode): string {
-  return `${path}/${node.id}`;
-}
-
-function branchKeys(items: HierarchyNode[], path: string, into: string[]): string[] {
-  for (const item of items) {
-    const key = pathKey(path, item.node);
-    if (item.children.length > 0) {
-      into.push(key);
-      branchKeys(item.children, key, into);
-    }
-  }
-  return into;
-}
-
+/** One flat tree row (indentation and guides come from VirtualTreeList's wrapper). */
 function TreeItem({
-  item,
-  path,
-  collapsed,
+  row,
   onToggle,
   operations,
 }: {
-  item: HierarchyNode;
-  path: string;
-  collapsed: ReadonlySet<string>;
+  row: TreeRow<GraphNode>;
   onToggle: (key: string) => void;
   operations: (node: GraphNode) => ReactNode;
 }) {
   const { t } = useTranslation();
-  const { node, children } = item;
-  const key = pathKey(path, node);
-  const isCollapsed = collapsed.has(key);
+  const { node } = row.item;
   return (
-    <Box>
-      <Group gap="xs" wrap="nowrap" py={2} px={4} className={classes.treeRow}>
-        {children.length > 0 ? (
-          <ActionIcon
-            size="xs"
-            aria-label={t("hierarchy.toggleAria", { name: node.name })}
-            aria-expanded={!isCollapsed}
-            onClick={() => onToggle(key)}
-          >
-            {isCollapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
-          </ActionIcon>
-        ) : (
-          <Box w={18} style={{ flexShrink: 0 }} />
-        )}
-        <KindBadge kind={node.kind} status={node.status} size="xs" />
-        {/* Placeholders have no stored entity to open — the same `fileId == null` test the
-            row's Operations menu applies — so they stay dimmed italic text. */}
-        {node.fileId != null ? (
-          <CatalogFileNameLink id={node.fileId} name={node.name} />
-        ) : (
-          <Text size="sm" fw={400} c="dimmed" fs="italic">
-            {node.name}
-          </Text>
-        )}
-        {node.title ? (
-          <Text size="xs" c="dimmed" truncate>
-            {node.title}
-          </Text>
-        ) : null}
-        {node.status === "MISSING" && (
-          <Badge variant="outline" size="xs" color="red">
-            {t("hierarchy.badge.missing")}
-          </Badge>
-        )}
-        <Box ml="auto" style={{ flexShrink: 0 }}>
-          {operations(node)}
-        </Box>
-      </Group>
-      {children.length > 0 && !isCollapsed && (
-        <Box pl={22} ml={13} className={classes.treeBranch}>
-          {children.map((child) => (
-            <TreeItem
-              key={pathKey(key, child.node)}
-              item={child}
-              path={key}
-              collapsed={collapsed}
-              onToggle={onToggle}
-              operations={operations}
-            />
-          ))}
-        </Box>
+    <Group gap="xs" wrap="nowrap" py={2} px={4} className={classes.treeRow}>
+      {row.hasChildren ? (
+        <ActionIcon
+          size="xs"
+          aria-label={t("hierarchy.toggleAria", { name: node.name })}
+          aria-expanded={!row.collapsed}
+          onClick={() => onToggle(row.key)}
+        >
+          {row.collapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
+        </ActionIcon>
+      ) : (
+        <Box w={18} style={{ flexShrink: 0 }} />
       )}
-    </Box>
+      <KindBadge kind={node.kind} status={node.status} size="xs" />
+      {/* Placeholders have no stored entity to open — the same `fileId == null` test the
+          row's Operations menu applies — so they stay dimmed italic text. */}
+      {node.fileId != null ? (
+        <CatalogFileNameLink id={node.fileId} name={node.name} />
+      ) : (
+        <Text size="sm" fw={400} c="dimmed" fs="italic">
+          {node.name}
+        </Text>
+      )}
+      {node.title ? (
+        <Text size="xs" c="dimmed" truncate>
+          {node.title}
+        </Text>
+      ) : null}
+      {node.status === "MISSING" && (
+        <Badge variant="outline" size="xs" color="red">
+          {t("hierarchy.badge.missing")}
+        </Badge>
+      )}
+      <Box ml="auto" style={{ flexShrink: 0 }}>
+        {operations(node)}
+      </Box>
+    </Group>
   );
 }
 
@@ -171,8 +136,10 @@ export default function Hierarchy() {
     () => (pinnedId ? findPlacement(roots, pinnedId) : null),
     [roots, pinnedId],
   );
-  const visible = placement ? [placement.item] : roots;
+  const visible = useMemo(() => (placement ? [placement.item] : roots), [placement, roots]);
   const basePath = placement?.path ?? "";
+  // The visible forest, flattened (folds applied) — what the list below windows over.
+  const rows = useMemo(() => flattenTree(visible, collapsed, basePath), [visible, collapsed, basePath]);
 
   // The pinned entity left the view — a narrowed filter, a kind pill off, the file deleted —
   // so the pin drops itself. Guarded on DATA (an effect firing mid-load would discard a
@@ -310,17 +277,11 @@ export default function Hierarchy() {
         {/* A disabled (noKinds) query stays pending forever — fall through to the empty state. */}
         {isPending && !data && !noKinds ? (
           <LoadingBlock py="md" />
-        ) : visible.length > 0 ? (
-          visible.map((root) => (
-            <TreeItem
-              key={pathKey(basePath, root.node)}
-              item={root}
-              path={basePath}
-              collapsed={collapsed}
-              onToggle={toggle}
-              operations={operations}
-            />
-          ))
+        ) : rows.length > 0 ? (
+          <VirtualTreeList
+            rows={rows}
+            renderRow={(row) => <TreeItem row={row} onToggle={toggle} operations={operations} />}
+          />
         ) : !isError ? (
           <EmptyState
             icon={IconSitemap}

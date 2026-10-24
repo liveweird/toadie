@@ -5,6 +5,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import EntityErrors from "./EntityErrors";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
+import { stubVirtualLayout } from "../test/virtualLayout";
 import { blueprintResponse, entityErrorsReport } from "../test/fixtures";
 
 const TOKEN_KEY = "toadie.auth.token";
@@ -382,5 +383,77 @@ describe("EntityErrors page", () => {
     expect(await screen.findByRole("status")).toBeInTheDocument();
     release();
     await screen.findByText("Required property missing");
+  });
+
+  describe("a long report (above the virtualization threshold)", () => {
+    const pad = (i: number) => String(i).padStart(3, "0");
+    // 250 entity + 100 blueprint + 60 saved-query rows: 410, concatenated into one windowed list.
+    const BIG_REPORT = entityErrorsReport({
+      entities: Array.from({ length: 250 }, (_, i) => ({
+        id: 1000 + i,
+        blueprintId: 1,
+        blueprint: "service",
+        blueprintTitle: "Service",
+        identifier: `svc-${pad(i)}`,
+        title: `Svc ${pad(i)}`,
+        team: [],
+        findings: [{ code: "REQUIRED_MISSING", field: "properties.name", message: "name is required" }],
+      })),
+      blueprints: Array.from({ length: 100 }, (_, i) => ({
+        id: 2000 + i,
+        identifier: `bp-${pad(i)}`,
+        title: `Bp ${pad(i)}`,
+        findings: [{ code: "CALCULATION_COMPILE_FAILED", field: "calculationProperties.cost", message: "syntax error" }],
+      })),
+      savedQueries: Array.from({ length: 60 }, (_, i) => ({
+        id: 3000 + i,
+        name: `query-${pad(i)}`,
+        visibility: "PRIVATE" as const,
+        createdBy: 1,
+        query: "MATCH (n:nope) RETURN n",
+        diagnostics: [{ code: "UNKNOWN_LABEL", message: "Unknown blueprint", line: 1, column: 8, endLine: 1, endColumn: 12 }],
+      })),
+      checkedEntities: 250,
+      checkedBlueprints: 100,
+      checkedSavedQueries: 60,
+    });
+
+    beforeEach(() => {
+      stubVirtualLayout(72);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test("mounts only the rows in view, with a sticky header and hidden spacers", async () => {
+      mockReport(mockFetch, BIG_REPORT);
+      renderPage();
+
+      expect(await screen.findByText("svc-000")).toBeInTheDocument();
+      const table = screen.getByRole("table", { name: "Errors" });
+      expect(table.querySelector("thead")).toHaveAttribute("data-sticky");
+      // 250 + 100 + 60 rows plus the header row.
+      expect(table).toHaveAttribute("aria-rowcount", "411");
+      expect(screen.getByText("svc-000").closest("tr")).toHaveAttribute("aria-rowindex", "2");
+      const rendered = within(table).getAllByRole("row").length;
+      expect(rendered).toBeGreaterThan(5);
+      expect(rendered).toBeLessThan(100);
+      // The tail of the concatenated list (saved queries) is not mounted.
+      expect(screen.queryByText("query-059")).not.toBeInTheDocument();
+      expect(table.querySelectorAll("tbody > tr[aria-hidden='true']").length).toBeGreaterThan(0);
+    });
+
+    test("the plain report keeps the unwindowed table", async () => {
+      mockReport(mockFetch);
+      renderPage();
+
+      await screen.findByText("Required property missing");
+      const table = screen.getByRole("table", { name: "Errors" });
+      expect(table.querySelector("thead")).not.toHaveAttribute("data-sticky");
+      expect(table.querySelectorAll("tr[aria-hidden='true']")).toHaveLength(0);
+      expect(table).not.toHaveAttribute("aria-rowcount");
+      expect(table.querySelector("[aria-rowindex]")).toBeNull();
+    });
   });
 });

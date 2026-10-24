@@ -160,7 +160,9 @@ from Lettuce, that any new or edited spec must satisfy:
   `e2e-eg-*`-marked `_team` entity, plus its throwaway user's `entity-graph-layout` document
   (see its own bullet below, alongside `graph-persistence`/`graph`); `entity-hierarchy` owns
   its two throwaway `e2e-eh-*` blueprints and entities plus one throwaway `e2e-eh-*`-marked
-  `_team` entity (run as the seed admin — entities carry no admin gate); `entity-query` owns
+  `_team` entity (run as the seed admin — entities carry no admin gate), and, for its
+  long-forest journey, a third `e2e-eh-*` blueprint with 320 chained entities imported in two
+  batches; `entity-query` owns
   its two throwaway `e2e-eq-*` blueprints and three entities (run as the seed admin; the
   shared, account-scoped `entityQuery.*` draft/applied state lives in the browser context's own
   localStorage, never on the server);
@@ -427,7 +429,12 @@ the same commit** — this list is the coverage map, the scenario file is the de
   deleting the parent
   is refused (`409`) naming the referring children, and switching the toolbar's Hierarchy
   picker to global-setup's own second hierarchy value — flagged on the SAME `parent` relation
-  — reproduces the identical nesting before switching back → cleanup.
+  — reproduces the identical nesting before switching back → cleanup. A second journey (2.20.1)
+  seeds one more throwaway blueprint and 320 chained entities (`seedEntityChain`) and, as the
+  seed admin, expands the whole forest under the `composition` hierarchy: only a window of the
+  rows is in the DOM with the first row on screen, the shared axe scan passes, scrolling the
+  window to the bottom unmounts the first row and mounts the last (whose Operations menu
+  opens and closes) → cleanup.
 - [`responsive-layout.spec.ts`](scenarios/responsive-layout.md) — full-width desktop registries,
   locally scrolling mobile tables, readable dynamic entity columns, deep hierarchy actions,
   query-editor space, and changelog wrapping.

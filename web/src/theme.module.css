@@ -268,10 +268,46 @@
   background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
 }
 
-.treeBranch {
-  margin-left: 13px;
-  padding-left: 22px;
-  border-left: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+/* One flat tree row (VirtualTreeList): indentation is depth × step, and the branch guides —
+   one hairline per ancestor level — are a repeating gradient over exactly that indent, so the
+   rows can be windowed without a nested box per branch. */
+.treeLine {
+  --tree-step: 35px;
+  --tree-guide-x: 13px;
+  --tree-guide-color: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  padding-left: calc(var(--tree-depth, 0) * var(--tree-step));
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0 var(--tree-guide-x),
+    var(--tree-guide-color) var(--tree-guide-x) calc(var(--tree-guide-x) + 1px),
+    transparent calc(var(--tree-guide-x) + 1px) var(--tree-step)
+  );
+  background-size: calc(var(--tree-depth, 0) * var(--tree-step)) 100%;
+  background-repeat: no-repeat;
+  /* Keep a row scrolled into view clear of the 48px shell header. */
+  scroll-margin-top: 56px;
+}
+
+/* A windowed Errors table's frame (VirtualTableFrame): the page itself scrolls, so the sticky
+   header sticks; only where the canvas is narrower than the table's minimum width does the
+   frame become its own horizontal scroller (and the header then simply scrolls with the rows). */
+@media (max-width: 75em) {
+  .virtualTableFrame {
+    overflow-x: auto;
+  }
+}
+
+/* A windowed list: a box as tall as every row, the mounted rows positioned inside it. */
+.virtualList {
+  position: relative;
+  width: 100%;
+}
+
+.virtualRow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
 }
 
 /* Keep the action trigger visible while the title and identifier share the available row.
@@ -458,9 +494,9 @@
 }
 
 @media (max-width: 48em) {
-  .treeBranch {
-    margin-left: 5px;
-    padding-left: 8px;
+  .treeLine {
+    --tree-step: 13px;
+    --tree-guide-x: 5px;
   }
 
   .queryEditorRow {
