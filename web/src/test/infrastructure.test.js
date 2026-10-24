@@ -114,6 +114,13 @@ describe("deployment and verification safety defaults", () => {
       expect(baseline).toContain(eventBase);
     }
     expect(baseline).not.toContain("github.sha");
+    // A force-pushed branch's unreachable before SHA falls back to its merge-base, for push events only.
+    const resolver = backend.steps.find((step) => step.id === "baseline");
+    expect(resolver.run).toContain('"$GITHUB_EVENT_NAME" = "push"');
+    expect(resolver.run).toContain("git cat-file -e");
+    expect(resolver.run).toContain("git merge-base origin/master HEAD");
+    const build = backend.steps.find((step) => step.run?.startsWith("./gradlew build"));
+    expect(build.env.GRAPHQL_BASELINE_REVISION).toBe("${{ steps.baseline.outputs.revision }}");
     const smokeSteps = parse(e2eSource).jobs.e2e.steps;
     expect(smokeSteps.some((step) => step.run === "npm run smoke:graphql -- compose")).toBe(true);
   });

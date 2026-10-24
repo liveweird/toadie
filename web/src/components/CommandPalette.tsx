@@ -152,12 +152,9 @@ export default function CommandPalette({ world }: { world: World }) {
   const placeholder = t(PLACEHOLDER[world]);
   return (
     <>
-      <UnstyledButton
-        className={classes.paletteTrigger}
-        visibleFrom="sm"
-        aria-label={t("appShell.palette.open")}
-        onClick={palette.open}
-      >
+      {/* No aria-label: the visible placeholder and shortcut ARE the accessible name (WCAG 2.5.3, axe
+          label-content-name-mismatch); only the icon-only narrow-screen trigger below needs one. */}
+      <UnstyledButton className={classes.paletteTrigger} visibleFrom="sm" onClick={palette.open}>
         <IconSearch size={16} />
         <Text component="span" size="sm" inherit>
           {placeholder}
