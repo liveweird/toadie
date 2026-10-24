@@ -568,6 +568,40 @@ class EntityQueryRouteTest {
     }
 
     @Test
+    fun `a whole-workspace graph read is decided entirely at admission`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-rb-admit", UserRole.ADMIN)
+        val bp = unique("bp-rb-admit")
+        val ids = List(3) { unique("ent-rb-admit-$it") }
+        try {
+            client.createBlueprint(simpleBlueprint(bp))
+            ids.forEach { client.postJson("/api/v1/entities", entityRequest(bp, it)) }
+            val filter = EntityGraphFilter(listOf(bp), q = null)
+            // The unconstrained read's peak IS its admission estimate: the decode charges draw the
+            // prepaid pool down and never move the shared total.
+            val probe = ReadLedger()
+            assertEquals(ids.size, TestEntities.tunedService(readLedger = probe).graph(filter).nodes.size)
+            val estimate = probe.peak
+            assertTrue(estimate > 0)
+            // Exactly that capacity admits the whole read ...
+            val exact = ReadLedger(capacity = estimate)
+            assertEquals(ids.size, TestEntities.tunedService(readLedger = exact).graph(filter).nodes.size)
+            assertEquals(estimate, exact.peak)
+            assertEquals(0L, exact.inFlightBytes)
+            // ... and one byte less refuses it up front, before any document is decoded.
+            val tight = ReadLedger(capacity = estimate - 1)
+            val failure = assertFailsWith<EntityQueryInvalidException> {
+                TestEntities.tunedService(readLedger = tight).graph(filter)
+            }
+            assertEquals(QueryDiagnosticCodes.WORKSPACE_TOO_LARGE, failure.diagnostics.single().code)
+            assertEquals(0L, tight.peak)
+        } finally {
+            TestEntities.remove(*ids.toTypedArray())
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    @Test
     fun `a workspace too large for the ledger refuses a query graph with WORKSPACE_TOO_LARGE`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("ent-rb-query", UserRole.ADMIN)
@@ -626,7 +660,7 @@ class EntityQueryRouteTest {
             // own-request 400.
             val capacity = 8L * 1024 * 1024
             val ledger = ReadLedger(capacity = capacity)
-            val other = ledger.open().apply { charge(capacity - 1) }
+            val other = ledger.open().apply { reserve(capacity - 1) }
             try {
                 val tuned = TestEntities.tunedService(readLedger = ledger)
                 val filter = EntityFilter(blueprint = bp, q = null)

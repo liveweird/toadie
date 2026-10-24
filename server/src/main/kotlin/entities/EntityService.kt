@@ -229,9 +229,9 @@ class EntityService(
      * read-set machinery — it only ever needs the resulting [RowLookup] to walk an Inherited
      * ownership path, never [EntitySnapshot]/[WorkspaceRow] themselves, so this ONE narrow
      * accessor is internal rather than [loadReadSet] (or its private return type) directly.
-     * A null reservation preserves REST's existing filter-resolution exemption. Integration
-     * reads pass their reservation because the lookup retains decoded target skeletons while
-     * matching candidates, even though candidate full documents are transient.
+     * Every reader passes its reservation (REST and integration alike, 2.19.0): the lookup retains
+     * decoded target skeletons while matching candidates, even though candidate full documents
+     * are transient. A null reservation exempts only writers.
      */
     internal suspend fun rowLookupFor(
         definitions: Collection<BlueprintDefinition>,
@@ -372,9 +372,7 @@ class EntityService(
                     filter.q?.let { q -> predicate = predicate and qPredicate(q) }
                     if (filter.team != null && !unknownBlueprint) {
                         val candidates = filterBlueprint?.let { listOf(it) } ?: activeBlueprints
-                        val inheritedIds = inheritedTeamMatches(
-                            filter.team, candidates, blueprintsByIdentifier, reservation.takeIf { budget != null },
-                        )
+                        val inheritedIds = inheritedTeamMatches(filter.team, candidates, blueprintsByIdentifier, reservation)
                         predicate = predicate and teamPredicate(filter.team, blueprintsByIdentifierFolded, inheritedIds)
                     }
 

@@ -81,34 +81,39 @@ class OntologyIntegrationFilterBudgetTest {
                 owner,
             )
 
+            // Even an empty page reads the system team/user targets, and an Inherited `team` filter
+            // adds its prologue (rowLookupFor → loadReadSet) on the SAME reservation — for REST and
+            // integration alike (2.19.0). Measure both instead of assuming the shared workspace is empty.
             val listFilter = EntityFilter(childBlueprint, null, missingTeam)
-            // Even an empty page reads the system team/user targets. Measure that legitimate
-            // REST baseline instead of assuming the shared test workspace contains no targets.
-            val ordinaryListLedger = ReadLedger()
-            val ordinaryListService = TestEntities.tunedService(readLedger = ordinaryListLedger)
-            assertEquals(0L, ordinaryListService.list(listFilter, page()).total)
-            assertTrue(ordinaryListLedger.peak > 0)
-            val listLedger = ReadLedger(capacity = ordinaryListLedger.peak)
-            val listService = TestEntities.tunedService(readLedger = listLedger)
+            val noTeamListLedger = ReadLedger()
+            val noTeamList = EntityFilter(childBlueprint, null)
+            assertEquals(1L, TestEntities.tunedService(readLedger = noTeamListLedger).list(noTeamList, page()).total)
+            val listLedger = ReadLedger()
+            assertEquals(0L, TestEntities.tunedService(readLedger = listLedger).list(listFilter, page()).total)
+            assertTrue(listLedger.peak > noTeamListLedger.peak, "the team prologue must be reserved on the request's ledger")
 
-            assertEquals(0L, listService.list(listFilter, page()).total)
-            assertFailsWith<BadRequestException> {
-                listService.list(listFilter, page(), OntologyReadBudget())
-            }
+            val listFits = TestEntities.tunedService(readLedger = ReadLedger(capacity = listLedger.peak))
+            assertEquals(0L, listFits.list(listFilter, page()).total)
+            assertEquals(0L, listFits.list(listFilter, page(), OntologyReadBudget()).total)
+            val listTight = TestEntities.tunedService(readLedger = ReadLedger(capacity = listLedger.peak - 1))
+            assertFailsWith<BadRequestException> { listTight.list(listFilter, page()) }
+            assertFailsWith<BadRequestException> { listTight.list(listFilter, page(), OntologyReadBudget()) }
 
             val errorsFilter = EntityGraphFilter(listOf(childBlueprint), null, missingTeam)
+            val noTeamErrorsLedger = ReadLedger()
+            TestEntities.tunedService(readLedger = noTeamErrorsLedger)
+                .ontologyErrors(EntityGraphFilter(listOf(childBlueprint), "$marker-matches-nothing"))
             val baselineLedger = ReadLedger()
-            val baselineService = TestEntities.tunedService(readLedger = baselineLedger)
-            val baselineReport = baselineService.ontologyErrors(errorsFilter)
+            val baselineReport = TestEntities.tunedService(readLedger = baselineLedger).ontologyErrors(errorsFilter)
             assertEquals(0, baselineReport.checkedEntities)
-            assertTrue(baselineLedger.peak > 0)
+            assertTrue(baselineLedger.peak > noTeamErrorsLedger.peak)
 
-            val constrainedLedger = ReadLedger(capacity = baselineLedger.peak)
-            val constrainedService = TestEntities.tunedService(readLedger = constrainedLedger)
-            assertEquals(0, constrainedService.ontologyErrors(errorsFilter).checkedEntities)
-            assertFailsWith<BadRequestException> {
-                constrainedService.ontologyErrors(errorsFilter, OntologyReadBudget())
-            }
+            val errorsFits = TestEntities.tunedService(readLedger = ReadLedger(capacity = baselineLedger.peak))
+            assertEquals(0, errorsFits.ontologyErrors(errorsFilter).checkedEntities)
+            assertEquals(0, errorsFits.ontologyErrors(errorsFilter, OntologyReadBudget()).checkedEntities)
+            val errorsTight = TestEntities.tunedService(readLedger = ReadLedger(capacity = baselineLedger.peak - 1))
+            assertFailsWith<BadRequestException> { errorsTight.ontologyErrors(errorsFilter) }
+            assertFailsWith<BadRequestException> { errorsTight.ontologyErrors(errorsFilter, OntologyReadBudget()) }
         } finally {
             TestEntities.remove(child, parent, team)
             TestBlueprints.remove(childBlueprint, parentBlueprint)

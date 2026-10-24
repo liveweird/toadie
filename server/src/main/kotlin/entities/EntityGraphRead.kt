@@ -155,7 +155,7 @@ private suspend fun EntityService.materializeGraph(
         it.identifier to GraphBlueprint(it.identifier, it.title, it.definition, it.hierarchyRelations, it.tiers)
     }
 
-    val scope = shownScope(filter, activeBlueprints) ?: return null
+    val scope = shownScope(filter, activeBlueprints, reservation) ?: return null
 
     val targets = if (parsedQuery != null) {
         blueprintsByIdentifier.keys

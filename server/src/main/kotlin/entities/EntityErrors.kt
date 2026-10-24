@@ -337,7 +337,7 @@ private suspend fun EntityService.readErrorReport(
                 val blueprintsById = activeBlueprints.associateBy { it.id }
                 val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
                 val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
-                val scope = shownScope(filter, activeBlueprints, reservation.takeIf { budget != null })
+                val scope = shownScope(filter, activeBlueprints, reservation)
                 val (entitySubjects, blueprintCandidates) = if (scope != null) {
                     val targets = narrowTargets(scope.candidates.map { it.definition }, definitionsByIdentifier, computed = false)
                     val readSet = loadReadSet(scope.predicate, targets, blueprintsByIdentifier, reservation)

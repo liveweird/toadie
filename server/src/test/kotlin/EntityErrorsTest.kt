@@ -545,7 +545,7 @@ class EntityErrorsTest {
 
             val capacity = 8L * 1024 * 1024
             val busyLedger = ReadLedger(capacity = capacity)
-            val other = busyLedger.open().apply { charge(capacity - 1) }
+            val other = busyLedger.open().apply { reserve(capacity - 1) }
             try {
                 val busy = TestEntities.tunedService(readLedger = busyLedger)
                 assertFailsWith<TooManyRequestsException> { busy.errors(EntityGraphFilter(listOf(bp), q = null), callerId) }

@@ -2,6 +2,7 @@ package ch.nokillswit.infra.concurrency
 
 import ch.nokillswit.authz.TooManyRequestsException
 import io.ktor.server.plugins.BadRequestException
+import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -16,15 +17,31 @@ import java.util.concurrent.atomic.AtomicLong
 const val READ_BUDGET_BYTES = 64L * 1024 * 1024
 
 /**
- * Thrown by [ReadLedger.Reservation.charge] when a charge does not fit. [ownRequest] is true
- * when THIS reservation alone would exceed the capacity (the caller's workspace is too large — a
- * `400`), false when other in-flight reads hold the room (contention — a `429`).
+ * Thrown by [ReadLedger.Reservation.reserve] and [ReadLedger.Reservation.charge] when the bytes do
+ * not fit. [ownRequest] is true when THIS reservation alone would exceed the capacity (the
+ * caller's workspace is too large — a `400`), false when other in-flight reads hold the room
+ * (contention — a `429`).
  */
 class ReadBudgetExceeded(val ownRequest: Boolean, val requested: Long) :
     RuntimeException("read budget exceeded (ownRequest=$ownRequest, requested=$requested)")
 
-/** The process-wide in-flight read ledger — one per application; a test seam via its capacity. */
+// Operational only (never audited, `.claude/docs/observability.md` "Not audit events"): sizes, no
+// caller and no content. The `JqCalculation.kt` named-logger idiom.
+private val log = LoggerFactory.getLogger("ch.nokillswit.infra.concurrency.ReadLedger")
+
+/**
+ * The process-wide in-flight read ledger — one per application; a test seam via its capacity.
+ * A read PREPAYS: [Reservation.reserve] books its whole conservative estimate in one step (it is
+ * admitted or refused up front, nothing is held while deciding), and the per-row decode
+ * [Reservation.charge]s that follow draw that prepaid pool down instead of moving the shared
+ * total. N concurrent reads therefore admit exactly floor(capacity / estimate) and the rest are
+ * refused immediately, rather than every read discovering the overflow row by row.
+ */
 class ReadLedger(private val capacity: Long = READ_BUDGET_BYTES) {
+    init {
+        require(capacity > 0) { "capacity must be positive" }
+    }
+
     private val inFlight = AtomicLong(0)
     private val peakSeen = AtomicLong(0)
 
@@ -38,20 +55,66 @@ class ReadLedger(private val capacity: Long = READ_BUDGET_BYTES) {
 
     inner class Reservation : AutoCloseable {
         private var held = 0L
+        private var prepaid = 0L
+        private var reservedTotal = 0L
+        private var chargedTotal = 0L
+        private var overflowTotal = 0L
         private var closed = false
 
-        /** Charged so far by this reservation. */
-        val charged: Long get() = held
+        /** Bytes booked through [reserve] (admission estimates), a test seam. */
+        val reserved: Long get() = reservedTotal
 
-        /** Reserves [bytes] on top of what this reservation already holds, or throws [ReadBudgetExceeded]. */
+        /** Bytes presented to [charge] so far (decode charges), a test seam. */
+        val charged: Long get() = chargedTotal
+
+        /** The part of [charged] that exceeded the prepaid pool and was reserved on top, a test seam. */
+        val overflow: Long get() = overflowTotal
+
+        /**
+         * All-or-nothing admission: books the whole [estimate] on top of what this reservation
+         * already holds in ONE step and adds it to the prepaid pool [charge] draws down, or throws
+         * [ReadBudgetExceeded] with nothing held. May be called more than once per reservation (the
+         * integration list's team-filter prologue precedes its read set — a bounded two-step).
+         */
+        fun reserve(estimate: Long) {
+            check(!closed) { "reservation already closed" }
+            if (estimate <= 0) return
+            add(estimate)
+            prepaid += estimate
+            reservedTotal += estimate
+        }
+
+        /**
+         * Accounts [bytes] decoded by this read: drawn from the prepaid pool first (the shared
+         * total does not move); only the excess is reserved on top, and can still be refused as
+         * [reserve] would be. Overflow stays charged because a dense-JSON workspace is charged at
+         * its estimated heap (`.claude/docs/security.md` "Entity read memory budget"); with the
+         * calibrated admission ratios it is ~zero for sample-shaped data.
+         */
         fun charge(bytes: Long) {
             check(!closed) { "reservation already closed" }
             if (bytes <= 0) return
+            val drawn = minOf(prepaid, bytes)
+            val excess = bytes - drawn
+            if (excess > 0) {
+                add(excess)
+                overflowTotal += excess
+            }
+            prepaid -= drawn
+            chargedTotal += bytes
+        }
+
+        private fun add(bytes: Long) {
             while (true) {
                 val current = inFlight.get()
                 val next = current + bytes
                 if (next > capacity) {
-                    throw ReadBudgetExceeded(ownRequest = held + bytes > capacity, requested = held + bytes)
+                    val requested = held + bytes
+                    log.info(
+                        "read budget refused: ownRequest={} requested={} inFlight={} capacity={}",
+                        requested > capacity, requested, current, capacity,
+                    )
+                    throw ReadBudgetExceeded(ownRequest = requested > capacity, requested = requested)
                 }
                 if (inFlight.compareAndSet(current, next)) {
                     held += bytes
@@ -66,6 +129,7 @@ class ReadLedger(private val capacity: Long = READ_BUDGET_BYTES) {
             closed = true
             inFlight.addAndGet(-held)
             held = 0
+            prepaid = 0
         }
     }
 }

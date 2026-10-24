@@ -245,11 +245,16 @@ internal class ReadSet(val rows: List<WorkspaceRow>, val snapshot: EntitySnapsho
  * SELECT: loads every row [shownPredicate] matches PLUS every active row of [targetIdentifiers]
  * inside ONE transaction (the CALLER's — this is an ordinary suspend function, not a method on
  * `EntityService`, so it runs inside whatever `suspendTransaction`/`writeTransaction` the caller
- * already opened). BEFORE a single document/team value crosses the wire, [reservation] is
- * charged the exact `SUM(octet_length(document)) + SUM(octet_length(team))` of the combined row
- * set — an over-budget workspace is refused (`ReadBudgetExceeded`) before its bytes are ever
- * fetched. Rows come back RAW ([WorkspaceRow.skeleton]/[WorkspaceRow.full] decode — and charge
- * the SAME [reservation] again, lazily — only when actually touched, after this call returns).
+ * already opened). BEFORE a single document/team value crosses the wire, [reservation] RESERVES
+ * the whole estimate of the combined row set — per row `octet_length(document) +
+ * octet_length(team)` weighted by [ENTITY_SHOWN_ROW_RATIO] for a shown row (decoded in full, so
+ * prepaid) and [ENTITY_TARGET_ADMISSION_RATIO] for a row loaded only as a target (raw only; the
+ * few target rows actually decoded are charged as overflow) — in ONE all-or-nothing step: an
+ * over-budget workspace is refused (`ReadBudgetExceeded`) before its bytes are ever fetched, and
+ * nothing is held while a read is being refused. Rows come back RAW ([WorkspaceRow.skeleton]/
+ * [WorkspaceRow.full] decode only when actually touched, after this call returns) and their
+ * decode charges DRAW DOWN that prepaid pool (`ReadLedger.Reservation.charge`) instead of moving
+ * the shared total; only an overrun is reserved on top.
  * [reservation] = `null` exempts writers (`create`/`update`, already serialized by the V28 lock)
  * from both the admission check and the later decode charges.
  */
@@ -270,11 +275,13 @@ internal suspend fun loadReadSet(
     reservation?.let {
         val docLen = octetLengthOf(ReadEntities.document)
         val teamLen = octetLengthOf(ReadEntities.team)
-        val total = ReadEntities.select(docLen, teamLen).where { combinedPredicate }
-            .map { row -> (row[docLen] ?: 0L) + (row[teamLen] ?: 0L) }
+        var shownRaw = 0L
+        var targetOnlyRaw = 0L
+        ReadEntities.select(ReadEntities.id, docLen, teamLen).where { combinedPredicate }
+            .map { row -> row[ReadEntities.id].value to ((row[docLen] ?: 0L) + (row[teamLen] ?: 0L)) }
             .toList()
-            .sum()
-        it.charge(total)
+            .forEach { (id, raw) -> if (id in shownIds) shownRaw += raw else targetOnlyRaw += raw }
+        it.reserve(shownRaw * ENTITY_SHOWN_ROW_RATIO + targetOnlyRaw * ENTITY_TARGET_ADMISSION_RATIO)
     }
 
     val rows = ReadEntities.selectAll().where { combinedPredicate }
