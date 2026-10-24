@@ -411,7 +411,7 @@ describe("EntityErrors page", () => {
         visibility: "PRIVATE" as const,
         createdBy: 1,
         query: "MATCH (n:nope) RETURN n",
-        diagnostics: [{ code: "UNKNOWN_LABEL", message: "Unknown blueprint", line: 1, column: 8, endLine: 1, endColumn: 12, suggestion: null }],
+        diagnostics: [{ code: "UNKNOWN_LABEL", message: "Unknown blueprint", line: 1, column: 8, endLine: 1, endColumn: 12 }],
       })),
       checkedEntities: 250,
       checkedBlueprints: 100,
