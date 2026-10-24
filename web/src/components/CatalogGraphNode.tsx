@@ -73,7 +73,9 @@ function CatalogGraphNode({ data }: NodeProps<LaidOutNode>) {
           ...STATUS_STYLE[node.status],
           ...(fold?.collapsed ? COLLAPSED_FACE_STYLE[node.status] : {}),
         }}
-        aria-label={t("graph.nodeAria", { name: node.name })}
+        // A stored node is named by its visible face (name, kind, type) — an "Open …" label would not
+        // contain that text (WCAG 2.5.3, axe label-content-name-mismatch). A virtual node is no widget.
+        aria-label={interactive ? undefined : t("graph.nodeAria", { name: node.name })}
       >
         {/* The name owns the whole first line. The kind badge used to float over it
             (`position: absolute`), so long names ran underneath instead of ellipsizing; putting

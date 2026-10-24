@@ -159,6 +159,12 @@
   content: attr(data-tier);
 }
 
+/* The account avatar's initials, as CSS content for the same reason: a DOM text node would be
+   visible text the menu button's accessible name must contain (WCAG 2.5.3). */
+.avatarInitials::before {
+  content: attr(data-initials);
+}
+
 .tierDot[data-tier="1"] {
   background-color: light-dark(var(--mantine-color-toadie-7), var(--mantine-color-toadie-8));
   color: var(--mantine-color-white);

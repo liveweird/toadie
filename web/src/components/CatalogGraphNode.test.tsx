@@ -41,7 +41,9 @@ describe("CatalogGraphNode", () => {
     renderWithProviders(<CatalogGraphNode {...nodeProps({ status, fileId, kind })} />);
     expect(screen.getByText("svc-x")).toBeInTheDocument();
     expect(screen.getByText(kind)).toBeInTheDocument();
-    expect(screen.getByLabelText("Open svc-x")).toBeInTheDocument();
+    // A stored node is a button named by its visible face; a virtual one is no widget and keeps its label.
+    if (fileId == null) expect(screen.getByLabelText("Open svc-x")).toBeInTheDocument();
+    else expect(screen.getByRole("button", { name: /^svc-x component/ })).toBeInTheDocument();
   });
 
   test("the second line is spec.type, not the namespace", () => {
@@ -107,7 +109,7 @@ describe("CatalogGraphNode", () => {
       </div>,
     );
 
-    screen.getByLabelText("Open svc-x").focus();
+    screen.getByRole("button", { name: /^svc-x/ }).focus();
     await user.keyboard("{Enter}");
     expect(onClick).toHaveBeenCalledTimes(1);
     await user.keyboard(" ");
@@ -155,7 +157,7 @@ describe("CatalogGraphNode", () => {
       expect(onToggle).toHaveBeenCalledTimes(1);
       expect(wrapperClick).not.toHaveBeenCalled();
       // The face is still its own, separate, control — the two are siblings, not nested.
-      expect(screen.getByLabelText("Open svc-x")).not.toContainElement(toggle);
+      expect(screen.getByRole("button", { name: /^svc-x/ })).not.toContainElement(toggle);
     });
 
     test("collapsed: an Expand pill carrying the hidden count, and the keyboard path stays sealed too", async () => {
@@ -175,7 +177,7 @@ describe("CatalogGraphNode", () => {
       expect(onToggle).toHaveBeenCalledTimes(1);
       expect(wrapperClick).not.toHaveBeenCalled();
       // Enter on the FACE still opens the file — the fold sits beside it, not inside it.
-      screen.getByLabelText("Open svc-x").focus();
+      screen.getByRole("button", { name: /^svc-x/ }).focus();
       await user.keyboard("{Enter}");
       expect(wrapperClick).toHaveBeenCalledTimes(1);
       expect(onToggle).toHaveBeenCalledTimes(1);

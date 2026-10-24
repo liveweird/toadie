@@ -20,6 +20,7 @@ import { getUser, setUserLanguage } from "../api/users";
 import { flagSignedOut, notifyAuthChange } from "../auth";
 import { asSupportedLanguage, NATIVE_LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from "../i18n";
 import { useChangelogUnseen } from "../hooks/useChangelogSeen";
+import classes from "../theme.module.css";
 
 const IDENTITY_STALE_MS = 5 * 60_000;
 
@@ -63,7 +64,7 @@ export default function UserMenu() {
     enabled: userId !== null,
     staleTime: IDENTITY_STALE_MS,
   });
-  const name = identity.data?.name ?? "";
+  const name = identity.data?.name?.trim() ?? "";
 
   function pickLanguage(lng: string) {
     void i18n.changeLanguage(lng);
@@ -96,10 +97,17 @@ export default function UserMenu() {
         title={changelogUnseen ? t("changelog.whatsNew") : undefined}
       >
         <Menu.Target>
-          <UnstyledButton aria-label={t("appShell.userMenu.open")} px={4} py={2}>
+          {/* The label starts with the visible name and the initials are CSS content, so the accessible
+              name contains all the visible text (WCAG 2.5.3, axe label-content-name-mismatch). */}
+          <UnstyledButton
+            aria-label={name ? t("appShell.userMenu.openNamed", { name }) : t("appShell.userMenu.open")}
+            px={4}
+            py={2}
+          >
             <Group gap={6} wrap="nowrap">
               <Avatar size={28} radius="xl" color="toadie" variant="light">
-                {initials(name)}
+                {/* No initials yet (identity loading or failed): no child, so Avatar keeps its placeholder icon. */}
+                {name && <span className={classes.avatarInitials} data-initials={initials(name)} aria-hidden="true" />}
               </Avatar>
               {name && (
                 <Text size="sm" fw={500} visibleFrom="md" truncate maw={160}>
