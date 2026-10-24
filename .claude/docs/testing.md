@@ -48,6 +48,24 @@ not satisfy a drag waiter. Confirm the request contains that node's position bef
 the checked Manual radio and moved canvas only prove local state, not completed persistence.
 The stub's `onInit` hands the page a fake instance whose `fitView` records the node ids the stub holds at call time; the `Graph`/`EntityGraph` re-fit cases assert the fit after an expand saw the re-added node (v2.2.1 — the fit must be keyed off the live `nodes`, not `baseLayout`).
 
+**Graph layout worker (2.20.0).**
+
+- **Applies when:** changing `web/src/utils/graphLayout.ts`, the layout worker or its hook
+  (`graphLayoutWorker.ts`, `useGraphLayoutWorker.ts`), the large-graph gate (`graphGate.ts`,
+  `useLargeGraphGate.ts`), or either canvas's (`Graph.tsx`, `EntityGraph.tsx`) memo chain.
+- **Requirement:** the layout runs only on structural inputs, a stale result is never reported,
+  supersede and the deadline cancel by terminating the worker, a missing or dead worker falls
+  back to a synchronous layout, and the large-graph gate's choices are never written to the
+  layout document (details in the reference below). Tests use fake timers and
+  `test/fakeWorker.ts` — no sleeps, no real `Worker`.
+- **Reference:** `web/CLAUDE.md` "Layout off the main thread (2.20.0)" and "The large-graph
+  gate (2.20.0)" under "The Graph page".
+- **Enforcement:** `useGraphLayoutWorker.test.tsx`, `graphLayoutWorker.test.ts`,
+  `graphGate.test.ts`, `useLargeGraphGate.test.ts`, the "layout re-runs only on structural
+  inputs" cases (spy on `layoutPositions`) and the worker/gate cases in `Graph.test.tsx` and
+  `EntityGraph.layout.test.tsx`, plus the `entity-graph.spec.ts` large-graph journey.
+- **Exception:** none.
+
 **Refresh crossing sign-out.** Use held responses to exercise the shared transport after an
 old protected request receives 401: hold refresh, perform the real best-effort logout with
 its revoke request failing, then release refresh. The browser session must remain cleared

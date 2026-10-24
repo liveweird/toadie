@@ -81,6 +81,23 @@
     "collapseAria": "Zwiń {{name}}",
     "expandAria": "Rozwiń {{name}} (ukrytych: {{count}})"
   },
+  "graphLayout": {
+    "computing": "Układanie grafu…",
+    "failedTitle": "Układanie grafu nie zostało ukończone",
+    "timedOut": "Układanie grafu trwało zbyt długo. Zawęź filtry lub spróbuj ponownie.",
+    "error": "Nie udało się ułożyć grafu. Zawęź filtry lub spróbuj ponownie.",
+    "retry": "Spróbuj ponownie",
+    "large": {
+      "title": "Duży graf",
+      "body": "Węzły: {{nodes}}, relacje: {{edges}}. Ułożenie takiego grafu trwa długo, a wynik jest trudny do odczytania.",
+      "showTopLevel": "Pokaż najwyższy poziom",
+      "showAll": "Pokaż wszystko",
+      "hint": "Możesz też najpierw zawęzić wybór filtrami i przyciskami widoczności."
+    },
+    "topLevelBadge": "Najwyższy poziom",
+    "topLevelClearAria": "Wyjdź z widoku najwyższego poziomu",
+    "saveLimit": "Zbyt wiele zapisanych pozycji lub zwiniętych węzłów — użyj Resetuj układ lub Rozwiń wszystko, aby zwolnić miejsce."
+  },
   "tier": {
     "tooltip": "Poziom {{tier}} — najpierw uzupełnij niższe poziomy",
     "label": "Poziom",

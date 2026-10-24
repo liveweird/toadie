@@ -199,6 +199,56 @@ export async function createTeamEntity(
   return body.id;
 }
 
+/** The entity import endpoint's batch cap (`EntityImportRequest.documents`, `maxItems: 200`). */
+const ENTITY_IMPORT_BATCH = 200;
+
+/**
+ * Seed `n` entities of ONE blueprint through the batched entity import (several
+ * `POST /api/v1/entities/import` calls of at most 200 documents each), as chains: entity `i`
+ * points its `parent` relation at entity `i - 1` unless it starts a chain (`i % chainLength ===
+ * 0`, a ROOT). The blueprint must carry a single `parent` relation to itself; flag it in
+ * `hierarchyRelations` for the chains to nest on the Entity graph/hierarchy. Identifiers are
+ * `<prefix>-<i>` with the title `<prefix> <i>`, so a spec narrows the canvas to its own rows with
+ * the `q` search filter on the prefix. Chains may cross a batch boundary: the import resolves a
+ * parent stored by an earlier batch like any other workspace entity.
+ *
+ * Returns the stored entity ids in creation order — delete them in REVERSE (a referrer before
+ * its target) — and the root identifiers. Pass `created` (an array the caller owns) to have each
+ * stored id pushed into it AS the batches land, so a `finally` can still clean up after a
+ * mid-seed failure.
+ */
+export async function seedEntityChain(
+  request: APIRequestContext,
+  token: string,
+  blueprint: string,
+  prefix: string,
+  n: number,
+  { chainLength = 40, created = [] }: { chainLength?: number; created?: number[] } = {},
+): Promise<{ ids: number[]; roots: string[] }> {
+  const headers = { Authorization: `Bearer ${token}` };
+  const documents = Array.from({ length: n }, (_, i) => ({
+    blueprint,
+    identifier: `${prefix}-${i}`,
+    title: `${prefix} ${i}`,
+    ...(i % chainLength === 0 ? {} : { relations: { parent: `${prefix}-${i - 1}` } }),
+  }));
+  const ids = created;
+  for (let start = 0; start < documents.length; start += ENTITY_IMPORT_BATCH) {
+    const resp = await request.post("/api/v1/entities/import", {
+      headers,
+      data: { documents: documents.slice(start, start + ENTITY_IMPORT_BATCH) },
+    });
+    expect(resp.status(), `entity import batch at ${start}`).toBe(200);
+    const { results } = (await resp.json()) as { results: { status: string; id?: number; message?: string }[] };
+    // Record every stored id BEFORE asserting, so a failing row cannot hide its siblings.
+    for (const row of results) if (row.id !== undefined) ids.push(row.id);
+    for (const [offset, row] of results.entries()) {
+      expect(row.status, `import row ${start + offset}: ${row.message ?? ""}`).toBe("CREATED");
+    }
+  }
+  return { ids, roots: documents.filter((_, i) => i % chainLength === 0).map((d) => d.identifier) };
+}
+
 /**
  * Ensure a list view's filter panel is expanded. Idempotent on purpose: the open/collapsed
  * state persists per view in localStorage (toadie.viewSettings.*), so within one test a

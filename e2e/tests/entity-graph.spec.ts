@@ -1,4 +1,14 @@
-import { createTeamEntity, createUserViaUi, expect, login, openFilters, openPills, test, uniqueText } from "./helpers";
+import {
+  createTeamEntity,
+  createUserViaUi,
+  expect,
+  login,
+  openFilters,
+  openPills,
+  seedEntityChain,
+  test,
+  uniqueText,
+} from "./helpers";
 
 type EntityLayoutDocument = {
   mode: "auto" | "manual";
@@ -310,6 +320,95 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     if (user) {
       const deletedUser = await page.request.delete(`/api/v1/users/${user.id}`, { headers: authHeaders });
       expect(deletedUser.status()).toBe(204);
+    }
+  }
+});
+
+// The large-graph gate (2.20.0): one throwaway blueprint whose single self-`parent` relation is
+// the `composition` hierarchy, and 320 entities in eight chains of forty, imported through the
+// batched entity import (two batches of at most 200). The seed admin opens the canvas narrowed
+// to this run with the search filter; the gate must hold the layout back at 300+ drawn nodes
+// and nothing it does may be written to the layout document (the admin's own is only READ, so a
+// PUT of it fails the journey). Owns only its `e2e-eg-*` blueprint and entities.
+test("a large entity graph opens behind the gate and lays out on request", async ({ page }) => {
+  test.slow();
+  await login(page);
+  const adminToken = await page.evaluate(() => localStorage.getItem("toadie.auth.token"));
+  expect(adminToken !== null, "the admin login must provide setup/cleanup authorization").toBe(true);
+  const authHeaders = { Authorization: `Bearer ${adminToken}` };
+
+  const run = uniqueText("e2e-eg");
+  const blueprint = `${run}-bp-large`;
+  const total = 320;
+  const chainLength = 40;
+  const storedIds: number[] = [];
+  let blueprintId: number | undefined;
+  const layoutWrites: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "PUT" && request.url().includes("entity-graph-layout")) {
+      layoutWrites.push(request.url());
+    }
+  });
+
+  try {
+    // 0. The blueprint (a single `parent` self-relation flagged as the `composition` hierarchy)
+    // and its 320 chained entities.
+    const blueprintResp = await page.request.post("/api/v1/blueprints", {
+      headers: authHeaders,
+      data: {
+        identifier: blueprint,
+        title: "E2E EG Large Blueprint",
+        schema: { properties: {}, required: [] },
+        relations: { parent: { title: "Parent", target: blueprint, required: false, many: false } },
+        hierarchyRelations: { composition: "parent" },
+      },
+    });
+    expect(blueprintResp.status()).toBe(201);
+    blueprintId = (await blueprintResp.json()).id;
+    const { roots } = await seedEntityChain(page.request, adminToken!, blueprint, run, total, {
+      chainLength,
+      created: storedIds,
+    });
+    expect(roots).toHaveLength(total / chainLength);
+
+    // 1. Open the Entity graph narrowed to this run: 320 nodes are over the gate's 300.
+    await page.goto("/entity-graph");
+    await expect(page.getByRole("heading", { name: "Entity graph" })).toBeVisible();
+    await openFilters(page);
+    await page.getByRole("textbox", { name: "Search" }).fill(run);
+    const gate = page.getByRole("region", { name: "Large graph" });
+    await expect(gate).toBeVisible();
+    await expect(gate).toContainText(`Nodes: ${total}`);
+    await expect(page.locator(".react-flow__node")).toHaveCount(0);
+    await expect(page.getByText(/nothing to render/i)).toHaveCount(0);
+
+    // 2. Show top level: only the eight chain roots are drawn, under a "Top level" badge.
+    await gate.getByRole("button", { name: "Show top level" }).click();
+    await expect(page.locator(".react-flow__node")).toHaveCount(roots.length);
+    await expect(page.getByText("Top level", { exact: true })).toBeVisible();
+    await expect(gate).toHaveCount(0);
+
+    // 3. Leaving the top-level view brings the gate back.
+    await page.getByRole("button", { name: "Leave the top-level view" }).click();
+    await expect(gate).toBeVisible();
+    await expect(page.locator(".react-flow__node")).toHaveCount(0);
+
+    // 4. Show everything lays all 320 out (the worker; the main thread stays responsive).
+    await gate.getByRole("button", { name: "Show everything" }).click();
+    await expect(page.locator(".react-flow__node")).toHaveCount(total, { timeout: 60_000 });
+    await expect(gate).toHaveCount(0);
+
+    // Nothing the gate did reached the per-user layout document.
+    expect(layoutWrites).toEqual([]);
+  } finally {
+    // Cleanup: every entity (a referrer before its target, so newest first), then the blueprint.
+    for (const id of [...storedIds].reverse()) {
+      const deleted = await page.request.delete(`/api/v1/entities/${id}`, { headers: authHeaders });
+      expect(deleted.status(), "cleanup: delete the referring entity before its target").toBe(204);
+    }
+    if (blueprintId) {
+      const deleted = await page.request.delete(`/api/v1/blueprints/${blueprintId}`, { headers: authHeaders });
+      expect(deleted.status()).toBe(204);
     }
   }
 });

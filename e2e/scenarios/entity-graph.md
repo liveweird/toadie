@@ -14,7 +14,11 @@
   layout. All removed at the end. Every identifier shares one run marker
   (`uniqueText("e2e-eg")`) so the graph can be narrowed to this run's own rows with the `q`
   filter once `_team` — a workspace-wide blueprint other specs also write to — joins the
-  blueprint filter.
+  blueprint filter. The large-graph journey (second scenario) additionally owns one more
+  throwaway `e2e-eg-*-bp-large` blueprint (a single self-`parent` relation flagged as the
+  `composition` entry of its `hierarchyRelations`) and its 320 chained `e2e-eg-*` entities,
+  and runs as the seed admin, whose own layout document it only READS (a PUT of it fails the
+  journey).
 
 ## Scenario: the entity graph filters by blueprint, folds hierarchy, and persists a manual layout
 
@@ -68,6 +72,29 @@
     own peer target), then the throwaway team (now unreferenced), then the child blueprint,
     then the parent blueprint, then the throwaway user.
 
+## Scenario: a large entity graph opens behind the gate and lays out on request
+
+1. The admin signs in and seeds one throwaway blueprint via the API (a single self-`parent`
+   relation flagged as the `composition` entry of its `hierarchyRelations`), then imports 320
+   entities of it through `POST /api/v1/entities/import` in two batches of at most 200: eight
+   chains of forty, each entity's `parent` naming the previous one except the chain's root.
+   - *Expected*: the blueprint creation succeeds (`201`) and every import row is `CREATED`.
+2. They open **Entity graph**, expand the filter panel and set the search filter to the run's
+   own marker.
+   - *Expected*: instead of a canvas, a "Large graph" panel names the selection (320 nodes);
+     no canvas node and no empty state is shown — the layout was not started.
+3. They click **Show top level**.
+   - *Expected*: exactly the eight chain roots are drawn, a "Top level" badge appears, and the
+     panel is gone.
+4. They clear the "Top level" badge.
+   - *Expected*: the panel returns and no canvas node is drawn.
+5. They click **Show everything**.
+   - *Expected*: all 320 nodes are drawn (the dagre layout ran off the main thread) and the
+     panel is gone.
+   - *Expected (whole journey)*: no `PUT` of `entity-graph-layout` was ever sent — the gate's
+     choices are transient view state, never persisted.
+6. Cleanup (API): every entity newest first (a referrer before its target), then the blueprint.
+
 ## Not covered here (and why)
 
 - **The full filter/graph-endpoint rule table** (the `q` substring filter, unknown-identifier
@@ -80,6 +107,12 @@
 - **The fold rule matrix** (multi-placement forests, folded/merged edge counting and labels) —
   pinned by `graphFold.test.ts` and `entityGraph.test.ts`; the journey proves one collapse/
   expand cycle end to end.
+- **The gate's rule matrix and the layout worker's lifecycle** (the 300-node boundary on both
+  sides, the top-level fold's root selection, stale-result dropping, supersede/deadline by
+  termination, the synchronous fallback, the 400 layout-cap message) — pinned by
+  `graphGate.test.ts`, `useLargeGraphGate.test.ts`, `useGraphLayoutWorker.test.tsx` and the
+  page tests; the journey proves the one real round trip with a real worker under the
+  production CSP.
 - **Inherited ownership and the `TEAM_TARGET_MISSING`/`TEAM_NOT_ALLOWED` findings** — pinned by
   `EntityOwnershipTest`; this journey proves one Direct-owned entity's ownership edge end to
   end.

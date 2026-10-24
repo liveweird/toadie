@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
-import { renderWithProviders } from "../test/render";
 import { blueprintResponse } from "../test/fixtures";
 import { expandQuery, ownedByQuery } from "../utils/queryTemplates";
 import { fitViewCalls } from "../test/reactFlowStub";
@@ -39,69 +37,15 @@ vi.mock("../components/QueryEditor", () => ({
   ),
 }));
 
-import EntityGraph from "./EntityGraph";
-
-const TOKEN_KEY = "toadie.auth.token";
-
-type FetchMock = ReturnType<typeof vi.fn>;
-
-const GRAPH = {
-  nodes: [
-    { id: "team|platform", entityId: 1, blueprint: "team", blueprintTitle: "Team", identifier: "platform", title: "Platform", findings: 0 },
-    { id: "service|checkout", entityId: 2, blueprint: "service", blueprintTitle: "Service", identifier: "checkout", title: "Checkout", findings: 0 },
-    { id: "service|solo", entityId: 3, blueprint: "service", blueprintTitle: "Service", identifier: "solo", title: "Solo", findings: 0 },
-  ],
-  edges: [
-    { sourceId: "service|checkout", targetId: "team|platform", relation: "team", hierarchies: ["composition"] },
-    { sourceId: "service|checkout", targetId: "service|solo", relation: "peer", hierarchies: [] },
-  ],
-};
-
-const HIERARCHIES = [
-  { id: 1, value: "composition", isDefault: false },
-  { id: 2, value: "cost-center", isDefault: false },
-];
-
-const BLUEPRINTS = [
-  blueprintResponse({ id: 1, identifier: "team", title: "Team" }),
-  blueprintResponse({ id: 2, identifier: "service", title: "Service" }),
-];
-
-function mockGraph(
-  mockFetch: FetchMock,
-  body: unknown = GRAPH,
-  status = 200,
-  layout: unknown = { mode: "auto", positions: {} },
-  hierarchies: unknown = HIERARCHIES,
-  checkDiagnostics: unknown[] = [],
-  blueprints: unknown = BLUEPRINTS,
-) {
-  mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-    if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: blueprints }));
-    if (url.startsWith("/api/v1/dictionaries/hierarchies")) return Promise.resolve(jsonResponse(200, { items: hierarchies }));
-    if (url.startsWith("/api/v1/entity-queries")) return Promise.resolve(jsonResponse(200, { items: [] }));
-    if (url === "/api/v1/entities/query/check")
-      return Promise.resolve(jsonResponse(200, { diagnostics: checkDiagnostics }));
-    if (url === "/api/v1/users/9/entity-graph-layout") {
-      return init?.method === "PUT"
-        ? Promise.resolve(new Response(null, { status: 204 }))
-        : Promise.resolve(jsonResponse(200, layout));
-    }
-    if (url.startsWith("/api/v1/entities/graph"))
-      return Promise.resolve(jsonResponse(status, body));
-    // The Team filter's own options pool (`useEntityOptions(TEAM_BLUEPRINT)`).
-    if (url.startsWith("/api/v1/entities?"))
-      return Promise.resolve(
-        jsonResponse(200, {
-          items: [{ id: 1, identifier: "platform", title: "Platform", findings: [] }],
-          page: 1,
-          pageSize: 100,
-          total: 1,
-        }),
-      );
-    return Promise.resolve(jsonResponse(404, {}));
-  });
-}
+import {
+  GRAPH,
+  HIERARCHIES,
+  mockGraph,
+  layoutPuts,
+  renderPage,
+  TOKEN_KEY,
+  type FetchMock,
+} from "../test/entityGraphPage";
 
 /** The `query=` param of the LAST `entities/graph` request, decoded — `null` when the latest
  *  such request carried none. */
@@ -112,30 +56,6 @@ function lastGraphQuery(mockFetch: FetchMock): string | null {
   const [url] = calls.at(-1) ?? [];
   if (typeof url !== "string") return null;
   return new URLSearchParams(url.split("?")[1] ?? "").get("query");
-}
-
-function layoutPuts(mockFetch: FetchMock): unknown[] {
-  return mockFetch.mock.calls
-    .filter(
-      ([url, init]) =>
-        url === "/api/v1/users/9/entity-graph-layout" && (init as RequestInit | undefined)?.method === "PUT",
-    )
-    .map(([, init]) => JSON.parse((init as RequestInit).body as string));
-}
-
-function PathProbe() {
-  const location = useLocation();
-  return <div data-testid="probe">{location.pathname}</div>;
-}
-
-function renderPage() {
-  return renderWithProviders(
-    <Routes>
-      <Route path="/entity-graph" element={<EntityGraph />} />
-      <Route path="/entities/:id/edit" element={<PathProbe />} />
-    </Routes>,
-    { route: "/entity-graph" },
-  );
 }
 
 describe("EntityGraph page", () => {

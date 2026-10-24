@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.20.0",
+    date: "2026-10-25",
+    en: `**Large graphs no longer freeze the page.** The Graph and Entity graph pages now lay out in the background, so the page stays responsive while a big graph is arranged, and a faster layout method arranges a 1,000-entity graph in seconds instead of minutes — automatic layouts may look slightly different once. A selection of more than 300 nodes opens on a choice: show only the top level, show everything, or narrow the view with filters. A layout save that hits the limit on stored positions now says so.`,
+    pl: `**Duże grafy nie zawieszają już strony.** Strony Graf i Graf encji układają węzły w tle, więc strona reaguje, gdy duży graf jest porządkowany, a szybsza metoda układania porządkuje graf z 1000 encji w kilka sekund zamiast minut — automatyczne układy mogą jednorazowo wyglądać nieco inaczej. Wybór obejmujący ponad 300 węzłów otwiera się od wyboru: pokaż tylko najwyższy poziom, pokaż wszystko albo zawęź widok filtrami. Zapis układu, który przekracza limit zapisanych pozycji, teraz to komunikuje.`,
+  },
+  {
     version: "2.19.0",
     date: "2026-10-25",
     en: `**Steadier under very large workspaces.** When several people open the Graph, Hierarchy or Errors views of a very large workspace at once, Toadie now admits as many of those reads as fit in memory and asks the others to retry a moment later — instead of refusing all of them or running out of memory; the browser retries such a refusal by itself. The Backstage catalog's graph, errors and export reads now share the same memory budget as the Port ontology's.`,

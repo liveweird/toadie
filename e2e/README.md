@@ -154,7 +154,9 @@ from Lettuce, that any new or edited spec must satisfy:
   (v1.27.0) computed-property PUTs mutate only its own two throwaway blueprints; `finally`
   strips the target blueprint's calculation/aggregation properties first (an aggregation target
   blocks deletion like a relation target), and the dependent's mirror goes with the dependent;
-  `entity-graph` owns its two throwaway `e2e-eg-*` blueprints and entities, one throwaway
+  `entity-graph` owns its two throwaway `e2e-eg-*` blueprints and entities (plus, for its
+  large-graph journey, a third `e2e-eg-*` blueprint and 320 chained entities imported in two
+  batches), one throwaway
   `e2e-eg-*`-marked `_team` entity, plus its throwaway user's `entity-graph-layout` document
   (see its own bullet below, alongside `graph-persistence`/`graph`); `entity-hierarchy` owns
   its two throwaway `e2e-eh-*` blueprints and entities plus one throwaway `e2e-eh-*`-marked
@@ -303,7 +305,9 @@ from Lettuce, that any new or edited spec must satisfy:
   `_team` entity carrying the run's own marker, as the admin first (the registry writer role
   above), then signs in as the throwaway user for the filter/fold/drag journey, and deletes
   everything (entities, the team, blueprints, the user) via the retained admin authorization in
-  `finally`.
+  `finally`. Its large-graph journey runs as the seed admin instead and only READS the admin's
+  layout document — the gate's choices are transient and the journey fails on any
+  `entity-graph-layout` PUT.
 - E2e-created entities carry a sweepable marker — every e2e-created file's name/namespace and
   every e2e-created user's email contains `e2e`, and nothing that must SURVIVE runs is ever
   named that way. Each spec deletes its own state, so the rule is currently satisfied by
@@ -405,7 +409,12 @@ the same commit** — this list is the coverage map, the scenario file is the de
   prune and restore an edge each, narrows further with the toolbar's Team filter,
   folds/unfolds the `composition`-hierarchy parent (the owning team unaffected — it never
   nests), and drags it in Manual mode, whose PUT is awaited by exact node id and confirmed
-  after a reload → cleanup.
+  after a reload → cleanup. A second journey (2.20.0) seeds one more throwaway blueprint and
+  320 chained entities through the batched entity import (`seedEntityChain` in `helpers.ts`)
+  and opens the canvas as the seed admin: the large-graph gate's "Large graph" panel holds
+  the layout back (no node drawn), Show top level draws the eight chain roots under a "Top
+  level" badge, clearing the badge restores the panel, Show everything draws all 320 through
+  the layout worker, and no `entity-graph-layout` PUT is ever sent → cleanup.
 - [`entity-hierarchy.spec.ts`](scenarios/entity-hierarchy.md) — the Entity hierarchy (Port
   migration phase 3; + Phase 4 ownership, v1.26.0; parallel hierarchies, v1.32.0): the same
   throwaway blueprint pair with one parent, two children, one orphan child Direct-owned by a

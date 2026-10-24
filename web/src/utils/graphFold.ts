@@ -25,7 +25,7 @@ interface FoldableEdge {
   targetId: string;
   field: string;
 }
-interface FoldableGraph<N> {
+export interface FoldableGraph<N> {
   nodes: N[];
   edges: FoldableEdge[];
 }

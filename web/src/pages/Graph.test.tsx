@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
 import { fitViewCalls } from "../test/reactFlowStub";
+import { FakeWorker } from "../test/fakeWorker";
 
 // React Flow needs real DOM measurement (ResizeObserver, bounding boxes) that happy-dom can't
 // give — the canvas is stubbed to a list of node buttons (src/test/reactFlowStub.tsx, shared
@@ -12,7 +13,15 @@ import { fitViewCalls } from "../test/reactFlowStub";
 // (filterGraph/layoutGraph) is covered in graphLayout.test.ts.
 vi.mock("@xyflow/react", () => import("../test/reactFlowStub"));
 
+// The dagre half of the layout is spied so the tests can pin WHAT re-runs it: only structural
+// inputs (graph, relation chips, fold) — never the layout document arriving or other decoration.
+vi.mock("../utils/graphLayout", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/graphLayout")>();
+  return { ...actual, layoutPositions: vi.fn(actual.layoutPositions) };
+});
+
 import Graph from "./Graph";
+import { layoutPositions } from "../utils/graphLayout";
 
 const TOKEN_KEY = "toadie.auth.token";
 
@@ -111,6 +120,7 @@ describe("Graph page", () => {
     // The layout document is loaded and saved per user — the mock serves user 9.
     localStorage.setItem("toadie.auth.userId", "9");
     fitViewCalls.length = 0;
+    vi.mocked(layoutPositions).mockClear();
   });
 
   afterEach(() => {
@@ -333,6 +343,26 @@ describe("Graph page", () => {
     expect(screen.getByTestId("flow")).toHaveAttribute("data-draggable", "false");
   });
 
+  test("a 400 on saving the layout names the cap and keeps Retry", async () => {
+    mockGraph(mockFetch);
+    const base = mockFetch.getMockImplementation() as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+      url === "/api/v1/users/9/graph-layout" && init?.method === "PUT"
+        ? Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }))
+        : base(url, init),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/svc-a/);
+    await user.click(screen.getByRole("radio", { name: "Manual" }));
+
+    expect(await screen.findByText("Failed to save the layout")).toBeInTheDocument();
+    expect(screen.getByText(/Too many saved positions or collapsed nodes/)).toBeInTheDocument();
+    expect(screen.queryByText("Save failed (400)")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry saving layout" })).toBeInTheDocument();
+  });
+
   test("Reset layout clears the stored positions and persists the empty map", async () => {
     mockGraph(mockFetch, GRAPH, 200, {
       mode: "manual",
@@ -451,6 +481,214 @@ describe("Graph page", () => {
         }),
       { timeout: 2000 },
     );
+  });
+
+  describe("the layout re-runs only on structural inputs", () => {
+    const layoutRuns = () => vi.mocked(layoutPositions).mock.calls.length;
+    const flush = () => act(async () => {});
+
+    test("the layout document arriving after the graph does not re-run it", async () => {
+      mockGraph(mockFetch, FOLD_GRAPH);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const base = mockFetch.getMockImplementation() as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+      mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+        url === "/api/v1/users/9/graph-layout" && init?.method !== "PUT"
+          ? gate.then(() => base(url, init))
+          : base(url, init),
+      );
+      renderPage();
+
+      await screen.findByText(/svc-a \[STORED\]/);
+      await flush();
+      const before = layoutRuns();
+      expect(before).toBeGreaterThan(0);
+      expect(screen.getByRole("radio", { name: "Manual" })).toBeDisabled();
+
+      release();
+      await waitFor(() => expect(screen.getByRole("radio", { name: "Manual" })).toBeEnabled());
+      await flush();
+      expect(layoutRuns()).toBe(before);
+    });
+
+    test("a relation chip toggle re-runs it", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/team-x \[MISSING\]/);
+      await flush();
+      const before = layoutRuns();
+      await user.click(screen.getByRole("button", { name: /^Visibility/ }));
+      await user.click(screen.getByRole("checkbox", { name: "Owned by" }));
+      expect(layoutRuns()).toBeGreaterThan(before);
+    });
+
+    test("a fold toggle re-runs it", async () => {
+      mockGraph(mockFetch, FOLD_GRAPH);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/svc-a \[STORED\]/);
+      await flush();
+      const before = layoutRuns();
+      await user.click(screen.getByRole("button", { name: "Collapse shop" }));
+      await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
+    });
+  });
+
+  describe("the layout worker", () => {
+    beforeEach(() => {
+      FakeWorker.reset();
+      vi.stubGlobal("Worker", FakeWorker);
+    });
+
+    test("shows a named 'Laying out' status until the worker answers, then the nodes", async () => {
+      mockGraph(mockFetch);
+      renderPage();
+
+      const status = await screen.findByText("Laying out the graph…");
+      expect(status).toHaveAttribute("role", "status");
+      expect(screen.queryByText(/svc-a/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/nothing to render/i)).not.toBeInTheDocument();
+
+      await waitFor(() => {
+        act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+        expect(screen.getByText(/svc-a \[STORED\]/)).toBeInTheDocument();
+      });
+    });
+
+    test("an empty graph shows the empty state at once, never the layout status", async () => {
+      mockGraph(mockFetch, { nodes: [], edges: [] });
+      renderPage();
+
+      expect(await screen.findByText(/nothing to render/i)).toBeInTheDocument();
+      expect(screen.queryByText("Laying out the graph…")).not.toBeInTheDocument();
+      expect(FakeWorker.instances).toHaveLength(0);
+    });
+
+    test("keeps the previous nodes while a newer layout computes", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+      await waitFor(() => {
+        act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+        expect(screen.getByText(/team-x \[MISSING\]/)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /^Visibility/ }));
+      await user.click(screen.getByRole("checkbox", { name: "Owned by" }));
+
+      // Unanswered: the old canvas stays, no spinner replaces it.
+      expect(screen.getByText(/team-x \[MISSING\]/)).toBeInTheDocument();
+      expect(screen.queryByText("Laying out the graph…")).not.toBeInTheDocument();
+
+      act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+      await waitFor(() => expect(screen.queryByText(/team-x/)).not.toBeInTheDocument());
+    });
+
+    test("a worker that fails to load falls back to laying out on the main thread", async () => {
+      mockGraph(mockFetch);
+      renderPage();
+      await screen.findByText("Laying out the graph…");
+      await waitFor(() => expect(FakeWorker.instances.at(-1)?.posted.length).toBeGreaterThan(0));
+      act(() => FakeWorker.instances.at(-1)!.fail());
+
+      // No error, no waiting out the deadline: the nodes arrive from the synchronous fallback.
+      expect(await screen.findByText(/svc-a \[STORED\]/)).toBeInTheDocument();
+      expect(screen.queryByText("The graph layout did not finish")).not.toBeInTheDocument();
+    });
+
+    test("a failed layout offers a retry", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("Laying out the graph…");
+      await waitFor(() => expect(FakeWorker.instances.at(-1)?.posted.length).toBeGreaterThan(0));
+      const worker = FakeWorker.instances.at(-1)!;
+      act(() => worker.reply({ id: worker.posted[0].id, error: "boom" }));
+
+      expect(await screen.findByText("The graph layout did not finish")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      await waitFor(() => {
+        act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+        expect(screen.getByText(/svc-a \[STORED\]/)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("the large-graph gate", () => {
+    /** Two systems (`sys-a`, `sys-b`) and `total - 2` components split between them. */
+    function bigCatalog(total: number) {
+      const systems = ["sys-a", "sys-b"];
+      const leaves = total - systems.length;
+      return {
+        nodes: [
+          ...systems.map((name, i) => ({
+            id: `system:default/${name}`, kind: "system", namespace: "default", name, title: null, fileId: i + 1, status: "STORED",
+          })),
+          ...Array.from({ length: leaves }, (_, i) => ({
+            id: `component:default/c${i}`, kind: "component", namespace: "default", name: `c${i}`, title: null, fileId: 100 + i, status: "STORED",
+          })),
+        ],
+        edges: Array.from({ length: leaves }, (_, i) => ({
+          sourceId: `component:default/c${i}`, targetId: `system:default/${systems[i % 2]}`, field: "spec.system",
+        })),
+      };
+    }
+    const drawn = () => screen.queryAllByText(/\[STORED\]/).length;
+    const panel = () => screen.findByRole("region", { name: "Large graph" });
+
+    test("a graph over 300 nodes opens behind the panel: no layout, no canvas, no empty state", async () => {
+      mockGraph(mockFetch, bigCatalog(301));
+      renderPage();
+
+      expect(await panel()).toHaveTextContent("Nodes: 301, relations: 299");
+      expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
+      expect(screen.queryByText(/nothing to render/i)).not.toBeInTheDocument();
+      expect(vi.mocked(layoutPositions)).not.toHaveBeenCalled();
+    });
+
+    test("exactly 300 nodes lay out as usual", async () => {
+      mockGraph(mockFetch, bigCatalog(300));
+      renderPage();
+
+      await waitFor(() => expect(drawn()).toBe(300));
+      expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
+    });
+
+    test("Show top level draws only the roots; toggling there saves nothing; Expand all brings the panel back", async () => {
+      mockGraph(mockFetch, bigCatalog(301));
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(await screen.findByRole("button", { name: "Show top level" }));
+      await waitFor(() => expect(drawn()).toBe(2));
+      expect(screen.getByText("Top level")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Expand sys-a (150 hidden)" }));
+      await waitFor(() => expect(drawn()).toBe(152));
+      expect(layoutPuts(mockFetch)).toEqual([]);
+
+      await user.click(screen.getByRole("button", { name: "Expand all" }));
+      expect(await panel()).toBeInTheDocument();
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
+      expect(layoutPuts(mockFetch)).toEqual([]);
+    });
+
+    test("Show everything draws all of it, with dagre's crossing heuristic switched off", async () => {
+      mockGraph(mockFetch, bigCatalog(301));
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(await screen.findByRole("button", { name: "Show everything" }));
+
+      await waitFor(() => expect(drawn()).toBe(301));
+      const request = vi.mocked(layoutPositions).mock.calls.at(-1)?.[0];
+      expect(request?.options).toEqual({ ranker: "tight-tree", disableOptimalOrderHeuristic: true });
+    });
   });
 
   test("a graph spanning two namespaces draws a frame per namespace", async () => {
