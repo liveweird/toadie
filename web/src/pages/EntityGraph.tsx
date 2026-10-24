@@ -27,6 +27,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { IconInfoCircle, IconTopologyStar3 } from "@tabler/icons-react";
+import type { Blueprint } from "../api/blueprints";
 import { getEntityGraph, type EntityGraph, type EntityGraphNode as EntityGraphNodeApi } from "../api/entities";
 import CaptionedChipGroup from "../components/CaptionedChipGroup";
 import ClusterFrames from "../components/ClusterFrames";
@@ -41,9 +42,11 @@ import {
   clusterFrames,
   COLLAPSED_FACE_STYLE,
   FOLDED_EDGE_STYLE,
-  layoutGraph,
   layoutOptions,
+  layoutPositions,
+  materializeLayout,
   STATUS_STYLE,
+  toLayoutRequest,
   type ClusterAccessor,
   type GraphPositions,
   type LaidOutNode,
@@ -74,6 +77,7 @@ import { blueprintTierLookup } from "../utils/tiers";
 import LoadingBlock from "../components/LoadingBlock";
 import classes from "../theme.module.css";
 import { useGraphLayout } from "../hooks/useGraphLayout";
+import { useStableIdSet } from "../hooks/useStableIdSet";
 import { useSessionUserId } from "../auth";
 
 const NODE_TYPES = { entity: EntityGraphNode };
@@ -93,6 +97,7 @@ type LayoutMode = "auto" | "manual";
 
 const EMPTY_POSITIONS: GraphPositions = {};
 const EMPTY_COLLAPSED: string[] = [];
+const NO_BLUEPRINTS: Blueprint[] = [];
 
 function toggleCollapsed(current: { collapsed: string[] }, id: string) {
   return current.collapsed.includes(id)
@@ -181,20 +186,45 @@ export default function EntityGraph() {
     () => new Map((graph?.nodes ?? []).map((n) => [n.blueprint, n.blueprintTitle])),
     [graph],
   );
-  const baseLayout = useMemo(() => {
-    if (!graph) return { nodes: [] as LaidOutNode<EntityGraphNodeApi>[], edges: [] as Edge[], anyCollapsed: false };
+  // The collapsed ids as a Set that changes identity only when its MEMBERS do.
+  const collapsedSet = useStableIdSet(collapsed);
+  // Only an active Focus reads the blueprint registry for edge thinning; without one the
+  // (late-arriving) registry must not look like a structural change.
+  const focusBlueprints = focus === null ? NO_BLUEPRINTS : blueprints;
+
+  // STRUCTURAL inputs only: dagre runs on exactly this memo's `request`. Tier dots, hierarchy
+  // emphasis, ownership dashes and the fold toggles are decoration, applied below.
+  const structural = useMemo(() => {
+    if (!graph) return null;
     const chipFiltered = filterEntityGraph(graph, disabled);
     // The tier Focus also thins relation edges (by the relation's tier on its source
     // blueprint) — BEFORE the fold and dagre, so a hidden edge neither stands in for a
     // collapsed subtree nor takes part in the layout. The containment forest below still
     // reads the full payload, so an entity stays collapsible under any Focus.
-    const filtered = {
-      nodes: chipFiltered.nodes,
-      edges: filterEdgesByTierFocus(chipFiltered.edges, chipFiltered.nodes, blueprints, focus),
+    const filtered = focus === null
+      ? chipFiltered
+      : {
+          nodes: chipFiltered.nodes,
+          edges: filterEdgesByTierFocus(chipFiltered.edges, chipFiltered.nodes, focusBlueprints, focus),
+        };
+    const folded = foldGraph(toFoldable(filtered), forest, collapsedSet);
+    return {
+      folded,
+      request: toLayoutRequest(folded, ENTITY_CLUSTER, layoutOptions(folded.nodes.length, false)),
     };
+  }, [graph, disabled, forest, collapsedSet, focus, focusBlueprints]);
+  const autoPositions = useMemo(
+    () => (structural ? layoutPositions(structural.request) : EMPTY_POSITIONS),
+    [structural],
+  );
+
+  const baseLayout = useMemo(() => {
+    if (!structural || !graph) {
+      return { nodes: [] as LaidOutNode<EntityGraphNodeApi>[], edges: [] as Edge[], anyCollapsed: false };
+    }
+    const { folded } = structural;
     const selectedHierarchyEdges = hierarchyEdgeKeys(graph, hierarchyId);
-    const folded = foldGraph(toFoldable(filtered), forest, new Set(collapsed));
-    const laidOut = layoutGraph(folded, ENTITY_CLUSTER, layoutOptions(folded.nodes.length, false));
+    const laidOut = materializeLayout(folded, ENTITY_CLUSTER, autoPositions);
     // Hierarchy edges draw solid and thicker, labelled by relation id — folding can still dash
     // one that stands in for a hidden relation, so the fold's own style wins when both apply.
     const edges = laidOut.edges
@@ -226,7 +256,7 @@ export default function EntityGraph() {
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges, anyCollapsed };
-  }, [graph, disabled, forest, collapsed, layoutReady, hierarchyId, blueprints, focus, tierOf]);
+  }, [structural, graph, autoPositions, layoutReady, hierarchyId, tierOf]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode<EntityGraphNodeApi>>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);

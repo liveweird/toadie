@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
@@ -12,7 +12,15 @@ import { fitViewCalls } from "../test/reactFlowStub";
 // (filterGraph/layoutGraph) is covered in graphLayout.test.ts.
 vi.mock("@xyflow/react", () => import("../test/reactFlowStub"));
 
+// The dagre half of the layout is spied so the tests can pin WHAT re-runs it: only structural
+// inputs (graph, relation chips, fold) — never the layout document arriving or other decoration.
+vi.mock("../utils/graphLayout", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/graphLayout")>();
+  return { ...actual, layoutPositions: vi.fn(actual.layoutPositions) };
+});
+
 import Graph from "./Graph";
+import { layoutPositions } from "../utils/graphLayout";
 
 const TOKEN_KEY = "toadie.auth.token";
 
@@ -111,6 +119,7 @@ describe("Graph page", () => {
     // The layout document is loaded and saved per user — the mock serves user 9.
     localStorage.setItem("toadie.auth.userId", "9");
     fitViewCalls.length = 0;
+    vi.mocked(layoutPositions).mockClear();
   });
 
   afterEach(() => {
@@ -451,6 +460,62 @@ describe("Graph page", () => {
         }),
       { timeout: 2000 },
     );
+  });
+
+  describe("the layout re-runs only on structural inputs", () => {
+    const layoutRuns = () => vi.mocked(layoutPositions).mock.calls.length;
+    const flush = () => act(async () => {});
+
+    test("the layout document arriving after the graph does not re-run it", async () => {
+      mockGraph(mockFetch, FOLD_GRAPH);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const base = mockFetch.getMockImplementation() as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+      mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+        url === "/api/v1/users/9/graph-layout" && init?.method !== "PUT"
+          ? gate.then(() => base(url, init))
+          : base(url, init),
+      );
+      renderPage();
+
+      await screen.findByText(/svc-a \[STORED\]/);
+      await flush();
+      const before = layoutRuns();
+      expect(before).toBeGreaterThan(0);
+      expect(screen.getByRole("radio", { name: "Manual" })).toBeDisabled();
+
+      release();
+      await waitFor(() => expect(screen.getByRole("radio", { name: "Manual" })).toBeEnabled());
+      await flush();
+      expect(layoutRuns()).toBe(before);
+    });
+
+    test("a relation chip toggle re-runs it", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/team-x \[MISSING\]/);
+      await flush();
+      const before = layoutRuns();
+      await user.click(screen.getByRole("button", { name: /^Visibility/ }));
+      await user.click(screen.getByRole("checkbox", { name: "Owned by" }));
+      expect(layoutRuns()).toBeGreaterThan(before);
+    });
+
+    test("a fold toggle re-runs it", async () => {
+      mockGraph(mockFetch, FOLD_GRAPH);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/svc-a \[STORED\]/);
+      await flush();
+      const before = layoutRuns();
+      await user.click(screen.getByRole("button", { name: "Collapse shop" }));
+      await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
+    });
   });
 
   test("a graph spanning two namespaces draws a frame per namespace", async () => {

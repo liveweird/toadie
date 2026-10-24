@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
@@ -39,7 +39,16 @@ vi.mock("../components/QueryEditor", () => ({
   ),
 }));
 
+// The dagre half of the layout is spied so the tests can pin WHAT re-runs it: only structural
+// inputs (graph, chips, fold, hierarchy, Focus) — never the layout document, the blueprint
+// registry's tiers, or other decoration.
+vi.mock("../utils/graphLayout", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/graphLayout")>();
+  return { ...actual, layoutPositions: vi.fn(actual.layoutPositions) };
+});
+
 import EntityGraph from "./EntityGraph";
+import { layoutPositions } from "../utils/graphLayout";
 
 const TOKEN_KEY = "toadie.auth.token";
 
@@ -147,6 +156,7 @@ describe("EntityGraph page", () => {
     localStorage.setItem(TOKEN_KEY, "fake-token");
     localStorage.setItem("toadie.auth.userId", "9");
     fitViewCalls.length = 0;
+    vi.mocked(layoutPositions).mockClear();
   });
 
   afterEach(() => {
@@ -227,6 +237,123 @@ describe("EntityGraph page", () => {
 
       await screen.findByText(/checkout \[service\]/);
       expect(screen.getByTestId("edge:service|checkout->team|platform:team")).toBeInTheDocument();
+    });
+  });
+
+  describe("the layout re-runs only on structural inputs", () => {
+    const layoutRuns = () => vi.mocked(layoutPositions).mock.calls.length;
+    const flush = () => act(async () => {});
+
+    /** Holds the GETs of the URLs [matching] until the returned release is called. */
+    function holdGets(matching: (url: string) => boolean): () => void {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const base = mockFetch.getMockImplementation() as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+      mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+        matching(url) && init?.method !== "PUT" ? gate.then(() => base(url, init)) : base(url, init),
+      );
+      return release;
+    }
+
+    test("the layout document arriving after the graph does not re-run it", async () => {
+      mockGraph(mockFetch);
+      const release = holdGets((url) => url === "/api/v1/users/9/entity-graph-layout");
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      await flush();
+      const before = layoutRuns();
+      expect(before).toBeGreaterThan(0);
+      expect(screen.getByRole("radio", { name: "Manual" })).toBeDisabled();
+
+      release();
+      await waitFor(() => expect(screen.getByRole("radio", { name: "Manual" })).toBeEnabled());
+      await flush();
+      expect(layoutRuns()).toBe(before);
+    });
+
+    test("a late blueprint registry (tier dots only) does not re-run it", async () => {
+      mockGraph(mockFetch, GRAPH, 200, undefined, undefined, [], [
+        blueprintResponse({ id: 1, identifier: "team", title: "Team", tiers: { blueprint: 1 } }),
+        blueprintResponse({ id: 2, identifier: "service", title: "Service", tiers: { blueprint: 2 } }),
+      ]);
+      const release = holdGets((url) => url.startsWith("/api/v1/blueprints"));
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      await flush();
+      const before = layoutRuns();
+
+      release();
+      await waitFor(() =>
+        expect(mockFetch.mock.calls.some(([url]) => String(url).startsWith("/api/v1/blueprints"))).toBe(true),
+      );
+      await flush();
+      await flush();
+      expect(layoutRuns()).toBe(before);
+    });
+
+    test("a relation chip toggle re-runs it", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      await flush();
+      const before = layoutRuns();
+      await user.click(screen.getByRole("button", { name: /^Visibility/ }));
+      await user.click(screen.getByRole("checkbox", { name: "peer" }));
+      expect(layoutRuns()).toBeGreaterThan(before);
+    });
+
+    test("a fold toggle re-runs it", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      await flush();
+      const before = layoutRuns();
+      await user.click(screen.getByRole("button", { name: "Collapse platform" }));
+      await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
+    });
+
+    test("a hierarchy pick re-runs it", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      await flush();
+      const before = layoutRuns();
+      await user.click(screen.getByLabelText("Hierarchy", { selector: "input" }));
+      await user.click(await screen.findByRole("option", { name: "cost-center" }));
+      await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
+    });
+
+    test("a Focus change re-runs it", async () => {
+      localStorage.setItem("toadie.viewSettings.entityGraph.filter.focusTier", "1");
+      mockGraph(mockFetch, GRAPH, 200, undefined, undefined, [], [
+        blueprintResponse({ id: 1, identifier: "team", title: "Team", tiers: { blueprint: 1 } }),
+        blueprintResponse({
+          id: 2,
+          identifier: "service",
+          title: "Service",
+          tiers: { blueprint: 1, relations: { peer: 1, team: 2 } },
+        }),
+      ]);
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByText(/checkout \[service\]/);
+      await flush();
+      const before = layoutRuns();
+      await user.click(screen.getByRole("button", { name: /^Filters/ }));
+      await user.click(screen.getByRole("combobox", { name: "Focus" }));
+      await user.click(await screen.findByRole("option", { name: "Tiers 1–2" }));
+      await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
     });
   });
 

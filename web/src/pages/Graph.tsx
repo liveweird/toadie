@@ -38,11 +38,13 @@ import {
   COLLAPSED_FACE_STYLE,
   filterGraph,
   FOLDED_EDGE_STYLE,
-  layoutGraph,
   layoutOptions,
+  layoutPositions,
+  materializeLayout,
   NAMESPACE_CLUSTER,
   RELATION_FAMILIES,
   STATUS_STYLE,
+  toLayoutRequest,
   type GraphPositions,
   type LaidOutNode,
   type RelationFamily,
@@ -56,6 +58,7 @@ import { editCatalogFilePath } from "../utils/catalogFileLinks";
 import LoadingBlock from "../components/LoadingBlock";
 import classes from "../theme.module.css";
 import { useGraphLayout } from "../hooks/useGraphLayout";
+import { useStableIdSet } from "../hooks/useStableIdSet";
 import { useSessionUserId } from "../auth";
 
 const NODE_TYPES = { catalog: CatalogGraphNode };
@@ -122,11 +125,31 @@ export default function Graph() {
   // Containment for the fold is the Hierarchy's, over the FULL payload — never the
   // chip-filtered graph, so a System stays collapsible with "Part of system" switched off.
   const forest = useMemo(() => (data && !noKinds ? buildHierarchy(data) : []), [data, noKinds]);
-  const baseLayout = useMemo(() => {
-    if (!data || noKinds) return { nodes: [] as LaidOutNode[], edges: [] as Edge[], anyCollapsed: false };
+  // The saved fold as a Set that changes identity only when its MEMBERS do (the layout
+  // document arriving with the same list must not re-run dagre).
+  const collapsedSet = useStableIdSet(collapsed);
+
+  // STRUCTURAL inputs only: the graph, the relation chips, the containment forest and the fold.
+  // dagre runs on exactly this memo's `request` — decoration (fold toggles, disabled state)
+  // below can change without a re-layout.
+  const structural = useMemo(() => {
+    if (!data || noKinds) return null;
     // Chips first, fold second: a MISSING child a chip pruned is neither counted nor hidden.
-    const folded = foldGraph(filterGraph(data, enabled), forest, new Set(collapsed));
-    const laidOut = layoutGraph(folded, NAMESPACE_CLUSTER, layoutOptions(folded.nodes.length, false));
+    const folded = foldGraph(filterGraph(data, enabled), forest, collapsedSet);
+    return {
+      folded,
+      request: toLayoutRequest(folded, NAMESPACE_CLUSTER, layoutOptions(folded.nodes.length, false)),
+    };
+  }, [data, enabled, noKinds, forest, collapsedSet]);
+  const autoPositions = useMemo(
+    () => (structural ? layoutPositions(structural.request) : EMPTY_POSITIONS),
+    [structural],
+  );
+
+  const baseLayout = useMemo(() => {
+    if (!structural) return { nodes: [] as LaidOutNode[], edges: [] as Edge[], anyCollapsed: false };
+    const { folded } = structural;
+    const laidOut = materializeLayout(folded, NAMESPACE_CLUSTER, autoPositions);
     const nodes = laidOut.nodes.map((n) => {
       const info = folded.info.get(n.id);
       return info ? {
@@ -139,7 +162,7 @@ export default function Graph() {
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges: laidOut.edges, anyCollapsed };
-  }, [data, enabled, noKinds, forest, collapsed, layoutReady]);
+  }, [structural, autoPositions, layoutReady]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
