@@ -9,7 +9,10 @@ import {
   GRAPH_NODE_HEIGHT,
   GRAPH_NODE_WIDTH,
   layoutGraph,
+  layoutPositions,
+  materializeLayout,
   namespaceFrames,
+  toLayoutRequest,
   RELATION_FAMILIES,
   type ClusterAccessor,
 } from "./graphLayout";
@@ -336,5 +339,58 @@ describe("clusterFrames with a custom keyOf", () => {
       (n: FakeNode) => n.group,
     );
     expect(frames).toEqual([]);
+  });
+});
+
+describe("layoutPositions / materializeLayout split", () => {
+  const graph = {
+    nodes: [
+      { id: "a", group: "alpha" },
+      { id: "b", group: "alpha" },
+      { id: "x", group: "beta" },
+    ],
+    edges: [
+      { sourceId: "a", targetId: "b", field: "next" },
+      { sourceId: "b", targetId: "x", field: "next" },
+    ],
+  };
+
+  test("layoutPositions on a two-cluster input gives finite, distinct positions for every node", () => {
+    const positions = layoutPositions(toLayoutRequest(graph, CUSTOM_CLUSTER));
+    expect(Object.keys(positions).sort()).toEqual(["a", "b", "x"]);
+    for (const p of Object.values(positions)) {
+      expect(Number.isFinite(p.x)).toBe(true);
+      expect(Number.isFinite(p.y)).toBe(true);
+    }
+    const spots = new Set(Object.values(positions).map((p) => `${p.x}|${p.y}`));
+    expect(spots.size).toBe(3);
+  });
+
+  test("the request carries only ids and cluster keys, so it survives structured clone", () => {
+    const request = toLayoutRequest(graph, CUSTOM_CLUSTER, { ranker: "tight-tree" });
+    expect(request.nodes).toEqual([
+      { id: "a", cluster: "alpha" },
+      { id: "b", cluster: "alpha" },
+      { id: "x", cluster: "beta" },
+    ]);
+    expect(request.edges).toEqual([
+      { sourceId: "a", targetId: "b" },
+      { sourceId: "b", targetId: "x" },
+    ]);
+    expect(structuredClone(request)).toEqual(request);
+  });
+
+  test("materializeLayout over layoutPositions equals layoutGraph, in input node order", () => {
+    const positions = layoutPositions(toLayoutRequest(graph, CUSTOM_CLUSTER));
+    const composed = materializeLayout(graph, CUSTOM_CLUSTER, positions);
+    expect(composed).toEqual(layoutGraph(graph, CUSTOM_CLUSTER));
+    expect(composed.nodes.map((n) => n.id)).toEqual(["a", "b", "x"]);
+  });
+
+  test("the tight-tree ranker and the heuristic switch lay out a compound graph without throwing", () => {
+    const positions = layoutPositions(
+      toLayoutRequest(graph, CUSTOM_CLUSTER, { ranker: "tight-tree", disableOptimalOrderHeuristic: true }),
+    );
+    expect(Object.keys(positions)).toHaveLength(3);
   });
 });

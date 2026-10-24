@@ -135,14 +135,34 @@ export const NAMESPACE_CLUSTER: ClusterAccessor<GraphNode> = {
   nodeType: "catalog",
 };
 
-function clusterKeysOf<N>(nodes: readonly N[], keyOf: (node: N) => string): string[] {
-  return [...new Set(nodes.map(keyOf))].sort((a, b) => a.localeCompare(b));
+function clusterKeysOf(clusters: Iterable<string>): string[] {
+  return [...new Set(clusters)].sort((a, b) => a.localeCompare(b));
+}
+
+/** The manual-mode position overlay: dragged positions by node id. */
+export type GraphPositions = Record<string, { x: number; y: number }>;
+
+/** The dagre knobs the pages choose (see [layoutOptions]); both default to dagre's own. */
+export interface LayoutOptions {
+  ranker?: "network-simplex" | "tight-tree";
+  disableOptimalOrderHeuristic?: boolean;
 }
 
 /**
- * dagre left-to-right auto-layout → React Flow's nodes/edges, generic over the node payload
- * `N` via [cluster] (defaulting to [NAMESPACE_CLUSTER] so every existing catalog-graph call
- * site keeps working unchanged).
+ * Everything the dagre call needs, as plain structured-clone-able data — it crosses the
+ * `postMessage` boundary to the layout worker (`graphLayoutWorker.ts`), so it carries node ids
+ * and cluster keys only, never the page's node payloads.
+ */
+export interface LayoutRequest {
+  nodes: { id: string; cluster: string }[];
+  edges: { sourceId: string; targetId: string }[];
+  options?: LayoutOptions;
+}
+
+/**
+ * The dagre left-to-right layout alone: [LayoutRequest] → each node's TOP-LEFT position by id.
+ * Pure and synchronous — the worker, the no-Worker fallback and [layoutGraph] all run exactly
+ * this.
  *
  * With two or more cluster keys on the canvas the layout runs as a COMPOUND dagre graph, one
  * cluster per key, so a cluster's entities come out clumped instead of scattered through the
@@ -155,34 +175,67 @@ function clusterKeysOf<N>(nodes: readonly N[], keyOf: (node: N) => string): stri
  * skips label-less nodes. Never set `rankdir` on a cluster — that switches dagre onto its
  * `recursiveClusterLayout` path, which is a different and far less exercised algorithm.
  */
-export function layoutGraph<N extends { id: string } = GraphNode>(
-  graph: LayoutInput<N>,
-  cluster: ClusterAccessor<N> = NAMESPACE_CLUSTER as unknown as ClusterAccessor<N>,
-): { nodes: LaidOutNode<N>[]; edges: Edge[] } {
-  const keys = clusterKeysOf(graph.nodes, cluster.keyOf);
+export function layoutPositions(request: LayoutRequest): GraphPositions {
+  const keys = clusterKeysOf(request.nodes.map((n) => n.cluster));
   const grouped = keys.length > 1;
   const g = new dagre.graphlib.Graph({ compound: grouped });
   // Clustering needs room for the frame chrome between neighbouring clusters: dagre's
   // cluster gap comes out at nodesep + 40, and a frame costs FRAME_PADDING below plus
   // FRAME_PADDING + FRAME_HEADER above, so 36 leaves the boxes visibly apart without
   // stretching the within-cluster spacing much (24 would leave them touching).
-  g.setGraph({ rankdir: "LR", nodesep: grouped ? 36 : 24, ranksep: 90 });
+  g.setGraph({
+    rankdir: "LR",
+    nodesep: grouped ? 36 : 24,
+    ranksep: 90,
+    // dagre reads the ranker from the GRAPH label (not from layout()'s options).
+    ...(request.options?.ranker ? { ranker: request.options.ranker } : {}),
+  });
   g.setDefaultEdgeLabel(() => ({}));
   // `cluster:` cannot collide with either id grammar (`kind:namespace/name`, `blueprint|identifier`).
   if (grouped) for (const key of keys) g.setNode(`cluster:${key}`, {});
-  for (const n of graph.nodes) {
+  for (const n of request.nodes) {
     g.setNode(n.id, { width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT });
-    if (grouped) g.setParent(n.id, `cluster:${cluster.keyOf(n)}`);
+    if (grouped) g.setParent(n.id, `cluster:${n.cluster}`);
   }
-  for (const e of graph.edges) g.setEdge(e.sourceId, e.targetId);
-  dagre.layout(g);
+  for (const e of request.edges) g.setEdge(e.sourceId, e.targetId);
+  dagre.layout(g, request.options?.disableOptimalOrderHeuristic ? { disableOptimalOrderHeuristic: true } : undefined);
 
-  const nodes: LaidOutNode<N>[] = graph.nodes.map((n) => {
+  const positions: GraphPositions = {};
+  for (const n of request.nodes) {
     const pos = g.node(n.id);
+    positions[n.id] = { x: pos.x - GRAPH_NODE_WIDTH / 2, y: pos.y - GRAPH_NODE_HEIGHT / 2 };
+  }
+  return positions;
+}
+
+/** The pure request for [layoutPositions] out of a page's (folded) graph and its clustering. */
+export function toLayoutRequest<N extends { id: string }>(
+  graph: LayoutInput<N>,
+  cluster: ClusterAccessor<N>,
+  options?: LayoutOptions,
+): LayoutRequest {
+  return {
+    nodes: graph.nodes.map((n) => ({ id: n.id, cluster: cluster.keyOf(n) })),
+    edges: graph.edges.map((e) => ({ sourceId: e.sourceId, targetId: e.targetId })),
+    ...(options ? { options } : {}),
+  };
+}
+
+/**
+ * [positions] → React Flow's nodes/edges, generic over the node payload `N` via [cluster].
+ * Output node order is the INPUT order (the pages and the tests rely on it).
+ */
+export function materializeLayout<N extends { id: string }>(
+  graph: LayoutInput<N>,
+  cluster: ClusterAccessor<N>,
+  positions: GraphPositions,
+): { nodes: LaidOutNode<N>[]; edges: Edge[] } {
+  const nodes: LaidOutNode<N>[] = graph.nodes.map((n) => {
+    const pos = positions[n.id] ?? { x: 0, y: 0 };
     return {
       id: n.id,
       type: cluster.nodeType,
-      position: { x: pos.x - GRAPH_NODE_WIDTH / 2, y: pos.y - GRAPH_NODE_HEIGHT / 2 },
+      position: { x: pos.x, y: pos.y },
       data: { apiNode: n },
     };
   });
@@ -201,8 +254,20 @@ export function layoutGraph<N extends { id: string } = GraphNode>(
   return { nodes, edges };
 }
 
-/** The manual-mode position overlay: dragged positions by node id. */
-export type GraphPositions = Record<string, { x: number; y: number }>;
+/**
+ * dagre left-to-right auto-layout → React Flow's nodes/edges, generic over the node payload
+ * `N` via [cluster] (defaulting to [NAMESPACE_CLUSTER] so every existing catalog-graph call
+ * site keeps working unchanged): [layoutPositions] then [materializeLayout], composed for the
+ * synchronous callers (tests, one-shot use). The pages run the two halves apart so the dagre
+ * half can live in a worker.
+ */
+export function layoutGraph<N extends { id: string } = GraphNode>(
+  graph: LayoutInput<N>,
+  cluster: ClusterAccessor<N> = NAMESPACE_CLUSTER as unknown as ClusterAccessor<N>,
+  options?: LayoutOptions,
+): { nodes: LaidOutNode<N>[]; edges: Edge[] } {
+  return materializeLayout(graph, cluster, layoutPositions(toLayoutRequest(graph, cluster, options)));
+}
 
 /**
  * Manual mode's overlay over the dagre output: nodes the user dragged take their stored
