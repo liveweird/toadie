@@ -13,13 +13,13 @@ buildscript {
                 version { strictly("3.21.0") }
             }
             // Advisory floors for the same plugin's Jib/Shadow integrations (build-time only):
-            // jackson 2.22.3 and plexus-utils 4.1.0. Literals, not the catalog: the buildscript
+            // jackson 2.22.4 and plexus-utils 4.1.0. Literals, not the catalog: the buildscript
             // block is evaluated before `libs` exists. Keep jackson in step with the `jackson-bom`
             // catalog line. Floor policy: `.claude/docs/dependency-reproducibility.md`.
-            classpath("com.fasterxml.jackson.core:jackson-databind:2.22.3")
-            classpath("com.fasterxml.jackson.core:jackson-core:2.22.3")
+            classpath("com.fasterxml.jackson.core:jackson-databind:2.22.4")
+            classpath("com.fasterxml.jackson.core:jackson-core:2.22.4")
             classpath("com.fasterxml.jackson.core:jackson-annotations:2.22")
-            classpath("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.22.3")
+            classpath("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.22.4")
             classpath("org.codehaus.plexus:plexus-utils:4.1.0")
             // log4j 2.25.1 carries MEDIUM advisories (below the scan's gate), cleared anyway so
             // the report starts at zero.
