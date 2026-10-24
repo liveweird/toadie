@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import {
   createTeamEntity,
   expect,
@@ -7,6 +8,7 @@ import {
   readyDialog,
   rowOperation,
   runHierarchy,
+  seedEntityChain,
   test,
   uniqueText,
 } from "./helpers";
@@ -245,6 +247,95 @@ test("the entity hierarchy nests by the hierarchy relation, pins a subtree, and 
     }
     if (parentBpId) {
       const deleted = await page.request.delete(`/api/v1/blueprints/${parentBpId}`, { headers: authHeaders });
+      expect(deleted.status()).toBe(204);
+    }
+  }
+});
+
+// The long-forest rendering (2.20.1): past 300 rows the Entity hierarchy mounts only the rows in
+// view (window-scrolled, measured heights) instead of one DOM row per entity. Seeds 320 chained
+// entities of one throwaway blueprint through the batched import (`seedEntityChain`), narrows
+// the tree to this run with the search filter and expands everything, then proves the DOM stays
+// small, the first row is on screen, scrolling the WINDOW to the bottom mounts a different row
+// whose Operations menu still opens, and the windowed list passes the shared axe scan. Owns only
+// its `e2e-eh-*` blueprint and entities (no `_team`, no second hierarchy value).
+test("a 320-row Entity hierarchy renders only the rows in view", async ({ page }) => {
+  test.slow();
+  await login(page);
+  const adminToken = await page.evaluate(() => localStorage.getItem("toadie.auth.token"));
+  expect(adminToken !== null, "the admin login must provide setup/cleanup authorization").toBe(true);
+  const authHeaders = { Authorization: `Bearer ${adminToken}` };
+
+  const run = uniqueText("e2e-eh");
+  const blueprint = `${run}-bp-long`;
+  const total = 320;
+  const storedIds: number[] = [];
+  let blueprintId: number | undefined;
+
+  try {
+    // 0. The blueprint (a single `parent` self-relation flagged as the `composition`
+    // hierarchy) and its 320 chained entities: eight chains of 40, so rows nest 40 deep.
+    const blueprintResp = await page.request.post("/api/v1/blueprints", {
+      headers: authHeaders,
+      data: {
+        identifier: blueprint,
+        title: "E2E EH Long Blueprint",
+        schema: { properties: {}, required: [] },
+        relations: { parent: { title: "Parent", target: blueprint, required: false, many: false } },
+        hierarchyRelations: { composition: "parent" },
+      },
+    });
+    expect(blueprintResp.status()).toBe(201);
+    blueprintId = (await blueprintResp.json()).id;
+    await seedEntityChain(page.request, adminToken!, blueprint, run, total, { chainLength: 40, created: storedIds });
+
+    // 1. Open the hierarchy narrowed to this run, on the composition hierarchy, fully expanded.
+    await page.goto("/entity-hierarchy");
+    await expect(page.getByRole("heading", { name: "Entity hierarchy" })).toBeVisible();
+    await openFilters(page);
+    await page.getByRole("textbox", { name: "Search" }).fill(run);
+    await page.getByRole("combobox", { name: "Hierarchy", exact: true }).click();
+    await page.getByRole("option", { name: "composition", exact: true }).click();
+    await page.getByRole("button", { name: "Expand all" }).click();
+
+    // 2. 320 rows are over the threshold: the first row is on screen, but only a window of the
+    // rows is in the DOM (a row's Operations kebab is its per-row marker).
+    const operations = page.getByRole("button", { name: /^Operations for / });
+    await expect(page.getByRole("button", { name: `Operations for ${run} 0`, exact: true })).toBeVisible();
+    await expect.poll(() => operations.count()).toBeGreaterThan(5);
+    expect(await operations.count()).toBeLessThan(total / 2);
+
+    // 3. The windowed list is accessible (the accessibility spec's tags and colour-contrast waiver).
+    const scan = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .disableRules(["color-contrast"])
+      .include("main")
+      .analyze();
+    expect(scan.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+
+    // 4. Scrolling the window to the bottom mounts the other end of the list: the first row
+    // unmounts, the last mounted row's Operations menu opens and closes. Re-scrolling inside
+    // the retry absorbs the list growing as freshly mounted rows are measured.
+    await expect(async () => {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await expect(page.getByRole("button", { name: `Operations for ${run} 0`, exact: true })).toHaveCount(0, {
+        timeout: 1_000,
+      });
+      await expect(operations.last()).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 20_000 });
+    expect(await operations.count()).toBeLessThan(total / 2);
+    await operations.last().click();
+    await expect(page.getByRole("menuitem", { name: "Edit", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  } finally {
+    // Cleanup: every entity (a referrer before its target, so newest first), then the blueprint.
+    for (const id of [...storedIds].reverse()) {
+      const deleted = await page.request.delete(`/api/v1/entities/${id}`, { headers: authHeaders });
+      expect(deleted.status(), "cleanup: delete the referring entity before its target").toBe(204);
+    }
+    if (blueprintId) {
+      const deleted = await page.request.delete(`/api/v1/blueprints/${blueprintId}`, { headers: authHeaders });
       expect(deleted.status()).toBe(204);
     }
   }
