@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.20.1",
+    date: "2026-10-25",
+    en: `**Long lists stay quick.** The Hierarchy, Entity hierarchy and both Errors pages now draw only the rows on screen once a list passes 300 rows, so a 10,000-row workspace opens and scrolls without pauses; the Errors tables keep their column headers in view while you scroll. On narrow screens both hierarchies now indent deeper levels less, so deep trees fit a phone.`,
+    pl: `**Długie listy działają szybko.** Strony Hierarchia, Hierarchia encji oraz obie strony Błędy rysują teraz tylko wiersze widoczne na ekranie, gdy lista przekracza 300 wierszy, więc przestrzeń robocza z 10 000 wierszy otwiera się i przewija bez przestojów; tabele błędów zachowują nagłówki kolumn w widoku podczas przewijania. Na wąskich ekranach obie hierarchie mniej wcinają głębsze poziomy, więc głębokie drzewa mieszczą się na telefonie.`,
+  },
+  {
     version: "2.20.0",
     date: "2026-10-25",
     en: `**Large graphs no longer freeze the page.** The Graph and Entity graph pages now lay out in the background, so the page stays responsive while a big graph is arranged, and a faster layout method arranges a 1,000-entity graph in seconds instead of minutes — automatic layouts may look slightly different once. A selection of more than 300 nodes opens on a choice: show only the top level, show everything, or narrow the view with filters. A layout save that hits the limit on stored positions now says so.`,
