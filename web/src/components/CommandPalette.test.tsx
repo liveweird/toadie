@@ -67,7 +67,7 @@ describe("CommandPalette", () => {
       vi.stubGlobal("fetch", vi.fn());
       const user = userEvent.setup();
       renderPalette("backstage");
-      await user.click(screen.getAllByRole("button", { name: "Search and jump to…" })[0]);
+      await user.click(screen.getByRole("button", { name: /jump to a page/ }));
       expect(await screen.findByRole("button", { name: /Hierarchy/ })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Change password/ })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /New catalog file/ })).toBeInTheDocument();
@@ -125,7 +125,7 @@ describe("CommandPalette", () => {
       vi.stubGlobal("fetch", vi.fn());
       const user = userEvent.setup();
       renderPalette("port");
-      await user.click(screen.getAllByRole("button", { name: "Search and jump to…" })[0]);
+      await user.click(screen.getByRole("button", { name: /jump to a page/ }));
       expect(await screen.findByRole("button", { name: /^Blueprints$/ })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Entity hierarchy/ })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /New entity/ })).toBeInTheDocument();
@@ -138,7 +138,7 @@ describe("CommandPalette", () => {
       vi.stubGlobal("fetch", vi.fn());
       const user = userEvent.setup();
       renderPalette("port");
-      await user.click(screen.getAllByRole("button", { name: "Search and jump to…" })[0]);
+      await user.click(screen.getByRole("button", { name: /jump to a page/ }));
       expect(await screen.findByRole("button", { name: /Users/ })).toBeInTheDocument();
     });
 
@@ -201,5 +201,11 @@ describe("CommandPalette", () => {
     expect(screen.getByText("Search files or jump to a page…")).toBeInTheDocument();
     rerender(<CommandPalette world="port" />);
     expect(screen.getByText("Search entities or jump to a page…")).toBeInTheDocument();
+  });
+
+  test("the wide trigger's accessible name contains its visible text", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    renderWithProviders(<CommandPalette world="port" />);
+    expect(screen.getByRole("button", { name: /^Search entities or jump to a page…/ })).toBeInTheDocument();
   });
 });

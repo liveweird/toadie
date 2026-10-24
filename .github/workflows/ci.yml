@@ -20,7 +20,8 @@ jobs:
     timeout-minutes: 20
     env:
       # Compare against the target before this change, never against the checked-out merge.
-      # A first branch push has an all-zero before SHA; the checker uses origin/master then.
+      # A first branch push has an all-zero before SHA; the checker uses origin/master then. The
+      # "Resolve the GraphQL baseline" step below hands the build the value it may actually use.
       GRAPHQL_BASELINE_REVISION: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
     steps:
       - uses: actions/checkout@v7
@@ -32,9 +33,24 @@ jobs:
           distribution: temurin
           java-version: '21.0.12+8.0.LTS'
           cache: gradle
+      # A force-pushed branch's push event names a before SHA that no ref reaches any more, so even a
+      # full-history checkout lacks it: compare such a push against its merge-base with origin/master
+      # (what it branched from, so a branch behind master is not charged with master's additions).
+      # Only push events fall back; an unresolvable PR or merge-group base still fails the checker.
+      - name: Resolve the GraphQL baseline
+        id: baseline
+        run: |
+          revision="$GRAPHQL_BASELINE_REVISION"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && ! git cat-file -e "${revision}^{commit}" 2>/dev/null; then
+            revision="$(git merge-base origin/master HEAD)"
+            echo "::notice::Push baseline '${GRAPHQL_BASELINE_REVISION}' is unreachable (force-push); comparing against merge-base ${revision}."
+          fi
+          echo "revision=${revision}" >> "$GITHUB_OUTPUT"
       # Strict: a missing or mismatched artifact checksum fails the build instead of warning.
       # installDist is what the Docker image build runs, so its resolution is verified here too.
       - name: Build, test, static analysis, and coverage
+        env:
+          GRAPHQL_BASELINE_REVISION: ${{ steps.baseline.outputs.revision }}
         run: ./gradlew build :server:koverXmlReport :server:installDist --dependency-verification strict --no-daemon
       # A tripwire, not the proof: a plain build never writes locks or checksums, so this fires only
       # if a step above (or a future --write-* flag) rewrote them. The proof is the strict build.
