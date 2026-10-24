@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.18.4",
+    date: "2026-10-24",
+    en: `**Clearer search button for screen readers.** The header's search button is now announced by the text it shows, so what you hear matches what you see. Dependencies were also updated.`,
+    pl: `**Czytelniejszy przycisk wyszukiwania dla czytników ekranu.** Przycisk wyszukiwania w nagłówku jest teraz odczytywany tekstem, który wyświetla, więc to, co słyszysz, zgadza się z tym, co widzisz. Zaktualizowano też zależności.`,
+  },
+  {
     version: "2.18.3",
     date: "2026-10-14",
     en: `**Checked dependencies.** Every build now verifies each downloaded library against a recorded checksum and fails on a known high or critical vulnerability. The libraries that carried such advisories were raised to fixed versions. No change to how you use Toadie.`,

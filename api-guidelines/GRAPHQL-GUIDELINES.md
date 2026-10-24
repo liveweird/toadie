@@ -43,7 +43,9 @@ up-to-date result for a moving Git reference.
 
 Baseline precedence is `-PgraphqlBaselineRef=<ref>`, then `GRAPHQL_BASELINE_REVISION`, then
 `origin/master`. Empty/all-zero CI before revisions fall back to `origin/master`. The CI job
-fetches full history and supplies the PR target SHA, merge-group base SHA, or pre-push SHA.
+fetches full history and supplies the PR target SHA, merge-group base SHA, or pre-push SHA; a
+push whose pre-push SHA no ref reaches any more (a force-push) compares against its merge-base
+with `origin/master`.
 A missing baseline revision or schema fails with an actionable error; it never silently skips
 compatibility. Fetch the relevant history before running against a shallow local checkout.
 

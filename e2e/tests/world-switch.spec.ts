@@ -44,13 +44,13 @@ test("the world switch follows the route, remembers the last world, and scopes t
   await expect(page).toHaveURL(/\/hierarchy$/);
 
   // The command palette is scoped to the current (Backstage) world.
-  await page.getByRole("button", { name: "Search and jump to…" }).first().click();
+  await page.getByRole("button", { name: /jump to a page/ }).click();
   await expect(page.getByRole("button", { name: "New catalog file" })).toBeVisible();
   await page.keyboard.press("Escape");
 
   // Switching to Port rescopes the palette's actions and search placeholder.
   await switchWorld(page, "Port");
-  await page.getByRole("button", { name: "Search and jump to…" }).first().click();
+  await page.getByRole("button", { name: /jump to a page/ }).click();
   await expect(page.getByRole("button", { name: "New entity" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Import ontology" })).toBeVisible();
   await expect(page.getByPlaceholder("Search entities or jump to a page…")).toBeVisible();
