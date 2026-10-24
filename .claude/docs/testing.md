@@ -375,6 +375,16 @@ pins across `EntityTest`, `EntityQueryRouteTest`, `EntityGraphTest`, `QueryEvalu
 (the default-capacity ledger never trips at ordinary test-fixture scale) — `EntityGraphTest`'s
 own fixtures were mechanically updated for `EntityGraphSource.relations` replacing `.document`.
 
+**Catalog read budget (2.19.0).** `CatalogFileReadBudgetTest` drives a private service via
+`TestCatalogFiles.tunedService(readLedger)` (the `TestEntities.tunedService` shape), no timing: a
+capacity-1 ledger makes `graph`/`errors`/`export` answer `BadRequestException` (a unique fixture
+file first, so the workspace is never empty); capacity 8 MiB with all but one byte pre-reserved by
+a second reservation makes the same three answer `TooManyRequestsException`, and they succeed
+once it closes with nothing in flight; "decided entirely at admission" measures an `export`'s
+peak P and pins capacity P admits it (peak still P) while P - 1 refuses; and the paged list,
+`read`, `check` and the `importCheck` dry-run succeed on a capacity-1 ledger without ever touching
+it (`peak` 0). `ReadLedgerTest` and the entity suites are the shared mechanics (above).
+
 **Ontology import (v1.28.0).** `BlueprintImportPlanTest` and `EntityImportPlanTest` are the pure
 planners (`blueprints/BlueprintImport.kt`/`entities/EntityImport.kt`, no database): one case per
 rule in `.claude/docs/port-data-model.md` "Import and export" — decode/validate failures, the

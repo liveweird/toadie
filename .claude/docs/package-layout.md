@@ -350,7 +350,9 @@ ch.nokillswit
                         rule for a graph node with no document to match),
                         CatalogFileService.kt, CatalogFileRoutes.kt — /api/v1/files CRUD
                         + paginated list + the sync pair (GET/POST …/{id}/sync); shared
-                        workspace (no admin gate on content);
+                        workspace (no admin gate on content); since 2.19.0 its graph/errors/
+                        export reads are admitted through the process-wide `ReadLedger`
+                        (`infra/concurrency/ReadLedger.kt`, `readWorkspace`);
                         CatalogRegistryReader.kt — transaction-neutral namespace lookup and
                         registry snapshot SQL called inside the service's write/report transaction;
                         CatalogFileImport.kt — the import pipeline (import/importCheck as

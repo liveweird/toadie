@@ -120,6 +120,17 @@ from `skeleton()`) never touches — or charges for — a target row's `properti
 from both the admission check and the later decode charges — `narrowTargets`/`loadReadSet` are
 otherwise identical for reads and writes.
 
+**Catalog whole-workspace reads (2.19.0).** `CatalogFileService.errors`/`graph`/`export` (the
+three reads that decode every active `content` row — `activeSources()` and the export loop) run
+through the private `readWorkspace(predicate) { … }`: it opens a `ReadLedger` reservation, and
+INSIDE the read transaction, before the content `SELECT`, reserves `SUM(octet_length(content))`
+over the same predicate x `CATALOG_READ_FOOTPRINT_RATIO` (`octetLength`, `infra/db/Sql.kt`),
+mapping a `ReadBudgetExceeded` to the `400`/`429` pair via `throwReadBudgetHttp(…, "catalog")`.
+The paged list, single read, `check` and the import dry-run (identity columns / one row at a time)
+stay unbudgeted. The semantics, the ledger's capacity and the rule live in
+`.claude/docs/security.md` "Entity read memory budget"; one `ReadLedger` is built in `infra/db/
+Database.kt` and passed to both `CatalogFileService` and `EntityService`.
+
 **Entity graph reads.** `EntityService.graph(EntityGraphFilter)` (Phase 3, v1.25.0) is a plain
 read transaction, not a write path: `materializeGraph` calls `loadReadSet` with the `blueprint`/
 `q`/`team` filter as `shownPredicate` (the catalog graph's rule, one level down — an edge needs

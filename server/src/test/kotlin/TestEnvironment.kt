@@ -393,8 +393,17 @@ object TestUsers {
 /** Direct service handle for contracts the routes can't exercise (e.g. blank-filter rules). */
 object TestCatalogFiles {
     val service: ch.nokillswit.catalog.CatalogFileService by lazy {
-        ch.nokillswit.catalog.CatalogFileService(sharedTestDatabase)
+        ch.nokillswit.catalog.CatalogFileService(sharedTestDatabase, readLedger = ch.nokillswit.infra.concurrency.ReadLedger())
     }
+
+    /**
+     * A private service instance with the read ledger injected (the [TestEntities.tunedService]
+     * shape): a small capacity makes the whole-workspace read budget cases deterministic.
+     */
+    fun tunedService(
+        readLedger: ch.nokillswit.infra.concurrency.ReadLedger = ch.nokillswit.infra.concurrency.ReadLedger(),
+    ): ch.nokillswit.catalog.CatalogFileService =
+        ch.nokillswit.catalog.CatalogFileService(sharedTestDatabase, readLedger = readLedger)
 
     /**
      * Direct content overwrite bypassing the write path's validation (the TestUsers.softDelete
@@ -943,7 +952,7 @@ object TestBlueprints {
  */
 object TestEntities {
     val service: ch.nokillswit.entities.EntityService by lazy {
-        ch.nokillswit.entities.EntityService(sharedTestDatabase)
+        ch.nokillswit.entities.EntityService(sharedTestDatabase, readLedger = ch.nokillswit.infra.concurrency.ReadLedger())
     }
 
     /**

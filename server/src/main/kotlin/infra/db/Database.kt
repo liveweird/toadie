@@ -26,6 +26,7 @@ import ch.nokillswit.entities.MAX_JQ_DEADLINE_MILLIS
 import ch.nokillswit.entityquery.MAX_ENTITY_QUERY_DEADLINE_MILLIS
 import ch.nokillswit.entityquery.SavedEntityQueryService
 import ch.nokillswit.entityquery.SavedEntityQueryServiceKey
+import ch.nokillswit.infra.concurrency.ReadLedger
 import ch.nokillswit.labels.LabelService
 import ch.nokillswit.labels.LabelServiceKey
 import ch.nokillswit.lenses.LensService
@@ -162,8 +163,10 @@ suspend fun Application.configureDatabase() {
     attributes.put(IntegrationClientServiceKey, IntegrationClientService(database))
     attributes.put(GraphLayoutServiceKey, GraphLayoutService(database, GraphLayoutService.GraphLayouts))
     attributes.put(EntityGraphLayoutServiceKey, GraphLayoutService(database, GraphLayoutService.EntityGraphLayouts))
+    // ONE process-wide read ledger for every whole-workspace content read (catalog + entities).
+    val readLedger = ReadLedger()
     val catalogFileEventService = CatalogFileEventService(database)
-    attributes.put(CatalogFileServiceKey, CatalogFileService(database, catalogFileEventService))
+    attributes.put(CatalogFileServiceKey, CatalogFileService(database, catalogFileEventService, readLedger))
     attributes.put(CatalogFileEventServiceKey, catalogFileEventService)
     attributes.put(DictionaryServiceKey, DictionaryService(database))
     attributes.put(LabelServiceKey, LabelService(database))
@@ -183,7 +186,12 @@ suspend fun Application.configureDatabase() {
         }
     attributes.put(
         EntityServiceKey,
-        EntityService(database, JqEvaluator(deadlineMillis = jqDeadlineMillis), queryDeadlineMillis = entityQueryDeadlineMillis),
+        EntityService(
+            database,
+            JqEvaluator(deadlineMillis = jqDeadlineMillis),
+            queryDeadlineMillis = entityQueryDeadlineMillis,
+            readLedger = readLedger,
+        ),
     )
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
     attributes.put(AuthSessionServiceKey, AuthSessionService(database))

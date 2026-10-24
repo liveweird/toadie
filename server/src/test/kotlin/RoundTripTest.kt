@@ -409,6 +409,7 @@ class RoundTripTest {
                 user = "nobody",
                 password = "nothing",
             ),
+            readLedger = ch.nokillswit.infra.concurrency.ReadLedger(),
         )
         val results = deadService.import(listOf(componentFile(uniqueEntityName("err"))), createdByUserId = 1u)
         assertEquals(ImportResultStatus.ERROR, results.single().status)

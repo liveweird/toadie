@@ -94,8 +94,11 @@ class EntityService(
     queryPermits: Int = MAX_CONCURRENT_ENTITY_QUERIES,
     /** The workspace document byte budget every create/replace/import is checked against — a test seam. */
     internal val workspaceDocumentBytes: Long = MAX_WORKSPACE_DOCUMENT_BYTES,
-    /** The process-wide read ledger every graph/list/read charges (`EntityReadBudget.kt`) — a test seam. */
-    internal val readLedger: ReadLedger = ReadLedger(),
+    /**
+     * The process-wide read ledger every graph/list/read charges — REQUIRED so the composition root
+     * passes the one shared instance (a test seam).
+     */
+    internal val readLedger: ReadLedger,
 ) {
     /** `tryAcquire` only — a saturated instance answers `429` immediately rather than queueing a workspace load. */
     internal val querySlots = Semaphore(queryPermits)

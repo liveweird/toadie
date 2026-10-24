@@ -330,6 +330,10 @@ the same 6 KB. `ProductionHttpTest` pins that a ~6 KB request line reaches the J
 
 ### Entity read memory budget (2.4.0)
 
+Since 2.19.0 the same ledger also admits the Backstage catalog's whole-workspace reads (`graph`,
+`errors`, `export`) — see "Whole-workspace content reads are admitted through the one read
+ledger" below; the mechanics described here are shared.
+
 The entity registry caps (2,000 entities per blueprint, 10,000 total, 256 KiB per document) can
 in the worst case exceed the 256 MB heap budget when a single graph/query read materializes many
 large documents at once. `infra/concurrency/ReadLedger.kt` bounds this with a process-wide,
@@ -404,6 +408,13 @@ read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persi
 Rule of thumb: change `READ_BUDGET_BYTES` together with `-Xmx` (`server/build.gradle.kts`)
 — raising one without the other either starves ordinary requests of heap or lets the ledger admit
 more than the heap can actually hold.
+
+**Whole-workspace content reads are admitted through the one read ledger** (2.19.0).
+- **Applies when:** adding or changing any read that materializes every active content row of `catalog_files` or `entities` (or a filtered subset) in application memory — the catalog `graph`/`errors`/`export` and the entity `graph`/`errors` paths today. The entity `list`/`read` paths reserve their lookup-target rows through the same ledger.
+- **Requirement:** the read opens a `ReadLedger` reservation (`infra/concurrency/ReadLedger.kt`) and reserves its whole conservative estimate in ONE all-or-nothing step, inside its read transaction and before any document crosses the wire; a refusal is `throwReadBudgetHttp` — `400` when the read is too large on its own, `429` when other reads hold the room — and audits nothing (one operational INFO line). The catalog estimate is `SUM(octet_length(content))` x `CATALOG_READ_FOOTPRINT_RATIO` (`catalog/CatalogFileService.kt`'s `readWorkspace`); the entity estimate is the per-row ratios above. One ledger for the whole process: the composition root (`infra/db/Database.kt`) passes the SAME `ReadLedger` to both services.
+- **Reference:** the bullets above; `.claude/docs/persistence.md` "Catalog whole-workspace reads (2.19.0)".
+- **Enforcement:** `CatalogFileReadBudgetTest`, `ReadLedgerTest`, and the entity suites (`EntityReadBudgetTest`, `EntityQueryRouteTest`, `EntityErrorsTest`, `OntologyIntegrationFilterBudgetTest`).
+- **Exception:** writers under a lock (`create`/`update` pass no reservation), the bounded page itself of a paged list (its page is capped by `pageSize`; only its lookup targets are reserved), identity-only reads, and registries capped at <= 200 rows.
 
 ### Not yet ported from Lettuce
 
