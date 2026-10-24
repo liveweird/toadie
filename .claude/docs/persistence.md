@@ -124,7 +124,8 @@ otherwise identical for reads and writes.
 three reads that decode every active `content` row — `activeSources()` and the export loop) run
 through the private `readWorkspace(predicate) { … }`: it opens a `ReadLedger` reservation, and
 INSIDE the read transaction, before the content `SELECT`, reserves `SUM(octet_length(content))`
-over the same predicate x `CATALOG_READ_FOOTPRINT_RATIO` (`octetLength`, `infra/db/Sql.kt`),
+over the same predicate x `CATALOG_READ_FOOTPRINT_RATIO` (x `CATALOG_EXPORT_FOOTPRINT_RATIO` for
+the export) (`octetLength`, `infra/db/Sql.kt`),
 mapping a `ReadBudgetExceeded` to the `400`/`429` pair via `throwReadBudgetHttp(…, "catalog")`.
 The paged list, single read, `check` and the import dry-run (identity columns / one row at a time)
 stay unbudgeted. The semantics, the ledger's capacity and the rule live in

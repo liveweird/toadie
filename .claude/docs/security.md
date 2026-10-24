@@ -410,7 +410,9 @@ read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persi
   AFTER that, from the returned DTO, so a slow client keeps the response tree (the catalog
   `export` and graph payloads are the largest) alive on the heap beyond what the ledger counts —
   the response-encoding slack the "Heap layout" bullet leaves headroom for, not bounded by the
-  ledger.
+  ledger. The catalog `export`, whose response is the whole workspace, is therefore admitted at
+  `CATALOG_EXPORT_FOOTPRINT_RATIO` (×6) rather than ×3: the 2026-10-25 capacity probe showed three
+  ×3-admitted exports of a 10k-file workspace exhausting the heap (one `500`).
 
 Rule of thumb: change `READ_BUDGET_BYTES` together with `-Xmx` (`server/build.gradle.kts`)
 — raising one without the other either starves ordinary requests of heap or lets the ledger admit

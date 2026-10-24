@@ -109,11 +109,19 @@ val CATALOG_FILE_SORT_FIELDS: Set<String> = SORTABLE_COLUMNS.keys
  * The admission weight of a whole-workspace catalog read (2.19.0): `SUM(octet_length(content))`
  * times this is reserved against the process-wide [ReadLedger] before any document is decoded —
  * the raw string held while it is parsed, the typed document, and the graph/errors projection
- * built from it. PROVISIONAL: a guess, not a calibration like the entity ratios
- * (`entities/EntityReadBudget.kt`) — to be re-measured with `npm run probe:capacity` and raised or
- * lowered here (the one place it lives) accordingly.
+ * built from it. Measured, not calibrated like the entity ratios (`entities/EntityReadBudget.kt`):
+ * the 2026-10-25 capacity probe (`npm run probe:capacity`, 10,009 files, up to 20 concurrent
+ * graph/errors reads) admitted three at a time with no `500` and no heap exhaustion.
  */
 const val CATALOG_READ_FOOTPRINT_RATIO = 3L
+
+/**
+ * [CATALOG_READ_FOOTPRINT_RATIO] for [CatalogFileService.export]: its response IS the whole
+ * workspace, re-encoded after the reservation closes (the response-encoding residual in
+ * `.claude/docs/security.md` "Entity read memory budget"), so it is weighted for that copy too. The
+ * same probe at ×3 let three exports in and one died with `OutOfMemoryError` (a `500`).
+ */
+const val CATALOG_EXPORT_FOOTPRINT_RATIO = 6L
 
 class CatalogFileService(
     private val database: R2dbcDatabase,
@@ -497,7 +505,7 @@ class CatalogFileService(
         // filter matches the case-insensitive contract) — no loading the workspace to discard it.
         var predicate: Op<Boolean> = active()
         namespace?.let { predicate = predicate and (CatalogFiles.namespace eq it.lowercase()) }
-        return readWorkspace(predicate) {
+        return readWorkspace(predicate, CATALOG_EXPORT_FOOTPRINT_RATIO) {
             val files = CatalogFiles.selectAll()
                 .where { predicate }
                 .map { json.decodeFromString<CatalogFile>(it[CatalogFiles.content]) }
@@ -511,18 +519,22 @@ class CatalogFileService(
      * Runs a whole-workspace content read ([errors]/[graph]/[export]) in one transaction after
      * admitting it against the process-wide [readLedger] (2.19.0 — `.claude/docs/security.md`
      * "Entity read memory budget"): the whole conservative estimate of the rows [predicate] matches
-     * is reserved BEFORE any `content` crosses the wire, so a workspace too large on its own is a
-     * `400` and one that merely finds no room beside other in-flight reads a `429`
-     * ([throwReadBudgetHttp]). The reservation is held for the whole read and released on exit.
+     * (raw bytes × [ratio]) is reserved BEFORE any `content` crosses the wire, so a workspace too
+     * large on its own is a `400` and one that merely finds no room beside other in-flight reads a
+     * `429` ([throwReadBudgetHttp]). The reservation is held for the whole read and released on exit.
      */
-    private suspend fun <T> readWorkspace(predicate: Op<Boolean>, block: suspend () -> T): T =
+    private suspend fun <T> readWorkspace(
+        predicate: Op<Boolean>,
+        ratio: Long = CATALOG_READ_FOOTPRINT_RATIO,
+        block: suspend () -> T,
+    ): T =
         readLedger.open().use { reservation ->
             try {
                 suspendTransaction(database) {
                     val contentSum = Sum(octetLength(CatalogFiles.content), LongColumnType())
                     val row = CatalogFiles.select(contentSum).where { predicate }.singleOrNull()
                         ?: error("an aggregate SELECT without GROUP BY must always answer exactly one row")
-                    reservation.reserve((row.getOrNull(contentSum) ?: 0L) * CATALOG_READ_FOOTPRINT_RATIO)
+                    reservation.reserve((row.getOrNull(contentSum) ?: 0L) * ratio)
                     block()
                 }
             } catch (cause: ReadBudgetExceeded) {
