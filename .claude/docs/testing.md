@@ -53,15 +53,11 @@ The stub's `onInit` hands the page a fake instance whose `fitView` records the n
 - **Applies when:** changing `web/src/utils/graphLayout.ts`, the layout worker or its hook
   (`graphLayoutWorker.ts`, `useGraphLayoutWorker.ts`), the large-graph gate (`graphGate.ts`,
   `useLargeGraphGate.ts`), or either canvas's (`Graph.tsx`, `EntityGraph.tsx`) memo chain.
-- **Requirement:** dagre runs only on STRUCTURAL inputs (graph, relation chips, containment
-  forest, fold, Focus-thinned edges, hierarchy) — the layout document arriving, `layoutReady`,
-  the blueprint registry/tiers and other decoration never re-run it. A result is reported only
-  for the latest request id; a stale one is dropped. Supersede (past `SUPERSEDE_GRACE_MS`) and
-  the `LAYOUT_DEADLINE_MS` timeout cancel by TERMINATING the worker. A missing or throwing
-  `Worker` falls back to a synchronous layout on the calling thread. A graph over
-  `LARGE_GRAPH_NODES` drawn nodes is held behind the gate, and the gate's choices (the
-  top-level overlay, Show everything) are transient state never written to the layout document.
-  Tests use fake timers and `test/fakeWorker.ts` — no sleeps, no real `Worker`.
+- **Requirement:** the layout runs only on structural inputs, a stale result is never reported,
+  supersede and the deadline cancel by terminating the worker, a missing or dead worker falls
+  back to a synchronous layout, and the large-graph gate's choices are never written to the
+  layout document (details in the reference below). Tests use fake timers and
+  `test/fakeWorker.ts` — no sleeps, no real `Worker`.
 - **Reference:** `web/CLAUDE.md` "Layout off the main thread (2.20.0)" and "The large-graph
   gate (2.20.0)" under "The Graph page".
 - **Enforcement:** `useGraphLayoutWorker.test.tsx`, `graphLayoutWorker.test.ts`,
