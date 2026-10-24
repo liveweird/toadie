@@ -74,7 +74,9 @@ services:
     ports:
       - "127.0.0.1:8081:8081"
     # Ceiling for the tuned JVM (SerialGC + -Xmx256m + C1, baked into bin/server): ~270 MiB RSS
-    # under light load, so 512 MiB leaves comfortable headroom and bounds the container.
+    # under light load, so 512 MiB leaves comfortable headroom and bounds the container. The
+    # whole-workspace read peak against this limit (2026-10-24 capacity probe) is recorded in
+    # .claude/docs/security.md "Entity read memory budget" (Heap layout).
     mem_limit: 512m
     healthcheck:
       # eclipse-temurin's -jre base ships curl (verified: `docker run --rm eclipse-temurin:...-jre

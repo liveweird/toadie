@@ -347,7 +347,14 @@ read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persi
   own baseline (class metadata, thread stacks, the JIT, GC bookkeeping) is subtracted — measured
   at ~21 MiB idle. The 64 MiB ledger is well inside that remaining headroom, leaving slack for
   request-handling overhead outside the ledger's own accounting (HTTP buffers, JSON encoding of
-  the RESPONSE, computed-property evaluation's own working set).
+  the RESPONSE, computed-property evaluation's own working set). The 512 MiB container stays at
+  ~270 MiB RSS under light load. **Probe numbers (the one canonical home; the Gradle, compose
+  and k8s comments link here):** the 2026-10-24 probe (10k files/10k entities, 10 concurrent
+  whole-workspace reads, master 62db09a, measured BEFORE the catalog reads joined the ledger)
+  read VmRSS 518624 kB (506 MiB) / VmHWM 532780 kB (520 MiB) from the app process against the
+  512 MiB container limit — at the limit, not comfortably under it — and the heap OOMed because
+  the catalog reads were unbudgeted. `infra/concurrency/ReadLedger.kt` bounds the heap side;
+  native memory (Netty/R2DBC direct buffers up to `-Xmx`, glibc arenas) is the remainder.
 - **Prepaid admission, then draw-down (2.19.0).** (1) An up-front, all-or-nothing RESERVATION:
   `loadReadSet` reads `id` + `octet_length(document)` + `octet_length(team)` per row of the
   combined row set off PostgreSQL BEFORE a single document crosses the wire and calls
