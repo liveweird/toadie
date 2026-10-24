@@ -577,6 +577,78 @@ describe("Graph page", () => {
     });
   });
 
+  describe("the large-graph gate", () => {
+    /** Two systems (`sys-a`, `sys-b`) and `total - 2` components split between them. */
+    function bigCatalog(total: number) {
+      const systems = ["sys-a", "sys-b"];
+      const leaves = total - systems.length;
+      return {
+        nodes: [
+          ...systems.map((name, i) => ({
+            id: `system:default/${name}`, kind: "system", namespace: "default", name, title: null, fileId: i + 1, status: "STORED",
+          })),
+          ...Array.from({ length: leaves }, (_, i) => ({
+            id: `component:default/c${i}`, kind: "component", namespace: "default", name: `c${i}`, title: null, fileId: 100 + i, status: "STORED",
+          })),
+        ],
+        edges: Array.from({ length: leaves }, (_, i) => ({
+          sourceId: `component:default/c${i}`, targetId: `system:default/${systems[i % 2]}`, field: "spec.system",
+        })),
+      };
+    }
+    const drawn = () => screen.queryAllByText(/\[STORED\]/).length;
+    const panel = () => screen.findByRole("region", { name: "Large graph" });
+
+    test("a graph over 300 nodes opens behind the panel: no layout, no canvas, no empty state", async () => {
+      mockGraph(mockFetch, bigCatalog(301));
+      renderPage();
+
+      expect(await panel()).toHaveTextContent("Nodes: 301, relations: 299");
+      expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
+      expect(screen.queryByText(/nothing to render/i)).not.toBeInTheDocument();
+      expect(vi.mocked(layoutPositions)).not.toHaveBeenCalled();
+    });
+
+    test("exactly 300 nodes lay out as usual", async () => {
+      mockGraph(mockFetch, bigCatalog(300));
+      renderPage();
+
+      await waitFor(() => expect(drawn()).toBe(300));
+      expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
+    });
+
+    test("Show top level draws only the roots; toggling there saves nothing; Expand all brings the panel back", async () => {
+      mockGraph(mockFetch, bigCatalog(301));
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(await screen.findByRole("button", { name: "Show top level" }));
+      await waitFor(() => expect(drawn()).toBe(2));
+      expect(screen.getByText("Top level")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Expand sys-a (150 hidden)" }));
+      await waitFor(() => expect(drawn()).toBe(152));
+      expect(layoutPuts(mockFetch)).toEqual([]);
+
+      await user.click(screen.getByRole("button", { name: "Expand all" }));
+      expect(await panel()).toBeInTheDocument();
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
+      expect(layoutPuts(mockFetch)).toEqual([]);
+    });
+
+    test("Show everything draws all of it, with dagre's crossing heuristic switched off", async () => {
+      mockGraph(mockFetch, bigCatalog(301));
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(await screen.findByRole("button", { name: "Show everything" }));
+
+      await waitFor(() => expect(drawn()).toBe(301));
+      const request = vi.mocked(layoutPositions).mock.calls.at(-1)?.[0];
+      expect(request?.options).toEqual({ ranker: "tight-tree", disableOptimalOrderHeuristic: true });
+    });
+  });
+
   test("a graph spanning two namespaces draws a frame per namespace", async () => {
     mockGraph(mockFetch, {
       nodes: [

@@ -86,7 +86,16 @@
     "failedTitle": "The graph layout did not finish",
     "timedOut": "Laying out the graph took too long. Narrow the filters or try again.",
     "error": "The graph layout failed. Narrow the filters or try again.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "large": {
+      "title": "Large graph",
+      "body": "Nodes: {{nodes}}, relations: {{edges}}. Laying this out takes a while and the result is hard to read.",
+      "showTopLevel": "Show top level",
+      "showAll": "Show everything",
+      "hint": "Or narrow the selection with the filters and the visibility pills first."
+    },
+    "topLevelBadge": "Top level",
+    "topLevelClearAria": "Leave the top-level view"
   },
   "tier": {
     "tooltip": "Tier {{tier}} — fill lower tiers first",

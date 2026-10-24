@@ -1,13 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { jsonResponse } from "../test/http";
-import { renderWithProviders } from "../test/render";
 import { blueprintResponse } from "../test/fixtures";
 import { expandQuery, ownedByQuery } from "../utils/queryTemplates";
 import { fitViewCalls } from "../test/reactFlowStub";
-import { FakeWorker } from "../test/fakeWorker";
 
 // React Flow needs real DOM measurement happy-dom can't give — shared stub (v1.25.0,
 // extracted from Graph.test.tsx). The pure shaping (entityGraph.ts/graphLayout.ts) is
@@ -40,78 +37,15 @@ vi.mock("../components/QueryEditor", () => ({
   ),
 }));
 
-// The dagre half of the layout is spied so the tests can pin WHAT re-runs it: only structural
-// inputs (graph, chips, fold, hierarchy, Focus) — never the layout document, the blueprint
-// registry's tiers, or other decoration.
-vi.mock("../utils/graphLayout", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../utils/graphLayout")>();
-  return { ...actual, layoutPositions: vi.fn(actual.layoutPositions) };
-});
-
-import EntityGraph from "./EntityGraph";
-import { layoutPositions } from "../utils/graphLayout";
-
-const TOKEN_KEY = "toadie.auth.token";
-
-type FetchMock = ReturnType<typeof vi.fn>;
-
-const GRAPH = {
-  nodes: [
-    { id: "team|platform", entityId: 1, blueprint: "team", blueprintTitle: "Team", identifier: "platform", title: "Platform", findings: 0 },
-    { id: "service|checkout", entityId: 2, blueprint: "service", blueprintTitle: "Service", identifier: "checkout", title: "Checkout", findings: 0 },
-    { id: "service|solo", entityId: 3, blueprint: "service", blueprintTitle: "Service", identifier: "solo", title: "Solo", findings: 0 },
-  ],
-  edges: [
-    { sourceId: "service|checkout", targetId: "team|platform", relation: "team", hierarchies: ["composition"] },
-    { sourceId: "service|checkout", targetId: "service|solo", relation: "peer", hierarchies: [] },
-  ],
-};
-
-const HIERARCHIES = [
-  { id: 1, value: "composition", isDefault: false },
-  { id: 2, value: "cost-center", isDefault: false },
-];
-
-const BLUEPRINTS = [
-  blueprintResponse({ id: 1, identifier: "team", title: "Team" }),
-  blueprintResponse({ id: 2, identifier: "service", title: "Service" }),
-];
-
-function mockGraph(
-  mockFetch: FetchMock,
-  body: unknown = GRAPH,
-  status = 200,
-  layout: unknown = { mode: "auto", positions: {} },
-  hierarchies: unknown = HIERARCHIES,
-  checkDiagnostics: unknown[] = [],
-  blueprints: unknown = BLUEPRINTS,
-) {
-  mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-    if (url.startsWith("/api/v1/blueprints")) return Promise.resolve(jsonResponse(200, { items: blueprints }));
-    if (url.startsWith("/api/v1/dictionaries/hierarchies")) return Promise.resolve(jsonResponse(200, { items: hierarchies }));
-    if (url.startsWith("/api/v1/entity-queries")) return Promise.resolve(jsonResponse(200, { items: [] }));
-    if (url === "/api/v1/entities/query/check")
-      return Promise.resolve(jsonResponse(200, { diagnostics: checkDiagnostics }));
-    if (url === "/api/v1/users/9/entity-graph-layout") {
-      return init?.method === "PUT"
-        ? Promise.resolve(new Response(null, { status: 204 }))
-        : Promise.resolve(jsonResponse(200, layout));
-    }
-    if (url.startsWith("/api/v1/entities/graph"))
-      return Promise.resolve(jsonResponse(status, body));
-    // The Team filter's own options pool (`useEntityOptions(TEAM_BLUEPRINT)`).
-    if (url.startsWith("/api/v1/entities?"))
-      return Promise.resolve(
-        jsonResponse(200, {
-          items: [{ id: 1, identifier: "platform", title: "Platform", findings: [] }],
-          page: 1,
-          pageSize: 100,
-          total: 1,
-        }),
-      );
-    return Promise.resolve(jsonResponse(404, {}));
-  });
-}
+import {
+  GRAPH,
+  HIERARCHIES,
+  mockGraph,
+  layoutPuts,
+  renderPage,
+  TOKEN_KEY,
+  type FetchMock,
+} from "../test/entityGraphPage";
 
 /** The `query=` param of the LAST `entities/graph` request, decoded — `null` when the latest
  *  such request carried none. */
@@ -124,30 +58,6 @@ function lastGraphQuery(mockFetch: FetchMock): string | null {
   return new URLSearchParams(url.split("?")[1] ?? "").get("query");
 }
 
-function layoutPuts(mockFetch: FetchMock): unknown[] {
-  return mockFetch.mock.calls
-    .filter(
-      ([url, init]) =>
-        url === "/api/v1/users/9/entity-graph-layout" && (init as RequestInit | undefined)?.method === "PUT",
-    )
-    .map(([, init]) => JSON.parse((init as RequestInit).body as string));
-}
-
-function PathProbe() {
-  const location = useLocation();
-  return <div data-testid="probe">{location.pathname}</div>;
-}
-
-function renderPage() {
-  return renderWithProviders(
-    <Routes>
-      <Route path="/entity-graph" element={<EntityGraph />} />
-      <Route path="/entities/:id/edit" element={<PathProbe />} />
-    </Routes>,
-    { route: "/entity-graph" },
-  );
-}
-
 describe("EntityGraph page", () => {
   let mockFetch: FetchMock;
 
@@ -157,7 +67,6 @@ describe("EntityGraph page", () => {
     localStorage.setItem(TOKEN_KEY, "fake-token");
     localStorage.setItem("toadie.auth.userId", "9");
     fitViewCalls.length = 0;
-    vi.mocked(layoutPositions).mockClear();
   });
 
   afterEach(() => {
@@ -238,190 +147,6 @@ describe("EntityGraph page", () => {
 
       await screen.findByText(/checkout \[service\]/);
       expect(screen.getByTestId("edge:service|checkout->team|platform:team")).toBeInTheDocument();
-    });
-  });
-
-  describe("the layout re-runs only on structural inputs", () => {
-    const layoutRuns = () => vi.mocked(layoutPositions).mock.calls.length;
-    const flush = () => act(async () => {});
-
-    /** Holds the GETs of the URLs [matching] until the returned release is called. */
-    function holdGets(matching: (url: string) => boolean): () => void {
-      let release!: () => void;
-      const gate = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const base = mockFetch.getMockImplementation() as unknown as (url: string, init?: RequestInit) => Promise<Response>;
-      mockFetch.mockImplementation((url: string, init?: RequestInit) =>
-        matching(url) && init?.method !== "PUT" ? gate.then(() => base(url, init)) : base(url, init),
-      );
-      return release;
-    }
-
-    test("the layout document arriving after the graph does not re-run it", async () => {
-      mockGraph(mockFetch);
-      const release = holdGets((url) => url === "/api/v1/users/9/entity-graph-layout");
-      renderPage();
-
-      await screen.findByText(/checkout \[service\]/);
-      await flush();
-      const before = layoutRuns();
-      expect(before).toBeGreaterThan(0);
-      expect(screen.getByRole("radio", { name: "Manual" })).toBeDisabled();
-
-      release();
-      await waitFor(() => expect(screen.getByRole("radio", { name: "Manual" })).toBeEnabled());
-      await flush();
-      expect(layoutRuns()).toBe(before);
-    });
-
-    test("a late blueprint registry (tier dots only) does not re-run it", async () => {
-      mockGraph(mockFetch, GRAPH, 200, undefined, undefined, [], [
-        blueprintResponse({ id: 1, identifier: "team", title: "Team", tiers: { blueprint: 1 } }),
-        blueprintResponse({ id: 2, identifier: "service", title: "Service", tiers: { blueprint: 2 } }),
-      ]);
-      const release = holdGets((url) => url.startsWith("/api/v1/blueprints"));
-      renderPage();
-
-      await screen.findByText(/checkout \[service\]/);
-      await flush();
-      const before = layoutRuns();
-
-      release();
-      await waitFor(() =>
-        expect(mockFetch.mock.calls.some(([url]) => String(url).startsWith("/api/v1/blueprints"))).toBe(true),
-      );
-      await flush();
-      await flush();
-      expect(layoutRuns()).toBe(before);
-    });
-
-    test("a relation chip toggle re-runs it", async () => {
-      mockGraph(mockFetch);
-      const user = userEvent.setup();
-      renderPage();
-
-      await screen.findByText(/checkout \[service\]/);
-      await flush();
-      const before = layoutRuns();
-      await user.click(screen.getByRole("button", { name: /^Visibility/ }));
-      await user.click(screen.getByRole("checkbox", { name: "peer" }));
-      expect(layoutRuns()).toBeGreaterThan(before);
-    });
-
-    test("a fold toggle re-runs it", async () => {
-      mockGraph(mockFetch);
-      const user = userEvent.setup();
-      renderPage();
-
-      await screen.findByText(/checkout \[service\]/);
-      await flush();
-      const before = layoutRuns();
-      await user.click(screen.getByRole("button", { name: "Collapse platform" }));
-      await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
-    });
-
-    test("a hierarchy pick re-runs it", async () => {
-      mockGraph(mockFetch);
-      const user = userEvent.setup();
-      renderPage();
-
-      await screen.findByText(/checkout \[service\]/);
-      await flush();
-      const before = layoutRuns();
-      await user.click(screen.getByLabelText("Hierarchy", { selector: "input" }));
-      await user.click(await screen.findByRole("option", { name: "cost-center" }));
-      await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
-    });
-
-    test("a Focus change re-runs it", async () => {
-      localStorage.setItem("toadie.viewSettings.entityGraph.filter.focusTier", "1");
-      mockGraph(mockFetch, GRAPH, 200, undefined, undefined, [], [
-        blueprintResponse({ id: 1, identifier: "team", title: "Team", tiers: { blueprint: 1 } }),
-        blueprintResponse({
-          id: 2,
-          identifier: "service",
-          title: "Service",
-          tiers: { blueprint: 1, relations: { peer: 1, team: 2 } },
-        }),
-      ]);
-      const user = userEvent.setup();
-      renderPage();
-
-      await screen.findByText(/checkout \[service\]/);
-      await flush();
-      const before = layoutRuns();
-      await user.click(screen.getByRole("button", { name: /^Filters/ }));
-      await user.click(screen.getByRole("combobox", { name: "Focus" }));
-      await user.click(await screen.findByRole("option", { name: "Tiers 1–2" }));
-      await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
-    });
-  });
-
-  describe("the layout worker", () => {
-    beforeEach(() => {
-      FakeWorker.reset();
-      vi.stubGlobal("Worker", FakeWorker);
-    });
-
-    /** Answers whatever the page has posted so far, until the canvas is up. */
-    async function answerUntilDrawn() {
-      await waitFor(() => {
-        act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
-        expect(screen.getByTestId("flow")).toBeInTheDocument();
-      });
-    }
-
-    test("shows a named 'Laying out' status instead of the canvas until the worker answers", async () => {
-      mockGraph(mockFetch);
-      renderPage();
-
-      const status = await screen.findByText("Laying out the graph…");
-      expect(status).toHaveAttribute("role", "status");
-      expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
-      expect(screen.queryByText(/nothing to render/i)).not.toBeInTheDocument();
-
-      await answerUntilDrawn();
-      expect(await screen.findByText(/checkout \[service\]/)).toBeInTheDocument();
-      expect(screen.queryByText("Laying out the graph…")).not.toBeInTheDocument();
-    });
-
-    test("keeps the previous canvas while a newer layout computes, then swaps it in and re-fits", async () => {
-      mockGraph(mockFetch);
-      const user = userEvent.setup();
-      renderPage();
-      await answerUntilDrawn();
-      await screen.findByText(/checkout \[service\]/);
-
-      await user.click(screen.getByRole("button", { name: "Collapse platform" }));
-
-      // The new layout is pending (unanswered): the old nodes are still on screen, with no
-      // spinner in their place.
-      expect(screen.getByText(/checkout \[service\]/)).toBeInTheDocument();
-      expect(screen.queryByText("Laying out the graph…")).not.toBeInTheDocument();
-
-      fitViewCalls.length = 0;
-      act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
-      await waitFor(() => expect(screen.queryByText(/checkout \[service\]/)).not.toBeInTheDocument());
-      // The fit follows the new node set reaching the canvas, not the request being posted.
-      await waitFor(() => expect(fitViewCalls.at(-1)).toEqual(["service|solo", "team|platform"]));
-    });
-
-    test("a failed layout shows the narrowing hint with a retry that resubmits", async () => {
-      mockGraph(mockFetch);
-      const user = userEvent.setup();
-      renderPage();
-      await screen.findByText("Laying out the graph…");
-      await waitFor(() => expect(FakeWorker.instances.at(-1)?.posted.length).toBeGreaterThan(0));
-      act(() => FakeWorker.instances.at(-1)!.fail());
-
-      expect(await screen.findByText("The graph layout did not finish")).toBeInTheDocument();
-      expect(screen.getByText(/Narrow the filters or try again/)).toBeInTheDocument();
-      expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
-
-      await user.click(screen.getByRole("button", { name: "Try again" }));
-      await answerUntilDrawn();
-      expect(await screen.findByText(/checkout \[service\]/)).toBeInTheDocument();
     });
   });
 

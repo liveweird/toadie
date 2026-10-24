@@ -37,6 +37,7 @@ import EntityNodeContextMenu, { type EntityNodeContextMenuTarget } from "../comp
 import EntityQueryBar from "../components/EntityQueryBar";
 import EmptyState from "../components/EmptyState";
 import GraphLayoutGate from "../components/GraphLayoutGate";
+import TopLevelBadge from "../components/TopLevelBadge";
 import HierarchyPicker from "../components/HierarchyPicker";
 import {
   applyManualPositions,
@@ -51,7 +52,6 @@ import {
   type GraphPositions,
   type LaidOutNode,
 } from "../utils/graphLayout";
-import { foldGraph } from "../utils/graphFold";
 import {
   buildEntityHierarchy,
   entityGraphEdgeKey,
@@ -78,6 +78,7 @@ import LoadingBlock from "../components/LoadingBlock";
 import classes from "../theme.module.css";
 import { useGraphLayout } from "../hooks/useGraphLayout";
 import { useGraphLayoutWorker } from "../hooks/useGraphLayoutWorker";
+import { useLargeGraphGate } from "../hooks/useLargeGraphGate";
 import { useStableIdSet } from "../hooks/useStableIdSet";
 import { useSessionUserId } from "../auth";
 
@@ -172,13 +173,6 @@ export default function EntityGraph() {
   const positions: GraphPositions = layout.document?.positions ?? EMPTY_POSITIONS;
   const collapsed: string[] = layout.document?.collapsed ?? EMPTY_COLLAPSED;
 
-  const toggleRef = useRef<(id: string) => void>(() => {});
-  useEffect(() => {
-    toggleRef.current = (id: string) => {
-      updateLayout((current) => ({ ...current, collapsed: toggleCollapsed(current, id) }));
-    };
-  }, [updateLayout]);
-
   // Containment for the fold comes from the FULL payload (never the relation-chip-filtered
   // one), so an entity stays collapsible with any chip off — the Render page's rule — along
   // the SELECTED hierarchy only; other hierarchies' edges draw as ordinary relations.
@@ -193,32 +187,62 @@ export default function EntityGraph() {
   // (late-arriving) registry must not look like a structural change.
   const focusBlueprints = focus === null ? NO_BLUEPRINTS : blueprints;
 
-  // STRUCTURAL inputs only: dagre runs on exactly this memo's `request`. Tier dots, hierarchy
-  // emphasis, ownership dashes and the fold toggles are decoration, applied below.
-  const structural = useMemo(() => {
+  // Relation chips, then the Focus's edge thinning — BEFORE the fold and dagre, so a hidden
+  // edge neither stands in for a collapsed subtree nor takes part in the layout.
+  const filtered = useMemo(() => {
     if (!graph) return null;
     const chipFiltered = filterEntityGraph(graph, disabled);
     // The tier Focus also thins relation edges (by the relation's tier on its source
-    // blueprint) — BEFORE the fold and dagre, so a hidden edge neither stands in for a
-    // collapsed subtree nor takes part in the layout. The containment forest below still
-    // reads the full payload, so an entity stays collapsible under any Focus.
-    const filtered = focus === null
-      ? chipFiltered
-      : {
-          nodes: chipFiltered.nodes,
-          edges: filterEdgesByTierFocus(chipFiltered.edges, chipFiltered.nodes, focusBlueprints, focus),
-        };
-    const folded = foldGraph(toFoldable(filtered), forest, collapsedSet);
-    return {
-      folded,
-      // Carried with the job so a result is always decorated against the hierarchy it was
-      // laid out for, even while a newer layout is pending.
-      selectedHierarchyEdges: hierarchyEdgeKeys(graph, hierarchyId),
-      request: toLayoutRequest(folded, ENTITY_CLUSTER, layoutOptions(folded.nodes.length, false)),
+    // blueprint). The containment forest above still reads the full payload, so an entity
+    // stays collapsible under any Focus.
+    return toFoldable(
+      focus === null
+        ? chipFiltered
+        : {
+            nodes: chipFiltered.nodes,
+            edges: filterEdgesByTierFocus(chipFiltered.edges, chipFiltered.nodes, focusBlueprints, focus),
+          },
+    );
+  }, [graph, disabled, focus, focusBlueprints]);
+  // The large-graph gate: the fold to draw (the transient "Top level" overlay's while active)
+  // and whether the canvas may be laid out at all.
+  const gate = useLargeGraphGate(filtered, forest, collapsedSet);
+  const overlayActive = gate.overlay !== null;
+  const toggleOverlay = gate.toggle;
+
+  // A fold toggle persists at once — except while the transient overlay is active: then it
+  // edits the overlay and NOTHING is saved. Reached through a ref so node callbacks stay stable.
+  const toggleRef = useRef<(id: string) => void>(() => {});
+  useEffect(() => {
+    toggleRef.current = (id: string) => {
+      if (overlayActive) {
+        toggleOverlay(id);
+        return;
+      }
+      updateLayout((current) => ({ ...current, collapsed: toggleCollapsed(current, id) }));
     };
-  }, [graph, hierarchyId, disabled, forest, collapsedSet, focus, focusBlueprints]);
+  }, [updateLayout, overlayActive, toggleOverlay]);
+
+  // STRUCTURAL inputs only: dagre runs on exactly this memo's `request`. Tier dots, hierarchy
+  // emphasis, ownership dashes and the fold toggles are decoration, applied below.
+  const structural = useMemo(
+    () =>
+      gate.folded && graph ? {
+        folded: gate.folded,
+        // Carried with the job so a result is always decorated against the hierarchy it was
+        // laid out for, even while a newer layout is pending.
+        selectedHierarchyEdges: hierarchyEdgeKeys(graph, hierarchyId),
+        request: toLayoutRequest(
+          gate.folded,
+          ENTITY_CLUSTER,
+          layoutOptions(gate.folded.nodes.length, gate.showAll),
+        ),
+      } : null,
+    [gate.folded, gate.showAll, graph, hierarchyId],
+  );
   // dagre runs in a worker; the previous result stays on screen while a newer layout computes.
-  const autoLayout = useGraphLayoutWorker(structural);
+  // A graph held back by the gate is not laid out at all.
+  const autoLayout = useGraphLayoutWorker(gate.gate === "layout" ? structural : null);
   const laid = autoLayout.result;
 
   const baseLayout = useMemo(() => {
@@ -253,13 +277,13 @@ export default function EntityGraph() {
       return {
         ...n,
         data: info
-          ? { ...tiered, fold: { ...info, disabled: !layoutReady, onToggle: () => toggleRef.current(n.id) } }
+          ? { ...tiered, fold: { ...info, disabled: !overlayActive && !layoutReady, onToggle: () => toggleRef.current(n.id) } }
           : tiered,
       };
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges, anyCollapsed };
-  }, [laid, layoutReady, tierOf]);
+  }, [laid, layoutReady, overlayActive, tierOf]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode<EntityGraphNodeApi>>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
@@ -406,12 +430,20 @@ export default function EntityGraph() {
             <Button
               variant="default"
               size="xs"
-              disabled={!layoutReady}
-              onClick={() => layout.update((current) => ({ ...current, collapsed: [] }))}
+              disabled={!overlayActive && !layoutReady}
+              onClick={() => {
+                // Leaves the transient top-level view too; the saved list is cleared only if
+                // it holds anything (an empty one needs no PUT).
+                gate.clearOverlay();
+                if (collapsed.length > 0) {
+                  layout.update((current) => ({ ...current, collapsed: [] }));
+                }
+              }}
             >
               {t("entityGraph.expandAll")}
             </Button>
           )}
+          {overlayActive && <TopLevelBadge onClear={gate.clearOverlay} />}
           <Popover position="bottom-end" shadow="md" withArrow>
             <Popover.Target>
               <Button variant="subtle" size="xs" color="gray" leftSection={<IconInfoCircle size={14} />}>
@@ -499,6 +531,15 @@ export default function EntityGraph() {
 
       {!filters.ready || (isLoading && !graph) ? (
         <LoadingBlock />
+      ) : gate.gate === "large" && gate.folded ? (
+        <GraphLayoutGate
+          kind="large"
+          nodes={gate.folded.nodes.length}
+          edges={gate.folded.edges.length}
+          canShowTopLevel={gate.canShowTopLevel}
+          onShowTopLevel={gate.showTopLevel}
+          onShowAll={gate.showEverything}
+        />
       ) : autoLayout.status === "timeout" || autoLayout.status === "error" ? (
         <GraphLayoutGate kind="failed" timedOut={autoLayout.status === "timeout"} onRetry={autoLayout.retry} />
       ) : autoLayout.status === "pending" && !laid ? (

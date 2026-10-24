@@ -32,6 +32,7 @@ import CatalogGraphNode from "../components/CatalogGraphNode";
 import CatalogToolbar from "../components/CatalogToolbar";
 import EmptyState from "../components/EmptyState";
 import GraphLayoutGate from "../components/GraphLayoutGate";
+import TopLevelBadge from "../components/TopLevelBadge";
 import ClusterFrames from "../components/ClusterFrames";
 import {
   applyManualPositions,
@@ -49,7 +50,6 @@ import {
   type LaidOutNode,
   type RelationFamily,
 } from "../utils/graphLayout";
-import { foldGraph } from "../utils/graphFold";
 import { buildHierarchy } from "../utils/hierarchy";
 import { useCatalogFileFilterState } from "../hooks/useCatalogFileFilterState";
 import { loadErrorMessage } from "../utils/saveError";
@@ -59,6 +59,7 @@ import LoadingBlock from "../components/LoadingBlock";
 import classes from "../theme.module.css";
 import { useGraphLayout } from "../hooks/useGraphLayout";
 import { useGraphLayoutWorker } from "../hooks/useGraphLayoutWorker";
+import { useLargeGraphGate } from "../hooks/useLargeGraphGate";
 import { useStableIdSet } from "../hooks/useStableIdSet";
 import { useSessionUserId } from "../auth";
 
@@ -110,18 +111,6 @@ export default function Graph() {
   const positions: GraphPositions = layout.document?.positions ?? EMPTY_POSITIONS;
   const collapsed: string[] = layout.document?.collapsed ?? EMPTY_COLLAPSED;
 
-  // A fold toggle persists at once, like a mode switch — a collapse is a deliberate act, not
-  // a gesture to coalesce. Reached through a ref so the node data's callbacks stay stable.
-  const toggleRef = useRef<(id: string) => void>(() => {});
-  useEffect(() => {
-    toggleRef.current = (id: string) => {
-      updateLayout((current) => ({
-        ...current,
-        collapsed: toggleCollapsed(current, id),
-      }));
-    };
-  }, [updateLayout]);
-
   const noKinds = filters.noKinds;
   // Containment for the fold is the Hierarchy's, over the FULL payload — never the
   // chip-filtered graph, so a System stays collapsible with "Part of system" switched off.
@@ -129,21 +118,49 @@ export default function Graph() {
   // The saved fold as a Set that changes identity only when its MEMBERS do (the layout
   // document arriving with the same list must not re-run dagre).
   const collapsedSet = useStableIdSet(collapsed);
+  // Chips first, fold second: a MISSING child a chip pruned is neither counted nor hidden.
+  const filtered = useMemo(() => (data && !noKinds ? filterGraph(data, enabled) : null), [data, enabled, noKinds]);
+  // The large-graph gate: the fold to draw (the transient "Top level" overlay's while active)
+  // and whether the canvas may be laid out at all.
+  const gate = useLargeGraphGate(filtered, forest, collapsedSet);
+  const overlayActive = gate.overlay !== null;
+  const toggleOverlay = gate.toggle;
+
+  // A fold toggle persists at once, like a mode switch — a collapse is a deliberate act, not
+  // a gesture to coalesce — except while the transient overlay is active: then it edits the
+  // overlay and NOTHING is saved. Reached through a ref so the node data's callbacks stay stable.
+  const toggleRef = useRef<(id: string) => void>(() => {});
+  useEffect(() => {
+    toggleRef.current = (id: string) => {
+      if (overlayActive) {
+        toggleOverlay(id);
+        return;
+      }
+      updateLayout((current) => ({
+        ...current,
+        collapsed: toggleCollapsed(current, id),
+      }));
+    };
+  }, [updateLayout, overlayActive, toggleOverlay]);
 
   // STRUCTURAL inputs only: the graph, the relation chips, the containment forest and the fold.
   // dagre runs on exactly this memo's `request` — decoration (fold toggles, disabled state)
   // below can change without a re-layout.
-  const structural = useMemo(() => {
-    if (!data || noKinds) return null;
-    // Chips first, fold second: a MISSING child a chip pruned is neither counted nor hidden.
-    const folded = foldGraph(filterGraph(data, enabled), forest, collapsedSet);
-    return {
-      folded,
-      request: toLayoutRequest(folded, NAMESPACE_CLUSTER, layoutOptions(folded.nodes.length, false)),
-    };
-  }, [data, enabled, noKinds, forest, collapsedSet]);
+  const structural = useMemo(
+    () =>
+      gate.folded && {
+        folded: gate.folded,
+        request: toLayoutRequest(
+          gate.folded,
+          NAMESPACE_CLUSTER,
+          layoutOptions(gate.folded.nodes.length, gate.showAll),
+        ),
+      },
+    [gate.folded, gate.showAll],
+  );
   // dagre runs in a worker; the previous result stays on screen while a newer layout computes.
-  const autoLayout = useGraphLayoutWorker(structural);
+  // A graph held back by the gate is not laid out at all.
+  const autoLayout = useGraphLayoutWorker(gate.gate === "layout" ? structural : null);
   const laid = autoLayout.result;
 
   const baseLayout = useMemo(() => {
@@ -157,13 +174,13 @@ export default function Graph() {
         ...n,
         data: {
           ...n.data,
-          fold: { ...info, disabled: !layoutReady, onToggle: () => toggleRef.current(n.id) },
+          fold: { ...info, disabled: !overlayActive && !layoutReady, onToggle: () => toggleRef.current(n.id) },
         },
       } : n;
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges: laidOut.edges, anyCollapsed };
-  }, [laid, layoutReady]);
+  }, [laid, layoutReady, overlayActive]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
@@ -300,12 +317,20 @@ export default function Graph() {
             <Button
               variant="default"
               size="xs"
-              disabled={!layoutReady}
-              onClick={() => layout.update((current) => ({ ...current, collapsed: [] }))}
+              disabled={!overlayActive && !layoutReady}
+              onClick={() => {
+                // Leaves the transient top-level view too; the saved list is cleared only if
+                // it holds anything (an empty one needs no PUT).
+                gate.clearOverlay();
+                if (collapsed.length > 0) {
+                  layout.update((current) => ({ ...current, collapsed: [] }));
+                }
+              }}
             >
               {t("graph.expandAll")}
             </Button>
           )}
+          {overlayActive && <TopLevelBadge onClear={gate.clearOverlay} />}
           <Popover position="bottom-end" shadow="md" withArrow>
             <Popover.Target>
               <Button variant="subtle" size="xs" color="gray" leftSection={<IconInfoCircle size={14} />}>
@@ -382,6 +407,15 @@ export default function Graph() {
 
       {isLoading && !data ? (
         <LoadingBlock />
+      ) : gate.gate === "large" && gate.folded ? (
+        <GraphLayoutGate
+          kind="large"
+          nodes={gate.folded.nodes.length}
+          edges={gate.folded.edges.length}
+          canShowTopLevel={gate.canShowTopLevel}
+          onShowTopLevel={gate.showTopLevel}
+          onShowAll={gate.showEverything}
+        />
       ) : autoLayout.status === "timeout" || autoLayout.status === "error" ? (
         <GraphLayoutGate kind="failed" timedOut={autoLayout.status === "timeout"} onRetry={autoLayout.retry} />
       ) : autoLayout.status === "pending" && !laid ? (
