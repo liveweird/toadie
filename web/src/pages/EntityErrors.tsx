@@ -175,12 +175,13 @@ export default function EntityErrors() {
         <DataTable
           label={t("entityErrors.title")}
           stickyHeader={virtualized}
+          aria-rowcount={virtualized ? rowCount + 1 : undefined}
           stickyHeaderOffset={48}
           layout={virtualized ? "fixed" : undefined}
           miw={virtualized ? 860 : undefined}
         >
           <Table.Thead>
-            <Table.Tr>
+            <Table.Tr aria-rowindex={virtualized ? 1 : undefined}>
               <Table.Th style={fixedWidth("30%")}>{t("entityErrors.field.subject")}</Table.Th>
               <Table.Th style={fixedWidth("16%")}>{t("entityErrors.field.blueprint")}</Table.Th>
               <Table.Th style={fixedWidth("14%")}>{t("entityErrors.field.team")}</Table.Th>
@@ -249,7 +250,7 @@ function FindingsList({ findings }: { findings: readonly EntityFinding[] }) {
 function EntityRow({ row, measureRef, index }: { row: EntityErrorRow } & MeasureProps) {
   const { t } = useTranslation();
   return (
-    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined}>
+    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined} aria-rowindex={measureRef ? index + 2 : undefined}>
       <Table.Td style={{ verticalAlign: "top" }}>
         <Group gap={6} wrap="nowrap">
           <Anchor
@@ -292,7 +293,7 @@ function EntityRow({ row, measureRef, index }: { row: EntityErrorRow } & Measure
 function BlueprintRow({ row, measureRef, index }: { row: BlueprintErrorRow } & MeasureProps) {
   const { t } = useTranslation();
   return (
-    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined}>
+    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined} aria-rowindex={measureRef ? index + 2 : undefined}>
       <Table.Td style={{ verticalAlign: "top" }}>
         <Group gap={6} wrap="nowrap">
           {isAdmin() ? (
@@ -340,7 +341,7 @@ function SavedQueryRow({
   const { t } = useTranslation();
   const mine = row.createdBy === getUserId();
   return (
-    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined}>
+    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined} aria-rowindex={measureRef ? index + 2 : undefined}>
       <Table.Td style={{ verticalAlign: "top" }}>
         <Group gap={6} wrap="nowrap">
           <Text size="sm">{row.name}</Text>

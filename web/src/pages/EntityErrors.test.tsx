@@ -433,6 +433,9 @@ describe("EntityErrors page", () => {
       expect(await screen.findByText("svc-000")).toBeInTheDocument();
       const table = screen.getByRole("table", { name: "Errors" });
       expect(table.querySelector("thead")).toHaveAttribute("data-sticky");
+      // 250 + 100 + 60 rows plus the header row.
+      expect(table).toHaveAttribute("aria-rowcount", "411");
+      expect(screen.getByText("svc-000").closest("tr")).toHaveAttribute("aria-rowindex", "2");
       const rendered = within(table).getAllByRole("row").length;
       expect(rendered).toBeGreaterThan(5);
       expect(rendered).toBeLessThan(100);
@@ -449,6 +452,8 @@ describe("EntityErrors page", () => {
       const table = screen.getByRole("table", { name: "Errors" });
       expect(table.querySelector("thead")).not.toHaveAttribute("data-sticky");
       expect(table.querySelectorAll("tr[aria-hidden='true']")).toHaveLength(0);
+      expect(table).not.toHaveAttribute("aria-rowcount");
+      expect(table.querySelector("[aria-rowindex]")).toBeNull();
     });
   });
 });

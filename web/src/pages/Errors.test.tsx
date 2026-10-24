@@ -225,6 +225,10 @@ describe("Errors page", () => {
       expect(await screen.findByText("svc-000")).toBeInTheDocument();
       const table = screen.getByRole("table", { name: "Errors" });
       expect(table.querySelector("thead")).toHaveAttribute("data-sticky");
+      // Screen readers get the true size: 400 files plus the header row, each mounted row its place.
+      expect(table).toHaveAttribute("aria-rowcount", "401");
+      expect(within(table).getAllByRole("row")[0]).toHaveAttribute("aria-rowindex", "1");
+      expect(screen.getByText("svc-000").closest("tr")).toHaveAttribute("aria-rowindex", "2");
       // The header row plus the windowed body rows — nowhere near the 400 reported files.
       const rendered = within(table).getAllByRole("row").length;
       expect(rendered).toBeGreaterThan(5);
@@ -244,6 +248,8 @@ describe("Errors page", () => {
       const table = screen.getByRole("table", { name: "Errors" });
       expect(table.querySelector("thead")).not.toHaveAttribute("data-sticky");
       expect(table.querySelectorAll("tr[aria-hidden='true']")).toHaveLength(0);
+      expect(table).not.toHaveAttribute("aria-rowcount");
+      expect(table.querySelector("[aria-rowindex]")).toBeNull();
     });
   });
 });

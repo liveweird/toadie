@@ -91,12 +91,13 @@ export default function Errors() {
         <DataTable
           label={t("errors.title")}
           stickyHeader={virtualized}
+          aria-rowcount={virtualized ? rows.length + 1 : undefined}
           stickyHeaderOffset={48}
           layout={virtualized ? "fixed" : undefined}
           miw={virtualized ? 760 : undefined}
         >
           <Table.Thead>
-            <Table.Tr>
+            <Table.Tr aria-rowindex={virtualized ? 1 : undefined}>
               <Table.Th style={fixedWidth("28%")}>{t("errors.field.file")}</Table.Th>
               <Table.Th style={fixedWidth(130)}>{t("errors.field.kind")}</Table.Th>
               <Table.Th style={fixedWidth(160)}>{t("errors.field.namespace")}</Table.Th>
@@ -113,7 +114,12 @@ export default function Errors() {
                 {items.map(({ index }) => {
                   const row = rows[index];
                   return (
-                    <Table.Tr key={row.fileId} ref={measureRow} data-index={measureRow ? index : undefined}>
+                    <Table.Tr
+                      key={row.fileId}
+                      ref={measureRow}
+                      data-index={measureRow ? index : undefined}
+                      aria-rowindex={measureRow ? index + 2 : undefined}
+                    >
                       <Table.Td style={{ verticalAlign: "top" }}>
                         <CatalogFileNameLink id={row.fileId} name={row.fileName} />
                       </Table.Td>
