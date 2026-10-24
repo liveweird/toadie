@@ -14,12 +14,14 @@
     "check:scenarios": "node scripts/check-scenarios.mjs",
     "smoke:graphql": "node scripts/graphql-smoke/run.mjs",
     "drill:backup-restore": "node scripts/backup-restore/drill.mjs",
-    "test:smoke": "node --test scripts/graphql-smoke/*.test.mjs scripts/backup-restore/*.test.mjs"
+    "probe:capacity": "node scripts/capacity-probe/run.mjs",
+    "test:smoke": "node --test scripts/graphql-smoke/*.test.mjs scripts/backup-restore/*.test.mjs scripts/capacity-probe/*.test.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.64.1",
     "@types/node": "^26.6.5",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "yaml": "^2.9.1"
   }
 }

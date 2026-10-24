@@ -3,9 +3,11 @@ import { join } from 'node:path'
 import {
   assertLiveFindings, assertSeedParity, createIntegrationClient, login, revokeAndAssert,
 } from './api-check.mjs'
-import { buildImage, loadSamples, startCompose, startKubernetes } from './orchestration.mjs'
 import {
-  cleanupStack, command, privateTempDir, removeTemp, repositoryRoot, runId, setCommandSignal,
+  buildImage, loadSamples, removeImage, startCompose, startKubernetes,
+} from './orchestration.mjs'
+import {
+  cleanupStack, privateTempDir, removeTemp, repositoryRoot, runId, setCommandSignal,
 } from './support.mjs'
 
 function usage() {
@@ -63,7 +65,7 @@ async function main() {
       ? `Compose project ${id}`
       : `Kubernetes namespace ${id} in context ${options.context}`
     console.log(`Owned GraphQL smoke resources: ${ownedResource}; image ${image}`)
-    cleanup.add(() => removeOwnedImage(image, options.target === 'kubernetes' ? options.context : undefined))
+    cleanup.add(() => removeImage(image, options.target === 'kubernetes' ? options.context : undefined))
     console.log('Stage: building image')
     await buildImage({ root, image, context: options.target === 'kubernetes' ? options.context : undefined })
     const deployment = options.target === 'compose'
@@ -100,17 +102,6 @@ async function main() {
       if (!primaryFailure) throw cleanupFailure
       console.error(`Cleanup for owned run ${id} also failed: ${errorMessage(cleanupFailure)}`)
     }
-  }
-}
-
-async function removeOwnedImage(image, context) {
-  const contextArgs = context ? ['--context', context] : []
-  try {
-    await command('docker', [...contextArgs, 'image', 'rm', '--force', image], { timeout: 60_000, ignoreSignal: true })
-  } catch (error) {
-    const stderr = error.cause?.stderr ?? ''
-    if (/No such image|No such object/i.test(stderr)) return
-    throw error
   }
 }
 
