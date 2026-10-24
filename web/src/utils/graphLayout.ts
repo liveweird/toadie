@@ -149,6 +149,27 @@ export interface LayoutOptions {
 }
 
 /**
+ * The drawn-node count above which a canvas stops laying out on its own and asks first (the
+ * large-graph gate, `utils/graphGate.ts`). Measured on the Entity graph (dagre 3.1.1, the app's
+ * own input): 300 nodes lay out in well under a second, 1,000 entities / 3,435 edges take
+ * minutes on the default ranker — past this size the layout is both slow and unreadable.
+ */
+export const LARGE_GRAPH_NODES = 300;
+
+/**
+ * The dagre options for a canvas drawing [drawnNodes] nodes. The ranker is ALWAYS `tight-tree`:
+ * the default network simplex is insertion-order sensitive, and the same 1,000-entity graph took
+ * 32 s in API payload order but 270-503 s in the order the app builds it, while `tight-tree`
+ * took 3.9-6.5 s on the app's exact input. (`longest-path` is never an option: it throws on the
+ * compound graph clustering builds.) The optimal-order crossing heuristic is dropped only when
+ * the user chose "Show everything" above the large-graph gate — trading edge crossings for a
+ * layout that finishes.
+ */
+export function layoutOptions(drawnNodes: number, showAll: boolean): LayoutOptions {
+  return { ranker: "tight-tree", disableOptimalOrderHeuristic: showAll && drawnNodes > LARGE_GRAPH_NODES };
+}
+
+/**
  * Everything the dagre call needs, as plain structured-clone-able data — it crosses the
  * `postMessage` boundary to the layout worker (`graphLayoutWorker.ts`), so it carries node ids
  * and cluster keys only, never the page's node payloads.

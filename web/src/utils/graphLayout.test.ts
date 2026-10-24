@@ -8,7 +8,9 @@ import {
   FOLDED_EDGE_STYLE,
   GRAPH_NODE_HEIGHT,
   GRAPH_NODE_WIDTH,
+  LARGE_GRAPH_NODES,
   layoutGraph,
+  layoutOptions,
   layoutPositions,
   materializeLayout,
   namespaceFrames,
@@ -392,5 +394,25 @@ describe("layoutPositions / materializeLayout split", () => {
       toLayoutRequest(graph, CUSTOM_CLUSTER, { ranker: "tight-tree", disableOptimalOrderHeuristic: true }),
     );
     expect(Object.keys(positions)).toHaveLength(3);
+  });
+});
+
+describe("layoutOptions", () => {
+  test.each([
+    [0, false],
+    [1, true],
+    [LARGE_GRAPH_NODES, false],
+    [LARGE_GRAPH_NODES, true],
+    [LARGE_GRAPH_NODES + 1, false],
+    [5000, false],
+  ])("always tight-tree, never the longest-path ranker, no heuristic switch (%i nodes, showAll %s)", (nodes, showAll) => {
+    const options = layoutOptions(nodes, showAll);
+    expect(options.ranker).toBe("tight-tree");
+    expect(options.disableOptimalOrderHeuristic).toBe(false);
+  });
+
+  test("the crossing heuristic is dropped only for Show everything above the gate", () => {
+    expect(layoutOptions(LARGE_GRAPH_NODES + 1, true).disableOptimalOrderHeuristic).toBe(true);
+    expect(layoutOptions(LARGE_GRAPH_NODES, true).disableOptimalOrderHeuristic).toBe(false);
   });
 });

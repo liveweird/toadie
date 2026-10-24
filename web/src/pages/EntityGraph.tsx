@@ -42,6 +42,7 @@ import {
   COLLAPSED_FACE_STYLE,
   FOLDED_EDGE_STYLE,
   layoutGraph,
+  layoutOptions,
   STATUS_STYLE,
   type ClusterAccessor,
   type GraphPositions,
@@ -193,7 +194,7 @@ export default function EntityGraph() {
     };
     const selectedHierarchyEdges = hierarchyEdgeKeys(graph, hierarchyId);
     const folded = foldGraph(toFoldable(filtered), forest, new Set(collapsed));
-    const laidOut = layoutGraph(folded, ENTITY_CLUSTER);
+    const laidOut = layoutGraph(folded, ENTITY_CLUSTER, layoutOptions(folded.nodes.length, false));
     // Hierarchy edges draw solid and thicker, labelled by relation id — folding can still dash
     // one that stands in for a hidden relation, so the fold's own style wins when both apply.
     const edges = laidOut.edges

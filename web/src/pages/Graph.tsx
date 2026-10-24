@@ -39,6 +39,7 @@ import {
   filterGraph,
   FOLDED_EDGE_STYLE,
   layoutGraph,
+  layoutOptions,
   NAMESPACE_CLUSTER,
   RELATION_FAMILIES,
   STATUS_STYLE,
@@ -125,7 +126,7 @@ export default function Graph() {
     if (!data || noKinds) return { nodes: [] as LaidOutNode[], edges: [] as Edge[], anyCollapsed: false };
     // Chips first, fold second: a MISSING child a chip pruned is neither counted nor hidden.
     const folded = foldGraph(filterGraph(data, enabled), forest, new Set(collapsed));
-    const laidOut = layoutGraph(folded, NAMESPACE_CLUSTER);
+    const laidOut = layoutGraph(folded, NAMESPACE_CLUSTER, layoutOptions(folded.nodes.length, false));
     const nodes = laidOut.nodes.map((n) => {
       const info = folded.info.get(n.id);
       return info ? {
