@@ -73,8 +73,8 @@ The stub's `onInit` hands the page a fake instance whose `fitView` records the n
   `hooks/useVirtualRows.ts`, `utils/treeRows.ts`, or the `VirtualTreeList` / `VirtualTableFrame` /
   `VirtualSpacerRow` components.
 - **Requirement:** one render path with the 300-row threshold: at or below it every row renders and
-  the DOM is the plain list's (no spacers, no sticky header, no `data-index`); above it only the
-  rows in view plus overscan are mounted, with MEASURED heights and the window as the scroller.
+  tables are exactly the plain table (no spacers, no sticky header, no `data-index`/`aria-rowindex`) and tree rows differ from the pre-2.20.1 markup only by their flat `.treeLine` wrappers; above it only the
+  rows in view plus overscan are mounted, with MEASURED heights, a size cache keyed by row identity (`getKey`, so a collapse above the window cannot leave a stale height on a shifted row), a scroll margin re-measured when content above grows, and the window as the scroller.
   Table rows stay `<tr>`s in flow between `aria-hidden` spacer rows; tree rows are flattened with
   the recursive renderer's `pathKey` chain, so collapse keys and the pin do not change. Unit
   tests stub the layout the way `test/virtualLayout.ts` does (happy-dom measures every element at
@@ -83,7 +83,7 @@ The stub's `onInit` hands the page a fake instance whose `fitView` records the n
   `getByText(name)` + `toHaveCount(0)` false-passes.
 - **Reference:** `web/CLAUDE.md` "The hierarchy view", "Entity graph & hierarchy", the Errors bullet
   in the list-page template and "Entity errors".
-- **Enforcement:** `useVirtualRows.test.tsx`, `treeRows.test.ts`, the "long forest" / "long
+- **Enforcement:** `useVirtualRows.test.tsx` (incl. the index-shift and scroll-margin cases), `treeRows.test.ts`, the "long forest" / "long
   report" cases in `Hierarchy.test.tsx`, `EntityHierarchy.test.tsx`, `Errors.test.tsx` and
   `EntityErrors.test.tsx`, plus the `entity-hierarchy.spec.ts` 320-row journey.
 - **Exception:** the Entities list is server-paged (its DOM is bounded by the page size) and is
