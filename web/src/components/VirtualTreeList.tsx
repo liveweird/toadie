@@ -17,7 +17,7 @@ export default function VirtualTreeList<N extends { id: string }>({
   rows: TreeRow<N>[];
   renderRow: (row: TreeRow<N>) => ReactNode;
 }) {
-  const { attachList, measureRow, enabled, items, totalSize } = useVirtualRows(rows.length);
+  const { attachList, measureRow, enabled, items, totalSize } = useVirtualRows(rows.length, (index) => rows[index]?.key ?? `#${index}`);
   return (
     <div
       ref={attachList}

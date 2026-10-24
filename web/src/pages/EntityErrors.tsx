@@ -122,7 +122,7 @@ export default function EntityErrors() {
   // Above the virtualization threshold only the rows in view are mounted (see useVirtualRows);
   // below it every row renders and the table is exactly the plain one.
   const { attachList, measureRow, enabled: virtualized, items, paddingTop, paddingBottom } =
-    useVirtualRows<HTMLTableSectionElement>(rowCount, 72);
+    useVirtualRows<HTMLTableSectionElement>(rowCount, (index) => tableRows[index]?.key ?? `#${index}`, 72);
   // A fixed layout keeps the columns from reflowing as different rows mount.
   const fixedWidth = (width: string) => (virtualized ? { width } : undefined);
 

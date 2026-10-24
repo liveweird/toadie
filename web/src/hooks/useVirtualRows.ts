@@ -27,11 +27,18 @@ export interface VirtualRow {
  *
  * Row heights are MEASURED (a row element takes `ref={measureRow}` and `data-index={index}`), because
  * rows wrap at narrow widths and in deep trees. `attachList` goes on the element that holds the
- * rows; its distance from the document top is the virtualizer's scroll margin. Destructure the
+ * rows; its distance from the document top is the virtualizer's scroll margin. [getKey] maps a row
+ * index to its stable identity (the same key the caller gives React): the size cache is keyed by it,
+ * so when rows shift index (a collapse or filter change above the window) a still-mounted row keeps
+ * its measured height instead of inheriting its new neighbour's. Destructure the
  * result at the call site: the React-compiler lint treats an object whose members are used as
  * `ref`s as a ref, and flags every other property read off it during render.
  */
-export function useVirtualRows<T extends HTMLElement = HTMLDivElement>(count: number, estimateSize = 32) {
+export function useVirtualRows<T extends HTMLElement = HTMLDivElement>(
+  count: number,
+  getKey: (index: number) => string | number,
+  estimateSize = 32,
+) {
   // A callback ref into state (not a ref object): the element mounting is what (re)starts the
   // scroll-margin measurement, and an object holding a ref cannot be read during render.
   const [listElement, attachList] = useState<T | null>(null);
@@ -41,13 +48,17 @@ export function useVirtualRows<T extends HTMLElement = HTMLDivElement>(count: nu
   const virtualizer = useWindowVirtualizer({
     count,
     estimateSize: () => estimateSize,
+    getItemKey: getKey,
     overscan: OVERSCAN,
     scrollMargin,
     enabled,
   });
 
-  // The list's top moves when the toolbar above grows (filters, query, visibility sections),
-  // which resizes the page body — re-measure then, not on every scroll.
+  // The list's top (document offset) is the scroll margin, and it moves whenever something above
+  // grows or shrinks — a Filters/Visibility/Query section opening, an Alert appearing. The
+  // document itself does not resize for that (html/body/#root are height 100%), so re-measure on
+  // every render of the host, on any resize of the page's main area, and on scroll: one rect
+  // read each, and state changes only when the top actually moved.
   useLayoutEffect(() => {
     if (!enabled || !listElement) return undefined;
     const measure = () => {
@@ -55,11 +66,24 @@ export function useVirtualRows<T extends HTMLElement = HTMLDivElement>(count: nu
       setScrollMargin((current) => (current === top ? current : top));
     };
     measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(measure);
-    observer.observe(document.body);
-    return () => observer.disconnect();
+    window.addEventListener("scroll", measure, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+    observer?.observe(listElement.closest("main") ?? document.body);
+    return () => {
+      window.removeEventListener("scroll", measure);
+      observer?.disconnect();
+    };
   }, [enabled, listElement]);
+  // Every render of the host: cheap (one rect read) and the only signal when a sibling above the
+  // list grew without anything observable resizing.
+  useLayoutEffect(() => {
+    if (!enabled || !listElement) return;
+    const remeasure = () => {
+      const top = Math.round(listElement.getBoundingClientRect().top + window.scrollY);
+      setScrollMargin((current) => (current === top ? current : top));
+    };
+    remeasure();
+  });
 
   if (!enabled) {
     return {

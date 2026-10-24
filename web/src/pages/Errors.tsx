@@ -61,7 +61,7 @@ export default function Errors() {
   // Above the virtualization threshold only the rows in view are mounted (see useVirtualRows);
   // below it every row renders and the table is exactly the plain one.
   const { attachList, measureRow, enabled: virtualized, items, paddingTop, paddingBottom } =
-    useVirtualRows<HTMLTableSectionElement>(rows.length, 64);
+    useVirtualRows<HTMLTableSectionElement>(rows.length, (index) => rows[index]?.fileId ?? `#${index}`, 64);
   // A fixed layout keeps the columns from reflowing as different rows mount.
   const fixedWidth = (width: string | number) => (virtualized ? { width } : undefined);
 
@@ -125,8 +125,8 @@ export default function Errors() {
                       </Table.Td>
                       <Table.Td>
                         <Stack gap={4}>
-                          {row.findings.map((f, index) => (
-                            <Group gap={6} wrap="nowrap" key={`${f.field}-${f.reference}-${index}`}>
+                          {row.findings.map((f, findingIndex) => (
+                            <Group gap={6} wrap="nowrap" key={`${f.field}-${f.reference}-${findingIndex}`}>
                               <Badge
                                 variant="light"
                                 size="xs"
