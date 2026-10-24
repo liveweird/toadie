@@ -51,6 +51,24 @@ promotes it. A finished item is removed, not ticked.
   hostname. Compose (Docker DNS, `postgres`) is covered by e2e; the k8s short name with search
   domains and `ndots` is not. Deploy to the OrbStack `toadie` namespace once and confirm `/readyz`.
 
+## Performance
+
+Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the
+Backstage sample to 10k files, on a disposable stack).
+
+- [new] **Keep the graph canvases responsive on large workspaces.** At 1,000 entities (3,435
+  relations) the Entity graph froze the tab for one ~275 s task inside dagre: the default
+  network-simplex ranker is pathologically sensitive to insertion order (the same graph took 32 s
+  in another order; `tight-tree` took 6.5 s clustered, 3.9 s flat). Lay out off the main thread,
+  run dagre only when the structure changes (not on decoration such as tiers or layout readiness),
+  pick a faster ranker, and open very large graphs collapsed or filter-first. The Backstage Graph
+  shares `layoutGraph`. Target: 1k entities interactive within a few seconds, no interaction
+  freezing the page for more than ~200 ms.
+- [new] **Virtualize the long lists.** At 10k rows the Entity hierarchy froze 2.3 s with 160k DOM
+  elements, the Port Errors report 2.8 s (all 9,974 rows rendered), the Backstage Hierarchy (the
+  home page) 2.6 s and the Backstage Errors page 1.9 s. Render only the visible rows, keeping tree
+  expand/collapse, row menus, keyboard navigation and the axe checks intact.
+
 ## Product
 
 - [new] **Decide whether import dry runs should validate batch `sourceUrl` like real imports.**
