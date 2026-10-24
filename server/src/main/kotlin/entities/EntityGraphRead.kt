@@ -19,7 +19,10 @@ import ch.nokillswit.entityquery.VariableSlots
 import ch.nokillswit.entityquery.parseEntityQuery
 import ch.nokillswit.entityquery.validateAndBind
 import ch.nokillswit.entityquery.validateEntityQuery
-import io.ktor.server.plugins.BadRequestException
+import ch.nokillswit.infra.concurrency.READ_BUDGET_BYTES
+import ch.nokillswit.infra.concurrency.ReadBudgetExceeded
+import ch.nokillswit.infra.concurrency.ReadLedger
+import ch.nokillswit.infra.concurrency.throwReadBudgetHttp
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
@@ -142,7 +145,7 @@ private suspend fun EntityService.graphWithPlan(filter: EntityGraphFilter, parse
 private suspend fun EntityService.materializeGraph(
     filter: EntityGraphFilter,
     parsedQuery: ParsedQuery?,
-    reservation: EntityReadLedger.Reservation,
+    reservation: ReadLedger.Reservation,
 ): GraphMaterialized? {
     val activeBlueprints = loadActiveBlueprints()
     val blueprintsById = activeBlueprints.associateBy { it.id }
@@ -275,33 +278,20 @@ private fun logQueryBudgetMiss(code: String, textLength: Int) {
     queryLog.debug("entity query budget miss ({}): queryLength={}", code, textLength)
 }
 
-/**
- * `.claude/docs/security.md` "Entity read memory budget": [EntityService.list]/[EntityService.read]'s refusal mapping —
- * [ReadBudgetExceeded.ownRequest] means THIS call's own workspace read is too large for the
- * budget on its own (a plain `400`); otherwise other in-flight reads hold the room (a `429`
- * naming contention, not this caller's fault).
- */
-internal fun throwReadBudgetHttp(cause: ReadBudgetExceeded): Nothing {
-    if (cause.ownRequest) {
-        throw BadRequestException("The entity workspace exceeds the server's read budget")
-    }
-    throw TooManyRequestsException("Too many entity reads are in flight — retry shortly")
-}
-
-/** [graph]'s twin of [throwReadBudgetHttp] — an own-request miss is a query-shaped `400` (with or without a `query`). */
+/** [graph]'s query-shaped twin of `throwReadBudgetHttp` — an own-request miss is a query-shaped `400` (with or without a `query`). */
 private fun throwReadBudgetQuery(cause: ReadBudgetExceeded): Nothing {
     if (cause.ownRequest) {
         throw EntityQueryInvalidException(
             listOf(
                 QueryDiagnostic(
                     code = QueryDiagnosticCodes.WORKSPACE_TOO_LARGE,
-                    message = "The entity workspace exceeds the $ENTITY_READ_BUDGET_BYTES-byte read budget — " +
+                    message = "The entity workspace exceeds the $READ_BUDGET_BYTES-byte read budget — " +
                         "narrow the blueprint filter or reduce stored documents",
                 ),
             ),
         )
     }
-    throw TooManyRequestsException("Too many entity reads are in flight — retry shortly")
+    throwReadBudgetHttp(cause, "entity")
 }
 
 /**

@@ -12,7 +12,6 @@ import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.entities.EntityFilter
 import ch.nokillswit.entities.EntityGraph
 import ch.nokillswit.entities.EntityGraphFilter
-import ch.nokillswit.entities.EntityReadLedger
 import ch.nokillswit.entityquery.EntityQueryInvalidException
 import ch.nokillswit.entities.EntityImportRequest
 import ch.nokillswit.entities.EntityImportResponse
@@ -22,6 +21,7 @@ import ch.nokillswit.entityquery.EntityQueryCheckRequest
 import ch.nokillswit.entityquery.EntityQueryCheckResponse
 import ch.nokillswit.entityquery.EntityQueryProblem
 import ch.nokillswit.entityquery.QueryDiagnosticCodes
+import ch.nokillswit.infra.concurrency.ReadLedger
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.plugins.ProblemDetail
@@ -556,7 +556,7 @@ class EntityQueryRouteTest {
             client.postJson("/api/v1/entities", entityRequest(bp, id))
             // Capacity 1 byte: even a bare {"properties":{},"relations":{}} document's raw
             // octet_length trips the up-front admission charge before any row is decoded.
-            val tuned = TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))
+            val tuned = TestEntities.tunedService(readLedger = ReadLedger(capacity = 1))
             val failure = assertFailsWith<EntityQueryInvalidException> {
                 tuned.graph(EntityGraphFilter(listOf(bp), q = null))
             }
@@ -576,7 +576,7 @@ class EntityQueryRouteTest {
         try {
             client.createBlueprint(simpleBlueprint(bp))
             client.postJson("/api/v1/entities", entityRequest(bp, id))
-            val tuned = TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))
+            val tuned = TestEntities.tunedService(readLedger = ReadLedger(capacity = 1))
             val failure = assertFailsWith<EntityQueryInvalidException> {
                 tuned.graph(EntityGraphFilter(listOf(bp), q = null, query = "MATCH (a:`$bp`) RETURN a"))
             }
@@ -601,7 +601,7 @@ class EntityQueryRouteTest {
             val selfRelation = RelationDefinition(title = "Self", target = bp, required = false, many = false)
             client.createBlueprint(BlueprintRequest(identifier = bp, title = "T", relations = mapOf("self" to selfRelation)))
             client.postJson("/api/v1/entities", entityRequest(bp, id))
-            val tuned = TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))
+            val tuned = TestEntities.tunedService(readLedger = ReadLedger(capacity = 1))
             val filter = EntityFilter(blueprint = bp, q = null)
             assertFailsWith<BadRequestException> { tuned.list(filter, PageRequest(1, 20, emptyList())) }
         } finally {
@@ -625,7 +625,7 @@ class EntityQueryRouteTest {
             // widened in) would fit an empty ledger, so the refusal is contention (429), never the
             // own-request 400.
             val capacity = 8L * 1024 * 1024
-            val ledger = EntityReadLedger(capacity = capacity)
+            val ledger = ReadLedger(capacity = capacity)
             val other = ledger.open().apply { charge(capacity - 1) }
             try {
                 val tuned = TestEntities.tunedService(readLedger = ledger)
@@ -657,7 +657,7 @@ class EntityQueryRouteTest {
             val userId = TestUsers.seed(uniqueEmail("ent-rb-writer-svc"), "pw")
             // An exhausted ledger (capacity 1) refuses every read, yet create and update — serialized
             // by the V28 lock, at most one raw candidate set at a time — pass a null reservation.
-            val tuned = TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))
+            val tuned = TestEntities.tunedService(readLedger = ReadLedger(capacity = 1))
             val created = tuned.create(entityRequest(bp, id), userId)
             assertEquals(1, tuned.update(created.id, entityRequest(bp, id).copy(title = "renamed")).affected)
             assertFailsWith<BadRequestException> { tuned.list(EntityFilter(blueprint = bp, q = null), PageRequest(1, 20, emptyList())) }

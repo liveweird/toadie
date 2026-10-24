@@ -34,9 +34,9 @@ promotes it. A finished item is removed, not ticked.
   cross-instance revocation); the `IntegrationLimits` admission semaphore, per-client buckets and
   the retained-value ledger (`integration/IntegrationLimits.kt`); the Ktor per-IP buckets
   (login, refresh, password-reset, MFA and integration); the jq quarantine set
-  (`entities/JqCalculation.kt`); and the entity read ledger. Move or redesign those stores, test
-  cross-replica behavior, and only then change `k8s/app-deployment.yaml` from one replica and `Recreate`.
-  Until then, one replica is an intentional deployment rule, not a broken rollout.
+  (`entities/JqCalculation.kt`); and the read ledger (`infra/concurrency/ReadLedger.kt`). Move or
+  redesign those stores, test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
+  from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 
 ## Reliability
 

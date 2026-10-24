@@ -963,7 +963,7 @@ object TestEntities {
      * a small capacity makes the budget cases deterministic without multi-megabyte fixtures.
      */
     fun tunedService(
-        readLedger: ch.nokillswit.entities.EntityReadLedger = ch.nokillswit.entities.EntityReadLedger(),
+        readLedger: ch.nokillswit.infra.concurrency.ReadLedger = ch.nokillswit.infra.concurrency.ReadLedger(),
         workspaceDocumentBytes: Long = ch.nokillswit.entities.MAX_WORKSPACE_DOCUMENT_BYTES,
         queryClock: () -> Long = System::nanoTime,
         queryPermits: Int = ch.nokillswit.entityquery.MAX_CONCURRENT_ENTITY_QUERIES,

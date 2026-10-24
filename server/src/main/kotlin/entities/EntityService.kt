@@ -12,6 +12,9 @@ import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.entityquery.DEFAULT_ENTITY_QUERY_DEADLINE_MILLIS
 import ch.nokillswit.entityquery.MAX_CONCURRENT_ENTITY_QUERIES
 import ch.nokillswit.entityquery.QuerySchema
+import ch.nokillswit.infra.concurrency.ReadBudgetExceeded
+import ch.nokillswit.infra.concurrency.ReadLedger
+import ch.nokillswit.infra.concurrency.throwReadBudgetHttp
 import ch.nokillswit.infra.db.bumpOntologyRevision
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.infra.db.octetLength
@@ -92,7 +95,7 @@ class EntityService(
     /** The workspace document byte budget every create/replace/import is checked against — a test seam. */
     internal val workspaceDocumentBytes: Long = MAX_WORKSPACE_DOCUMENT_BYTES,
     /** The process-wide read ledger every graph/list/read charges (`EntityReadBudget.kt`) — a test seam. */
-    internal val readLedger: EntityReadLedger = EntityReadLedger(),
+    internal val readLedger: ReadLedger = ReadLedger(),
 ) {
     /** `tryAcquire` only — a saturated instance answers `429` immediately rather than queueing a workspace load. */
     internal val querySlots = Semaphore(queryPermits)
@@ -233,7 +236,7 @@ class EntityService(
     internal suspend fun rowLookupFor(
         definitions: Collection<BlueprintDefinition>,
         blueprintsByIdentifier: Map<String, ActiveBlueprint>,
-        reservation: EntityReadLedger.Reservation? = null,
+        reservation: ReadLedger.Reservation? = null,
     ): RowLookup {
         val definitionsByIdentifier = blueprintsByIdentifier.mapValues { it.value.definition }
         val targets = narrowTargets(definitions, definitionsByIdentifier, computed = false)
@@ -390,7 +393,7 @@ class EntityService(
                 val (rows, total, revision) = materialized.payload
                 return EntityListResult(rows.map { toResponse(it, materialized.context, budget) }, total, revision)
             } catch (cause: ReadBudgetExceeded) {
-                throwReadBudgetHttp(cause)
+                throwReadBudgetHttp(cause, "entity")
             }
         }
     }
@@ -414,7 +417,7 @@ class EntityService(
                 } ?: return null
                 return toResponse(materialized.payload, materialized.context, budget)
             } catch (cause: ReadBudgetExceeded) {
-                throwReadBudgetHttp(cause)
+                throwReadBudgetHttp(cause, "entity")
             }
         }
     }

@@ -341,13 +341,14 @@ tests and the new `EntityGraph`/`EntityHierarchy` page tests drive, so the canva
 pinned once rather than duplicated per page.
 
 **Entity read budget (2.4.0).** `EntityReadBudgetTest` is the pure suite (no database):
-`estimatedHeapBytes` per shape (`JsonNull`, a scalar, an array, an object, nesting), and
-`EntityReadLedger` — a reservation charges/releases against the shared ledger, an own-request
+`estimatedHeapBytes` per shape (`JsonNull`, a scalar, an array, an object, nesting) and the
+write-cap pin; `ReadLedgerTest` is the pure ledger suite (relocated in 2.19.0) —
+`ReadLedger` — a reservation charges/releases against the shared ledger, an own-request
 charge that alone exceeds capacity throws `ReadBudgetExceeded(ownRequest = true)`, a charge that
 only fails because a SIBLING reservation already holds room throws `ownRequest = false`, `peak`
 tracks the highest observed in-flight total across overlapping reservations without shrinking
 when one closes, and a non-positive charge is a no-op. `EntityQueryRouteTest` adds three
-route-level cases via `TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))`
+route-level cases via `TestEntities.tunedService(readLedger = ReadLedger(capacity = 1))`
 (the same private-service-injection idiom `queryService` already uses for the entity-query
 deadline/permit seams) — a 1-byte capacity trips on the raw `octet_length` of even a bare
 `{"properties":{},"relations":{}}` document, deterministically, with no timing: the plain graph
@@ -532,7 +533,7 @@ compile-failed calculation; a quarantined calculation via `TestEntities.tunedSer
 seam with a latch-held executor (the `JqCalculationTest` fixture, never a real stranded
 worker); saved-query visibility (own PRIVATE, foreign PRIVATE excluded, foreign PUBLIC
 included); the `blueprint`/`q`/`team` filters; no audit event; the read-budget `400`/`429`
-pair via a capacity-1 `EntityReadLedger` (the `EntityQueryRouteTest` idiom); and (2.9.1) a
+pair via a capacity-1 `ReadLedger` (the `EntityQueryRouteTest` idiom); and (2.9.1) a
 source-less entity reporting `SOURCE_MISSING` as its last finding, cleared once a `sourceUrl`
 is set (`EntityErrorsCheckTest` additionally pins the ordering against a stale finding).
 `JqCalculationTest`

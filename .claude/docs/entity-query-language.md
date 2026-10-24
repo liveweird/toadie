@@ -225,7 +225,7 @@ SET, never rows: two bindings of the same entity count once.
 | `MAX_STRING_OPERAND_CHARS` / `MAX_STRING_NEEDLE_CHARS` | 16 384 / 256 characters for the string operators | the comparison is UNKNOWN (never an error) |
 | `MAX_CONCURRENT_ENTITY_QUERIES` | 4 in-flight evaluations per instance | `429 Too Many Requests` (plain problem, no diagnostics) |
 | `MAX_SUGGESTION_INPUT_CHARS` | 128 — an unknown name longer than any identifier gets no suggestion | (no refusal) |
-| `ENTITY_READ_BUDGET_BYTES` (2.4.0, `entities/EntityReadBudget.kt`) | 64 MiB process-wide, shared with every `list`/`read`/`create`/`update`/`graph` read (`.claude/docs/security.md` "Entity read memory budget") | `WORKSPACE_TOO_LARGE` (own request) or `429 Too Many Requests` (contention) — with or without a `query` |
+| `READ_BUDGET_BYTES` (2.4.0, `infra/concurrency/ReadLedger.kt`) | 64 MiB process-wide, shared with every `list`/`read`/`create`/`update`/`graph` read (`.claude/docs/security.md` "Entity read memory budget") | `WORKSPACE_TOO_LARGE` (own request) or `429 Too Many Requests` (contention) — with or without a `query` |
 
 `QueryBudget` is COOPERATIVE: the evaluator calls `checkpoint()` per produced candidate, and
 EVERY call checks caller cancellation (`ensureActive`) and the clock (a `nanoTime` read is far

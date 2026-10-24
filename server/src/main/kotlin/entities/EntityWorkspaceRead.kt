@@ -4,6 +4,8 @@ import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.infra.concurrency.ReadBudgetExceeded
+import ch.nokillswit.infra.concurrency.ReadLedger
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.json.Json
@@ -85,7 +87,7 @@ internal class WorkspaceRow(
     private val raw: RawEntityColumns,
     /** Whether this row matched the CALLER's own predicate (as opposed to being loaded only as a validation/lookup target). */
     val shown: Boolean,
-    private val reservation: EntityReadLedger.Reservation?,
+    private val reservation: ReadLedger.Reservation?,
 ) {
     val id: UInt get() = raw.id
     val blueprintId: UInt get() = raw.blueprintId
@@ -140,7 +142,7 @@ private class WorkspaceRowView(private val owner: WorkspaceRow) : EntityRowView 
 private fun ResultRow.toWorkspaceRow(
     blueprintsById: Map<UInt, ReadActiveBlueprint>,
     shownIds: Set<UInt>,
-    reservation: EntityReadLedger.Reservation?,
+    reservation: ReadLedger.Reservation?,
 ): WorkspaceRow {
     val blueprint = blueprintsById.getValue(this[ReadEntities.blueprintId].value)
     val id = this[ReadEntities.id].value
@@ -255,7 +257,7 @@ internal suspend fun loadReadSet(
     shownPredicate: Op<Boolean>,
     targetIdentifiers: Set<String>,
     blueprintsByIdentifier: Map<String, ReadActiveBlueprint>,
-    reservation: EntityReadLedger.Reservation?,
+    reservation: ReadLedger.Reservation?,
 ): ReadSet {
     val blueprintsById = blueprintsByIdentifier.values.associateBy { it.id }
     val targetIds = targetIdentifiers.mapNotNull { blueprintsByIdentifier[it]?.id }

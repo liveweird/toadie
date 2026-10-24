@@ -332,8 +332,8 @@ the same 6 KB. `ProductionHttpTest` pins that a ~6 KB request line reaches the J
 
 The entity registry caps (2,000 entities per blueprint, 10,000 total, 256 KiB per document) can
 in the worst case exceed the 256 MB heap budget when a single graph/query read materializes many
-large documents at once. `entities/EntityReadBudget.kt` bounds this with a process-wide,
-in-flight-bytes ledger (`ENTITY_READ_BUDGET_BYTES` = 64 MiB, derived from `-Xmx256m`
+large documents at once. `infra/concurrency/ReadLedger.kt` bounds this with a process-wide,
+in-flight-bytes ledger (`READ_BUDGET_BYTES` = 64 MiB, derived from `-Xmx256m`
 — `server/build.gradle.kts`'s JVM-args comment cross-references this constant; change the two
 together) every `list`/`read`/`create`/`update`/`graph`/`errors` read charges through ONE consolidated
 read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persistence.md`
@@ -352,7 +352,7 @@ read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persi
   (`WorkspaceRow.full()`) — charged once each, memoized, only when that row is actually decoded.
   A row admitted by (1) can still be charged further by (2) as more of the workspace is
   materialized; the ledger simply keeps accumulating until either the request finishes (releasing
-  everything at once via `EntityReadLedger.Reservation.close()`) or a charge would exceed
+  everything at once via `ReadLedger.Reservation.close()`) or a charge would exceed
   capacity.
 - **Refusal semantics.** `ReadBudgetExceeded.ownRequest` distinguishes "this read's own combined
   row set is too large to ever fit" (`true` — a `400`, or `EntityQueryInvalidException`
@@ -380,7 +380,7 @@ read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persi
   reflects the JVM object graph's real footprint (typically several times the raw byte count,
   since `estimatedHeapBytes` carries per-scalar/per-entry/per-string constant overhead).
 
-Rule of thumb: change `ENTITY_READ_BUDGET_BYTES` together with `-Xmx` (`server/build.gradle.kts`)
+Rule of thumb: change `READ_BUDGET_BYTES` together with `-Xmx` (`server/build.gradle.kts`)
 — raising one without the other either starves ordinary requests of heap or lets the ledger admit
 more than the heap can actually hold.
 

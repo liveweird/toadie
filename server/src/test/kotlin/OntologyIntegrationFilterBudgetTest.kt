@@ -7,10 +7,10 @@ import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.entities.EntityFilter
 import ch.nokillswit.entities.EntityGraphFilter
-import ch.nokillswit.entities.EntityReadLedger
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.OntologyReadBudget
 import ch.nokillswit.entities.ontologyErrors
+import ch.nokillswit.infra.concurrency.ReadLedger
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.SortField
 import io.ktor.server.plugins.BadRequestException
@@ -84,11 +84,11 @@ class OntologyIntegrationFilterBudgetTest {
             val listFilter = EntityFilter(childBlueprint, null, missingTeam)
             // Even an empty page reads the system team/user targets. Measure that legitimate
             // REST baseline instead of assuming the shared test workspace contains no targets.
-            val ordinaryListLedger = EntityReadLedger()
+            val ordinaryListLedger = ReadLedger()
             val ordinaryListService = TestEntities.tunedService(readLedger = ordinaryListLedger)
             assertEquals(0L, ordinaryListService.list(listFilter, page()).total)
             assertTrue(ordinaryListLedger.peak > 0)
-            val listLedger = EntityReadLedger(capacity = ordinaryListLedger.peak)
+            val listLedger = ReadLedger(capacity = ordinaryListLedger.peak)
             val listService = TestEntities.tunedService(readLedger = listLedger)
 
             assertEquals(0L, listService.list(listFilter, page()).total)
@@ -97,13 +97,13 @@ class OntologyIntegrationFilterBudgetTest {
             }
 
             val errorsFilter = EntityGraphFilter(listOf(childBlueprint), null, missingTeam)
-            val baselineLedger = EntityReadLedger()
+            val baselineLedger = ReadLedger()
             val baselineService = TestEntities.tunedService(readLedger = baselineLedger)
             val baselineReport = baselineService.ontologyErrors(errorsFilter)
             assertEquals(0, baselineReport.checkedEntities)
             assertTrue(baselineLedger.peak > 0)
 
-            val constrainedLedger = EntityReadLedger(capacity = baselineLedger.peak)
+            val constrainedLedger = ReadLedger(capacity = baselineLedger.peak)
             val constrainedService = TestEntities.tunedService(readLedger = constrainedLedger)
             assertEquals(0, constrainedService.ontologyErrors(errorsFilter).checkedEntities)
             assertFailsWith<BadRequestException> {

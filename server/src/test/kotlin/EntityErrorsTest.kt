@@ -12,7 +12,6 @@ import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.entities.EntityErrorsReport
 import ch.nokillswit.entities.EntityGraphFilter
-import ch.nokillswit.entities.EntityReadLedger
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
 import ch.nokillswit.entities.JqEvaluator
@@ -21,6 +20,7 @@ import ch.nokillswit.entities.errors
 import ch.nokillswit.entityquery.SavedEntityQuery
 import ch.nokillswit.entityquery.SavedEntityQueryRequest
 import ch.nokillswit.entityquery.SavedEntityQueryVisibility
+import ch.nokillswit.infra.concurrency.ReadLedger
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -539,12 +539,12 @@ class EntityErrorsTest {
             client.createBlueprint(BlueprintRequest(identifier = bp, title = "T", relations = mapOf("self" to selfRelation)))
             client.postJson("/api/v1/entities", entityRequest(bp, id))
 
-            val tinyLedger = EntityReadLedger(capacity = 1)
+            val tinyLedger = ReadLedger(capacity = 1)
             val tuned = TestEntities.tunedService(readLedger = tinyLedger)
             assertFailsWith<BadRequestException> { tuned.errors(EntityGraphFilter(listOf(bp), q = null), callerId) }
 
             val capacity = 8L * 1024 * 1024
-            val busyLedger = EntityReadLedger(capacity = capacity)
+            val busyLedger = ReadLedger(capacity = capacity)
             val other = busyLedger.open().apply { charge(capacity - 1) }
             try {
                 val busy = TestEntities.tunedService(readLedger = busyLedger)
