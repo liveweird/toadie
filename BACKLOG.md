@@ -62,14 +62,10 @@ Backstage sample to 10k files, on a disposable stack).
   are unbounded. Probe `-XX:MaxDirectMemorySize` and `MALLOC_ARENA_MAX=2` against the same load,
   keep what lowers the high-water mark without costing throughput, and record the numbers beside
   the `server/build.gradle.kts` JVM flags.
-- [new] **Keep the graph canvases responsive on large workspaces.** At 1,000 entities (3,435
-  relations) the Entity graph froze the tab for one ~275 s task inside dagre: the default
-  network-simplex ranker is pathologically sensitive to insertion order (the same graph took 32 s
-  in another order; `tight-tree` took 6.5 s clustered, 3.9 s flat). Lay out off the main thread,
-  run dagre only when the structure changes (not on decoration such as tiers or layout readiness),
-  pick a faster ranker, and open very large graphs collapsed or filter-first. The Backstage Graph
-  shares `layoutGraph`. Target: 1k entities interactive within a few seconds, no interaction
-  freezing the page for more than ~200 ms.
+- [new] **Draw only the visible part of very large graphs.** Since 2.20.0 the layout runs in a
+  worker, but "Show everything" on 1,000 entities still costs two main-thread tasks (414 ms and
+  230 ms) when React Flow mounts 1,000 nodes and 3,435 edges. Measure React Flow's
+  `onlyRenderVisibleElements` (and its effect on the fit-view and fold behaviour) on both canvases.
 - [new] **Virtualize the long lists.** At 10k rows the Entity hierarchy froze 2.3 s with 160k DOM
   elements, the Port Errors report 2.8 s (all 9,974 rows rendered), the Backstage Hierarchy (the
   home page) 2.6 s and the Backstage Errors page 1.9 s. Render only the visible rows, keeping tree
