@@ -40,7 +40,7 @@ test("the command palette jumps to pages and opens a file by name", async ({ pag
 
   // The header trigger opens it too; two characters of a file name search the catalog, and
   // the result opens the file's editor.
-  await page.getByRole("button", { name: "Search and jump to…" }).first().click();
+  await page.getByRole("button", { name: /jump to a page/ }).click();
   await search.fill(name);
   await page.getByRole("button", { name }).click();
   await expect(page.getByRole("heading", { name: "Edit catalog file" })).toBeVisible();
