@@ -24,32 +24,18 @@ import { useStoredState, isString } from "../hooks/useStoredState";
 import { buildEntityHierarchy, effectiveHierarchyId } from "../utils/entityGraph";
 import { editEntityPath } from "../utils/entityLinks";
 import { entityDeleteErrorMessage } from "../utils/entityForm";
-import { findPlacement, type HierarchyNode } from "../utils/hierarchy";
+import { findPlacement } from "../utils/hierarchy";
+import { branchKeys, flattenTree, type TreeRow } from "../utils/treeRows";
 import { loadErrorMessage } from "../utils/saveError";
 import { queryProblemDiagnostics } from "../utils/queryDiagnostics";
 import { blueprintTierLookup, type Tier } from "../utils/tiers";
 import LoadingBlock from "../components/LoadingBlock";
+import VirtualTreeList from "../components/VirtualTreeList";
 import classes from "../theme.module.css";
 
-function pathKey(path: string, node: EntityGraphNode): string {
-  return `${path}/${node.id}`;
-}
-
-function branchKeys(items: HierarchyNode<EntityGraphNode>[], path: string, into: string[]): string[] {
-  for (const item of items) {
-    const key = pathKey(path, item.node);
-    if (item.children.length > 0) {
-      into.push(key);
-      branchKeys(item.children, key, into);
-    }
-  }
-  return into;
-}
-
+/** One flat tree row (indentation and guides come from VirtualTreeList's wrapper). */
 function TreeItem({
-  item,
-  path,
-  collapsed,
+  row,
   onToggle,
   onPin,
   pinnedId,
@@ -58,9 +44,7 @@ function TreeItem({
   onRunQuery,
   tierOf,
 }: {
-  item: HierarchyNode<EntityGraphNode>;
-  path: string;
-  collapsed: ReadonlySet<string>;
+  row: TreeRow<EntityGraphNode>;
   onToggle: (key: string) => void;
   onPin: (id: string) => void;
   pinnedId: string;
@@ -72,89 +56,66 @@ function TreeItem({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { node, children } = item;
+  const { node } = row.item;
   const nodeTier = tierOf(node.blueprint);
-  const key = pathKey(path, node);
-  const isCollapsed = collapsed.has(key);
   return (
-    <Box>
-      <Group gap="xs" wrap="nowrap" py={2} px={4} className={classes.treeRow}>
-        {children.length > 0 ? (
-          <ActionIcon
-            size="xs"
-            aria-label={t("entityHierarchy.toggleAria", { name: node.title })}
-            aria-expanded={!isCollapsed}
-            onClick={() => onToggle(key)}
-          >
-            {isCollapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
-          </ActionIcon>
-        ) : (
-          <Box w={18} style={{ flexShrink: 0 }} />
-        )}
-        <Group gap="xs" wrap="wrap" className={classes.treeIdentity}>
-          <Badge
-            variant="light"
-            color="gray"
-            size="xs"
-            leftSection={nodeTier === null ? undefined : <TierDot tier={nodeTier} />}
-          >
-            {node.blueprintTitle}
-          </Badge>
-          <Text size="sm" fw={500} className={classes.treeIdentityText}>
-            {node.title}
-          </Text>
-          <Anchor
-            component={RouterLink}
-            to={editEntityPath(node.entityId)}
-            size="xs"
-            ff="monospace"
-            aria-label={t("common.action.editAria", { name: node.identifier })}
-            className={classes.treeIdentityText}
-          >
-            {node.identifier}
-          </Anchor>
-          <EntityFindingsBadge findings={node.findings} />
-        </Group>
-        <Box ml="auto" style={{ flexShrink: 0 }}>
-          <RowActionsMenu label={t("common.table.operationsAria", { name: node.title })}>
-            <Menu.Item leftSection={<IconPin size={14} />} onClick={() => onPin(node.id)}>
-              {node.id === pinnedId ? t("entityHierarchy.unpin") : t("entityHierarchy.pin")}
-            </Menu.Item>
-            <Menu.Item onClick={() => navigate(editEntityPath(node.entityId))}>
-              {t("common.action.edit")}
-            </Menu.Item>
-            <Menu.Item color="red" onClick={() => onDelete(node)}>
-              {t("common.action.delete")}
-            </Menu.Item>
-            <Menu.Divider />
-            <EntityQueryActionItems
-              node={{ blueprint: node.blueprint, identifier: node.identifier }}
-              hierarchyId={hierarchyId}
-              onRun={onRunQuery}
-            />
-          </RowActionsMenu>
-        </Box>
-      </Group>
-      {children.length > 0 && !isCollapsed && (
-        <Box className={classes.treeBranch}>
-          {children.map((child) => (
-            <TreeItem
-              key={pathKey(key, child.node)}
-              item={child}
-              path={key}
-              collapsed={collapsed}
-              onToggle={onToggle}
-              onPin={onPin}
-              pinnedId={pinnedId}
-              onDelete={onDelete}
-              hierarchyId={hierarchyId}
-              onRunQuery={onRunQuery}
-              tierOf={tierOf}
-            />
-          ))}
-        </Box>
+    <Group gap="xs" wrap="nowrap" py={2} px={4} className={classes.treeRow}>
+      {row.hasChildren ? (
+        <ActionIcon
+          size="xs"
+          aria-label={t("entityHierarchy.toggleAria", { name: node.title })}
+          aria-expanded={!row.collapsed}
+          onClick={() => onToggle(row.key)}
+        >
+          {row.collapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
+        </ActionIcon>
+      ) : (
+        <Box w={18} style={{ flexShrink: 0 }} />
       )}
-    </Box>
+      <Group gap="xs" wrap="wrap" className={classes.treeIdentity}>
+        <Badge
+          variant="light"
+          color="gray"
+          size="xs"
+          leftSection={nodeTier === null ? undefined : <TierDot tier={nodeTier} />}
+        >
+          {node.blueprintTitle}
+        </Badge>
+        <Text size="sm" fw={500} className={classes.treeIdentityText}>
+          {node.title}
+        </Text>
+        <Anchor
+          component={RouterLink}
+          to={editEntityPath(node.entityId)}
+          size="xs"
+          ff="monospace"
+          aria-label={t("common.action.editAria", { name: node.identifier })}
+          className={classes.treeIdentityText}
+        >
+          {node.identifier}
+        </Anchor>
+        <EntityFindingsBadge findings={node.findings} />
+      </Group>
+      <Box ml="auto" style={{ flexShrink: 0 }}>
+        <RowActionsMenu label={t("common.table.operationsAria", { name: node.title })}>
+          <Menu.Item leftSection={<IconPin size={14} />} onClick={() => onPin(node.id)}>
+            {node.id === pinnedId ? t("entityHierarchy.unpin") : t("entityHierarchy.pin")}
+          </Menu.Item>
+          <Menu.Item onClick={() => navigate(editEntityPath(node.entityId))}>
+            {t("common.action.edit")}
+          </Menu.Item>
+          <Menu.Item color="red" onClick={() => onDelete(node)}>
+            {t("common.action.delete")}
+          </Menu.Item>
+          <Menu.Divider />
+          <EntityQueryActionItems
+            node={{ blueprint: node.blueprint, identifier: node.identifier }}
+            hierarchyId={hierarchyId}
+            onRun={onRunQuery}
+          />
+        </RowActionsMenu>
+      </Box>
+    </Group>
   );
 }
 
@@ -205,8 +166,10 @@ export default function EntityHierarchy() {
 
   const roots = useMemo(() => (graph ? buildEntityHierarchy(graph, hierarchyId) : []), [graph, hierarchyId]);
   const placement = useMemo(() => (pinnedId ? findPlacement(roots, pinnedId) : null), [roots, pinnedId]);
-  const visible = placement ? [placement.item] : roots;
+  const visible = useMemo(() => (placement ? [placement.item] : roots), [placement, roots]);
   const basePath = placement?.path ?? "";
+  // The visible forest, flattened (folds applied) — what the list below windows over.
+  const rows = useMemo(() => flattenTree(visible, collapsed, basePath), [visible, collapsed, basePath]);
 
   useEffect(() => {
     // Guarded on `graph` (never fires mid-load or while every blueprint is hidden — the
@@ -299,22 +262,22 @@ export default function EntityHierarchy() {
       <Paper withBorder p="md" className={classes.treeSurface}>
         {!filters.ready || (isLoading && !graph) ? (
           <LoadingBlock py="md" />
-        ) : visible.length > 0 ? (
-          visible.map((root) => (
-            <TreeItem
-              key={pathKey(basePath, root.node)}
-              item={root}
-              path={basePath}
-              collapsed={collapsed}
-              onToggle={toggle}
-              onPin={(id) => setPinnedId(id === pinnedId ? "" : id)}
-              pinnedId={pinnedId}
-              onDelete={(node) => deleteConfirm.requestDelete(node)}
-              hierarchyId={hierarchyId}
-              onRunQuery={query.runText}
-              tierOf={tierOf}
-            />
-          ))
+        ) : rows.length > 0 ? (
+          <VirtualTreeList
+            rows={rows}
+            renderRow={(row) => (
+              <TreeItem
+                row={row}
+                onToggle={toggle}
+                onPin={(id) => setPinnedId(id === pinnedId ? "" : id)}
+                pinnedId={pinnedId}
+                onDelete={(node) => deleteConfirm.requestDelete(node)}
+                hierarchyId={hierarchyId}
+                onRunQuery={query.runText}
+                tierOf={tierOf}
+              />
+            )}
+          />
         ) : !isError ? (
           <EmptyState icon={IconSitemap} label={t("entityHierarchy.empty")} />
         ) : null}

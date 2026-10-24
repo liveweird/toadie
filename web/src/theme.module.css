@@ -288,13 +288,6 @@
   scroll-margin-top: 56px;
 }
 
-/* Retired with the Entity hierarchy's flattening (next commit). */
-.treeBranch {
-  margin-left: 13px;
-  padding-left: 22px;
-  border-left: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
-}
-
 /* A windowed list: a box as tall as every row, the mounted rows positioned inside it. */
 .virtualList {
   position: relative;
@@ -492,11 +485,6 @@
 }
 
 @media (max-width: 48em) {
-  .treeBranch {
-    margin-left: 5px;
-    padding-left: 8px;
-  }
-
   .treeLine {
     --tree-step: 13px;
     --tree-guide-x: 5px;
