@@ -343,6 +343,26 @@ describe("Graph page", () => {
     expect(screen.getByTestId("flow")).toHaveAttribute("data-draggable", "false");
   });
 
+  test("a 400 on saving the layout names the cap and keeps Retry", async () => {
+    mockGraph(mockFetch);
+    const base = mockFetch.getMockImplementation() as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+      url === "/api/v1/users/9/graph-layout" && init?.method === "PUT"
+        ? Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }))
+        : base(url, init),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/svc-a/);
+    await user.click(screen.getByRole("radio", { name: "Manual" }));
+
+    expect(await screen.findByText("Failed to save the layout")).toBeInTheDocument();
+    expect(screen.getByText(/Too many saved positions or collapsed nodes/)).toBeInTheDocument();
+    expect(screen.queryByText("Save failed (400)")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry saving layout" })).toBeInTheDocument();
+  });
+
   test("Reset layout clears the stored positions and persists the empty map", async () => {
     mockGraph(mockFetch, GRAPH, 200, {
       mode: "manual",

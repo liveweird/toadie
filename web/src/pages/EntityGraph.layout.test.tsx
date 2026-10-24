@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { act, screen, waitFor } from "@testing-library/react";
+import { jsonResponse } from "../test/http";
 import { blueprintResponse } from "../test/fixtures";
 import { fitViewCalls } from "../test/reactFlowStub";
 import { FakeWorker } from "../test/fakeWorker";
@@ -339,5 +340,25 @@ describe("EntityGraph layout", () => {
       expect(screen.queryByRole("button", { name: "Show top level" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Show everything" })).toBeInTheDocument();
     });
+  });
+
+  test("a 400 on saving the layout names the cap and keeps Retry", async () => {
+    mockGraph(mockFetch);
+    const base = mockFetch.getMockImplementation() as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+      url === "/api/v1/users/9/entity-graph-layout" && init?.method === "PUT"
+        ? Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }))
+        : base(url, init),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/checkout \[service\]/);
+    await user.click(screen.getByRole("radio", { name: "Manual" }));
+
+    expect(await screen.findByText("Failed to save the layout")).toBeInTheDocument();
+    expect(screen.getByText(/Too many saved positions or collapsed nodes/)).toBeInTheDocument();
+    expect(screen.queryByText("Save failed (400)")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry saving layout" })).toBeInTheDocument();
   });
 });

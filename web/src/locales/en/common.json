@@ -95,7 +95,8 @@
       "hint": "Or narrow the selection with the filters and the visibility pills first."
     },
     "topLevelBadge": "Top level",
-    "topLevelClearAria": "Leave the top-level view"
+    "topLevelClearAria": "Leave the top-level view",
+    "saveLimit": "Too many saved positions or collapsed nodes — use Reset layout or Expand all to free some."
   },
   "tier": {
     "tooltip": "Tier {{tier}} — fill lower tiers first",

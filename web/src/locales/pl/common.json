@@ -95,7 +95,8 @@
       "hint": "Możesz też najpierw zawęzić wybór filtrami i przyciskami widoczności."
     },
     "topLevelBadge": "Najwyższy poziom",
-    "topLevelClearAria": "Wyjdź z widoku najwyższego poziomu"
+    "topLevelClearAria": "Wyjdź z widoku najwyższego poziomu",
+    "saveLimit": "Zbyt wiele zapisanych pozycji lub zwiniętych węzłów — użyj Resetuj układ lub Rozwiń wszystko, aby zwolnić miejsce."
   },
   "tier": {
     "tooltip": "Poziom {{tier}} — najpierw uzupełnij niższe poziomy",

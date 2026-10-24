@@ -379,6 +379,8 @@ export default function Graph() {
         <Alert color="red" variant="light" title={t("graph.layout.saveFailed")} style={{ flexShrink: 0 }}>
           <Stack gap="xs" align="flex-start">
             <Text size="sm">{saveErrorMessage(layout.saveError, t, {
+              // The layout document caps positions and collapsed ids (1,000 each, server-side).
+              invalid: "common.graphLayout.saveLimit",
               failedStatus: "common.error.saveFailedStatus",
               failed: "common.error.saveFailedNetwork",
             })}</Text>
