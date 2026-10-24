@@ -17,7 +17,10 @@ import type { HierarchyNode } from "../utils/hierarchy";
  *   crossing-order heuristic above the limit (`layoutOptions`).
  *
  * Both reset as soon as the graph under the SAVED fold is back under the limit, so narrowing
- * the filters and widening them again shows the gate again.
+ * the filters and widening them again shows the gate again. That mid-session flip from a
+ * canvas back to the panel is deliberate: "everything" was a choice about THAT selection, and
+ * silently remembering it would start a long layout the user never asked for on the next
+ * widening (pinned by the "both choices reset" case in `useLargeGraphGate.test.ts`).
  */
 export function useLargeGraphGate<N extends { id: string }>(
   filtered: FoldableGraph<N> | null,
@@ -58,14 +61,17 @@ export function useLargeGraphGate<N extends { id: string }>(
     () => (overlay && filtered ? foldGraph(filtered, forest, overlay) : saved),
     [overlay, filtered, forest, saved],
   );
-  const topLevel = useMemo(
-    () => (overLimit && saved ? topLevelFold(forest, saved.info) : []),
-    [overLimit, saved, forest],
-  );
+  // What "Show top level" would draw — offered only if it actually brings the drawn count down.
+  const topLevel = useMemo(() => {
+    if (!overLimit || !saved || !filtered) return { ids: [] as string[], helps: false };
+    const ids = topLevelFold(forest, saved.info);
+    const folded = ids.length > 0 ? foldGraph(filtered, forest, new Set(ids)) : null;
+    return { ids, helps: folded !== null && folded.nodes.length < saved.nodes.length };
+  }, [overLimit, saved, filtered, forest]);
 
   const showTopLevel = useCallback(() => {
     setShowAllState(false);
-    setOverlayState(new Set(topLevel));
+    setOverlayState(new Set(topLevel.ids));
   }, [topLevel]);
   const showEverything = useCallback(() => {
     setOverlayState(null);
@@ -85,7 +91,7 @@ export function useLargeGraphGate<N extends { id: string }>(
     gate: folded ? graphGate({ drawnNodes: folded.nodes.length, showAll }) : "layout",
     showAll,
     overlay,
-    canShowTopLevel: overlay === null && topLevel.length > 0,
+    canShowTopLevel: overlay === null && topLevel.helps,
     showTopLevel,
     showEverything,
     clearOverlay,

@@ -16,14 +16,29 @@ export function graphGate({ drawnNodes, showAll }: { drawnNodes: number; showAll
 }
 
 /**
- * The ids "Show top level" collapses: every forest ROOT that has at least one DRAWN descendant
- * (`info` is the fold's per-node info, which holds an entry only for nodes with a drawn
- * descendant). Folding exactly these leaves the roots plus every node outside the forest.
- * Each root is listed once.
+ * The ids "Show top level" collapses: the TOPMOST DRAWN node of every tree — the first node on
+ * each root-to-leaf path that has at least one drawn descendant (`info` is the fold's per-node
+ * info, which holds an entry exactly for those). Usually that is the forest root; when a filter
+ * hides the roots it is the first drawn level underneath, so the overlay still folds the tree.
+ * Folding exactly these leaves them plus every node outside the forest. Each id is listed once
+ * (membership can place one node under several parents).
  */
 export function topLevelFold<N extends { id: string }>(
   forest: readonly HierarchyNode<N>[],
   info: ReadonlyMap<string, unknown>,
 ): string[] {
-  return [...new Set(forest.map((root) => root.node.id))].filter((id) => info.has(id));
+  const found = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (item: HierarchyNode<N>) => {
+    const id = item.node.id;
+    if (info.has(id)) {
+      found.add(id);
+      return;
+    }
+    if (visited.has(id)) return;
+    visited.add(id);
+    item.children.forEach(visit);
+  };
+  forest.forEach(visit);
+  return [...found];
 }

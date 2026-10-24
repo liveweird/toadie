@@ -78,6 +78,36 @@ describe("useLargeGraphGate", () => {
     expect(result.current.gate).toBe("large");
   });
 
+  test("with the roots filtered out, Show top level folds the first drawn level", () => {
+    // 160 mids with one child each (320 drawn nodes); their root is hidden by a filter.
+    const mids = Array.from({ length: 160 }, (_, i) => ({ id: `m${i}` }));
+    const kids = mids.map((_m, i) => ({ id: `k${i}` }));
+    const forest: HierarchyNode<N>[] = [
+      {
+        node: { id: "hidden-root" },
+        children: mids.map((node, i) => ({ node, children: [{ node: kids[i], children: [] }] })),
+      },
+    ];
+    const graph = { nodes: [...mids, ...kids], edges: [] };
+    const { result } = mount({ graph, forest });
+
+    expect(result.current.gate).toBe("large");
+    expect(result.current.canShowTopLevel).toBe(true);
+    act(() => result.current.showTopLevel());
+    expect(result.current.folded?.nodes).toHaveLength(160);
+    expect(result.current.gate).toBe("layout");
+  });
+
+  test("Show top level is not offered when folding would not draw fewer nodes", () => {
+    // Roots exist but none has a drawn descendant: the overlay would change nothing.
+    const nodes: N[] = Array.from({ length: LARGE_GRAPH_NODES + 1 }, (_, i) => ({ id: `n${i}` }));
+    const forest: HierarchyNode<N>[] = nodes.map((node) => ({ node, children: [] }));
+    const { result } = mount({ graph: { nodes, edges: [] }, forest });
+
+    expect(result.current.gate).toBe("large");
+    expect(result.current.canShowTopLevel).toBe(false);
+  });
+
   test("a flat graph has nothing to fold at the top level", () => {
     const flat = { graph: { nodes: BIG.graph.nodes, edges: [] }, forest: [] };
     const { result } = mount(flat);

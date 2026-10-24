@@ -36,6 +36,14 @@ describe("topLevelFold", () => {
     expect(topLevelFold(forest, new Map([["sys-b", {}]]))).toEqual(["sys-b"]);
   });
 
+  test("with the roots filtered out, the topmost DRAWN level of each tree is folded instead", () => {
+    // `root` is not drawn (no info entry of its own); its drawn children are the fold points,
+    // and nothing below the first drawn node is listed.
+    const forest = [tree("root", tree("mid-a", tree("deep", leaf("x"))), tree("mid-b", leaf("y")), leaf("lone"))];
+    const info = new Map([["mid-a", {}], ["deep", {}], ["mid-b", {}]]);
+    expect(topLevelFold(forest, info)).toEqual(["mid-a", "mid-b"]);
+  });
+
   test("a node the forest places twice (group membership) is listed once", () => {
     const shared = tree("grp", leaf("u1"));
     expect(topLevelFold([shared, shared], new Map([["grp", {}]]))).toEqual(["grp"]);
