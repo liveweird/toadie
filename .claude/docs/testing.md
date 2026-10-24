@@ -48,6 +48,28 @@ not satisfy a drag waiter. Confirm the request contains that node's position bef
 the checked Manual radio and moved canvas only prove local state, not completed persistence.
 The stub's `onInit` hands the page a fake instance whose `fitView` records the node ids the stub holds at call time; the `Graph`/`EntityGraph` re-fit cases assert the fit after an expand saw the re-added node (v2.2.1 — the fit must be keyed off the live `nodes`, not `baseLayout`).
 
+**Graph layout worker (2.20.0).**
+
+- **Applies when:** changing `web/src/utils/graphLayout.ts`, the layout worker or its hook
+  (`graphLayoutWorker.ts`, `useGraphLayoutWorker.ts`), the large-graph gate (`graphGate.ts`,
+  `useLargeGraphGate.ts`), or either canvas's (`Graph.tsx`, `EntityGraph.tsx`) memo chain.
+- **Requirement:** dagre runs only on STRUCTURAL inputs (graph, relation chips, containment
+  forest, fold, Focus-thinned edges, hierarchy) — the layout document arriving, `layoutReady`,
+  the blueprint registry/tiers and other decoration never re-run it. A result is reported only
+  for the latest request id; a stale one is dropped. Supersede (past `SUPERSEDE_GRACE_MS`) and
+  the `LAYOUT_DEADLINE_MS` timeout cancel by TERMINATING the worker. A missing or throwing
+  `Worker` falls back to a synchronous layout on the calling thread. A graph over
+  `LARGE_GRAPH_NODES` drawn nodes is held behind the gate, and the gate's choices (the
+  top-level overlay, Show everything) are transient state never written to the layout document.
+  Tests use fake timers and `test/fakeWorker.ts` — no sleeps, no real `Worker`.
+- **Reference:** `web/CLAUDE.md` "Layout off the main thread (2.20.0)" and "The large-graph
+  gate (2.20.0)" under "The Graph page".
+- **Enforcement:** `useGraphLayoutWorker.test.tsx`, `graphLayoutWorker.test.ts`,
+  `graphGate.test.ts`, `useLargeGraphGate.test.ts`, the "layout re-runs only on structural
+  inputs" cases (spy on `layoutPositions`) and the worker/gate cases in `Graph.test.tsx` and
+  `EntityGraph.layout.test.tsx`, plus the `entity-graph.spec.ts` large-graph journey.
+- **Exception:** none.
+
 **Refresh crossing sign-out.** Use held responses to exercise the shared transport after an
 old protected request receives 401: hold refresh, perform the real best-effort logout with
 its revoke request failing, then release refresh. The browser session must remain cleared
