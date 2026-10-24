@@ -37,7 +37,7 @@ describe("EntityGraphNode", () => {
     expect(screen.getByText("Checkout")).toBeInTheDocument();
     expect(screen.getByText("checkout")).toBeInTheDocument();
     expect(screen.getByText("Service")).toBeInTheDocument();
-    expect(screen.getByLabelText("Open Checkout")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Checkout/ })).toBeInTheDocument();
   });
 
   test("the blueprint badge leads with the tier dot stamped on the node data, and none without one", () => {
@@ -65,7 +65,7 @@ describe("EntityGraphNode", () => {
       </div>,
     );
 
-    screen.getByLabelText("Open Checkout").focus();
+    screen.getByRole("button", { name: /^Checkout/ }).focus();
     await user.keyboard("{Enter}");
     expect(onClick).toHaveBeenCalledTimes(1);
     await user.keyboard(" ");

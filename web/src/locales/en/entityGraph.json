@@ -35,6 +35,5 @@
     "retrySave": "Retry saving layout"
   },
   "empty": "Nothing to render — no entities match.",
-  "nodeAria": "Open {{name}}",
   "expandAll": "Expand all"
 }

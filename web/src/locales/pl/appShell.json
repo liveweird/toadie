@@ -34,6 +34,7 @@
   },
   "userMenu": {
     "open": "Menu konta",
+    "openNamed": "{{name}} – Menu konta",
     "language": "Język",
     "theme": "Motyw",
     "themeLight": "Jasny",

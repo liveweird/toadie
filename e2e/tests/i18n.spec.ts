@@ -41,7 +41,7 @@ test("a language switch persists across reload and re-login on a fresh device", 
 
   // Signing back in as the (English-language) seed admin flips the UI back to English the
   // same way — the sync works in both directions. Cleanup: delete the throwaway user.
-  await page.getByRole("button", { name: "Menu konta" }).click();
+  await page.getByRole("button", { name: /Menu konta$/ }).click();
   await page.getByRole("menuitem", { name: "Wyloguj" }).click();
   await login(page);
   await deleteUserRow(page, throwaway.name);

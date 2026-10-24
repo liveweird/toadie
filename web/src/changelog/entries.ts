@@ -19,8 +19,8 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "2.18.4",
     date: "2026-10-24",
-    en: `**Clearer search button for screen readers.** The header's search button is now announced by the text it shows, so what you hear matches what you see. Dependencies were also updated.`,
-    pl: `**Czytelniejszy przycisk wyszukiwania dla czytników ekranu.** Przycisk wyszukiwania w nagłówku jest teraz odczytywany tekstem, który wyświetla, więc to, co słyszysz, zgadza się z tym, co widzisz. Zaktualizowano też zależności.`,
+    en: `**Clearer buttons for screen readers.** The header's search button is now announced by the text it shows, the account menu button by your name, and graph nodes by what is written on them, so what you hear matches what you see. Dependencies were also updated.`,
+    pl: `**Czytelniejsze przyciski dla czytników ekranu.** Przycisk wyszukiwania w nagłówku jest teraz odczytywany tekstem, który wyświetla, przycisk menu konta Twoim imieniem i nazwiskiem, a węzły grafu tym, co jest na nich napisane, więc to, co słyszysz, zgadza się z tym, co widzisz. Zaktualizowano też zależności.`,
   },
   {
     version: "2.18.3",

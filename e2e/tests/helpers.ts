@@ -56,7 +56,7 @@ export async function login(page: Page, email = ADMIN, password = PASSWORD): Pro
 
 /** The header account-menu trigger — visible only inside the authenticated shell (v1.19.0). */
 export function accountMenu(page: Page) {
-  return page.getByRole("button", { name: "Account menu" });
+  return page.getByRole("button", { name: /Account menu$/ });
 }
 
 /** Sign out through the account menu (the former header Logout button). */
