@@ -36,6 +36,7 @@ import EntityGraphToolbar from "../components/EntityGraphToolbar";
 import EntityNodeContextMenu, { type EntityNodeContextMenuTarget } from "../components/EntityNodeContextMenu";
 import EntityQueryBar from "../components/EntityQueryBar";
 import EmptyState from "../components/EmptyState";
+import GraphLayoutGate from "../components/GraphLayoutGate";
 import HierarchyPicker from "../components/HierarchyPicker";
 import {
   applyManualPositions,
@@ -43,7 +44,6 @@ import {
   COLLAPSED_FACE_STYLE,
   FOLDED_EDGE_STYLE,
   layoutOptions,
-  layoutPositions,
   materializeLayout,
   STATUS_STYLE,
   toLayoutRequest,
@@ -77,6 +77,7 @@ import { blueprintTierLookup } from "../utils/tiers";
 import LoadingBlock from "../components/LoadingBlock";
 import classes from "../theme.module.css";
 import { useGraphLayout } from "../hooks/useGraphLayout";
+import { useGraphLayoutWorker } from "../hooks/useGraphLayoutWorker";
 import { useStableIdSet } from "../hooks/useStableIdSet";
 import { useSessionUserId } from "../auth";
 
@@ -210,21 +211,23 @@ export default function EntityGraph() {
     const folded = foldGraph(toFoldable(filtered), forest, collapsedSet);
     return {
       folded,
+      // Carried with the job so a result is always decorated against the hierarchy it was
+      // laid out for, even while a newer layout is pending.
+      selectedHierarchyEdges: hierarchyEdgeKeys(graph, hierarchyId),
       request: toLayoutRequest(folded, ENTITY_CLUSTER, layoutOptions(folded.nodes.length, false)),
     };
-  }, [graph, disabled, forest, collapsedSet, focus, focusBlueprints]);
-  const autoPositions = useMemo(
-    () => (structural ? layoutPositions(structural.request) : EMPTY_POSITIONS),
-    [structural],
-  );
+  }, [graph, hierarchyId, disabled, forest, collapsedSet, focus, focusBlueprints]);
+  // dagre runs in a worker; the previous result stays on screen while a newer layout computes.
+  const autoLayout = useGraphLayoutWorker(structural);
+  const laid = autoLayout.result;
 
   const baseLayout = useMemo(() => {
-    if (!structural || !graph) {
+    if (!laid) {
       return { nodes: [] as LaidOutNode<EntityGraphNodeApi>[], edges: [] as Edge[], anyCollapsed: false };
     }
-    const { folded } = structural;
-    const selectedHierarchyEdges = hierarchyEdgeKeys(graph, hierarchyId);
-    const laidOut = materializeLayout(folded, ENTITY_CLUSTER, autoPositions);
+    // The folded graph the positions were computed FOR (not the newest one, which may be pending).
+    const { folded, selectedHierarchyEdges } = laid.source;
+    const laidOut = materializeLayout(folded, ENTITY_CLUSTER, laid.positions);
     // Hierarchy edges draw solid and thicker, labelled by relation id — folding can still dash
     // one that stands in for a hidden relation, so the fold's own style wins when both apply.
     const edges = laidOut.edges
@@ -256,7 +259,7 @@ export default function EntityGraph() {
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges, anyCollapsed };
-  }, [structural, graph, autoPositions, layoutReady, hierarchyId, tierOf]);
+  }, [laid, layoutReady, tierOf]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode<EntityGraphNodeApi>>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
@@ -496,7 +499,11 @@ export default function EntityGraph() {
 
       {!filters.ready || (isLoading && !graph) ? (
         <LoadingBlock />
-      ) : !isLoading && !isError && nodes.length === 0 ? (
+      ) : autoLayout.status === "timeout" || autoLayout.status === "error" ? (
+        <GraphLayoutGate kind="failed" timedOut={autoLayout.status === "timeout"} onRetry={autoLayout.retry} />
+      ) : autoLayout.status === "pending" && !laid ? (
+        <GraphLayoutGate kind="computing" />
+      ) : !isLoading && !isError && baseLayout.nodes.length === 0 ? (
         <EmptyState icon={IconTopologyStar3} label={t("entityGraph.empty")} />
       ) : (
         <Paper withBorder radius="md" className={classes.fillPageCanvas}>

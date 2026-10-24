@@ -7,6 +7,7 @@ import { renderWithProviders } from "../test/render";
 import { blueprintResponse } from "../test/fixtures";
 import { expandQuery, ownedByQuery } from "../utils/queryTemplates";
 import { fitViewCalls } from "../test/reactFlowStub";
+import { FakeWorker } from "../test/fakeWorker";
 
 // React Flow needs real DOM measurement happy-dom can't give — shared stub (v1.25.0,
 // extracted from Graph.test.tsx). The pure shaping (entityGraph.ts/graphLayout.ts) is
@@ -354,6 +355,73 @@ describe("EntityGraph page", () => {
       await user.click(screen.getByRole("combobox", { name: "Focus" }));
       await user.click(await screen.findByRole("option", { name: "Tiers 1–2" }));
       await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
+    });
+  });
+
+  describe("the layout worker", () => {
+    beforeEach(() => {
+      FakeWorker.reset();
+      vi.stubGlobal("Worker", FakeWorker);
+    });
+
+    /** Answers whatever the page has posted so far, until the canvas is up. */
+    async function answerUntilDrawn() {
+      await waitFor(() => {
+        act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+        expect(screen.getByTestId("flow")).toBeInTheDocument();
+      });
+    }
+
+    test("shows a named 'Laying out' status instead of the canvas until the worker answers", async () => {
+      mockGraph(mockFetch);
+      renderPage();
+
+      const status = await screen.findByText("Laying out the graph…");
+      expect(status).toHaveAttribute("role", "status");
+      expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
+      expect(screen.queryByText(/nothing to render/i)).not.toBeInTheDocument();
+
+      await answerUntilDrawn();
+      expect(await screen.findByText(/checkout \[service\]/)).toBeInTheDocument();
+      expect(screen.queryByText("Laying out the graph…")).not.toBeInTheDocument();
+    });
+
+    test("keeps the previous canvas while a newer layout computes, then swaps it in and re-fits", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+      await answerUntilDrawn();
+      await screen.findByText(/checkout \[service\]/);
+
+      await user.click(screen.getByRole("button", { name: "Collapse platform" }));
+
+      // The new layout is pending (unanswered): the old nodes are still on screen, with no
+      // spinner in their place.
+      expect(screen.getByText(/checkout \[service\]/)).toBeInTheDocument();
+      expect(screen.queryByText("Laying out the graph…")).not.toBeInTheDocument();
+
+      fitViewCalls.length = 0;
+      act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+      await waitFor(() => expect(screen.queryByText(/checkout \[service\]/)).not.toBeInTheDocument());
+      // The fit follows the new node set reaching the canvas, not the request being posted.
+      await waitFor(() => expect(fitViewCalls.at(-1)).toEqual(["service|solo", "team|platform"]));
+    });
+
+    test("a failed layout shows the narrowing hint with a retry that resubmits", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("Laying out the graph…");
+      await waitFor(() => expect(FakeWorker.instances.at(-1)?.posted.length).toBeGreaterThan(0));
+      act(() => FakeWorker.instances.at(-1)!.fail());
+
+      expect(await screen.findByText("The graph layout did not finish")).toBeInTheDocument();
+      expect(screen.getByText(/Narrow the filters or try again/)).toBeInTheDocument();
+      expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      await answerUntilDrawn();
+      expect(await screen.findByText(/checkout \[service\]/)).toBeInTheDocument();
     });
   });
 

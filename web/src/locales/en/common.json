@@ -81,6 +81,13 @@
     "collapseAria": "Collapse {{name}}",
     "expandAria": "Expand {{name}} ({{count}} hidden)"
   },
+  "graphLayout": {
+    "computing": "Laying out the graph…",
+    "failedTitle": "The graph layout did not finish",
+    "timedOut": "Laying out the graph took too long. Narrow the filters or try again.",
+    "error": "The graph layout failed. Narrow the filters or try again.",
+    "retry": "Try again"
+  },
   "tier": {
     "tooltip": "Tier {{tier}} — fill lower tiers first",
     "label": "Tier",

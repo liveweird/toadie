@@ -33,6 +33,11 @@ export default defineConfig({
       '/api': 'http://localhost:8081',
     },
   },
+  // The dagre layout worker (src/utils/graphLayoutWorker.ts) is a same-origin ES-module chunk:
+  // `script-src 'self'` allows it, an inline/`blob:` worker (`?worker&inline`) would not.
+  worker: {
+    format: 'es',
+  },
   build: {
     rolldownOptions: {
       output: {

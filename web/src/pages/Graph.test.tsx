@@ -5,6 +5,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
 import { fitViewCalls } from "../test/reactFlowStub";
+import { FakeWorker } from "../test/fakeWorker";
 
 // React Flow needs real DOM measurement (ResizeObserver, bounding boxes) that happy-dom can't
 // give — the canvas is stubbed to a list of node buttons (src/test/reactFlowStub.tsx, shared
@@ -515,6 +516,64 @@ describe("Graph page", () => {
       const before = layoutRuns();
       await user.click(screen.getByRole("button", { name: "Collapse shop" }));
       await waitFor(() => expect(layoutRuns()).toBeGreaterThan(before));
+    });
+  });
+
+  describe("the layout worker", () => {
+    beforeEach(() => {
+      FakeWorker.reset();
+      vi.stubGlobal("Worker", FakeWorker);
+    });
+
+    test("shows a named 'Laying out' status until the worker answers, then the nodes", async () => {
+      mockGraph(mockFetch);
+      renderPage();
+
+      const status = await screen.findByText("Laying out the graph…");
+      expect(status).toHaveAttribute("role", "status");
+      expect(screen.queryByText(/svc-a/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/nothing to render/i)).not.toBeInTheDocument();
+
+      await waitFor(() => {
+        act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+        expect(screen.getByText(/svc-a \[STORED\]/)).toBeInTheDocument();
+      });
+    });
+
+    test("keeps the previous nodes while a newer layout computes", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+      await waitFor(() => {
+        act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+        expect(screen.getByText(/team-x \[MISSING\]/)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /^Visibility/ }));
+      await user.click(screen.getByRole("checkbox", { name: "Owned by" }));
+
+      // Unanswered: the old canvas stays, no spinner replaces it.
+      expect(screen.getByText(/team-x \[MISSING\]/)).toBeInTheDocument();
+      expect(screen.queryByText("Laying out the graph…")).not.toBeInTheDocument();
+
+      act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+      await waitFor(() => expect(screen.queryByText(/team-x/)).not.toBeInTheDocument());
+    });
+
+    test("a timed-out or failed layout offers a retry", async () => {
+      mockGraph(mockFetch);
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("Laying out the graph…");
+      await waitFor(() => expect(FakeWorker.instances.at(-1)?.posted.length).toBeGreaterThan(0));
+      act(() => FakeWorker.instances.at(-1)!.fail());
+
+      expect(await screen.findByText("The graph layout did not finish")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      await waitFor(() => {
+        act(() => FakeWorker.instances.forEach((w) => w.answerPending()));
+        expect(screen.getByText(/svc-a \[STORED\]/)).toBeInTheDocument();
+      });
     });
   });
 

@@ -31,6 +31,7 @@ import { getCatalogGraph } from "../api/catalogFiles";
 import CatalogGraphNode from "../components/CatalogGraphNode";
 import CatalogToolbar from "../components/CatalogToolbar";
 import EmptyState from "../components/EmptyState";
+import GraphLayoutGate from "../components/GraphLayoutGate";
 import ClusterFrames from "../components/ClusterFrames";
 import {
   applyManualPositions,
@@ -39,7 +40,6 @@ import {
   filterGraph,
   FOLDED_EDGE_STYLE,
   layoutOptions,
-  layoutPositions,
   materializeLayout,
   NAMESPACE_CLUSTER,
   RELATION_FAMILIES,
@@ -58,6 +58,7 @@ import { editCatalogFilePath } from "../utils/catalogFileLinks";
 import LoadingBlock from "../components/LoadingBlock";
 import classes from "../theme.module.css";
 import { useGraphLayout } from "../hooks/useGraphLayout";
+import { useGraphLayoutWorker } from "../hooks/useGraphLayoutWorker";
 import { useStableIdSet } from "../hooks/useStableIdSet";
 import { useSessionUserId } from "../auth";
 
@@ -141,15 +142,15 @@ export default function Graph() {
       request: toLayoutRequest(folded, NAMESPACE_CLUSTER, layoutOptions(folded.nodes.length, false)),
     };
   }, [data, enabled, noKinds, forest, collapsedSet]);
-  const autoPositions = useMemo(
-    () => (structural ? layoutPositions(structural.request) : EMPTY_POSITIONS),
-    [structural],
-  );
+  // dagre runs in a worker; the previous result stays on screen while a newer layout computes.
+  const autoLayout = useGraphLayoutWorker(structural);
+  const laid = autoLayout.result;
 
   const baseLayout = useMemo(() => {
-    if (!structural) return { nodes: [] as LaidOutNode[], edges: [] as Edge[], anyCollapsed: false };
-    const { folded } = structural;
-    const laidOut = materializeLayout(folded, NAMESPACE_CLUSTER, autoPositions);
+    if (!laid) return { nodes: [] as LaidOutNode[], edges: [] as Edge[], anyCollapsed: false };
+    // The folded graph the positions were computed FOR (not the newest one, which may be pending).
+    const { folded } = laid.source;
+    const laidOut = materializeLayout(folded, NAMESPACE_CLUSTER, laid.positions);
     const nodes = laidOut.nodes.map((n) => {
       const info = folded.info.get(n.id);
       return info ? {
@@ -162,7 +163,7 @@ export default function Graph() {
     });
     const anyCollapsed = [...folded.info.values()].some((info) => info.collapsed);
     return { nodes, edges: laidOut.edges, anyCollapsed };
-  }, [structural, autoPositions, layoutReady]);
+  }, [laid, layoutReady]);
 
   const [nodes, setNodes] = useNodesState<LaidOutNode>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
@@ -381,7 +382,11 @@ export default function Graph() {
 
       {isLoading && !data ? (
         <LoadingBlock />
-      ) : !isLoading && !isError && nodes.length === 0 ? (
+      ) : autoLayout.status === "timeout" || autoLayout.status === "error" ? (
+        <GraphLayoutGate kind="failed" timedOut={autoLayout.status === "timeout"} onRetry={autoLayout.retry} />
+      ) : autoLayout.status === "pending" && !laid ? (
+        <GraphLayoutGate kind="computing" />
+      ) : !isLoading && !isError && baseLayout.nodes.length === 0 ? (
         <EmptyState
           icon={IconTopologyStar3}
           label={t("graph.empty")}

@@ -81,6 +81,13 @@
     "collapseAria": "Zwiń {{name}}",
     "expandAria": "Rozwiń {{name}} (ukrytych: {{count}})"
   },
+  "graphLayout": {
+    "computing": "Układanie grafu…",
+    "failedTitle": "Układanie grafu nie zostało ukończone",
+    "timedOut": "Układanie grafu trwało zbyt długo. Zawęź filtry lub spróbuj ponownie.",
+    "error": "Nie udało się ułożyć grafu. Zawęź filtry lub spróbuj ponownie.",
+    "retry": "Spróbuj ponownie"
+  },
   "tier": {
     "tooltip": "Poziom {{tier}} — najpierw uzupełnij niższe poziomy",
     "label": "Poziom",
