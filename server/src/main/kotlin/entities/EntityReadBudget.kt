@@ -5,18 +5,6 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import java.util.concurrent.atomic.AtomicLong
-
-/**
- * The entity READ memory budget (2.4.0): every graph/list/read charges the raw bytes it loads
- * and the estimated heap of what it decodes against one process-wide ledger, so a read that
- * cannot fit answers a named `400`/`429` instead of exhausting the heap. Derived from
- * `-Xmx256m` (`server/build.gradle.kts`): a ~170 MiB old generation, ~130 MiB of it headroom after
- * the ~21 MiB idle baseline, half of that headroom the ledger — change the two together. Writers are exempt (serialized by
- * the V28 lock, at most one raw candidate set at a time). `.claude/docs/security.md`
- * "Entity read memory budget".
- */
-const val ENTITY_READ_BUDGET_BYTES = 64L * 1024 * 1024
 
 // Measured against kotlinx-serialization-json 1.11.0 on JDK 21 (compact strings, SerialGC):
 // a scalar is a JsonLiteral (24 B) + a String (40 B + content); an object is a LinkedHashMap
@@ -37,57 +25,16 @@ fun estimatedHeapBytes(element: JsonElement): Long = when (element) {
         element.entries.sumOf { (k, v) -> OBJECT_ENTRY_OVERHEAD + STRING_OVERHEAD + k.length + estimatedHeapBytes(v) }
 }
 
-/**
- * Thrown by [EntityReadLedger.Reservation.charge] when a charge does not fit. [ownRequest] is true
- * when THIS reservation alone would exceed the capacity (the caller's workspace is too large — a
- * `400`), false when other in-flight reads hold the room (contention — a `429`).
- */
-class ReadBudgetExceeded(val ownRequest: Boolean, val requested: Long) :
-    RuntimeException("entity read budget exceeded (ownRequest=$ownRequest, requested=$requested)")
-
-/** The process-wide in-flight read ledger — one per [EntityService]; a test seam via its capacity. */
-class EntityReadLedger(private val capacity: Long = ENTITY_READ_BUDGET_BYTES) {
-    private val inFlight = AtomicLong(0)
-    private val peakSeen = AtomicLong(0)
-
-    /** The highest in-flight total observed (a test seam: "one read, not two"). */
-    val peak: Long get() = peakSeen.get()
-
-    /** The bytes currently reserved across every open reservation. */
-    val inFlightBytes: Long get() = inFlight.get()
-
-    fun open(): Reservation = Reservation()
-
-    inner class Reservation : AutoCloseable {
-        private var held = 0L
-        private var closed = false
-
-        /** Charged so far by this reservation. */
-        val charged: Long get() = held
-
-        /** Reserves [bytes] on top of what this reservation already holds, or throws [ReadBudgetExceeded]. */
-        fun charge(bytes: Long) {
-            check(!closed) { "reservation already closed" }
-            if (bytes <= 0) return
-            while (true) {
-                val current = inFlight.get()
-                val next = current + bytes
-                if (next > capacity) {
-                    throw ReadBudgetExceeded(ownRequest = held + bytes > capacity, requested = held + bytes)
-                }
-                if (inFlight.compareAndSet(current, next)) {
-                    held += bytes
-                    peakSeen.accumulateAndGet(next, ::maxOf)
-                    return
-                }
-            }
-        }
-
-        override fun close() {
-            if (closed) return
-            closed = true
-            inFlight.addAndGet(-held)
-            held = 0
-        }
-    }
-}
+// Admission weights (2.19.0): `loadReadSet` reserves `raw x ratio` per row up front, where raw is
+// the row's stored `octet_length(document) + octet_length(team)`. Calibrated on the Port sample
+// (`SampleData.numberedFiles("entities")`, pinned by `EntityReadBudgetTest`): the decoded heap is
+// ~1.52x raw for relations+team and ~4.51x raw for properties. A SHOWN row is decoded in full
+// (raw string held 1 + relations/team 1.52 + properties 4.51 = 7.03), so it is prepaid at 8. A
+// TARGET-only row (a lookup/validation target, mostly never decoded) is admitted at raw x
+// ENTITY_TARGET_ADMISSION_RATIO; the rows that ARE decoded are charged as overflow, up to
+// ENTITY_TARGET_ROW_RATIO x raw each (raw 1 + relations/team 1.52 = 2.52, rounded up to 3 — the
+// worst case a paged read pins against the write cap). A dense-JSON workspace can decode past its
+// estimate; that overrun is charged on top (the ledger's overflow) rather than admitted for free.
+const val ENTITY_SHOWN_ROW_RATIO = 8L
+const val ENTITY_TARGET_ADMISSION_RATIO = 1L
+const val ENTITY_TARGET_ROW_RATIO = 3L

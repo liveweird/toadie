@@ -34,9 +34,9 @@ promotes it. A finished item is removed, not ticked.
   cross-instance revocation); the `IntegrationLimits` admission semaphore, per-client buckets and
   the retained-value ledger (`integration/IntegrationLimits.kt`); the Ktor per-IP buckets
   (login, refresh, password-reset, MFA and integration); the jq quarantine set
-  (`entities/JqCalculation.kt`); and the entity read ledger. Move or redesign those stores, test
-  cross-replica behavior, and only then change `k8s/app-deployment.yaml` from one replica and `Recreate`.
-  Until then, one replica is an intentional deployment rule, not a broken rollout.
+  (`entities/JqCalculation.kt`); and the read ledger (`infra/concurrency/ReadLedger.kt`). Move or
+  redesign those stores, test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
+  from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 
 ## Reliability
 
@@ -50,6 +50,30 @@ promotes it. A finished item is removed, not ticked.
   r2dbc-postgresql onto reactor-netty 1.3 / Netty 4.2, whose DNS resolver now answers the database
   hostname. Compose (Docker DNS, `postgres`) is covered by e2e; the k8s short name with search
   domains and `ndots` is not. Deploy to the OrbStack `toadie` namespace once and confirm `/readyz`.
+
+## Performance
+
+Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the
+Backstage sample to 10k files, on a disposable stack).
+
+- [new] **Bound native memory after a probe.** The 2026-10-24 capacity probe put the 512 MiB
+  container at VmRSS 506 MiB / VmHWM 520 MiB under 10 concurrent whole-workspace reads: the read
+  ledger bounds the heap, but Netty/R2DBC direct buffers (default up to `-Xmx`) and glibc arenas
+  are unbounded. Probe `-XX:MaxDirectMemorySize` and `MALLOC_ARENA_MAX=2` against the same load,
+  keep what lowers the high-water mark without costing throughput, and record the numbers beside
+  the `server/build.gradle.kts` JVM flags.
+- [new] **Keep the graph canvases responsive on large workspaces.** At 1,000 entities (3,435
+  relations) the Entity graph froze the tab for one ~275 s task inside dagre: the default
+  network-simplex ranker is pathologically sensitive to insertion order (the same graph took 32 s
+  in another order; `tight-tree` took 6.5 s clustered, 3.9 s flat). Lay out off the main thread,
+  run dagre only when the structure changes (not on decoration such as tiers or layout readiness),
+  pick a faster ranker, and open very large graphs collapsed or filter-first. The Backstage Graph
+  shares `layoutGraph`. Target: 1k entities interactive within a few seconds, no interaction
+  freezing the page for more than ~200 ms.
+- [new] **Virtualize the long lists.** At 10k rows the Entity hierarchy froze 2.3 s with 160k DOM
+  elements, the Port Errors report 2.8 s (all 9,974 rows rendered), the Backstage Hierarchy (the
+  home page) 2.6 s and the Backstage Errors page 1.9 s. Render only the visible rows, keeping tree
+  expand/collapse, row menus, keyboard navigation and the axe checks intact.
 
 ## Product
 

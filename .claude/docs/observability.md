@@ -59,7 +59,11 @@ are pure reads and audit nothing (`.claude/docs/authorization.md`). `GET …/ent
 episode (see `.claude/docs/security.md` "Computed-property evaluation (jq)") — ride the same
 Logback→OTel pipeline as everything above but are deliberately NOT `audit(...)` events: neither
 is a mutation or a denial, they are operational signals about a runaway or overloaded
-expression. The INPUT document is never logged, on either logger.
+expression. The INPUT document is never logged, on either logger. The read ledger's (2.19.0)
+ONE INFO line on `ch.nokillswit.infra.concurrency.ReadLedger` per refused whole-workspace read —
+`ownRequest`, the requested bytes, the in-flight total and the capacity, never a caller or any
+document content — is the same kind of operational signal; the `400`/`429` it accompanies audits
+nothing (`.claude/docs/security.md` "Entity read memory budget").
 
 **User mutation deltas.** Identity/role, disabled-feature, and language writes return their
 actual predecessor from the same row-locked transaction as the mutation. Routes audit after

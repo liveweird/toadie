@@ -12,6 +12,9 @@ import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.entityquery.DEFAULT_ENTITY_QUERY_DEADLINE_MILLIS
 import ch.nokillswit.entityquery.MAX_CONCURRENT_ENTITY_QUERIES
 import ch.nokillswit.entityquery.QuerySchema
+import ch.nokillswit.infra.concurrency.ReadBudgetExceeded
+import ch.nokillswit.infra.concurrency.ReadLedger
+import ch.nokillswit.infra.concurrency.throwReadBudgetHttp
 import ch.nokillswit.infra.db.bumpOntologyRevision
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.infra.db.octetLength
@@ -91,8 +94,11 @@ class EntityService(
     queryPermits: Int = MAX_CONCURRENT_ENTITY_QUERIES,
     /** The workspace document byte budget every create/replace/import is checked against — a test seam. */
     internal val workspaceDocumentBytes: Long = MAX_WORKSPACE_DOCUMENT_BYTES,
-    /** The process-wide read ledger every graph/list/read charges (`EntityReadBudget.kt`) — a test seam. */
-    internal val readLedger: EntityReadLedger = EntityReadLedger(),
+    /**
+     * The process-wide read ledger every graph/list/read charges — REQUIRED so the composition root
+     * passes the one shared instance (a test seam).
+     */
+    internal val readLedger: ReadLedger,
 ) {
     /** `tryAcquire` only — a saturated instance answers `429` immediately rather than queueing a workspace load. */
     internal val querySlots = Semaphore(queryPermits)
@@ -226,14 +232,14 @@ class EntityService(
      * read-set machinery — it only ever needs the resulting [RowLookup] to walk an Inherited
      * ownership path, never [EntitySnapshot]/[WorkspaceRow] themselves, so this ONE narrow
      * accessor is internal rather than [loadReadSet] (or its private return type) directly.
-     * A null reservation preserves REST's existing filter-resolution exemption. Integration
-     * reads pass their reservation because the lookup retains decoded target skeletons while
-     * matching candidates, even though candidate full documents are transient.
+     * Every reader passes its reservation (REST and integration alike, 2.19.0): the lookup retains
+     * decoded target skeletons while matching candidates, even though candidate full documents
+     * are transient. A null reservation exempts only writers.
      */
     internal suspend fun rowLookupFor(
         definitions: Collection<BlueprintDefinition>,
         blueprintsByIdentifier: Map<String, ActiveBlueprint>,
-        reservation: EntityReadLedger.Reservation? = null,
+        reservation: ReadLedger.Reservation? = null,
     ): RowLookup {
         val definitionsByIdentifier = blueprintsByIdentifier.mapValues { it.value.definition }
         val targets = narrowTargets(definitions, definitionsByIdentifier, computed = false)
@@ -369,9 +375,7 @@ class EntityService(
                     filter.q?.let { q -> predicate = predicate and qPredicate(q) }
                     if (filter.team != null && !unknownBlueprint) {
                         val candidates = filterBlueprint?.let { listOf(it) } ?: activeBlueprints
-                        val inheritedIds = inheritedTeamMatches(
-                            filter.team, candidates, blueprintsByIdentifier, reservation.takeIf { budget != null },
-                        )
+                        val inheritedIds = inheritedTeamMatches(filter.team, candidates, blueprintsByIdentifier, reservation)
                         predicate = predicate and teamPredicate(filter.team, blueprintsByIdentifierFolded, inheritedIds)
                     }
 
@@ -390,7 +394,7 @@ class EntityService(
                 val (rows, total, revision) = materialized.payload
                 return EntityListResult(rows.map { toResponse(it, materialized.context, budget) }, total, revision)
             } catch (cause: ReadBudgetExceeded) {
-                throwReadBudgetHttp(cause)
+                throwReadBudgetHttp(cause, "entity")
             }
         }
     }
@@ -414,7 +418,7 @@ class EntityService(
                 } ?: return null
                 return toResponse(materialized.payload, materialized.context, budget)
             } catch (cause: ReadBudgetExceeded) {
-                throwReadBudgetHttp(cause)
+                throwReadBudgetHttp(cause, "entity")
             }
         }
     }

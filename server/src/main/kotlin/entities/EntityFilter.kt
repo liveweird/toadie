@@ -2,6 +2,7 @@ package ch.nokillswit.entities
 
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.infra.concurrency.ReadLedger
 import ch.nokillswit.infra.db.containsNormalized
 import ch.nokillswit.infra.db.currentOntologyRevision
 import ch.nokillswit.infra.db.jsonStringOrArrayContainsFolded
@@ -106,7 +107,7 @@ internal suspend fun EntityService.inheritedTeamMatches(
     team: String,
     candidates: List<ActiveBlueprint>,
     blueprintsByIdentifier: Map<String, ActiveBlueprint>,
-    reservation: EntityReadLedger.Reservation? = null,
+    reservation: ReadLedger.Reservation? = null,
 ): List<UInt> {
     val inherited = candidates.filter { isInherited(it.definition) }
     if (inherited.isEmpty()) return emptyList()

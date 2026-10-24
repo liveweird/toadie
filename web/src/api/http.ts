@@ -237,10 +237,14 @@ export class ApiError extends Error {
 /**
  * The QueryClient's retry policy (wired in main.tsx): never retry a 4xx — the server's
  * answer won't change, and retrying only delays the error UI (a 403 used to sit behind
- * ~7 s of backoff); transient failures (network, timeout, 5xx) get up to two retries.
+ * ~7 s of backoff) — EXCEPT a 429: it is the read memory budget's contention answer (a
+ * whole-workspace read that found no room beside other in-flight reads, `.claude/docs/
+ * security.md` "Entity read memory budget"), which clears as those reads finish. ANY 429 on a
+ * query is retried (the per-IP rate-limit buckets answer 429 too), bounded at two retries like
+ * the transient failures (network, timeout, 5xx).
  */
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
-  return failureCount < 2 && !(error instanceof ApiError && error.status >= 400 && error.status < 500);
+  return failureCount < 2 && !(error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 429);
 }
 
 export async function safeJson(res: Response): Promise<unknown> {

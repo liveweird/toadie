@@ -13,6 +13,9 @@ import ch.nokillswit.entityquery.SavedEntityQueryVisibility
 import ch.nokillswit.entityquery.parseEntityQuery
 import ch.nokillswit.entityquery.savedQueriesVisibleTo
 import ch.nokillswit.entityquery.validateEntityQuery
+import ch.nokillswit.infra.concurrency.ReadBudgetExceeded
+import ch.nokillswit.infra.concurrency.ReadLedger
+import ch.nokillswit.infra.concurrency.throwReadBudgetHttp
 import ch.nokillswit.infra.db.currentOntologyRevision
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
@@ -252,7 +255,7 @@ internal data class ShownScope(val predicate: Op<Boolean>, val candidates: List<
 internal suspend fun EntityService.shownScope(
     filter: EntityGraphFilter,
     activeBlueprints: List<ErrorsActiveBlueprint>,
-    reservation: EntityReadLedger.Reservation? = null,
+    reservation: ReadLedger.Reservation? = null,
 ): ShownScope? {
     val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
     val blueprintsByIdentifierFolded = foldedByIdentifier(activeBlueprints)
@@ -334,7 +337,7 @@ private suspend fun EntityService.readErrorReport(
                 val blueprintsById = activeBlueprints.associateBy { it.id }
                 val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
                 val definitionsByIdentifier = activeBlueprints.associate { it.identifier to it.definition }
-                val scope = shownScope(filter, activeBlueprints, reservation.takeIf { budget != null })
+                val scope = shownScope(filter, activeBlueprints, reservation)
                 val (entitySubjects, blueprintCandidates) = if (scope != null) {
                     val targets = narrowTargets(scope.candidates.map { it.definition }, definitionsByIdentifier, computed = false)
                     val readSet = loadReadSet(scope.predicate, targets, blueprintsByIdentifier, reservation)
@@ -353,7 +356,7 @@ private suspend fun EntityService.readErrorReport(
             }
             return entityErrorsReport(subjects, budget, jq::calculationVerdict) to revision
         } catch (cause: ReadBudgetExceeded) {
-            throwReadBudgetHttp(cause)
+            throwReadBudgetHttp(cause, "entity")
         }
     }
 }

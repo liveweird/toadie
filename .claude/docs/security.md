@@ -330,10 +330,14 @@ the same 6 KB. `ProductionHttpTest` pins that a ~6 KB request line reaches the J
 
 ### Entity read memory budget (2.4.0)
 
+Since 2.19.0 the same ledger also admits the Backstage catalog's whole-workspace reads (`graph`,
+`errors`, `export`) — see "Whole-workspace content reads are admitted through the one read
+ledger" below; the mechanics described here are shared.
+
 The entity registry caps (2,000 entities per blueprint, 10,000 total, 256 KiB per document) can
 in the worst case exceed the 256 MB heap budget when a single graph/query read materializes many
-large documents at once. `entities/EntityReadBudget.kt` bounds this with a process-wide,
-in-flight-bytes ledger (`ENTITY_READ_BUDGET_BYTES` = 64 MiB, derived from `-Xmx256m`
+large documents at once. `infra/concurrency/ReadLedger.kt` bounds this with a process-wide,
+in-flight-bytes ledger (`READ_BUDGET_BYTES` = 64 MiB, derived from `-Xmx256m`
 — `server/build.gradle.kts`'s JVM-args comment cross-references this constant; change the two
 together) every `list`/`read`/`create`/`update`/`graph`/`errors` read charges through ONE consolidated
 read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persistence.md`
@@ -343,24 +347,44 @@ read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persi
   own baseline (class metadata, thread stacks, the JIT, GC bookkeeping) is subtracted — measured
   at ~21 MiB idle. The 64 MiB ledger is well inside that remaining headroom, leaving slack for
   request-handling overhead outside the ledger's own accounting (HTTP buffers, JSON encoding of
-  the RESPONSE, computed-property evaluation's own working set).
-- **Two charge layers.** (1) An up-front, PER-ROW-SET admission charge — `SUM(octet_length
-  (document)) + SUM(octet_length(team))`, read straight off PostgreSQL — BEFORE a single document
-  crosses the wire, using the STORED byte length as a fast, conservative proxy for decoded size.
-  (2) A per-row, per-tier DECODE charge — `estimatedHeapBytes` (`EntityReadBudget.kt`'s measured
-  formula) of the relations/team (`WorkspaceRow.skeleton()`) or additionally the properties
-  (`WorkspaceRow.full()`) — charged once each, memoized, only when that row is actually decoded.
-  A row admitted by (1) can still be charged further by (2) as more of the workspace is
-  materialized; the ledger simply keeps accumulating until either the request finishes (releasing
-  everything at once via `EntityReadLedger.Reservation.close()`) or a charge would exceed
-  capacity.
+  the RESPONSE, computed-property evaluation's own working set). The 512 MiB container stays at
+  ~270 MiB RSS under light load. **Probe numbers (the one canonical home; the Gradle, compose
+  and k8s comments link here):** the 2026-10-24 probe (10k files/10k entities, 10 concurrent
+  whole-workspace reads, master 62db09a, measured BEFORE the catalog reads joined the ledger)
+  read VmRSS 518624 kB (506 MiB) / VmHWM 532780 kB (520 MiB) from the app process against the
+  512 MiB container limit — at the limit, not comfortably under it — and the heap OOMed because
+  the catalog reads were unbudgeted. `infra/concurrency/ReadLedger.kt` bounds the heap side;
+  native memory (Netty/R2DBC direct buffers up to `-Xmx`, glibc arenas) is the remainder.
+- **Prepaid admission, then draw-down (2.19.0).** (1) An up-front, all-or-nothing RESERVATION:
+  `loadReadSet` reads `id` + `octet_length(document)` + `octet_length(team)` per row of the
+  combined row set off PostgreSQL BEFORE a single document crosses the wire and calls
+  `ReadLedger.Reservation.reserve(shownRaw x ENTITY_SHOWN_ROW_RATIO + targetOnlyRaw x
+  ENTITY_TARGET_ADMISSION_RATIO)` — one CAS adds the whole estimate or refuses it, so nothing is
+  held while a read is being refused. The ratios are measured on the Port sample (raw 1 +
+  relations/team 1.52 + properties 4.51 = 7.03, rounded up to 8 for a SHOWN row, which is decoded
+  in full and therefore prepaid; a target-only row is admitted at raw x 1 because most targets are
+  never decoded, and the ones that are decode at up to raw 1 + relations/team 1.52 = 2.52,
+  `ENTITY_TARGET_ROW_RATIO` = 3, charged as overflow — `EntityReadBudget.kt`, pinned by
+  `EntityReadBudgetTest`). (2) A per-row, per-tier DECODE charge — `estimatedHeapBytes`
+  of the relations/team (`WorkspaceRow.skeleton()`) or additionally the properties
+  (`WorkspaceRow.full()`), once each, memoized — that DRAWS DOWN the prepaid pool: the shared
+  total does not move. Only the excess beyond the pool is reserved on top (and can still be
+  refused). N concurrent whole-workspace reads therefore admit exactly floor(capacity /
+  estimate) and the rest answer `429` at once, instead of every read discovering the overflow row
+  by row and all of them failing. Everything releases at once via
+  `ReadLedger.Reservation.close()`.
 - **Refusal semantics.** `ReadBudgetExceeded.ownRequest` distinguishes "this read's own combined
-  row set is too large to ever fit" (`true` — a `400`, or `EntityQueryInvalidException`
+  estimate is too large to ever fit" (`true` — a `400`, or `EntityQueryInvalidException`
   `WORKSPACE_TOO_LARGE` for `graph`) from "other in-flight reads currently hold the room" (`false`
   — a `429`, the same shape as the entity-query evaluation permit's contention response). `list`/
-  `read` throw a plain `BadRequestException`/`TooManyRequestsException`; `graph` throws the
-  query-shaped `EntityQueryInvalidException`/`TooManyRequestsException` pair — WITH or WITHOUT a
-  `query` present, since the plain graph is itself an unpaged, workspace-scale read.
+  `read` throw a plain `BadRequestException`/`TooManyRequestsException` (`throwReadBudgetHttp`);
+  `graph` throws the query-shaped `EntityQueryInvalidException`/`TooManyRequestsException` pair —
+  WITH or WITHOUT a `query` present, since the plain graph is itself an unpaged, workspace-scale
+  read. There is deliberately NO server-side wait queue: the admission read runs inside the read
+  transaction, so a queue would hold pooled connections (the repo already chose `tryAcquire` for
+  the entity-query permits); waiting belongs on the client, which retries a `429`
+  (`web/CLAUDE.md`). Each refusal logs one operational INFO line (`.claude/docs/observability.md`
+  "Not audit events"); nothing is audited.
 - **Writers are exempt.** `create`/`update` pass `reservation = null` through `loadReadSet` —
   already serialized one-at-a-time by the V28 two-table lock (`.claude/docs/persistence.md`), so
   admission control adds nothing there; only the six READ paths listed above (2.5.0 adds
@@ -368,21 +392,38 @@ read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persi
   health") open a `readLedger.open()` reservation.
 - **Documented residuals.** (1) A single `WorkspaceRow.full()` decode is charged transiently but
   its memoized field lives for the reservation's whole lifetime (the request), so a graph read's
-  peak charge can include EVERY shown row's `properties` even though only one is "in scope" at
-  any instant — a documented ≤ one-document (≤ 256 KiB raw, larger once decoded) slack per shown
-  row, favoring UNDER-admission (refusing sooner) rather than over-admission. (2) A workspace
-  whose rows are unusually DENSE JSON (deeply nested, many short keys — `estimatedHeapBytes`'s
-  per-scalar/per-entry overhead dominates) can be refused well below the raw 64 MiB figure; this
-  is intentional — the ledger charges the ESTIMATED HEAP cost, not the wire size. (3) The two
-  charge layers can double-count the same bytes across the SQL admission check and the later
-  decode; this is deliberate defense in depth, not a bug — the SQL charge exists to avoid ever
-  fetching an oversized workspace off the wire in the first place, while the decode charge
-  reflects the JVM object graph's real footprint (typically several times the raw byte count,
-  since `estimatedHeapBytes` carries per-scalar/per-entry/per-string constant overhead).
+  peak includes EVERY shown row's `properties` even though only one is "in scope" at any instant
+  — which is exactly what the shown-row ratio prepays. (2) A workspace whose rows are unusually
+  DENSE JSON (deeply nested, many short keys — `estimatedHeapBytes`'s per-scalar/per-entry
+  overhead dominates) decodes past its prepaid estimate; the OVERFLOW is still charged at the
+  estimated heap cost (and refused when it no longer fits), never silently admitted. With the
+  calibrated ratios the overflow is ~zero for sample-shaped data; it is the one place a read can
+  still fail after admission. (3) A `team` filter (REST and integration alike)
+  runs its Inherited-ownership prologue (`inheritedTeamMatches` → `rowLookupFor` → `loadReadSet`)
+  before the main read set on the SAME reservation, so such a read is a bounded two-step: the
+  prologue `reserve`s its lookup targets and charges the skeletons it decodes, then the main read
+  `reserve`s its own set — a deliberate double reservation that favors refusing sooner. The
+  prologue's scan of the Inherited blueprints' own rows decodes each row transiently and retains
+  only `(id, effective team)` pairs. (4) A target-only row whose `properties` are later decoded
+  (an aggregation or mirror reaching into it) is charged beyond its admission as overflow.
+  (5) The reservation closes when the service call returns; the RESPONSE is serialized by Ktor
+  AFTER that, from the returned DTO, so a slow client keeps the response tree (the catalog
+  `export` and graph payloads are the largest) alive on the heap beyond what the ledger counts —
+  the response-encoding slack the "Heap layout" bullet leaves headroom for, not bounded by the
+  ledger. The catalog `export`, whose response is the whole workspace, is therefore admitted at
+  `CATALOG_EXPORT_FOOTPRINT_RATIO` (×6) rather than ×3: the 2026-10-25 capacity probe showed three
+  ×3-admitted exports of a 10k-file workspace exhausting the heap (one `500`).
 
-Rule of thumb: change `ENTITY_READ_BUDGET_BYTES` together with `-Xmx` (`server/build.gradle.kts`)
+Rule of thumb: change `READ_BUDGET_BYTES` together with `-Xmx` (`server/build.gradle.kts`)
 — raising one without the other either starves ordinary requests of heap or lets the ledger admit
 more than the heap can actually hold.
+
+**Whole-workspace content reads are admitted through the one read ledger** (2.19.0).
+- **Applies when:** adding or changing any read that materializes every active content row of `catalog_files` or `entities` (or a filtered subset) in application memory — the catalog `graph`/`errors`/`export` and the entity `graph`/`errors` paths today. The entity `list`/`read` paths reserve their lookup-target rows through the same ledger.
+- **Requirement:** the read opens a `ReadLedger` reservation (`infra/concurrency/ReadLedger.kt`) and reserves its whole conservative estimate in ONE all-or-nothing step, inside its read transaction and before any document crosses the wire; a refusal is `throwReadBudgetHttp` — `400` when the read is too large on its own, `429` when other reads hold the room — and audits nothing (one operational INFO line). The catalog estimate is `SUM(octet_length(content))` x `CATALOG_READ_FOOTPRINT_RATIO` (`catalog/CatalogFileService.kt`'s `readWorkspace`); the entity estimate is the per-row ratios above. One ledger for the whole process: the composition root (`infra/db/Database.kt`) passes the SAME `ReadLedger` to both services.
+- **Reference:** the bullets above; `.claude/docs/persistence.md` "Catalog whole-workspace reads (2.19.0)".
+- **Enforcement:** `CatalogFileReadBudgetTest`, `ReadLedgerTest`, and the entity suites (`EntityReadBudgetTest`, `EntityQueryRouteTest`, `EntityErrorsTest`, `OntologyIntegrationFilterBudgetTest`).
+- **Exception:** writers under a lock (`create`/`update` pass no reservation), the bounded page itself of a paged list (its page is capped by `pageSize`; only its lookup targets are reserved), identity-only reads, and registries capped at <= 200 rows.
 
 ### Not yet ported from Lettuce
 

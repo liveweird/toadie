@@ -56,7 +56,10 @@ ch.nokillswit
 ├── infra/concurrency/  BoundedExecution.kt — Executor.awaitBounded, the suspend-with-cancellation
 │                       bridge to a bounded ThreadPoolExecutor, extracted from
 │                       infra/fetch/UrlFetch.kt (originally catalog/UrlFetch.kt); consumers: the
-│                       URL fetch and the jq evaluator
+│                       URL fetch and the jq evaluator; ReadLedger.kt — the process-wide read memory
+│                       ledger (`READ_BUDGET_BYTES`, `ReadLedger`/`ReadBudgetExceeded`,
+│                       `throwReadBudgetHttp`), relocated from entities/ in 2.19.0 — see
+│                       `.claude/docs/security.md` "Entity read memory budget"
 ├── infra/fetch/        UrlFetch.kt — the SSRF-guarded outbound fetcher (relocated from
 │                       catalog/ in 2.9.0 when entities gained their own source references:
 │                       `UrlFetcher`/`UrlFetcherKey`, one shared bounded pool, plus
@@ -229,11 +232,10 @@ ch.nokillswit
 │                       level down: `EntityFilter`/`EntityGraphFilter`, the `q`/blueprint-lookup
 │                       helpers, and the team-match predicate + `inheritedTeamMatches`, the
 │                       v1.30.0 in-memory Inherited-ownership resolver behind the `team` filter's
-│                       SQL `id IN (…)` disjunct), EntityReadBudget.kt (2.4.0 — the process-wide
-│                       entity read memory ledger: `ENTITY_READ_BUDGET_BYTES`, `estimatedHeapBytes`,
-│                       `EntityReadLedger`/`ReadBudgetExceeded`; `EntityWorkspaceRead.kt`'s
-│                       `WorkspaceRow`/`EntitySnapshot`/`loadReadSet` charge it — see
-│                       `.claude/docs/security.md` "Entity read memory budget"), EntityService.kt
+│                       SQL `id IN (…)` disjunct), EntityReadBudget.kt (2.4.0 — the measured
+│                       decoded-heap estimator `estimatedHeapBytes`; `EntityWorkspaceRead.kt`'s
+│                       `WorkspaceRow`/`EntitySnapshot`/`loadReadSet` charge the `ReadLedger` with
+│                       it — see `.claude/docs/security.md` "Entity read memory budget"), EntityService.kt
 │                       (one row =
 │                       one entity, FK to blueprints.id; every mutation under the two-table
 │                       `blueprints`-then-`entities` lock — .claude/docs/persistence.md "Entity
@@ -348,7 +350,9 @@ ch.nokillswit
                         rule for a graph node with no document to match),
                         CatalogFileService.kt, CatalogFileRoutes.kt — /api/v1/files CRUD
                         + paginated list + the sync pair (GET/POST …/{id}/sync); shared
-                        workspace (no admin gate on content);
+                        workspace (no admin gate on content); since 2.19.0 its graph/errors/
+                        export reads are admitted through the process-wide `ReadLedger`
+                        (`infra/concurrency/ReadLedger.kt`, `readWorkspace`);
                         CatalogRegistryReader.kt — transaction-neutral namespace lookup and
                         registry snapshot SQL called inside the service's write/report transaction;
                         CatalogFileImport.kt — the import pipeline (import/importCheck as

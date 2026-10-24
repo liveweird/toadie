@@ -1,14 +1,17 @@
 package ch.nokillswit
 
-import ch.nokillswit.entities.ENTITY_READ_BUDGET_BYTES
-import ch.nokillswit.entities.EntityReadLedger
+import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.entities.ENTITY_SHOWN_ROW_RATIO
+import ch.nokillswit.entities.ENTITY_TARGET_ADMISSION_RATIO
+import ch.nokillswit.entities.ENTITY_TARGET_ROW_RATIO
+import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.MAX_WORKSPACE_DOCUMENT_BYTES
-import ch.nokillswit.entities.ReadBudgetExceeded
+import ch.nokillswit.entities.documentByteSize
 import ch.nokillswit.entities.estimatedHeapBytes
+import ch.nokillswit.entities.toDocument
+import ch.nokillswit.infra.concurrency.READ_BUDGET_BYTES
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
@@ -17,21 +20,59 @@ import kotlinx.serialization.json.buildJsonObject
 
 /**
  * Pure tests of `entities/EntityReadBudget.kt` (2.4.0 — `.claude/docs/security.md` "Entity read
- * memory budget"): the [estimatedHeapBytes] formula per shape, and [EntityReadLedger]'s
- * own-vs-contention distinction plus release-on-close. No database. The write-side cap pin (`MAX_WORKSPACE_DOCUMENT_BYTES`) lives here too.
+ * memory budget"): the [estimatedHeapBytes] formula per shape, the write-side cap pin
+ * (`MAX_WORKSPACE_DOCUMENT_BYTES`) and the admission-ratio calibration against the Port sample.
+ * No database. The ledger itself is `ReadLedgerTest`.
  */
 class EntityReadBudgetTest {
 
     @Test
-    fun `the workspace write budget leaves room for a whole workspace to fit a read beside it`() {
-        // .claude/docs/persistence.md / entities/Entity.kt: MAX_WORKSPACE_DOCUMENT_BYTES is
-        // deliberately ENTITY_READ_BUDGET_BYTES / 4, so a read charging the raw stored bytes
-        // PLUS its decoded relations/team estimate never blows the read ledger just from a
-        // workspace sitting right at its write-time cap.
+    fun `a paged read over a cap-sized workspace always fits alone`() {
+        // .claude/docs/persistence.md / entities/Entity.kt: a PAGED read (list/read) admits the
+        // workspace's target rows at raw x ENTITY_TARGET_ADMISSION_RATIO and then charges the ones it
+        // actually decodes (relations/team only, properties are decoded on demand) as overflow, at
+        // worst ENTITY_TARGET_ROW_RATIO x raw in total. A workspace sitting right at its write-time
+        // cap therefore never blows the read ledger just by being read, even if every row were
+        // decoded. The UNPAGED graph/errors reads prepay every shown row at ENTITY_SHOWN_ROW_RATIO, so
+        // their ceiling is READ_BUDGET_BYTES / ENTITY_SHOWN_ROW_RATIO = 8 MiB of stored workspace —
+        // half the write cap — beyond which they are refused with the named 400
+        // (`.claude/docs/security.md` "Entity read memory budget").
         assertTrue(
-            MAX_WORKSPACE_DOCUMENT_BYTES * 4 <= ENTITY_READ_BUDGET_BYTES,
-            "MAX_WORKSPACE_DOCUMENT_BYTES ($MAX_WORKSPACE_DOCUMENT_BYTES) * 4 must fit " +
-                "ENTITY_READ_BUDGET_BYTES ($ENTITY_READ_BUDGET_BYTES)",
+            MAX_WORKSPACE_DOCUMENT_BYTES * ENTITY_TARGET_ADMISSION_RATIO <= READ_BUDGET_BYTES,
+            "admission of a cap-sized workspace must fit READ_BUDGET_BYTES ($READ_BUDGET_BYTES)",
+        )
+        assertTrue(
+            MAX_WORKSPACE_DOCUMENT_BYTES * ENTITY_TARGET_ROW_RATIO <= READ_BUDGET_BYTES,
+            "MAX_WORKSPACE_DOCUMENT_BYTES ($MAX_WORKSPACE_DOCUMENT_BYTES) * ENTITY_TARGET_ROW_RATIO " +
+                "($ENTITY_TARGET_ROW_RATIO) must fit READ_BUDGET_BYTES ($READ_BUDGET_BYTES)",
+        )
+    }
+
+    @Test
+    fun `the baseline ontology's documents decode within the shown- and target-row ratios`() {
+        // The calibration pin behind ENTITY_SHOWN_ROW_RATIO / ENTITY_TARGET_ROW_RATIO (the worst-case
+        // decode of a target row): workspace-level
+        // sums over the Port sample, raw = the stored encoding the service writes (document + team).
+        var raw = 0L
+        var allEstimate = 0L
+        var skeletonEstimate = 0L
+        SampleData.numberedFiles("entities")
+            .flatMap { blueprintJson.decodeFromString<List<EntityRequest>>(it.readText()) }
+            .forEach { request ->
+                val document = request.toDocument()
+                raw += documentByteSize(document, request.team)
+                val skeleton = estimatedHeapBytes(document.relations) + (request.team?.let(::estimatedHeapBytes) ?: 0L)
+                skeletonEstimate += skeleton
+                allEstimate += skeleton + estimatedHeapBytes(document.properties)
+            }
+        assertTrue(raw > 0)
+        assertTrue(
+            raw + allEstimate <= ENTITY_SHOWN_ROW_RATIO * raw,
+            "shown rows: raw $raw + decoded $allEstimate must stay within $ENTITY_SHOWN_ROW_RATIO x raw",
+        )
+        assertTrue(
+            raw + skeletonEstimate <= ENTITY_TARGET_ROW_RATIO * raw,
+            "target rows: raw $raw + relations/team $skeletonEstimate must stay within $ENTITY_TARGET_ROW_RATIO x raw",
         )
     }
 
@@ -69,63 +110,5 @@ class EntityReadBudgetTest {
             buildJsonObject { put("k", buildJsonObject { put("inner", JsonPrimitive("v")) }) },
         )
         assertTrue(nested > flat)
-    }
-
-    @Test
-    fun `a reservation charges against the shared ledger and releases on close`() {
-        val ledger = EntityReadLedger(capacity = 1000)
-        ledger.open().use { reservation ->
-            reservation.charge(500)
-            assertEquals(500L, ledger.inFlightBytes)
-            assertEquals(500L, reservation.charged)
-        }
-        assertEquals(0L, ledger.inFlightBytes)
-    }
-
-    @Test
-    fun `a charge that alone exceeds capacity is the caller's own request`() {
-        val ledger = EntityReadLedger(capacity = 100)
-        ledger.open().use { reservation ->
-            val error = assertFailsWith<ReadBudgetExceeded> { reservation.charge(200) }
-            assertTrue(error.ownRequest)
-        }
-        assertEquals(0L, ledger.inFlightBytes)
-    }
-
-    @Test
-    fun `a charge that fits alone but not alongside another reservation is contention, not the caller's own request`() {
-        val ledger = EntityReadLedger(capacity = 100)
-        ledger.open().use { first ->
-            first.charge(60)
-            ledger.open().use { second ->
-                val error = assertFailsWith<ReadBudgetExceeded> { second.charge(60) }
-                assertFalse(error.ownRequest)
-            }
-        }
-    }
-
-    @Test
-    fun `peak tracks the highest observed in-flight total across reservations`() {
-        val ledger = EntityReadLedger(capacity = 1000)
-        ledger.open().use { first ->
-            first.charge(300)
-            ledger.open().use { second ->
-                second.charge(200)
-                assertEquals(500L, ledger.peak)
-            }
-        }
-        // peak is never reduced by closing reservations
-        assertEquals(500L, ledger.peak)
-        assertEquals(0L, ledger.inFlightBytes)
-    }
-
-    @Test
-    fun `a non-positive charge is a no-op`() {
-        val ledger = EntityReadLedger(capacity = 10)
-        ledger.open().use { reservation ->
-            reservation.charge(0)
-            reservation.charge(-5)
-            assertEquals(0L, ledger.inFlightBytes)
-        }
     }
 }

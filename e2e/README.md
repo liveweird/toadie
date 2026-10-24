@@ -93,6 +93,40 @@ up its own Compose project. It never connects to the development database. `npm 
 also runs the drill's isolation and interruption tests, but does not run the live Docker drill.
 See [`k8s/BACKUP-RESTORE.md`](../k8s/BACKUP-RESTORE.md) for sizing and real backup/recovery steps.
 
+## Capacity probe
+
+```bash
+cd e2e
+npm run probe:capacity -- --entities 1000 --files 1000 --concurrency 1,2,3,5,10
+```
+
+The probe answers "what do the whole-workspace reads cost at this size?". It builds the current
+checkout, starts its **own disposable Compose project** (random `toadie-cap-*` name, loopback
+port chosen at runtime, its own database volume), loads the fifteen sample blueprints without
+source references, and replicates the Port entity sample and the Backstage catalog sample up to
+`--entities` / `--files` (whole replicas, so the reached counts are slightly under the request;
+the server's entity caps of 2,000 per blueprint and 10,000 total stop it, and the report says
+so). Domains, environments, clusters, the two tribes (and Backstage Groups, Users, Domains) are
+shared; squads and users are copied once per five replicas; everything else per replica with its
+references remapped. It then fires K simultaneous GETs of `/api/v1/entities/graph`,
+`/entities/errors`, `/files/graph`, `/files/errors` and `/files/export` for every K in
+`--concurrency` (default `1,2,3,5,10`).
+
+It is **disposable-only**: there is no option to point it at an existing URL, project, or
+volume, and it never touches the long-lived `toadie` Compose project. The project, its volume
+and its image are removed at the end, on success or failure. `--keep` leaves the stack up after
+a successful run and prints the exact `docker compose -p <id> down -v` command to remove it.
+Requirements as for the GraphQL smoke (Node 26, Docker/Compose, bash, curl, jq); on OrbStack,
+export `DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock`. The password is the demo stack's
+default, passed through the environment of the loader and never printed.
+
+The output is markdown: one table row per endpoint and concurrency (status histogram such as
+`200x8, 429x2`, p50 and max latency over that round's requests, payload KiB of the largest `200`
+body), then the app's java `VmRSS`/`VmHWM` before and after the reads and the container's restart
+count (flagged when OOM-killed). One round per cell, so treat small differences as noise.
+`npm run test:smoke` covers the pure replication and report modules; the live run is manual and
+adds no Playwright scenario.
+
 ## Parallel execution
 
 The suite runs on **4 workers by default** (`E2E_WORKERS` overrides; `E2E_WORKERS=1` restores

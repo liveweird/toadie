@@ -936,6 +936,10 @@ paths:
         which reads the same params as "what is shown": a file's verdict must not depend on
         what else is on screen. Unpaged by design — a report-style computation over the
         workspace.
+
+        Since 2.19.0 the whole-workspace read is admitted against the process-wide read memory
+        budget before any document is decoded — too large on its own `400`, contention `429`;
+        `.claude/docs/security.md` "Entity read memory budget".
       parameters:
         - $ref: '#/components/parameters/CatalogNameFilter'
         - $ref: '#/components/parameters/CatalogNamespaceFilter'
@@ -955,6 +959,7 @@ paths:
                 $ref: '#/components/schemas/ErrorsReport'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
   /api/v1/files/check:
@@ -1019,6 +1024,10 @@ paths:
         (Location, Template, custom) can be selected by no `kind` value and is never drawn.
 
         Unpaged by design — a report-style computation over the workspace.
+
+        Since 2.19.0 the whole-workspace read is admitted against the process-wide read memory
+        budget before any document is decoded — too large on its own `400`, contention `429`;
+        `.claude/docs/security.md` "Entity read memory budget".
       parameters:
         - $ref: '#/components/parameters/CatalogNameFilter'
         - $ref: '#/components/parameters/CatalogNamespaceFilter'
@@ -1038,6 +1047,7 @@ paths:
                 $ref: '#/components/schemas/CatalogGraph'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
   /api/v1/files/export:
@@ -1051,6 +1061,10 @@ paths:
         rendering is deliberately a client concern — the SPA joins these documents into one
         multi-document `catalog-info.yaml` with its tested generator. Unpaged by design — a
         report-style read of the whole workspace.
+
+        Since 2.19.0 the whole-workspace read is admitted against the process-wide read memory
+        budget before any document is decoded — too large on its own `400`, contention `429`;
+        `.claude/docs/security.md` "Entity read memory budget".
       parameters:
         - name: namespace
           in: query
@@ -1066,6 +1080,7 @@ paths:
                 $ref: '#/components/schemas/ExportResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
   /api/v1/files/import:
@@ -3204,8 +3219,9 @@ components:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
     TooManyRequests:
       description: >-
-        Throttled — either the per-IP rate-limit bucket is exhausted (generic detail) or, on
-        /login, the per-account lockout is active (account-specific detail). Both carry a
+        Throttled — either the per-IP rate-limit bucket is exhausted (generic detail), on
+        /login the per-account lockout is active (account-specific detail), or a
+        whole-workspace read found no room in the read memory budget. All carry a
         ProblemDetail body.
       content:
         application/problem+json:

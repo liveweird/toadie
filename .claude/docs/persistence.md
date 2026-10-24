@@ -104,19 +104,33 @@ budget/refusal semantics). Inside ONE transaction it: (1) resolves which ids mat
 `_user`, Inherited `ownership.path` blueprints, and — when `computed`, i.e. `list`/`read`/
 `create` — every `computedPathBlueprints` target; `graph` passes the real `blueprint`/`q`/`team`
 filter as `shownPredicate`, since a plain graph read genuinely IS this budget's target: it is
-unpaged); (2) when `reservation` is non-null, charges it the up-front
-`SUM(octet_length(document)) + SUM(octet_length(team))` over the COMBINED (shown ∪ targets) row
-set, in PostgreSQL, before a single document crosses the wire; (3) selects the combined row set
-into `WorkspaceRow`s — raw, undecoded, tagged `shown = id ∈ shownIds`. `EntitySnapshot` (also in
+unpaged); (2) when `reservation` is non-null, RESERVES (all-or-nothing, 2.19.0) the whole
+admission estimate — per row of the COMBINED (shown ∪ targets) set, in PostgreSQL,
+`octet_length(document) + octet_length(team)` weighted by `ENTITY_SHOWN_ROW_RATIO` (shown) or
+`ENTITY_TARGET_ADMISSION_RATIO` (target-only, = 1) — before a single document crosses the wire; (3) selects
+the combined row set into `WorkspaceRow`s — raw, undecoded, tagged `shown = id ∈ shownIds`. `EntitySnapshot` (also in
 `EntityWorkspaceRead.kt`) wraps the resulting rows exactly as before (`targetExists`,
 `rowLookup`, the lazily-built `inbound` index), but each row's `EntityRowView` (`entities/
 EntityComputed.kt`) decodes and charges lazily: `WorkspaceRow.skeleton()` (relations + team) and
 `WorkspaceRow.full()` (adds `properties`) each decode and charge the SAME reservation ONCE,
-memoized, so an aggregation that only counts inbound relations (`EntityIndex.inbound`, built
+memoized — the charge DRAWS DOWN the prepaid estimate and only an overrun moves the shared
+ledger (`.claude/docs/security.md` "Entity read memory budget") — so an aggregation that only counts inbound relations (`EntityIndex.inbound`, built
 from `skeleton()`) never touches — or charges for — a target row's `properties` at all.
 `reservation = null` exempts `create`/`update` (writers, already serialized by the V28 lock)
 from both the admission check and the later decode charges — `narrowTargets`/`loadReadSet` are
 otherwise identical for reads and writes.
+
+**Catalog whole-workspace reads (2.19.0).** `CatalogFileService.errors`/`graph`/`export` (the
+three reads that decode every active `content` row — `activeSources()` and the export loop) run
+through the private `readWorkspace(predicate) { … }`: it opens a `ReadLedger` reservation, and
+INSIDE the read transaction, before the content `SELECT`, reserves `SUM(octet_length(content))`
+over the same predicate x `CATALOG_READ_FOOTPRINT_RATIO` (x `CATALOG_EXPORT_FOOTPRINT_RATIO` for
+the export) (`octetLength`, `infra/db/Sql.kt`),
+mapping a `ReadBudgetExceeded` to the `400`/`429` pair via `throwReadBudgetHttp(…, "catalog")`.
+The paged list, single read, `check` and the import dry-run (identity columns / one row at a time)
+stay unbudgeted. The semantics, the ledger's capacity and the rule live in
+`.claude/docs/security.md` "Entity read memory budget"; one `ReadLedger` is built in `infra/db/
+Database.kt` and passed to both `CatalogFileService` and `EntityService`.
 
 **Entity graph reads.** `EntityService.graph(EntityGraphFilter)` (Phase 3, v1.25.0) is a plain
 read transaction, not a write path: `materializeGraph` calls `loadReadSet` with the `blueprint`/

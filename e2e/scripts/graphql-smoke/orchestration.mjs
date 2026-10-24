@@ -186,7 +186,9 @@ export async function startKubernetes({ root, temp, id, image, context, cleanup 
   }
 }
 
-export async function loadSamples({ root, temp, baseUrl, password }) {
+export async function loadSamples({
+  root, temp, baseUrl, password, areas = ['blueprints', 'entities'], extraEnv = {},
+}) {
   const shimDirectory = join(temp, 'bin')
   await mkdir(shimDirectory, { mode: 0o700 })
   const curlShim = join(shimDirectory, 'curl')
@@ -197,10 +199,22 @@ export async function loadSamples({ root, temp, baseUrl, password }) {
     PATH: `${shimDirectory}:${process.env.PATH}`,
     TOADIE_URL: baseUrl,
     TOADIE_PASSWORD: password,
+    ...extraEnv,
   }
-  for (const area of ['blueprints', 'entities']) {
+  for (const area of areas) {
     await command('bash', [`sample-data/port/commerce-payments/${area}/load.sh`], {
       cwd: root, env, timeout: 180_000,
     })
+  }
+}
+
+export async function removeImage(image, context) {
+  const contextArgs = context ? ['--context', context] : []
+  try {
+    await command('docker', [...contextArgs, 'image', 'rm', '--force', image], { timeout: 60_000, ignoreSignal: true })
+  } catch (error) {
+    const stderr = error.cause?.stderr ?? ''
+    if (/No such image|No such object/i.test(stderr)) return
+    throw error
   }
 }

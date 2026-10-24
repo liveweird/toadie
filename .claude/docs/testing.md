@@ -340,22 +340,33 @@ versa. On the frontend, `web/src/test/reactFlowStub.tsx` is the shared React Flo
 tests and the new `EntityGraph`/`EntityHierarchy` page tests drive, so the canvas contract is
 pinned once rather than duplicated per page.
 
-**Entity read budget (2.4.0).** `EntityReadBudgetTest` is the pure suite (no database):
-`estimatedHeapBytes` per shape (`JsonNull`, a scalar, an array, an object, nesting), and
-`EntityReadLedger` — a reservation charges/releases against the shared ledger, an own-request
-charge that alone exceeds capacity throws `ReadBudgetExceeded(ownRequest = true)`, a charge that
-only fails because a SIBLING reservation already holds room throws `ownRequest = false`, `peak`
-tracks the highest observed in-flight total across overlapping reservations without shrinking
-when one closes, and a non-positive charge is a no-op. `EntityQueryRouteTest` adds three
-route-level cases via `TestEntities.tunedService(readLedger = EntityReadLedger(capacity = 1))`
+**Entity read budget (2.4.0, prepaid admission 2.19.0).** `EntityReadBudgetTest` is the pure suite
+(no database): `estimatedHeapBytes` per shape (`JsonNull`, a scalar, an array, an object, nesting),
+the write-cap pin (`MAX_WORKSPACE_DOCUMENT_BYTES` admitted at `ENTITY_TARGET_ADMISSION_RATIO` and
+decoded at worst `ENTITY_TARGET_ROW_RATIO` fits `READ_BUDGET_BYTES`: a PAGED read over a cap-sized
+workspace always fits alone; the unpaged ceiling is 8 MiB), and the
+calibration pin — the baseline ontology's sample documents decode within `ENTITY_SHOWN_ROW_RATIO`
+and `ENTITY_TARGET_ROW_RATIO` (workspace-level sums). `ReadLedgerTest` is the pure ledger suite
+(`infra/concurrency/ReadLedger.kt`): `reserve` admits its whole estimate at once and releases it
+on close, an estimate that alone exceeds capacity is `ownRequest = true`, one that only fails
+beside a SIBLING is `ownRequest = false` and leaves the sibling's room untouched, decode charges
+draw the prepaid estimate down without moving the shared total (and only the excess is reserved),
+estimates summing beyond capacity admit exactly the reads that fit and refuse the rest up front,
+16 concurrent admissions on Dispatchers.Default admit exactly capacity / estimate (no timing —
+every admitted reservation is held until each attempt has returned), `peak` tracks the highest
+in-flight total without shrinking, and a non-positive charge is a no-op. `EntityQueryRouteTest`
+adds route-level cases via `TestEntities.tunedService(readLedger = ReadLedger(capacity = 1))`
 (the same private-service-injection idiom `queryService` already uses for the entity-query
 deadline/permit seams) — a 1-byte capacity trips on the raw `octet_length` of even a bare
 `{"properties":{},"relations":{}}` document, deterministically, with no timing: the plain graph
 AND the query graph both refuse `EntityQueryInvalidException`/`WORKSPACE_TOO_LARGE`, and `list`
 refuses `BadRequestException` once its blueprint has a SELF relation (so `narrowTargets` widens
 to the blueprint's own active rows — a relation-less blueprint would widen only to `_team`/
-`_user`, which may hold zero rows and never trip a tiny capacity). Contention is pinned
-without concurrency: a second reservation pre-charges the shared ledger, so `list` and `graph`
+`_user`, which may hold zero rows and never trip a tiny capacity). "A whole-workspace graph read
+is decided entirely at admission" measures the unconstrained read's `peak` P, then pins that
+capacity P admits it (peak still P, nothing in flight afterwards) and P - 1 refuses it with
+`WORKSPACE_TOO_LARGE` (the `OntologyIntegrationFilterBudgetTest` idiom). Contention is pinned
+without concurrency: a second reservation pre-reserves the shared ledger (`reserve(capacity - 1)`), so `list` and `graph`
 answer `TooManyRequestsException` (never the own-request `400`) and succeed once it closes with
 zero bytes left in flight; the writer exemption is pinned by `create`/`update` succeeding on a
 capacity-1 ledger that refuses every read. Existing
@@ -363,6 +374,16 @@ pins across `EntityTest`, `EntityQueryRouteTest`, `EntityGraphTest`, `QueryEvalu
 `QueryEvaluatorScaleTest`, `QueryTckCasesTest`, and `EntityAggregationTest` stay GREEN unchanged
 (the default-capacity ledger never trips at ordinary test-fixture scale) — `EntityGraphTest`'s
 own fixtures were mechanically updated for `EntityGraphSource.relations` replacing `.document`.
+
+**Catalog read budget (2.19.0).** `CatalogFileReadBudgetTest` drives a private service via
+`TestCatalogFiles.tunedService(readLedger)` (the `TestEntities.tunedService` shape), no timing: a
+capacity-1 ledger makes `graph`/`errors`/`export` answer `BadRequestException` (a unique fixture
+file first, so the workspace is never empty); capacity 8 MiB with all but one byte pre-reserved by
+a second reservation makes the same three answer `TooManyRequestsException`, and they succeed
+once it closes with nothing in flight; "decided entirely at admission" measures an `export`'s
+peak P and pins capacity P admits it (peak still P) while P - 1 refuses; and the paged list,
+`read`, `check` and the `importCheck` dry-run succeed on a capacity-1 ledger without ever touching
+it (`peak` 0). `ReadLedgerTest` and the entity suites are the shared mechanics (above).
 
 **Ontology import (v1.28.0).** `BlueprintImportPlanTest` and `EntityImportPlanTest` are the pure
 planners (`blueprints/BlueprintImport.kt`/`entities/EntityImport.kt`, no database): one case per
@@ -532,7 +553,7 @@ compile-failed calculation; a quarantined calculation via `TestEntities.tunedSer
 seam with a latch-held executor (the `JqCalculationTest` fixture, never a real stranded
 worker); saved-query visibility (own PRIVATE, foreign PRIVATE excluded, foreign PUBLIC
 included); the `blueprint`/`q`/`team` filters; no audit event; the read-budget `400`/`429`
-pair via a capacity-1 `EntityReadLedger` (the `EntityQueryRouteTest` idiom); and (2.9.1) a
+pair via a capacity-1 `ReadLedger` (the `EntityQueryRouteTest` idiom); and (2.9.1) a
 source-less entity reporting `SOURCE_MISSING` as its last finding, cleared once a `sourceUrl`
 is set (`EntityErrorsCheckTest` additionally pins the ordering against a stale finding).
 `JqCalculationTest`

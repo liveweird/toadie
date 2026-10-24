@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.19.0",
+    date: "2026-10-25",
+    en: `**Steadier under very large workspaces.** When several people open the Graph, Hierarchy or Errors views of a very large workspace at once, Toadie now admits as many of those reads as fit in memory and asks the others to retry a moment later — instead of refusing all of them or running out of memory; the browser retries such a refusal by itself. The Backstage catalog's graph, errors and export reads now share the same memory budget as the Port ontology's.`,
+    pl: `**Stabilniej przy bardzo dużych przestrzeniach roboczych.** Gdy kilka osób naraz otwiera widoki Graf, Hierarchia lub Błędy bardzo dużej przestrzeni roboczej, Toadie wpuszcza tyle z tych odczytów, ile mieści się w pamięci, a pozostałe prosi o ponowienie za chwilę — zamiast odrzucać wszystkie albo wyczerpywać pamięć; przeglądarka sama ponawia taką odmowę. Odczyty grafu, błędów i eksportu katalogu Backstage dzielą teraz ten sam budżet pamięci co ontologia Port.`,
+  },
+  {
     version: "2.18.4",
     date: "2026-10-24",
     en: `**Clearer buttons for screen readers.** The header's search button is now announced by the text it shows, the account menu button by your name, and graph nodes by what is written on them, so what you hear matches what you see. Dependencies were also updated.`,

@@ -631,6 +631,10 @@ export interface paths {
          *     which reads the same params as "what is shown": a file's verdict must not depend on
          *     what else is on screen. Unpaged by design — a report-style computation over the
          *     workspace.
+         *
+         *     Since 2.19.0 the whole-workspace read is admitted against the process-wide read memory
+         *     budget before any document is decoded — too large on its own `400`, contention `429`;
+         *     `.claude/docs/security.md` "Entity read memory budget".
          */
         get: operations["getCatalogFileErrors"];
         put?: never;
@@ -702,6 +706,10 @@ export interface paths {
          *     (Location, Template, custom) can be selected by no `kind` value and is never drawn.
          *
          *     Unpaged by design — a report-style computation over the workspace.
+         *
+         *     Since 2.19.0 the whole-workspace read is admitted against the process-wide read memory
+         *     budget before any document is decoded — too large on its own `400`, contention `429`;
+         *     `.claude/docs/security.md` "Entity read memory budget".
          */
         get: operations["getCatalogGraph"];
         put?: never;
@@ -726,6 +734,10 @@ export interface paths {
          *     rendering is deliberately a client concern — the SPA joins these documents into one
          *     multi-document `catalog-info.yaml` with its tested generator. Unpaged by design — a
          *     report-style read of the whole workspace.
+         *
+         *     Since 2.19.0 the whole-workspace read is admitted against the process-wide read memory
+         *     budget before any document is decoded — too large on its own `400`, contention `429`;
+         *     `.claude/docs/security.md` "Entity read memory budget".
          */
         get: operations["exportCatalogFiles"];
         put?: never;
@@ -3637,7 +3649,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["ProblemDetail"];
             };
         };
-        /** @description Throttled — either the per-IP rate-limit bucket is exhausted (generic detail) or, on /login, the per-account lockout is active (account-specific detail). Both carry a ProblemDetail body. */
+        /** @description Throttled — either the per-IP rate-limit bucket is exhausted (generic detail), on /login the per-account lockout is active (account-specific detail), or a whole-workspace read found no room in the read memory budget. All carry a ProblemDetail body. */
         TooManyRequests: {
             headers: {
                 [name: string]: unknown;
@@ -4669,6 +4681,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -4738,6 +4751,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -4764,6 +4778,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };

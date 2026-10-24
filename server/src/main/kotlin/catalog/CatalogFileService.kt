@@ -1,5 +1,9 @@
 package ch.nokillswit.catalog
 
+import ch.nokillswit.infra.concurrency.ReadBudgetExceeded
+import ch.nokillswit.infra.concurrency.ReadLedger
+import ch.nokillswit.infra.concurrency.throwReadBudgetHttp
+import ch.nokillswit.infra.db.octetLength
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.paging.PageRequest
@@ -101,9 +105,32 @@ private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
  *  above, so the two can never drift apart (a mismatch used to be a runtime 500). */
 val CATALOG_FILE_SORT_FIELDS: Set<String> = SORTABLE_COLUMNS.keys
 
+/**
+ * The admission weight of a whole-workspace catalog read (2.19.0): `SUM(octet_length(content))`
+ * times this is reserved against the process-wide [ReadLedger] before any document is decoded —
+ * the raw string held while it is parsed, the typed document, and the graph/errors projection
+ * built from it. Measured, not calibrated like the entity ratios (`entities/EntityReadBudget.kt`):
+ * the 2026-10-25 capacity probe (`npm run probe:capacity`, 10,009 files, up to 20 concurrent
+ * graph/errors reads) admitted three at a time with no `500` and no heap exhaustion.
+ */
+const val CATALOG_READ_FOOTPRINT_RATIO = 3L
+
+/**
+ * [CATALOG_READ_FOOTPRINT_RATIO] for [CatalogFileService.export]: its response IS the whole
+ * workspace, re-encoded after the reservation closes (the response-encoding residual in
+ * `.claude/docs/security.md` "Entity read memory budget"), so it is weighted for that copy too. The
+ * same probe at ×3 let three exports in and one died with `OutOfMemoryError` (a `500`).
+ */
+const val CATALOG_EXPORT_FOOTPRINT_RATIO = 6L
+
 class CatalogFileService(
     private val database: R2dbcDatabase,
     private val eventService: CatalogFileEventService = CatalogFileEventService(database),
+    /**
+     * The process-wide read ledger the whole-workspace reads (`errors`/`graph`/`export`) are admitted
+     * against — REQUIRED so the composition root passes the one shared instance (a test seam).
+     */
+    private val readLedger: ReadLedger,
 ) {
     object CatalogFiles : UIntIdTable("catalog_files") {
         val kind = varchar("kind", length = 63).default("Component")
@@ -407,7 +434,7 @@ class CatalogFileService(
      * the same filter decides what is SHOWN and a hidden target takes its edge with it: a
      * report about a file must not change its verdict because of what else is on screen.
      */
-    suspend fun errors(filter: CatalogFileListFilter): ErrorsReport = suspendTransaction(database) {
+    suspend fun errors(filter: CatalogFileListFilter): ErrorsReport = readWorkspace(active()) {
         val all = activeSources()
         errorsReport(
             reported = all.filter { filter.matches(it.file) },
@@ -463,7 +490,7 @@ class CatalogFileService(
      * query, and an edge is drawn only when both of its ends are shown. The unfiltered `all` is
      * still passed so a hidden stored target can be told apart from an absent one.
      */
-    suspend fun graph(filter: CatalogFileListFilter): CatalogGraph = suspendTransaction(database) {
+    suspend fun graph(filter: CatalogFileListFilter): CatalogGraph = readWorkspace(active()) {
         val all = activeSources()
         buildGraph(
             sources = all.filter { filter.matches(it.file) },
@@ -473,18 +500,47 @@ class CatalogFileService(
     }
 
     /** The export payload: active documents, (namespace, name)-ordered, optionally one namespace. */
-    suspend fun export(namespace: String?): ExportResponse = suspendTransaction(database) {
+    suspend fun export(namespace: String?): ExportResponse {
         // The namespace predicate runs in SQL (stored namespaces are lowercase, so folding the
         // filter matches the case-insensitive contract) — no loading the workspace to discard it.
         var predicate: Op<Boolean> = active()
         namespace?.let { predicate = predicate and (CatalogFiles.namespace eq it.lowercase()) }
-        val files = CatalogFiles.selectAll()
-            .where { predicate }
-            .map { json.decodeFromString<CatalogFile>(it[CatalogFiles.content]) }
-            .toList()
-            .sortedWith(compareBy({ it.metadata.namespace.lowercase() }, { it.metadata.name.lowercase() }))
-        ExportResponse(files = files)
+        return readWorkspace(predicate, CATALOG_EXPORT_FOOTPRINT_RATIO) {
+            val files = CatalogFiles.selectAll()
+                .where { predicate }
+                .map { json.decodeFromString<CatalogFile>(it[CatalogFiles.content]) }
+                .toList()
+                .sortedWith(compareBy({ it.metadata.namespace.lowercase() }, { it.metadata.name.lowercase() }))
+            ExportResponse(files = files)
+        }
     }
+
+    /**
+     * Runs a whole-workspace content read ([errors]/[graph]/[export]) in one transaction after
+     * admitting it against the process-wide [readLedger] (2.19.0 — `.claude/docs/security.md`
+     * "Entity read memory budget"): the whole conservative estimate of the rows [predicate] matches
+     * (raw bytes × [ratio]) is reserved BEFORE any `content` crosses the wire, so a workspace too
+     * large on its own is a `400` and one that merely finds no room beside other in-flight reads a
+     * `429` ([throwReadBudgetHttp]). The reservation is held for the whole read and released on exit.
+     */
+    private suspend fun <T> readWorkspace(
+        predicate: Op<Boolean>,
+        ratio: Long = CATALOG_READ_FOOTPRINT_RATIO,
+        block: suspend () -> T,
+    ): T =
+        readLedger.open().use { reservation ->
+            try {
+                suspendTransaction(database) {
+                    val contentSum = Sum(octetLength(CatalogFiles.content), LongColumnType())
+                    val row = CatalogFiles.select(contentSum).where { predicate }.singleOrNull()
+                        ?: error("an aggregate SELECT without GROUP BY must always answer exactly one row")
+                    reservation.reserve((row.getOrNull(contentSum) ?: 0L) * ratio)
+                    block()
+                }
+            } catch (cause: ReadBudgetExceeded) {
+                throwReadBudgetHttp(cause, "catalog")
+            }
+        }
 
     /**
      * One snapshot transaction for the import DRY-RUN (see CatalogFileImport.kt — the same
