@@ -63,6 +63,10 @@ ENV KTOR_DEVELOPMENT=false
 # No outbound email unless the deployment opts in: a real deployment sets
 # MAIL_TRANSPORT=smtp with real SMTP_* settings (production mode refuses `log`).
 ENV MAIL_TRANSPORT=disabled
+# glibc malloc otherwise keeps up to 8 x cores arenas, and each of the ~100 JVM threads pins its own
+# 2 MiB; two arenas bound that native memory. Measurements: .claude/docs/security.md "Entity read
+# memory budget" (Heap layout).
+ENV MALLOC_ARENA_MAX=2
 EXPOSE 8081
 # Plain `docker run` gets a health status too. docker-compose.yaml keeps its explicit copy of this
 # check; Kubernetes ignores HEALTHCHECK and uses the probes in k8s/app-deployment.yaml. The -jre
