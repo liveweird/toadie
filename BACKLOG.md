@@ -26,6 +26,12 @@ promotes it. A finished item is removed, not ticked.
   choose RPO/RTO, monitor PostgreSQL size and growth, set alerts, and confirm the backup
   schedule and retention against those targets. The 10 GiB initial claim and isolated restore
   drill are already implemented; the procedure is in [k8s/BACKUP-RESTORE.md](k8s/BACKUP-RESTORE.md).
+- [new] **Let the app wait for PostgreSQL on a fresh Kubernetes deploy.** The 2026-10-25 smoke on
+  OrbStack (an empty `toadie` namespace, `kubectl apply -f k8s/`) restarted the app pod twice:
+  Flyway's first connect got "Connection refused" while PostgreSQL was still initialising its volume,
+  and the pod crash-looped until it accepted connections. It recovers by itself, but a first deploy
+  reads as failing. Consider an init container that waits on `pg_isready`, or a bounded Flyway connect
+  retry, and keep the startupProbe budget in step.
 
 ## Scaling constraint
 
@@ -55,10 +61,6 @@ promotes it. A finished item is removed, not ticked.
   before each statement from the transaction's `queryTimeout` (with 0 before 2.20.2, 30 s since),
   roughly doubling round trips. Flow's `StatementTimeoutCachingConnectionFactory` skips an unchanged
   value; measure the gain before porting it.
-- [next] **Smoke the Kubernetes deployment on the new Netty/Reactor line.** 2.18.3 moved
-  r2dbc-postgresql onto reactor-netty 1.3 / Netty 4.2, whose DNS resolver now answers the database
-  hostname. Compose (Docker DNS, `postgres`) is covered by e2e; the k8s short name with search
-  domains and `ndots` is not. Deploy to the OrbStack `toadie` namespace once and confirm `/readyz`.
 
 ## Performance
 
@@ -78,10 +80,6 @@ Backstage sample to 10k files, on a disposable stack).
   published contract documents this difference. If changed, update the shared preflight,
   OpenAPI/generated types, and focused regressions together. This is a product-consistency
   improvement, not an authorization or data-integrity defect.
-- [next] **Sample saved queries for the newer Port blueprints.** The Port demo ships no saved
-  queries for `product`, `dataset`, `api_adoption` or `dataset_adoption`; add a few PUBLIC ones
-  (sample data only, under `sample-data/port/commerce-payments/`) that show the adoption
-  relations and the regulatory flags on the Entity graph and hierarchy canvases.
 
 ## Tests
 
