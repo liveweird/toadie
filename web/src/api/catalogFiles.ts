@@ -178,30 +178,35 @@ export type ImportFileResult = components["schemas"]["ImportFileResult"];
 /**
  * Report & skip: one result row per document, 200 even when every document failed.
  * `sourceUrl` (the fetch-from-URL flow) makes every stored row carry the reference and
- * start synced — an import from a repo URL IS a sync.
+ * start synced — an import from a repo URL IS a sync. `replaceExisting` turns an identity
+ * clash into an in-place replace (UPDATED / UPDATED_WITH_FINDINGS / UNCHANGED rows); it is
+ * only put on the wire when on, so a default import's body is unchanged.
  */
 export async function importCatalogFiles(
   files: CatalogFileRequest[],
   sourceUrl?: string,
+  replaceExisting = false,
 ): Promise<ImportResult> {
   return jsonRequest<ImportResult>("/api/v1/files/import", {
     method: "POST",
-    body: JSON.stringify({ files, sourceUrl }),
+    body: JSON.stringify({ files, sourceUrl, replaceExisting: replaceExisting || undefined }),
   });
 }
 
 /**
- * The import's dry-run: the same per-row report, predicted — nothing is stored. Carries the same
- * optional batch `sourceUrl` as {@link importCatalogFiles}: the server validates it identically
- * (and never fetches it), so a rejected URL is the same `400` on both.
+ * The import's dry-run: the same per-row report, predicted — nothing is stored. Takes the same
+ * optional batch `sourceUrl` and `replaceExisting` as {@link importCatalogFiles}: the server
+ * validates the URL identically (never fetching it, so a rejected URL is the same `400` on both)
+ * and uses it, with `replaceExisting`, to predict whether a replace moves an existing reference.
  */
 export async function checkImportCatalogFiles(
   files: CatalogFileRequest[],
   sourceUrl?: string,
+  replaceExisting = false,
 ): Promise<ImportResult> {
   return jsonRequest<ImportResult>("/api/v1/files/import/check", {
     method: "POST",
-    body: JSON.stringify({ files, sourceUrl }),
+    body: JSON.stringify({ files, sourceUrl, replaceExisting: replaceExisting || undefined }),
   });
 }
 

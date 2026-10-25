@@ -133,7 +133,7 @@
   "import": {
     "linkLabel": "Importuj nowy YAML",
     "title": "Importuj pliki katalogu",
-    "intro": "Wklej catalog-info.yaml (wiele dokumentów rozdzielonych ---) albo wybierz plik. Każdy dokument importuje się niezależnie — istniejący plik nigdy nie zostaje nadpisany.",
+    "intro": "Wklej catalog-info.yaml (wiele dokumentów rozdzielonych ---) albo wybierz plik. Każdy dokument importuje się niezależnie — istniejący plik nigdy nie zostaje nadpisany, chyba że włączono „Zastąp istniejące pliki”.",
     "textareaLabel": "Zawartość YAML",
     "placeholder": "apiVersion: backstage.io/v1alpha1\nkind: Component\nmetadata:\n  name: my-service\nspec:\n  ...",
     "pickFile": "Wybierz plik…",
@@ -160,9 +160,16 @@
     "resultSummary": "Zaimportowano {{created}} z {{total}} dokumentów.",
     "resultsTableLabel": "Wyniki importu",
     "checkResultSummary": "{{created}} z {{total}} dokumentów zostałoby zaimportowanych.",
+    "resultSummaryUnchanged": "Zaimportowano {{created}} z {{total}} dokumentów; {{unchanged}} już się zgadzało.",
+    "checkResultSummaryUnchanged": "{{created}} z {{total}} dokumentów zostałoby zaimportowanych; {{unchanged}} już się zgadza.",
+    "replaceExisting": "Zastąp istniejące pliki",
+    "replaceExistingHint": "Dokument o tym samym rodzaju, przestrzeni nazw i nazwie co istniejący plik zastępuje go w miejscu (z wpisem w historii) zamiast zostać pominięty. Zastrzeżenia miękkie są pomijane; plik, który już się zgadza, pozostaje nietknięty.",
     "status": {
       "CREATED": "Utworzony",
       "CREATED_WITH_FINDINGS": "Utworzono z zastrzeżeniami",
+      "UPDATED": "Zaktualizowano",
+      "UPDATED_WITH_FINDINGS": "Zaktualizowano z zastrzeżeniami",
+      "UNCHANGED": "Bez zmian",
       "CONFLICT": "Już istnieje",
       "INVALID": "Nieprawidłowy",
       "ERROR": "Niepowodzenie"
@@ -170,6 +177,9 @@
     "checkStatus": {
       "CREATED": "Zostałby utworzony",
       "CREATED_WITH_FINDINGS": "Zostałby utworzony z zastrzeżeniami",
+      "UPDATED": "Zostałby zaktualizowany",
+      "UPDATED_WITH_FINDINGS": "Zostałby zaktualizowany z zastrzeżeniami",
+      "UNCHANGED": "Pozostałby bez zmian",
       "CONFLICT": "Już istnieje",
       "INVALID": "Nieprawidłowy",
       "ERROR": "Niepowodzenie"

@@ -290,6 +290,24 @@ the 32 `CREATED` / 2 `CREATED_WITH_FINDINGS` result, the four intentional refere
 and the 34 report-only `SOURCE_MISSING` findings. The frontend's
 `sampleCatalogImport.test.ts` parses the same moved fixture with the production YAML parser.
 
+**Catalog import `replaceExisting`.** `CatalogImportReplaceTest` pins: the flag off or omitted
+behaves as before (`CONFLICT`, file untouched); `UPDATED` in place (same `fileId`, revision +1, the
+UPDATED event with the field diff, dry-run `UPDATED` with a null `fileId` and nothing stored);
+`UPDATED_WITH_FINDINGS` with the `catalog_file.updated` audit (`waivedFindings`, `import`,
+`withFindings`); `UNCHANGED` without a batch URL (nothing written: no event, revision, stamp;
+findings still reported) and its audit; under a batch URL the sync semantics (an editor-typed,
+never-synced reference re-imported identically is `UNCHANGED` yet a recorded `SYNCED` event with
+revision +1 and `updated_at == last_synced_at`, a matching re-sync doing the same again, equal to
+`POST …/sync`); the `sourceUrl` keep / move / re-stamp rule; in-batch duplicates (including
+case-variants) staying `CONFLICT`; replacing through a differently-cased name; a blank namespace
+resolving to the default; a soft-deleted identity `CREATED` with a new id; the vanished-file create
+fallback (via the `activeIdLookup` seam); and real-vs-dry-run row parity on a mixed batch.
+`CatalogFileAtomicHistoryTest` adds the fault injection (a failing history insert rolls back that
+replace whole, audits nothing for the row; adjacent rows still commit). Frontend:
+`ImportCatalogFiles.test.tsx` (the switch reaches Check and Import, the three statuses and
+summaries) and the two wire cases in `catalogFiles.test.ts`; e2e: the second scenario of
+`round-trip.spec.ts`.
+
 Each Port sample test explicitly provisions its required `composition`/`deployment` hierarchy
 values and snapshots the prior dictionary, including entry IDs. Cleanup removes sample entity
 and blueprint references before restoring that dictionary. Every case must pass independently

@@ -10,6 +10,7 @@ import {
   Group,
   Paper,
   Stack,
+  Switch,
   Table,
   Text,
   Textarea,
@@ -35,6 +36,10 @@ const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
   CREATED: "teal",
   // Stored, but carrying waived findings the Errors page tracks — a caution, not a failure.
   CREATED_WITH_FINDINGS: "orange",
+  UPDATED: "teal",
+  UPDATED_WITH_FINDINGS: "orange",
+  // Nothing needed writing BY DESIGN under Replace existing — the ontology import's EXISTS gray.
+  UNCHANGED: "gray",
   // Nothing was stored — as blocking as INVALID, so the same red (not a softer third hue).
   CONFLICT: "red",
   INVALID: "red",
@@ -55,6 +60,8 @@ export default function ImportCatalogFiles() {
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Replace existing files: an identity clash becomes an in-place replace (sent to Check too).
+  const [replaceExisting, setReplaceExisting] = useState(false);
   // The mode discriminates the report: a dry-run's rows are PREDICTIONS ("Would be
   // created"), never to be mislabeled as stored.
   const [results, setResults] = useState<{ mode: "import" | "check"; rows: ImportFileResult[] } | null>(null);
@@ -101,8 +108,8 @@ export default function ImportCatalogFiles() {
     try {
       const response =
         mode === "import"
-          ? await importCatalogFiles(current.documents, fetchedFrom ?? undefined)
-          : await checkImportCatalogFiles(current.documents, fetchedFrom ?? undefined);
+          ? await importCatalogFiles(current.documents, fetchedFrom ?? undefined, replaceExisting)
+          : await checkImportCatalogFiles(current.documents, fetchedFrom ?? undefined, replaceExisting);
       setResults({ mode, rows: response.results });
       if (mode === "import") {
         // The ["catalogFiles"] prefix covers every catalog-derived query: the list pages,
@@ -123,9 +130,17 @@ export default function ImportCatalogFiles() {
     }
   }
 
-  // Both stored statuses count as imported (or would-import) — the summary reports them.
+  // Every stored or replaced status counts as imported (or would-import); UNCHANGED rows —
+  // files that already matched — are reported beside them, not as failures.
+  const unchangedCount = results?.rows.filter((r) => r.status === "UNCHANGED").length ?? 0;
   const createdCount =
-    results?.rows.filter((r) => r.status === "CREATED" || r.status === "CREATED_WITH_FINDINGS").length ?? 0;
+    results?.rows.filter(
+      (r) =>
+        r.status === "CREATED" ||
+        r.status === "CREATED_WITH_FINDINGS" ||
+        r.status === "UPDATED" ||
+        r.status === "UPDATED_WITH_FINDINGS",
+    ).length ?? 0;
 
   return (
     <Stack gap="md">
@@ -199,6 +214,17 @@ export default function ImportCatalogFiles() {
           </Text>
         )}
       </Group>
+
+      <Switch
+        label={t("catalog.import.replaceExisting")}
+        description={t("catalog.import.replaceExistingHint")}
+        checked={replaceExisting}
+        disabled={submitting || checking}
+        onChange={(event) => {
+          setReplaceExisting(event.currentTarget.checked);
+          setResults(null);
+        }}
+      />
       </Stack>
       </Paper>
 
@@ -225,9 +251,13 @@ export default function ImportCatalogFiles() {
           <Text size="sm" fw={500}>
             {t(
               results.mode === "check"
-                ? "catalog.import.checkResultSummary"
-                : "catalog.import.resultSummary",
-              { created: createdCount, total: results.rows.length },
+                ? unchangedCount > 0
+                  ? "catalog.import.checkResultSummaryUnchanged"
+                  : "catalog.import.checkResultSummary"
+                : unchangedCount > 0
+                  ? "catalog.import.resultSummaryUnchanged"
+                  : "catalog.import.resultSummary",
+              { created: createdCount, total: results.rows.length, unchanged: unchangedCount },
             )}
           </Text>
           <Table.ScrollContainer minWidth={760}>

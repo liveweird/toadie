@@ -849,11 +849,19 @@ URL fetching stays outside them.
   for interactive PUT, sync, and delete flows.
 
 Import remains report-and-skip with one transaction per document. Each successful row commits
-its file and CREATED event (`origin=import`) together. An unexpected storage/history failure
+its file and CREATED event (`origin=import`) together (a `replaceExisting` row: its file and the
+ordinary UPDATED event, below). An unexpected storage/history failure
 rolls back that row and returns ERROR without a fileId; other rows proceed, and earlier successful
 rows remain committed. Cancellation stops further work without undoing completed rows. The
 batch itself is not an all-or-nothing transaction, and sibling identities may still refer to a
 row that later fails to store (the existing Errors-report residual).
+
+**Catalog import: `replaceExisting`.**
+- **Applies when:** `POST /files/import` or `/files/import/check` carries `replaceExisting: true` (default `false` — the request is then byte-identical to before), or when changing `CatalogFileImport.kt` / `CatalogFileService.update`'s `sourceWrite` handling.
+- **Requirement:** an identity (kind + namespace + case-insensitive name, the namespace resolved exactly as for a create) held by an ACTIVE file is replaced IN PLACE through the ordinary `CatalogFileService.update` — its own per-document transaction with the history event inside it; never a delete-and-create — instead of `CONFLICT`. Soft findings are waived as always (hard structural rules stay hard). Rows: `UPDATED` (replaced), `UPDATED_WITH_FINDINGS` (`message` lists the waived findings), `UNCHANGED` (the replace records no field change; `message` still lists the findings the file carries; `fileId` is the file) — decided identically in both runs by the structural `documentChanges` check (plus the reference's pseudo-field). The ontology imports have no such status (their `replaceExisting` reports a no-op PUT as `UPDATED`); the catalog can say so because it suppresses no-op history events. **Source reference (the D3 rule of "Entity source references (V37)")**: a batch WITHOUT `sourceUrl` is `SourceWrite.Keep` — the reference and sync state are untouched, and an `UNCHANGED` row writes NOTHING (no event, no revision bump, no stamp change). A batch WITH one is `SourceWrite.Synced` — an import from a URL IS a repo sync, so the write follows `syncFromRepo` exactly: `updated_at`, `last_synced_at` and the `synced_content` baseline are stamped together, the revision always bumps, and a history event is always recorded (the field-diff `UPDATED` event when the document or the reference changed — the row then reads `UPDATED` — else the empty `SYNCED` event a matching sync records, the row still reading `UNCHANGED`: the document did not change, the sync is still recorded). A soft-deleted file with the same identity is invisible to the lookup (the partial unique index covers active rows only), so that document is `CREATED`. A repeat of an identity the batch already stored or replaced is `CONFLICT`, tracked per batch in the real run (a replace, unlike a create, has no 23505 to catch it) and by the dry-run's seen-set, checked before any replace prediction. Should the matched file vanish between the lookup and the locked update, the document is created. Import-replace is headerless by design: it sends no `X-Expected-Revision` (a batch has no per-file revision to carry), and a concurrent editor still gets its `409` on its own guarded save. The dry-run predicts the same rows through the same `replacedRow` classification, reading only the matched file's `content`/`source_url` (one single-row read per replaced identity, never a workspace content read); its `fileId` stays null. The route audits every replaced row as `catalog_file.updated` (`import: true`, `waivedFindings` count, `withFindings` on `UPDATED_WITH_FINDINGS`) — also `UNCHANGED`, as a no-op PUT is audited.
+- **Reference:** `CatalogFileImport.kt`, `CatalogFileService.update`/`activeIdOf`/`predictReplace`, `syncFromRepo` (the semantics mirrored).
+- **Enforcement:** `CatalogImportReplaceTest`; the replace case of `CatalogFileAtomicHistoryTest` (a failed history insert rolls back that replace and leaves adjacent rows intact).
+- **Exception:** none.
 
 Security `audit(...)` logs stay route-side after successful service returns; they are separate
 from the transactional product history and are not an atomic external-delivery guarantee.
@@ -998,7 +1006,7 @@ on their own next save, the same as after any other blueprint PUT
 (`.claude/docs/port-data-model.md` "Lifecycle rules"). `BlueprintSync.kt`'s `replaceRow` resolves
 these three columns via the SAME shared `resolveSourceColumns` (2.13.1) as `EntitySync.kt`
 above — `catalog/CatalogFileService.kt`'s own repo sync predates that extraction, always waives,
-and has no `Keep` branch, so it remains the older, inline copy rather than a third consumer.
+and stays the older, inline copy rather than a third consumer; the import's `replaceExisting` replace (`CatalogFileService.update`) selects `Keep`/`Synced` directly and, for `Synced`, mirrors that sync's writes ("Catalog import: `replaceExisting`" above).
 Migration checksums, including V38, are pinned in `MigrationChecksumTest`.
 
 ### Ontology revision (V39)

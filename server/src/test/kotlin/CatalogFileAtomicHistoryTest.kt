@@ -380,6 +380,64 @@ class CatalogFileAtomicHistoryTest {
     }
 
     @Test
+    fun `a replace event failure rolls back only that replaced row and keeps adjacent rows`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("atomic-replace")
+        val actorId = TestUsers.seed(email, "pw", role = UserRole.USER)
+        val client = authedClient(email, "pw")
+        val existingName = uniqueEntityName("atomic-replace-existing")
+        val beforeName = uniqueEntityName("atomic-replace-before")
+        val afterName = uniqueEntityName("atomic-replace-after")
+        val sourceUrl = "https://example.com/${uniqueEntityName("atomic-replace-source")}.yaml"
+        val existing: CatalogFileResponse = client.postJson(
+            CATALOG_FILES_PATH,
+            writeRequest(componentFile(existingName, title = "Original"), "https://example.com/$existingName/o.yaml"),
+        ).body()
+        val baseline = storedState(existing.id)
+        // Installed AFTER the fixture: the trigger fails only this file's NEXT event insert.
+        val (response, auditEvents) = withAuditCapture { capture ->
+            val body: ImportResponse = withFailingEventInsert(actorId, existingName, existing.id) {
+                client.postJson(
+                    "$CATALOG_FILES_PATH/import",
+                    ImportRequest(
+                        files = listOf(
+                            componentFile(beforeName),
+                            componentFile(existingName, title = "Replaced"),
+                            componentFile(afterName),
+                        ),
+                        sourceUrl = sourceUrl,
+                        replaceExisting = true,
+                    ),
+                ).body()
+            }
+            body to capture.events.toList()
+        }
+        // The failed row audits nothing (the route audits only stored/replaced rows)...
+        assertTrue(auditEvents.none { it.hasKeyValue("catalogFileId", existing.id.toLong()) })
+        assertTrue(auditEvents.none { it.message == "catalog_file.updated" && it.hasKeyValue("byUserId", actorId.toLong()) })
+
+        val failed = response.results[1]
+        assertEquals(ImportResultStatus.ERROR, failed.status)
+        assertEquals("Storage failed", failed.message)
+        assertNull(failed.fileId)
+        // The replace rolled back whole: row (content, reference, sync state, revision) and history.
+        assertEquals(baseline, storedState(existing.id))
+
+        val successfulIds = listOf(response.results[0], response.results[2]).map { result ->
+            assertEquals(ImportResultStatus.CREATED, result.status)
+            checkNotNull(result.fileId)
+        }
+        try {
+            successfulIds.forEach { id ->
+                val events: CatalogFileEventPageResponse = client.get("$CATALOG_FILES_PATH/$id/events").body()
+                assertEquals(listOf(CatalogFileEventType.CREATED), events.items.map { it.type })
+            }
+        } finally {
+            (successfulIds + existing.id).forEach { client.delete("$CATALOG_FILES_PATH/$it") }
+        }
+    }
+
+    @Test
     fun `overlapping updates derive each history diff from the preceding committed row`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("atomic-overlap")

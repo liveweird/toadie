@@ -588,7 +588,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`round-trip.spec.ts`](scenarios/round-trip.md) — the YAML round-trip: two pasted documents
   dry-run as Would-be-created (the Check button, nothing stored), import as Created, export
   downloads them as one `---`-separated file, and re-importing the export reports every row
-  Already exists (nothing overwritten).
+  Already exists (nothing overwritten); and, with **Replace existing files**, a changed
+  document re-imports as Updated (dry-run: Would be updated), an identical one as Unchanged,
+  and the file's History shows the import creation plus one field-level update.
 - [`source-sync.spec.ts`](scenarios/source-sync.md) — source references: a file created
   source-less is flagged on the Errors report (No source), setting the URL in the
   editor's Source section clears the flag and turns on the Last-sync column + the Sync

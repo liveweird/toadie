@@ -685,7 +685,7 @@ it; renders gray in the SPA, not red — nothing failed), `INVALID` (shape/regis
 validation failure, an unresolvable target, a registry cap, or a cycle through a MANDATORY
 reference — see below), `CONFLICT` (an in-batch duplicate identifier, case-insensitive; the
 later document loses), `ERROR` (an unexpected storage failure, or a pass-2 residual — see
-below). The response is `200` even when every document failed. The status vocabulary is deliberately NOT the catalog import's (`CREATED`/`CREATED_WITH_FINDINGS`/`INVALID`/`CONFLICT`/`ERROR`): a catalog import always waives soft findings and never replaces, while an ontology import can `replaceExisting` (`UPDATED`) and reports an untouched existing row (`EXISTS`).
+below). The response is `200` even when every document failed. The status vocabulary is deliberately NOT the catalog import's (`CREATED`/`CREATED_WITH_FINDINGS`/`UPDATED`/`UPDATED_WITH_FINDINGS`/`UNCHANGED`/`INVALID`/`CONFLICT`/`ERROR`): a catalog import always waives soft findings and replaces only under its own `replaceExisting` (`.claude/docs/persistence.md` "Catalog import"), while an ontology import reports an untouched existing row (`EXISTS`) and a replaced one always as `UPDATED`.
 
 **Entity import source references (2.9.0).** `EntityImportRequest.sourceUrl` is an optional
 batch-level https URL — the catalog import's own fetch-from-URL rule, one level up: every

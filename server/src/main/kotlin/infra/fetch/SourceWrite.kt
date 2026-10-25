@@ -51,8 +51,10 @@ internal fun requireExpectedSourceUrl(expectedSourceUrl: String?, currentSourceU
  * keeps [current]'s stamp/baseline when [requestSourceUrl] is unchanged, else resets both to
  * `0`/`null`; [SourceWrite.Keep] leaves [current] untouched; [SourceWrite.Synced] stamps [now] and
  * invokes [baseline] — the ONLY branch that does, since it is the one write that needs one.
- * `catalog/CatalogFileService.kt`'s own sync predates this type, always waives, and has no [Keep]
- * branch — it stays its own inline copy rather than a third consumer.
+ * `catalog/CatalogFileService.kt`'s own repo sync (`syncFromRepo`) predates this type, always
+ * waives, and stays its own inline copy rather than a third consumer; its import-side twin
+ * (`update` under `replaceExisting`) uses [Keep]/[Synced] directly as a posture selector
+ * and mirrors `syncFromRepo`'s writes for [Synced].
  */
 fun resolveSourceColumns(
     source: SourceWrite,

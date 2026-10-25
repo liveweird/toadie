@@ -5,6 +5,7 @@ import ch.nokillswit.infra.concurrency.ReadLedger
 import ch.nokillswit.infra.concurrency.throwReadBudgetHttp
 import ch.nokillswit.infra.db.octetLength
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
+import ch.nokillswit.infra.fetch.SourceWrite
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.infra.paging.applyPaging
@@ -76,6 +77,9 @@ data class CatalogFileSyncState(
         syncedDocument = syncedDocument,
     )
 }
+
+/** The dry-run's verdict on a `replaceExisting` row: would the ordinary replace change anything? */
+internal enum class ReplacePrediction { CHANGED, UNCHANGED }
 
 /** A successful create plus the soft findings the save waived (empty on a strict save). */
 data class CatalogFileSaveResult(val id: UInt, val waived: List<SoftFinding>)
@@ -273,6 +277,17 @@ class CatalogFileService(
             .singleOrNull()
     }
 
+    /**
+     * The ordinary replace. [sourceWrite] picks the source-reference posture: [SourceWrite.FromRequest]
+     * (the PUT — [sourceUrl] replaces the stored one, resetting the sync state when it differs),
+     * or, for the import's `replaceExisting`, [SourceWrite.Keep] (a batch without a URL leaves
+     * the reference and sync state alone — the ontology imports' D3 rule: a no-op then writes
+     * nothing at all) / [SourceWrite.Synced] (a batch with a URL IS a repo sync, so the write
+     * follows [syncFromRepo] exactly: `updated_at`, `last_synced_at` and the baseline stamped
+     * together, the revision bumped, and a history event ALWAYS recorded — the field-diff UPDATED
+     * event when something changed, else the empty SYNCED event a matching sync records).
+     * [extraIdentities] is the import path's batch universe.
+     */
     suspend fun update(
         id: UInt,
         file: CatalogFile,
@@ -280,12 +295,18 @@ class CatalogFileService(
         expectedRevision: Long? = null,
         allowInvalid: Boolean = false,
         sourceUrl: String? = null,
+        extraIdentities: Set<EntityIdentity> = emptySet(),
+        sourceWrite: SourceWrite = SourceWrite.FromRequest,
     ): CatalogFileUpdateResult =
         suspendTransaction(database) {
             validateCatalogFile(file) // re-checked service-side so direct callers stay guarded
-            val source = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
+            val requestedSource = when (sourceWrite) { // re-checked service-side too
+                SourceWrite.FromRequest -> sanitizedSourceUrl(sourceUrl)
+                SourceWrite.Keep -> null // resolved from the current row below
+                is SourceWrite.Synced -> sanitizedSourceUrl(sourceWrite.sourceUrl)
+            }
             val stored = file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace))
-            val findings = requireOrWaive(stored, emptySet(), allowInvalid, excludingId = id)
+            val findings = requireOrWaive(stored, extraIdentities, allowInvalid, excludingId = id)
             val encoded = json.encodeToString(stored)
             // The current row decides the sync-state consequences: a changed/cleared reference
             // resets the sync state (a different source was never synced from), and updatedAt
@@ -298,8 +319,12 @@ class CatalogFileService(
                 .singleOrNull()
                 ?: return@suspendTransaction CatalogFileUpdateResult(rows = 0, waived = findings)
             requireExpectedRevision(expectedRevision, current[CatalogFiles.revision])
+            val source = if (sourceWrite == SourceWrite.Keep) current[CatalogFiles.sourceUrl] else requestedSource
             val contentChanged = current[CatalogFiles.content] != encoded
             val sourceChanged = current[CatalogFiles.sourceUrl] != source
+            // A URL-bearing import row is a repo sync (see the KDoc): it takes the sync path's
+            // writes and always-recorded event even when the document matched.
+            val synced = sourceWrite is SourceWrite.Synced && source != null
             // The history's field-level diff — the stored JSON is only decoded when it actually
             // differs, so an unchanged save pays nothing.
             val changes = buildList {
@@ -308,24 +333,28 @@ class CatalogFileService(
                 }
                 sourceUrlChange(current[CatalogFiles.sourceUrl], source)?.let { add(it) }
             }
+            val now = System.currentTimeMillis()
             val rows = CatalogFiles.update({ (CatalogFiles.id eq id) and (CatalogFiles.markedAsDeleted eq false) }) {
                 it[kind] = stored.kind
                 it[name] = stored.metadata.name
                 it[namespace] = stored.metadata.namespace
                 it[content] = encoded
-                if (contentChanged) it[updatedAt] = System.currentTimeMillis()
+                if (contentChanged || synced) it[updatedAt] = now
                 it[CatalogFiles.sourceUrl] = source
-                if (sourceChanged) {
+                if (synced) {
+                    it[lastSyncedAt] = now
+                    it[syncedContent] = encoded
+                } else if (sourceChanged) {
                     it[lastSyncedAt] = 0
                     it[syncedContent] = null
                 }
-                if (contentChanged || sourceChanged) {
+                if (contentChanged || sourceChanged || synced) {
                     it[revision] = current[CatalogFiles.revision] + 1
                 }
             }
-            catalogFileUpdateEvent(changes)?.let {
-                eventService.recordInTransaction(id, actingUserId, it)
-            }
+            val event =
+                if (synced && changes.isEmpty()) catalogFileSyncEvent(changes) else catalogFileUpdateEvent(changes)
+            event?.let { eventService.recordInTransaction(id, actingUserId, it) }
             CatalogFileUpdateResult(rows = rows, waived = findings, changes = changes)
         }
 
@@ -542,23 +571,62 @@ class CatalogFileService(
             }
         }
 
+    /** The predicate of the ACTIVE file holding [file]'s identity (the V5 index: kind, namespace, LOWER(name)). */
+    private fun identityPredicate(file: CatalogFile): Op<Boolean> =
+        active() and
+            (CatalogFiles.kind eq file.kind) and
+            (CatalogFiles.namespace eq file.metadata.namespace) and
+            (CatalogFiles.name.lowerCase() eq file.metadata.name.lowercase())
+
+    /**
+     * The id of the ACTIVE file holding the (namespace-resolved) [file]'s identity — the
+     * import's `replaceExisting` lookup. A soft-deleted twin is invisible here, exactly as it is
+     * to the partial unique index, so its identity imports as a plain create.
+     */
+    internal suspend fun activeIdOf(file: CatalogFile): UInt? = suspendTransaction(database) {
+        CatalogFiles.select(CatalogFiles.id).where { identityPredicate(file) }
+            .toList().singleOrNull()?.get(CatalogFiles.id)?.value
+    }
+
+    /**
+     * The dry-run's prediction of [update] for the active file holding [file]'s identity:
+     * UNCHANGED exactly when the replace would record no field change — the SAME structural
+     * check the real run's row status uses ([documentChanges] plus the reference's pseudo-field,
+     * decoded only when the stored JSON differs from the re-encoded document, as [update] does).
+     * One single-row read, only for the identities the batch actually replaces.
+     */
+    private suspend fun predictReplace(file: CatalogFile, sourceWrite: SourceWrite): ReplacePrediction {
+        val row = CatalogFiles.select(CatalogFiles.content, CatalogFiles.sourceUrl)
+            .where { identityPredicate(file) }
+            .toList().singleOrNull() ?: return ReplacePrediction.CHANGED
+        val source = if (sourceWrite is SourceWrite.Synced) sourceWrite.sourceUrl else row[CatalogFiles.sourceUrl]
+        val changed = (row[CatalogFiles.content] != json.encodeToString(file) &&
+            documentChanges(json.decodeFromString(row[CatalogFiles.content]), file).isNotEmpty()) ||
+            sourceUrlChange(row[CatalogFiles.sourceUrl], source) != null
+        return if (changed) ReplacePrediction.CHANGED else ReplacePrediction.UNCHANGED
+    }
+
     /**
      * One snapshot transaction for the import DRY-RUN (see CatalogFileImport.kt — the same
-     * feature, split into its own file): the active identities, the registry snapshot, and
-     * an in-transaction namespace resolver, handed to [block] so the dry-run classifies
-     * against exactly what a real run would see. Internal-only seam — everything it exposes
-     * stays private to this class.
+     * feature, split into its own file): the active identities, the registry snapshot, an
+     * in-transaction namespace resolver, and the `replaceExisting` prediction, handed to [block]
+     * so the dry-run classifies against exactly what a real run would see. Internal-only seam —
+     * everything it exposes stays private to this class.
      */
     internal suspend fun <T> withImportSnapshot(
         block: suspend (
             active: Set<EntityIdentity>,
             registries: RegistrySnapshot,
             resolve: suspend (CatalogFile) -> CatalogFile,
+            predict: suspend (CatalogFile, SourceWrite) -> ReplacePrediction,
         ) -> T,
     ): T = suspendTransaction(database) {
-        block(activeIdentities(), registryReader.loadSnapshot()) { file ->
-            file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace))
-        }
+        block(
+            activeIdentities(),
+            registryReader.loadSnapshot(),
+            { file -> file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace)) },
+            { file, sourceWrite -> predictReplace(file, sourceWrite) },
+        )
     }
 
     private suspend fun activeSources(): List<CatalogSource> =

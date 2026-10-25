@@ -133,7 +133,7 @@
   "import": {
     "linkLabel": "Import new YAML",
     "title": "Import catalog files",
-    "intro": "Paste a catalog-info.yaml (multiple documents separated by ---) or pick a file. Each document imports independently — an existing file is never overwritten.",
+    "intro": "Paste a catalog-info.yaml (multiple documents separated by ---) or pick a file. Each document imports independently — an existing file is never overwritten unless “Replace existing files” is on.",
     "textareaLabel": "YAML content",
     "placeholder": "apiVersion: backstage.io/v1alpha1\nkind: Component\nmetadata:\n  name: my-service\nspec:\n  ...",
     "pickFile": "Choose file…",
@@ -156,9 +156,16 @@
     "resultSummary": "Imported {{created}} of {{total}} documents.",
     "resultsTableLabel": "Import results",
     "checkResultSummary": "{{created}} of {{total}} documents would import.",
+    "resultSummaryUnchanged": "Imported {{created}} of {{total}} documents; {{unchanged}} already matched.",
+    "checkResultSummaryUnchanged": "{{created}} of {{total}} documents would import; {{unchanged}} already match.",
+    "replaceExisting": "Replace existing files",
+    "replaceExistingHint": "A document whose kind, namespace and name match an existing file replaces it in place (recorded in its history) instead of being skipped. Soft findings are waived; a file that already matches is left untouched.",
     "status": {
       "CREATED": "Created",
       "CREATED_WITH_FINDINGS": "Created with findings",
+      "UPDATED": "Updated",
+      "UPDATED_WITH_FINDINGS": "Updated with findings",
+      "UNCHANGED": "Unchanged",
       "CONFLICT": "Already exists",
       "INVALID": "Invalid",
       "ERROR": "Failed"
@@ -166,6 +173,9 @@
     "checkStatus": {
       "CREATED": "Would be created",
       "CREATED_WITH_FINDINGS": "Would be created with findings",
+      "UPDATED": "Would be updated",
+      "UPDATED_WITH_FINDINGS": "Would be updated with findings",
+      "UNCHANGED": "Would stay unchanged",
       "CONFLICT": "Already exists",
       "INVALID": "Invalid",
       "ERROR": "Failed"

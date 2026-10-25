@@ -230,11 +230,16 @@ fun Application.configureCatalogFileRoutes() {
             post<CatalogFiles.Import.Check> {
                 call.caller()
                 val request = call.receive<ImportRequest>()
-                catalogImportPreflight(request)
+                val sourceUrl = catalogImportPreflight(request)
                 // The import's dry-run: the same per-row report, nothing stored. A pure
                 // computation like the other check endpoints — no audit events (and no
                 // created-audit loop: predicted rows have no fileId).
-                call.respond(HttpStatusCode.OK, ImportResponse(results = catalogFileService.importCheck(request.files)))
+                val results = catalogFileService.importCheck(
+                    request.files,
+                    replaceExisting = request.replaceExisting,
+                    sourceUrl = sourceUrl,
+                )
+                call.respond(HttpStatusCode.OK, ImportResponse(results = results))
             }
             post<CatalogFiles.Import> {
                 val caller = call.caller()
@@ -247,7 +252,29 @@ fun Application.configureCatalogFileRoutes() {
                     request.files,
                     caller.userId,
                     sourceUrl = sourceUrl,
+                    replaceExisting = request.replaceExisting,
                 )
+                // Replaced rows audit exactly like the ordinary replace (`catalog_file.updated`,
+                // `waivedFindings` = the waived count), marked `import` — the UNCHANGED no-op
+                // too, as a no-op PUT does.
+                val replacedStatuses = setOf(
+                    ImportResultStatus.UPDATED,
+                    ImportResultStatus.UPDATED_WITH_FINDINGS,
+                    ImportResultStatus.UNCHANGED,
+                )
+                for (result in results.filter { it.status in replacedStatuses }) {
+                    val fileId = checkNotNull(result.fileId) { "replaced import row without a fileId" }
+                    audit(
+                        "catalog_file.updated",
+                        *catalogAuditFields(
+                            caller.userId,
+                            fileId,
+                            waived = result.waivedFindings,
+                            import = true,
+                            withFindings = result.status == ImportResultStatus.UPDATED_WITH_FINDINGS,
+                        ),
+                    )
+                }
                 for (result in results.filter { it.status in storedStatuses }) {
                     val fileId = checkNotNull(result.fileId) { "stored import row without a fileId" }
                     audit(
