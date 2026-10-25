@@ -1,0 +1,5 @@
+{
+  "name": "Sample: Banking-outsourcing scope across blueprints",
+  "visibility": "PUBLIC",
+  "query": "MATCH (e:service|api|resource|dataset)\nWHERE e.banking_outsourcing = true\nOPTIONAL MATCH (e)-[:system]->(sys:system)\nRETURN e, sys"
+}

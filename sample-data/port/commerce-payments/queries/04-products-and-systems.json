@@ -1,0 +1,5 @@
+{
+  "name": "Sample: Products and the systems that deliver them",
+  "visibility": "PUBLIC",
+  "query": "MATCH (p:product)\nOPTIONAL MATCH (p)<-[:products]-(sys:system)\nRETURN p, sys"
+}

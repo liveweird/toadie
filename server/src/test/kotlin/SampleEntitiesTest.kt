@@ -230,13 +230,15 @@ class SampleEntitiesTest {
 
             val response = admin.postJson("/api/v1/entities/import", EntityImportRequest(documents = documents))
                 .body<EntityImportResponse>()
+            // Recorded BEFORE any assertion, so a failed import still cleans up what it stored.
+            response.results.forEach { row -> row.identifier?.let { entityIdentifiers += it } }
             assertEquals(76, response.results.size, "expected the 76 sample entities")
             assertTrue(
                 response.results.all { it.status == OntologyImportStatus.CREATED },
                 "every row must be CREATED: ${response.results}",
             )
             response.results.forEach { row ->
-                entityIdentifiers += row.identifier ?: error("import row ${row.index} carries no identifier")
+                assertTrue(row.identifier != null, "import row ${row.index} carries no identifier")
                 val reread = admin.get("/api/v1/entities/${row.id}").body<EntityResponse>()
                 assertTrue(reread.findings.isEmpty(), "${row.blueprint}/${row.identifier} reads back with findings: ${reread.findings}")
             }

@@ -1,0 +1,5 @@
+{
+  "name": "Sample: Dataset ownership and lineage",
+  "visibility": "PUBLIC",
+  "query": "MATCH (d:dataset)\nOPTIONAL MATCH (d)-[:$team]->(t:_team)\nOPTIONAL MATCH (d)<-[:produces_datasets]-(prod:service)\nOPTIONAL MATCH (d)<-[:consumes_datasets]-(c:service)\nRETURN d, t, prod, c"
+}

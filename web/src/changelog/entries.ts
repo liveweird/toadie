@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.21.0",
+    date: "2026-10-25",
+    en: `**Sample saved queries for the Port demo.** The commerce-payments demo now ships eight public saved queries — who consumes which API or dataset, adoptions being migrated or retired, products and the systems behind them, dataset ownership and lineage, and the PCI-DSS, DORA and banking-outsourcing scopes — loaded with a third script after the blueprints and entities, and ready to pick on the Entity graph and Entity hierarchy.`,
+    pl: `**Przykładowe zapisane zapytania dla demo Port.** Demo commerce-payments zawiera teraz osiem publicznych zapisanych zapytań — kto korzysta z którego API lub zbioru danych, adopcje w trakcie migracji lub wycofywania, produkty i dostarczające je systemy, własność i pochodzenie zbiorów danych oraz zakresy PCI-DSS, DORA i outsourcingu bankowego — ładowanych trzecim skryptem po blueprintach i encjach i gotowych do wyboru na Grafie encji i w Hierarchii encji.`,
+  },
+  {
     version: "2.20.3",
     date: "2026-10-25",
     en: `**More memory headroom under heavy load.** The server's memory allocator now keeps fewer idle memory pools, so under many simultaneous large reads Toadie peaks about 100 MiB lower and stays well inside its container's limit, with no change in speed.`,

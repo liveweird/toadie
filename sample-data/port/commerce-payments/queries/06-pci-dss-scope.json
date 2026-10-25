@@ -1,0 +1,5 @@
+{
+  "name": "Sample: PCI-DSS services and what they touch",
+  "visibility": "PUBLIC",
+  "query": "MATCH (s:service {pci_dss: true})\nOPTIONAL MATCH (s)-[:system]->(sys:system)\nOPTIONAL MATCH (s)-[:depends_on|uses|consumes_apis|consumes_datasets|produces_datasets]->(x)\nRETURN s, sys, x"
+}

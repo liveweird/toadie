@@ -5,7 +5,8 @@
 feature-showcase set), and `sample-data/port/commerce-payments/entities/` is the same broad
 landscape as `sample-data/backstage/commerce-payments/catalog-info.yaml` re-told as Port entities —
 the two independent demos share a story and vocabulary, which
-is what the Backstage round trip below is about.
+is what the Backstage round trip below is about. `sample-data/port/commerce-payments/queries/` holds the public saved queries
+(see `sample-data/port/commerce-payments/README.md` "Saved queries"; pinned by `SampleQueriesTest`).
 The design decisions, taken 2026-09-10: `service` + `library` rather than one `component` or a
 five-way split (a Port relation targets ONE blueprint, so every extra blueprint multiplies the
 dependency relations); the full runtime layer `environment` + `cluster` + `workload`; Kafka topics
