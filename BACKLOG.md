@@ -40,7 +40,7 @@ promotes it. A finished item is removed, not ticked.
 
 ## Reliability
 
-- [new] **Fail fast when the database hangs.** With PostgreSQL paused (connections open, nothing
+- [next] **Fail fast when the database hangs.** With PostgreSQL paused (connections open, nothing
   answering), an authenticated request waited past 40 s instead of failing: the pool bounds only
   the acquire, and no statement or socket timeout bounds a query on a connection already held.
   Found while proving 2.18.2's outage handling (a stopped database correctly answers 500 in
@@ -56,7 +56,7 @@ promotes it. A finished item is removed, not ticked.
 Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the
 Backstage sample to 10k files, on a disposable stack).
 
-- [new] **Bound native memory after a probe.** The 2026-10-24 capacity probe put the 512 MiB
+- [next] **Bound native memory after a probe.** The 2026-10-24 capacity probe put the 512 MiB
   container at VmRSS 506 MiB / VmHWM 520 MiB under 10 concurrent whole-workspace reads: the read
   ledger bounds the heap, but Netty/R2DBC direct buffers (default up to `-Xmx`) and glibc arenas
   are unbounded. Probe `-XX:MaxDirectMemorySize` and `MALLOC_ARENA_MAX=2` against the same load,
@@ -82,7 +82,7 @@ Backstage sample to 10k files, on a disposable stack).
 
 ## Tests
 
-- [new] **Make two parallel-run e2e flakes deterministic.** Local full runs (4 workers) failed
+- [next] **Make two parallel-run e2e flakes deterministic.** Local full runs (4 workers) failed
   `annotations.spec.ts` intermittently (the edit step's "Applies to kinds" option never appeared;
   2 of 3 isolated reruns failed on 2026-10-25) and `catalog-files.spec.ts`, which expects the
   global "No catalog files" empty state while other files' specs are writing files. Both pass in
