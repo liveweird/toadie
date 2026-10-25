@@ -50,7 +50,7 @@ r2dbc-pool = "1.0.2.RELEASE"
 # io.projectreactor* module to one release train. r2dbc-pool 1.0.2 alone would pull reactor-pool 1.0.8
 # (a reactor-core 3.5-era pairing). Moving this line moves reactor-netty - keep it in step with the
 # `netty` pin above.
-reactor-bom = "2025.0.7"
+reactor-bom = "2025.0.8"
 # Advisory floor (CVE-2026-53712, authentication downgrade via TLS channel binding): the SCRAM client
 # arrives via r2dbc-postgresql; see the constraints in server/build.gradle.kts.
 scram = "3.4"
