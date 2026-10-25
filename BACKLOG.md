@@ -44,7 +44,7 @@ promotes it. A finished item is removed, not ticked.
 
 ## Product
 
-- [new] **Decide whether import dry runs should validate batch `sourceUrl` like real imports.**
+- [next] **Decide whether import dry runs should validate batch `sourceUrl` like real imports.**
   `/files/import/check`, `/blueprints/import/check`, and `/entities/import/check` currently
   ignore an invalid batch-level source URL that the corresponding import rejects. The
   published contract documents this difference. If changed, update the shared preflight,
@@ -53,7 +53,7 @@ promotes it. A finished item is removed, not ticked.
 
 ## Tests
 
-- [new] **Click through a successful blueprint sync in the browser.** The e2e suite stops at the
+- [next] **Click through a successful blueprint sync in the browser.** The e2e suite stops at the
   loopback refusal by design, since the SSRF guard rejects every address a local fixture server
   could use. A success journey needs a fixture source the guard accepts and the browser suite can
   reach; until then the server suite owns the success path.
@@ -70,7 +70,7 @@ promotes it. A finished item is removed, not ticked.
   at 0.15.0; `integration/Mcp.kt` relies on its stateless mode needing no `initialize`, on the
   Accept-header pair and on unknown tools being tool results. Re-verify those with the real
   TypeScript MCP client before merging the bump.
-- [new] **Automate the Gradle Dependabot fix-up.** Dependabot's Gradle PRs edit only
+- [next] **Automate the Gradle Dependabot fix-up.** Dependabot's Gradle PRs edit only
   `libs.versions.toml`; the lockfiles and `gradle/verification-metadata.xml` must be regenerated
   by hand from an empty Gradle home ([dependency-reproducibility.md](.claude/docs/dependency-reproducibility.md))
   before strict verification passes. Consider a small fix-up workflow if the weekly cadence hurts.
