@@ -46,16 +46,16 @@ promotes it. A finished item is removed, not ticked.
   "A hung database is bounded", Exception (i)). A fix is a decorator below the pool: a first-signal
   timeout on every exchange, plus a poison flag that makes `validate()` fail so r2dbc-pool invalidates
   the connection on release. It needs a fake-connection test for every delegated r2dbc-spi method.
-- [new] **Make pooled-connection release cancel-proof.** r2dbc-pool's `PooledConnection.close()` runs a
+- [next] **Make pooled-connection release cancel-proof.** r2dbc-pool's `PooledConnection.close()` runs a
   validation and a rollback before `ref.release()`. If the awaiting coroutine is cancelled while that
   rollback waits on a frozen server, the release may never run and the slot stays acquired (read from
   the bytecode, not reproduced). Confirm with a held-statement/cancel regression; the fix would subscribe
   the release eagerly, or close under `NonCancellable`.
-- [new] **Stop re-sending `SET statement_timeout` before every statement.** Exposed 1.6.0 R2DBC sends it
+- [next] **Stop re-sending `SET statement_timeout` before every statement.** Exposed 1.6.0 R2DBC sends it
   before each statement from the transaction's `queryTimeout` (with 0 before 2.20.2, 30 s since),
   roughly doubling round trips. Flow's `StatementTimeoutCachingConnectionFactory` skips an unchanged
   value; measure the gain before porting it.
-- [new] **Smoke the Kubernetes deployment on the new Netty/Reactor line.** 2.18.3 moved
+- [next] **Smoke the Kubernetes deployment on the new Netty/Reactor line.** 2.18.3 moved
   r2dbc-postgresql onto reactor-netty 1.3 / Netty 4.2, whose DNS resolver now answers the database
   hostname. Compose (Docker DNS, `postgres`) is covered by e2e; the k8s short name with search
   domains and `ndots` is not. Deploy to the OrbStack `toadie` namespace once and confirm `/readyz`.
@@ -78,7 +78,7 @@ Backstage sample to 10k files, on a disposable stack).
   published contract documents this difference. If changed, update the shared preflight,
   OpenAPI/generated types, and focused regressions together. This is a product-consistency
   improvement, not an authorization or data-integrity defect.
-- [new] **Sample saved queries for the newer Port blueprints.** The Port demo ships no saved
+- [next] **Sample saved queries for the newer Port blueprints.** The Port demo ships no saved
   queries for `product`, `dataset`, `api_adoption` or `dataset_adoption`; add a few PUBLIC ones
   (sample data only, under `sample-data/port/commerce-payments/`) that show the adoption
   relations and the regulatory flags on the Entity graph and hierarchy canvases.
