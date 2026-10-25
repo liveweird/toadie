@@ -218,6 +218,30 @@ Backend tests live flat in `server/src/test/kotlin/` (kotlin.test + `io.ktor.ser
 - `TestEntities` (`service`/`rawRows`/`remove(vararg ids)`) — the entity registry is SHARED suite state too, the `TestBlueprints` shape one level down: every test mints unique identifiers within its own throwaway blueprint(s) and removes what it creates; there is no seed to protect.
 - `TestSeedState.restoreSeedAccounts()` — bootstrap/production-mode tests rotate the seed admin's password in the SHARED container; call this afterwards so later tests (and re-runs) see the pristine V3 state. Production-mode boots must also override `"mail.transport" to "disabled"` — the dev-default `log` transport is refused in production (`MailTransportTest`).
 
+**Hung-database regressions.**
+
+- **Applies when:** a test needs the database to stop ANSWERING (not refuse connections) —
+  checking the pool's validation/creation bounds, `statement_timeout`, or `/readyz` behaviour.
+- **Requirement:** freeze the database one of two ways only. (1) `FreezableRelay` (a TCP relay in
+  front of the shared container that holds every byte while `frozen`) for anything that fits the
+  shared suite container: point `postgres.r2dbcUrl` at `relay.relayed(PostgresTestSupport.r2dbcUrl)`
+  and give the app its own `postgres.pool.applicationName`. (2) `docker pause` on a DEDICATED
+  `PostgreSQLContainer` (image from `PostgresTestSupport.IMAGE`) started and stopped by the test
+  itself, as `DatabaseHangTest` does — NEVER pause or stop the shared `PostgresTestSupport`
+  container, the whole suite runs against it. Thaw (`relay.frozen = false` / unpause) in a
+  `finally` that runs BEFORE the application stops, so disposing the pool does not wait on silent
+  sockets; the dedicated container is unpaused again (best-effort) and stopped in an outer
+  `finally`. Every wait is a bounded poll (`withTimeoutOrNull` + `delay(100)`), never a sleep, and a
+  call against the frozen database is wrapped in an outer `withTimeout` so a regression fails the
+  test instead of hanging the suite. Use short pool bounds (`maxValidationTimeSeconds=1`,
+  `maxCreateConnectionTimeSeconds=2`, `maxAcquireTimeSeconds=3`) and expect a few seconds per case
+  (`DatabaseHangTest` costs about 12-15 s, mostly the container start).
+- **Reference:** `server/src/test/kotlin/FreezableRelay.kt`, `ConnectionPoolTest` (the relay cases),
+  `DatabaseHangTest`, and `.claude/docs/persistence.md` "A hung database is bounded".
+- **Enforcement:** manual review (no gate can tell a paused shared container from any other test
+  side effect); a pause of the shared container would surface as every later test timing out.
+- **Exception:** none.
+
 **Coverage gates.** Backend Kover enforces line- and branch-coverage floors in `server/build.gradle.kts` (`minBound(97)` line, `minBound(78)` branch, wired into `check` via `koverVerify`). The floors sit just below current actuals — the convention is to **re-measure and raise** them as coverage improves, never to lower them for new code: `check` runs only `koverVerify`, so run `./gradlew :server:koverXmlReport` for fresh actuals. Frontend vitest enforces thresholds in `web/vite.config.ts` (`test.coverage.thresholds`: 97 lines / 95 statements / 92 functions / 91 branches, same re-measure convention — the current actuals are noted in a comment beside them); run `cd web && npm run test:coverage`. One class-scoped Kover exclusion exists (`server/build.gradle.kts`, commented in place): the sixteen pure-data blueprint DTOs in `blueprints/Blueprint.kt` (2.18.0 added `BlueprintTiers`; its rules live in `BlueprintTiers.kt` and stay measured), the four logic-free entity DTOs in `entities/Entity.kt`, the six ontology-import DTOs, the four entity-query wire DTOs in `entityquery/EntityQuery.kt` (`QueryDiagnostic`, `EntityQueryProblem`, `EntityQueryCheckRequest`/`Response`), and the two findings-bearing problem bodies (`EntityInvalidProblem`, `CatalogFileInvalidProblem`), whose compiler/kotlinx-serialization synthetic constructors carry one unreachable branch per optional field — a logic-free @Serializable family is the ONLY thing that may join that list.
 
 **Static analysis (detekt).** `./gradlew detekt` runs detekt over `core` + `server` (plain rule sets, no type resolution) and rides `check`, so `build` fails on any finding — the gate is zero findings with **no baseline file**. Repo tuning lives in `config/detekt/detekt.yml`, layered on the bundled defaults; every override there carries a one-line comment naming the deliberate idiom it protects (wildcard Ktor imports, the flat feature-package layout, declarative `*Routes.kt` registrars, the validation-throw convention, guard-clause returns). Fix new findings in code first; extend the config only for a genuinely deliberate idiom, and prefer a config override over `@Suppress` (a per-site `@Suppress` needs a one-line justifying comment) — with one deliberate inversion: `TooGenericExceptionCaught` stays ACTIVE and each of the twelve best-effort boundaries across seven files (import loops, URL fetch, mail sends, jq evaluation) carries its own justified `@Suppress`, so a new generic catch is a finding until it earns one. Runs in seconds, no Docker — safe to run anytime, unlike the test suite.
