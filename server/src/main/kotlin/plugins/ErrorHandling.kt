@@ -91,6 +91,50 @@ private inline fun Throwable.anyInChain(predicate: (Throwable) -> Boolean): Bool
 private fun Throwable.hasSqlState(state: String): Boolean =
     anyInChain { it is R2dbcException && it.sqlState == state }
 
+private const val MAX_LOGGED_CAUSE_DEPTH = 16
+
+/**
+ * Stand-in logged INSTEAD of a database failure. `ExposedR2dbcException.getMessage()` appends the
+ * statements that failed (`causedByQueries()` — Exposed 1.6.0 R2DBC renders an unexpandable placeholder
+ * there, but nothing pins that), and the driver's own message can quote the offending row, so a
+ * database message may carry document contents — the never-log-document-contents rule
+ * (`.claude/docs/observability.md`) therefore never lets one through. It
+ * carries only the exception classes along the cause chain and the SQLSTATE, plus the ORIGINAL stack
+ * trace (so the failing call site stays diagnosable), and never a message.
+ */
+internal class DatabaseFailureLogged(description: String, original: Throwable) : RuntimeException(description) {
+    init {
+        stackTrace = original.stackTrace
+    }
+}
+
+/**
+ * What to hand a logger for this throwable: itself, unless a database exception (R2DBC or Exposed) sits
+ * in its cause chain, in which case a [DatabaseFailureLogged] with the classes and the SQLSTATE only.
+ * Every site that logs a throwable which may come from a query goes through this (`respondInternalError`,
+ * the readiness probe's WARN).
+ */
+internal fun Throwable.safeForLog(): Throwable {
+    val classes = ArrayList<String>()
+    var sqlState: String? = null
+    var hasDatabaseException = false
+    var cur: Throwable? = this
+    while (cur != null && classes.size < MAX_LOGGED_CAUSE_DEPTH) {
+        classes += cur.javaClass.name
+        if (cur is R2dbcException) {
+            hasDatabaseException = true
+            sqlState = sqlState ?: cur.sqlState
+        }
+        if (cur is ExposedSQLException) {
+            hasDatabaseException = true
+            sqlState = sqlState ?: cur.sqlState
+        }
+        cur = cur.cause
+    }
+    if (!hasDatabaseException) return this
+    return DatabaseFailureLogged("database failure (sqlState=${sqlState ?: "none"}, causes=${classes.joinToString(" <- ")})", this)
+}
+
 // Internal (not private): the user-import loop classifies per-row duplicates with it.
 internal fun Throwable.isUniqueViolation(): Boolean = hasSqlState(PG_UNIQUE_VIOLATION)
 
@@ -139,7 +183,11 @@ private suspend fun ApplicationCall.respondDbFailure(cause: Throwable) = when {
 // revocation-lookup failure with this same catch-all 500 instead of a 401 (the 500-not-401 rule —
 // see "An outage reads as 500, never 401" in .claude/docs/security.md).
 internal suspend fun ApplicationCall.respondInternalError(cause: Throwable) {
-    application.log.error("Unhandled exception while processing ${request.local.method.value} ${request.local.uri}", cause)
+    application.log.error(
+        // The PATH only: the query string can carry user data (an entity query's text, filters).
+        "Unhandled exception while processing ${request.local.method.value} ${request.path()}",
+        cause.safeForLog(),
+    )
     respondProblem(HttpStatusCode.InternalServerError, "An unexpected error occurred")
 }
 
