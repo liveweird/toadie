@@ -40,15 +40,6 @@ promotes it. A finished item is removed, not ticked.
 
 ## Reliability
 
-- [next] **Bound a statement already in flight when the database freezes.** 2.20.2 bounds every
-  request that reaches the pool during a hang, but a statement already on the wire when PostgreSQL
-  froze waits until it thaws (or TCP gives up), holding one pool slot (`.claude/docs/persistence.md`
-  "A hung database is bounded", Exception (i)). A fix is a decorator below the pool: a first-signal
-  timeout on every exchange, plus a poison flag that makes `validate()` fail so r2dbc-pool invalidates
-  the connection on release. It needs a fake-connection test for every delegated r2dbc-spi method. The same
-  wait applies to a commit held by a frozen server: cancelling its coroutine ends the commit await,
-  but the rollback and close that follow are non-cancellable and hold the slot until the thaw.
-
 ## Performance
 
 Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the

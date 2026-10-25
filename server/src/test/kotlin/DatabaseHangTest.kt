@@ -8,9 +8,11 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -32,7 +34,8 @@ import kotlin.test.assertTrue
  * frozen PostgreSQL: `docker pause` on a DEDICATED container. The kernel keeps ACKing the paused
  * process's sockets, exactly like the original outage, so only the pool's client-side deadlines can
  * fire. `ConnectionPoolTest` covers the same bounds with [FreezableRelay] against the shared
- * container; this single test is the end-to-end check that a pause (not a relay) is bounded and that
+ * container; this single test is the end-to-end check that a pause (not a relay) is bounded — also for a statement already in
+ * flight when it lands (the response deadline) — and that
  * the pool, the connection slot and a locking transaction all recover after the thaw.
  *
  * NEVER pause the shared [PostgresTestSupport] container: the whole suite runs against it.
@@ -94,6 +97,8 @@ class DatabaseHangTest {
                     "postgres.pool.maxAcquireTimeSeconds" to "3",
                     "postgres.pool.maxValidationTimeSeconds" to "1",
                     "postgres.pool.maxCreateConnectionTimeSeconds" to "2",
+                    "postgres.statementTimeoutSeconds" to "1",
+                    "postgres.responseTimeoutSeconds" to "2",
                 )
                 startApplication()
                 val client = authedClient(SEED_ADMIN_EMAIL, "changeme")
@@ -102,8 +107,31 @@ class DatabaseHangTest {
                 val pid0 = backendPid(db)
 
                 val dockerClient = container.dockerClient
-                dockerClient.pauseContainerCmd(container.containerId).exec()
+                // A regression (no response deadline) would leave the non-cancellable rollback waiting for the unpause that only
+                // the finally below provides; the watchdog unpauses after 15 s so it fails the test instead of hanging it.
+                val watchdog = CoroutineScope(Dispatchers.IO).launch {
+                    delay(15_000)
+                    runCatching { dockerClient.unpauseContainerCmd(container.containerId).exec() }
+                }
                 try {
+                    // A statement ALREADY on the wire when the server freezes: the pause happens inside the transaction, so
+                    // the driver (which has no read timeout) has nothing to wait on but ResponseDeadline.kt's deadline.
+                    var pausedAt = 0L
+                    val inFlight = withTimeout(20_000) {
+                        runCatching {
+                            suspendTransaction(db) {
+                                exec("SELECT 1") { row -> row.get(0) }?.toList()
+                                dockerClient.pauseContainerCmd(container.containerId).exec()
+                                pausedAt = System.nanoTime()
+                                exec("SELECT 1") { row -> row.get(0) }?.toList()
+                            }
+                        }.exceptionOrNull()
+                    }
+                    val inFlightMillis = (System.nanoTime() - pausedAt) / 1_000_000
+                    assertNotNull(inFlight, "the in-flight statement must fail rather than wait for the unpause")
+                    assertTrue(inFlight.isResponseTimeout(), "expected the response-deadline failure (08006), got $inFlight")
+                    assertTrue(inFlightMillis < 6_000, "responseTimeoutSeconds is 2: the in-flight statement took $inFlightMillis ms")
+
                     val startedAt = System.nanoTime()
                     val response = withTimeout(20_000) { client.get(CATALOG_FILES_PATH) }
                     val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000
@@ -120,6 +148,7 @@ class DatabaseHangTest {
                     assertEquals(HttpStatusCode.ServiceUnavailable, probe)
                     assertTrue(probeMillis < 5_000, "the readiness probe must answer 503 within its own deadline (took $probeMillis ms)")
                 } finally {
+                    watchdog.cancel()
                     runCatching { dockerClient.unpauseContainerCmd(container.containerId).exec() }
                 }
 

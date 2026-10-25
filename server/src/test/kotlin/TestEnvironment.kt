@@ -1051,3 +1051,10 @@ object TestSeedState {
 /** Whether this or a cause is PostgreSQL's `query_canceled` (SQLSTATE 57014), what `statement_timeout` raises. */
 fun Throwable.isQueryCanceled(): Boolean =
     generateSequence(this) { it.cause }.any { it is io.r2dbc.spi.R2dbcException && it.sqlState == "57014" }
+
+/**
+ * Whether this or a cause is the client-side response deadline (`infra/db/ResponseDeadline.kt`, SQLSTATE 08006), what a frozen
+ * database raises after `postgres.responseTimeoutSeconds`; never `isQueryCanceled()`, which is the server's own cancel.
+ */
+fun Throwable.isResponseTimeout(): Boolean =
+    generateSequence(this) { it.cause }.any { it is ch.nokillswit.infra.db.DatabaseResponseTimeoutException }

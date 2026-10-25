@@ -255,12 +255,13 @@ Backend tests live flat in `server/src/test/kotlin/` (kotlin.test + `io.ktor.ser
   call against the frozen database is wrapped in an outer `withTimeout` so a regression fails the
   test instead of hanging the suite. A test that must act while an exchange is ON THE WIRE (a commit
   sent to the frozen server) polls `relay.held` (the chunks the relay is holding) instead of sleeping,
-  and never JOINS a coroutine whose commit is held: the commit await is cancelled at once, but the
-  rollback and close that follow run non-cancellably against the frozen server, so the coroutine ends
-  only after the thaw (thaw first, then a bounded `join`). Put the freeze-to-join stretch in a
-  `try { } finally { relay.frozen = false }` so a failed assertion fails the test instead of hanging
-  it. Use short pool bounds (`maxValidationTimeSeconds=1`,
-  `maxCreateConnectionTimeSeconds=2`, `maxAcquireTimeSeconds=3`) and expect a few seconds per case
+  and JOINS a coroutine whose commit is held under `withTimeout(responseTimeout + margin)` WHILE STILL
+  FROZEN: the commit await is cancelled at once, the rollback that follows is a new exchange bounded by the
+  response deadline, so the coroutine ends within it — that join IS the pin (thaw only afterwards). Put the
+  freeze-to-join stretch in a `try { } finally { relay.frozen = false }` so a failed assertion fails the test
+  instead of hanging it. Use short bounds (`maxValidationTimeSeconds=1`,
+  `maxCreateConnectionTimeSeconds=2`, `maxAcquireTimeSeconds=3`, and `responseTimeoutSeconds=2` over
+  `statementTimeoutSeconds=1`, which the boot invariant requires to be strictly smaller) and expect a few seconds per case
   (`DatabaseHangTest` costs about 12-15 s, mostly the container start).
 - **Reference:** `server/src/test/kotlin/FreezableRelay.kt`, `ConnectionPoolTest` (the relay cases),
   `DatabaseHangTest`, and `.claude/docs/persistence.md` "A hung database is bounded".
