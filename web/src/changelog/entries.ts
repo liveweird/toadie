@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.20.3",
+    date: "2026-10-25",
+    en: `**More memory headroom under heavy load.** The server's memory allocator now keeps fewer idle memory pools, so under many simultaneous large reads Toadie peaks about 100 MiB lower and stays well inside its container's limit, with no change in speed.`,
+    pl: `**Więcej zapasu pamięci pod dużym obciążeniem.** Alokator pamięci serwera utrzymuje teraz mniej bezczynnych pul pamięci, więc przy wielu jednoczesnych dużych odczytach Toadie zużywa w szczycie około 100 MiB mniej i mieści się z zapasem w limicie kontenera, bez zmiany szybkości.`,
+  },
+  {
     version: "2.20.2",
     date: "2026-10-25",
     en: `**A stalled database no longer leaves pages loading.** When the database stops answering, Toadie now reports an error within about 20 seconds instead of waiting indefinitely, and recovers by itself once the database answers again; a connection the database dropped is replaced before a request uses it. A database statement is now stopped after 30 seconds. Error logs no longer include database messages or request query strings.`,
