@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.21.3",
+    date: "2026-10-25",
+    en: `**Very large graphs open faster.** When you show more than 300 nodes on the Graph or Entity graph page, only the nodes on screen are drawn, so "Show everything" on a 1,000-node graph blocks the page for about a third less time and uses noticeably less memory. Panning and zooming bring the rest into view as before.`,
+    pl: `**Bardzo duże grafy otwierają się szybciej.** Gdy na stronie Graf lub Graf encji widać ponad 300 węzłów, rysowane są tylko węzły na ekranie, więc „Pokaż wszystko” na grafie z 1000 węzłów blokuje stronę o około jedną trzecią krócej i zużywa wyraźnie mniej pamięci. Przesuwanie i powiększanie pokazuje resztę tak jak dotąd.`,
+  },
+  {
     version: "2.21.2",
     date: "2026-10-25",
     en: `**A fresh deployment starts cleanly.** On a new Kubernetes deployment Toadie now waits for its database to finish starting instead of restarting until it is ready. A wrong database password is now reported after about a minute rather than at once.`,

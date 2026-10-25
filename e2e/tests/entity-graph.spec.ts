@@ -393,9 +393,14 @@ test("a large entity graph opens behind the gate and lays out on request", async
     await expect(gate).toBeVisible();
     await expect(page.locator(".react-flow__node")).toHaveCount(0);
 
-    // 4. Show everything lays all 320 out (the worker; the main thread stays responsive).
+    // 4. Show everything lays all 320 out (the worker; the main thread stays responsive). Above
+    // the gate's limit the canvas mounts only the nodes in view (`onlyRenderVisibleElements`), so
+    // the DOM holds a subset; the canvas wrapper's `data-drawn-nodes` carries the laid-out count.
     await gate.getByRole("button", { name: "Show everything" }).click();
-    await expect(page.locator(".react-flow__node")).toHaveCount(total, { timeout: 60_000 });
+    await expect(page.getByTestId("rf__wrapper")).toHaveAttribute("data-drawn-nodes", String(total), {
+      timeout: 60_000,
+    });
+    await expect(page.locator(".react-flow__node").first()).toBeVisible();
     await expect(gate).toHaveCount(0);
 
     // Nothing the gate did reached the per-user layout document.

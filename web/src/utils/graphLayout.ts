@@ -157,6 +157,17 @@ export interface LayoutOptions {
 export const LARGE_GRAPH_NODES = 300;
 
 /**
+ * Whether a canvas drawing [drawnNodes] nodes is VIRTUALIZED: React Flow then mounts only the
+ * nodes and edges in view (`onlyRenderVisibleElements`). The same 300-node limit the gate uses, so
+ * only a graph that needed "Show everything" ever is, and every smaller canvas keeps mounting all
+ * of its nodes. Deliberately NOT paired with declared node sizes or `fitView` options — see the
+ * "Virtualized canvas" rule in `web/CLAUDE.md`.
+ */
+export function isVirtualized(drawnNodes: number): boolean {
+  return drawnNodes > LARGE_GRAPH_NODES;
+}
+
+/**
  * The dagre options for a canvas drawing [drawnNodes] nodes. The ranker is ALWAYS `tight-tree`:
  * the default network simplex is insertion-order sensitive, and the same 1,000-entity graph took
  * 32 s in API payload order but 270-503 s in the order the app builds it, while `tight-tree`

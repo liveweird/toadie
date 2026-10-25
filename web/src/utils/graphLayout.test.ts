@@ -8,6 +8,7 @@ import {
   FOLDED_EDGE_STYLE,
   GRAPH_NODE_HEIGHT,
   GRAPH_NODE_WIDTH,
+  isVirtualized,
   LARGE_GRAPH_NODES,
   layoutGraph,
   layoutOptions,
@@ -394,6 +395,17 @@ describe("layoutPositions / materializeLayout split", () => {
       toLayoutRequest(graph, CUSTOM_CLUSTER, { ranker: "tight-tree", disableOptimalOrderHeuristic: true }),
     );
     expect(Object.keys(positions)).toHaveLength(3);
+  });
+});
+
+describe("isVirtualized", () => {
+  test.each([
+    [0, false],
+    [LARGE_GRAPH_NODES, false],
+    [LARGE_GRAPH_NODES + 1, true],
+    [5000, true],
+  ])("%i drawn nodes -> %s", (nodes, expected) => {
+    expect(isVirtualized(nodes)).toBe(expected);
   });
 });
 

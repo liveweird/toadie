@@ -89,7 +89,9 @@
 4. They clear the "Top level" badge.
    - *Expected*: the panel returns and no canvas node is drawn.
 5. They click **Show everything**.
-   - *Expected*: all 320 nodes are drawn (the dagre layout ran off the main thread) and the
+   - *Expected*: all 320 nodes are laid out (the dagre layout ran off the main thread; the
+     canvas wrapper reports 320 drawn nodes) and only those in view are mounted (at least
+     one) — above the gate's 300-node limit React Flow mounts just the visible nodes. The
      panel is gone.
    - *Expected (whole journey)*: no `PUT` of `entity-graph-layout` was ever sent — the gate's
      choices are transient view state, never persisted.

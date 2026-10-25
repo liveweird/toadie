@@ -215,6 +215,8 @@ describe("Graph page", () => {
     renderPage();
 
     await screen.findByText(/shop \[STORED\]/);
+    // A small graph keeps mounting every node.
+    expect(screen.getByTestId("flow")).toHaveAttribute("data-virtualized", "false");
     expect(screen.getByRole("status", { name: "Loading saved layout…" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Manual" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Collapse shop" })).toBeDisabled();
@@ -657,6 +659,9 @@ describe("Graph page", () => {
 
       await waitFor(() => expect(drawn()).toBe(300));
       expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
+      // At the limit (not over it) every node is mounted.
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-virtualized", "false");
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-drawn-nodes", "300");
     });
 
     test("Show top level draws only the roots; toggling there saves nothing; Expand all brings the panel back", async () => {
@@ -688,6 +693,9 @@ describe("Graph page", () => {
       await waitFor(() => expect(drawn()).toBe(301));
       const request = vi.mocked(layoutPositions).mock.calls.at(-1)?.[0];
       expect(request?.options).toEqual({ ranker: "tight-tree", disableOptimalOrderHeuristic: true });
+      // Only a canvas that needed the gate mounts just what is in view.
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-virtualized", "true");
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-drawn-nodes", "301");
     });
   });
 

@@ -44,6 +44,7 @@ import {
   clusterFrames,
   COLLAPSED_FACE_STYLE,
   FOLDED_EDGE_STYLE,
+  isVirtualized,
   layoutOptions,
   materializeLayout,
   STATUS_STYLE,
@@ -562,6 +563,11 @@ export default function EntityGraph() {
             onNodeContextMenu={onNodeContextMenu}
             colorMode={colorScheme}
             fitView
+            onlyRenderVisibleElements={isVirtualized(nodes.length)}
+            // The drawn count straight from the store-bound array (React Flow forwards unknown props
+            // to its wrapper): with virtualization the DOM holds only what is in view, so tests
+            // read the full laid-out set here.
+            data-drawn-nodes={nodes.length}
             minZoom={0.2}
             nodesDraggable={layoutReady && mode === "manual"}
             nodesConnectable={false}
