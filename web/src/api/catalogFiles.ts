@@ -190,11 +190,18 @@ export async function importCatalogFiles(
   });
 }
 
-/** The import's dry-run: the same per-row report, predicted — nothing is stored. */
-export async function checkImportCatalogFiles(files: CatalogFileRequest[]): Promise<ImportResult> {
+/**
+ * The import's dry-run: the same per-row report, predicted — nothing is stored. Carries the same
+ * optional batch `sourceUrl` as {@link importCatalogFiles}: the server validates it identically
+ * (and never fetches it), so a rejected URL is the same `400` on both.
+ */
+export async function checkImportCatalogFiles(
+  files: CatalogFileRequest[],
+  sourceUrl?: string,
+): Promise<ImportResult> {
   return jsonRequest<ImportResult>("/api/v1/files/import/check", {
     method: "POST",
-    body: JSON.stringify({ files }),
+    body: JSON.stringify({ files, sourceUrl }),
   });
 }
 

@@ -102,7 +102,7 @@ export default function ImportCatalogFiles() {
       const response =
         mode === "import"
           ? await importCatalogFiles(current.documents, fetchedFrom ?? undefined)
-          : await checkImportCatalogFiles(current.documents);
+          : await checkImportCatalogFiles(current.documents, fetchedFrom ?? undefined);
       setResults({ mode, rows: response.results });
       if (mode === "import") {
         // The ["catalogFiles"] prefix covers every catalog-derived query: the list pages,

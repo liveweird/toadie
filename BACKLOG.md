@@ -44,12 +44,6 @@ promotes it. A finished item is removed, not ticked.
 
 ## Product
 
-- [next] **Decide whether import dry runs should validate batch `sourceUrl` like real imports.**
-  `/files/import/check`, `/blueprints/import/check`, and `/entities/import/check` currently
-  ignore an invalid batch-level source URL that the corresponding import rejects. The
-  published contract documents this difference. If changed, update the shared preflight,
-  OpenAPI/generated types, and focused regressions together. This is a product-consistency
-  improvement, not an authorization or data-integrity defect.
 - [new] **Treat empty and absent blueprint maps as equal in the sync modal.** After a sync the stored
   blueprint renders empty `relations`, `mirrorProperties`, `calculationProperties` and
   `aggregationProperties` maps, so a source document that omits them never reads "in sync": reopening
