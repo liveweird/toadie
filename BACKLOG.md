@@ -26,7 +26,7 @@ promotes it. A finished item is removed, not ticked.
   choose RPO/RTO, monitor PostgreSQL size and growth, set alerts, and confirm the backup
   schedule and retention against those targets. The 10 GiB initial claim and isolated restore
   drill are already implemented; the procedure is in [k8s/BACKUP-RESTORE.md](k8s/BACKUP-RESTORE.md).
-- [new] **Let the app wait for PostgreSQL on a fresh Kubernetes deploy.** The 2026-10-25 smoke on
+- [next] **Let the app wait for PostgreSQL on a fresh Kubernetes deploy.** The 2026-10-25 smoke on
   OrbStack (an empty `toadie` namespace, `kubectl apply -f k8s/`) restarted the app pod twice:
   Flyway's first connect got "Connection refused" while PostgreSQL was still initialising its volume,
   and the pod crash-looped until it accepted connections. It recovers by itself, but a first deploy
@@ -46,7 +46,7 @@ promotes it. A finished item is removed, not ticked.
 
 ## Reliability
 
-- [new] **Bound a statement already in flight when the database freezes.** 2.20.2 bounds every
+- [next] **Bound a statement already in flight when the database freezes.** 2.20.2 bounds every
   request that reaches the pool during a hang, but a statement already on the wire when PostgreSQL
   froze waits until it thaws (or TCP gives up), holding one pool slot (`.claude/docs/persistence.md`
   "A hung database is bounded", Exception (i)). A fix is a decorator below the pool: a first-signal
@@ -60,7 +60,7 @@ promotes it. A finished item is removed, not ticked.
 Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the
 Backstage sample to 10k files, on a disposable stack).
 
-- [new] **Draw only the visible part of very large graphs.** Since 2.20.0 the layout runs in a
+- [next] **Draw only the visible part of very large graphs.** Since 2.20.0 the layout runs in a
   worker, but "Show everything" on 1,000 entities still costs two main-thread tasks (414 ms and
   230 ms) when React Flow mounts 1,000 nodes and 3,435 edges. Measure React Flow's
   `onlyRenderVisibleElements` (and its effect on the fit-view and fold behaviour) on both canvases.
