@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.20.2",
+    date: "2026-10-25",
+    en: `**A stalled database no longer leaves pages loading.** When the database stops answering, Toadie now reports an error within about 20 seconds instead of waiting indefinitely, and recovers by itself once the database answers again; a connection the database dropped is replaced before a request uses it. A database statement is now stopped after 30 seconds. Error logs no longer include database messages or request query strings.`,
+    pl: `**Zawieszona baza danych nie zostawia już stron w ładowaniu.** Gdy baza danych przestaje odpowiadać, Toadie zgłasza błąd w ciągu około 20 sekund zamiast czekać bez końca i sam wraca do pracy, gdy baza znów odpowiada; połączenie zerwane przez bazę jest zastępowane, zanim użyje go żądanie. Pojedyncze polecenie bazy danych jest teraz przerywane po 30 sekundach. Dzienniki błędów nie zawierają już komunikatów bazy danych ani parametrów zapytań w adresach żądań.`,
+  },
+  {
     version: "2.20.1",
     date: "2026-10-25",
     en: `**Long lists stay quick.** The Hierarchy, Entity hierarchy and both Errors pages now draw only the rows on screen once a list passes 300 rows, so a 10,000-row workspace opens and scrolls without pauses; the Errors tables keep their column headers in view while you scroll. On narrow screens both hierarchies now indent deeper levels less, so deep trees fit a phone.`,

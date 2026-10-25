@@ -67,7 +67,7 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   evaluates the idle/lifetime eviction predicate on acquire and release, and also in a background
   sweep whose `backgroundEvictionInterval` defaults to `maxIdleTime`; `Database.kt` pins that sweep
   to `min(60 s, maxIdle, maxLife)` so an expired idle connection is released promptly. Lettuce
-  ported the pool in v3.16.1 and added the hung-database bounds in v4.7.1; this release ports them
+  ported the pool in v3.16.1 and added the hung-database bounds in v4.7.1; 2.20.2 ports them
   back.
 
 ### A hung database is bounded
