@@ -1,0 +1,82 @@
+name: dependabot-gradle-fixup
+
+# Computes, WITHOUT privilege, the lockfiles and verification metadata a Dependabot Gradle PR is
+# missing, and hands them over as an artifact. Nothing here writes to the repository: a person
+# validates the artifact and applies it with `.github/scripts/dependabot-gradle-fixup.sh apply <pr>`.
+# The rule, the threat model and the manual fallback: .claude/docs/dependency-reproducibility.md
+# ("the Dependabot fix-up is computed without privilege and applied by a person").
+#
+# Deliberately NOT a Quality-gate dependency, and deliberately only `pull_request` (a read-only
+# token, no repository credentials for a Dependabot run) plus `workflow_dispatch` for a manual run
+# on a branch. The job runs the bumped dependency's build, exactly like the CI backend job does, so
+# it must stay that unprivileged: never widen `permissions`, never add another trigger, never cache.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    name: Regenerate locks and checksums
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    # Job level, so a guarded-out run (a fork's lookalike branch, a maintainer's reopen) never joins
+    # the group and cannot cancel the real one; keyed on the PR number, not on a branch name anyone
+    # can choose.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'dependabot/gradle/'))
+    env:
+      # The eight data files the artifact may carry (the validator's allow-list, minus manifest.json).
+      FIXUP_FILES: gradle/verification-metadata.xml gradle.lockfile settings-gradle.lockfile buildscript-gradle.lockfile core/gradle.lockfile core/buildscript-gradle.lockfile server/gradle.lockfile server/buildscript-gradle.lockfile
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      # Empty on a manual run: the GraphQL compatibility check then falls back to origin/master.
+      GRAPHQL_BASELINE_REVISION: ${{ github.event.pull_request.base.sha }}
+    steps:
+      # The PR head itself, never the merge ref: the artifact must describe exactly this commit.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      # No dependency cache of any kind: the point is a cold, empty-home resolution.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21.0.12+8.0.LTS'
+      - name: Generate locks and checksums from an empty Gradle home
+        run: GRADLE_USER_HOME="$RUNNER_TEMP/gradle-home-generate" ./gradlew --write-locks --write-verification-metadata sha256 build :server:koverXmlReport :server:installDist --no-daemon
+      - name: Snapshot the generated files
+        run: |
+          {
+            echo '### Files changed by regeneration'
+            echo '```'
+            git diff --stat -- $FIXUP_FILES
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p "$RUNNER_TEMP/fixup"
+          tar -cf - $FIXUP_FILES | tar -xf - -C "$RUNNER_TEMP/fixup"
+      # The proof: a second empty home, strict verification, no write flags.
+      - name: Prove the snapshot with a strict build from a second empty Gradle home
+        run: GRADLE_USER_HOME="$RUNNER_TEMP/gradle-home-prove" ./gradlew --dependency-verification strict build :server:koverXmlReport :server:installDist --no-daemon
+      - name: Tripwire - the proof build left the snapshot untouched
+        run: |
+          for file in $FIXUP_FILES; do
+            cmp "$file" "$RUNNER_TEMP/fixup/$file"
+          done
+      - name: Write the manifest
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: printf '{"headSha":"%s","baseSha":"%s","pr":"%s","runId":"%s"}\n' "$HEAD_SHA" "$BASE_SHA" "$PR_NUMBER" "$RUN_ID" > "$RUNNER_TEMP/fixup/manifest.json"
+      - name: Upload the fix-up artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: gradle-fixup-${{ env.HEAD_SHA }}
+          path: ${{ runner.temp }}/fixup/
+          retention-days: 7
+          if-no-files-found: error
