@@ -2,6 +2,7 @@ import {
   createTeamEntity,
   createUserViaUi,
   expect,
+  expectNoAccessibilityViolations,
   login,
   openFilters,
   openPills,
@@ -222,10 +223,13 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
     await expect(page.getByText(c2Id, { exact: true })).toHaveCount(0);
     await expect(page.getByText(teamId, { exact: true })).toBeVisible();
     await expect(page.locator(".react-flow__node")).toHaveCount(3);
-    await expect(page.getByRole("button", { name: `Expand ${p1Title} (2 hidden)` })).toBeVisible();
+    await expect(page.getByRole("button", { name: `Expand ${p1Title}, 2 hidden` })).toBeVisible();
+    // The collapsed pill is on screen: its accessible name must carry the visible count outside
+    // any parenthetical (axe `label-content-name-mismatch`).
+    await expectNoAccessibilityViolations(page);
 
     // Expand again — p1's descendants come back.
-    await page.getByRole("button", { name: `Expand ${p1Title} (2 hidden)` }).click();
+    await page.getByRole("button", { name: `Expand ${p1Title}, 2 hidden` }).click();
     await expect(page.getByText(c1Id, { exact: true })).toBeVisible();
     await expect(page.getByText(c2Id, { exact: true })).toBeVisible();
     await expect(page.locator(".react-flow__node")).toHaveCount(5);
@@ -386,6 +390,9 @@ test("a large entity graph opens folded to its top level and shows everything on
     await expect(page.getByText("Top level", { exact: true })).toBeVisible();
     await expect(gate).toHaveCount(0);
     await expect(page.getByText(/nothing to render/i)).toHaveCount(0);
+    // The folded top level carries collapsed fold pills and the badge: axe over exactly that.
+    await expect(page.getByRole("button", { name: /^Expand .*, \d+ hidden$/ }).first()).toBeVisible();
+    await expectNoAccessibilityViolations(page);
 
     // 2. Leaving the top-level view brings the gate panel, which names the whole selection.
     await page.getByRole("button", { name: "Leave the top-level view" }).click();

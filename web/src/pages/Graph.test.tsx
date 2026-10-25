@@ -403,14 +403,14 @@ describe("Graph page", () => {
     expect(screen.getByTestId(`edge:${SHOP}->${DB}:spec.dependsOn`)).toHaveTextContent("dependsOn ×2");
     expect(screen.queryByTestId("edge:component:default/a->resource:default/db:spec.dependsOn")).not.toBeInTheDocument();
     expect(screen.queryByTestId(`edge:component:default/a->${SHOP}:spec.system`)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Expand shop (2 hidden)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand shop, 2 hidden" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand all" })).toBeInTheDocument();
     // Persisted immediately (not debounced like a drag), as the whole document.
     await waitFor(() =>
       expect(layoutPuts(mockFetch)).toEqual([{ mode: "auto", positions: {}, collapsed: [SHOP] }]),
     );
 
-    await user.click(screen.getByRole("button", { name: "Expand shop (2 hidden)" }));
+    await user.click(screen.getByRole("button", { name: "Expand shop, 2 hidden" }));
     expect(screen.getByText(/svc-a \[STORED\]/)).toBeInTheDocument();
     expect(screen.getByTestId("edge:component:default/a->resource:default/db:spec.dependsOn")).toHaveTextContent("dependsOn");
     await waitFor(() =>
@@ -425,10 +425,10 @@ describe("Graph page", () => {
 
     await screen.findByText(/svc-a \[STORED\]/);
     await user.click(screen.getByRole("button", { name: "Collapse shop" }));
-    await screen.findByRole("button", { name: "Expand shop (2 hidden)" });
+    await screen.findByRole("button", { name: "Expand shop, 2 hidden" });
 
     const callsBeforeExpand = fitViewCalls.length;
-    await user.click(screen.getByRole("button", { name: "Expand shop (2 hidden)" }));
+    await user.click(screen.getByRole("button", { name: "Expand shop, 2 hidden" }));
     await screen.findByText(/svc-a \[STORED\]/);
 
     // At least one more fit was requested after the expand…
@@ -717,7 +717,7 @@ describe("Graph page", () => {
       renderPage();
 
       await waitFor(() => expect(drawn()).toBe(2));
-      await user.click(screen.getByRole("button", { name: "Expand sys-a (150 hidden)" }));
+      await user.click(screen.getByRole("button", { name: "Expand sys-a, 150 hidden" }));
       await waitFor(() => expect(drawn()).toBe(152));
       expect(layoutPuts(mockFetch)).toEqual([]);
 
@@ -783,9 +783,9 @@ describe("Graph page", () => {
 
       await waitFor(() => expect(drawn()).toBe(2));
       // Expanding both systems draws all 301 nodes: gated again, with the top level on offer.
-      await user.click(screen.getByRole("button", { name: "Expand sys-a (150 hidden)" }));
+      await user.click(screen.getByRole("button", { name: "Expand sys-a, 150 hidden" }));
       await waitFor(() => expect(drawn()).toBe(152));
-      await user.click(screen.getByRole("button", { name: "Expand sys-b (149 hidden)" }));
+      await user.click(screen.getByRole("button", { name: "Expand sys-b, 149 hidden" }));
       expect(await panel()).toHaveTextContent("Nodes: 301");
       await user.click(screen.getByRole("button", { name: "Show top level" }));
       await waitFor(() => expect(drawn()).toBe(2));

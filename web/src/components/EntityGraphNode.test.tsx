@@ -121,7 +121,7 @@ describe("EntityGraphNode", () => {
       renderWithProviders(
         <EntityGraphNode {...withFold({ collapsed: true, descendants: 5, onToggle: vi.fn() })} />,
       );
-      expect(screen.getByRole("button", { name: "Expand Checkout (5 hidden)" })).toHaveTextContent("5");
+      expect(screen.getByRole("button", { name: "Expand Checkout, 5 hidden" })).toHaveTextContent("5");
     });
   });
 });

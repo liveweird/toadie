@@ -166,7 +166,7 @@ export function ReactFlow({
               type="button"
               aria-label={
                 n.data.fold.collapsed
-                  ? `Expand ${n.data.apiNode.name ?? n.data.apiNode.identifier} (${n.data.fold.descendants} hidden)`
+                  ? `Expand ${n.data.apiNode.name ?? n.data.apiNode.identifier}, ${n.data.fold.descendants} hidden`
                   : `Collapse ${n.data.apiNode.name ?? n.data.apiNode.identifier}`
               }
               disabled={n.data.fold.disabled}

@@ -313,7 +313,7 @@ describe("EntityGraph layout", () => {
       renderPage();
 
       await waitFor(() => expect(faces("team")).toBe(2));
-      await user.click(screen.getByRole("button", { name: "Expand alpha (150 hidden)" }));
+      await user.click(screen.getByRole("button", { name: "Expand alpha, 150 hidden" }));
       await waitFor(() => expect(faces("service")).toBe(150));
       expect(layoutPuts(mockFetch)).toEqual([]);
     });
@@ -393,9 +393,9 @@ describe("EntityGraph layout", () => {
       renderPage();
 
       await waitFor(() => expect(faces("team")).toBe(2));
-      await user.click(screen.getByRole("button", { name: "Expand alpha (150 hidden)" }));
+      await user.click(screen.getByRole("button", { name: "Expand alpha, 150 hidden" }));
       await waitFor(() => expect(faces("service")).toBe(150));
-      await user.click(screen.getByRole("button", { name: "Expand beta (149 hidden)" }));
+      await user.click(screen.getByRole("button", { name: "Expand beta, 149 hidden" }));
       expect(await panel()).toHaveTextContent("Nodes: 301");
       await user.click(screen.getByRole("button", { name: "Show top level" }));
       await waitFor(() => expect(faces("team")).toBe(2));

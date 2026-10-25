@@ -79,7 +79,7 @@
   },
   "fold": {
     "collapseAria": "Collapse {{name}}",
-    "expandAria": "Expand {{name}} ({{count}} hidden)"
+    "expandAria": "Expand {{name}}, {{count}} hidden"
   },
   "graphLayout": {
     "computing": "Laying out the graph…",
