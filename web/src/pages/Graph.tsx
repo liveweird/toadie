@@ -40,6 +40,7 @@ import {
   COLLAPSED_FACE_STYLE,
   filterGraph,
   FOLDED_EDGE_STYLE,
+  isVirtualized,
   layoutOptions,
   materializeLayout,
   NAMESPACE_CLUSTER,
@@ -440,6 +441,11 @@ export default function Graph() {
             onNodeClick={onNodeClick}
             colorMode={colorScheme}
             fitView
+            onlyRenderVisibleElements={isVirtualized(nodes.length)}
+            // The drawn count straight from the store-bound array (React Flow forwards unknown props
+            // to its wrapper): with virtualization the DOM holds only what is in view, so tests
+            // read the full laid-out set here.
+            data-drawn-nodes={nodes.length}
             // React Flow's default floor is 0.5, which fitView silently clamps to — a large
             // workspace (or a namespace-clustered one, which dagre lays out taller) then
             // spills off the canvas with no way to see it whole.

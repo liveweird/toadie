@@ -86,6 +86,8 @@ export function ReactFlow({
   nodes,
   edges,
   nodesDraggable,
+  onlyRenderVisibleElements,
+  "data-drawn-nodes": drawnNodes,
   onInit,
   onNodesChange,
   onNodeDragStart,
@@ -97,6 +99,8 @@ export function ReactFlow({
   nodes: StubNode[];
   edges: { id: string; label?: unknown; style?: { strokeDasharray?: unknown; strokeWidth?: unknown } }[];
   nodesDraggable?: boolean;
+  onlyRenderVisibleElements?: boolean;
+  "data-drawn-nodes"?: number;
   onInit?: (instance: { fitView: () => void }) => void;
   onNodesChange?: (changes: unknown[]) => void;
   onNodeDragStart?: () => void;
@@ -128,7 +132,12 @@ export function ReactFlow({
   }, []);
 
   return (
-    <div data-testid="flow" data-draggable={String(nodesDraggable ?? true)}>
+    <div
+      data-testid="flow"
+      data-draggable={String(nodesDraggable ?? true)}
+      data-virtualized={String(onlyRenderVisibleElements ?? false)}
+      data-drawn-nodes={drawnNodes}
+    >
       {/* The canvas overlays (cluster frames, Background, Controls) are children. */}
       {children}
       {/* Edges by id with their label — the fold's re-attribution is asserted on these; style

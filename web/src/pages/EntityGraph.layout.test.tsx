@@ -272,6 +272,9 @@ describe("EntityGraph layout", () => {
 
       await waitFor(() => expect(faces("service")).toBe(298));
       expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
+      // At the limit (not over it) every node is mounted.
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-virtualized", "false");
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-drawn-nodes", "300");
     });
 
     test("Show top level draws only the roots, and nothing it does is saved", async () => {
@@ -330,6 +333,9 @@ describe("EntityGraph layout", () => {
       expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
       const request = vi.mocked(layoutPositions).mock.calls.at(-1)?.[0];
       expect(request?.options).toEqual({ ranker: "tight-tree", disableOptimalOrderHeuristic: true });
+      // Only a canvas that needed the gate mounts just what is in view.
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-virtualized", "true");
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-drawn-nodes", "301");
     });
 
     test("a graph without a hierarchy offers only Show everything", async () => {
