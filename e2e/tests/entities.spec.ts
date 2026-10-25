@@ -128,10 +128,16 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     await blueprintSelect.fill(targetIdentifier);
     await page.getByRole("option", { name: targetIdentifier, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`blueprint=${targetIdentifier}`));
+    // The router writes the URL (history.replaceState) BEFORE React re-renders, so the URL can
+    // pass while "New entity" still carries its pre-pick `to="#"`; a Mantine `data-disabled`
+    // link stays clickable, and that click navigates to bare /entities, dropping the pick (one
+    // CI failure, PR #147). Gate the click on the link's own href.
+    const newEntityLink = page.getByRole("link", { name: "New entity" });
+    await expect(newEntityLink).toHaveAttribute("href", new RegExp(`blueprint=${targetIdentifier}$`));
 
     // 2. New entity, submit empty: identifier/title/required-property errors render inline
     // and nothing navigates away.
-    await page.getByRole("link", { name: "New entity" }).click();
+    await newEntityLink.click();
     const identifierInput = page.getByRole("textbox", { name: "Identifier" });
     await expect(identifierInput).toBeVisible();
     await page.getByRole("button", { name: "Create" }).click();
@@ -306,8 +312,10 @@ test("an entity is created from a blueprint, a relation blocks its deletion, and
     await blueprintSelect.fill(depIdentifier);
     await page.getByRole("option", { name: depIdentifier, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`blueprint=${depIdentifier}`));
+    // Same gate as step 1: a stale href here would open the PREVIOUS blueprint's editor.
+    await expect(newEntityLink).toHaveAttribute("href", new RegExp(`blueprint=${depIdentifier}$`));
 
-    await page.getByRole("link", { name: "New entity" }).click();
+    await newEntityLink.click();
     await expect(identifierInput).toBeVisible();
     await identifierInput.fill(entityBIdentifier);
     await page.getByRole("textbox", { name: "Title" }).fill(entityBTitle);
