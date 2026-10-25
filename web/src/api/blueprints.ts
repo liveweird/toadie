@@ -64,8 +64,8 @@ export async function importBlueprints(
   return postBlueprintImport("import", documents, replaceExisting, sourceUrl);
 }
 
-/** The dry-run: identical row shape, nothing stored or audited. `sourceUrl` is accepted for
- *  parity with `importBlueprints` (the server ignores its effect on a dry-run's classification). */
+/** The dry-run: identical row shape, nothing stored or audited. `sourceUrl` is validated exactly
+ *  as `importBlueprints` validates it (an invalid one is the same 400) but never fetched or stamped. */
 export async function checkBlueprintImport(
   documents: Record<string, unknown>[],
   replaceExisting: boolean,

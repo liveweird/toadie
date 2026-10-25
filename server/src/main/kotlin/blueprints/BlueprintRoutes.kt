@@ -8,10 +8,9 @@ import ch.nokillswit.authz.requireAdmin
 import ch.nokillswit.infra.fetch.fetchForCaller
 import ch.nokillswit.infra.fetch.UrlFetcher
 import ch.nokillswit.infra.fetch.UrlFetcherKey
-import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.infra.importing.ImportMutation
 import ch.nokillswit.infra.importing.ImportMutationKind
-import ch.nokillswit.infra.importing.requireBatchSize
+import ch.nokillswit.infra.importing.ontologyImportPreflight
 import ch.nokillswit.infra.validation.requireNoDocumentSourceUrl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -199,7 +198,7 @@ fun Application.configureBlueprintRoutes() {
                 val caller = call.caller()
                 requireAdmin(caller)
                 val request = call.receive<BlueprintImportRequest>()
-                requireBatchSize(request.documents.size)
+                ontologyImportPreflight(request.documents.size, request.sourceUrl)
                 val rows = blueprintService.importCheck(request.documents, request.replaceExisting)
                 call.respondBlueprint(HttpStatusCode.OK, BlueprintImportResponse(rows))
             }
@@ -207,12 +206,12 @@ fun Application.configureBlueprintRoutes() {
                 val caller = call.caller()
                 requireAdmin(caller)
                 val request = call.receive<BlueprintImportRequest>()
-                requireBatchSize(request.documents.size)
+                val sourceUrl = ontologyImportPreflight(request.documents.size, request.sourceUrl)
                 val rows = blueprintService.import(
                     request.documents,
                     caller.userId,
                     request.replaceExisting,
-                    sourceUrl = sanitizedSourceUrl(request.sourceUrl),
+                    sourceUrl = sourceUrl,
                 ) { mutation ->
                     auditImportedBlueprintMutation(caller.userId, mutation)
                 }

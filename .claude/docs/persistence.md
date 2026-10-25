@@ -946,6 +946,16 @@ and the sync request schemas in OpenAPI.
 Enforcement: `EntitySyncTest` and `BlueprintSyncTest`; frontend modal regressions. Exception:
 batch imports stamp their own source reference and do not use this sync guard.
 
+**Import dry-run preflight (files, blueprints, entities).** Applies when a `POST …/import` and its
+`POST …/import/check` dry-run accept a batch-level `sourceUrl`. Requirement: both run ONE route-side
+preflight, after the route's own guard and `receive` (so 401/403 win over any 400) and before any
+service call: the batch-size cap, then the `sourceUrl`'s static guards (`sanitizedSourceUrl`, the
+one home of those rules). An invalid value is therefore the same
+`400` problem on both; a valid one changes no row prediction. The check validates and never fetches;
+only the real run stamps the reference and the synced baseline. Reference:
+`infra/importing/ontologyImportPreflight` (blueprints, entities), `catalogImportPreflight` in
+`catalog/CatalogFileRoutes.kt`. Enforcement: `ImportSourceUrlPreflightTest`. Exception: none.
+
 ### Blueprint source references (V38)
 
 `ALTER TABLE blueprints ADD COLUMN source_url VARCHAR(2048) NULL, ADD COLUMN last_synced_at BIGINT

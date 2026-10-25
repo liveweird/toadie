@@ -96,6 +96,19 @@ class CatalogFiles {
 }
 
 /**
+ * The ONE route-side preflight of `POST …/files/import` AND its `/import/check` dry-run (the
+ * ontology twin is `infra/importing/ontologyImportPreflight`), run after the guard and `receive`,
+ * before any service call: the batch cap, then the batch-level `sourceUrl`'s static guards.
+ * Validation only — never a fetch. Returns the trimmed URL for the real run to stamp.
+ */
+private fun catalogImportPreflight(request: ImportRequest): String? {
+    if (request.files.size > MAX_IMPORT_FILES) {
+        throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
+    }
+    return sanitizedSourceUrl(request.sourceUrl)
+}
+
+/**
  * The catalog-file mutation audit fields, shared by created/updated/synced and the import
  * loop: `waivedFindings` (always the COUNT — one type per field name, SIEM-friendly) rides
  * along ONLY when the save actually waived something; `import`/`withFindings` are the import
@@ -217,9 +230,7 @@ fun Application.configureCatalogFileRoutes() {
             post<CatalogFiles.Import.Check> {
                 call.caller()
                 val request = call.receive<ImportRequest>()
-                if (request.files.size > MAX_IMPORT_FILES) {
-                    throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
-                }
+                catalogImportPreflight(request)
                 // The import's dry-run: the same per-row report, nothing stored. A pure
                 // computation like the other check endpoints — no audit events (and no
                 // created-audit loop: predicted rows have no fileId).
@@ -228,16 +239,14 @@ fun Application.configureCatalogFileRoutes() {
             post<CatalogFiles.Import> {
                 val caller = call.caller()
                 val request = call.receive<ImportRequest>()
-                if (request.files.size > MAX_IMPORT_FILES) {
-                    throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
-                }
+                val sourceUrl = catalogImportPreflight(request)
                 // Report & skip: the per-document orchestration lives in the service; security
                 // audits stay route-side (waived documents store too, marked withFindings).
                 val storedStatuses = setOf(ImportResultStatus.CREATED, ImportResultStatus.CREATED_WITH_FINDINGS)
                 val results = catalogFileService.import(
                     request.files,
                     caller.userId,
-                    sourceUrl = sanitizedSourceUrl(request.sourceUrl),
+                    sourceUrl = sourceUrl,
                 )
                 for (result in results.filter { it.status in storedStatuses }) {
                     val fileId = checkNotNull(result.fileId) { "stored import row without a fileId" }

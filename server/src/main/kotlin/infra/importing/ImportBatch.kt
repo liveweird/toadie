@@ -1,6 +1,7 @@
 package ch.nokillswit.infra.importing
 
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
@@ -85,6 +86,19 @@ fun requireBatchSize(size: Int) {
     if (size > MAX_IMPORT_DOCUMENTS) {
         throw BadRequestException("documents must have at most $MAX_IMPORT_DOCUMENTS entries")
     }
+}
+
+/**
+ * The ONE route-side preflight of the ontology imports, run in this order by BOTH the real
+ * `POST …/import` and its `POST …/import/check` dry-run — after the route's own guard and
+ * `receive`, before any service call: the batch-size cap, then the batch-level `sourceUrl`'s
+ * static guards ([sanitizedSourceUrl]: absolute https, no credentials, bounded length). Pure
+ * validation: nothing is fetched and the public-host check stays a fetch-time concern. Returns
+ * the trimmed URL (null when omitted/blank) for the real run to stamp; the dry-run discards it.
+ */
+fun ontologyImportPreflight(documentCount: Int, sourceUrl: String?): String? {
+    requireBatchSize(documentCount)
+    return sanitizedSourceUrl(sourceUrl)
 }
 
 /**

@@ -49,7 +49,8 @@ ch.nokillswit
 ├── infra/importing/    shared ontology bulk-import vocabulary (phase 6, v1.28.0 — the
 │                       `catalog/CatalogFileImport.kt` precedent, one level up): ImportBatch.kt —
 │                       `MAX_IMPORT_DOCUMENTS` (200), `OntologyImportStatus`, the per-row
-│                       `decodeDocument`/`rawString`/`requireBatchSize` helpers, and
+│                       `decodeDocument`/`rawString`/`requireBatchSize` helpers, `ontologyImportPreflight` (the
+│                       batch cap + `sourceUrl` check shared by each real import and its dry run), and
 │                       `orderWithDeferral` (the Kahn topological-sort skeleton — the
 │                       in-degree/queue loop and its input-order tie-break — shared by
 │                       `blueprints/BlueprintImport.kt`'s `orderCandidates` and

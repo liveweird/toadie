@@ -222,6 +222,24 @@ describe("ImportCatalogFiles page", () => {
     ).toBeInTheDocument();
   });
 
+  test("a rejected dry-run shows the same fixed-vocabulary error as a rejected import", async () => {
+    mockFetch.mockImplementation((url: string) =>
+      url === "/api/v1/files/import/check"
+        ? Promise.resolve(jsonResponse(400, { title: "Bad Request", status: 400 }))
+        : Promise.resolve(jsonResponse(404, {})),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    pasteYaml(TWO_DOCS);
+    await screen.findByText("2 documents ready to import");
+
+    await user.click(screen.getByRole("button", { name: "Check" }));
+
+    expect(
+      await screen.findByText("Too many documents for one import (the limit is 200)."),
+    ).toBeInTheDocument();
+  });
+
   test("editing the text clears stale results", async () => {
     mockFetch.mockImplementation((url: string) =>
       url === "/api/v1/files/import"
@@ -321,9 +339,14 @@ describe("ImportCatalogFiles page", () => {
 
   test("a fetched batch imports with its source URL; editing the text drops it", async () => {
     const importBodies: unknown[] = [];
+    const checkBodies: unknown[] = [];
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if (url === "/api/v1/files/fetch" && init?.method === "POST") {
         return Promise.resolve(jsonResponse(200, { content: TWO_DOCS }));
+      }
+      if (url === "/api/v1/files/import/check" && init?.method === "POST") {
+        checkBodies.push(JSON.parse(init.body as string));
+        return Promise.resolve(jsonResponse(200, { results: [] }));
       }
       if (url === "/api/v1/files/import" && init?.method === "POST") {
         importBodies.push(JSON.parse(init.body as string));
@@ -351,6 +374,12 @@ describe("ImportCatalogFiles page", () => {
     ).toBeInTheDocument();
 
     await screen.findByText("2 documents ready to import");
+    // The dry-run carries the same batch URL, so the server validates it exactly as the import does.
+    await user.click(screen.getByRole("button", { name: "Check" }));
+    await waitFor(() => expect(checkBodies).toHaveLength(1));
+    expect(checkBodies[0]).toMatchObject({
+      sourceUrl: "https://raw.githubusercontent.com/acme/svc/main/catalog-info.yaml",
+    });
     await user.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() => expect(importBodies).toHaveLength(1));
     expect(importBodies[0]).toMatchObject({
