@@ -19,6 +19,10 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   // Space-free and grammar-valid ([a-z0-9-]), so it is a legal entity name AND needs no
   // encoding gymnastics in the list-filter assertions.
   const name = uniqueText("e2e-comp");
+  // Unique too: a fixed title is shared by every concurrent copy of this test (repeat-each,
+  // a re-run against leftover residue), so the exact-text title asserts below would resolve
+  // to several rows' paragraphs and fail on strict mode instead of on the behaviour.
+  const title = `E2E Component ${name}`;
 
   // Create: the minimal Component (name/type/lifecycle/owner) plus a title.
   await page.goto("/files/new");
@@ -26,7 +30,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await pickType(page, "service");
   await pickLifecycle(page, "production");
   await page.getByRole("combobox", { name: "Owner" }).fill("group:default/platform");
-  await page.getByRole("textbox", { name: "Title", exact: true }).fill("E2E Component");
+  await page.getByRole("textbox", { name: "Title", exact: true }).fill(title);
 
   // The live preview reflects the document before anything is saved.
   const preview = page.getByLabel("YAML preview");
@@ -45,7 +49,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   await openFilters(page);
   await page.getByLabel("Name", { exact: true }).fill(name);
   await expect(page.getByText(name, { exact: true })).toBeVisible();
-  await expect(page.getByText("E2E Component", { exact: true })).toBeVisible();
+  await expect(page.getByText(title, { exact: true })).toBeVisible();
 
   // The new dropdown filters: matching type + owner keep the row (the owner option is the
   // stored group's full reference), a different type hides it; cleared, it returns.
@@ -73,7 +77,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   // Edit: retitle and deprecate — via the row's Operations menu (auto-waiting locators).
   await rowOperation(page, name, "Edit");
   await expect(page).toHaveURL(new RegExp(`/files/${fileId}/edit`));
-  await page.getByRole("textbox", { name: "Title", exact: true }).fill("E2E Component Renamed");
+  await page.getByRole("textbox", { name: "Title", exact: true }).fill(`${title} Renamed`);
   await pickLifecycle(page, "deprecated");
   await Promise.all([
     page.waitForResponse(
@@ -85,7 +89,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   // Reopen the editor — the changes persisted.
   await page.goto(`/files/${fileId}/edit`);
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
-    "E2E Component Renamed",
+    `${title} Renamed`,
   );
   await expect(page.getByRole("combobox", { name: "Lifecycle" })).toHaveValue("deprecated");
 
@@ -100,7 +104,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
       "kind: Component",
       "metadata:",
       `  name: ${name}`,
-      "  title: E2E Component Overwritten",
+      `  title: ${title} Overwritten`,
       "spec:",
       "  type: library",
       "  lifecycle: production",
@@ -115,7 +119,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
     overwrite.getByRole("button", { name: "Overwrite stored copy" }).click(),
   ]);
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
-    "E2E Component Overwritten",
+    `${title} Overwritten`,
   );
   await expect(page.getByRole("combobox", { name: "Type" })).toHaveValue("library");
   // Saving the re-seeded form must keep the overwrite, not write the old document back.
@@ -127,7 +131,7 @@ test("admin creates a component file, edits it, downloads the YAML, and deletes 
   ]);
   await page.goto(`/files/${fileId}/edit`);
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
-    "E2E Component Overwritten",
+    `${title} Overwritten`,
   );
 
   // Download hands over Backstage's canonical filename.
