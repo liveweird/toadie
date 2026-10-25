@@ -19,7 +19,7 @@ promotes it. A finished item is removed, not ticked.
   production SMTP if reset/MFA email is needed, and test email links through that origin.
   Update `k8s/templates/app-ingress.yaml` and the run-stack guide together; do not retire a
   controller used by another application.
-- [new] **Deploy an immutable application image.** Publish each release to a registry the target
+- [next] **Deploy an immutable application image.** Publish each release to a registry the target
   cluster can reach, deploy by digest instead of `toadie-app:latest`, and document the update
   and rollback procedure. Verify that the running pod's digest is the reviewed release.
 - [new] **Set production recovery targets and capacity from real measurements.** An operator must
@@ -43,11 +43,11 @@ promotes it. A finished item is removed, not ticked.
 Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the
 Backstage sample to 10k files, on a disposable stack).
 
-- [new] **Make zooming a 1,000-node graph smooth.** Since 2.21.3 a graph above 300 nodes draws only
+- [next] **Make zooming a 1,000-node graph smooth.** Since 2.21.3 a graph above 300 nodes draws only
   its visible nodes, but each animated zoom-button click on a 1,000-node canvas still costs ~0.5 s of
   main-thread work (edge painting dominates, not the node count; ~14% more than with every node
   mounted). Measure where it goes and whether edges can be simplified or culled while zooming.
-- [new] **Let "fit" show a whole very large graph.** The canvases clamp the zoom at 0.2, so on a
+- [next] **Let "fit" show a whole very large graph.** The canvases clamp the zoom at 0.2, so on a
   1,000-entity graph (a layout ~75,000 px tall) the initial fit shows only ~5% of it. Decide between a
   lower minimum zoom (with simplified node rendering when zoomed out) and opening such graphs folded.
 
