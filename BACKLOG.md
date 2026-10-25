@@ -42,19 +42,6 @@ promotes it. A finished item is removed, not ticked.
   redesign those stores, test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
   from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 
-## Performance
-
-Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the
-Backstage sample to 10k files, on a disposable stack).
-
-- [next] **Make zooming a 1,000-node graph smooth.** Since 2.21.3 a graph above 300 nodes draws only
-  its visible nodes, but each animated zoom-button click on a 1,000-node canvas still costs ~0.5 s of
-  main-thread work (edge painting dominates, not the node count; ~14% more than with every node
-  mounted). Measure where it goes and whether edges can be simplified or culled while zooming.
-- [next] **Let "fit" show a whole very large graph.** The canvases clamp the zoom at 0.2, so on a
-  1,000-entity graph (a layout ~75,000 px tall) the initial fit shows only ~5% of it. Decide between a
-  lower minimum zoom (with simplified node rendering when zoomed out) and opening such graphs folded.
-
 ## Product
 
 - [new] **Decide whether import dry runs should validate batch `sourceUrl` like real imports.**
