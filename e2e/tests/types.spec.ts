@@ -5,6 +5,7 @@ import {
   login,
   openFilters,
   pickType,
+  readyFormDialog,
   rowOperation,
   signOut,
   switchWorld,
@@ -46,6 +47,7 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
   // Edit the Domain dictionary: the unique type lands after a save.
   const domainRow = page.getByRole("row").filter({ has: page.getByText("Domain", { exact: true }) });
   await page.getByRole("button", { name: "Edit Domain" }).click();
+  await readyFormDialog(page, "Edit type dictionary");
   await dialog().getByRole("combobox", { name: "Allowed types" }).fill(extraType);
   await page.keyboard.press("Enter");
   await Promise.all([
@@ -99,6 +101,7 @@ test("admin curates the type dictionaries; a regular user reads them; the editor
 
   await page.goto("/types");
   await page.getByRole("button", { name: "Edit Domain" }).click();
+  await readyFormDialog(page, "Edit type dictionary");
   await dialog().getByRole("combobox", { name: "Allowed types" }).click();
   await page.keyboard.press("Backspace");
   await expect(dialog().getByText(extraType)).toHaveCount(0);

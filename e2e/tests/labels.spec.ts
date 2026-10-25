@@ -6,6 +6,7 @@ import {
   openFilters,
   pickLifecycle,
   pickType,
+  readyFormDialog,
   rowOperation,
   signOut,
   switchWorld,
@@ -61,6 +62,7 @@ test("admin curates the label registry; a regular user reads it; the editor enfo
 
   // Edit: a third allowed value lands after a save.
   await page.getByRole("button", { name: `Edit ${key}` }).click();
+  await readyFormDialog(page, "Edit label");
   await dialog().getByRole("combobox", { name: "Allowed values" }).fill("edge");
   await page.keyboard.press("Enter");
   await Promise.all([

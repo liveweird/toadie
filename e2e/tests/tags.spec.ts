@@ -6,6 +6,7 @@ import {
   openFilters,
   pickLifecycle,
   pickType,
+  readyFormDialog,
   rowOperation,
   signOut,
   switchWorld,
@@ -62,6 +63,7 @@ test("admin curates the tag categories; a regular user reads them; the editor en
 
   // Edit: a second tag lands after a save.
   await page.getByRole("button", { name: `Edit ${category}` }).click();
+  await readyFormDialog(page, "Edit tag category");
   await dialog().getByRole("combobox", { name: "Tags" }).fill(tagB);
   await page.keyboard.press("Enter");
   await Promise.all([

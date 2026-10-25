@@ -6,6 +6,7 @@ import {
   openFilters,
   pickLifecycle,
   pickType,
+  readyFormDialog,
   rowOperation,
   signOut,
   switchWorld,
@@ -34,6 +35,7 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
   // An empty modal submission is blocked client-side with both field errors.
   await page.getByRole("button", { name: "New annotation key" }).click();
   const dialog = () => page.getByRole("dialog");
+  await readyFormDialog(page, "New annotation key");
   await dialog().getByRole("button", { name: "Save" }).click();
   await expect(dialog().getByText(/Must be an optional lowercase-domain prefix/)).toBeVisible();
   await expect(dialog().getByText("Pick at least one kind")).toBeVisible();
@@ -57,6 +59,7 @@ test("admin curates the annotation keys; a regular user reads them; the editor e
 
   // Edit: a second kind lands after a save.
   await page.getByRole("button", { name: `Edit ${key}` }).click();
+  await readyFormDialog(page, "Edit annotation key");
   await dialog().getByRole("combobox", { name: "Applies to kinds" }).click({ force: true });
   await page.getByRole("option", { name: "API", exact: true }).click();
   await page.keyboard.press("Escape");

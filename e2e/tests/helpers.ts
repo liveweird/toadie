@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page, type Response } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page, type Response } from "@playwright/test";
 
 export { expect, test };
 
@@ -24,6 +24,23 @@ export function waitForApi(page: Page, { method, path }: { method: string; path:
 export async function readyDialog(page: Page, title: string) {
   const dialog = page.getByRole("dialog", { name: title, exact: true });
   await expect(dialog).toHaveCSS("opacity", "1");
+  return dialog;
+}
+
+/**
+ * [readyDialog] plus the focus trap's own move. A Mantine modal does two things after it
+ * mounts: it fades in, and its focus trap moves focus from the opener to the `data-autofocus`
+ * field (or the first tabbable one) a tick later. Typing or clicking a field BEFORE that move
+ * is undone by it: a combobox dropdown opened by the click closes on the blur, and text typed
+ * into a tags input is lost together with the following Enter. Traces of the 2026-10-25
+ * failures (annotations "Applies to kinds" option never appearing; tags/types edit steps whose
+ * PUT never left): the last snapshot had focus on the modal's FIRST field, the dropdown closed
+ * and the typed value missing. Use this, not bare `readyDialog`, before the first interaction
+ * with a form modal's fields; the title is the modal's heading.
+ */
+export async function readyFormDialog(page: Page, title: string) {
+  const dialog = await readyDialog(page, title);
+  await expect(dialog.locator(":focus")).toHaveCount(1);
   return dialog;
 }
 
@@ -325,6 +342,50 @@ export function runHierarchy(): string {
 }
 
 /**
+ * Commit one option of a searchable Mantine Select through the keyboard. Both picks below
+ * share it because the naive sequence (fill, wait for the option, ArrowDown, Enter) LOSES the
+ * selection now and then, and the old closing `toHaveValue` could not notice: the input
+ * still holds the TYPED text, which equals the wanted value. Trace of the 2026-10-25 hierarchy
+ * failure: the Lifecycle input read "experimental", its listbox was still open with the
+ * option marked `data-combobox-selected`, no filter request ever left the page, and the
+ * assertion after it waited out its 10s on the unfiltered tree. A probe repeating the pick
+ * under 8 parallel workers lost 87 of 800 (about 11%) that way, against 0 of 800 through
+ * this helper. The same race starves the catalog-files "No catalog files" step: its Type
+ * filter silently stays on `service`, so the row never leaves the list.
+ *
+ * Mantine tracks the keyboard-selected option by INDEX into the listbox DOM, and `fill`
+ * re-renders that list asynchronously, so an ArrowDown/Enter that lands while the list still
+ * holds the pre-filter options indexes into a list that is about to change — "the option is
+ * visible" holds on both sides of that re-render and proves nothing. So: wait until the
+ * listbox is SETTLED (every listed option matches the typed text), only then navigate, wait
+ * for Mantine's own selection marker before Enter, and finally require what a real commit
+ * does — the dropdown closes. No sleeps, no retried keystrokes.
+ */
+async function commitKeyboardOption(
+  page: Page,
+  select: Locator,
+  text: string,
+  option: Locator,
+): Promise<void> {
+  await expect(select).toHaveAttribute("aria-expanded", "true");
+  await expect(select).toHaveAttribute("aria-controls", /.+/);
+  const listbox = page.locator(`[id="${(await select.getAttribute("aria-controls")) ?? ""}"]`);
+  const wanted = text.toLowerCase();
+  await expect
+    .poll(async () => {
+      const labels = await listbox.getByRole("option").allTextContents();
+      return labels.length > 0 && labels.every((label) => label.toLowerCase().includes(wanted));
+    })
+    .toBe(true);
+  await expect(option).toBeVisible();
+  await select.press("ArrowDown");
+  await expect(option).toHaveAttribute("data-combobox-selected", "true");
+  await select.press("Enter");
+  await expect(select).toHaveAttribute("aria-expanded", "false");
+  await expect(select).toHaveValue(text);
+}
+
+/**
  * Pick a spec.type in the catalog form's Type Select (free text is not accepted — the
  * field offers only the kind's admin-defined type dictionary, seeded by V15 and re-curated
  * by V22). Same shape as [pickNamespace].
@@ -342,12 +403,9 @@ export async function pickType(page: Page, type: string): Promise<void> {
   // stable", then intercepted by the editor's sticky action bar and its fieldset in turn —
   // the filtered dropdown option keeps moving under those elements while the live
   // reference/registry check re-renders the form. A pointer click needs stable geometry;
-  // keyboard selection does not, so drive it once the exact option is visible.
+  // keyboard selection does not, so commit it through [commitKeyboardOption].
   const option = page.getByRole("option", { name: type, exact: true }).first();
-  await expect(option).toBeVisible();
-  await select.press("ArrowDown");
-  await select.press("Enter");
-  await expect(select).toHaveValue(type);
+  await commitKeyboardOption(page, select, type, option);
 }
 
 /**
@@ -363,10 +421,7 @@ export async function pickLifecycle(page: Page, lifecycle: string): Promise<void
   // stealing the pointer event while the live check re-renders) — keyboard selection needs
   // no pointer geometry, so it is deterministic where a click is not.
   const option = page.getByRole("option", { name: lifecycle, exact: true });
-  await expect(option).toBeVisible();
-  await select.press("ArrowDown");
-  await select.press("Enter");
-  await expect(select).toHaveValue(lifecycle);
+  await commitKeyboardOption(page, select, lifecycle, option);
 }
 
 /**

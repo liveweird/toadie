@@ -155,6 +155,26 @@ does not resolve, releases the hold in `finally`, then cancels. The Lenses journ
 matches exact resource URLs/methods, asserts status outside the response predicate (a failed
 HTTP response must fail directly, not be ignored until timeout), and awaits completed UI.
 
+**Form-modal focus and keyboard-picked options.** Two lost-input races found in parallel-run
+traces (2026-10-25).
+
+- **Applies when:** an E2E step interacts with a field inside a Mantine form modal, or picks an
+  option of a searchable Select through the keyboard.
+- **Requirement:** before the first field interaction in a form modal, wait with
+  `readyFormDialog(page, title)` — `readyDialog` plus "focus is inside the dialog". The modal's
+  focus trap moves focus to its first field a tick AFTER the entrance, undoing a dropdown opened
+  or text typed in between (the registry edit steps' "Applies to kinds" option never appeared; a
+  typed tag vanished with its Enter). Keyboard picks commit through `commitKeyboardOption`
+  (`pickType`/`pickLifecycle`): wait for the filtered listbox to settle, ArrowDown, wait for
+  `data-combobox-selected`, Enter, then require the dropdown to close. The bare
+  fill/ArrowDown/Enter sequence lost about 11% of picks under 8 workers (Mantine indexes the
+  keyboard-selected option into a listbox `fill` is still re-rendering) while `toHaveValue`
+  passed on the TYPED text, so a Select assertion must prove the commit, not echo the input.
+  Still no sleeps or retried keys.
+- **Reference:** `e2e/tests/helpers.ts` (`readyFormDialog`, `commitKeyboardOption`).
+- **Enforcement:** manual review; the CI fail-on-flaky policy surfaces a regression.
+- **Exception:** none.
+
 **One-time password capture.** The shared E2E `createUserViaUi` helper must wait for the
 named "User created" dialog to finish entering and for the reveal control to expose
 "Hide password" with `aria-pressed=true` before reading its code block. A successful
