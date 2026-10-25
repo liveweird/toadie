@@ -5,6 +5,10 @@
 # digest is separate open work (BACKLOG.md). See web/CLAUDE.md and CLAUDE.md for the gates
 # every bump must pass (lint/knip/coverage, detekt, lockfile regeneration).
 #
+# Temurin: the runtime JRE may sit on a same-update respin ahead of mise.toml, while the JDK stage
+# must equal mise, so a Dependabot bump of the JDK stage to that respin goes red on the parity test
+# until mise lists it. That is the intended signal (.claude/docs/dependency-reproducibility.md).
+#
 # `web/src/test/infrastructure.test.js` pins this file's existence and its five
 # (directory, ecosystem) pairs — update that test in the same commit as any pair added here.
 version: 2

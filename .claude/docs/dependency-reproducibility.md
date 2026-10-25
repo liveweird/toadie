@@ -101,6 +101,42 @@ Run the scan locally with the CI image: copy the lockfiles into a temp tree (`gr
 `docker run --rm -v <tree>:/scan:ro ghcr.io/aquasecurity/trivy:<tag>@sha256:<digest> fs --scanners vuln --include-dev-deps /scan`
 (tag and digest from `ci.yml`).
 
+## Rule: the image's OS layer, never an ignore file
+
+- **Applies when:** the CI `image` job ("Container image") reports a fixed HIGH or CRITICAL
+  vulnerability in the OS packages of the amd64 runtime image (it runs on every push/PR/merge group
+  and on `workflow_dispatch`; a newly published advisory can turn it red with no code change - the
+  OS-layer twin of the advisory-floors rule above).
+- **Requirement:** move the runtime stage to the newest CLEAN base image for the SAME Java update,
+  a respin tag (`21.0.12.N_M`) included: a new digest of the same tag is often not enough. Find
+  candidates with `docker buildx imagetools inspect eclipse-temurin:<tag>-jre` (take the multi-arch
+  INDEX digest) or the Docker Hub tag list, and re-scan the candidate locally with the script's Trivy
+  flags before pinning it.
+- **Requirement:** a later update (`21.0.13.x`) is a `mise.toml` / toolchain decision first (the JDK
+  stage, mise and CI move together), never a runtime-only jump. The JDK build stage stays on the
+  mise/CI Java build; only the runtime JRE may run a same-update respin ahead of it.
+- **Requirement:** never a `.trivyignore`, a severity downgrade or a skipped job.
+- **Reference:** `.github/scripts/image-check.sh`, `.github/workflows/ci.yml` (`image`), the Dockerfile.
+- **Enforcement:** the `image` job is part of the **Quality gate**; `web/src/test/infrastructure.test.js`
+  pins that the script builds both platforms, scans with `--pkg-types os --ignore-unfixed
+  --exit-code 1` on the Trivy command line itself, that its exit status is captured and re-raised, that a
+  scan with no `os-pkgs` target or no report fails, that it never pushes, and that it uses the same Trivy
+  pin as the Gradle advisory scan.
+- **Exception:** the gap where Ubuntu has published a fix but no Temurin image carries it yet.
+  `--ignore-unfixed` filters on the distro's fix status, not on what a Temurin digest contains, so
+  every PR stays red until Temurin republishes: wait for the republish, then re-run the job. A
+  temporary `apt-get install --only-upgrade <pkg>` in the runtime stage is allowed ONLY by the
+  maintainer's explicit decision and is removed with the next clean base image. Never a
+  `.trivyignore`, never a skipped job. Separately, a failed Trivy DB download turns the job red with
+  no report: re-run it. Only the OS layer is scanned (`--pkg-types os`): the application's Java
+  dependencies are covered by the Gradle advisory scan over the lockfiles.
+
+Hand-maintained pins: Dependabot bumps the Dockerfile's base images and the workflows' `uses:` actions,
+but NOT images named inside `run:` steps or `.github/scripts/image-check.sh`. Bump these three by hand, tag and digest together (the multi-arch
+index digest from `docker buildx imagetools inspect <image>:<tag>`): `ghcr.io/aquasecurity/trivy`
+(the same pin is in `ci.yml`'s Gradle advisory scan; the infrastructure test demands they match),
+`moby/buildkit` (the buildx builder) and `tonistiigi/binfmt` (the QEMU installer).
+
 ## Dependabot
 
 Dependabot edits `gradle/libs.versions.toml` only: expect NO lockfile updates in a Gradle bump PR

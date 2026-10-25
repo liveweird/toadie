@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.21.5",
+    date: "2026-10-25",
+    en: `**Updated server runtime.** The Toadie server image now runs on the Temurin 21.0.12.1 Java runtime, whose system libraries carry the latest security fixes for curl and OpenSSL, and it builds for both Intel/AMD and ARM servers. Every change is now checked for fixable high-severity vulnerabilities in the image before it ships.`,
+    pl: `**Zaktualizowane środowisko serwera.** Obraz serwera Toadie działa teraz na środowisku Java Temurin 21.0.12.1, którego biblioteki systemowe zawierają najnowsze poprawki bezpieczeństwa dla curl i OpenSSL, i jest budowany zarówno dla serwerów Intel/AMD, jak i ARM. Każda zmiana jest teraz sprawdzana pod kątem możliwych do usunięcia poważnych podatności w obrazie, zanim zostanie wydana.`,
+  },
+  {
     version: "2.21.4",
     date: "2026-10-25",
     en: `**A database that freezes mid-request no longer ties up a connection.** If the database stops answering while a request is already waiting on it, Toadie now gives up after 45 seconds, reports an error and replaces the connection, instead of holding it until the database recovers. A save that times out this way may still be applied once the database answers again; reload before retrying.`,

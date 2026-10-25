@@ -162,6 +162,32 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  image:
+    # Proves the Dockerfile cross-builds for linux/amd64 and linux/arm64 and blocks on a fixed
+    # HIGH/CRITICAL vulnerability in the amd64 image's OS layer. Nothing is pushed or published:
+    # the script (and its pinned buildkit/binfmt/Trivy images) is .github/scripts/image-check.sh.
+    # A red scan is fixed by moving to the newest clean base image for the same Java update
+    # (a respin tag included), never an ignore file; the full path, including the "no clean image
+    # yet" gap, is .claude/docs/dependency-reproducibility.md "Rule: the image's OS layer".
+    name: Container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The default depth-1 checkout is enough: the SPA stage stamps the version from HEAD's sha and time.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build both architectures and scan the amd64 OS layer
+        run: bash .github/scripts/image-check.sh
+      - name: Upload image advisory report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-vulnerabilities
+          path: ${{ runner.temp }}/image-vulnerabilities.json
+          retention-days: 7
+          if-no-files-found: ignore
+
   e2e:
     name: Browser journeys
     uses: ./.github/workflows/e2e.yml
@@ -171,7 +197,7 @@ jobs:
     # dependency must never turn a required check green or leave a documentation PR pending.
     name: Quality gate
     if: ${{ always() }}
-    needs: [backend, frontend, gradle-vulnerability-scan, e2e]
+    needs: [backend, frontend, gradle-vulnerability-scan, image, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -180,5 +206,6 @@ jobs:
           BACKEND: ${{ needs.backend.result }}
           FRONTEND: ${{ needs.frontend.result }}
           GRADLE_SCAN: ${{ needs.gradle-vulnerability-scan.result }}
+          IMAGE: ${{ needs.image.result }}
           E2E: ${{ needs.e2e.result }}
-        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$GRADLE_SCAN" = success && test "$E2E" = success
+        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$GRADLE_SCAN" = success && test "$IMAGE" = success && test "$E2E" = success

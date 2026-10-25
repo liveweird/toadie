@@ -19,9 +19,13 @@ promotes it. A finished item is removed, not ticked.
   production SMTP if reset/MFA email is needed, and test email links through that origin.
   Update `k8s/templates/app-ingress.yaml` and the run-stack guide together; do not retire a
   controller used by another application.
-- [next] **Deploy an immutable application image.** Publish each release to a registry the target
+- [parked] **Deploy an immutable application image.** Publish each release to a registry the target
   cluster can reach, deploy by digest instead of `toadie-app:latest`, and document the update
-  and rollback procedure. Verify that the running pod's digest is the reviewed release.
+  and rollback procedure. Verify that the running pod's digest is the reviewed release. Parked
+  2026-10-25 until a real (non-laptop) cluster is planned: on compose/OrbStack the shared local image
+  store makes it overhead. The multi-arch build and the image OS-layer scan already ship in the
+  Quality gate; a plan exists (GHCR, release-only write-once tags, attested provenance, Lettuce's
+  fail-closed digest renderer ported into `k8s/templates/`, a DEPLOY-ROLLBACK runbook).
 - [new] **Set production recovery targets and capacity from real measurements.** An operator must
   choose RPO/RTO, monitor PostgreSQL size and growth, set alerts, and confirm the backup
   schedule and retention against those targets. The 10 GiB initial claim and isolated restore
@@ -69,11 +73,12 @@ Backstage sample to 10k files, on a disposable stack).
 
 ## Housekeeping
 
-- [new] **Align Temurin with the `21.0.12.1` respin.** Dependabot proposed `eclipse-temurin:21.0.12.1_1`
-  (#116, closed by Dependabot once the Dockerfile moved to tag@digest pins), but `mise.toml` and CI's
-  `setup-java` must name the same build (`infrastructure.test.js` pins the parity) and mise does not
-  list `21.0.12.1` yet. When Dependabot reopens the bump and mise lists the build, align `mise.toml`
-  and `ci.yml` on that branch.
+- [new] **Align Temurin with the `21.0.12.1` respin.** The runtime JRE already runs
+  `eclipse-temurin:21.0.12.1_1-jre` (its image is the one the OS-layer scan passes), while the build
+  JDK, `mise.toml` and CI's `setup-java` stay on `21.0.12+8`: `infrastructure.test.js` requires the
+  JDK stage to equal mise exactly and lets the runtime run a same-update respin ahead. mise does not
+  list `21.0.12.1` yet, so a Dependabot bump of the JDK stage to the respin goes red on that parity
+  test (intended). When mise lists the build, move `mise.toml`, `ci.yml` and the JDK stage together.
 - [new] **Re-check the MCP transport facts on the first MCP Kotlin SDK bump.** The SDK is pinned
   at 0.15.0; `integration/Mcp.kt` relies on its stateless mode needing no `initialize`, on the
   Accept-header pair and on unknown tools being tool results. Re-verify those with the real
