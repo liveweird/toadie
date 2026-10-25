@@ -1,0 +1,16 @@
+{
+  "identifier": "e2e-bpsync-source",
+  "title": "E2E Blueprint Sync (from source)",
+  "description": "The remote copy that blueprint-sync.spec.ts syncs a throwaway blueprint from, fetched by the app through the SSRF guard at an immutable raw.githubusercontent.com commit URL. After any edit, commit it first and then bump FIXTURE_COMMIT in the spec to that commit.",
+  "schema": {
+    "properties": {
+      "label": { "type": "string", "title": "Label" },
+      "source_note": { "type": "string", "title": "Source note" }
+    },
+    "required": []
+  },
+  "relations": {},
+  "mirrorProperties": {},
+  "calculationProperties": {},
+  "aggregationProperties": {}
+}

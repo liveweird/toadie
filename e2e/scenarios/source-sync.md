@@ -32,7 +32,7 @@
 ## Not covered here (and why)
 
 - **The fetch→diff→overwrite happy path** — deliberately not e2e: the SSRF guard blocks
-  loopback fixture servers and the suite runs without external network (the `url-import.md`
+  loopback fixture servers and the suite (bar `blueprint-sync.md`'s pinned public-file journey) runs without external network (the `url-import.md`
   precedent). The server half (overwrite, sync-state stamping, waived findings, identity
   conflicts, the import-as-sync path) is pinned by `SyncTest.kt` against the real DB, and
   the modal's diff/side-badges/confirm flow by `SyncCatalogFileModal.test.tsx` with stubbed

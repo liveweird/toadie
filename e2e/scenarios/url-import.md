@@ -18,7 +18,7 @@
 ## Not covered here (and why)
 
 - **The happy network path (fetching a real raw.githubusercontent.com file)** — deliberately
-  not e2e: the suite must run without external network. The response-handling logic (200
+  not e2e: the suite runs without external network (bar `blueprint-sync.md`'s pinned public-file journey). The response-handling logic (200
   body, 404/redirect/oversize → 502) is covered by the server suite (`UrlFetchTest`) against
   a local fixture server, and the page's fetch→textarea wiring by
   `ImportCatalogFiles.test.tsx`.

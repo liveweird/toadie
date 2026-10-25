@@ -50,13 +50,12 @@ promotes it. A finished item is removed, not ticked.
   published contract documents this difference. If changed, update the shared preflight,
   OpenAPI/generated types, and focused regressions together. This is a product-consistency
   improvement, not an authorization or data-integrity defect.
-
-## Tests
-
-- [next] **Click through a successful blueprint sync in the browser.** The e2e suite stops at the
-  loopback refusal by design, since the SSRF guard rejects every address a local fixture server
-  could use. A success journey needs a fixture source the guard accepts and the browser suite can
-  reach; until then the server suite owns the success path.
+- [new] **Treat empty and absent blueprint maps as equal in the sync modal.** After a sync the stored
+  blueprint renders empty `relations`, `mirrorProperties`, `calculationProperties` and
+  `aggregationProperties` maps, so a source document that omits them never reads "in sync": reopening
+  the modal still shows a diff and keeps Overwrite enabled (`canonicalBlueprintDocumentJson` over
+  `blueprintExportDocument(detail)` vs. the picked source). The e2e fixture spells the four empty maps
+  out to work around it. Normalise both sides the same way and pin it with a vitest.
 
 ## Housekeeping
 
