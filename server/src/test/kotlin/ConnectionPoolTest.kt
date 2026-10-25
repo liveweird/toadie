@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.infra.db.ConnectionPoolKey
 import ch.nokillswit.infra.db.DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT
 import ch.nokillswit.infra.db.DatabaseKey
 import ch.nokillswit.infra.db.withIdleInTransactionTimeout
@@ -9,12 +10,16 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.config.ApplicationConfig
+import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import io.r2dbc.pool.ConnectionPool
 import io.r2dbc.postgresql.PostgresqlConnectionFactoryProvider
 import io.r2dbc.spi.ConnectionFactoryOptions
 import io.r2dbc.spi.Option
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -26,6 +31,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.exposed.v1.core.statements.StatementType
+import org.jetbrains.exposed.v1.r2dbc.R2dbcTransaction
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import java.sql.DriverManager
@@ -369,29 +375,79 @@ class ConnectionPoolTest {
         suspendTransaction(db) { touchDatabase() }
     }
 
+    /** The pooled backend's pid, read inside the caller's transaction. */
+    private suspend fun R2dbcTransaction.backendPid(): Int =
+        exec("SELECT pg_backend_pid()", explicitStatementType = StatementType.SELECT) { row ->
+            row.get(0, Int::class.javaObjectType)!!
+        }?.toList()?.single() ?: error("pg_backend_pid() returned no row")
+
+    /** Polls (bounded, off the test dispatcher's virtual clock) until [done] holds; false when [limitMillis] ran out. */
+    private suspend fun pollUntil(limitMillis: Long, done: () -> Boolean): Boolean =
+        withContext(Dispatchers.IO) {
+            withTimeoutOrNull(limitMillis) {
+                while (!done()) delay(50)
+                true
+            }
+        } == true
+
+    /**
+     * Thaws [relay] after [afterMillis] whatever the test does. The rollback and close after a failed exchange are
+     * non-cancellable, so on a REGRESSION (no response deadline) an outer `withTimeout` cannot abort them and the test would
+     * wait for a thaw that only its own `finally` provides: this turns that hang into an assertion failure. Cancel it AS SOON AS
+     * the frozen exchange has returned (and in `finally`): a later thaw must never be able to fake "still frozen" assertions.
+     */
+    private fun thawWatchdog(relay: FreezableRelay, afterMillis: Long = 15_000) =
+        CoroutineScope(Dispatchers.IO).launch {
+            delay(afterMillis)
+            relay.frozen = false
+        }
+
+    /**
+     * Waits (bounded) until the pool holds NO connection at all (`acquiredSize` and `allocatedSize` 0: the frozen one was
+     * invalidated, not merely released to idle), and that this happened while the relay was STILL frozen.
+     */
+    private suspend fun assertSlotFree(pool: ConnectionPool, relay: FreezableRelay) {
+        val freed = pollUntil(10_000) { pool.metrics.get().let { it.acquiredSize() == 0 && it.allocatedSize() == 0 } }
+        assertTrue(freed, "the frozen connection must be invalidated and free its pool slot")
+        assertTrue(relay.frozen, "the slot must come back WHILE THE SERVER IS STILL FROZEN")
+    }
+
+    /** Waits (bounded) until backend [pid] ended, i.e. the server read the Terminate the discarded connection queued. */
+    private suspend fun assertBackendEnds(pid: Int) =
+        assertTrue(pollUntil(10_000) { !backendExists(pid) }, "the discarded backend $pid must end once the server reads Terminate")
+
+    /** The in-flight cases' config: one slot, short hung-database bounds, a 2 s response deadline over a 1 s statement timeout. */
+    private fun ApplicationTestBuilder.configureInFlightApp(relay: FreezableRelay, prefix: String) = configureApp(
+        "postgres.r2dbcUrl" to relay.relayed(PostgresTestSupport.r2dbcUrl),
+        "postgres.pool.applicationName" to "$prefix-${UUID.randomUUID()}",
+        "postgres.pool.maxSize" to "1",
+        "postgres.pool.initialSize" to "1",
+        "postgres.pool.maxValidationTimeSeconds" to "1",
+        "postgres.pool.maxCreateConnectionTimeSeconds" to "2",
+        "postgres.pool.maxAcquireTimeSeconds" to "3",
+        "postgres.statementTimeoutSeconds" to "1",
+        "postgres.responseTimeoutSeconds" to "2",
+    )
+
     @Test
-    fun `a transaction cancelled while its commit waits on a frozen server still returns its pooled slot`() {
+    fun `a transaction cancelled while its commit waits on a frozen server ends within the response deadline and returns its slot`() {
         // An OUTCOME check of the release path (.claude/docs/persistence.md "A hung database is bounded"): cancel a
-        // transaction whose commit is held by a frozen server, and the pool's only slot must come back after the thaw.
-        // Why it does: Exposed commits (cancellable, cancelled at once), then rolls back and closes under
-        // NonCancellable; the pooled connection cleared its in-transaction flag when the commit was subscribed, so
-        // close() skips its own rollback and only validates locally and releases. The test does not pin that mechanism.
+        // transaction whose commit is held by a frozen server. Exposed commits (cancellable, cancelled at once), then rolls
+        // back and closes under NonCancellable. Exposed 1.6.0's rollback first asks `isClosed()`, i.e. `validate(LOCAL)` then
+        // `validate(REMOTE)`, and on a frozen server that pre-rollback REMOTE validation is the exchange ResponseDeadline.kt
+        // times out after the deadline: it poisons the connection, `isClosed()` then answers true, the rollback is skipped
+        // and the close invalidates the connection, so the coroutine ends WHILE the server is still frozen (before the
+        // response deadline existed this join could only complete after the thaw). The join below is the pin; the test does
+        // not assert the mechanism, only the bound.
         FreezableRelay.forTestDatabase().use { relay ->
             testApplication {
-                configureApp(
-                    "postgres.r2dbcUrl" to relay.relayed(PostgresTestSupport.r2dbcUrl),
-                    "postgres.pool.applicationName" to "pool-cancel-${UUID.randomUUID()}",
-                    "postgres.pool.maxSize" to "1",
-                    "postgres.pool.initialSize" to "1",
-                    "postgres.pool.maxValidationTimeSeconds" to "1",
-                    "postgres.pool.maxCreateConnectionTimeSeconds" to "2",
-                    "postgres.pool.maxAcquireTimeSeconds" to "3",
-                )
+                configureInFlightApp(relay, "pool-cancel")
                 startApplication()
                 val db = application.attributes[DatabaseKey]
 
                 val inBody = CompletableDeferred<Unit>()
                 val finish = CompletableDeferred<Unit>()
+                val watchdog = thawWatchdog(relay)
                 try {
                     coroutineScope {
                         val holder = launch(Dispatchers.IO) {
@@ -405,25 +461,166 @@ class ConnectionPoolTest {
                         relay.frozen = true
                         finish.complete(Unit)
                         // The commit is now ON THE WIRE, held by the frozen relay: cancel exactly there.
-                        val onTheWire = withContext(Dispatchers.IO) {
-                            withTimeoutOrNull(10_000) {
-                                while (relay.held.get() == 0) delay(10)
-                                true
-                            }
-                        }
-                        assertNotNull(onTheWire, "the commit must reach the frozen relay")
+                        assertTrue(pollUntil(10_000) { relay.held.get() > 0 }, "the commit must reach the frozen relay")
                         holder.cancel()
-                        // Not joined while frozen: the commit await is cancelled at once, but the rollback and close that
-                        // follow run non-cancellably against the frozen server, so the coroutine ends only after the thaw.
-                        relay.frozen = false
-                        withContext(Dispatchers.IO) { withTimeout(20_000) { holder.join() } }
+                        // Joined while STILL FROZEN: responseTimeoutSeconds (2) plus a margin.
+                        withContext(Dispatchers.IO) { withTimeout(2_000 + 5_000) { holder.join() } }
+                        watchdog.cancel()
+                        assertTrue(relay.frozen, "the holder must have ended WHILE THE SERVER IS STILL FROZEN")
                     }
                 } finally {
                     // A failed assertion above must fail the test, not leave the relay silent for the pool's disposal.
+                    watchdog.cancel()
                     relay.frozen = false
                 }
                 // maxSize is 1: only a released slot lets this acquire succeed (a leaked one times out after ~2 x 3 s).
                 withTimeout(20_000) { suspendTransaction(db) { touchDatabase() } }
+            }
+        }
+    }
+
+    @Test
+    fun `a statement already in flight when the server freezes fails within the response deadline and frees its slot while still frozen`() {
+        FreezableRelay.forTestDatabase().use { relay ->
+            testApplication {
+                configureInFlightApp(relay, "pool-inflight")
+                startApplication()
+                val db = application.attributes[DatabaseKey]
+                val pool = application.attributes[ConnectionPoolKey]
+
+                var oldPid = 0
+                var frozenAt = 0L
+                val watchdog = thawWatchdog(relay)
+                try {
+                    val failure = withTimeoutOrNull(20_000) {
+                        runCatching {
+                            suspendTransaction(db) {
+                                touchDatabase()
+                                oldPid = backendPid()
+                                frozenAt = System.nanoTime()
+                                relay.frozen = true
+                                // Already on the wire when the server goes silent; the driver has no read timeout.
+                                exec("SELECT 1") { row -> row.get(0) }?.toList()
+                            }
+                        }.exceptionOrNull()
+                    }
+                    watchdog.cancel()
+                    val elapsedMillis = (System.nanoTime() - frozenAt) / 1_000_000
+                    assertNotNull(failure, "the in-flight statement must fail rather than wait for the thaw")
+                    assertTrue(failure.isResponseTimeout(), "expected the response-deadline failure (08006), got $failure")
+                    assertTrue(!failure.isQueryCanceled(), "the client deadline must not masquerade as the server's 57014")
+                    assertTrue(elapsedMillis < 6_000, "responseTimeoutSeconds is 2: the failure took $elapsedMillis ms")
+                    // The slot is back WHILE THE SERVER IS STILL FROZEN: destroy is local, only the socket lingers.
+                    assertSlotFree(pool, relay)
+                } finally {
+                    watchdog.cancel()
+                    relay.frozen = false
+                }
+                withTimeout(20_000) { suspendTransaction(db) { touchDatabase() } }
+                assertBackendEnds(oldPid)
+            }
+        }
+    }
+
+    @Test
+    fun `a commit held by a frozen server fails within the response deadline without any cancel and frees its slot`() {
+        FreezableRelay.forTestDatabase().use { relay ->
+            testApplication {
+                configureInFlightApp(relay, "pool-commit")
+                startApplication()
+                val db = application.attributes[DatabaseKey]
+                val pool = application.attributes[ConnectionPoolKey]
+
+                val inBody = CompletableDeferred<Unit>()
+                val finish = CompletableDeferred<Unit>()
+                var oldPid = 0
+                val watchdog = thawWatchdog(relay)
+                try {
+                    coroutineScope {
+                        val transaction = async(Dispatchers.IO) {
+                            runCatching {
+                                suspendTransaction(db) {
+                                    touchDatabase()
+                                    oldPid = backendPid()
+                                    inBody.complete(Unit)
+                                    finish.await()
+                                }
+                            }.exceptionOrNull()
+                        }
+                        inBody.await()
+                        relay.frozen = true
+                        finish.complete(Unit)
+                        assertTrue(pollUntil(10_000) { relay.held.get() > 0 }, "the commit must reach the frozen relay")
+                        // No cancel anywhere: the commit itself is bounded (and IN DOUBT, see DatabaseResponseTimeoutException).
+                        val failure = withTimeoutOrNull(2_000 + 5_000) { transaction.await() }
+                        assertNotNull(failure, "the held commit must fail within the response deadline")
+                        assertTrue(failure.isResponseTimeout(), "expected the response-deadline failure (08006), got $failure")
+                        watchdog.cancel()
+                    }
+                    assertSlotFree(pool, relay)
+                } finally {
+                    watchdog.cancel()
+                    relay.frozen = false
+                }
+                withTimeout(20_000) { suspendTransaction(db) { touchDatabase() } }
+                assertBackendEnds(oldPid)
+            }
+        }
+    }
+
+    @Test
+    fun `on a live server the statement timeout still wins over the response deadline and discards nothing`() = testApplication {
+        val capture = LogCapture("ch.nokillswit.infra.db")
+        try {
+            configureApp(
+                "postgres.pool.applicationName" to "pool-live-${UUID.randomUUID()}",
+                "postgres.pool.maxSize" to "1",
+                "postgres.pool.initialSize" to "1",
+                "postgres.statementTimeoutSeconds" to "1",
+                "postgres.responseTimeoutSeconds" to "3",
+            )
+            startApplication()
+            val db = application.attributes[DatabaseKey]
+            val before = suspendTransaction(db) { backendPid() }
+            val failure = runCatching {
+                suspendTransaction(db) { exec("SELECT pg_sleep(2)") { row -> row.get(0) }?.toList() }
+            }.exceptionOrNull()
+            assertNotNull(failure, "a 2 s statement must not survive a 1 s statement_timeout")
+            assertTrue(failure.isQueryCanceled(), "expected the server's query_canceled (57014), got $failure")
+            assertTrue(!failure.isResponseTimeout(), "the server's cancel arrives before the client deadline")
+            // maxSize is 1: the SAME backend answers, i.e. the connection was not poisoned and replaced.
+            assertEquals(before, suspendTransaction(db) { backendPid() })
+            assertTrue(capture.events.none { "did not answer" in it.formattedMessage }, "no connection may have been discarded")
+        } finally {
+            capture.detach()
+        }
+    }
+
+    @Test
+    fun `a response deadline not longer than the statement timeout, or with the statement timeout off, fails startup naming both keys`() {
+        // 10 and 30 against the default statement timeout (30); 10 against a switched-off statement timeout.
+        for ((statement, response) in listOf("30" to "10", "30" to "30", "0" to "10")) {
+            testApplication {
+                configureApp("postgres.statementTimeoutSeconds" to statement, "postgres.responseTimeoutSeconds" to response)
+                assertStartupFails(
+                    "postgres.responseTimeoutSeconds ($response) must be 0 (off) or greater than a non-zero " +
+                        "postgres.statementTimeoutSeconds ($statement)",
+                ) { startApplication() }
+            }
+        }
+    }
+
+    @Test
+    fun `a zero response deadline turns the decorator off and boots, with the statement timeout on or off`() {
+        for ((statement, response) in listOf("30" to "0", "0" to "0")) {
+            testApplication {
+                configureApp(
+                    "postgres.pool.applicationName" to "pool-nodeadline-${UUID.randomUUID()}",
+                    "postgres.statementTimeoutSeconds" to statement,
+                    "postgres.responseTimeoutSeconds" to response,
+                )
+                startApplication()
+                suspendTransaction(application.attributes[DatabaseKey]) { touchDatabase() }
             }
         }
     }
@@ -516,6 +713,8 @@ class ConnectionPoolTest {
             "postgres.connectTimeoutSeconds" to "601",
             "postgres.statementTimeoutSeconds" to "-1",
             "postgres.statementTimeoutSeconds" to "3601",
+            "postgres.responseTimeoutSeconds" to "-1",
+            "postgres.responseTimeoutSeconds" to "3601",
         )) {
             testApplication {
                 configureApp(key to value)

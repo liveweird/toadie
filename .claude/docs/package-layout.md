@@ -19,7 +19,9 @@ ch.nokillswit
 │                       production refusal (fail-closed), null mailer = email features 503.
 │                       Consumers: self-service password reset and email MFA
 ├── infra/db/           Flyway bootstrap + the R2DBC connection/composition root + the per-connection
-│                       statement_timeout cache (StatementTimeoutCache.kt, below the pool) + the seed
+│                       statement_timeout cache (StatementTimeoutCache.kt, below the pool) + the client-side
+│                       response deadline and connection poisoning (ResponseDeadline.kt, above that cache,
+│                       still below the pool) + the seed
 │                       bootstrap (admin rotation, prod fail-closed) + Sql.kt (containsNormalized,
 │                       jsonArrayContains, orVanished) + EventLog.kt/JsonParams.kt (Lettuce's
 │                       shared per-record audit-event machinery — the EventLogTable base behind

@@ -235,6 +235,11 @@ postgres:
   # statements and per-document transaction holds are ~100 ms; Flyway's JDBC connection is not
   # affected. Set through Exposed's defaultQueryTimeout (Database.kt), never a driver option.
   statementTimeoutSeconds: "$POSTGRES_STATEMENT_TIMEOUT_SECONDS:30"
+  # Client-side deadline on every exchange with the database (ResponseDeadline.kt): the driver has no
+  # read timeout, so a statement already on the wire when the server froze would otherwise wait for the
+  # thaw. Must exceed statementTimeoutSeconds (boot-checked) so the server's own cancel wins on a live
+  # server, and a non-zero value requires a non-zero statementTimeoutSeconds; 0 = off. See persistence.md "Response deadline: every exchange below the pool".
+  responseTimeoutSeconds: "$POSTGRES_RESPONSE_TIMEOUT_SECONDS:45"
 
 # Read-only Port integration API; admin key management remains available when disabled.
 integration:

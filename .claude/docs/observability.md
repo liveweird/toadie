@@ -63,7 +63,14 @@ expression. The INPUT document is never logged, on either logger. The read ledge
 ONE INFO line on `ch.nokillswit.infra.concurrency.ReadLedger` per refused whole-workspace read —
 `ownRequest`, the requested bytes, the in-flight total and the capacity, never a caller or any
 document content — is the same kind of operational signal; the `400`/`429` it accompanies audits
-nothing (`.claude/docs/security.md` "Entity read memory budget").
+nothing (`.claude/docs/security.md` "Entity read memory budget"). The response deadline's ONE WARN on
+`ch.nokillswit.infra.db` per discarded connection — the kind of exchange (statement, commit, rollback, …) and
+the bound (seconds, or milliseconds for a sub-second bound), never SQL, parameters or a caller (`infra/db/ResponseDeadline.kt`, `.claude/docs/persistence.md`
+"Response deadline: every exchange below the pool") — is an operational signal too, not an audit event; the failure
+it causes reaches the caller as the catch-all `500`. Routes audit only after success, so a COMMIT that timed out
+and then applies at the thaw leaves a committed mutation (an admin role change, say) that answered `500` with NO
+audit line (`persistence.md` "A hung database is bounded", Exception (i)); catalog and entity history is unaffected,
+it commits in the same transaction.
 
 **User mutation deltas.** Identity/role, disabled-feature, and language writes return their
 actual predecessor from the same row-locked transaction as the mutation. Routes audit after

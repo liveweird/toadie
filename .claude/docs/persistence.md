@@ -118,14 +118,17 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
 ### A hung database is bounded
 
 - **Applies when:** touching the pool's validation/creation bounds, `defaultQueryTimeout`, the
-  `postgres.connectTimeoutSeconds` / `postgres.statementTimeoutSeconds` keys, any
+  `postgres.connectTimeoutSeconds` / `postgres.statementTimeoutSeconds` /
+  `postgres.responseTimeoutSeconds` keys, `infra/db/ResponseDeadline.kt`, any
   `queryTimeout` on a transaction, or anything that could `SET statement_timeout`.
 - **Requirement:** the R2DBC driver has no socket read timeout, so a database that accepts or
   holds connections but never answers (a paused container, a network black hole, a frozen VM)
   must be bounded by the client. Against it only a CLIENT-side deadline on an exchange can fire:
   the kernel still ACKs, so TCP keepalive and the server-side timeouts cannot. `r2dbc-pool` offers
-  exactly three such deadlines, and all are set (boot-validated, the same `.also { require(..) }`
-  idiom as the other bounds): `postgres.pool.maxValidationTimeSeconds`
+  exactly three such deadlines, and all are set, plus a fourth of Toadie's own below the pool for an
+  exchange already on the wire (`postgres.responseTimeoutSeconds`, `POSTGRES_RESPONSE_TIMEOUT_SECONDS`, default 45,
+  0..3600, 0 = off; "Response deadline: every exchange below the pool" below). All are boot-validated, the same
+  `.also { require(..) }` idiom as the other bounds: `postgres.pool.maxValidationTimeSeconds`
   (`POSTGRES_POOL_MAX_VALIDATION_SECONDS`, default 5, 1..60) together with
   `ValidationDepth.REMOTE` (every acquire runs a `SELECT 1`; a validation timeout invalidates the
   connection; the pool returns its slot before the driver's `close()`, which is local, so a frozen
@@ -135,7 +138,7 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   alone is `postgres.connectTimeoutSeconds` (`POSTGRES_CONNECT_TIMEOUT_SECONDS`, default 10,
   1..600), with TCP keepalive on. PostgreSQL's `statement_timeout` is
   `postgres.statementTimeoutSeconds` (`POSTGRES_STATEMENT_TIMEOUT_SECONDS`, default 30, 0..3600,
-  0 = off), set ONLY through Exposed's `defaultQueryTimeout` (beside `defaultMaxAttempts = 1`):
+  0 = off; boot then requires the response deadline off too), set ONLY through Exposed's `defaultQueryTimeout` (beside `defaultMaxAttempts = 1`):
   Exposed asks the driver to apply the transaction's `queryTimeout` before every statement, so a
   driver startup option or a post-allocate `SET` would be overwritten with 0 and nothing else may
   `SET statement_timeout` (the driver turns each ask into a `SET`; "Statement timeouts: the
@@ -146,7 +149,9 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   valid). No coroutine `withTimeout` around the pool: it cannot cancel the driver handshake and
   leaves rollback/release in limbo (Lettuce dropped it in v4.5.2). The promise: a request against a
   hung database fails within about 2 x `maxAcquireTimeSeconds` (r2dbc-pool retries a timed-out
-  acquire once) with the catch-all 500, and `/readyz` answers 503 within its own deadline. Cost:
+  acquire once) with the catch-all 500, and `/readyz` answers 503 within its own deadline; an exchange
+  already on the wire fails within `postgres.responseTimeoutSeconds` and its slot comes back while the
+  server is still frozen. Cost:
   one `SELECT 1` round trip per acquire (Lettuce measured +0.3 ms mean / +0.7 ms p95 per request).
   Flyway (its own short-lived JDBC connection: a frozen database at boot hangs until the
   startupProbe restarts the pod; only its connect FAILURES are retried, "Cold start" above) and `pg_dump` are out of scope.
@@ -166,7 +171,12 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   `inTopLevelSuspendTransaction` and on `R2dbcConnectionImpl.releaseConnection`. It is NOT on the
   statements or the commit (`withConnection` makes only the pool ACQUIRE non-cancellable), so cancelling
   a coroutine whose commit is on the wire to a frozen server ends the commit await at once; the rollback
-  and close that follow do wait for the server (thaw, or TCP giving up), and then release the slot.
+  and close that follow run to the end, but Exposed 1.6.0's rollback first asks `isClosed()`, which runs
+  `validate(LOCAL)` and then `validate(REMOTE)` (read from the bytecode). On a frozen server that pre-rollback
+  `validate(REMOTE)` is the exchange bounded by the response deadline: it times out after `responseTimeoutSeconds`
+  (the WARN says "validation") and poisons the connection, `isClosed()` then answers true and the rollback is
+  skipped, and the close invalidates the connection and returns the slot, so the coroutine ends within the
+  deadline even while the server is still frozen.
   Re-verify both on every Exposed or r2dbc-pool upgrade. If either stops holding, the fix is a
   `ConnectionFactory` decorator above the pool whose `Connection.close()` subscribes the pool's release
   eagerly and independently of the downstream cancel.
@@ -189,18 +199,86 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   reaches the server (`SHOW idle_in_transaction_session_timeout`: `5min` by default, `0` when off) and
   the startup-option merge keeps an operator's own value; `DatabaseHangTest` replays the incident against a
   really paused dedicated container (`.claude/docs/testing.md` "Hung-database regressions"):
-  bounded 500 and `/readyz` 503, then recovery with a replaced backend, the invalidated backend
+  bounded 500 and `/readyz` 503, a statement already in flight when the pause lands failing with the response
+  deadline, then recovery with a replaced backend, the invalidated backend
   closed and a table-locking transaction completing. The released slot is pinned by `ConnectionPoolTest`
-  as an OUTCOME (a transaction cancelled while its commit is held by the frozen relay, and one cancelled
-  inside its body, both still give a `maxSize = 1` pool back); the tests do not name the mechanism, so a
-  change in Exposed's or r2dbc-pool's close path is caught only if it actually strands the slot.
-- **Exception:** (i) a statement already on the wire when the server froze has nothing to time out
-  client-side: it waits until the server thaws or TCP gives up, holding one pool slot (backlogged,
-  not bounded in this change). Cancelling its coroutine does not shorten the wait of a commit's
-  rollback and close (see "Releasing the slot survives a cancelled coroutine" above: they are
-  non-cancellable). (ii) After a PostgreSQL restart every idle connection dies at once; each acquire
+  as an OUTCOME (a transaction cancelled while its commit is held by the frozen relay, joined WHILE FROZEN
+  within the response deadline, and one cancelled inside its body, both still give a `maxSize = 1` pool back);
+  the tests do not assert the mechanism, so a change in Exposed's or r2dbc-pool's close path is caught only if it
+  actually strands the slot. The in-flight cases are in the same class: a statement already on the wire, and a
+  commit held with no cancel at all, each fail with the response deadline in under 6 s and the pool's
+  `acquiredSize()` and `allocatedSize()` reach 0 (invalidated, not just released) WHILE THE RELAY IS STILL FROZEN
+  (`ConnectionPoolKey`; the test's thaw watchdog is cancelled before it can fake that), the old backend ends after
+  the thaw; on a live server a `statement_timeout` cancel (57014) still wins and the same backend answers
+  afterwards; the boot invariant (`responseTimeoutSeconds` is `0` or greater than a NON-ZERO
+  `statementTimeoutSeconds`, naming both keys), the range and `0` = off are boot-checked. `ResponseDeadlineConnectionTest` pins the decorator against a fake connection
+  (no database).
+- **Exception:** (i) a discarded connection is only discarded locally: its socket lingers until the thaw,
+  and its backend, with its locks, until the server reads the `Terminate` the destroy queued (which also
+  aborts the transaction the skipped rollback would have ended). A COMMIT that times out is IN DOUBT: the
+  thawed server executes it before it reads that `Terminate`, so the transaction may have committed although
+  the caller saw `DatabaseResponseTimeoutException`. Routes emit `audit(...)` only after success, so such a
+  commit that applies at the thaw leaves a committed security-relevant mutation (an admin role change, say, that
+  answered 500) with NO audit line; catalog and entity history is unaffected because it commits in the same
+  transaction. And a true black hole with a full kernel send buffer could
+  stall the `Terminate` write itself: that holds the requesting coroutine, never the pool slot. (ii) After a
+  PostgreSQL restart every idle connection dies at once; each acquire
   gets two validation attempts (`acquireRetry = 1`), so a request whose two picks are both dead still
   fails fast until the pool has refreshed.
+
+### Response deadline: every exchange below the pool
+
+- **Applies when:** touching `infra/db/ResponseDeadline.kt`, `postgres.responseTimeoutSeconds`, the factory
+  stack in `Database.kt` (`ResponseDeadlineConnectionFactory` over `StatementTimeoutCachingConnectionFactory`
+  over the driver), or upgrading r2dbc-pool, r2dbc-postgresql, r2dbc-spi or Exposed (a new SPI method on
+  `Connection`, `Statement`, `Batch` or `Result`, or a new pool release path).
+- **Requirement:** every exchange with the database has a CLIENT-side deadline, because the driver has no read
+  timeout and a frozen server's kernel keeps ACKing. `ResponseDeadlineConnection` (sits below the pool) bounds
+  with reactor `timeout`: each Mono exchange (`beginTransaction`, `commitTransaction`, `rollbackTransaction`,
+  `rollbackTransactionToSavepoint`, `createSavepoint`, `releaseSavepoint`, `setAutoCommit`, `setLockWaitTimeout`,
+  `setStatementTimeout`, `setTransactionIsolationLevel`, `validate(REMOTE)`) as a whole, and each stream (`Statement.execute()`,
+  `Batch.execute()`, `Result.getRowsUpdated`/`map`/`flatMap`, and a `filter`ed `Result`) per GAP, i.e. from the
+  subscription to the first signal and between consecutive signals. NOT bounded, on purpose: `close()` (local; the
+  destroy path must run after a poison) and `validate(LOCAL)` (a synchronous flag read). Statements, batches and
+  results are wrapped explicitly and every fluent method returns the WRAPPER (Kotlin delegation would return the
+  inner object and let `execute()` escape). Boot invariant, checked in `readPoolBounds` (startup fails otherwise,
+  naming both keys): `responseTimeoutSeconds` is `0` (off: the factory returns the inner connection unwrapped), or
+  `statementTimeoutSeconds` is non-zero AND the response deadline is strictly greater than it, so on a live server
+  the server's own 57014 always arrives first. A non-zero deadline with `statement_timeout` off is refused: a LIVE
+  lock wait longer than the deadline would be poisoned and discarded while its backend keeps waiting (PostgreSQL does
+  not notice the client is gone without `client_connection_check_interval`), the freed slot would open another
+  backend, and a lock convoy would pile backends past `maxSize` toward `max_connections`. A timeout POISONS the connection once and for good:
+  `validate(any depth)` answers `false` without asking the driver (r2dbc-pool's release then invalidates it, and the
+  driver's `close()` is local, so the slot is free at once), every other exchange fails with
+  `DatabaseResponseTimeoutException` (`R2dbcTimeoutException`, SQLSTATE `08006`, never `57014`) without touching the
+  driver, a rollback completes EMPTY (defensive: through Exposed 1.6.0 the rollback is already skipped by its
+  `isClosed()` pre-check, so this covers savepoint rollbacks and the pool's release rollback; nothing is sent to a
+  server that is not reading, and the destroy's `Terminate` aborts the transaction at the thaw), and `close()`
+  delegates unchanged. A poisoned connection is never reused: a
+  cancelled conversation is drained silently by the driver, so its protocol state is unknown. A CANCEL is not a
+  timeout and never poisons. The first poisoner logs ONE WARN on `ch.nokillswit.infra.db` (kind of exchange and
+  bound only, never SQL or parameters). COMMIT is bounded too and a timed-out COMMIT is in doubt (Exception of
+  "A hung database is bounded"). Cost: one parallel-scheduler timer task per exchange (and per streamed signal),
+  disposed on completion or cancel.
+- **Reference:** `infra/db/ResponseDeadline.kt`, `infra/db/Database.kt` (`readPoolBounds`, `connectPooled`,
+  `ConnectionPoolKey`), `application.yaml` `postgres.responseTimeoutSeconds`.
+- **Enforcement:** `ResponseDeadlineConnectionTest` (fake connection: every SPI method delegates while healthy; each
+  Mono exchange and each stream read times out and poisons; a stall mid-stream; refusal after the poison; no escape
+  through a fluent `Statement`/`Batch` method or `Result.filter`; cancel never poisons and no timer is left behind;
+  one WARN without SQL; `0` = unwrapped). Two set-equality sweeps catch SPI growth: the Publisher-returning
+  `Connection` methods (but `close`) must equal the set of bounded exchanges, and the synchronous ones must equal the
+  classified set, so a new `Connection` method fails the test (`Connection by delegate` would otherwise pass it through
+  unbounded); every method of `Statement`, `Batch` and `Result`, default methods included, must be overridden by its
+  wrapper, so a new default method fails the test too (a new abstract one also fails the compile, the wrappers do not
+  use `by`). The frozen-relay and paused-container cases are listed in the Enforcement of "A hung database is bounded".
+- **Exception:** the streaming gap is measured between signals, not against downstream demand, and the outer
+  `execute()` stream's second gap spans the WHOLE row consumption (driver 1.1.3 builds it with `windowUntil`). CPU
+  work in a consumer counts, not just suspension, and PostgreSQL does not act on a query cancel (`statement_timeout`)
+  while it is blocked writing to a client that is not reading. So the rule: keep per-statement row consumption well
+  under `responseTimeoutSeconds - statementTimeoutSeconds`. Today rows are `.toList()`ed inside the transaction, and
+  decoding, jq and query evaluation run outside it, so there is no realistic live false positive; re-check that before
+  adding a suspending or heavy row consumer inside a transaction. The `Lifecycle` interface stays hidden from the
+  pool, as for the statement-timeout cache.
 
 ### Statement timeouts: the per-connection cache
 
