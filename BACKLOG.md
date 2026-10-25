@@ -26,12 +26,6 @@ promotes it. A finished item is removed, not ticked.
   choose RPO/RTO, monitor PostgreSQL size and growth, set alerts, and confirm the backup
   schedule and retention against those targets. The 10 GiB initial claim and isolated restore
   drill are already implemented; the procedure is in [k8s/BACKUP-RESTORE.md](k8s/BACKUP-RESTORE.md).
-- [next] **Let the app wait for PostgreSQL on a fresh Kubernetes deploy.** The 2026-10-25 smoke on
-  OrbStack (an empty `toadie` namespace, `kubectl apply -f k8s/`) restarted the app pod twice:
-  Flyway's first connect got "Connection refused" while PostgreSQL was still initialising its volume,
-  and the pod crash-looped until it accepted connections. It recovers by itself, but a first deploy
-  reads as failing. Consider an init container that waits on `pg_isready`, or a bounded Flyway connect
-  retry, and keep the startupProbe budget in step.
 
 ## Scaling constraint
 
