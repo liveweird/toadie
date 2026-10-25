@@ -157,6 +157,17 @@ export interface LayoutOptions {
 export const LARGE_GRAPH_NODES = 300;
 
 /**
+ * The canvases' minimum zoom (2.22.0; React Flow's own default is 0.5, which `fitView` silently
+ * clamps to). A CONSTANT 0.05, not a per-graph fit scale: the large-graph gate's top-level
+ * views need 0.07-0.14 to fit in one view (measured on 1,000 entities / 984 files), a
+ * computed floor would make the zoom-out limit and the Controls' disabled state move with
+ * every filter change, and the floor cannot rescue "Show everything" anyway (a 1,000-node
+ * layout is about 75,000 px tall, so it would need 0.009 and fit to a sliver). It applies to
+ * every canvas, graphs at or under the gate included.
+ */
+export const GRAPH_MIN_ZOOM = 0.05;
+
+/**
  * Whether a canvas drawing [drawnNodes] nodes is VIRTUALIZED: React Flow then mounts only the
  * nodes and edges in view (`onlyRenderVisibleElements`). The same 300-node limit the gate uses, so
  * only a graph that needed "Show everything" ever is, and every smaller canvas keeps mounting all

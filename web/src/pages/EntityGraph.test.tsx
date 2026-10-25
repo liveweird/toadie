@@ -197,10 +197,10 @@ describe("EntityGraph page", () => {
 
     await screen.findByText(/checkout \[service\]/);
     await user.click(screen.getByRole("button", { name: "Collapse platform" }));
-    await screen.findByRole("button", { name: "Expand platform (1 hidden)" });
+    await screen.findByRole("button", { name: "Expand platform, 1 hidden" });
 
     const callsBeforeExpand = fitViewCalls.length;
-    await user.click(screen.getByRole("button", { name: "Expand platform (1 hidden)" }));
+    await user.click(screen.getByRole("button", { name: "Expand platform, 1 hidden" }));
     await screen.findByText(/checkout \[service\]/);
 
     // At least one more fit was requested after the expand…

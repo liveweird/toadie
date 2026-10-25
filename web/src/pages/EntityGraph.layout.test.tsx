@@ -254,11 +254,39 @@ describe("EntityGraph layout", () => {
     const faces = (blueprint: string) => screen.queryAllByText(new RegExp(String.raw`\[${blueprint}\]`)).length;
     const panel = () => screen.findByRole("region", { name: "Large graph" });
 
-    test("a graph over 300 nodes opens behind the panel: no layout, no canvas, no empty state", async () => {
+    test("a graph over 300 nodes opens on the top-level overlay: only the roots are laid out, nothing is saved", async () => {
       mockGraph(mockFetch, bigGraph(301));
       renderPage();
 
-      expect(await panel()).toHaveTextContent("Nodes: 301, relations: 299");
+      await waitFor(() => expect(faces("team")).toBe(2));
+      expect(faces("service")).toBe(0);
+      expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
+      expect(screen.getByText("Top level")).toBeInTheDocument();
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-drawn-nodes", "2");
+      // dagre never saw the 301-node graph, and the overlay is not written to the layout document.
+      expect(vi.mocked(layoutPositions).mock.calls.every(([request]) => request.nodes.length === 2)).toBe(true);
+      expect(layoutPuts(mockFetch)).toEqual([]);
+    });
+
+    test("a graph whose top level is still over 300 nodes keeps the panel: no layout, no canvas, no empty state", async () => {
+      // 301 teams with one service each: 602 nodes, and the top level still draws 301.
+      const teams = Array.from({ length: 301 }, (_, i) => `t${i}`);
+      mockGraph(mockFetch, {
+        nodes: [
+          ...teams.map((id, i) => ({
+            id: `team|${id}`, entityId: i + 1, blueprint: "team", blueprintTitle: "Team", identifier: id, title: id, findings: 0,
+          })),
+          ...teams.map((id, i) => ({
+            id: `service|s-${id}`, entityId: 1000 + i, blueprint: "service", blueprintTitle: "Service", identifier: `s-${id}`, title: `S-${id}`, findings: 0,
+          })),
+        ],
+        edges: teams.map((id) => ({
+          sourceId: `service|s-${id}`, targetId: `team|${id}`, relation: "team", hierarchies: ["composition"],
+        })),
+      });
+      renderPage();
+
+      expect(await panel()).toHaveTextContent("Nodes: 602, relations: 301");
       expect(screen.getByRole("button", { name: "Show top level" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Show everything" })).toBeInTheDocument();
       expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
@@ -266,45 +294,44 @@ describe("EntityGraph layout", () => {
       expect(vi.mocked(layoutPositions)).not.toHaveBeenCalled();
     });
 
-    test("exactly 300 nodes lay out as usual", async () => {
+    test("exactly 300 nodes lay out as usual, with the 0.05 zoom floor", async () => {
       mockGraph(mockFetch, bigGraph(300));
       renderPage();
 
       await waitFor(() => expect(faces("service")).toBe(298));
       expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
       // At the limit (not over it) every node is mounted.
       expect(screen.getByTestId("flow")).toHaveAttribute("data-virtualized", "false");
       expect(screen.getByTestId("flow")).toHaveAttribute("data-drawn-nodes", "300");
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-min-zoom", "0.05");
     });
 
-    test("Show top level draws only the roots, and nothing it does is saved", async () => {
+    test("expanding a root edits the overlay locally: no PUT of the layout document", async () => {
       mockGraph(mockFetch, bigGraph(301));
       const user = userEvent.setup();
       renderPage();
 
-      await user.click(await screen.findByRole("button", { name: "Show top level" }));
-
       await waitFor(() => expect(faces("team")).toBe(2));
-      expect(faces("service")).toBe(0);
-      expect(screen.getByText("Top level")).toBeInTheDocument();
-
-      // Expanding a root edits the overlay locally — no PUT of the layout document.
-      await user.click(screen.getByRole("button", { name: "Expand alpha (150 hidden)" }));
+      await user.click(screen.getByRole("button", { name: "Expand alpha, 150 hidden" }));
       await waitFor(() => expect(faces("service")).toBe(150));
       expect(layoutPuts(mockFetch)).toEqual([]);
     });
 
-    test("leaving the top-level view with its badge brings the panel back", async () => {
+    test("leaving the top-level view with its badge brings the panel, and Show top level returns", async () => {
       mockGraph(mockFetch, bigGraph(301));
       const user = userEvent.setup();
       renderPage();
 
-      await user.click(await screen.findByRole("button", { name: "Show top level" }));
       await waitFor(() => expect(faces("team")).toBe(2));
       await user.click(screen.getByRole("button", { name: "Leave the top-level view" }));
 
       expect(await panel()).toBeInTheDocument();
       expect(layoutPuts(mockFetch)).toEqual([]);
+
+      await user.click(screen.getByRole("button", { name: "Show top level" }));
+      await waitFor(() => expect(faces("team")).toBe(2));
+      expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
     });
 
     test("Expand all leaves the overlay too, and the panel returns", async () => {
@@ -312,7 +339,6 @@ describe("EntityGraph layout", () => {
       const user = userEvent.setup();
       renderPage();
 
-      await user.click(await screen.findByRole("button", { name: "Show top level" }));
       await waitFor(() => expect(faces("team")).toBe(2));
       await user.click(screen.getByRole("button", { name: "Expand all" }));
 
@@ -321,16 +347,75 @@ describe("EntityGraph layout", () => {
       expect(layoutPuts(mockFetch)).toEqual([]);
     });
 
-    test("Show everything draws all of it, with dagre's crossing heuristic switched off", async () => {
+    test("Expand all on the default overlay only leaves it: the saved fold is neither cleared nor PUT", async () => {
+      // 700 nodes; the saved fold hides beta's 349 services (351 left, still over 300), so the
+      // top level (two teams) opens by default.
+      mockGraph(mockFetch, bigGraph(700), 200, { mode: "auto", positions: {}, collapsed: ["team|beta"] });
+      const user = userEvent.setup();
+      renderPage();
+
+      await waitFor(() => expect(faces("team")).toBe(2));
+      expect(screen.getByText("Top level")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Expand all" }));
+
+      expect(await panel()).toHaveTextContent("Nodes: 351");
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
+      expect(layoutPuts(mockFetch)).toEqual([]);
+    });
+
+    test("a saved fold arriving late never flashes the default overlay or lays it out", async () => {
+      // The layout GET is held: the fold it carries brings 301 nodes down to 151.
+      let release: (value: Response) => void = () => {};
+      mockGraph(mockFetch, bigGraph(301));
+      const base = mockFetch.getMockImplementation() as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+      mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+        url === "/api/v1/users/9/entity-graph-layout" && init?.method !== "PUT"
+          ? new Promise<Response>((resolve) => {
+              release = resolve;
+            })
+          : base(url, init),
+      );
+      renderPage();
+
+      expect(await panel()).toHaveTextContent("Nodes: 301");
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
+      expect(vi.mocked(layoutPositions)).not.toHaveBeenCalled();
+
+      act(() => release(jsonResponse(200, { mode: "auto", positions: {}, collapsed: ["team|alpha"] })));
+      await waitFor(() => expect(faces("team") + faces("service")).toBe(151));
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
+      expect(vi.mocked(layoutPositions).mock.calls.every(([request]) => request.nodes.length === 151)).toBe(true);
+    });
+
+    test("an expand over the limit offers Show top level again, and it returns to the roots", async () => {
       mockGraph(mockFetch, bigGraph(301));
       const user = userEvent.setup();
       renderPage();
 
+      await waitFor(() => expect(faces("team")).toBe(2));
+      await user.click(screen.getByRole("button", { name: "Expand alpha, 150 hidden" }));
+      await waitFor(() => expect(faces("service")).toBe(150));
+      await user.click(screen.getByRole("button", { name: "Expand beta, 149 hidden" }));
+      expect(await panel()).toHaveTextContent("Nodes: 301");
+      await user.click(screen.getByRole("button", { name: "Show top level" }));
+      await waitFor(() => expect(faces("team")).toBe(2));
+      expect(faces("service")).toBe(0);
+      expect(layoutPuts(mockFetch)).toEqual([]);
+    });
+
+    test("Show everything, reached through the panel, draws all of it with dagre's crossing heuristic switched off", async () => {
+      mockGraph(mockFetch, bigGraph(301));
+      const user = userEvent.setup();
+      renderPage();
+
+      await waitFor(() => expect(faces("team")).toBe(2));
+      await user.click(screen.getByRole("button", { name: "Leave the top-level view" }));
       await user.click(await screen.findByRole("button", { name: "Show everything" }));
 
       await waitFor(() => expect(faces("service")).toBe(299));
       expect(faces("team")).toBe(2);
       expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
       const request = vi.mocked(layoutPositions).mock.calls.at(-1)?.[0];
       expect(request?.options).toEqual({ ranker: "tight-tree", disableOptimalOrderHeuristic: true });
       // Only a canvas that needed the gate mounts just what is in view.
@@ -338,7 +423,7 @@ describe("EntityGraph layout", () => {
       expect(screen.getByTestId("flow")).toHaveAttribute("data-drawn-nodes", "301");
     });
 
-    test("a graph without a hierarchy offers only Show everything", async () => {
+    test("a graph without a hierarchy keeps the panel and offers only Show everything", async () => {
       const flat = bigGraph(301);
       mockGraph(mockFetch, { nodes: flat.nodes, edges: [] });
       renderPage();
@@ -346,6 +431,7 @@ describe("EntityGraph layout", () => {
       await panel();
       expect(screen.queryByRole("button", { name: "Show top level" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Show everything" })).toBeInTheDocument();
+      expect(vi.mocked(layoutPositions)).not.toHaveBeenCalled();
     });
   });
 

@@ -42,7 +42,9 @@
      beneath them). A disappears — it belongs to the System — and the System's toggle now
      reads as an **Expand** pill counting one hidden entity. A's two Depends-on relations are
      NOT lost: two **dashed** `dependsOn` edges now leave the System, one to B and one to the
-     ghost, standing in for the hidden A.
+     ghost, standing in for the hidden A. With the pill on screen, an axe scan of the page's
+     `<main>` (WCAG A/AA, the accessibility spec's colour-contrast waiver) reports zero
+     violations — the pill's accessible name carries the visible count outside any parenthetical.
 6. They reload the page.
    - *Expected*: the System is still collapsed and A still hidden — the collapsed set lives
      in the per-user layout document, server-side, not in the browser.

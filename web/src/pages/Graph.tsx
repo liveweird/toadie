@@ -40,6 +40,7 @@ import {
   COLLAPSED_FACE_STYLE,
   filterGraph,
   FOLDED_EDGE_STYLE,
+  GRAPH_MIN_ZOOM,
   isVirtualized,
   layoutOptions,
   materializeLayout,
@@ -123,7 +124,14 @@ export default function Graph() {
   const filtered = useMemo(() => (data && !noKinds ? filterGraph(data, enabled) : null), [data, enabled, noKinds]);
   // The large-graph gate: the fold to draw (the transient "Top level" overlay's while active)
   // and whether the canvas may be laid out at all.
-  const gate = useLargeGraphGate(filtered, forest, collapsedSet);
+  const gate = useLargeGraphGate(
+    filtered,
+    forest,
+    collapsedSet,
+    // The saved fold is final once the layout document loaded or failed to: opening the default
+    // top-level overlay earlier would flash it for a graph the saved fold brings under the limit.
+    layout.phase !== "loading",
+  );
   const overlayActive = gate.overlay !== null;
   const toggleOverlay = gate.toggle;
 
@@ -320,9 +328,14 @@ export default function Graph() {
               size="xs"
               disabled={!overlayActive && !layoutReady}
               onClick={() => {
-                // Leaves the transient top-level view too; the saved list is cleared only if
-                // it holds anything (an empty one needs no PUT).
-                gate.clearOverlay();
+                // With the transient top-level view active this ONLY leaves it (the badge's clear
+                // button): the saved fold is the user's, and the overlay hides it rather than
+                // replacing it. Otherwise the saved list is cleared if it holds anything (an empty
+                // one needs no PUT).
+                if (overlayActive) {
+                  gate.clearOverlay();
+                  return;
+                }
                 if (collapsed.length > 0) {
                   layout.update((current) => ({ ...current, collapsed: [] }));
                 }
@@ -446,10 +459,9 @@ export default function Graph() {
             // to its wrapper): with virtualization the DOM holds only what is in view, so tests
             // read the full laid-out set here.
             data-drawn-nodes={nodes.length}
-            // React Flow's default floor is 0.5, which fitView silently clamps to — a large
-            // workspace (or a namespace-clustered one, which dagre lays out taller) then
-            // spills off the canvas with no way to see it whole.
-            minZoom={0.2}
+            // The zoom floor (0.05, GRAPH_MIN_ZOOM): a tall layout, such as a large workspace or a
+            // namespace-clustered one, must still fit one view; fitView clamps to this floor.
+            minZoom={GRAPH_MIN_ZOOM}
             nodesDraggable={layoutReady && mode === "manual"}
             nodesConnectable={false}
             edgesFocusable={false}
