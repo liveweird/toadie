@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.22.1",
+    date: "2026-10-26",
+    en: `**Import checks match the import.** When an import batch carries a source address, the Check step on the Import files and Ontology import pages now rejects an invalid address exactly as the import itself would, instead of reporting the batch as fine and failing only on Import.`,
+    pl: `**Sprawdzenie importu zgadza się z importem.** Gdy partia importu ma adres źródła, krok Sprawdź na stronach Importu plików i Importu ontologii odrzuca teraz nieprawidłowy adres dokładnie tak, jak zrobiłby to sam import, zamiast zgłaszać partię jako poprawną i kończyć się błędem dopiero przy imporcie.`,
+  },
+  {
     version: "2.22.0",
     date: "2026-10-25",
     en: `**Very large graphs open on their top level.** When the Graph or Entity graph page would show more than 300 nodes and the graph has a hierarchy, it now opens folded to its top level, fitted whole on screen, instead of asking first: a 1,000-entity graph opens in about a second. Leave the top-level view (the button beside its badge) to choose Show everything. Both graph pages can also zoom out further than before.`,
