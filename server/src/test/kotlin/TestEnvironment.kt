@@ -1047,3 +1047,7 @@ object TestSeedState {
         }
     }
 }
+
+/** Whether this or a cause is PostgreSQL's `query_canceled` (SQLSTATE 57014), what `statement_timeout` raises. */
+fun Throwable.isQueryCanceled(): Boolean =
+    generateSequence(this) { it.cause }.any { it is io.r2dbc.spi.R2dbcException && it.sqlState == "57014" }

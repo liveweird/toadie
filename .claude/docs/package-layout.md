@@ -18,7 +18,8 @@ ch.nokillswit
 │                       configureMail — MAIL_TRANSPORT log/smtp/disabled, the log-transport
 │                       production refusal (fail-closed), null mailer = email features 503.
 │                       Consumers: self-service password reset and email MFA
-├── infra/db/           Flyway bootstrap + the R2DBC connection/composition root + the seed
+├── infra/db/           Flyway bootstrap + the R2DBC connection/composition root + the per-connection
+│                       statement_timeout cache (StatementTimeoutCache.kt, below the pool) + the seed
 │                       bootstrap (admin rotation, prod fail-closed) + Sql.kt (containsNormalized,
 │                       jsonArrayContains, orVanished) + EventLog.kt/JsonParams.kt (Lettuce's
 │                       shared per-record audit-event machinery — the EventLogTable base behind

@@ -91,10 +91,12 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   1..600), with TCP keepalive on. PostgreSQL's `statement_timeout` is
   `postgres.statementTimeoutSeconds` (`POSTGRES_STATEMENT_TIMEOUT_SECONDS`, default 30, 0..3600,
   0 = off), set ONLY through Exposed's `defaultQueryTimeout` (beside `defaultMaxAttempts = 1`):
-  Exposed re-`SET`s `statement_timeout` from the transaction's `queryTimeout` before every
-  statement, so a driver startup option or a post-allocate `SET` would be overwritten with 0 and
-  nothing else may `SET statement_timeout`. It applies to every pooled statement, lock waits
-  included (`LOCK TABLE`, `FOR UPDATE`); Toadie's per-document transaction holds are ~100 ms. A live
+  Exposed asks the driver to apply the transaction's `queryTimeout` before every statement, so a
+  driver startup option or a post-allocate `SET` would be overwritten with 0 and nothing else may
+  `SET statement_timeout` (the driver turns each ask into a `SET`; "Statement timeouts: the
+  per-connection cache" below sends it only when the connection's value differs). It applies to
+  every pooled statement, lock waits included (`LOCK TABLE`, `FOR UPDATE`); Toadie's per-document
+  transaction holds are ~100 ms. A live
   server cancels a long statement itself (SQLSTATE 57014, Exposed rolls back, the connection stays
   valid). No coroutine `withTimeout` around the pool: it cannot cancel the driver handshake and
   leaves rollback/release in limbo (Lettuce dropped it in v4.5.2). The promise: a request against a
@@ -103,6 +105,26 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   one `SELECT 1` round trip per acquire (Lettuce measured +0.3 ms mean / +0.7 ms p95 per request).
   Flyway (its own short-lived JDBC connection: a frozen database at boot hangs until the
   startupProbe restarts the pod) and `pg_dump` are out of scope.
+  **Releasing the slot survives a cancelled coroutine, by construction.** r2dbc-pool 1.0.2's
+  `PooledConnection.close()` is `validate(LOCAL)`, then, only while the connection is flagged in a
+  transaction, `rollbackTransaction()`, then `ref.release()`. A subscription cancel that arrives while
+  that rollback waits on a frozen server stops the chain before the release and strands the slot for
+  good (reproduced against a bare pool on a frozen relay, 2026-10-25: `acquiredSize` stays 1 and the
+  next acquire times out). Through Exposed 1.6.0 R2DBC that cannot happen, for two reasons read from
+  the bytecode of the locked jars:
+  (1) `PooledConnection.commitTransaction()` and `rollbackTransaction()` clear the `inTransaction` flag
+  when they are SUBSCRIBED (`doOnSubscribe`), and Exposed always subscribes one of them before it
+  closes, so `close()` skips its own rollback; what is left is `validate(LOCAL)` (a synchronous
+  `Mono.fromSupplier(client::isConnected)`) and `ref.release()`, which finish during the subscription.
+  (2) The close itself is not cancellable: `NonCancellable` sits on `rollbackLoggingException`, on the
+  three `withContext(NonCancellable) { closeStatementsAndConnection }` calls in
+  `inTopLevelSuspendTransaction` and on `R2dbcConnectionImpl.releaseConnection`. It is NOT on the
+  statements or the commit (`withConnection` makes only the pool ACQUIRE non-cancellable), so cancelling
+  a coroutine whose commit is on the wire to a frozen server ends the commit await at once; the rollback
+  and close that follow do wait for the server (thaw, or TCP giving up), and then release the slot.
+  Re-verify both on every Exposed or r2dbc-pool upgrade. If either stops holding, the fix is a
+  `ConnectionFactory` decorator above the pool whose `Connection.close()` subscribes the pool's release
+  eagerly and independently of the downstream cancel.
   As a server-side backstop for a session whose client stopped talking to it with a transaction
   open, every pooled connection also carries PostgreSQL's `idle_in_transaction_session_timeout`
   (`postgres.pool.idleInTransactionTimeoutSeconds`, `POSTGRES_POOL_IDLE_IN_TRANSACTION_TIMEOUT_SECONDS`,
@@ -110,7 +132,7 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   (`withIdleInTransactionTimeout`; an `options=` already in the r2dbc URL wins) and never `SET`.
   Toadie's longest transaction is ~0.5 s, so 300 s is a wide margin. It ends only an IDLE session; a
   statement stuck `active` is `statement_timeout`'s job. Ported from Flow (without its
-  `LeakedSocketGuard` / `StatementTimeoutCache`).
+  `LeakedSocketGuard`; its `StatementTimeoutCache` is ported too, see below).
 - **Reference:** `infra/db/Database.kt` (`readPoolBounds`, `connectPooled`), `application.yaml`
   `postgres`; Lettuce `infra/db/Database.kt` and its `persistence-details.md` "A hung database is
   bounded (v4.7.1)".
@@ -123,12 +145,71 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   the startup-option merge keeps an operator's own value; `DatabaseHangTest` replays the incident against a
   really paused dedicated container (`.claude/docs/testing.md` "Hung-database regressions"):
   bounded 500 and `/readyz` 503, then recovery with a replaced backend, the invalidated backend
-  closed and a table-locking transaction completing.
+  closed and a table-locking transaction completing. The released slot is pinned by `ConnectionPoolTest`
+  as an OUTCOME (a transaction cancelled while its commit is held by the frozen relay, and one cancelled
+  inside its body, both still give a `maxSize = 1` pool back); the tests do not name the mechanism, so a
+  change in Exposed's or r2dbc-pool's close path is caught only if it actually strands the slot.
 - **Exception:** (i) a statement already on the wire when the server froze has nothing to time out
   client-side: it waits until the server thaws or TCP gives up, holding one pool slot (backlogged,
-  not bounded in this change). (ii) After a PostgreSQL restart every idle connection dies at once;
-  each acquire gets two validation attempts (`acquireRetry = 1`), so a request whose two picks are
-  both dead still fails fast until the pool has refreshed.
+  not bounded in this change). Cancelling its coroutine does not shorten the wait of a commit's
+  rollback and close (see "Releasing the slot survives a cancelled coroutine" above: they are
+  non-cancellable). (ii) After a PostgreSQL restart every idle connection dies at once; each acquire
+  gets two validation attempts (`acquireRetry = 1`), so a request whose two picks are both dead still
+  fails fast until the pool has refreshed.
+
+### Statement timeouts: the per-connection cache
+
+- **Applies when:** touching `infra/db/StatementTimeoutCache.kt`, the factory wrapping in
+  `Database.kt`, `defaultQueryTimeout`, any transaction's `queryTimeout`, upgrading r2dbc-pool,
+  r2dbc-postgresql or Exposed (a driver that implements `io.r2dbc.spi.Lifecycle` would have its
+  `postAllocate`/`preRelease` hidden from `PooledConnection` by the decorator), or adding anything
+  that could change `statement_timeout` (`SET`, `SET LOCAL`, `set_config`, `RESET`, `DISCARD`) on a
+  pooled connection.
+- **Requirement:** Exposed's R2DBC executor asks the driver for the transaction's `queryTimeout`
+  before EVERY statement and r2dbc-postgresql answers each ask with its own
+  `SET STATEMENT_TIMEOUT = <ms>` simple query that Exposed awaits.
+  `StatementTimeoutCachingConnectionFactory` (ported from Flow) wraps the unpooled factory, BELOW
+  the pool, so each physical connection remembers the value the server last confirmed and the
+  driver call is sent only when the requested value differs. Measured 2026-10-25 against a
+  dedicated PostgreSQL 18 container (`log_statement=all`, loopback, warm pool, 300 requests per
+  path): statements per authenticated request `GET /api/v1/files` 15 to 12, `/api/v1/entities`
+  30 to 22, `/entities/graph` 21 to 16, `/blueprints` 12 to 10, i.e. every `SET` gone (3, 8, 5, 2
+  per request); mean latency 3.85 to 3.50 ms, 4.84 to 3.99 ms, 3.22 to 2.74 ms and 2.57 to
+  2.15 ms (a single run each; the gain grows with the network round-trip time, ~0 on loopback).
+  No reset on release is needed: Exposed states its value before every statement, so a borrower
+  with another value simply differs from the remembered one and is sent. The one trap is that
+  PostgreSQL reverts a session-level `SET` issued INSIDE a transaction when that transaction rolls
+  back (also to a savepoint), and a statement cancelled by the timeout (SQLSTATE 57014) aborts its
+  transaction. The remembered value is therefore forgotten on every rollback, on a failed or
+  cancelled commit and on `setAutoCommit(true)`; forgotten BEFORE a `SET` goes out; and remembered
+  only once the `SET` completed under an unchanged generation (a `SET` whose reply was cancelled or
+  failed, or that outlived a rollback, is never remembered). It is kept across a successful commit,
+  which is where the gain is. The skip is decided at subscription, not when the publisher is
+  assembled. A fresh or replaced physical connection (pool eviction, `maxLifeTime`, a failed
+  validation, a killed backend) is a new decorator with nothing remembered, so its first statement
+  always sends the value; `defaultQueryTimeout = 0` is an ordinary value (sent once per connection,
+  then skipped).
+  **ONLY the transaction's `queryTimeout` may set the statement timeout.** A hand-rolled `SET`,
+  `SET LOCAL`, `set_config(.., false)`, `RESET` or `DISCARD` on a pooled connection desyncs the
+  cache from the backend (the next statement sees the requested value as unchanged and skips it).
+  Nothing in `server/src/main` does any of these (grep, 2026-10-25), and neither r2dbc-pool 1.0.2
+  nor r2dbc-postgresql 1.1.3 issues a `RESET`/`DISCARD` on release or checkout (checked in the
+  bytecode). Deployment assumption: one client connection is one server session; a
+  transaction-mode PgBouncer in front of PostgreSQL would break the cache (none today).
+- **Reference:** `infra/db/StatementTimeoutCache.kt`, `infra/db/Database.kt` (`connectPooled`),
+  Flow `infra/db/StatementTimeoutCache.kt` and its `persistence.md`.
+- **Enforcement:** `StatementTimeoutCachingConnectionTest` (a recording fake `Connection`, no
+  database) pins the skip, the generation guard, forgetting on rollback, savepoint rollback,
+  `setAutoCommit(true)` and a failed or cancelled commit, and that every other SPI method
+  delegates; `StatementTimeoutCacheTest` (each case on its own one-connection pool built like
+  `Database.kt`'s) pins convergence of every borrower to its own value including 0, the rolled-back
+  `SET`, the aborted-transaction canary (the driver's ROLLBACK-tag exception plus Exposed's
+  rollback after a failed commit), a budget enforced again after a cancelled statement (57014), a
+  killed backend replaced and given the value again, and the skip with its limit; and
+  `ConnectionPoolTest`'s statement-timeout cases pin the same through the application wiring. The
+  rule that nothing else may set the timeout is enforced by manual review (a grep gate is not
+  worth its false positives: `SET` and `RESET` are ordinary words in this codebase).
+- **Exception:** none.
 
 **Cross-feature table reads (the service-layer rule, inherited from Lettuce).** A feature service MAY query another feature's Exposed table objects directly when the read must run **inside its own transaction** (SQL joins, atomic snapshots) — calling the other feature's *service* would open a second transaction and break atomicity. Route handlers never touch tables (services only). The reads in place: `BlueprintService`'s read of the active `HIERARCHY` rows in `DictionaryService.Entries` (every `hierarchyRelations` key must be one, inside the V27 locked write) and `DictionaryService.replace`'s read of `BlueprintService.Blueprints` (the hierarchy referrer check, under the same lock — V34), `CatalogFileService.joined()`, `LensService.joined()`, and `EntityService.joined()` (catalog list/read, the lens list, and the entity list/read join `UserService.Users` for the creator's display fields), `EntityService.errors`'s read of `SavedEntityQueryService.EntityQueries` via the extracted `savedQueriesVisibleTo(callerId)` predicate (2.5.0 — inside the errors report's own read transaction, the `joined()` idiom above), `EntityService`'s `narrowTargets`/`loadReadSet` (`entities/EntityWorkspaceRead.kt`, 2.4.0) — the per-call read of active rows from `BlueprintService.Blueprints`, the `_team`/`_user` system blueprints (if they exist), and the set of blueprints named by any Inherited `ownership.path` (rows raw inside the transaction, decoded outside it under the read ledger), used to validate relation targets and compute inherited teams (since 2.10.0, `EntityService.loadActiveBlueprints` — the shared `ActiveBlueprint` read behind `list`/`graph`/`errors` alike — also carries each blueprint's `source_url`, so the errors report can decide the blueprint-row `SOURCE_MISSING` finding without a second query). The definition each entity's `entityFindings` is checked against, and every map (`(blueprintId, identifier)` pairs for relations, `(blueprintId, teamId)` for ownership, and the blueprint-graph for path-following) are read inside the calling write/list/read transaction so an entity is never validated against definitions mid-change — see the V28 lock protocol below, `CatalogRegistryReader.resolveNamespace()` (every catalog write resolves its namespace against the active `NAMESPACE` dictionary entries inside the write's own transaction: blank → the ADMIN-flagged default entry, none flagged → 400; a concrete value must be an active entry — STRICT, no grandfathering: a stored file whose namespace was since removed cannot be saved until it is re-added or changed. The stored row AND content JSON always carry the resolved concrete value), and `CatalogRegistryReader.loadSnapshot()` (one snapshot of the five soft-check registries — active labels with kinds+closed value lists, annotation keys with kinds, tag categories, per-kind `entity_types` dictionaries, and the GLOBAL `LIFECYCLE` dictionary entries — plus the active `NAMESPACE` dictionary values (feeding ONLY the Errors report's report-only namespace check, never the soft checks) — read inside the calling write/report transaction; the soft rules themselves are the PURE `registryFindings` in `catalog/Errors.kt`: label key registered + kind allowed + value in the closed list, annotation KEY registered + kind allowed with values staying free, tag registered in a category whose kinds allow the file's kind, non-blank `spec.type` in the kind's active dictionary — no dictionary allows no types — and non-blank `spec.lifecycle` an active entry, byte-exact against the lowercase-folded stored values; empty registries allow nothing). These are the write path's SOFT checks (`CatalogFileService.softFindings` adds reference resolution): strict by default with the same no-grandfathering rule — a stored file whose registry row was since removed cannot be strict-saved until fixed — but waivable per write via `allowInvalid=true` (see `.claude/docs/authorization.md`), and the same snapshot feeds the Errors report (`GET …/errors` — which adds the report-only `STRUCTURE_INVALID`/`NAMESPACE_NOT_ALLOWED` checks over stored content, rules that stay HARD on writes) and `POST …/check`.
 

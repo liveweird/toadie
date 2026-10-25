@@ -15,6 +15,7 @@ import io.r2dbc.spi.ConnectionFactoryOptions
 import io.r2dbc.spi.Option
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
@@ -369,6 +370,92 @@ class ConnectionPoolTest {
     }
 
     @Test
+    fun `a transaction cancelled while its commit waits on a frozen server still returns its pooled slot`() {
+        // An OUTCOME check of the release path (.claude/docs/persistence.md "A hung database is bounded"): cancel a
+        // transaction whose commit is held by a frozen server, and the pool's only slot must come back after the thaw.
+        // Why it does: Exposed commits (cancellable, cancelled at once), then rolls back and closes under
+        // NonCancellable; the pooled connection cleared its in-transaction flag when the commit was subscribed, so
+        // close() skips its own rollback and only validates locally and releases. The test does not pin that mechanism.
+        FreezableRelay.forTestDatabase().use { relay ->
+            testApplication {
+                configureApp(
+                    "postgres.r2dbcUrl" to relay.relayed(PostgresTestSupport.r2dbcUrl),
+                    "postgres.pool.applicationName" to "pool-cancel-${UUID.randomUUID()}",
+                    "postgres.pool.maxSize" to "1",
+                    "postgres.pool.initialSize" to "1",
+                    "postgres.pool.maxValidationTimeSeconds" to "1",
+                    "postgres.pool.maxCreateConnectionTimeSeconds" to "2",
+                    "postgres.pool.maxAcquireTimeSeconds" to "3",
+                )
+                startApplication()
+                val db = application.attributes[DatabaseKey]
+
+                val inBody = CompletableDeferred<Unit>()
+                val finish = CompletableDeferred<Unit>()
+                try {
+                    coroutineScope {
+                        val holder = launch(Dispatchers.IO) {
+                            suspendTransaction(db) {
+                                touchDatabase()
+                                inBody.complete(Unit)
+                                finish.await()
+                            }
+                        }
+                        inBody.await()
+                        relay.frozen = true
+                        finish.complete(Unit)
+                        // The commit is now ON THE WIRE, held by the frozen relay: cancel exactly there.
+                        val onTheWire = withContext(Dispatchers.IO) {
+                            withTimeoutOrNull(10_000) {
+                                while (relay.held.get() == 0) delay(10)
+                                true
+                            }
+                        }
+                        assertNotNull(onTheWire, "the commit must reach the frozen relay")
+                        holder.cancel()
+                        // Not joined while frozen: the commit await is cancelled at once, but the rollback and close that
+                        // follow run non-cancellably against the frozen server, so the coroutine ends only after the thaw.
+                        relay.frozen = false
+                        withContext(Dispatchers.IO) { withTimeout(20_000) { holder.join() } }
+                    }
+                } finally {
+                    // A failed assertion above must fail the test, not leave the relay silent for the pool's disposal.
+                    relay.frozen = false
+                }
+                // maxSize is 1: only a released slot lets this acquire succeed (a leaked one times out after ~2 x 3 s).
+                withTimeout(20_000) { suspendTransaction(db) { touchDatabase() } }
+            }
+        }
+    }
+
+    @Test
+    fun `a transaction cancelled inside its body returns its pooled slot`() = testApplication {
+        // No frozen server here, so nothing can hang: cancel in the body, then the single slot must be acquirable again.
+        configureApp(
+            "postgres.pool.applicationName" to "pool-cancel-${UUID.randomUUID()}",
+            "postgres.pool.maxSize" to "1",
+            "postgres.pool.initialSize" to "0",
+            "postgres.pool.maxAcquireTimeSeconds" to "3",
+        )
+        startApplication()
+        val db = application.attributes[DatabaseKey]
+
+        val inBody = CompletableDeferred<Unit>()
+        coroutineScope {
+            val holder = launch(Dispatchers.IO) {
+                suspendTransaction(db) {
+                    touchDatabase()
+                    inBody.complete(Unit)
+                    CompletableDeferred<Unit>().await()
+                }
+            }
+            inBody.await()
+            holder.cancelAndJoin()
+        }
+        withTimeout(20_000) { suspendTransaction(db) { touchDatabase() } }
+    }
+
+    @Test
     fun `statementTimeoutSeconds cancels a statement the server runs too long`() = testApplication {
         configureApp(
             "postgres.pool.applicationName" to "pool-stmt-${UUID.randomUUID()}",
@@ -386,6 +473,36 @@ class ConnectionPoolTest {
         assertNotNull(failure, "a 3 s statement must not survive a 1 s statement_timeout")
         val messages = generateSequence(failure) { it.cause }.mapNotNull { it.message }.joinToString(" | ")
         assertTrue("statement timeout" in messages, "unexpected failure: $messages")
+    }
+
+    @Test
+    fun `the configured statement timeout survives a rollback and a cancelled statement on the same pooled connection`() = testApplication {
+        // One connection, so every transaction below reuses the SAME backend and the per-connection cache
+        // (infra/db/StatementTimeoutCache.kt) is what decides whether the SET is sent again.
+        val appName = "pool-stmt-${UUID.randomUUID()}"
+        configureApp(
+            "postgres.pool.applicationName" to appName,
+            "postgres.pool.maxSize" to "1",
+            "postgres.pool.initialSize" to "1",
+            "postgres.statementTimeoutSeconds" to "1",
+        )
+        startApplication()
+        val db = application.attributes[DatabaseKey]
+        // Startup already used the connection (its cache holds 1s); killing it makes the next acquire build a fresh one.
+        assertEquals(1, terminateBackends(appName), "exactly the one pooled backend is killed")
+        suspend fun show() = suspendTransaction(db) { exec("SHOW statement_timeout") { row -> row.get(0, String::class.java) }?.toList() }
+
+        // The FIRST transaction on the fresh connection sends the SET and is then rolled back, which PostgreSQL reverts: the
+        // cache must have forgotten it (a transaction that only SKIPS the SET has nothing to revert).
+        runCatching { suspendTransaction(db) { exec("SELECT 1/0") } }
+        assertEquals(listOf("1s"), show(), "a transaction aborted by an error must not leave the timeout forgotten on the server")
+        repeat(2) {
+            val failure = runCatching { suspendTransaction(db) { exec("SELECT pg_sleep(3)") { row -> row.get(0) }?.toList() } }
+                .exceptionOrNull()
+            assertNotNull(failure, "a 3 s statement must not survive a 1 s statement_timeout, even after a cancelled one")
+            assertTrue(failure.isQueryCanceled(), "expected query_canceled (57014), got $failure")
+        }
+        assertEquals(listOf("1s"), show())
     }
 
     @Test

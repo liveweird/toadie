@@ -3,6 +3,7 @@ package ch.nokillswit
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /**
@@ -19,6 +20,12 @@ class FreezableRelay(private val targetHost: String, private val targetPort: Int
     @Volatile
     var frozen = false
     val port: Int get() = server.localPort
+
+    /**
+     * How many chunks the relay is holding right now because it is [frozen]: a test that must act while an exchange is ON
+     * THE WIRE (a commit sent to a frozen server) polls this instead of sleeping.
+     */
+    val held = AtomicInteger()
 
     init {
         thread(isDaemon = true, name = "freezable-relay-accept") {
@@ -45,7 +52,14 @@ class FreezableRelay(private val targetHost: String, private val targetPort: Int
                     runCatching { to.shutdownOutput() }
                     break
                 }
-                while (frozen) Thread.sleep(50)
+                if (frozen) {
+                    held.incrementAndGet()
+                    try {
+                        while (frozen) Thread.sleep(50)
+                    } finally {
+                        held.decrementAndGet()
+                    }
+                }
                 output.write(buffer, 0, read)
                 output.flush()
             }

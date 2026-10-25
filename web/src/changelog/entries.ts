@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.21.1",
+    date: "2026-10-25",
+    en: `**Fewer database round trips.** Toadie no longer re-sends the database statement time limit before every query when it is already in place, so a typical page load makes 20–27% fewer database calls and answers slightly faster, more so when the database is on another machine.`,
+    pl: `**Mniej odwołań do bazy danych.** Toadie nie wysyła już ponownie limitu czasu polecenia przed każdym zapytaniem, gdy limit jest już ustawiony, więc typowe załadowanie strony wykonuje o 20–27% mniej wywołań bazy danych i odpowiada nieco szybciej, tym bardziej gdy baza działa na innej maszynie.`,
+  },
+  {
     version: "2.21.0",
     date: "2026-10-25",
     en: `**Sample saved queries for the Port demo.** The commerce-payments demo now ships eight public saved queries — who consumes which API or dataset, adoptions being migrated or retired, products and the systems behind them, dataset ownership and lineage, and the PCI-DSS, DORA and banking-outsourcing scopes — loaded with a third script after the blueprints and entities, and ready to pick on the Entity graph and Entity hierarchy.`,
