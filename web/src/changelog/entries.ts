@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.21.4",
+    date: "2026-10-25",
+    en: `**A database that freezes mid-request no longer ties up a connection.** If the database stops answering while a request is already waiting on it, Toadie now gives up after 45 seconds, reports an error and replaces the connection, instead of holding it until the database recovers. A save that times out this way may still be applied once the database answers again; reload before retrying.`,
+    pl: `**Baza danych zawieszona w trakcie żądania nie blokuje już połączenia.** Jeśli baza danych przestaje odpowiadać, gdy żądanie już na nią czeka, Toadie po 45 sekundach rezygnuje, zgłasza błąd i zastępuje połączenie, zamiast trzymać je do czasu, aż baza wróci. Zapis przerwany w ten sposób może jednak zostać zastosowany, gdy baza znów odpowie; przed ponowną próbą odśwież stronę.`,
+  },
+  {
     version: "2.21.3",
     date: "2026-10-25",
     en: `**Very large graphs open faster.** When you show more than 300 nodes on the Graph or Entity graph page, only the nodes on screen are drawn, so "Show everything" on a 1,000-node graph blocks the page for about a third less time and uses noticeably less memory. Panning and zooming bring the rest into view as before.`,
