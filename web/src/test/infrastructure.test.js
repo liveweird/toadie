@@ -13,6 +13,7 @@ const toolchainSource = readFileSync(resolve(repoRoot, "mise.toml"), "utf8");
 const dockerfileSource = readFileSync(resolve(repoRoot, "Dockerfile"), "utf8");
 const dependabotSource = readFileSync(resolve(repoRoot, ".github/dependabot.yml"), "utf8");
 const appDeploymentSource = readFileSync(resolve(repoRoot, "k8s/app-deployment.yaml"), "utf8");
+const applicationYamlSource = readFileSync(resolve(repoRoot, "server/src/main/resources/application.yaml"), "utf8");
 const openTelemetrySource = readFileSync(resolve(repoRoot, "core/src/commonMain/kotlin/OpenTelemetry.kt"), "utf8");
 const postgresDeploymentSource = readFileSync(resolve(repoRoot, "k8s/postgres-deployment.yaml"), "utf8");
 
@@ -242,6 +243,17 @@ describe("deployment and verification safety defaults", () => {
     const postgres = parse(postgresDeploymentSource);
     expect(postgres.spec.replicas).toBe(1);
     expect(postgres.spec.strategy.type).toBe("Recreate");
+  });
+
+  it("keeps the k8s startupProbe budget above Ktor's startup timeout, which must cover Flyway's cold-start wait", () => {
+    // The relationship is explained in .claude/docs/persistence.md "Cold start: Flyway waits for PostgreSQL".
+    const probe = parse(appDeploymentSource).spec.template.spec.containers[0].startupProbe;
+    const probeBudgetMillis = probe.periodSeconds * probe.failureThreshold * 1000;
+    const startupTimeoutMillis = Number(parse(applicationYamlSource).ktor.application.startupTimeoutMillis);
+    expect(Number.isInteger(startupTimeoutMillis)).toBe(true);
+    // Ktor's 10 s default fails a boot whose Flyway is still waiting for PostgreSQL.
+    expect(startupTimeoutMillis).toBeGreaterThan(10_000);
+    expect(probeBudgetMillis).toBeGreaterThan(startupTimeoutMillis);
   });
 
   it("the app pod and container declare full security context (non-root, read-only root, no capabilities)", () => {

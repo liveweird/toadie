@@ -15,7 +15,7 @@
 
 PostgreSQL is the only database. Connection settings come from the `postgres:` block in `application.yaml` (env-overridable via `POSTGRES_JDBC_URL`, `POSTGRES_R2DBC_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`); defaults match the `docker compose up postgres` service (host port **5433** — Lettuce may occupy 5432 on the same machine; in-network consumers use `postgres:5432`). There is one persistence stack:
 
-- **Flyway** (`infra/db/Flyway.kt`) — runs schema migrations from `server/src/main/resources/db/migration/` at startup via the Java API, opening a short-lived JDBC connection. Migrations are the single source of truth for schema; do not call `SchemaUtils.create` anywhere. **An applied migration's bytes are immutable — comments included**: Flyway validates stored checksums at startup, so any edit to an existing `V*.sql` makes every long-lived database refuse to boot (a failure no fresh-container CI run can see). `MigrationChecksumTest` pins every file's checksum; a new migration adds one manifest line, and a red pin means REVERT the edit (clarifications go into this doc), never update the pinned value.
+- **Flyway** (`infra/db/Flyway.kt`) — runs schema migrations from `server/src/main/resources/db/migration/` at startup via the Java API, opening a short-lived JDBC connection that retries a refused connect while PostgreSQL starts ("Cold start: Flyway waits for PostgreSQL" below). Migrations are the single source of truth for schema; do not call `SchemaUtils.create` anywhere. **An applied migration's bytes are immutable — comments included**: Flyway validates stored checksums at startup, so any edit to an existing `V*.sql` makes every long-lived database refuse to boot (a failure no fresh-container CI run can see). `MigrationChecksumTest` pins every file's checksum; a new migration adds one manifest line, and a red pin means REVERT the edit (clarifications go into this doc), never update the pinned value.
 - **Exposed + R2DBC** (`infra/db/Database.kt` + the feature services) — runtime DB access. `Database.kt` connects the `R2dbcDatabase` and is the composition root: it constructs the services and publishes them into `Application.attributes` (`UserServiceKey`, `GraphLayoutServiceKey`, `EntityGraphLayoutServiceKey`, `TokenBlocklistServiceKey`, `CatalogFileServiceKey`, `CatalogFileEventServiceKey`, `DictionaryServiceKey`, `LabelServiceKey`, `AnnotationKeyServiceKey`, `TagCategoryServiceKey`, `EntityTypesServiceKey`, `LensServiceKey`, `BlueprintServiceKey`, `EntityServiceKey`, `SavedEntityQueryServiceKey`, `IntegrationClientServiceKey`, `AuthSessionServiceKey`, `PasswordResetServiceKey`) plus `DatabaseKey` (the `R2dbcDatabase` itself); each service itself lives next to the feature it serves (`users/UserService.kt`, `users/GraphLayoutService.kt` — the second `EntityGraphLayoutServiceKey` instance is the SAME class over a second table, see V30 below —, `auth/TokenBlocklistService.kt`, `catalog/CatalogFileService.kt`, `catalog/CatalogFileEventService.kt`, `dictionaries/DictionaryService.kt`, `labels/LabelService.kt`, `annotations/AnnotationKeyService.kt`, `tags/TagCategoryService.kt`, `types/EntityTypesService.kt`, `lenses/LensService.kt`, `blueprints/BlueprintService.kt`, `entities/EntityService.kt`, `entityquery/SavedEntityQueryService.kt`, `integration/IntegrationClientService.kt`, `auth/AuthSessionService.kt`, `auth/PasswordResetService.kt`). The Exposed table `object`s (e.g. `UserService.Users`, nested inside their service) are used for queries only, not DDL. Ids are `UIntIdTable` — unsigned end-to-end (the spec declares `minimum: 0`, and `ErrorHandling.kt` 400s negative path segments before kotlinx's `UInt` decoding can silently wrap them); one wrinkle: V1 created `users.id` as `BIGSERIAL` (64-bit in SQL, 32-bit everywhere above it) while V5 uses `SERIAL` — harmless at this scale, documented so nobody "fixes" one to match the other without a migration.
 
 The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flyway; runtime queries go through R2DBC.
@@ -70,6 +70,51 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   ported the pool in v3.16.1 and added the hung-database bounds in v4.7.1; 2.20.2 ports them
   back.
 
+### Cold start: Flyway waits for PostgreSQL
+
+- **Applies when:** touching `infra/db/Flyway.kt`, `postgres.connectRetries`, the boot order of
+  `application.yaml`'s modules, `ktor.application.startupTimeoutMillis`, or the app's
+  `startupProbe` in `k8s/app-deployment.yaml`. This section is the one home of the numbers below;
+  every other file points here.
+- **Requirement:** Flyway is the first database contact at boot, so it retries its JDBC connect
+  (`postgres.connectRetries` / `POSTGRES_CONNECT_RETRIES`, default 10, boot-validated 0..15; waits
+  double 1, 2, 4, 8 s and stay capped at 8 s, `CONNECT_RETRY_MAX_INTERVAL_SECONDS`) instead of
+  failing on the first refused connection and crash-looping the pod until PostgreSQL has
+  initialised its volume (the 2026-10-25 OrbStack smoke on an empty namespace restarted the app
+  twice). The sleeps total 63 s at 10 retries and 103 s at the maximum 15; a REFUSED connect (a
+  Kubernetes Service with no ready endpoints, a port nobody listens on) costs nothing on top. After
+  the retries are spent the ORIGINAL connection error is raised and the process exits as before; `0`
+  restores fail-fast.
+  **Ktor's startup timeout is why `ktor.application.startupTimeoutMillis` is 140 000.** Ktor wraps
+  module loading in `withTimeout(startupTimeoutMillis)` (default 10 s). `migrate()` is a blocking call
+  (`Thread.sleep` back-off), so the timeout cannot interrupt the wait; it fires at the next suspension
+  point AFTER Flyway has returned and fails a boot whose database had in fact come up. Measured
+  through the real module chain (`FlywayConnectRetriesTest`, database up after 8 s, so Flyway
+  returns at about 15 s): with the 10 s default the boot dies with `TimeoutCancellationException`
+  ("Timed out waiting for 10000 ms after 16824 ms"); with 140 000 it boots. 140 s outlasts the 103 s
+  maximum wait plus boot. It is NOT a hard bound on the wait (see the Exception) and it must stay
+  below the `startupProbe` (30 x 5 s = 150 s), pinned by `web/src/test/infrastructure.test.js`.
+  **Flyway 13.11.1 retries EVERY `SQLException` from `getConnection`** (read from `JdbcUtils.openConnection`;
+  its specific-exception short-circuit covers SQL Server / untrusted-certificate cases only), so a
+  wrong password or a missing database also fails, but only after the retries are spent (63 s at the
+  default) — a misconfigured Secret takes about a minute to surface instead of seconds.
+- **Reference:** `infra/db/Flyway.kt` (`readFlywayConnectRetries`, `buildFlyway`), ported from Flow's
+  `readFlywayConnectRetries`; `application.yaml` (`postgres.connectRetries`,
+  `startupTimeoutMillis`); `k8s/app-deployment.yaml` (the `startupProbe`).
+- **Enforcement:** `FlywayConnectRetriesTest` — range validation (startup refuses 16), the configured
+  value reaches the Flyway `configureFlyway` builds (the `(connect retries: N)` log line), a wrong
+  password is retried then fails, a REAL boot under the shipped timeout waits for a database that
+  comes up late (its Flyway returns after 15 s, so it fails if the timeout falls back to Ktor's 10 s
+  default), and the timeout covers the 103 s maximum wait + 20 s;
+  `web/src/test/infrastructure.test.js` — the `startupProbe` budget exceeds `startupTimeoutMillis`.
+- **Exception:** only Flyway's connect FAILURES are retried (a frozen database at boot still hangs, see
+  "A hung database is bounded"). The wait is not bounded by Ktor's timeout, and an address that
+  silently drops packets costs pgjdbc's default `connectTimeout` (10 s, verified in `PGProperty` of the
+  locked 42.7.14) per attempt on top of the sleeps: 11 x 10 s + 63 s = 173 s at the default retries.
+  The startupProbe (about 145-150 s from container start, JVM start included) then kills and restarts
+  the pod mid-Flyway, exactly the pre-change behaviour for that network shape. The R2DBC pool opens
+  lazily after Flyway succeeded; a database that goes away mid-run is the pool's concern.
+
 ### A hung database is bounded
 
 - **Applies when:** touching the pool's validation/creation bounds, `defaultQueryTimeout`, the
@@ -104,7 +149,7 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   acquire once) with the catch-all 500, and `/readyz` answers 503 within its own deadline. Cost:
   one `SELECT 1` round trip per acquire (Lettuce measured +0.3 ms mean / +0.7 ms p95 per request).
   Flyway (its own short-lived JDBC connection: a frozen database at boot hangs until the
-  startupProbe restarts the pod) and `pg_dump` are out of scope.
+  startupProbe restarts the pod; only its connect FAILURES are retried, "Cold start" above) and `pg_dump` are out of scope.
   **Releasing the slot survives a cancelled coroutine, by construction.** r2dbc-pool 1.0.2's
   `PooledConnection.close()` is `validate(LOCAL)`, then, only while the connection is flagged in a
   transaction, `rollbackTransaction()`, then `ref.release()`. A subscription cancel that arrives while
