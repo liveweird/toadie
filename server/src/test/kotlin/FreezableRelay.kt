@@ -11,10 +11,16 @@ import kotlin.concurrent.thread
  * directions — while [frozen]: the shape of a hung database (a network black hole, a frozen VM)
  * rather than a refused connection. It keeps accepting new connections while frozen, so a new
  * connection's startup handshake hangs too. Used by ConnectionPoolTest (the hung-database
- * regressions, `.claude/docs/testing.md`).
+ * regressions, `.claude/docs/testing.md`). Created LATE on a [listenPort] reserved earlier (nothing
+ * listening until then, so connects are refused) it models a database that comes up after its
+ * clients start: `FlywayConnectRetriesTest`.
  */
-class FreezableRelay(private val targetHost: String, private val targetPort: Int) : AutoCloseable {
-    private val server = ServerSocket(0)
+class FreezableRelay(
+    private val targetHost: String,
+    private val targetPort: Int,
+    listenPort: Int = 0,
+) : AutoCloseable {
+    private val server = ServerSocket(listenPort)
     private val sockets = CopyOnWriteArrayList<Socket>()
 
     @Volatile

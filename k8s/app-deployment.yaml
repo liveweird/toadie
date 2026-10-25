@@ -161,8 +161,10 @@ spec:
           #              NOT restart-storm the pod).
           #   /readyz  — readiness: a trivial DB round-trip; 503 while the DB is unreachable, so the
           #              pod is pulled from the Service until it can actually serve API traffic.
-          # The startupProbe gives JVM boot + Flyway migrations up to ~150s (30 × 5s) before the
-          # liveness clock starts, so a slow first boot cannot trigger a restart.
+          # The startupProbe gives JVM boot + Flyway migrations (30 × 5s) before the liveness clock starts, so a
+          # slow first boot cannot trigger a restart. That budget must also cover Flyway waiting for PostgreSQL on
+          # a fresh deploy: keep it above ktor.application.startupTimeoutMillis (pinned by
+          # web/src/test/infrastructure.test.js; reasoning in .claude/docs/persistence.md "Cold start").
           # Every probe sends X-Forwarded-Proto: https — the header the TLS-terminating ingress sets
           # (HTTP_BEHIND_PROXY above makes the app trust it). Without it, production mode answers the
           # plain-HTTP probe with a 301 to https://<pod-ip>/, which the kubelet FOLLOWS (same host)

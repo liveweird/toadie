@@ -1,6 +1,7 @@
 package ch.nokillswit.infra.db
 
 import io.ktor.server.application.*
+import io.ktor.server.config.ApplicationConfig
 import org.flywaydb.core.Flyway
 
 private const val JDBC_PLACEHOLDER = "<unparseable jdbc url>"
@@ -49,16 +50,35 @@ internal fun jdbcUrlForLogging(url: String): String {
     }
 }
 
+/** The cap, in seconds, on Flyway's doubling wait between connect attempts (1, 2, 4, 8, 8, … s). */
+internal const val CONNECT_RETRY_MAX_INTERVAL_SECONDS = 8
+
+/**
+ * `postgres.connectRetries` (`POSTGRES_CONNECT_RETRIES`, 0..15, default 10) — boot-validated the
+ * `readPoolBounds` way (a range failure throws [IllegalArgumentException] before any connection is
+ * attempted). Flyway is the FIRST thing to touch the database at boot, so retrying its connect makes a
+ * cold start (a fresh Kubernetes deploy, a PostgreSQL restart) wait instead of crash-looping; `0` restores
+ * fail-fast. Ported from Flow; timings, limits and the startup-timeout/probe relationship live in
+ * `.claude/docs/persistence.md` "Cold start: Flyway waits for PostgreSQL".
+ */
+internal fun readFlywayConnectRetries(config: ApplicationConfig): Int =
+    config.property("postgres.connectRetries").getString().toInt()
+        .also { require(it in 0..15) { "postgres.connectRetries must be between 0 and 15" } }
+
+internal fun buildFlyway(url: String, user: String, password: String, connectRetries: Int): Flyway = Flyway.configure()
+    .dataSource(url, user, password)
+    .locations("classpath:db/migration")
+    .connectRetries(connectRetries)
+    .connectRetriesInterval(CONNECT_RETRY_MAX_INTERVAL_SECONDS)
+    .load()
+
 fun Application.configureFlyway() {
     val url = environment.config.property("postgres.jdbcUrl").getString()
     val user = environment.config.property("postgres.user").getString()
     val password = environment.config.property("postgres.password").getString()
+    val connectRetries = readFlywayConnectRetries(environment.config)
 
-    log.info("Running Flyway migrations against ${jdbcUrlForLogging(url)}")
-    val result = Flyway.configure()
-        .dataSource(url, user, password)
-        .locations("classpath:db/migration")
-        .load()
-        .migrate()
+    log.info("Running Flyway migrations against ${jdbcUrlForLogging(url)} (connect retries: $connectRetries)")
+    val result = buildFlyway(url, user, password, connectRetries).migrate()
     log.info("Flyway applied ${result.migrationsExecuted} migration(s); schema at version ${result.targetSchemaVersion}")
 }

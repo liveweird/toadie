@@ -11,6 +11,10 @@ ktor:
     # ingress-nginx's default `large_client_header_buffers 4 8k` (8 KB per header line).
     maxInitialLineLength: 16384
   application:
+    # Ktor fails the boot when module loading takes longer than this (default 10 s), checked once loading next
+    # suspends — i.e. AFTER a blocking Flyway connect-retry wait returned. Raised so the cold-start wait fits;
+    # FlywayConnectRetriesTest boots through it. Rationale and numbers: persistence.md "Cold start".
+    startupTimeoutMillis: 140000
     modules:
       # — base plugins
       - ch.nokillswit.plugins.HttpKt.configureHttp
@@ -187,6 +191,9 @@ postgres:
   r2dbcUrl: "$POSTGRES_R2DBC_URL:r2dbc:postgresql://localhost:5433/toadie"
   user: "$POSTGRES_USER:toadie"
   password: "$POSTGRES_PASSWORD:toadie"
+  # How many times Flyway retries its boot connection with a capped doubling back-off (0 = fail fast, 0..15), so a
+  # cold start waits for PostgreSQL instead of crash-looping — infra/db/Flyway.kt, persistence.md "Cold start".
+  connectRetries: "$POSTGRES_CONNECT_RETRIES:10"
   # Bounded R2DBC connection pool (infra/db/Database.kt, `.claude/docs/persistence.md`
   # "Connection pool") — a plain r2dbc:postgresql:// connect opens one PostgreSQL backend
   # per suspendTransaction with nothing capping how many run at once. Sizing assumes a

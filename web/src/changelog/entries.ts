@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.21.2",
+    date: "2026-10-25",
+    en: `**A fresh deployment starts cleanly.** On a new Kubernetes deployment Toadie now waits for its database to finish starting instead of restarting until it is ready. A wrong database password is now reported after about a minute rather than at once.`,
+    pl: `**Nowe wdrożenie startuje bez restartów.** W nowym wdrożeniu Kubernetes Toadie czeka teraz, aż baza danych zakończy uruchamianie, zamiast restartować się, dopóki nie będzie gotowa. Błędne hasło do bazy danych jest teraz zgłaszane po około minucie, a nie od razu.`,
+  },
+  {
     version: "2.21.1",
     date: "2026-10-25",
     en: `**Fewer database round trips.** Toadie no longer re-sends the database statement time limit before every query when it is already in place, so a typical page load makes 20–27% fewer database calls and answers slightly faster, more so when the database is on another machine.`,
