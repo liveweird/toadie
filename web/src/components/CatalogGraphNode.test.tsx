@@ -170,7 +170,7 @@ describe("CatalogGraphNode", () => {
         </div>,
       );
 
-      const toggle = screen.getByRole("button", { name: "Expand svc-x (12 hidden)" });
+      const toggle = screen.getByRole("button", { name: "Expand svc-x, 12 hidden" });
       expect(toggle).toHaveTextContent("12");
       toggle.focus();
       await user.keyboard("{Enter}");

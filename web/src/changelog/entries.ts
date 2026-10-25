@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.22.0",
+    date: "2026-10-25",
+    en: `**Very large graphs open on their top level.** When the Graph or Entity graph page would show more than 300 nodes and the graph has a hierarchy, it now opens folded to its top level, fitted whole on screen, instead of asking first: a 1,000-entity graph opens in about a second. Leave the top-level view (the button beside its badge) to choose Show everything. Both graph pages can also zoom out further than before.`,
+    pl: `**Bardzo duże grafy otwierają się na najwyższym poziomie.** Gdy strona Graf lub Graf encji pokazałaby ponad 300 węzłów, a graf ma hierarchię, otwiera się teraz zwinięta do najwyższego poziomu i w całości mieści się na ekranie, zamiast najpierw pytać: graf z 1000 encji otwiera się w około sekundę. Opuść widok najwyższego poziomu (przycisk obok jego plakietki), aby wybrać Pokaż wszystko. Obie strony grafów pozwalają też oddalać widok bardziej niż dotąd.`,
+  },
+  {
     version: "2.21.5",
     date: "2026-10-25",
     en: `**Updated server runtime.** The Toadie server image now runs on the Temurin 21.0.12.1 Java runtime, whose system libraries carry the latest security fixes for curl and OpenSSL, and it builds for both Intel/AMD and ARM servers. Every change is now checked for fixable high-severity vulnerabilities in the image before it ships.`,

@@ -79,7 +79,7 @@
   },
   "fold": {
     "collapseAria": "Collapse {{name}}",
-    "expandAria": "Expand {{name}} ({{count}} hidden)"
+    "expandAria": "Expand {{name}}, {{count}} hidden"
   },
   "graphLayout": {
     "computing": "Laying out the graph…",
@@ -96,6 +96,7 @@
     },
     "topLevelBadge": "Top level",
     "topLevelClearAria": "Leave the top-level view",
+    "topLevelClearTitle": "Leave the top-level view to show everything",
     "saveLimit": "Too many saved positions or collapsed nodes — use Reset layout or Expand all to free some."
   },
   "tier": {

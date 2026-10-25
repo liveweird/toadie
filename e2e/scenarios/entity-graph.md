@@ -59,7 +59,10 @@
 9. They collapse p1 via its own fold toggle, then expand it again.
    - *Expected*: collapsing hides c1 and c2 (p1's hierarchy-relation descendants — the
      admin-picked `parent` relation) and the pill names the hidden count (2); the throwaway
-     team stays visible throughout (ownership never nests); expanding restores c1/c2.
+     team stays visible throughout (ownership never nests); while collapsed, with the pill on
+     screen, an axe scan of the page's `<main>` (WCAG A/AA, the accessibility spec's colour-
+     contrast waiver) reports zero violations — the pill's accessible name carries the visible
+     count outside any parenthetical; expanding restores c1/c2.
 10. They switch the layout to Manual and drag p1 to a new canvas position.
     - *Expected*: the drag produces exactly one `PUT /api/v1/users/{id}/entity-graph-layout`
       whose body's `positions` map contains the node id `<parent-blueprint>|<p1 identifier>`,
@@ -72,7 +75,7 @@
     own peer target), then the throwaway team (now unreferenced), then the child blueprint,
     then the parent blueprint, then the throwaway user.
 
-## Scenario: a large entity graph opens behind the gate and lays out on request
+## Scenario: a large entity graph opens folded to its top level and shows everything on request
 
 1. The admin signs in and seeds one throwaway blueprint via the API (a single self-`parent`
    relation flagged as the `composition` entry of its `hierarchyRelations`), then imports 320
@@ -81,21 +84,22 @@
    - *Expected*: the blueprint creation succeeds (`201`) and every import row is `CREATED`.
 2. They open **Entity graph**, expand the filter panel and set the search filter to the run's
    own marker.
-   - *Expected*: instead of a canvas, a "Large graph" panel names the selection (320 nodes);
-     no canvas node and no empty state is shown — the layout was not started.
-3. They click **Show top level**.
-   - *Expected*: exactly the eight chain roots are drawn, a "Top level" badge appears, and the
-     panel is gone.
-4. They clear the "Top level" badge.
-   - *Expected*: the panel returns and no canvas node is drawn.
-5. They click **Show everything**.
+   - *Expected*: 320 nodes are over the large-graph gate's 300, so the canvas opens on the
+     top-level overlay by itself (2.22.0): the canvas wrapper reports eight drawn nodes (the
+     chain roots, all mounted), a "Top level" badge is shown, and neither the "Large graph"
+     panel nor the empty state appears. The roots show collapsed fold pills, and an axe scan of
+     `<main>` (as above) reports zero violations over exactly that state.
+3. They clear the "Top level" badge.
+   - *Expected*: the "Large graph" panel returns and names the selection (320 nodes); no canvas
+     node is drawn.
+4. They click **Show everything**.
    - *Expected*: all 320 nodes are laid out (the dagre layout ran off the main thread; the
      canvas wrapper reports 320 drawn nodes) and only those in view are mounted (at least
      one) — above the gate's 300-node limit React Flow mounts just the visible nodes. The
-     panel is gone.
+     panel and the badge are gone.
    - *Expected (whole journey)*: no `PUT` of `entity-graph-layout` was ever sent — the gate's
-     choices are transient view state, never persisted.
-6. Cleanup (API): every entity newest first (a referrer before its target), then the blueprint.
+     choices, the default overlay included, are transient view state, never persisted.
+5. Cleanup (API): every entity newest first (a referrer before its target), then the blueprint.
 
 ## Not covered here (and why)
 
