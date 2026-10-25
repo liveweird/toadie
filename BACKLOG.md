@@ -85,11 +85,6 @@ Backstage sample to 10k files, on a disposable stack).
 
 ## Tests
 
-- [next] **Make two parallel-run e2e flakes deterministic.** Local full runs (4 workers) failed
-  `annotations.spec.ts` intermittently (the edit step's "Applies to kinds" option never appeared;
-  2 of 3 isolated reruns failed on 2026-10-25) and `catalog-files.spec.ts`, which expects the
-  global "No catalog files" empty state while other files' specs are writing files. Both pass in
-  CI and on rerun; neither touches the pages changed by 2.19–2.20.
 - [new] **Click through a successful blueprint sync in the browser.** The e2e suite stops at the
   loopback refusal by design, since the SSRF guard rejects every address a local fixture server
   could use. A success journey needs a fixture source the guard accepts and the browser suite can
