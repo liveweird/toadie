@@ -48,6 +48,8 @@ import io.r2dbc.pool.ConnectionPoolConfiguration
 import io.r2dbc.postgresql.PostgresqlConnectionFactoryProvider
 import io.r2dbc.spi.ConnectionFactories
 import io.r2dbc.spi.ConnectionFactoryOptions
+import io.r2dbc.spi.Option
+import io.r2dbc.spi.ValidationDepth
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabaseConfig
 import java.time.Duration
@@ -70,6 +72,11 @@ private data class PoolBounds(
     val maxAcquireTimeSeconds: Long,
     val maxIdleTimeSeconds: Long,
     val maxLifeTimeSeconds: Long,
+    val idleInTransactionTimeoutSeconds: Long,
+    val maxValidationTimeSeconds: Long,
+    val maxCreateConnectionTimeSeconds: Long,
+    val connectTimeoutSeconds: Long,
+    val statementTimeoutSeconds: Long,
     val applicationName: String,
 )
 
@@ -84,13 +91,70 @@ private fun readPoolBounds(config: ApplicationConfig): PoolBounds {
         .also { require(it in 1..86400) { "postgres.pool.maxIdleTimeSeconds must be between 1 and 86400" } }
     val maxLifeTimeSeconds = config.property("postgres.pool.maxLifeTimeSeconds").getString().toLong()
         .also { require(it in 1..86400) { "postgres.pool.maxLifeTimeSeconds must be between 1 and 86400" } }
+    // 0 = off (PostgreSQL's own meaning); see DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT for the default and why.
+    val idleInTransactionTimeoutSeconds = config.property("postgres.pool.idleInTransactionTimeoutSeconds").getString().toLong()
+        .also { require(it in 0..86400) { "postgres.pool.idleInTransactionTimeoutSeconds must be between 0 and 86400" } }
+    // The hung-database bounds (application.yaml explains each; persistence.md "A hung database is bounded").
+    val maxValidationTimeSeconds = config.property("postgres.pool.maxValidationTimeSeconds").getString().toLong()
+        .also { require(it in 1..60) { "postgres.pool.maxValidationTimeSeconds must be between 1 and 60" } }
+    val maxCreateConnectionTimeSeconds = config.property("postgres.pool.maxCreateConnectionTimeSeconds").getString().toLong()
+        .also { require(it in 1..600) { "postgres.pool.maxCreateConnectionTimeSeconds must be between 1 and 600" } }
+    val connectTimeoutSeconds = config.property("postgres.connectTimeoutSeconds").getString().toLong()
+        .also { require(it in 1..600) { "postgres.connectTimeoutSeconds must be between 1 and 600" } }
+    val statementTimeoutSeconds = config.property("postgres.statementTimeoutSeconds").getString().toLong()
+        .also { require(it in 0..3600) { "postgres.statementTimeoutSeconds must be between 0 and 3600" } }
     // application_name = toadie on every pooled connection by default (deliberate — ops can
     // count Toadie's own connections in pg_stat_activity, and ConnectionPoolTest relies on
     // it); overridable per test application instance so overlapping test apps sharing the
     // Testcontainer never share one count.
     val applicationName = config.propertyOrNull("postgres.pool.applicationName")?.getString() ?: "toadie"
-    return PoolBounds(maxSize, initialSize, maxAcquireTimeSeconds, maxIdleTimeSeconds, maxLifeTimeSeconds, applicationName)
+    return PoolBounds(
+        maxSize, initialSize, maxAcquireTimeSeconds, maxIdleTimeSeconds, maxLifeTimeSeconds, idleInTransactionTimeoutSeconds,
+        maxValidationTimeSeconds, maxCreateConnectionTimeSeconds, connectTimeoutSeconds, statementTimeoutSeconds,
+        applicationName,
+    )
 }
+
+/**
+ * PostgreSQL's `idle_in_transaction_session_timeout` for every pooled connection
+ * (`postgres.pool.idleInTransactionTimeoutSeconds`, sent as a startup parameter, so it is the session default — it also
+ * overrides an `ALTER ROLE/DATABASE … SET` of the same setting — and no `SET` ever touches it): the server ends a session
+ * that sits idle INSIDE a transaction for longer, rolling the transaction back and releasing its locks. It is the backstop
+ * for a session whose client stopped talking to it with a transaction open (a frozen worker, a coroutine stuck
+ * mid-transaction). An idle gap inside a transaction can never be longer than the
+ * transaction, and Toadie's longest one is ~0.5 s (per-document import holds are ~100 ms; no transaction spans an outbound
+ * call or a mail send; jq and entity-query evaluation run outside transactions), so 5 minutes is a very wide margin. It ends
+ * only an IDLE session — a statement stuck `active` is `statement_timeout`'s job (and, against a frozen server, the pool's).
+ * `0` switches it off (PostgreSQL's own meaning).
+ */
+internal val DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT: Duration = Duration.ofMinutes(5)
+
+private const val IDLE_IN_TRANSACTION_TIMEOUT = "idle_in_transaction_session_timeout"
+
+/**
+ * [options] plus the `idle_in_transaction_session_timeout` startup parameter, unless the URL already set one (an operator's
+ * `options=` wins). The driver takes `options` as a map or as its `key=value;key=value` string form.
+ */
+internal fun withIdleInTransactionTimeout(options: ConnectionFactoryOptions, timeout: Duration): ConnectionFactoryOptions {
+    val millis = timeout.toMillis().toString()
+    val existing = if (options.hasOption(STARTUP_OPTIONS)) options.getValue(STARTUP_OPTIONS) else null
+    val alreadySet = when (existing) {
+        null -> false
+        is Map<*, *> -> existing.containsKey(IDLE_IN_TRANSACTION_TIMEOUT)
+        else -> IDLE_IN_TRANSACTION_TIMEOUT in existing.toString()
+    }
+    if (alreadySet) return options
+    val merged: Any = when (existing) {
+        null -> mapOf(IDLE_IN_TRANSACTION_TIMEOUT to millis)
+        is Map<*, *> -> existing + (IDLE_IN_TRANSACTION_TIMEOUT to millis)
+        else -> "$existing;$IDLE_IN_TRANSACTION_TIMEOUT=$millis"
+    }
+    return options.mutate().option(STARTUP_OPTIONS, merged).build()
+}
+
+// The driver's `options` option is typed Map<String, String>, but a URL's `?options=` arrives as its string form.
+@Suppress("UNCHECKED_CAST") // reading and writing the one option whose declared type the URL form does not honour
+private val STARTUP_OPTIONS = PostgresqlConnectionFactoryProvider.OPTIONS as Option<Any>
 
 /**
  * Connects Exposed to a bounded R2DBC [ConnectionPool] instead of a raw per-transaction
@@ -120,8 +184,17 @@ private fun Application.connectPooled(): R2dbcDatabase {
         .option(ConnectionFactoryOptions.USER, config.property("postgres.user").getString())
         .option(ConnectionFactoryOptions.PASSWORD, config.property("postgres.password").getString())
         .option(PostgresqlConnectionFactoryProvider.APPLICATION_NAME, bounds.applicationName)
+        // The driver bounds it CAN offer: the TCP connect and TCP keepalive. Keepalive uses the OS
+        // defaults (about 2 h before the first probe), so it is a slow fuse; the acquire-time REMOTE
+        // validation below is what actually detects a dead connection. The driver has no socket READ
+        // timeout, so a hung database is bounded at acquire time by the pool below. The statement timeout is NOT a driver option
+        // here — see defaultQueryTimeout in the Exposed config below.
+        .option(ConnectionFactoryOptions.CONNECT_TIMEOUT, Duration.ofSeconds(bounds.connectTimeoutSeconds))
+        .option(PostgresqlConnectionFactoryProvider.TCP_KEEPALIVE, true)
         .build()
-    val rawFactory = ConnectionFactories.get(options)
+    val rawFactory = ConnectionFactories.get(
+        withIdleInTransactionTimeout(options, Duration.ofSeconds(bounds.idleInTransactionTimeoutSeconds)),
+    )
     val pool = ConnectionPool(
         ConnectionPoolConfiguration.builder(rawFactory)
             .maxSize(bounds.maxSize)
@@ -129,8 +202,22 @@ private fun Application.connectPooled(): R2dbcDatabase {
             .maxAcquireTime(Duration.ofSeconds(bounds.maxAcquireTimeSeconds))
             .maxIdleTime(Duration.ofSeconds(bounds.maxIdleTimeSeconds))
             // No connection outlives this, so a long-lived backend cannot linger past a server-side
-            // restart/failover/idle-killer (the pool validates LOCALLY only — see persistence.md).
+            // restart/failover/idle-killer even when it is never validated against a frozen peer.
             .maxLifeTime(Duration.ofSeconds(bounds.maxLifeTimeSeconds))
+            // Every acquire validates with a bounded round trip: a frozen or server-killed connection fails
+            // validation and is discarded (r2dbc-pool invalidates it; reactor-pool returns the slot before
+            // the driver's close(), which is local, so the slot is free while the frozen socket lingers
+            // until the thaw), and the pool creates a new one, itself bounded by maxCreateConnectionTime.
+            // r2dbc-pool retries a failed timed acquire once (acquireRetry = 1, its default), so a
+            // request waits at most about 2 × maxAcquireTime for a hung database instead of forever.
+            // Each acquire gets two validation attempts: ONE dropped connection is replaced
+            // transparently, but after a PostgreSQL restart (every idle connection dead at once) a
+            // request whose two picks are both dead still fails fast until the pool has refreshed.
+            // Costs one round trip (SELECT 1) per acquire; a statement ALREADY in flight when the
+            // network black-holes still waits until TCP gives up — the driver has no read timeout.
+            .validationDepth(ValidationDepth.REMOTE)
+            .maxValidationTime(Duration.ofSeconds(bounds.maxValidationTimeSeconds))
+            .maxCreateConnectionTime(Duration.ofSeconds(bounds.maxCreateConnectionTimeSeconds))
             // r2dbc-pool 1.0.2 evicts on acquire/release regardless; its background sweep defaults to
             // an interval of maxIdleTime (10 min here) — pinned to at most a minute so an idle,
             // expired connection is released promptly instead of waiting for the next acquire.
@@ -146,6 +233,13 @@ private fun Application.connectPooled(): R2dbcDatabase {
         // already full. Toadie's writes serialize on table locks (READ COMMITTED), never on
         // serialization failures, so nothing here relied on the retry.
         defaultMaxAttempts = 1
+        // PostgreSQL's server-side statement_timeout: a statement a LIVE but stuck server runs
+        // longer (a lock wait, a runaway query) is cancelled (SQLSTATE 57014; the transaction rolls
+        // back, the connection stays valid). It MUST be set here: Exposed's statement executor
+        // re-SETs statement_timeout from the transaction's queryTimeout before every statement
+        // (default 0 = no limit), so a driver startup option or a post-allocate SET would be silently
+        // overwritten with 0 — nothing else may SET statement_timeout. Seconds, as Exposed takes them.
+        defaultQueryTimeout = bounds.statementTimeoutSeconds.toInt()
     }
     return R2dbcDatabase.connect(connectionFactory = pool, databaseConfig = databaseConfig)
 }

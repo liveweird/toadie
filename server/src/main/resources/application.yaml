@@ -207,6 +207,27 @@ postgres:
     # release and by the background sweep), so a backend killed or restarted server-side is not
     # kept for the lifetime of the process.
     maxLifeTimeSeconds: "$POSTGRES_POOL_MAX_LIFE_SECONDS:1800"
+    # PostgreSQL's idle_in_transaction_session_timeout on every pooled connection (0 = off): the
+    # server ends a session left idle inside an open transaction, releasing its locks. Toadie's
+    # longest transaction is ~0.5 s, so 300 s is a very wide margin — see "Connection pool" in
+    # persistence.md. Sent as a startup parameter; an `options=` already in the r2dbc URL wins.
+    idleInTransactionTimeoutSeconds: "$POSTGRES_POOL_IDLE_IN_TRANSACTION_TIMEOUT_SECONDS:300"
+    # Bounding a HUNG database (one that accepts or holds connections but never answers), which
+    # nothing else bounds: the driver has no socket read timeout. Every acquire validates the
+    # connection with a round trip (ValidationDepth.REMOTE), failing after this many seconds — a
+    # frozen or server-killed connection is discarded instead of handed to a request. A hung
+    # database holds a request at most ~2 x maxAcquireTimeSeconds (r2dbc-pool retries a timed-out
+    # acquire once) before the catch-all 500 (and /readyz 503).
+    maxValidationTimeSeconds: "$POSTGRES_POOL_MAX_VALIDATION_SECONDS:5"
+    # Creating a new connection (TCP connect + startup/auth handshake) fails after this long.
+    maxCreateConnectionTimeSeconds: "$POSTGRES_POOL_MAX_CREATE_SECONDS:10"
+  # The TCP connect alone (the driver's connectTimeout; Netty's default is 30 s).
+  connectTimeoutSeconds: "$POSTGRES_CONNECT_TIMEOUT_SECONDS:10"
+  # PostgreSQL's server-side statement_timeout for every pooled connection: a statement a LIVE but
+  # stuck server runs longer (a lock wait, a runaway query) is cancelled. 0 = no limit. Toadie's
+  # statements and per-document transaction holds are ~100 ms; Flyway's JDBC connection is not
+  # affected. Set through Exposed's defaultQueryTimeout (Database.kt), never a driver option.
+  statementTimeoutSeconds: "$POSTGRES_STATEMENT_TIMEOUT_SECONDS:30"
 
 # Read-only Port integration API; admin key management remains available when disabled.
 integration:
