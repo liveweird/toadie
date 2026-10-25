@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -8,6 +9,8 @@ import { parse } from "yaml";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const composeSource = readFileSync(resolve(repoRoot, "docker-compose.yaml"), "utf8");
 const ciSource = readFileSync(resolve(repoRoot, ".github/workflows/ci.yml"), "utf8");
+const imageCheckPath = resolve(repoRoot, ".github/scripts/image-check.sh");
+const imageCheckSource = readFileSync(imageCheckPath, "utf8");
 const e2eSource = readFileSync(resolve(repoRoot, ".github/workflows/e2e.yml"), "utf8");
 const toolchainSource = readFileSync(resolve(repoRoot, "mise.toml"), "utf8");
 const dockerfileSource = readFileSync(resolve(repoRoot, "Dockerfile"), "utf8");
@@ -26,6 +29,13 @@ function lockfiles(root, dir = "") {
     if (entry.isDirectory()) return skipped.has(entry.name) ? [] : lockfiles(root, path);
     return entry.name.endsWith("gradle.lockfile") ? [path] : [];
   });
+}
+
+// A runtime tag follows the toolchain tag ("21.0.12_8") when it is the same feature/update line,
+// optionally as a respin ("21.0.12.N_M"); a different update (21.0.13_9) must fail.
+function runtimeFollowsToolchain(runtimeTag, toolchainTag) {
+  const base = toolchainTag.split("_")[0];
+  return new RegExp(`^${base.replaceAll(".", "\\.")}(\\.\\d+)?_\\d+$`).test(runtimeTag);
 }
 
 describe("deployment and verification safety defaults", () => {
@@ -51,10 +61,10 @@ describe("deployment and verification safety defaults", () => {
       expect(ci.on).toHaveProperty(event, null); // no path/branch skips on a required gate
     }
     expect(ci.permissions).toEqual({ contents: "read" });
-    expect(ci.jobs["quality-gate"].needs).toEqual(["backend", "frontend", "gradle-vulnerability-scan", "e2e"]);
+    expect(ci.jobs["quality-gate"].needs).toEqual(["backend", "frontend", "gradle-vulnerability-scan", "image", "e2e"]);
     expect(ci.jobs["quality-gate"].if).toBe("${{ always() }}");
     const gate = ci.jobs["quality-gate"].steps?.[0].run;
-    for (const job of ["BACKEND", "FRONTEND", "GRADLE_SCAN", "E2E"]) expect(gate).toContain(`test "$${job}" = success`);
+    for (const job of ["BACKEND", "FRONTEND", "GRADLE_SCAN", "IMAGE", "E2E"]) expect(gate).toContain(`test "$${job}" = success`);
     expect(ci.jobs.e2e.uses).toBe("./.github/workflows/e2e.yml");
   });
 
@@ -96,6 +106,60 @@ describe("deployment and verification safety defaults", () => {
       expect(dockerCopies, `Dockerfile COPY lines miss ${lock}`).toContain(lock);
     }
     expect(tripwire).toContain("gradle/verification-metadata.xml");
+  });
+
+  it("builds both architectures and scans the image OS layer on every run", () => {
+    const ci = parse(ciSource);
+    const image = ci.jobs.image;
+    expect(image.name).toBe("Container image");
+    expect(image["timeout-minutes"]).toBe(30);
+    expect(image.if).toBeUndefined(); // every event, like the other gate jobs
+    expect(image.steps.some((step) => step.run === "bash .github/scripts/image-check.sh")).toBe(true);
+    const checkout = image.steps.find((step) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkout.with["persist-credentials"]).toBe(false);
+    const upload = image.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
+    expect(upload.if).toBe("${{ always() }}");
+    expect(upload.with["retention-days"]).toBe(7);
+    // No secrets or write token reach this job: it never publishes (registry publishing is parked).
+    expect(ciSource).not.toMatch(/\bsecrets\./);
+    expect(ci.permissions).toEqual({ contents: "read" });
+
+    // The script is syntactically valid bash (execFileSync throws on a non-zero exit).
+    execFileSync("bash", ["-n", imageCheckPath]);
+
+    // Comments cannot satisfy a flag: match the code only, with line continuations joined.
+    const code = imageCheckSource
+      .split("\n")
+      .filter((line) => !/^\s*#/.test(line))
+      .join("\n")
+      .replace(/\\\n/g, " ");
+    expect(code).toContain("--platform linux/amd64,linux/arm64");
+    expect(code).toContain("--install arm64");
+    const trivyScan = code.split("\n").find((line) => line.includes("image --input"));
+    expect(trivyScan).toBeTruthy();
+    for (const flag of ["--scanners vuln", "--pkg-types os", "--ignore-unfixed", "--severity HIGH,CRITICAL", "--exit-code 1"]) {
+      expect(trivyScan).toContain(flag);
+    }
+    // The blocking property: Trivy's exit status is captured, and the script exits with it after
+    // the report guards; a clean exit with a missing report or without an os-pkgs target still fails.
+    expect(code).toContain("|| scan_status=$?");
+    expect(code).toContain('exit "$scan_status"');
+    expect(code).toContain('"os-pkgs"');
+    expect(code).toContain("no OS-package target");
+    expect(code).toMatch(/elif \[ "\$scan_status" -eq 0 \]; then[\s\S]*?exit 1/);
+
+    // Every image the script runs is pinned by tag AND digest.
+    expect(imageCheckSource).toMatch(/moby\/buildkit:v[\d.]+@sha256:[0-9a-f]{64}/);
+    expect(imageCheckSource).toMatch(/tonistiigi\/binfmt:qemu-v[\d.]+-\d+@sha256:[0-9a-f]{64}/);
+    const trivyPin = /ghcr\.io\/aquasecurity\/trivy:[\d.]+@sha256:[0-9a-f]{64}/;
+    const scriptTrivy = imageCheckSource.match(trivyPin)?.[0];
+    const advisoryScan = ci.jobs["gradle-vulnerability-scan"].steps.map((step) => step.run ?? "").join("\n");
+    expect(scriptTrivy).toBeTruthy();
+    expect(advisoryScan.match(trivyPin)?.[0]).toBe(scriptTrivy); // one Trivy version for both scans
+
+    // Nothing is published.
+    expect(code).not.toMatch(/push|type=registry|type=image|docker login/);
+    expect(code).toMatch(/--output "type=docker,dest=/); // the only output: a local tar
   });
 
   it("fails the API lint on warnings for both the contract and the conformant fixture", () => {
@@ -154,27 +218,50 @@ describe("deployment and verification safety defaults", () => {
     expect(appDeploymentSource).not.toContain("MALLOC_ARENA_MAX");
   });
 
-  it("pins both Temurin build and runtime tags to the local toolchain's exact patch", () => {
+  it("pins the Temurin build stage to the local toolchain's exact patch and the runtime to the same update", () => {
     const localVersion = toolchainSource.match(/^java = "temurin-([^"]+)"$/m)?.[1];
     expect(localVersion).toBeTruthy();
     // mise.toml spells "21.0.11+10.0.LTS"; Docker Hub's eclipse-temurin tags spell the same
     // build as "21.0.11_10" (underscore, LTS suffix dropped) — reduce both to that form.
     const dockerTag = localVersion.replace("+", "_").replace(/\.\d+\.LTS$/, "");
-    const buildTags = [...dockerfileSource.matchAll(/eclipse-temurin:(\S+?)-(?:jdk|jre)(?:@sha256:[0-9a-f]{64})?\b/g)].map((m) => m[1]);
-    expect(buildTags).toHaveLength(2); // the server build stage and the runtime stage
-    for (const tag of buildTags) expect(tag).toBe(dockerTag);
+    const tags = (kind) => [...dockerfileSource.matchAll(new RegExp(`eclipse-temurin:(\\S+?)-${kind}(?:@sha256:[0-9a-f]{64})?\\b`, "g"))].map((m) => m[1]);
+    // The build JDK must match mise/CI exactly; the runtime JRE may run a respin ahead (below).
+    expect(tags("jdk")).toEqual([dockerTag]);
+    expect(tags("jre")).toHaveLength(1);
+    expect(runtimeFollowsToolchain(tags("jre")[0], dockerTag)).toBe(true);
+  });
+
+  it("lets the runtime JRE run a respin of the toolchain's update, never a different update", () => {
+    expect(runtimeFollowsToolchain("21.0.12_8", "21.0.12_8")).toBe(true);
+    expect(runtimeFollowsToolchain("21.0.12.1_1", "21.0.12_8")).toBe(true);
+    expect(runtimeFollowsToolchain("21.0.12.2_3", "21.0.12_8")).toBe(true);
+    expect(runtimeFollowsToolchain("21.0.13_9", "21.0.12_8")).toBe(false);
+    expect(runtimeFollowsToolchain("21.0.13.1_1", "21.0.12_8")).toBe(false);
+    expect(runtimeFollowsToolchain("21.0.120_8", "21.0.12_8")).toBe(false);
+    expect(runtimeFollowsToolchain("17.0.12_8", "21.0.12_8")).toBe(false);
+    expect(runtimeFollowsToolchain("21.0.12.1", "21.0.12_8")).toBe(false);
   });
 
   it("pins every Dockerfile base image by sha256 digest", () => {
     const froms = dockerfileSource.split("\n").filter((line) => /^FROM\s/.test(line));
     expect(froms).toHaveLength(3);
-    for (const line of froms) expect(line).toMatch(/^FROM\s+\S+@sha256:[0-9a-f]{64}(\s+AS\s+\S+)?$/);
+    for (const line of froms) expect(line).toMatch(/^FROM\s+(--platform=\$BUILDPLATFORM\s+)?\S+@sha256:[0-9a-f]{64}(\s+AS\s+\S+)?$/);
+  });
+
+  it("cross-builds: the two build stages run on the build platform, only the runtime stage is per-platform", () => {
+    // web/dist and the installDist JARs are platform-independent, so a multi-arch build compiles them
+    // once; the runtime stage (and its emulated useradd) is the only stage that follows the target.
+    const froms = dockerfileSource.split("\n").filter((line) => /^FROM\s/.test(line));
+    const stage = (name) => froms.find((line) => line.endsWith(` AS ${name}`));
+    expect(stage("web")).toMatch(/^FROM --platform=\$BUILDPLATFORM node:/);
+    expect(stage("server")).toMatch(/^FROM --platform=\$BUILDPLATFORM eclipse-temurin:/);
+    expect(stage("runtime")).not.toContain("--platform");
   });
 
   it("keeps the Node major identical across mise.toml, the Dockerfile and both workflows", () => {
     const miseMajor = toolchainSource.match(/^node = "(\d+)/m)?.[1];
     expect(miseMajor).toBeTruthy();
-    expect(dockerfileSource.match(/^FROM node:(\d+)-alpine/m)?.[1]).toBe(miseMajor);
+    expect(dockerfileSource.match(/^FROM (?:--platform=\$BUILDPLATFORM )?node:(\d+)-alpine/m)?.[1]).toBe(miseMajor);
     const setupNodeVersions = (source) =>
       Object.values(parse(source).jobs)
         .flatMap((job) => job.steps ?? [])
