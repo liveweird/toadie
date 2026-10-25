@@ -143,6 +143,16 @@ describe("deployment and verification safety defaults", () => {
     expect(userLine).not.toBe("root");
   });
 
+  it("bakes MALLOC_ARENA_MAX=2 into the runtime stage so compose and k8s both inherit it", () => {
+    // Native-memory bound (.claude/docs/security.md "Entity read memory budget" - Heap layout): without it
+    // glibc keeps 8 x cores malloc arenas, ~2 MiB resident per JVM thread.
+    const runtimeStage = dockerfileSource.slice(dockerfileSource.indexOf("AS runtime"));
+    expect(runtimeStage).toMatch(/^ENV MALLOC_ARENA_MAX=2$/m);
+    // Neither deployment descriptor may override it with a looser value.
+    expect(composeSource).not.toContain("MALLOC_ARENA_MAX");
+    expect(appDeploymentSource).not.toContain("MALLOC_ARENA_MAX");
+  });
+
   it("pins both Temurin build and runtime tags to the local toolchain's exact patch", () => {
     const localVersion = toolchainSource.match(/^java = "temurin-([^"]+)"$/m)?.[1];
     expect(localVersion).toBeTruthy();

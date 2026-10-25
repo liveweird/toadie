@@ -1,5 +1,5 @@
 import { command, operationSignal } from '../graphql-smoke/support.mjs'
-import { parseVmStatus } from './report.mjs'
+import { countMemoryErrors, parseVmStatus } from './report.mjs'
 
 /** The whole-workspace reads: every one materialises the full workspace in the app. */
 export const ENDPOINTS = [
@@ -58,4 +58,10 @@ export async function containerState(container) {
   ], { timeout: 30_000 })
   const [restartCount, oomKilled] = stdout.trim().split(' ')
   return { restartCount: Number(restartCount), oomKilled: oomKilled === 'true' }
+}
+
+/** Heap / direct-buffer exhaustion lines in the app container's log (stdout and stderr). */
+export async function appLogMemoryErrors(container) {
+  const { stdout, stderr } = await command('docker', ['logs', container], { timeout: 60_000 })
+  return countMemoryErrors(`${stdout}\n${stderr}`)
 }

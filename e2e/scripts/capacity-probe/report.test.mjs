@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  countMemoryErrors,
   parseVmStatus, percentile, renderReport, statusHistogram, summarize,
 } from './report.mjs'
 
@@ -60,4 +61,13 @@ test('report flags an OOM-killed restarting container and unreadable memory', ()
   })
   assert.match(markdown, /Container restarts: 2 \(OOM-killed\)/)
   assert.match(markdown, /\| after reads \| n\/a \| n\/a \|/)
+})
+
+test('app log memory errors are counted per line and reported as n/a when the log is unreadable', () => {
+  const log = 'ok\njava.lang.OutOfMemoryError: Java heap space\nx\nio.netty.util.internal.OutOfDirectMemoryError: failed\n'
+  assert.equal(countMemoryErrors(log), 2)
+  assert.equal(countMemoryErrors('all quiet\n'), 0)
+  const base = { workspace: { entities: 1, files: 1 }, cells: [], memory: { before: {}, after: {}, restartCount: 0, oomKilled: false } }
+  assert.match(renderReport(base), /OutOfDirectMemoryError: n\/a\n/)
+  assert.match(renderReport({ ...base, memory: { ...base.memory, memoryErrors: 2 } }), /OutOfDirectMemoryError: 2\n/)
 })

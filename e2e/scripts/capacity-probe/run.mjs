@@ -12,13 +12,18 @@ import {
   cleanupStack, privateTempDir, removeTemp, repositoryRoot, setCommandSignal,
 } from '../graphql-smoke/support.mjs'
 import { activeTotal, importDocuments } from './load.mjs'
-import { appMemory, containerState, measureEndpoints } from './measure.mjs'
+import { appLogMemoryErrors, appMemory, containerState, measureEndpoints } from './measure.mjs'
 import { renderReport } from './report.mjs'
 import {
   catalogReplicator, entityReplicator, GROUP, planCatalogReplicas, planEntityReplicas,
 } from './replicate.mjs'
 
 const DEFAULT_CONCURRENCY = [1, 2, 3, 5, 10]
+
+// Variables that make the probe's app talk to something other than its own disposable Postgres and
+// Mailpit: the database, SMTP, mail-link and telemetry-exporter settings of the base compose app service
+// (docker-compose.yaml), plus any other name that reads as a host or URL.
+const FORBIDDEN_APP_ENV = /^(POSTGRES_|SMTP_|MAIL_|OTEL_EXPORTER_)|(_URL|_URI|_HOST|_HOSTS|_ENDPOINT)$/
 
 export function usage() {
   return `Usage: npm run probe:capacity -- --entities N --files N [--concurrency 1,2,3,5,10] [--keep]
@@ -28,13 +33,15 @@ builds the current checkout, loads the 15 sample blueprints, replicates the Port
 and the Backstage catalog sample up to the requested sizes (the server's entity caps apply:
 2,000 per blueprint, 10,000 total), then fires K simultaneous whole-workspace reads for every K
 in --concurrency and prints a markdown report. It never accepts an existing URL, project or
-volume. The project and its volume are removed at the end; --keep leaves them up and prints
+volume. --app-env (repeatable) adds environment variables to the probe's own app container
+(e.g. JAVA_OPTS=... or MALLOC_ARENA_MAX=2) to compare runtime settings without rebuilding code.
+The project and its volume are removed at the end; --keep leaves them up and prints
 the exact removal command.`
 }
 
 export function parseArgs(argv) {
   if (argv.includes('--help') || argv.includes('-h')) return { help: true }
-  const options = { entities: 1000, files: 1000, concurrency: DEFAULT_CONCURRENCY, keep: false }
+  const options = { entities: 1000, files: 1000, concurrency: DEFAULT_CONCURRENCY, keep: false, appEnv: Object.create(null) }
   const count = (name, value, minimum) => {
     const parsed = Number(value)
     if (!Number.isInteger(parsed) || parsed < minimum) throw new Error(`${name} needs an integer >= ${minimum}\n\n${usage()}`)
@@ -48,6 +55,14 @@ export function parseArgs(argv) {
     else if (option === '--files' && value !== undefined) options.files = count(option, argv[++index], 0)
     else if (option === '--concurrency' && value !== undefined) {
       options.concurrency = argv[++index].split(',').map((item) => count(option, item, 1))
+    } else if (option === '--app-env' && value !== undefined) {
+      const [, key, setting] = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s.exec(argv[++index]) ?? []
+      if (key === undefined) throw new Error(`--app-env needs KEY=VALUE (KEY a shell-style name)\n\n${usage()}`)
+      if (FORBIDDEN_APP_ENV.test(key)) {
+        throw new Error(`--app-env ${key} is refused: the probe's app may only use its own disposable database and mail catcher\n\n${usage()}`)
+      }
+      if (key in options.appEnv) throw new Error(`--app-env ${key} was given twice\n\n${usage()}`)
+      options.appEnv[key] = setting
     } else throw new Error(`Unknown or incomplete option: ${option}\n\n${usage()}`)
   }
   return options
@@ -140,7 +155,7 @@ async function main() {
     stack.add(() => removeImage(names.image))
     console.log('Stage: building image')
     await buildImage({ root, image: names.image })
-    const deployment = await startCompose({ root, temp, id, image: names.image, cleanup: stack })
+    const deployment = await startCompose({ root, temp, id, image: names.image, cleanup: stack, appEnv: options.appEnv })
     const [baseUrl] = await deployment.targets()
     console.log('Stage: deployment ready; loading the sample blueprints')
     await loadSamples({
@@ -149,6 +164,8 @@ async function main() {
     const { value: token } = await login(baseUrl, deployment.password)
 
     const notes = []
+    const appEnvKeys = Object.keys(options.appEnv)
+    if (appEnvKeys.length > 0) notes.push(`app environment overrides: ${appEnvKeys.join(', ')}`)
     if (options.entities > 0) {
       console.log(`Stage: replicating up to ${options.entities} entities`)
       notes.push(...await loadEntities({ baseUrl, token, root, entities: options.entities }))
@@ -168,8 +185,11 @@ async function main() {
     const cells = await measureEndpoints({ baseUrl, token, concurrencies: options.concurrency })
     const after = await safely(() => appMemory(names.app))
     const state = await safely(() => containerState(names.app))
+    const memoryErrors = await safely(() => appLogMemoryErrors(names.app).then((count) => ({ count })))
     console.log(`\n${renderReport({
-      workspace, cells, memory: { before, after, restartCount: state.restartCount ?? 'unknown', oomKilled: state.oomKilled },
+      workspace, cells, memory: { before, after, restartCount: state.restartCount ?? 'unknown', oomKilled: state.oomKilled,
+        memoryErrors: memoryErrors.count,
+      },
     })}`)
     succeeded = true
     if (options.keep) {

@@ -65,12 +65,6 @@ promotes it. A finished item is removed, not ticked.
 Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the
 Backstage sample to 10k files, on a disposable stack).
 
-- [next] **Bound native memory after a probe.** The 2026-10-24 capacity probe put the 512 MiB
-  container at VmRSS 506 MiB / VmHWM 520 MiB under 10 concurrent whole-workspace reads: the read
-  ledger bounds the heap, but Netty/R2DBC direct buffers (default up to `-Xmx`) and glibc arenas
-  are unbounded. Probe `-XX:MaxDirectMemorySize` and `MALLOC_ARENA_MAX=2` against the same load,
-  keep what lowers the high-water mark without costing throughput, and record the numbers beside
-  the `server/build.gradle.kts` JVM flags.
 - [new] **Draw only the visible part of very large graphs.** Since 2.20.0 the layout runs in a
   worker, but "Show everything" on 1,000 entities still costs two main-thread tasks (414 ms and
   230 ms) when React Flow mounts 1,000 nodes and 3,435 edges. Measure React Flow's

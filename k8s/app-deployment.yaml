@@ -144,9 +144,11 @@ spec:
             - containerPort: 8081
               protocol: TCP
           # Sized for the tuned JVM baked into the image (SerialGC + -Xmx256m + C1): ~270 MiB RSS
-          # under light load. Request covers steady state; the 512 MiB limit bounds it with headroom.
+          # under light load (a near-empty workspace). Request covers steady state; the 512 MiB limit
+          # bounds it with headroom.
           # The whole-workspace read peak against this limit (2026-10-24 capacity probe) is recorded
-          # in .claude/docs/security.md "Entity read memory budget" (Heap layout).
+          # in .claude/docs/security.md "Entity read memory budget" (Heap layout), together with the
+          # native-memory bound the image sets (malloc arena cap, Dockerfile).
           # Re-examined in the 2026-09-20 checkup Tier 2 (2.13.1) and deliberately kept absent.
           resources:
             requests:

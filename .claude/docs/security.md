@@ -348,13 +348,40 @@ read set (`entities/EntityWorkspaceRead.kt`'s `loadReadSet`, `.claude/docs/persi
   at ~21 MiB idle. The 64 MiB ledger is well inside that remaining headroom, leaving slack for
   request-handling overhead outside the ledger's own accounting (HTTP buffers, JSON encoding of
   the RESPONSE, computed-property evaluation's own working set). The 512 MiB container stays at
-  ~270 MiB RSS under light load. **Probe numbers (the one canonical home; the Gradle, compose
+  ~270 MiB RSS under light load (a near-empty workspace, not the 10k/10k probe below).
+  **Probe numbers (the one canonical home; the Gradle, compose
   and k8s comments link here):** the 2026-10-24 probe (10k files/10k entities, 10 concurrent
   whole-workspace reads, master 62db09a, measured BEFORE the catalog reads joined the ledger)
   read VmRSS 518624 kB (506 MiB) / VmHWM 532780 kB (520 MiB) from the app process against the
   512 MiB container limit — at the limit, not comfortably under it — and the heap OOMed because
-  the catalog reads were unbudgeted. `infra/concurrency/ReadLedger.kt` bounds the heap side;
-  native memory (Netty/R2DBC direct buffers up to `-Xmx`, glibc arenas) is the remainder.
+  the catalog reads were unbudgeted. `infra/concurrency/ReadLedger.kt` bounds the heap side.
+- **Native memory (measured 2026-10-25).** The remainder was NOT Netty/R2DBC direct
+  buffers: `-XX:NativeMemoryTracking=summary` on the loaded process (10k/10k workspace, master
+  2031e33) put the whole malloc side at ~39 MiB and `Other` (where `DirectByteBuffer`s are
+  counted) at ~3 MiB, while `/proc/1/smaps` showed ~106 per-thread glibc malloc arenas
+  (64 MiB-aligned mappings, ~100 JVM threads on an 18-core host: arena cap = 8 x cores), each
+  resident as one 2 MiB transparent huge page — ~210 MiB of the ~500 MiB RSS, mostly empty. The
+  image therefore sets `ENV MALLOC_ARENA_MAX=2` (`Dockerfile` runtime stage; compose and k8s
+  inherit it; `web/src/test/infrastructure.test.js` pins it). Probe, same 10k/10k workspace, concurrency 1,2,3,5,10, every
+  configuration 47 x `200` / 58 x `429` / 0 x `5xx`, 0 restarts, 0 `OutOfMemoryError` lines:
+
+  | App configuration | RSS before reads | RSS / HWM after reads |
+  |---|---:|---:|
+  | baseline (run A / run B) | 417 / 428 MiB | 494 / 519 and 506 / 521 MiB |
+  | `-XX:MaxDirectMemorySize=64m` | 425 MiB | 495 / 521 MiB |
+  | `MaxDirectMemorySize=32m` + `-Dio.netty.maxDirectMemory=32 MiB` | 427 MiB | 507 / 520 MiB |
+  | `MALLOC_ARENA_MAX=2` (run A / run B) | 243 / 241 MiB | 419 / 419 and 379 / 418 MiB |
+  | `MALLOC_ARENA_MAX=2` + `MaxDirectMemorySize=64m` | 241 MiB | 372 / 418 MiB |
+  | shipped image (`ENV MALLOC_ARENA_MAX=2`, no overrides) | 242 MiB | 405 / 414 MiB |
+
+  The arena cap lowers the high-water mark by ~100 MiB (HWM ~520 -> ~418 MiB, ~94 MiB under the
+  limit instead of ~0) with the same status mix and no latency penalty (K=1 p50 per endpoint
+  within the run-to-run noise of 230-470 ms; K=10 `entities/graph` p50 ~160-170 ms vs ~220 ms).
+  Direct-buffer caps changed nothing (the numbers are run-to-run noise of ~+-10 MiB) and were
+  NOT adopted: a cap that never binds only adds an `OutOfDirectMemoryError` path. The heap
+  (`-Xmx256m`) and `READ_BUDGET_BYTES` are unchanged. Re-measure with
+  `cd e2e && npm run probe:capacity -- --entities 10000 --files 10000 --app-env KEY=VALUE`
+  (`e2e/README.md` "Capacity probe").
 - **Prepaid admission, then draw-down (2.19.0).** (1) An up-front, all-or-nothing RESERVATION:
   `loadReadSet` reads `id` + `octet_length(document)` + `octet_length(team)` per row of the
   combined row set off PostgreSQL BEFORE a single document crosses the wire and calls
