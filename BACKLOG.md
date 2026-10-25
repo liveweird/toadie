@@ -51,16 +51,9 @@ promotes it. A finished item is removed, not ticked.
   froze waits until it thaws (or TCP gives up), holding one pool slot (`.claude/docs/persistence.md`
   "A hung database is bounded", Exception (i)). A fix is a decorator below the pool: a first-signal
   timeout on every exchange, plus a poison flag that makes `validate()` fail so r2dbc-pool invalidates
-  the connection on release. It needs a fake-connection test for every delegated r2dbc-spi method.
-- [next] **Make pooled-connection release cancel-proof.** r2dbc-pool's `PooledConnection.close()` runs a
-  validation and a rollback before `ref.release()`. If the awaiting coroutine is cancelled while that
-  rollback waits on a frozen server, the release may never run and the slot stays acquired (read from
-  the bytecode, not reproduced). Confirm with a held-statement/cancel regression; the fix would subscribe
-  the release eagerly, or close under `NonCancellable`.
-- [next] **Stop re-sending `SET statement_timeout` before every statement.** Exposed 1.6.0 R2DBC sends it
-  before each statement from the transaction's `queryTimeout` (with 0 before 2.20.2, 30 s since),
-  roughly doubling round trips. Flow's `StatementTimeoutCachingConnectionFactory` skips an unchanged
-  value; measure the gain before porting it.
+  the connection on release. It needs a fake-connection test for every delegated r2dbc-spi method. The same
+  wait applies to a commit held by a frozen server: cancelling its coroutine ends the commit await,
+  but the rollback and close that follow are non-cancellable and hold the slot until the thaw.
 
 ## Performance
 
