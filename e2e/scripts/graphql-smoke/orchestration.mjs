@@ -33,7 +33,19 @@ export async function buildImage({ root, image, context }) {
   await command('docker', [...contextArgs, 'build', '--tag', image, '.'], { cwd: root, timeout: 900_000 })
 }
 
-export async function startCompose({ root, temp, id, image, cleanup }) {
+/**
+ * Extra `environment:` entries for the app service of the override file. Values are written as
+ * JSON strings (a YAML double-quoted scalar), so `:`/`#`/quotes in a value cannot change the YAML,
+ * and `$` is doubled because Compose interpolates `$VAR` in its files: `$$` reaches the container
+ * as a literal `$`.
+ */
+export function appEnvironmentLines(appEnv = {}) {
+  return Object.entries(appEnv)
+    .map(([key, value]) => `      ${key}: ${JSON.stringify(String(value).replaceAll('$', '$$$$'))}\n`)
+    .join('')
+}
+
+export async function startCompose({ root, temp, id, image, cleanup, appEnv = {} }) {
   const names = composeNames(id)
   const override = join(temp, 'compose.override.yaml')
   const password = 'changeme'
@@ -49,7 +61,7 @@ export async function startCompose({ root, temp, id, image, cleanup }) {
     image: ${image}
     environment:
       MAIL_APP_URL: http://localhost
-    ports: !override
+${appEnvironmentLines(appEnv)}    ports: !override
       - "127.0.0.1::8081"
 `)
   const compose = ['compose', '--project-name', names.project, '-f', 'docker-compose.yaml', '-f', override]

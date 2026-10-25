@@ -123,7 +123,13 @@ default, passed through the environment of the loader and never printed.
 The output is markdown: one table row per endpoint and concurrency (status histogram such as
 `200x8, 429x2`, p50 and max latency over that round's requests, payload KiB of the largest `200`
 body), then the app's java `VmRSS`/`VmHWM` before and after the reads and the container's restart
-count (flagged when OOM-killed). One round per cell, so treat small differences as noise.
+count (flagged when OOM-killed) and the number of app-log lines naming an `OutOfMemoryError` /
+`OutOfDirectMemoryError`. One round per cell, so treat small differences as noise.
+
+To compare runtime settings without rebuilding code, add `--app-env KEY=VALUE` (repeatable) —
+it sets that variable on the probe's OWN app container only (the report lists the keys, never
+the values), e.g. `--app-env MALLOC_ARENA_MAX=4 --app-env 'JAVA_OPTS=-XX:MaxDirectMemorySize=64m'`.
+Run configurations back to back, one probe at a time, and repeat one to see the noise.
 `npm run test:smoke` covers the pure replication and report modules; the live run is manual and
 adds no Playwright scenario.
 

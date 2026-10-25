@@ -39,6 +39,11 @@ export function parseVmStatus(text) {
   return { rssKb: read('VmRSS'), hwmKb: read('VmHWM') }
 }
 
+/** Lines of an app log naming a heap or Netty direct-buffer exhaustion. */
+export function countMemoryErrors(text) {
+  return text.split('\n').filter((line) => /OutOfMemoryError|OutOfDirectMemoryError/.test(line)).length
+}
+
 const mib = (kb) => (kb === undefined ? 'n/a' : `${(kb / 1024).toFixed(0)} MiB`)
 const ms = (value) => (value === undefined ? 'n/a' : String(Math.round(value)))
 const kib = (value) => (value === undefined ? 'n/a' : value.toFixed(0))
@@ -46,7 +51,8 @@ const kib = (value) => (value === undefined ? 'n/a' : value.toFixed(0))
 /**
  * Renders the whole probe result as markdown.
  * `cells`: [{ endpoint, concurrency, samples }]; `memory`: { before, after, restartCount, oomKilled }
- * (before/after are parseVmStatus results); `workspace`: { entities, files, notes } counts as reached.
+ * (before/after are parseVmStatus results; `memoryErrors` is countMemoryErrors of the app log,
+ * undefined when the log could not be read); `workspace`: { entities, files, notes } counts as reached.
  */
 export function renderReport({ workspace, cells, memory }) {
   const lines = ['## Capacity probe', '']
@@ -65,5 +71,6 @@ export function renderReport({ workspace, cells, memory }) {
   lines.push(`| before reads | ${mib(memory.before.rssKb)} | ${mib(memory.before.hwmKb)} |`)
   lines.push(`| after reads | ${mib(memory.after.rssKb)} | ${mib(memory.after.hwmKb)} |`)
   lines.push('', `Container restarts: ${memory.restartCount}${memory.oomKilled ? ' (OOM-killed)' : ''}`, '')
+  lines.push(`App log lines with OutOfMemoryError / OutOfDirectMemoryError: ${memory.memoryErrors ?? 'n/a'}`, '')
   return lines.join('\n')
 }
