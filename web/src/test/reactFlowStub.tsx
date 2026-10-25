@@ -87,6 +87,7 @@ export function ReactFlow({
   edges,
   nodesDraggable,
   onlyRenderVisibleElements,
+  minZoom,
   "data-drawn-nodes": drawnNodes,
   onInit,
   onNodesChange,
@@ -100,6 +101,7 @@ export function ReactFlow({
   edges: { id: string; label?: unknown; style?: { strokeDasharray?: unknown; strokeWidth?: unknown } }[];
   nodesDraggable?: boolean;
   onlyRenderVisibleElements?: boolean;
+  minZoom?: number;
   "data-drawn-nodes"?: number;
   onInit?: (instance: { fitView: () => void }) => void;
   onNodesChange?: (changes: unknown[]) => void;
@@ -136,6 +138,7 @@ export function ReactFlow({
       data-testid="flow"
       data-draggable={String(nodesDraggable ?? true)}
       data-virtualized={String(onlyRenderVisibleElements ?? false)}
+      data-min-zoom={minZoom}
       data-drawn-nodes={drawnNodes}
     >
       {/* The canvas overlays (cluster frames, Background, Controls) are children. */}

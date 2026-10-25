@@ -5,7 +5,7 @@ import { IconStack2 } from "@tabler/icons-react";
 /**
  * The "Top level" marker beside Expand all while the large-graph gate's transient fold overlay
  * is active (the Hierarchy's Pinned badge idiom): gray — neutral state, not caution — with a
- * labelled clear button. Shared by Graph and EntityGraph.
+ * labelled clear button whose tooltip names what it leads to. Shared by Graph and EntityGraph.
  */
 export default function TopLevelBadge({ onClear }: { onClear: () => void }) {
   const { t } = useTranslation();
@@ -22,6 +22,8 @@ export default function TopLevelBadge({ onClear }: { onClear: () => void }) {
           size="xs"
           variant="transparent"
           aria-label={t("common.graphLayout.topLevelClearAria")}
+          // The way to Show everything runs through this button (it brings the panel): say so.
+          title={t("common.graphLayout.topLevelClearTitle")}
           onClick={onClear}
         />
       }

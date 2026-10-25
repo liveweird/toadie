@@ -419,12 +419,12 @@ the same commit** — this list is the coverage map, the scenario file is the de
   nests), and drags it in Manual mode, whose PUT is awaited by exact node id and confirmed
   after a reload → cleanup. A second journey (2.20.0) seeds one more throwaway blueprint and
   320 chained entities through the batched entity import (`seedEntityChain` in `helpers.ts`)
-  and opens the canvas as the seed admin: the large-graph gate's "Large graph" panel holds
-  the layout back (no node drawn), Show top level draws the eight chain roots under a "Top
-  level" badge, clearing the badge restores the panel, Show everything lays all 320 out through
-  the layout worker (the canvas reports 320 drawn nodes) while mounting only the nodes in view
-  (`onlyRenderVisibleElements`), and no
-  `entity-graph-layout` PUT is ever sent → cleanup.
+  and opens the canvas as the seed admin: the over-the-gate graph opens folded by itself (2.22.0)
+  — the canvas reports the eight chain roots as its drawn nodes under a "Top level" badge, with no
+  "Large graph" panel — clearing the badge brings the panel back, Show everything lays all 320
+  out through the layout worker (the canvas reports 320 drawn nodes) while mounting only the
+  nodes in view (`onlyRenderVisibleElements`), and no `entity-graph-layout` PUT is ever sent
+  → cleanup.
 - [`entity-hierarchy.spec.ts`](scenarios/entity-hierarchy.md) — the Entity hierarchy (Port
   migration phase 3; + Phase 4 ownership, v1.26.0; parallel hierarchies, v1.32.0): the same
   throwaway blueprint pair with one parent, two children, one orphan child Direct-owned by a

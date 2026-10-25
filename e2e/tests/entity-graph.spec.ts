@@ -324,13 +324,14 @@ test("the entity graph filters by blueprint, folds hierarchy, and persists a man
   }
 });
 
-// The large-graph gate (2.20.0): one throwaway blueprint whose single self-`parent` relation is
+// The large-graph gate (2.20.0; opens folded by default since 2.22.0): one throwaway blueprint whose single self-`parent` relation is
 // the `composition` hierarchy, and 320 entities in eight chains of forty, imported through the
 // batched entity import (two batches of at most 200). The seed admin opens the canvas narrowed
-// to this run with the search filter; the gate must hold the layout back at 300+ drawn nodes
-// and nothing it does may be written to the layout document (the admin's own is only READ, so a
+// to this run with the search filter; at 300+ drawn nodes the canvas must open on the top-level
+// overlay (the eight chain roots) instead of laying all 320 out, and nothing it does may be
+// written to the layout document (the admin's own is only READ, so a
 // PUT of it fails the journey). Owns only its `e2e-eg-*` blueprint and entities.
-test("a large entity graph opens behind the gate and lays out on request", async ({ page }) => {
+test("a large entity graph opens folded to its top level and shows everything on request", async ({ page }) => {
   test.slow();
   await login(page);
   const adminToken = await page.evaluate(() => localStorage.getItem("toadie.auth.token"));
@@ -371,37 +372,35 @@ test("a large entity graph opens behind the gate and lays out on request", async
     });
     expect(roots).toHaveLength(total / chainLength);
 
-    // 1. Open the Entity graph narrowed to this run: 320 nodes are over the gate's 300.
+    // 1. Open the Entity graph narrowed to this run: 320 nodes are over the gate's 300, so the
+    // canvas opens on the top-level overlay by itself: the eight chain roots, under a "Top level"
+    // badge, with no panel in the way.
     await page.goto("/entity-graph");
     await expect(page.getByRole("heading", { name: "Entity graph" })).toBeVisible();
     await openFilters(page);
     await page.getByRole("textbox", { name: "Search" }).fill(run);
     const gate = page.getByRole("region", { name: "Large graph" });
-    await expect(gate).toBeVisible();
-    await expect(gate).toContainText(`Nodes: ${total}`);
-    await expect(page.locator(".react-flow__node")).toHaveCount(0);
-    await expect(page.getByText(/nothing to render/i)).toHaveCount(0);
-
-    // 2. Show top level: only the eight chain roots are drawn, under a "Top level" badge.
-    await gate.getByRole("button", { name: "Show top level" }).click();
+    const wrapper = page.getByTestId("rf__wrapper");
+    await expect(wrapper).toHaveAttribute("data-drawn-nodes", String(roots.length), { timeout: 60_000 });
     await expect(page.locator(".react-flow__node")).toHaveCount(roots.length);
     await expect(page.getByText("Top level", { exact: true })).toBeVisible();
     await expect(gate).toHaveCount(0);
+    await expect(page.getByText(/nothing to render/i)).toHaveCount(0);
 
-    // 3. Leaving the top-level view brings the gate back.
+    // 2. Leaving the top-level view brings the gate panel, which names the whole selection.
     await page.getByRole("button", { name: "Leave the top-level view" }).click();
     await expect(gate).toBeVisible();
+    await expect(gate).toContainText(`Nodes: ${total}`);
     await expect(page.locator(".react-flow__node")).toHaveCount(0);
 
-    // 4. Show everything lays all 320 out (the worker; the main thread stays responsive). Above
+    // 3. Show everything lays all 320 out (the worker; the main thread stays responsive). Above
     // the gate's limit the canvas mounts only the nodes in view (`onlyRenderVisibleElements`), so
     // the DOM holds a subset; the canvas wrapper's `data-drawn-nodes` carries the laid-out count.
     await gate.getByRole("button", { name: "Show everything" }).click();
-    await expect(page.getByTestId("rf__wrapper")).toHaveAttribute("data-drawn-nodes", String(total), {
-      timeout: 60_000,
-    });
+    await expect(wrapper).toHaveAttribute("data-drawn-nodes", String(total), { timeout: 60_000 });
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
     await expect(gate).toHaveCount(0);
+    await expect(page.getByText("Top level", { exact: true })).toHaveCount(0);
 
     // Nothing the gate did reached the per-user layout document.
     expect(layoutWrites).toEqual([]);

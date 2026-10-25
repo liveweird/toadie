@@ -96,6 +96,7 @@
     },
     "topLevelBadge": "Najwyższy poziom",
     "topLevelClearAria": "Wyjdź z widoku najwyższego poziomu",
+    "topLevelClearTitle": "Wyjdź z widoku najwyższego poziomu, aby pokazać wszystko",
     "saveLimit": "Zbyt wiele zapisanych pozycji lub zwiniętych węzłów — użyj Resetuj układ lub Rozwiń wszystko, aby zwolnić miejsce."
   },
   "tier": {

@@ -96,6 +96,7 @@
     },
     "topLevelBadge": "Top level",
     "topLevelClearAria": "Leave the top-level view",
+    "topLevelClearTitle": "Leave the top-level view to show everything",
     "saveLimit": "Too many saved positions or collapsed nodes — use Reset layout or Expand all to free some."
   },
   "tier": {

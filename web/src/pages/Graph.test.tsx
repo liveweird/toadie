@@ -643,36 +643,80 @@ describe("Graph page", () => {
     const drawn = () => screen.queryAllByText(/\[STORED\]/).length;
     const panel = () => screen.findByRole("region", { name: "Large graph" });
 
-    test("a graph over 300 nodes opens behind the panel: no layout, no canvas, no empty state", async () => {
+    test("a graph over 300 nodes opens on the top-level overlay: only the roots are laid out, nothing is saved", async () => {
       mockGraph(mockFetch, bigCatalog(301));
       renderPage();
 
-      expect(await panel()).toHaveTextContent("Nodes: 301, relations: 299");
+      await waitFor(() => expect(drawn()).toBe(2));
+      expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
+      expect(screen.getByText("Top level")).toBeInTheDocument();
+      // The way to Show everything runs through the badge's clear button, and its tooltip says so.
+      expect(screen.getByRole("button", { name: "Leave the top-level view" })).toHaveAttribute(
+        "title",
+        "Leave the top-level view to show everything",
+      );
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-drawn-nodes", "2");
+      // dagre never saw the 301-node graph; the overlay is not written to the layout document.
+      expect(vi.mocked(layoutPositions).mock.calls.every(([request]) => request.nodes.length === 2)).toBe(true);
+      expect(layoutPuts(mockFetch)).toEqual([]);
+    });
+
+    test("a graph whose top level is still over 300 nodes keeps the panel: no layout, no canvas, no empty state", async () => {
+      // 301 systems with one component each: 602 nodes, and the top level still draws 301.
+      const systems = Array.from({ length: 301 }, (_, i) => `sys${i}`);
+      mockGraph(mockFetch, {
+        nodes: [
+          ...systems.map((name, i) => ({
+            id: `system:default/${name}`, kind: "system", namespace: "default", name, title: null, fileId: i + 1, status: "STORED",
+          })),
+          ...systems.map((name, i) => ({
+            id: `component:default/c-${name}`, kind: "component", namespace: "default", name: `c-${name}`, title: null, fileId: 1000 + i, status: "STORED",
+          })),
+        ],
+        edges: systems.map((name) => ({
+          sourceId: `component:default/c-${name}`, targetId: `system:default/${name}`, field: "spec.system",
+        })),
+      });
+      renderPage();
+
+      expect(await panel()).toHaveTextContent("Nodes: 602, relations: 301");
+      expect(screen.getByRole("button", { name: "Show top level" })).toBeInTheDocument();
       expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
       expect(screen.queryByText(/nothing to render/i)).not.toBeInTheDocument();
       expect(vi.mocked(layoutPositions)).not.toHaveBeenCalled();
     });
 
-    test("exactly 300 nodes lay out as usual", async () => {
+    test("a graph without a hierarchy keeps the panel and offers only Show everything", async () => {
+      const flat = bigCatalog(301);
+      flat.edges = [];
+      mockGraph(mockFetch, flat);
+      renderPage();
+
+      expect(await panel()).toHaveTextContent("Nodes: 301, relations: 0");
+      expect(screen.queryByRole("button", { name: "Show top level" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Show everything" })).toBeInTheDocument();
+      expect(vi.mocked(layoutPositions)).not.toHaveBeenCalled();
+    });
+
+    test("exactly 300 nodes lay out as usual, with the 0.05 zoom floor", async () => {
       mockGraph(mockFetch, bigCatalog(300));
       renderPage();
 
       await waitFor(() => expect(drawn()).toBe(300));
       expect(screen.queryByRole("region", { name: "Large graph" })).not.toBeInTheDocument();
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
       // At the limit (not over it) every node is mounted.
       expect(screen.getByTestId("flow")).toHaveAttribute("data-virtualized", "false");
       expect(screen.getByTestId("flow")).toHaveAttribute("data-drawn-nodes", "300");
+      expect(screen.getByTestId("flow")).toHaveAttribute("data-min-zoom", "0.05");
     });
 
-    test("Show top level draws only the roots; toggling there saves nothing; Expand all brings the panel back", async () => {
+    test("toggling the overlay saves nothing; Expand all and the badge's clear bring the panel back", async () => {
       mockGraph(mockFetch, bigCatalog(301));
       const user = userEvent.setup();
       renderPage();
 
-      await user.click(await screen.findByRole("button", { name: "Show top level" }));
       await waitFor(() => expect(drawn()).toBe(2));
-      expect(screen.getByText("Top level")).toBeInTheDocument();
-
       await user.click(screen.getByRole("button", { name: "Expand sys-a (150 hidden)" }));
       await waitFor(() => expect(drawn()).toBe(152));
       expect(layoutPuts(mockFetch)).toEqual([]);
@@ -681,13 +725,80 @@ describe("Graph page", () => {
       expect(await panel()).toBeInTheDocument();
       expect(screen.queryByText("Top level")).not.toBeInTheDocument();
       expect(layoutPuts(mockFetch)).toEqual([]);
+
+      // The panel's Show top level brings the overlay back; the badge's clear leaves it again.
+      await user.click(screen.getByRole("button", { name: "Show top level" }));
+      await waitFor(() => expect(drawn()).toBe(2));
+      await user.click(screen.getByRole("button", { name: "Leave the top-level view" }));
+      expect(await panel()).toBeInTheDocument();
     });
 
-    test("Show everything draws all of it, with dagre's crossing heuristic switched off", async () => {
+    test("Expand all on the default overlay only leaves it: the saved fold is neither cleared nor PUT", async () => {
+      // 700 nodes; the saved fold hides sys-b's 349 descendants (351 left, still over 300), so
+      // the top level (two systems) opens by default.
+      mockGraph(mockFetch, bigCatalog(700), 200, { mode: "auto", positions: {}, collapsed: ["system:default/sys-b"] });
+      const user = userEvent.setup();
+      renderPage();
+
+      await waitFor(() => expect(drawn()).toBe(2));
+      expect(screen.getByText("Top level")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Expand all" }));
+
+      expect(await panel()).toHaveTextContent("Nodes: 351");
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
+      expect(layoutPuts(mockFetch)).toEqual([]);
+    });
+
+    test("a saved fold arriving late never flashes the default overlay or lays it out", async () => {
+      // The layout GET is held: the fold it carries brings 301 nodes down to 151.
+      let release: (value: Response) => void = () => {};
+      mockGraph(mockFetch, bigCatalog(301));
+      const base = mockFetch.getMockImplementation() as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+      mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+        url === "/api/v1/users/9/graph-layout" && init?.method !== "PUT"
+          ? new Promise<Response>((resolve) => {
+              release = resolve;
+            })
+          : base(url, init),
+      );
+      renderPage();
+
+      // Held: the panel of old, no top-level canvas and no layout run at all.
+      expect(await panel()).toHaveTextContent("Nodes: 301");
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
+      expect(vi.mocked(layoutPositions)).not.toHaveBeenCalled();
+
+      act(() =>
+        release(jsonResponse(200, { mode: "auto", positions: {}, collapsed: ["system:default/sys-a"] })),
+      );
+      await waitFor(() => expect(drawn()).toBe(151));
+      expect(screen.queryByText("Top level")).not.toBeInTheDocument();
+      expect(vi.mocked(layoutPositions).mock.calls.every(([request]) => request.nodes.length === 151)).toBe(true);
+    });
+
+    test("an expand over the limit offers Show top level again, and it returns to the roots", async () => {
       mockGraph(mockFetch, bigCatalog(301));
       const user = userEvent.setup();
       renderPage();
 
+      await waitFor(() => expect(drawn()).toBe(2));
+      // Expanding both systems draws all 301 nodes: gated again, with the top level on offer.
+      await user.click(screen.getByRole("button", { name: "Expand sys-a (150 hidden)" }));
+      await waitFor(() => expect(drawn()).toBe(152));
+      await user.click(screen.getByRole("button", { name: "Expand sys-b (149 hidden)" }));
+      expect(await panel()).toHaveTextContent("Nodes: 301");
+      await user.click(screen.getByRole("button", { name: "Show top level" }));
+      await waitFor(() => expect(drawn()).toBe(2));
+      expect(layoutPuts(mockFetch)).toEqual([]);
+    });
+
+    test("Show everything, reached through the panel, draws all of it with dagre's crossing heuristic switched off", async () => {
+      mockGraph(mockFetch, bigCatalog(301));
+      const user = userEvent.setup();
+      renderPage();
+
+      await waitFor(() => expect(drawn()).toBe(2));
+      await user.click(screen.getByRole("button", { name: "Leave the top-level view" }));
       await user.click(await screen.findByRole("button", { name: "Show everything" }));
 
       await waitFor(() => expect(drawn()).toBe(301));
