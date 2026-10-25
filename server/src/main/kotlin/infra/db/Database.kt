@@ -165,8 +165,8 @@ private val STARTUP_OPTIONS = PostgresqlConnectionFactoryProvider.OPTIONS as Opt
  * backends against PostgreSQL's default `max_connections = 100`.
  *
  * [ConnectionFactoryOptions.parse] plus the user/password/application-name mutations produce
- * [options], from which [ConnectionFactories.get] resolves the PLAIN (unpooled) PostgreSQL
- * factory that [ConnectionPool] then wraps. Exposed's
+ * [options], from which [ConnectionFactories.get] resolves the plain (unpooled) PostgreSQL
+ * factory, which [StatementTimeoutCachingConnectionFactory] decorates and [ConnectionPool] then wraps. Exposed's
  * `R2dbcDatabase.connect(connectionFactory, databaseConfig, ...)` overload derives its SQL
  * dialect and reported URL from `databaseConfig.connectionFactoryOptions` alone — verified
  * against `exposed-r2dbc-1.5.0`'s `R2dbcDatabase.Companion.doConnect` bytecode: it only calls
@@ -192,11 +192,14 @@ private fun Application.connectPooled(): R2dbcDatabase {
         .option(ConnectionFactoryOptions.CONNECT_TIMEOUT, Duration.ofSeconds(bounds.connectTimeoutSeconds))
         .option(PostgresqlConnectionFactoryProvider.TCP_KEEPALIVE, true)
         .build()
-    val rawFactory = ConnectionFactories.get(
-        withIdleInTransactionTimeout(options, Duration.ofSeconds(bounds.idleInTransactionTimeoutSeconds)),
+    // BELOW the pool: the remembered statement_timeout belongs to one physical connection (StatementTimeoutCache.kt).
+    val unpooledFactory = StatementTimeoutCachingConnectionFactory(
+        ConnectionFactories.get(
+            withIdleInTransactionTimeout(options, Duration.ofSeconds(bounds.idleInTransactionTimeoutSeconds)),
+        ),
     )
     val pool = ConnectionPool(
-        ConnectionPoolConfiguration.builder(rawFactory)
+        ConnectionPoolConfiguration.builder(unpooledFactory)
             .maxSize(bounds.maxSize)
             .initialSize(bounds.initialSize)
             .maxAcquireTime(Duration.ofSeconds(bounds.maxAcquireTimeSeconds))
@@ -238,7 +241,8 @@ private fun Application.connectPooled(): R2dbcDatabase {
         // back, the connection stays valid). It MUST be set here: Exposed's statement executor
         // re-SETs statement_timeout from the transaction's queryTimeout before every statement
         // (default 0 = no limit), so a driver startup option or a post-allocate SET would be silently
-        // overwritten with 0 — nothing else may SET statement_timeout. Seconds, as Exposed takes them.
+        // overwritten with 0 — nothing else may SET statement_timeout. Seconds, as Exposed takes them. The driver
+        // sends the SET only when the connection's value differs: StatementTimeoutCachingConnectionFactory above.
         defaultQueryTimeout = bounds.statementTimeoutSeconds.toInt()
     }
     return R2dbcDatabase.connect(connectionFactory = pool, databaseConfig = databaseConfig)
