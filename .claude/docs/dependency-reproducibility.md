@@ -137,13 +137,66 @@ index digest from `docker buildx imagetools inspect <image>:<tag>`): `ghcr.io/aq
 (the same pin is in `ci.yml`'s Gradle advisory scan; the infrastructure test demands they match),
 `moby/buildkit` (the buildx builder) and `tonistiigi/binfmt` (the QEMU installer).
 
+## Rule: the Dependabot fix-up is computed without privilege and applied by a person
+
+- **Applies when:** a Dependabot PR on the `gradle` ecosystem (head branch `dependabot/gradle/...`)
+  needs its lockfiles and `gradle/verification-metadata.xml` regenerated.
+- **Requirement:** the `dependabot-gradle-fixup` workflow COMPUTES the regeneration and a maintainer
+  APPLIES it; no workflow ever writes to a branch.
+  - The workflow runs on `pull_request` (a Dependabot run gets a read-only token and no Actions
+    secrets) and `workflow_dispatch` only, with `permissions: contents: read`, no cache and no
+    write step. It checks out the PR head, runs the two-empty-home procedure above (generate, then
+    the strict proof from a second home, then a `cmp` tripwire) and uploads ONLY the eight data
+    files plus `manifest.json` as artifact `gradle-fixup-<head sha>` (7 days).
+  - `.github/scripts/dependabot-gradle-fixup.sh apply <pr>` downloads the artifact for the PR's
+    exact head SHA, validates it with `.github/scripts/gradle-fixup-validate.mjs` and commits it
+    with the maintainer's own credentials by a plain fast-forward push (a rejected push means the
+    head moved and the artifact is stale: re-run, never force). The artifact is untrusted data:
+    the job ran the bumped dependency's build.
+  - The validator allows only the eight files and `manifest.json`, metadata ADDITIONS only (the
+    `<configuration>` block byte-identical, no trust/key/alternate-hash constructs, one `sha256` per
+    artifact, no duplicates, the head's lines all still present) and lockfile grammar. It REFUSES an
+    artifact that contradicts the spec: no lockfile resolves a bumped module's declared version, or an
+    entry the artifact moved lands on an undeclared one (and `settings-gradle.lockfile` must pin the
+    Ktor catalog coordinate `settings.gradle.kts` declares). Verdict `OK` applies; `REVIEW` applies
+    only with `--accept-review` after a person read the listed changes; `REFUSED` never applies.
+    REVIEW is everything the validator cannot explain from the spec diff: lockfile changes outside the
+    requested bump (transitive deltas a grouped PR normally has), downgrades, configuration-only
+    moves, a changed `empty=` configuration set, a bumped module a file keeps on an undeclared version
+    (reached only transitively, or stale) or loses the declared one in, and checksum additions outside
+    the bump's groups that no lockfile line explains. It never prunes obsolete entries.
+- **Reference:** `.github/workflows/dependabot-gradle-fixup.yml`,
+  `.github/scripts/dependabot-gradle-fixup.sh`, `.github/scripts/gradle-fixup-validate.mjs`,
+  `.github/dependabot.yml` (`rebase-strategy: disabled`: a Dependabot rebase would force-push over
+  the fix-up commit; use `gh pr update-branch` or `@dependabot recreate`, then re-run the fix-up).
+- **Enforcement:** `web/src/test/infrastructure.test.js` pins the workflow's triggers, read-only
+  permissions, absence of secrets/write commands/caches, the job guards, the head checkout, the two
+  distinct Gradle homes, the strict proof and the artifact retention, plus the script's syntax and
+  the Dependabot setting; `web/src/test/gradleFixupValidate.test.js` pins each refusal. The workflow
+  is NOT a required check and not a **Quality gate** dependency; the strict CI build on the applied
+  commit remains the proof.
+- **Exception:** a bump that needs a human decision (paired versions such as the OpenTelemetry SDK
+  and its Ktor instrumentation, an advisory floor) is edited by hand first. A Gradle wrapper bump that
+  changes the metadata schema line fails closed (REFUSED, the frame around `<components>` must equal the
+  head's): use `local`, or regenerate by hand. The script's `local <pr>` mode is the fallback when the
+  workflow cannot run: it executes the two documented commands above verbatim, each from its own empty
+  Gradle home (two separate directories under one temp directory, removed afterwards), in a detached
+  worktree at the PR head, then takes the same validate, commit and push path. **`local` runs the bumped
+  dependency's build on the maintainer's machine, with their credentials, SSH keys and Docker socket**;
+  that build can tamper with the validator or the git configuration before validation, so the validator
+  is no boundary in that mode (the manual procedure above carries the same exposure). Use it for a PR you
+  trust; the workflow path keeps the build off your machine.
+
 ## Dependabot
 
-Dependabot edits `gradle/libs.versions.toml` only: expect NO lockfile updates in a Gradle bump PR
-(not even the module lockfiles) and no `verification-metadata.xml` update. Every Gradle bump PR
-therefore needs the regeneration above run on its branch by hand before the Quality gate can go
-green. Flow takes the same documented-manual-step approach; Lettuce instead dropped Gradle from
-Dependabot altogether and bumps through the same process on its own schedule. There is no fix-up
-workflow here. The Netty and Reactor families are excluded from the grouped PR (they must move
-together; `checkDependencyAlignment` fails otherwise). npm is different: the committed
-`package-lock.json` plus `npm ci` governs, and Dependabot maintains it.
+What a Gradle PR contains: Dependabot edits `gradle/libs.versions.toml`, `settings.gradle.kts` (the
+Ktor catalog coordinate), the `"group:name:version"` literals in the kts scripts and the Gradle
+wrapper (with its `distributionSha256Sum` and `gradlew.bat`), and SOMETIMES `core/gradle.lockfile`
+and `server/gradle.lockfile`. It never edits `settings-gradle.lockfile`, any
+`buildscript-gradle.lockfile` or `gradle/verification-metadata.xml`, and a grouped PR normally also
+needs transitive lockfile deltas. Every Gradle bump PR therefore needs the regeneration above before
+the Quality gate can go green; the fix-up rule above is how it gets there (Flow documents the manual
+step only; Lettuce dropped Gradle from Dependabot altogether). The Netty and Reactor families are
+excluded from the grouped PR (they must move together; `checkDependencyAlignment` fails
+otherwise). npm is different: the committed `package-lock.json` plus `npm ci` governs, and
+Dependabot maintains it.

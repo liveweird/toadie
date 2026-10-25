@@ -90,7 +90,3 @@ promotes it. A finished item is removed, not ticked.
   at 0.15.0; `integration/Mcp.kt` relies on its stateless mode needing no `initialize`, on the
   Accept-header pair and on unknown tools being tool results. Re-verify those with the real
   TypeScript MCP client before merging the bump.
-- [next] **Automate the Gradle Dependabot fix-up.** Dependabot's Gradle PRs edit only
-  `libs.versions.toml`; the lockfiles and `gradle/verification-metadata.xml` must be regenerated
-  by hand from an empty Gradle home ([dependency-reproducibility.md](.claude/docs/dependency-reproducibility.md))
-  before strict verification passes. Consider a small fix-up workflow if the weekly cadence hurts.

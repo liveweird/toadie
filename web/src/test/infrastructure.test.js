@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { lockfiles } from "./repoLockfiles.js";
 
 // Read repository configuration as test data without exposing it through Vite's dev server.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -19,17 +20,13 @@ const appDeploymentSource = readFileSync(resolve(repoRoot, "k8s/app-deployment.y
 const applicationYamlSource = readFileSync(resolve(repoRoot, "server/src/main/resources/application.yaml"), "utf8");
 const openTelemetrySource = readFileSync(resolve(repoRoot, "core/src/commonMain/kotlin/OpenTelemetry.kt"), "utf8");
 const postgresDeploymentSource = readFileSync(resolve(repoRoot, "k8s/postgres-deployment.yaml"), "utf8");
+const fixupWorkflowSource = readFileSync(resolve(repoRoot, ".github/workflows/dependabot-gradle-fixup.yml"), "utf8");
+const fixupValidatorPath = resolve(repoRoot, ".github/scripts/gradle-fixup-validate.mjs");
+const fixupCliPath = resolve(repoRoot, ".github/scripts/dependabot-gradle-fixup.sh");
 
-// Every Gradle lockfile in the repository, as repo-relative POSIX paths (build outputs, installed
-// packages and agent worktrees are not part of the repository).
-function lockfiles(root, dir = "") {
-  const skipped = new Set(["node_modules", "build", ".git", ".gradle", ".kotlin", ".claude"]);
-  return readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((entry) => {
-    const path = dir ? `${dir}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) return skipped.has(entry.name) ? [] : lockfiles(root, path);
-    return entry.name.endsWith("gradle.lockfile") ? [path] : [];
-  });
-}
+// Whole whitespace-delimited tokens of a text (quotes stripped): a plain substring check would let
+// "gradle.lockfile" hide inside "settings-gradle.lockfile".
+const tokens = (text) => new Set(text.split(/\s+/).map((token) => token.replace(/^["']|["']$/g, "")));
 
 // A runtime tag follows the toolchain tag ("21.0.12_8") when it is the same feature/update line,
 // optionally as a respin ("21.0.12.N_M"); a different update (21.0.13_9) must fail.
@@ -89,10 +86,8 @@ describe("deployment and verification safety defaults", () => {
     expect(scan).toContain("Lockfiles missing from the scan");
     expect(existsSync(resolve(repoRoot, "gradle/verification-metadata.xml"))).toBe(true);
 
-    // A lockfile is only covered when it appears as a WHOLE whitespace-delimited token: a plain
-    // substring check would let "gradle.lockfile" hide inside "settings-gradle.lockfile". The
+    // A lockfile is only covered when it appears as a WHOLE whitespace-delimited token (`tokens`). The
     // lockfiles are globbed from the repository, so a newly added one is demanded automatically.
-    const tokens = (text) => new Set(text.split(/\s+/).map((token) => token.replace(/^["']|["']$/g, "")));
     const copied = tokens(scan.split("\n").filter((line) => line.trim().startsWith("cp ")).join("\n"));
     const backend = ci.jobs.backend.steps.map((step) => step.run ?? "").find((run) => run.includes("git diff --exit-code"));
     const tripwire = tokens(backend ?? "");
@@ -126,6 +121,9 @@ describe("deployment and verification safety defaults", () => {
 
     // The script is syntactically valid bash (execFileSync throws on a non-zero exit).
     execFileSync("bash", ["-n", imageCheckPath]);
+    // The fix-up validator and CLI parse too (the validator is Node-only, the CLI plain bash).
+    execFileSync(process.execPath, ["--check", fixupValidatorPath]);
+    execFileSync("bash", ["-n", fixupCliPath]);
 
     // Comments cannot satisfy a flag: match the code only, with line continuations joined.
     const code = imageCheckSource
@@ -364,5 +362,116 @@ describe("deployment and verification safety defaults", () => {
     const tmpVolumeMount = appContainer.volumeMounts.find((v) => v.name === "tmp");
     expect(tmpVolumeMount).toBeDefined();
     expect(tmpVolumeMount.mountPath).toBe("/tmp");
+  });
+});
+
+describe("Dependabot Gradle fix-up", () => {
+  const workflow = parse(fixupWorkflowSource);
+  const job = workflow.jobs.regenerate;
+  const stepOf = (text) => job.steps.find((step) => (step.run ?? "").includes(text));
+  const gradleHome = (step) => step.run.match(/GRADLE_USER_HOME="\$RUNNER_TEMP\/([^"]+)"/)?.[1];
+  const buildTasks = parse(ciSource)
+    .jobs.backend.steps.map((step) => step.run ?? "")
+    .join("\n")
+    .match(/\.\/gradlew (build :server:koverXmlReport :server:installDist)/)?.[1];
+
+  it("runs unprivileged: two triggers, read-only token, no secrets, no write commands, no caches", () => {
+    expect(Object.keys(workflow.on)).toEqual(["pull_request", "workflow_dispatch"]);
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(Object.values(workflow.jobs).filter((candidate) => candidate.permissions !== undefined)).toEqual([]);
+    // Job-level and keyed on the PR number: a run the job guard skips (a fork's lookalike branch, a
+    // maintainer's reopen) must not cancel the real one, and a branch name is attacker-chosen.
+    expect(workflow.concurrency).toBeUndefined();
+    expect(job.concurrency["cancel-in-progress"]).toBe(true);
+    expect(job.concurrency.group).toContain("github.event.pull_request.number");
+    expect(job.concurrency.group).not.toContain("head_ref");
+    for (const step of job.steps) expect(step.run ?? "", "an expression inside run: would be script injection").not.toContain("${{");
+    for (const forbidden of [
+      /\bsecrets\b/,
+      /contents:\s*write/,
+      /actions:\s*write/,
+      /pull-requests:\s*write/,
+      /github\.token|GITHUB_TOKEN/,
+      /git push|gh pr |gh workflow run|gh api/,
+      /actions\/cache|gradle\/actions|download-artifact/,
+      /pull_request_target|workflow_run/,
+    ]) {
+      expect(fixupWorkflowSource).not.toMatch(forbidden);
+    }
+    expect(job["timeout-minutes"]).toBeLessThanOrEqual(60);
+  });
+
+  it("only runs for Dependabot's own Gradle branches (or a manual dispatch)", () => {
+    expect(job.if).toContain("github.event_name == 'workflow_dispatch'");
+    expect(job.if).toContain("github.actor == 'dependabot[bot]'");
+    expect(job.if).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+    expect(job.if).toContain("startsWith(github.head_ref, 'dependabot/gradle/')");
+  });
+
+  it("checks out the PR head, not the merge ref, with full history and no stored credentials", () => {
+    const checkout = job.steps.find((step) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkout.with.ref).toContain("github.event.pull_request.head.sha");
+    expect(checkout.with.ref).toContain("github.sha"); // a dispatch is pinned to its SHA too, never a movable ref
+    expect(checkout.with.ref).not.toContain("github.ref");
+    expect(checkout.with["persist-credentials"]).toBe(false);
+    expect(checkout.with["fetch-depth"]).toBe(0);
+    const javaSetup = job.steps.find((step) => step.uses?.startsWith("actions/setup-java@"));
+    expect(javaSetup.with.distribution).toBe("temurin");
+    expect(javaSetup.with["java-version"]).toBe(toolchainSource.match(/^java = "temurin-([^"]+)"$/m)?.[1]);
+    expect(javaSetup.with).not.toHaveProperty("cache");
+  });
+
+  it("generates from one empty Gradle home and proves from another, strictly and without write flags", () => {
+    expect(buildTasks).toBeTruthy();
+    const generate = stepOf("--write-locks");
+    const prove = stepOf("--dependency-verification strict");
+    expect(generate.run).toContain("--write-locks --write-verification-metadata sha256");
+    expect(generate.run).toContain(`${buildTasks} --no-daemon`);
+    expect(prove.run).not.toContain("--write-");
+    expect(prove.run).toContain(`${buildTasks} --no-daemon`);
+    expect(gradleHome(generate)).toBeTruthy();
+    expect(gradleHome(prove)).toBeTruthy();
+    expect(gradleHome(generate)).not.toBe(gradleHome(prove));
+    // Generate, snapshot, prove, tripwire - in that order.
+    const order = ["--write-locks", "tar -cf", "--dependency-verification strict", "cmp "].map((text) => job.steps.indexOf(stepOf(text)));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(new Set(order).size).toBe(4);
+    expect(job.env.GRAPHQL_BASELINE_REVISION).toContain("github.event.pull_request.base.sha");
+  });
+
+  it("snapshots exactly the lockfiles and the verification metadata", () => {
+    const files = tokens(job.env.FIXUP_FILES);
+    files.delete("");
+    expect([...files].sort()).toEqual([...lockfiles(repoRoot), "gradle/verification-metadata.xml"].sort());
+  });
+
+  it("uploads only the snapshot, for a week, named by the head SHA", () => {
+    const upload = job.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
+    expect(upload.with.name).toContain("env.HEAD_SHA");
+    expect(upload.with["retention-days"]).toBeLessThanOrEqual(7);
+    expect(upload.with["if-no-files-found"]).toBe("error");
+    expect(upload.with.path).toMatch(/runner\.temp[^/]*\/fixup\/?$/);
+    expect(job.env.HEAD_SHA).toContain("github.event.pull_request.head.sha");
+  });
+
+  it("stays out of the Quality gate and keeps Dependabot from rebasing over the fix-up", () => {
+    expect(parse(ciSource).jobs["quality-gate"].needs).toEqual(["backend", "frontend", "gradle-vulnerability-scan", "image", "e2e"]);
+    const gradle = parse(dependabotSource).updates.find((update) => update["package-ecosystem"] === "gradle");
+    expect(gradle["rebase-strategy"]).toBe("disabled");
+  });
+
+  it("ships a maintainer CLI that parses and documents itself without touching the network", () => {
+    execFileSync("bash", ["-n", fixupCliPath]);
+    const help = execFileSync("bash", [fixupCliPath, "--help"], { encoding: "utf8" });
+    expect(help).toContain("apply <pr>");
+    expect(help).toContain("--accept-review");
+    const cli = readFileSync(fixupCliPath, "utf8");
+    expect(cli).toMatch(/set -euo pipefail/);
+    const pushes = cli.split("\n").filter((line) => /\bpush\b/.test(line) && !/^\s*#/.test(line));
+    expect(pushes.length).toBeGreaterThan(0);
+    // A rejected push means a stale artifact, never a force: no -f/--force, no "+refspec" (also quoted), no deleting or mirroring.
+    for (const line of pushes) expect(line).not.toMatch(/--force|--mirror|--delete|\s-f\b|[\s"']\+/);
+    expect(cli).toContain("--print-allow-list"); // the file list is the validator's, not a third hard-coded copy
+    expect(cli).toContain("core.hooksPath=/dev/null"); // no repository hook runs on the PR head's files
   });
 });
