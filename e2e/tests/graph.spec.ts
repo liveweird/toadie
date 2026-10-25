@@ -1,6 +1,7 @@
 import {
   createUserViaUi,
   expect,
+  expectNoAccessibilityViolations,
   login,
   openFilters,
   openPills,
@@ -164,13 +165,16 @@ test("the graph renders stored and missing nodes for a namespace", async ({ page
     expect(collapsedSaved.status()).toBe(204);
     await expect(page.getByText(a, { exact: true })).toHaveCount(0);
     await expect(page.locator(".react-flow__node")).toHaveCount(3);
-    await expect(page.getByRole("button", { name: `Expand ${sys} (1 hidden)` })).toBeVisible();
+    await expect(page.getByRole("button", { name: `Expand ${sys}, 1 hidden` })).toBeVisible();
+    // The collapsed pill is on screen: its accessible name must carry the visible count outside
+    // any parenthetical (axe `label-content-name-mismatch`).
+    await expectNoAccessibilityViolations(page);
     await expect(page.locator(".react-flow__edge").filter({ hasText: "dependsOn" })).toHaveCount(2);
     await expect(page.locator(".react-flow__edge-path[style*='stroke-dasharray']")).toHaveCount(2);
 
     // Reload: the collapsed set lives in the per-user layout document, server-side.
     await page.reload();
-    await expect(page.getByRole("button", { name: `Expand ${sys} (1 hidden)` })).toBeVisible();
+    await expect(page.getByRole("button", { name: `Expand ${sys}, 1 hidden` })).toBeVisible();
     await expect(page.getByText(a, { exact: true })).toHaveCount(0);
 
     // Expand all brings A back with its own solid edges, and clears the stored list.

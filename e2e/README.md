@@ -416,15 +416,15 @@ the same commit** — this list is the coverage map, the scenario file is the de
   `$team` relation chips to
   prune and restore an edge each, narrows further with the toolbar's Team filter,
   folds/unfolds the `composition`-hierarchy parent (the owning team unaffected — it never
-  nests), and drags it in Manual mode, whose PUT is awaited by exact node id and confirmed
+  nests; an axe scan runs over the collapsed pill), and drags it in Manual mode, whose PUT is awaited by exact node id and confirmed
   after a reload → cleanup. A second journey (2.20.0) seeds one more throwaway blueprint and
   320 chained entities through the batched entity import (`seedEntityChain` in `helpers.ts`)
-  and opens the canvas as the seed admin: the large-graph gate's "Large graph" panel holds
-  the layout back (no node drawn), Show top level draws the eight chain roots under a "Top
-  level" badge, clearing the badge restores the panel, Show everything lays all 320 out through
-  the layout worker (the canvas reports 320 drawn nodes) while mounting only the nodes in view
-  (`onlyRenderVisibleElements`), and no
-  `entity-graph-layout` PUT is ever sent → cleanup.
+  and opens the canvas as the seed admin: the over-the-gate graph opens folded by itself (2.22.0)
+  — the canvas reports the eight chain roots as its drawn nodes under a "Top level" badge (with their
+  collapsed fold pills, axe-scanned in place), with no "Large graph" panel — clearing the badge brings the panel back, Show everything lays all 320
+  out through the layout worker (the canvas reports 320 drawn nodes) while mounting only the
+  nodes in view (`onlyRenderVisibleElements`), and no `entity-graph-layout` PUT is ever sent
+  → cleanup.
 - [`entity-hierarchy.spec.ts`](scenarios/entity-hierarchy.md) — the Entity hierarchy (Port
   migration phase 3; + Phase 4 ownership, v1.26.0; parallel hierarchies, v1.32.0): the same
   throwaway blueprint pair with one parent, two children, one orphan child Direct-owned by a
@@ -568,8 +568,8 @@ the same commit** — this list is the coverage map, the scenario file is the de
   owner group left out; toggling a relation family (behind the title row's Visibility toggle
   since 2.4.2) prunes the missing nodes it strands;
   collapsing the System hides its component and re-attributes the component's relations to
-  the System as dashed edges, survives a reload (server-side per user), and Expand all undoes
-  it; a throwaway user's Manual layout mode drags a node, separately acknowledges the mode-only
+  the System as dashed edges (the collapsed Expand pill is axe-scanned in place), survives a
+  reload (server-side per user), and Expand all undoes it; a throwaway user's Manual layout mode drags a node, separately acknowledges the mode-only
   and exact position-bearing saves, then verifies the position survives a reload; Reset + Auto
   restore the pristine layout document before the user is deleted.
 - [`integration-clients.spec.ts`](scenarios/integration-clients.md) — an administrator creates an

@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type APIRequestContext, type Locator, type Page, type Response } from "@playwright/test";
 
 export { expect, test };
@@ -467,4 +468,20 @@ export async function pickNamespace(page: Page, ns: string): Promise<void> {
   await select.fill(ns);
   await page.getByRole("option", { name: ns }).click();
   await expect(select).toHaveValue(ns);
+}
+
+/**
+ * The accessibility spec's axe scan (WCAG 2.0/2.1 A+AA, its documented `color-contrast` waiver),
+ * scoped to `<main>` and asserted in place — for journeys that REACH a state the page-level scan
+ * cannot count on seeing (a collapsed fold pill, the top-level badge on a large graph). The
+ * page-level scan depends on whatever the shared database holds; this one runs against the state
+ * the calling journey just built.
+ */
+export async function expectNoAccessibilityViolations(page: Page): Promise<void> {
+  const scan = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .disableRules(["color-contrast"])
+    .include("main")
+    .analyze();
+  expect(scan.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 }
