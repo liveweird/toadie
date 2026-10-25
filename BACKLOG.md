@@ -40,12 +40,21 @@ promotes it. A finished item is removed, not ticked.
 
 ## Reliability
 
-- [next] **Fail fast when the database hangs.** With PostgreSQL paused (connections open, nothing
-  answering), an authenticated request waited past 40 s instead of failing: the pool bounds only
-  the acquire, and no statement or socket timeout bounds a query on a connection already held.
-  Found while proving 2.18.2's outage handling (a stopped database correctly answers 500 in
-  milliseconds). Decide on a statement timeout and/or r2dbc-postgresql socket timeout, with a
-  regression that pauses the container.
+- [new] **Bound a statement already in flight when the database freezes.** 2.20.2 bounds every
+  request that reaches the pool during a hang, but a statement already on the wire when PostgreSQL
+  froze waits until it thaws (or TCP gives up), holding one pool slot (`.claude/docs/persistence.md`
+  "A hung database is bounded", Exception (i)). A fix is a decorator below the pool: a first-signal
+  timeout on every exchange, plus a poison flag that makes `validate()` fail so r2dbc-pool invalidates
+  the connection on release. It needs a fake-connection test for every delegated r2dbc-spi method.
+- [new] **Make pooled-connection release cancel-proof.** r2dbc-pool's `PooledConnection.close()` runs a
+  validation and a rollback before `ref.release()`. If the awaiting coroutine is cancelled while that
+  rollback waits on a frozen server, the release may never run and the slot stays acquired (read from
+  the bytecode, not reproduced). Confirm with a held-statement/cancel regression; the fix would subscribe
+  the release eagerly, or close under `NonCancellable`.
+- [new] **Stop re-sending `SET statement_timeout` before every statement.** Exposed 1.6.0 R2DBC sends it
+  before each statement from the transaction's `queryTimeout` (with 0 before 2.20.2, 30 s since),
+  roughly doubling round trips. Flow's `StatementTimeoutCachingConnectionFactory` skips an unchanged
+  value; measure the gain before porting it.
 - [new] **Smoke the Kubernetes deployment on the new Netty/Reactor line.** 2.18.3 moved
   r2dbc-postgresql onto reactor-netty 1.3 / Netty 4.2, whose DNS resolver now answers the database
   hostname. Compose (Docker DNS, `postgres`) is covered by e2e; the k8s short name with search

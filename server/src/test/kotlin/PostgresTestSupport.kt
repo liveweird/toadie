@@ -3,8 +3,11 @@ package ch.nokillswit
 import org.testcontainers.postgresql.PostgreSQLContainer
 
 object PostgresTestSupport {
+    /** The one PostgreSQL image every test container uses (the shared one and `DatabaseHangTest`'s dedicated one). */
+    const val IMAGE = "postgres:18-alpine"
+
     private val container: PostgreSQLContainer by lazy {
-        PostgreSQLContainer("postgres:18-alpine").apply {
+        PostgreSQLContainer(IMAGE).apply {
             withDatabaseName("toadie_test")
             withUsername("toadie")
             withPassword("toadie")

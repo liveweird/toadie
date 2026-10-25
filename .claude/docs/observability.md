@@ -77,6 +77,22 @@ Field-naming convention: the acting caller is `byUserId` everywhere except the a
 
 Never log secrets (passwords, tokens); emails/ids are fine. Never log a throwable that can carry token or credential text: auth0's `JWTDecodeException` message embeds the decoded token segment (the logout debug lines log `cause.javaClass.simpleName` only; `LogoutTest` pins it), and the Flyway boot line logs `jdbcUrlForLogging(url)` — `host[:port]/db` only: string-based (no `java.net.URI`), a `//` authority accepted only straight after `jdbc:<subprotocol>:`, userinfo stripped at the last `@` before the authority is cut, the host/port/database strictly pattern-checked, and a fixed placeholder for anything unparseable or ambiguous (a `?`/`;` before the last `@` could be a password or a parameter value) (`FlywayLogTest`). When adding a security-relevant mutation or denial path, emit an `audit(...)` event alongside it and extend this list in the same change (the one sanctioned exception: the graph-layout PUT and its V30 `entity-graph-layout` twin — both pure per-user view state written on every drag stop, documented in `.claude/docs/authorization.md`) — in Lettuce this catalog grows to every user/team/content mutation, and the convention transfers wholesale. Tested in `AuditTest` via a Logback `ListAppender` on the audit logger (the shared `LogCapture` helper in `TestEnvironment.kt`).
 
+**Database failures are logged by class and SQLSTATE, never by message.**
+
+- **Applies when:** logging a throwable that may come from a query (the catch-all 500, the readiness
+  WARN, any new `log.*(…, throwable)` on a path that touches the database).
+- **Requirement:** pass it through `Throwable.safeForLog()` (`plugins/ErrorHandling.kt`). When an R2DBC or
+  Exposed exception sits anywhere in the cause chain it logs a `DatabaseFailureLogged` stand-in carrying
+  only the chain's exception classes, the SQLSTATE and the original stack trace: `ExposedR2dbcException`
+  appends the failed statements to its message (Exposed 1.6.0 R2DBC renders an unexpandable placeholder,
+  which nothing pins) and the driver message can quote data, so no database message is ever logged — a
+  lock wait cancelled by `statement_timeout` (57014) on a catalog write must not risk the document. Any other throwable is logged unchanged. The catch-all 500 line also carries the
+  request PATH only, never the query string (it can hold an entity query's text or filter values).
+- **Reference:** `plugins/ErrorHandling.kt` (`respondInternalError`, `safeForLog`), `plugins/Health.kt`.
+- **Enforcement:** `DatabaseFailureLogTest` (a real 57014 on a blocked write and a blocked read: SQLSTATE
+  present, the document text and the query-string value absent).
+- **Exception:** none.
+
 ### Integration audit
 
 The machine API additionally audits reads as `integration.request` and MCP tool calls as `integration.mcp_call`, with bounded client and

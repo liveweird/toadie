@@ -17,7 +17,8 @@ import org.slf4j.LoggerFactory
 private val healthLog = LoggerFactory.getLogger("ch.nokillswit.health")
 
 /**
- * Ceiling on the readiness answer. The R2DBC connection has no connect timeout of its own, and a
+ * Ceiling on the readiness answer. The pool's own bounds (`.claude/docs/persistence.md` "A hung database is
+ * bounded") fail a hung database after about 2 × `maxAcquireTime`, which is longer than a probe may wait, and a
  * cancellation reaches the Exposed transaction only at its next suspension point — measured
  * 2–7 s per probe against a database whose Service has no endpoints (the v1.22.0 acceptance
  * test). The probe therefore runs DETACHED (single-flight, below) and the handler awaits it with
@@ -69,7 +70,7 @@ fun Application.configureHealth() {
                     call.respondProblem(HttpStatusCode.ServiceUnavailable, "Database is not reachable")
                 }
                 outcome.isFailure -> {
-                    healthLog.warn("readiness probe failed: database unreachable", outcome.exceptionOrNull())
+                    healthLog.warn("readiness probe failed: database unreachable", outcome.exceptionOrNull()?.safeForLog())
                     call.respondProblem(HttpStatusCode.ServiceUnavailable, "Database is not reachable")
                 }
                 else -> call.respondText("OK")
