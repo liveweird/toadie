@@ -256,13 +256,16 @@ Backend tests live flat in `server/src/test/kotlin/` (kotlin.test + `io.ktor.ser
   test instead of hanging the suite. A test that must act while an exchange is ON THE WIRE (a commit
   sent to the frozen server) polls `relay.held` (the chunks the relay is holding) instead of sleeping,
   and JOINS a coroutine whose commit is held under `withTimeout(responseTimeout + margin)` WHILE STILL
-  FROZEN: the commit await is cancelled at once, the rollback that follows is a new exchange bounded by the
-  response deadline, so the coroutine ends within it — that join IS the pin (thaw only afterwards). Put the
-  freeze-to-join stretch in a `try { } finally { relay.frozen = false }` so a failed assertion fails the test
-  instead of hanging it. Use short bounds (`maxValidationTimeSeconds=1`,
+  FROZEN: the commit await is cancelled at once, Exposed's pre-rollback `validate(REMOTE)` is bounded by the
+  response deadline and poisons the connection, so the coroutine ends within it — that join IS the pin (thaw only
+  afterwards). Put the freeze-to-join stretch in a `try { } finally { relay.frozen = false }` so a failed assertion
+  fails the test instead of hanging it. A freezing test also arms a thaw WATCHDOG (a coroutine that thaws or
+  unpauses after ~15 s), because the non-cancellable rollback cannot be aborted by an outer `withTimeout` and a
+  regression would otherwise hang the suite; it cancels the watchdog as soon as the frozen exchange has returned,
+  so a late thaw can never fake a "still frozen" assertion. Use short bounds (`maxValidationTimeSeconds=1`,
   `maxCreateConnectionTimeSeconds=2`, `maxAcquireTimeSeconds=3`, and `responseTimeoutSeconds=2` over
-  `statementTimeoutSeconds=1`, which the boot invariant requires to be strictly smaller) and expect a few seconds per case
-  (`DatabaseHangTest` costs about 12-15 s, mostly the container start).
+  `statementTimeoutSeconds=1`, which the boot invariant requires to be non-zero and strictly smaller) and expect a few seconds per case
+  (`DatabaseHangTest` costs about 10 s in the test report, measured 2026-10-25 on a warm image; allow 15-18 s wall when the container image is not cached, mostly the container start).
 - **Reference:** `server/src/test/kotlin/FreezableRelay.kt`, `ConnectionPoolTest` (the relay cases),
   `DatabaseHangTest`, and `.claude/docs/persistence.md` "A hung database is bounded".
 - **Enforcement:** manual review (no gate can tell a paused shared container from any other test

@@ -111,13 +111,15 @@ private fun readPoolBounds(config: ApplicationConfig): PoolBounds {
     val statementTimeoutSeconds = config.property("postgres.statementTimeoutSeconds").getString().toLong()
         .also { require(it in 0..3600) { "postgres.statementTimeoutSeconds must be between 0 and 3600" } }
     // The client-side response deadline (ResponseDeadline.kt); 0 = off. It must out-wait the server's own statement_timeout, or a
-    // healthy long statement would be discarded as a hung one before the server cancels it.
+    // healthy long statement would be discarded as a hung one before the server cancels it; and with statement_timeout off a LIVE
+    // lock wait longer than the deadline would be discarded while its backend keeps waiting, the freed slot opening another
+    // backend (a lock convoy past maxSize), so a non-zero deadline requires a non-zero statement timeout.
     val responseTimeoutSeconds = config.property("postgres.responseTimeoutSeconds").getString().toLong()
         .also { require(it in 0..3600) { "postgres.responseTimeoutSeconds must be between 0 and 3600" } }
         .also {
-            require(it == 0L || statementTimeoutSeconds == 0L || it > statementTimeoutSeconds) {
-                "postgres.responseTimeoutSeconds ($it) must be greater than postgres.statementTimeoutSeconds ($statementTimeoutSeconds), " +
-                    "or 0 to turn the response deadline off"
+            require(it == 0L || (statementTimeoutSeconds > 0L && it > statementTimeoutSeconds)) {
+                "postgres.responseTimeoutSeconds ($it) must be 0 (off) or greater than a non-zero " +
+                    "postgres.statementTimeoutSeconds ($statementTimeoutSeconds)"
             }
         }
     // application_name = toadie on every pooled connection by default (deliberate — ops can
@@ -141,7 +143,7 @@ private fun readPoolBounds(config: ApplicationConfig): PoolBounds {
  * mid-transaction). An idle gap inside a transaction can never be longer than the
  * transaction, and Toadie's longest one is ~0.5 s (per-document import holds are ~100 ms; no transaction spans an outbound
  * call or a mail send; jq and entity-query evaluation run outside transactions), so 5 minutes is a very wide margin. It ends
- * only an IDLE session — a statement stuck `active` is `statement_timeout`'s job (and, against a frozen server, the pool's).
+ * only an IDLE session — a statement stuck `active` is `statement_timeout`'s job (and, against a frozen server, the response deadline's).
  * `0` switches it off (PostgreSQL's own meaning).
  */
 internal val DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT: Duration = Duration.ofMinutes(5)

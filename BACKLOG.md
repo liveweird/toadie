@@ -38,8 +38,6 @@ promotes it. A finished item is removed, not ticked.
   redesign those stores, test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
   from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 
-## Reliability
-
 ## Performance
 
 Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the

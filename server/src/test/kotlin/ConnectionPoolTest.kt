@@ -393,7 +393,8 @@ class ConnectionPoolTest {
     /**
      * Thaws [relay] after [afterMillis] whatever the test does. The rollback and close after a failed exchange are
      * non-cancellable, so on a REGRESSION (no response deadline) an outer `withTimeout` cannot abort them and the test would
-     * wait for a thaw that only its own `finally` provides: this turns that hang into an assertion failure. Cancel it in `finally`.
+     * wait for a thaw that only its own `finally` provides: this turns that hang into an assertion failure. Cancel it AS SOON AS
+     * the frozen exchange has returned (and in `finally`): a later thaw must never be able to fake "still frozen" assertions.
      */
     private fun thawWatchdog(relay: FreezableRelay, afterMillis: Long = 15_000) =
         CoroutineScope(Dispatchers.IO).launch {
@@ -401,9 +402,15 @@ class ConnectionPoolTest {
             relay.frozen = false
         }
 
-    /** Waits (bounded) until the pool has no acquired connection, i.e. the frozen one released its slot. */
-    private suspend fun assertSlotFree(pool: ConnectionPool) =
-        assertTrue(pollUntil(10_000) { pool.metrics.get().acquiredSize() == 0 }, "the frozen connection must free its pool slot")
+    /**
+     * Waits (bounded) until the pool holds NO connection at all (`acquiredSize` and `allocatedSize` 0: the frozen one was
+     * invalidated, not merely released to idle), and that this happened while the relay was STILL frozen.
+     */
+    private suspend fun assertSlotFree(pool: ConnectionPool, relay: FreezableRelay) {
+        val freed = pollUntil(10_000) { pool.metrics.get().let { it.acquiredSize() == 0 && it.allocatedSize() == 0 } }
+        assertTrue(freed, "the frozen connection must be invalidated and free its pool slot")
+        assertTrue(relay.frozen, "the slot must come back WHILE THE SERVER IS STILL FROZEN")
+    }
 
     /** Waits (bounded) until backend [pid] ended, i.e. the server read the Terminate the discarded connection queued. */
     private suspend fun assertBackendEnds(pid: Int) =
@@ -426,10 +433,12 @@ class ConnectionPoolTest {
     fun `a transaction cancelled while its commit waits on a frozen server ends within the response deadline and returns its slot`() {
         // An OUTCOME check of the release path (.claude/docs/persistence.md "A hung database is bounded"): cancel a
         // transaction whose commit is held by a frozen server. Exposed commits (cancellable, cancelled at once), then rolls
-        // back and closes under NonCancellable. That rollback is a NEW exchange on a frozen server: ResponseDeadline.kt times
-        // it out after the deadline, poisons the connection and the close invalidates it, so the coroutine ends WHILE the
-        // server is still frozen (before the response deadline existed this join could only complete after the thaw). The
-        // join below is the pin; the test does not name the mechanism, only the bound.
+        // back and closes under NonCancellable. Exposed 1.6.0's rollback first asks `isClosed()`, i.e. `validate(LOCAL)` then
+        // `validate(REMOTE)`, and on a frozen server that pre-rollback REMOTE validation is the exchange ResponseDeadline.kt
+        // times out after the deadline: it poisons the connection, `isClosed()` then answers true, the rollback is skipped
+        // and the close invalidates the connection, so the coroutine ends WHILE the server is still frozen (before the
+        // response deadline existed this join could only complete after the thaw). The join below is the pin; the test does
+        // not assert the mechanism, only the bound.
         FreezableRelay.forTestDatabase().use { relay ->
             testApplication {
                 configureInFlightApp(relay, "pool-cancel")
@@ -456,6 +465,8 @@ class ConnectionPoolTest {
                         holder.cancel()
                         // Joined while STILL FROZEN: responseTimeoutSeconds (2) plus a margin.
                         withContext(Dispatchers.IO) { withTimeout(2_000 + 5_000) { holder.join() } }
+                        watchdog.cancel()
+                        assertTrue(relay.frozen, "the holder must have ended WHILE THE SERVER IS STILL FROZEN")
                     }
                 } finally {
                     // A failed assertion above must fail the test, not leave the relay silent for the pool's disposal.
@@ -493,13 +504,14 @@ class ConnectionPoolTest {
                             }
                         }.exceptionOrNull()
                     }
+                    watchdog.cancel()
                     val elapsedMillis = (System.nanoTime() - frozenAt) / 1_000_000
                     assertNotNull(failure, "the in-flight statement must fail rather than wait for the thaw")
                     assertTrue(failure.isResponseTimeout(), "expected the response-deadline failure (08006), got $failure")
                     assertTrue(!failure.isQueryCanceled(), "the client deadline must not masquerade as the server's 57014")
                     assertTrue(elapsedMillis < 6_000, "responseTimeoutSeconds is 2: the failure took $elapsedMillis ms")
                     // The slot is back WHILE THE SERVER IS STILL FROZEN: destroy is local, only the socket lingers.
-                    assertSlotFree(pool)
+                    assertSlotFree(pool, relay)
                 } finally {
                     watchdog.cancel()
                     relay.frozen = false
@@ -543,8 +555,9 @@ class ConnectionPoolTest {
                         val failure = withTimeoutOrNull(2_000 + 5_000) { transaction.await() }
                         assertNotNull(failure, "the held commit must fail within the response deadline")
                         assertTrue(failure.isResponseTimeout(), "expected the response-deadline failure (08006), got $failure")
+                        watchdog.cancel()
                     }
-                    assertSlotFree(pool)
+                    assertSlotFree(pool, relay)
                 } finally {
                     watchdog.cancel()
                     relay.frozen = false
@@ -584,22 +597,22 @@ class ConnectionPoolTest {
     }
 
     @Test
-    fun `a response deadline not longer than the statement timeout fails startup naming both keys`() {
-        for (bad in listOf("10", "30")) {
+    fun `a response deadline not longer than the statement timeout, or with the statement timeout off, fails startup naming both keys`() {
+        // 10 and 30 against the default statement timeout (30); 10 against a switched-off statement timeout.
+        for ((statement, response) in listOf("30" to "10", "30" to "30", "0" to "10")) {
             testApplication {
-                configureApp("postgres.responseTimeoutSeconds" to bad)
-                assertStartupFails("postgres.responseTimeoutSeconds") { startApplication() }
+                configureApp("postgres.statementTimeoutSeconds" to statement, "postgres.responseTimeoutSeconds" to response)
+                assertStartupFails(
+                    "postgres.responseTimeoutSeconds ($response) must be 0 (off) or greater than a non-zero " +
+                        "postgres.statementTimeoutSeconds ($statement)",
+                ) { startApplication() }
             }
-        }
-        testApplication {
-            configureApp("postgres.responseTimeoutSeconds" to "10")
-            assertStartupFails("postgres.statementTimeoutSeconds") { startApplication() }
         }
     }
 
     @Test
-    fun `a zero response deadline turns the decorator off and boots, as does a zero statement timeout`() {
-        for ((statement, response) in listOf("30" to "0", "0" to "10")) {
+    fun `a zero response deadline turns the decorator off and boots, with the statement timeout on or off`() {
+        for ((statement, response) in listOf("30" to "0", "0" to "0")) {
             testApplication {
                 configureApp(
                     "postgres.pool.applicationName" to "pool-nodeadline-${UUID.randomUUID()}",

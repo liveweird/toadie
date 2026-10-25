@@ -43,12 +43,14 @@ private fun signature(prefix: String, m: Method) = "$prefix${m.name}(${m.paramet
 
 /**
  * `ResponseDeadlineConnection` against RECORDING fake [Connection]/[Statement]/[Batch]/[Result] objects (no database): the
- * client-side response deadline, poisoning, and the "no escape hatch" surface, all with a 100 ms bound. The database-backed
+ * client-side response deadline, poisoning, and the "no escape hatch" surface. A case that expects a timeout uses a 100 ms bound; one
+ * that expects none uses [patient] (5 s), so a loaded machine cannot turn a healthy exchange into a timeout. The database-backed
  * cases (a really frozen relay or container) live in `ConnectionPoolTest` and `DatabaseHangTest`.
  */
 class ResponseDeadlineConnectionTest {
 
     private val bound = Duration.ofMillis(100)
+    private val patient = Duration.ofSeconds(5)
 
     /** Counts the timer tasks scheduled and how many are still live (neither run nor disposed). */
     private class CountingScheduler : Scheduler {
@@ -152,7 +154,8 @@ class ResponseDeadlineConnectionTest {
         for (part in inMessage) assertTrue(part in message.orEmpty(), "the message '$message' must contain '$part'")
     }
 
-    private fun decorate(fake: Fake, timers: Scheduler = Schedulers.parallel()) = ResponseDeadlineConnection(fake.connection, bound, timers)
+    private fun decorate(fake: Fake, timers: Scheduler = Schedulers.parallel(), deadline: Duration = bound) =
+        ResponseDeadlineConnection(fake.connection, deadline, timers)
 
     private val definition = Fake().sentinel(TransactionDefinition::class.java) as TransactionDefinition
 
@@ -177,7 +180,7 @@ class ResponseDeadlineConnectionTest {
     @Test
     fun `every SPI method reaches the inner connection and hands back its own objects while nothing timed out`() {
         val fake = Fake()
-        val decorated = decorate(fake)
+        val decorated = decorate(fake, deadline = patient)
         val argumentFor = mapOf<Class<*>, Any>(
             String::class.java to "x",
             Duration::class.java to bound,
@@ -204,9 +207,52 @@ class ResponseDeadlineConnectionTest {
     }
 
     @Test
+    fun `the Connection methods the decorator bounds or wraps are exactly the SPI's, so a new one fails here`() {
+        val methods = Connection::class.java.methods.filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }
+        // `Connection by delegate` would silently pass a NEW Publisher-returning SPI method straight through, unbounded.
+        val publishers = methods.filter { Publisher::class.java.isAssignableFrom(it.returnType) && it.name != "close" }
+            .map { signature("", it) }.toSet()
+        val bounded = monoExchanges.map { (_, _, call) ->
+            val fake = Fake()
+            call(decorate(fake, deadline = patient)).run()
+            fake.calls.single()
+        }.toSet()
+        assertEquals(publishers, bounded, "every Publisher-returning Connection method (but close) must be a bounded exchange")
+        // The synchronous ones: getters pass through, createStatement/createBatch hand out bounded wrappers. A new one
+        // returning a Statement-like object would escape the deadline, so it must be classified here.
+        val synchronous = methods.filterNot { Publisher::class.java.isAssignableFrom(it.returnType) }.map { it.name }.toSet()
+        assertEquals(
+            setOf("isAutoCommit", "getMetadata", "getTransactionIsolationLevel", "createStatement", "createBatch"),
+            synchronous,
+            "a new synchronous Connection method must be classified (pass-through or wrapped) in ResponseDeadline.kt",
+        )
+    }
+
+    @Test
+    fun `the Statement, Batch and Result wrappers override every method of their interface, defaults included`() {
+        val decorated = decorate(Fake(), deadline = patient)
+        val statement = decorated.createStatement("SELECT 1")
+        val wrapped = listOf(
+            Statement::class.java to statement,
+            Batch::class.java to decorated.createBatch(),
+            Result::class.java to Flux.from(statement.execute()).blockFirst(patient)!!,
+        )
+        for ((type, wrapper) in wrapped) {
+            val own = wrapper.javaClass.declaredMethods.filterNot { it.isBridge || it.isSynthetic }
+            for (m in type.methods.filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }) {
+                assertTrue(
+                    own.any { it.name == m.name && it.parameterTypes.contentEquals(m.parameterTypes) },
+                    "${type.simpleName}.${signature("", m)} must be overridden by ${wrapper.javaClass.simpleName}: " +
+                        "a default or delegated method would hand back (or run on) the unbounded inner object",
+                )
+            }
+        }
+    }
+
+    @Test
     fun `statement and batch fluent methods return the wrapper, never the inner object, and execute reaches the inner`() {
         val fake = Fake()
-        val statement = decorate(fake).createStatement("SELECT 1")
+        val statement = decorate(fake, deadline = patient).createStatement("SELECT 1")
         assertNotSame(fake.statement, statement)
         assertSame(statement, statement.add())
         assertSame(statement, statement.bind(0, "x"))
@@ -221,7 +267,7 @@ class ResponseDeadlineConnectionTest {
         Flux.from(statement.execute()).blockLast(Duration.ofSeconds(5))
         assertTrue("statement.execute()" in fake.calls)
 
-        val batch = decorate(fake).createBatch()
+        val batch = decorate(fake, deadline = patient).createBatch()
         assertNotSame(fake.batch, batch)
         assertSame(batch, batch.add("SELECT 1"))
         Flux.from(batch.execute()).blockLast(Duration.ofSeconds(5))
@@ -233,7 +279,7 @@ class ResponseDeadlineConnectionTest {
         val fake = Fake()
         fake.answers["commitTransaction"] = { Mono.delay(Duration.ofMillis(20)).then() }
         fake.answers["map"] = { Flux.just("a", "b") }
-        val decorated = decorate(fake)
+        val decorated = decorate(fake, deadline = patient)
         decorated.commitTransaction().run()
         val rows = Flux.from(decorated.createStatement("SELECT 1").execute())
             .flatMap { it.map(BiFunction<Row, RowMetadata, String> { _, _ -> "unused" }) }
@@ -350,7 +396,7 @@ class ResponseDeadlineConnectionTest {
         val fake = Fake()
         fake.hang("commitTransaction", "execute")
         val timers = CountingScheduler()
-        val decorated = decorate(fake, timers)
+        val decorated = decorate(fake, timers, patient)
         val commit = decorated.commitTransaction().let { Mono.from(it).subscribe() }
         val execute = Flux.from(decorated.createStatement("SELECT 1").execute()).subscribe()
         assertEquals(2, timers.live.get(), "each held exchange owns exactly one timer")
@@ -366,7 +412,7 @@ class ResponseDeadlineConnectionTest {
     fun `completed exchanges leave no timer behind`() {
         val fake = Fake()
         val timers = CountingScheduler()
-        val decorated = decorate(fake, timers)
+        val decorated = decorate(fake, timers, patient)
         repeat(500) {
             decorated.commitTransaction().run()
             Flux.from(decorated.createStatement("SELECT 1").execute()).blockLast(Duration.ofSeconds(5))

@@ -108,7 +108,9 @@ class DatabaseHangTest {
 
                 val dockerClient = container.dockerClient
                 // A regression (no response deadline) would leave the non-cancellable rollback waiting for the unpause that only
-                // the finally below provides; the watchdog unpauses after 15 s so it fails the test instead of hanging it.
+                // the finally below provides; the watchdog unpauses after 15 s so it fails the test instead of hanging it. It is
+                // cancelled the moment the in-flight statement returned: the GET and the /readyz probe below need the container
+                // paused, so a later unpause must never be able to land inside them.
                 val watchdog = CoroutineScope(Dispatchers.IO).launch {
                     delay(15_000)
                     runCatching { dockerClient.unpauseContainerCmd(container.containerId).exec() }
@@ -127,6 +129,7 @@ class DatabaseHangTest {
                             }
                         }.exceptionOrNull()
                     }
+                    watchdog.cancel()
                     val inFlightMillis = (System.nanoTime() - pausedAt) / 1_000_000
                     assertNotNull(inFlight, "the in-flight statement must fail rather than wait for the unpause")
                     assertTrue(inFlight.isResponseTimeout(), "expected the response-deadline failure (08006), got $inFlight")

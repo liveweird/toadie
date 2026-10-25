@@ -76,6 +76,10 @@ internal class ResponseDeadlineConnectionFactory(
  *
  * NOT bounded, by design: `close()` (local; it is the destroy path and must still run after a poison) and
  * `validate(LOCAL)` (a synchronous flag read). Hides `io.r2dbc.spi.Lifecycle` as [StatementTimeoutCachingConnection] does.
+ *
+ * The empty rollback of a poisoned connection is defensive. Through Exposed 1.6.0 its rollback first asks `isClosed()`
+ * (`validate(LOCAL)`, then `validate(REMOTE)`), which answers true once poisoned, so the rollback is skipped; the branch
+ * covers a savepoint rollback and the pool's own release rollback.
  */
 internal class ResponseDeadlineConnection(
     private val delegate: Connection,

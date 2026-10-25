@@ -238,7 +238,7 @@ postgres:
   # Client-side deadline on every exchange with the database (ResponseDeadline.kt): the driver has no
   # read timeout, so a statement already on the wire when the server froze would otherwise wait for the
   # thaw. Must exceed statementTimeoutSeconds (boot-checked) so the server's own cancel wins on a live
-  # server; 0 = off. See persistence.md "Response deadline: every exchange below the pool".
+  # server, and a non-zero value requires a non-zero statementTimeoutSeconds; 0 = off. See persistence.md "Response deadline: every exchange below the pool".
   responseTimeoutSeconds: "$POSTGRES_RESPONSE_TIMEOUT_SECONDS:45"
 
 # Read-only Port integration API; admin key management remains available when disabled.
