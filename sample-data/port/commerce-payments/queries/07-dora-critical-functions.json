@@ -1,0 +1,5 @@
+{
+  "name": "Sample: DORA critical functions and their footprint",
+  "visibility": "PUBLIC",
+  "query": "MATCH (s:service {dora_cif: true})\nOPTIONAL MATCH (s)-[:system]->(sys:system)\nOPTIONAL MATCH (s)-[:uses]->(r:resource)\nOPTIONAL MATCH (s)-[:$team]->(t:_team)\nRETURN s, sys, r, t"
+}

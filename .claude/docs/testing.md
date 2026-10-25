@@ -311,7 +311,11 @@ re-GET, pins the `properties`/`relations` round trip, and asserts the coverage t
 promises — every property and relation of every blueprint used, every `type`/`lifecycle`
 dictionary value used (a dictionary being one `(property, enum)` pair, so `lifecycle` counts
 across service/library/api), both `team` shapes, a multi-element relation array, an explicit
-`null` relation, and dependency-safe file numbering.
+`null` relation, and dependency-safe file numbering. `SampleQueriesTest` does the same for
+`sample-data/port/commerce-payments/queries/` (eight PUBLIC saved entity queries): over the loaded blueprints
+and the 76 entities it POSTs every file (`201`, then the `409` that `queries/load.sh` reports as "exists,
+skipped"), requires an empty `POST /entities/query/check`, and pins each query's per-blueprint node counts
+through `GET /entities/graph?query=` — a rename that strands a sample query fails here.
 
 `SystemBlueprintTest` pins the V31 rows — present with `system: true` on a fresh database,
 seeded definitions equal `SYSTEM_BLUEPRINT_BASES`, DELETE 409, PUT rename 400, PUT removing/retyping

@@ -5,6 +5,10 @@ This standalone Port demo models a commerce and payments platform as two depende
 - [`blueprints/`](blueprints/) contains fifteen numbered blueprint definitions.
 - [`entities/`](entities/) contains fifteen numbered files with 76 entity instances.
 
+A third, optional set, [`queries/`](queries/), holds eight public saved entity queries that
+focus the Entity graph and Entity hierarchy canvases on the adoption, product, dataset and
+regulatory-flag models. It is loaded after the entities.
+
 The numbering is dependency order. Load all blueprint definitions before any entity instances.
 The related Backstage demo uses the same broad business vocabulary, but neither sample depends on
 the other.
@@ -49,6 +53,7 @@ The scripts need `bash`, `curl`, and `jq`. They log in with the seed admin by de
 ```bash
 sample-data/port/commerce-payments/blueprints/load.sh
 sample-data/port/commerce-payments/entities/load.sh
+sample-data/port/commerce-payments/queries/load.sh   # optional: the saved queries below
 ```
 
 The blueprint loader ensures both `composition` and `deployment` exist in the `hierarchies`
@@ -135,11 +140,34 @@ findings. Ownership is direct on domain, product, system, service, library, API,
 cluster, and dataset; workload ownership is inherited through its `service` relation, and
 `api_adoption`/`dataset_adoption` ownership is inherited through their `consumer` relation.
 
+## Saved queries
+
+Each file in [`queries/`](queries/) is one `POST /api/v1/entity-queries` body (`name`,
+`visibility`, `query`). All are `PUBLIC`, so every user finds them in the query bar's picker on
+the Entity graph and Entity hierarchy pages; picking one runs it. Their names start with
+`Sample:`. The counts are over the full 76-entity sample (`SampleQueriesTest` pins them).
+
+| Query | Shows | Nodes |
+|---|---|---:|
+| API consumption (who uses which API) | each `api_adoption` with its consuming service and the API it declares | 11 |
+| Dataset consumption (who reads which dataset) | the same for `dataset_adoption` | 9 |
+| Adoptions in flight (migrating or retiring) | API and dataset adoptions whose `status` is `migrating` or `retiring`, with consumer and target | 12 |
+| Products and the systems that deliver them | every `product` with the systems whose `products` relation names it | 10 |
+| Dataset ownership and lineage | every `dataset` with its owning team, producing services and consuming services | 14 |
+| PCI-DSS services and what they touch | services with `pci_dss: true`, their system, and everything they use, consume, produce or depend on | 11 |
+| DORA critical functions and their footprint | services with `dora_cif: true`, their system, resources and owning teams | 9 |
+| Banking-outsourcing scope across blueprints | services, APIs, resources and datasets with `banking_outsourcing` true, with their system | 12 |
+
+`queries/load.sh` takes its environment variables from its own header. A query is parsed when saved but only checked against the blueprints when applied, so load the
+blueprints and entities first. Rows are owned by the loading user and a name is unique per
+owner: a rerun reports `exists, skipped` for every query and never overwrites an edited row.
+
 ## Remove the demo
 
-Delete entity instances before definitions:
+Delete saved queries first (optional), then entity instances before definitions:
 
 ```bash
+sample-data/port/commerce-payments/queries/load.sh --delete
 sample-data/port/commerce-payments/entities/load.sh --delete
 sample-data/port/commerce-payments/blueprints/load.sh --delete
 ```

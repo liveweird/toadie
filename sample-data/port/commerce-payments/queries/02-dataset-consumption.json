@@ -1,0 +1,5 @@
+{
+  "name": "Sample: Dataset consumption (who reads which dataset)",
+  "visibility": "PUBLIC",
+  "query": "MATCH (s:service)<-[:consumer]-(ad:dataset_adoption)-[:dataset]->(d:dataset)\nRETURN s, ad, d"
+}

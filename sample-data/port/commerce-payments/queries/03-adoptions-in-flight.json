@@ -1,0 +1,5 @@
+{
+  "name": "Sample: Adoptions in flight (migrating or retiring)",
+  "visibility": "PUBLIC",
+  "query": "MATCH (ad:api_adoption|dataset_adoption)\nWHERE ad.status IN ['migrating', 'retiring']\nOPTIONAL MATCH (ad)-[:consumer]->(s:service)\nOPTIONAL MATCH (ad)-[:api|dataset]->(t)\nRETURN ad, s, t"
+}

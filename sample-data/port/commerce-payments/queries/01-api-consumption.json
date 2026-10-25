@@ -1,0 +1,5 @@
+{
+  "name": "Sample: API consumption (who uses which API)",
+  "visibility": "PUBLIC",
+  "query": "MATCH (s:service)<-[:consumer]-(ad:api_adoption)-[:api]->(a:api)\nRETURN s, ad, a"
+}
