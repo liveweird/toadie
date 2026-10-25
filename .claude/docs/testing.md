@@ -556,10 +556,15 @@ Frontend: `SyncBlueprintModal.test.tsx` (the `SyncEntityModal.test.tsx` case lis
 computed/blueprint-mismatch, plus the hierarchy-kept sync and both `["blueprints"]`/`["entities"]`
 invalidations), `Blueprints.test.tsx` (the kebab-driven Last-sync states and the Sync item's
 disabled/enabled wiring), `EditBlueprint.test.tsx` (the Source field and the header Sync action).
-E2E stays at the loopback-refusal posture only — `blueprint-sync.spec.ts`: the
-fetch→diff→overwrite happy path is deliberately server-/unit-tested, never run against external
-network, and the import page's own fetch refusal is NOT duplicated (already covered by
-`entity-sync.spec.ts`).
+E2E: `blueprint-sync.spec.ts` runs the loopback refusal AND, since the SSRF guard admits no fixture
+server the suite could host, a success click-through (fetch→diff→overwrite→Last sync stamped→in
+sync) against a REAL public file — `e2e/fixtures/blueprint-sync-source.json` at an immutable
+raw.githubusercontent.com commit (`FIXTURE_COMMIT` in the spec). The guard is NOT widened for it
+(no test allowlist, no loopback/private flag, no proxy bypass). It is the suite's one external
+network dependency: an up-front probe has the APP fetch the pinned URL and compare it with the
+checkout's fixture; no outbound https skips locally and fails in CI (the Mailpit policy), a 404 or
+a different body always fails. After editing the fixture, commit/push it first, then bump the pin.
+The import page's own fetch refusal is NOT duplicated (already covered by `entity-sync.spec.ts`).
 
 **Port sync source guard and confirm readiness.** Applies when changing either Port sync
 endpoint or modal. Requirement: backend regressions cover matching, changed, and cleared
@@ -571,7 +576,8 @@ row, a changed source URL, an invalid/failed/empty pre-flight, and candidate cha
 prior check is pending. Reference: `.claude/docs/persistence.md` "Source-bound sync" and
 `web/CLAUDE.md` source-sync sections. Enforcement: `EntitySyncTest`, `BlueprintSyncTest`,
 `SyncEntityModal.test.tsx`, `SyncBlueprintModal.test.tsx`. Exception: external network success
-is covered at the route/unit boundary, not browser E2E.
+is covered at the route/unit boundary, not browser E2E — except the blueprint modal's
+pinned-public-file journey above (`blueprint-sync.spec.ts`).
 
 The entity modal must refresh the blueprint registry on open and wait for that request before
 stripping computed properties or building the comparison. Pin a cached blueprint where a

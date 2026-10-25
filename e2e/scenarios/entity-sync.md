@@ -36,7 +36,7 @@
 ## Not covered here (and why)
 
 - **The fetch→diff→overwrite happy path** — deliberately not e2e: the SSRF guard blocks
-  loopback fixture servers and the suite runs without external network (the `source-sync.md`/
+  loopback fixture servers and the suite (bar `blueprint-sync.md`'s pinned public-file journey) runs without external network (the `source-sync.md`/
   `url-import.md` precedent). The server half (overwrite, sync-state stamping, the strict
   never-waives refusal, identity conflicts, the import-as-sync path) is pinned by
   `EntitySyncTest.kt` and `UrlFetchTest`'s entity fetch-route case against a local fixture

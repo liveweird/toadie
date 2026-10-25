@@ -154,6 +154,8 @@ from Lettuce, that any new or edited spec must satisfy:
   `namespaces` owns its throwaway dictionary entries and user;
   `lenses` owns its throwaway lenses, files, and users (see its own bullet below);
   `blueprints` owns its two throwaway `e2e-bp-*` blueprints and its user;
+  `blueprint-sync` owns one throwaway `e2e-bpsync-*` blueprint and one throwaway blueprint with the
+  reserved identifier `e2e-bpsync-source` (the success journey's fixture identifier);
   `entities` owns its two throwaway `e2e-ent-bp-*` blueprints, their `e2e-ent-*` entities, and
   one throwaway `e2e-ent-team-*` `_team` entity (together with `blueprints`, one of the
   blueprint registry's four in-run writers — see the dedicated bullet below); its Phase 5
@@ -375,7 +377,13 @@ the same commit** — this list is the coverage map, the scenario file is the de
   "Never synced", and the sync modal shows the SSRF guard's public-https error against a
   loopback URL with the overwrite disabled — sync/fetch are ADMIN-only for blueprints, so the
   whole journey runs as the admin, and the import page's own loopback-fetch refusal is not
-  duplicated here (already covered by `entity-sync.spec.ts`).
+  duplicated here (already covered by `entity-sync.spec.ts`). A second journey completes a
+  SUCCESSFUL sync (diff → confirm → Last sync stamped → in sync) from a pinned public file,
+  [`fixtures/blueprint-sync-source.json`](fixtures/blueprint-sync-source.json) at an immutable
+  raw.githubusercontent.com commit, which the unchanged SSRF guard accepts — **the suite's one
+  external-network dependency**: the app container needs outbound https; missing network skips
+  locally and fails in CI (the Mailpit policy); the throwaway blueprint owns the reserved
+  identifier `e2e-bpsync-source`.
 - [`blueprints.spec.ts`](scenarios/blueprints.md) — the blueprint registry (Port
   compatibility, phase 1; + Phase 4 system-blueprint protections, v1.26.0): the seeded `_team`
   system row's System badge/disabled Delete and its editor's read-only identifier + locked
