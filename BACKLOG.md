@@ -54,10 +54,13 @@ promotes it. A finished item is removed, not ticked.
 Found by the first capacity probe (2026-10-24: the Port sample replicated to 1k–10k entities, the
 Backstage sample to 10k files, on a disposable stack).
 
-- [next] **Draw only the visible part of very large graphs.** Since 2.20.0 the layout runs in a
-  worker, but "Show everything" on 1,000 entities still costs two main-thread tasks (414 ms and
-  230 ms) when React Flow mounts 1,000 nodes and 3,435 edges. Measure React Flow's
-  `onlyRenderVisibleElements` (and its effect on the fit-view and fold behaviour) on both canvases.
+- [new] **Make zooming a 1,000-node graph smooth.** Since 2.21.3 a graph above 300 nodes draws only
+  its visible nodes, but each animated zoom-button click on a 1,000-node canvas still costs ~0.5 s of
+  main-thread work (edge painting dominates, not the node count; ~14% more than with every node
+  mounted). Measure where it goes and whether edges can be simplified or culled while zooming.
+- [new] **Let "fit" show a whole very large graph.** The canvases clamp the zoom at 0.2, so on a
+  1,000-entity graph (a layout ~75,000 px tall) the initial fit shows only ~5% of it. Decide between a
+  lower minimum zoom (with simplified node rendering when zoomed out) and opening such graphs folded.
 
 ## Product
 
