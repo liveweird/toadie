@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.23.0",
+    date: "2026-10-26",
+    en: `**Re-import updates existing files.** The Import files page has a new "Replace existing files" switch: when it is on, a file whose kind, namespace and name already exist is updated in place instead of being reported as a conflict, with its change recorded in the file's History. Files that already match are reported as unchanged. A batch imported from a URL re-stamps each file's source reference as synced.`,
+    pl: `**Ponowny import aktualizuje istniejące pliki.** Strona Importu plików ma nowy przełącznik „Zastąp istniejące pliki”: gdy jest włączony, plik o tym samym rodzaju, przestrzeni nazw i nazwie jest aktualizowany w miejscu zamiast zgłaszania konfliktu, a zmiana trafia do Historii pliku. Pliki, które już się zgadzają, są zgłaszane jako niezmienione. Partia zaimportowana z adresu URL oznacza źródło każdego pliku jako zsynchronizowane.`,
+  },
+  {
     version: "2.22.1",
     date: "2026-10-26",
     en: `**Import checks match the import.** When an import batch carries a source address, the Check step on the Import files and Ontology import pages now rejects an invalid address exactly as the import itself would, instead of reporting the batch as fine and failing only on Import.`,
