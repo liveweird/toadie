@@ -64,6 +64,11 @@ promotes it. A finished item is removed, not ticked.
 
 ## Housekeeping
 
+- [next] **Keep query strings out of the `authz.denied` audit event.** The app-wide `ForbiddenException`
+  handler (`plugins/ErrorHandling.kt`) audits `call.request.local.uri`, query string included, so a
+  denied request's search text (`q`, which can be an email on the Users list), filters or entity-query
+  text lands in the audit log, against the "never log query text" rule. Log the path without the query
+  string, pin it with a test, and check that no other audit event or log line records a raw URI.
 - [new] **Align Temurin with the `21.0.12.1` respin.** The runtime JRE already runs
   `eclipse-temurin:21.0.12.1_1-jre` (its image is the one the OS-layer scan passes), while the build
   JDK, `mise.toml` and CI's `setup-java` stay on `21.0.12+8`: `infrastructure.test.js` requires the
