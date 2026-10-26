@@ -499,6 +499,22 @@ may land only after a held lock releases.
 The lock-mode compatibility and transaction lifetime follow the
 [PostgreSQL explicit-locking rules](https://www.postgresql.org/docs/18/explicit-locking.html).
 
+**Advisory lock (V46 telemetry).**
+
+- **Applies when:** a piece of work must run on exactly one process per interval and there is no row to lock until it has been done.
+- **Requirement:** take `pg_try_advisory_xact_lock(<bigint>)` (the TRY form: a loser skips, never waits; transaction-scoped, so
+  commit or rollback releases it and a crashed holder never strands it) at the top of the one transaction that does the work.
+  The telemetry cluster section is the only user: `TELEMETRY_LOCK_KEY` = the ASCII bytes of "ToadTele" = `0x546F616454656C65`
+  (`telemetry/TelemetryStore.kt`). A new advisory lock needs its own constant, distinct from every other, and a line here. A row lock
+  cannot do this job (nothing exists to lock until the first process has written its marker), and the table-lock protocols above
+  do not apply: the cluster transaction touches only `telemetry_processes`/`telemetry_samples`, so it never interacts with the
+  `blueprints` -> `entities` order.
+- **Reference:** `TelemetryStore.clusterSection`, `TelemetrySampler.runClusterSection`.
+- **Enforcement:** `TelemetryStoreTest` (the lock is exclusive while held and free after), `TelemetrySamplerTest` (two samplers on
+  one database run the section once per interval).
+- **Exception:** none. With the single replica of `k8s/app-deployment.yaml` the lock is uncontended; it is what keeps telemetry
+  off the BACKLOG "Scaling constraint" list.
+
 **Ownership storage rule (v1.26.0, phase 4).** An entity's `entities.team` column is NULL when
 the blueprint has `ownership: { type: Inherited }` (the computed `team` is never stored) and
 MUST carry a value when Direct/absent (the stored `team` field). The rule is enforced during
@@ -568,7 +584,7 @@ that row's create/update audit before another row or pass two begins. Final ERRO
 later cancellation cannot erase this event; pass two emits no duplicate. Audit logs remain
 post-commit external output, not an atomic database outbox or a process-crash delivery guarantee.
 
-Current migrations are `V1`–`V45` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32; V44, an additive column, follows V43's paragraph; V45, a new registry table, follows V44's) — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V46` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32; V44, an additive column, follows V43's paragraph; V45, a new registry table, follows V44's; V46, the telemetry tables, has its own section at the end of this file, "Telemetry (V46)") — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -831,7 +847,7 @@ before touching the session and reject a stale epoch. Cleanup uses its own trans
 avoid reversing that lock order. Renewal updates only an existing live family and never
 shortens its expiry. No runtime DDL; prior migration checksums remain untouched.
 
-`users`, `catalog_files`, `dictionary_entries`, `labels`, `annotation_keys`, `tag_categories`, `entity_types`, `lenses`, `blueprints`, `entities`, and `entity_queries` are **soft-deleted** — rows are flagged, never physically removed; every future business entity follows the same convention (except V31's two system blueprints, schema not content). Only join/audit/detail tables (today: `password_reset_tokens` (V26, expiring single-use credentials), `auth_sessions` (V25, expiring login families deleted at logout and pruned on login), `revoked_tokens`, a pure token registry, `user_disabled_features`, a pure flag join whose PUT is a wholesale replace, `graph_layouts` (V19) and its V30 twin `entity_graph_layouts`, both pure per-user settings rows whose PUT is a wholesale replace, `catalog_file_events` (V23), the immutable audit trail itself, `ontology_revision` (V39, a single row forever UPDATEd in place — a pure counter, not a business entity, with nothing to soft-delete), and `integration_clients` (V36 — NOT a hard delete at all, but the one table outside the `marked_as_deleted` convention: a terminal `revoked_at` marks the row, which is kept for administrator inspection and can never be re-enabled — justified in "Integration identities (V36)" below) — none carry history worth keeping, or ARE the history) hard-delete — a new hard-delete table needs a documented justification, exactly like Lettuce's exceptions list. To add soft-delete to a new entity, follow the established pattern (reference implementations: `users/UserService.kt`, `catalog/CatalogFileService.kt` — the latter shows the full CRUD shape incl. the delete route):
+`users`, `catalog_files`, `dictionary_entries`, `labels`, `annotation_keys`, `tag_categories`, `entity_types`, `lenses`, `blueprints`, `entities`, and `entity_queries` are **soft-deleted** — rows are flagged, never physically removed; every future business entity follows the same convention (except V31's two system blueprints, schema not content). Only join/audit/detail tables (today: `password_reset_tokens` (V26, expiring single-use credentials), `auth_sessions` (V25, expiring login families deleted at logout and pruned on login), `revoked_tokens`, a pure token registry, `user_disabled_features`, a pure flag join whose PUT is a wholesale replace, `graph_layouts` (V19) and its V30 twin `entity_graph_layouts`, both pure per-user settings rows whose PUT is a wholesale replace, `catalog_file_events` (V23), the immutable audit trail itself, `telemetry_processes`/`telemetry_samples` (V46 — regenerated, high-volume observations with no reader once old: raw samples after 7 days, hourly rollups after 90, processes unseen for 90 with their samples cascading; pruned inside the telemetry cluster transaction, a row exactly at its cutoff stays — "Telemetry (V46)" below), `ontology_revision` (V39, a single row forever UPDATEd in place — a pure counter, not a business entity, with nothing to soft-delete), and `integration_clients` (V36 — NOT a hard delete at all, but the one table outside the `marked_as_deleted` convention: a terminal `revoked_at` marks the row, which is kept for administrator inspection and can never be re-enabled — justified in "Integration identities (V36)" below) — none carry history worth keeping, or ARE the history) hard-delete — a new hard-delete table needs a documented justification, exactly like Lettuce's exceptions list. To add soft-delete to a new entity, follow the established pattern (reference implementations: `users/UserService.kt`, `catalog/CatalogFileService.kt` — the latter shows the full CRUD shape incl. the delete route):
 
 1. **Migration** — `marked_as_deleted BOOLEAN NOT NULL DEFAULT FALSE` in the CREATE (a retrofit adds the column plus `CREATE INDEX idx_<t>_marked_as_deleted ON <t>(marked_as_deleted);`).
 2. **Exposed table** — add `val markedAsDeleted = bool("marked_as_deleted").default(false)` and a private helper `fun active(): Op<Boolean> = <T>.markedAsDeleted eq false`.
@@ -1070,3 +1086,32 @@ the counter as the FIRST statement in its one transaction instead of riding a ro
 earliest snapshot the rest of the report could have seen, not a promise it also matches the
 report's last statement. Migration checksums, including V39, are pinned in
 `MigrationChecksumTest`.
+
+### Telemetry (V46)
+
+`telemetry_processes` and `telemetry_samples` (both in `public`, `SERIAL`/`INTEGER` ids, epoch-millis `BIGINT`) back the in-app
+telemetry sampler (`.claude/docs/observability.md` "Telemetry"): the process writes its OWN figures — numbers and labels, never
+project data. `telemetry_processes` is one row per process run, unique on `(instance, started_at)` (`instance` = `HOSTNAME`, the
+pod or container name), carrying the sizing facts (`processors`, `heap_max_bytes`, `container_limit_bytes`), the optional build
+identity (`build_version`/`build_commit`, from the `TOADIE_BUILD_*` image variables, null when unset) and `last_seen`, stamped every
+tick. `telemetry_samples` is ONE narrow table for every metric — `(resolution, ts, process_id, metric, label, n, avg, max)` with the
+primary key `(resolution, metric, ts, process_id, label)`; the metric names, kinds and units live in
+`telemetry/TelemetryMetrics.kt`, so a new metric needs no migration. `resolution` is the sample width in seconds: a RAW row stores
+the sampler's real interval (60..1800 and a divisor of 3600; the CHECK is `resolution BETWEEN 60 AND 3600 AND 3600 % resolution =
+0`), kept 7 days; 3600 is an HOURLY rollup (`n` = the samples folded, `avg` their n-weighted mean, `max` the largest max, so a
+five-minute peak survives), kept 90 days.
+
+- **Hard deletes, justified.** Both tables are on the hard-delete exceptions list above: regenerated, high-volume observations
+  with no reader once old. The prune (`pruneTelemetry`) runs inside the cluster transaction and only after a rollup that INSERTED
+  hourly rows (`rollupHourly` returns false when there was nothing to fold, and a failing rollup throws before the prune, so raw rows
+  are never pruned while the rollup fails): raw rows older than 7 days, hourly rows older than 90, processes whose `last_seen` is
+  older than 90 days (their samples cascade, `ON DELETE CASCADE`). A row exactly at its cutoff stays.
+- **Raw-tier predicates are equality lists.** Every raw-tier read — the marker lookups, the rollup source, the prune — filters
+  `resolution IN (RAW_RESOLUTIONS)`, never `resolution < 3600`, so the primary key gets equality prefixes; `TelemetryStoreTest` pins
+  the list against the CHECK.
+- **Writes.** One `batchInsert(ignore = true)` of at most ~100 rows per tick (`ON CONFLICT DO NOTHING`: a duplicate keeps the first),
+  after the tick's collectors ran. No statement carries a per-transaction `queryTimeout`; the global `postgres.statementTimeoutSeconds`
+  (30 s) and the 45 s response deadline bound every one, and the tick's own `interval / 2` budget bounds the whole tick.
+- **Cluster section.** One short transaction under the advisory lock ("Advisory lock (V46 telemetry)" above): it skips when the
+  `telemetry.cluster_ms` marker already sits at this bucket, otherwise runs the retention (rollup, then prune) in a savepoint and
+  commits the marker with it. Applied V46 is byte-immutable like every migration; its checksum is pinned in `MigrationChecksumTest`.

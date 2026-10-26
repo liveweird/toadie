@@ -216,6 +216,20 @@ describe("deployment and verification safety defaults", () => {
     expect(appDeploymentSource).not.toContain("MALLOC_ARENA_MAX");
   });
 
+  it("passes the optional telemetry build identity through compose into the runtime stage, declared after every COPY and RUN", () => {
+    // observability.md "Telemetry": the sampler records TOADIE_BUILD_VERSION/TOADIE_BUILD_COMMIT on its process row; empty = null.
+    const runtimeStage = dockerfileSource.slice(dockerfileSource.indexOf("AS runtime"));
+    const lines = runtimeStage.split("\n");
+    const lastBuildStep = Math.max(...lines.map((line, i) => (/^(COPY|RUN)\s/.test(line) ? i : -1)));
+    for (const name of ["TOADIE_BUILD_VERSION", "TOADIE_BUILD_COMMIT"]) {
+      const arg = lines.findIndex((line) => line === `ARG ${name}=""`);
+      expect(arg, `${name} ARG in the runtime stage`).toBeGreaterThan(lastBuildStep);
+      expect(runtimeStage).toContain(`${name}=$${name}`);
+      // Compose forwards the host variable, empty when unset, so `docker compose up --build` leaves the columns null.
+      expect(parse(composeSource).services.app.build.args[name]).toBe("${" + name + ":-}");
+    }
+  });
+
   it("pins the Temurin build stage to the local toolchain's exact patch and the runtime to the same update", () => {
     const localVersion = toolchainSource.match(/^java = "temurin-([^"]+)"$/m)?.[1];
     expect(localVersion).toBeTruthy();

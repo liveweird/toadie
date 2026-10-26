@@ -5,6 +5,7 @@ import ch.nokillswit.infra.db.DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT
 import ch.nokillswit.infra.db.DatabaseKey
 import ch.nokillswit.infra.db.withIdleInTransactionTimeout
 import ch.nokillswit.plugins.ProblemDetail
+import ch.nokillswit.telemetry.figures
 import ch.nokillswit.users.UserService
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -778,5 +779,22 @@ class ConnectionPoolTest {
         assertEquals("search_path=public;$key=300000", withIdleInTransactionTimeout(asString, five).getValue(stringForm).toString())
         val stringOperatorSet = base.mutate().option(stringForm, "$key=1000").build()
         assertEquals("$key=1000", withIdleInTransactionTimeout(stringOperatorSet, five).getValue(stringForm).toString())
+    }
+
+    @Test
+    fun `the published pool reports metrics that follow its use, the telemetry sampler's pool seam`() = testApplication {
+        configureApp("postgres.pool.applicationName" to "pool-metrics-${UUID.randomUUID()}")
+        startApplication()
+        val pool = application.attributes[ConnectionPoolKey]
+        // r2dbc-pool 1.0.2 exposes PoolMetrics; an upgrade that dropped it would silently blank the pool figures of the telemetry panel.
+        assertTrue(pool.metrics.isPresent, "r2dbc-pool exposes PoolMetrics")
+        val idle = assertNotNull(pool.figures())
+        assertEquals(0, idle.acquired)
+        assertEquals(0, idle.pendingAcquire)
+        assertTrue(idle.allocated >= 1 && idle.idle == idle.allocated, "everything allocated is idle: $idle")
+        suspendTransaction(application.attributes[DatabaseKey]) {
+            touchDatabase()
+            assertEquals(1, assertNotNull(pool.figures()).acquired, "the open transaction holds one connection")
+        }
     }
 }

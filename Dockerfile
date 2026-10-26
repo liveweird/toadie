@@ -75,6 +75,14 @@ ENV MAIL_TRANSPORT=disabled
 # 2 MiB; two arenas bound that native memory. Measurements: .claude/docs/security.md "Entity read
 # memory budget" (Heap layout).
 ENV MALLOC_ARENA_MAX=2
+# The build identity the telemetry sampler records beside the process (`telemetry_processes.build_version`/`build_commit`,
+# observability.md "Telemetry"). Empty by default (a plain `docker build` or `docker compose up --build` leaves them unset and the
+# columns null); pass `--build-arg TOADIE_BUILD_VERSION=... --build-arg TOADIE_BUILD_COMMIT=...` to stamp them. Declared after
+# every COPY and RUN of the stage on purpose: an ARG value change only invalidates the layers after it, never the COPY layers above.
+ARG TOADIE_BUILD_VERSION=""
+ARG TOADIE_BUILD_COMMIT=""
+ENV TOADIE_BUILD_VERSION=$TOADIE_BUILD_VERSION \
+    TOADIE_BUILD_COMMIT=$TOADIE_BUILD_COMMIT
 EXPOSE 8081
 # Plain `docker run` gets a health status too. docker-compose.yaml keeps its explicit copy of this
 # check; Kubernetes ignores HEALTHCHECK and uses the probes in k8s/app-deployment.yaml. The -jre

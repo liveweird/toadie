@@ -20,6 +20,13 @@ WAL, index creation, and vacuum. A practical allocation is the larger of 10 GiB 
 the live database size, then rounded up to the storage provider's next tier. Recalculate from at
 least four weeks of observed growth and provision enough for the chosen planning horizon.
 
+The in-app telemetry tables (`telemetry_samples`, `telemetry_processes`) grow front-loaded, so a
+fresh deployment's first weeks must not be extrapolated: about 3-5 MB/day for the first 7 days
+(the raw tier), then only a small hourly tier, flat at roughly 45-150 MB once 90 days have passed
+(the prune keeps it there). They hold regenerated observations, not project data; a logical backup
+may skip their rows with `pg_dump --exclude-table-data='telemetry_*'` (the tables themselves are
+still dumped, so a restore comes up with them empty).
+
 The committed PVC size applies automatically only to a new claim. For an existing deployment,
 first confirm that its StorageClass has `allowVolumeExpansion: true`, increase the live claim,
 and wait for both PVC capacity and the filesystem size to report the new value. Never delete and

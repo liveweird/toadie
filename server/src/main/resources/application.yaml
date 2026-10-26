@@ -31,6 +31,9 @@ ktor:
       - ch.nokillswit.infra.db.FlywayKt.configureFlyway
       - ch.nokillswit.infra.db.DatabaseKt.configureDatabase
       - ch.nokillswit.infra.db.BootstrapKt.configureBootstrap
+      # The in-app telemetry sampler (`.claude/docs/observability.md` "Telemetry"): reads DatabaseKey and ConnectionPoolKey, so after
+      # the database group; the pressure seams it samples are read at ApplicationStarted, after every module has published them.
+      - ch.nokillswit.telemetry.TelemetryKt.configureTelemetry
       # Health endpoints (/healthz liveness, /readyz readiness) — the readiness handler reads the
       # dictionary service from attributes, so after the infrastructure group; a real route, so
       # before the SPA catch-all below.
@@ -241,6 +244,22 @@ postgres:
   # thaw. Must exceed statementTimeoutSeconds (boot-checked) so the server's own cancel wins on a live
   # server, and a non-zero value requires a non-zero statementTimeoutSeconds; 0 = off. See persistence.md "Response deadline: every exchange below the pool".
   responseTimeoutSeconds: "$POSTGRES_RESPONSE_TIMEOUT_SECONDS:45"
+
+monitoring:
+  # How often the Dropwizard registry is dumped to the `metrics` logger (plugins/Monitoring.kt). 0 = off (metrics are still
+  # collected); otherwise 30..3600. Was a fixed 10 s: a dump every 10 s, with the JVM gauge sets enumerating every thread, was a
+  # steady idle-allocation and log-volume cost for lines nothing consumes; five minutes still leaves a trail to look back on.
+  reporterIntervalSeconds: "$METRICS_REPORT_INTERVAL_SECONDS:300"
+
+telemetry:
+  # The in-app telemetry sampler (telemetry/, `.claude/docs/observability.md` "Telemetry"): the process writes its own
+  # memory/JVM/pool figures to telemetry_samples. All values are validated on every boot, enabled or not.
+  enabled: "$TELEMETRY_ENABLED:true"
+  # How often the process samples itself (whole seconds, 60..1800 and a divisor of 3600, so an hour's samples tile it); stored as
+  # the raw rows' `resolution`. Also the window of the request timers, capped at 300.
+  sampleIntervalSeconds: "$TELEMETRY_SAMPLE_INTERVAL_SECONDS:300"
+  # How often the workspace sizes and counts are measured (900..86400).
+  storageIntervalSeconds: "$TELEMETRY_STORAGE_INTERVAL_SECONDS:3600"
 
 # Read-only Port integration API; admin key management remains available when disabled.
 integration:
