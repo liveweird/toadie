@@ -58,6 +58,7 @@ class ConversionImportService(
                 stored = stored,
                 directory = snapshot.directory(),
                 existingId = snapshot::existingId,
+                existingUpdatedAt = snapshot::existingUpdatedAt,
                 merge = request.merge,
             ),
         )

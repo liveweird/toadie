@@ -771,7 +771,25 @@ export interface paths {
          *     already holds the kind+namespace+name identity — nothing is overwritten unless
          *     `replaceExisting` is on), or `ERROR` (an unexpected storage failure). The response is `200` even when every document failed
          *     — the result rows are the outcome; a `400` covers only the batch itself (an
-         *     undecodable body, more than 200 entries, or an invalid `sourceUrl`).
+         *     undecodable body, more than 200 entries, an invalid `sourceUrl`, or a malformed
+         *     `expected` list — an out-of-range or repeated index, a negative revision, a `fileId`
+         *     beside revision 0).
+         *
+         *     With `expected` (2.29.0) a file is imported only if its stored counterpart still carries
+         *     the revision it was converted over (`ConversionRow.existingRevision`); `0` expects no
+         *     counterpart. A revision restarts at 1 for every file, so an entry may also pin the
+         *     counterpart's `fileId` (`ConversionRow.existingId`): another file holding the identity
+         *     — one deleted and re-created, or renamed into it — is `STALE` even at an equal
+         *     revision. A counterpart that changed, was replaced, vanished or appeared meanwhile
+         *     makes the row `STALE` (nothing stored: no history event, no revision bump, no audit
+         *     event; `fileId` names the counterpart when one exists). The revision is compared under
+         *     the row lock, before any mutation, so even a document identical to the stored one is
+         *     `STALE` on a wrong token (the document's own validation and namespace resolution run
+         *     first: a guarded file whose namespace was removed meanwhile reads `INVALID`; nothing is
+         *     written either way). Without `replaceExisting` an existing counterpart stays the ordinary
+         *     `CONFLICT` whatever the expectation; only a vanished one (positive revision, no active
+         *     file) is `STALE`, so nothing the conversion merged over is resurrected. A file without
+         *     an entry is unguarded, exactly as before.
          *
          *     With `sourceUrl` set (the fetch-from-URL flow), every STORED row gets it as its
          *     source reference and starts synced — an import from a repo URL IS a sync.
@@ -825,8 +843,9 @@ export interface paths {
          *     A pure computation: nothing is stored, nothing is audited; POST only because the
          *     batch travels in the body. The report is a snapshot — a concurrent write between
          *     the check and the real import can change the actual outcome. The same `400` covers
-         *     only the batch itself (an undecodable body, more than 200 entries, or an invalid
-         *     batch-level `sourceUrl`). The `sourceUrl` is validated exactly as `importCatalogFiles`
+         *     only the batch itself (an undecodable body, more than 200 entries, an invalid
+         *     batch-level `sourceUrl`, or a malformed `expected` list). `expected` is classified exactly
+         *     as the real import classifies it (`STALE` rows, `fileId` null like every prediction). The `sourceUrl` is validated exactly as `importCatalogFiles`
          *     validates it (same preflight, same order, same problem body) but never fetched; a
          *     valid one changes no prediction, except whether a `replaceExisting` replace would move
          *     an existing file's source reference.
@@ -1559,13 +1578,17 @@ export interface paths {
          *     file of the same identity: only the leaves the pair's rules own are replaced (labels and
          *     annotations by key, tags by tag category, links by title, reference-list entries by the
          *     blueprint they resolve to), everything else in the stored file survives — a hand-added
-         *     label, a foreign tag, a `template:` dependency. `existingId` names the merged file. A
+         *     label, a foreign tag, a `template:` dependency. `existingId` names the active stored file
+         *     of the same identity — with `merge` or without it (an identity-only read; `merge` decides
+         *     only whether the document is merged over it) — and `existingRevision` is that file's
+         *     write-version at conversion time (`>= 1`), present exactly when `existingId` is. `files`
+         *     holds exactly the rows that have a document, in row order. A
          *     document the catalog's own validator refuses is an `INVALID` row and is NOT in `files`. A
          *     stored reference to a Port entity that was deleted resolves to nothing and survives the merge.
          *
          *     A mapping that carries blocking findings (it went stale after a blueprint or registry
          *     edit) answers `409` — fix the mapping first. The entity read and the catalog
-         *     read (only when merging, narrowed to the files the export can write to) are admitted as ONE
+         *     content read (only when merging, narrowed to the files the export can write to) are admitted as ONE
          *     reservation against the process-wide read memory budget, held until the answer is built —
          *     their costs add (too large on its own `400`, contention `429`; `.claude/docs/security.md` "Entity read memory budget"), with the
          *     entity query's rules (`EntityQueryInvalid` `400`, at most four concurrent evaluations)
@@ -1625,9 +1648,12 @@ export interface paths {
          *     properties and relations, the icon, the title of a document without one — survives. A
          *     many-valued relation of which only some entries resolved keeps its stored targets. The
          *     converted owner stands for the FIRST stored team: equal, the stored team is kept; different,
-         *     only that first entry is replaced and the extra teams stay. Nothing guards the later entity
-         *     import against a Port-only edit made after this call, so convert immediately before importing. `existingId` names the
-         *     merged entity; `merge: false` produces the bare document.
+         *     only that first entry is replaced and the extra teams stay. A caller sends each row's
+         *     `existingUpdatedAt` back as the later `POST /entities/import`'s `expected` entry for that
+         *     document, so an entity edited after this call comes back `STALE` instead of being overwritten.
+         *     `existingId` names the merged entity; `merge: false` produces the bare document. `existingUpdatedAt` is that entity's
+         *     `updatedAt` at conversion time (the write-version token), present exactly when `existingId` is.
+         *     `documents` holds exactly the rows that have a document, in row order.
          *
          *     A mapping that carries blocking findings answers `409`. The stored entities a merge reads
          *     are admitted against the process-wide read memory budget (too large on its own `400`,
@@ -2193,10 +2219,15 @@ export interface paths {
          *     relation or a `format: team|user` property named in `schema.required` — carrying the
          *     full `findings` array when the rejection came from the blueprint's own rule table),
          *     `CONFLICT` (an in-batch duplicate identifier within the same blueprint,
-         *     case-insensitive), `ERROR` (an unexpected storage failure, or a pass-2 residual — see
-         *     below). The response is `200` even when every document failed; a `400` covers only
-         *     the batch itself (an undecodable body, a non-object element, or more than 200
-         *     documents).
+         *     case-insensitive), `STALE` (the request's `expected` write-version for this document no
+         *     longer holds — its counterpart changed, vanished or appeared since it was converted;
+         *     nothing stored, `id` names the counterpart when one exists, no audit event), `ERROR`
+         *     (an unexpected storage failure, or a pass-2 residual — see below). The response is
+         *     `200` even when every document failed; a `400` covers only the batch itself (an
+         *     undecodable body, a non-object element, more than 200 documents, an invalid
+         *     batch-level `sourceUrl`, or a malformed `expected` list — an out-of-range or repeated
+         *     index, a negative value). A pass-two write expects exactly the stamp pass one left, so
+         *     an edit landing between the two passes is the pass-2 `ERROR`, never an overwrite.
          *
          *     The batch is topologically ordered over every sibling reference a document's
          *     `relations`, `team`, and `format: team|user` properties name (the same three sources
@@ -2241,7 +2272,9 @@ export interface paths {
          *     and `EXISTS`. A pure computation: no audit events. The report is a snapshot — a
          *     concurrent write between the check and the real import can change the actual outcome.
          *     The same `400` covers only the batch itself (an undecodable body, a non-object
-         *     element, more than 200 documents, or an invalid batch-level `sourceUrl`). The
+         *     element, more than 200 documents, an invalid batch-level `sourceUrl`, or a malformed
+         *     `expected` list). `expected` is classified exactly as the real import classifies it
+         *     (`STALE` rows with the counterpart's `id`). The
          *     `sourceUrl` is validated exactly as `importEntities` validates it (same preflight, same
          *     order, same problem body) but never fetched; a valid one changes no prediction.
          */
@@ -2732,6 +2765,25 @@ export interface components {
              * @default false
              */
             replaceExisting: boolean;
+            /** @description Optional per-file write-version expectations (2.29.0), by `files` index — the conversion's guard (`ConversionRow.existingRevision`). A positive `revision` is the stored counterpart's revision: the file is written only if the counterpart still carries exactly it (compared atomically under the row lock), else the row is `STALE`; `0` means "expect no stored counterpart" (one that appeared meanwhile is `STALE`). A positive expectation whose counterpart is gone is `STALE` too. A file without an entry is unguarded. An index outside `0..files-1`, a repeated index or a negative revision is a `400` for the whole batch, on the real import and the dry-run alike. */
+            expected?: components["schemas"]["ExpectedFileState"][];
+        };
+        ExpectedFileState: {
+            /**
+             * Format: int32
+             * @description The 0-based position of the file in `files`.
+             */
+            index: number;
+            /**
+             * Format: int64
+             * @description The stored counterpart's `revision` the file expects; 0 = no stored counterpart.
+             */
+            revision: number;
+            /**
+             * Format: int32
+             * @description The stored counterpart's id (a conversion row's `existingId`), pinning WHICH file the `revision` belongs to — revisions restart at 1 per file, so a file deleted and re-created (or renamed into the identity) at an equal revision is another file and the row is `STALE`. Optional; absent for a `revision` of 0, and a `fileId` beside `revision: 0` is a `400`.
+             */
+            fileId?: number;
         };
         ImportResponse: {
             /** @description One result per submitted document, in submission order. */
@@ -2747,13 +2799,13 @@ export interface components {
             /** @description The sanitized entity name. */
             name: string;
             /**
-             * @description CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite soft findings, which import always waives (`fileId` set, `message` lists the findings; the Errors report tracks them). UPDATED / UPDATED_WITH_FINDINGS — `replaceExisting` only: the active file holding this identity was replaced in place (`fileId` is that file; the latter waived soft findings, listed in `message`). UNCHANGED — `replaceExisting` only: the file already held this exact document and source reference. Without a batch `sourceUrl` nothing was recorded or changed; with one the row is still a repo sync and records a SYNCED history event, bumps the revision and re-stamps the sync state. `message` still lists any findings the file carries. INVALID — failed the structural descriptor-format validation or namespace resolution (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document.
+             * @description CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite soft findings, which import always waives (`fileId` set, `message` lists the findings; the Errors report tracks them). UPDATED / UPDATED_WITH_FINDINGS — `replaceExisting` only: the active file holding this identity was replaced in place (`fileId` is that file; the latter waived soft findings, listed in `message`). UNCHANGED — `replaceExisting` only: the file already held this exact document and source reference. Without a batch `sourceUrl` nothing was recorded or changed; with one the row is still a repo sync and records a SYNCED history event, bumps the revision and re-stamps the sync state. `message` still lists any findings the file carries. INVALID — failed the structural descriptor-format validation or namespace resolution (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document. STALE — the request's `expected` revision for this file no longer holds (its counterpart changed, vanished or appeared since it was converted); nothing was stored, `fileId` names the counterpart on the real run when one exists.
              * @enum {string}
              */
-            status: "CREATED" | "CREATED_WITH_FINDINGS" | "UPDATED" | "UPDATED_WITH_FINDINGS" | "UNCHANGED" | "INVALID" | "CONFLICT" | "ERROR";
+            status: "CREATED" | "CREATED_WITH_FINDINGS" | "UPDATED" | "UPDATED_WITH_FINDINGS" | "UNCHANGED" | "INVALID" | "CONFLICT" | "ERROR" | "STALE";
             /**
              * Format: int32
-             * @description The new (or, for UPDATED/UPDATED_WITH_FINDINGS/UNCHANGED, the replaced) file's id, only when the document was stored (always null on the dry-run's predicted rows).
+             * @description The new (or, for UPDATED/UPDATED_WITH_FINDINGS/UNCHANGED, the replaced) file's id, only when the document was stored (always null on the dry-run's predicted rows); on a real-run `STALE` row, the counterpart's id when one exists.
              */
             fileId?: number | null;
             /** @description The failure or finding detail, absent on a clean CREATED/UPDATED. */
@@ -3491,10 +3543,10 @@ export interface components {
             items: components["schemas"]["Blueprint"][];
         };
         /**
-         * @description Shared by the blueprint and entity bulk-import reports (phase 6, v1.28.0). CREATED — stored as a new row. UPDATED — an existing row was replaced (`replaceExisting: true`). EXISTS — an existing row was found but `replaceExisting` is off; nothing was stored (renders gray, not red — by design, not a failure). INVALID — failed shape/registry/ reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts, a concurrent-change residual). Deliberately not the catalog import's vocabulary (`CREATED_WITH_FINDINGS`, `UPDATED_WITH_FINDINGS`, `UNCHANGED`): a catalog import always waives soft findings and replaces only under its own `replaceExisting`, while an ontology import reports an untouched existing row (`EXISTS`) and has no findings vocabulary.
+         * @description Shared by the blueprint and entity bulk-import reports (phase 6, v1.28.0). CREATED — stored as a new row. UPDATED — an existing row was replaced (`replaceExisting: true`). EXISTS — an existing row was found but `replaceExisting` is off; nothing was stored (renders gray, not red — by design, not a failure). INVALID — failed shape/registry/ reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts, a concurrent-change residual). STALE — ENTITY imports only (a blueprint import never emits it): the row carried an `expected` write-version and the stored counterpart changed, vanished or appeared since the conversion that produced the document; nothing was stored (renders red, report-and-skip). Deliberately not the catalog import's vocabulary (`CREATED_WITH_FINDINGS`, `UPDATED_WITH_FINDINGS`, `UNCHANGED`): a catalog import always waives soft findings and replaces only under its own `replaceExisting`, while an ontology import reports an untouched existing row (`EXISTS`) and has no findings vocabulary.
          * @enum {string}
          */
-        OntologyImportStatus: "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR";
+        OntologyImportStatus: "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR" | "STALE";
         BlueprintImportRequest: {
             /** @description The blueprint documents to import (the supported Port-shaped request, one per entry). Unknown members, including upstream read-only metadata, are rejected as INVALID for that row. Toadie's exports omit response metadata. Each document is decoded and classified INDEPENDENTLY, so one malformed document never fails the batch. */
             documents: {
@@ -3764,6 +3816,20 @@ export interface components {
             replaceExisting: boolean;
             /** @description The URL the batch was fetched from (2.9.0, the `ImportRequest.sourceUrl` twin, one level down) — every CREATED/UPDATED entity row gets it as its source reference AND starts synced (the document IS the remote copy at import time); blueprints never carry it. Omit for pasted batches. A per-document `sourceUrl` member is `INVALID` for that row — it is row state for the whole request, not one document. The real import and the dry-run check alike require an absolute credential-free https URL of at most 2048 characters, else `400` for the whole batch. */
             sourceUrl?: string | null;
+            /** @description Optional per-document write-version expectations (2.29.0), by `documents` index — the conversion's guard (`EntityDocumentRow.existingUpdatedAt`). A positive `updatedAt` is the stored counterpart's token: the row is written only if the counterpart still carries exactly it (checked atomically under the write lock, so a concurrent edit makes the row `STALE`, never a silent overwrite); `0` means "expect no stored counterpart" (a counterpart that appeared meanwhile is `STALE`). A positive expectation whose counterpart is gone is `STALE` too. A document without an entry is unguarded, exactly as before. An index outside `0..documents-1`, a repeated index or a negative `updatedAt` is a `400` for the whole batch, on the real import and the dry-run alike. */
+            expected?: components["schemas"]["ExpectedEntityState"][];
+        };
+        ExpectedEntityState: {
+            /**
+             * Format: int32
+             * @description The 0-based position of the document in `documents`.
+             */
+            index: number;
+            /**
+             * Format: int64
+             * @description The stored counterpart's `updatedAt` (epoch milliseconds) the document expects; 0 = no stored counterpart.
+             */
+            updatedAt: number;
         };
         EntityImportRow: {
             /** @description The document's 0-based position in the submitted batch. */
@@ -3775,7 +3841,7 @@ export interface components {
             status: components["schemas"]["OntologyImportStatus"];
             /**
              * Format: int32
-             * @description The entity's id — present for a stored row, for `EXISTS` (the row that already holds this identity), and for a dry-run's `UPDATED` prediction. A pass-two ERROR retains the earlier committed id, even if the row was subsequently deleted. Absent (never `null`) for a dry-run CREATED prediction or a rejection before storage.
+             * @description The entity's id — present for a stored row, for `EXISTS` (the row that already holds this identity), for a `STALE` row whose counterpart still exists, and for a dry-run's `UPDATED` prediction. A pass-two ERROR retains the earlier committed id, even if the row was subsequently deleted. Absent (never `null`) for a dry-run CREATED prediction or a rejection before storage.
              */
             id?: number;
             /** @description Present on every status except a clean `CREATED`/`UPDATED`. */
@@ -3944,15 +4010,20 @@ export interface components {
             name?: string;
             /**
              * Format: int32
-             * @description The stored catalog file of the same identity the document was merged over; absent without `merge` or a match.
+             * @description The active stored catalog file of the same identity, whether or not the document was merged over it (`merge` only decides that); absent without a match.
              */
             existingId?: number;
+            /**
+             * Format: int64
+             * @description The `revision` of that stored file at conversion time — the write-version token an import expects; present exactly when `existingId` is.
+             */
+            existingRevision?: number;
             findings: components["schemas"]["ConversionFinding"][];
             /** @description Port-side fields the entity carries that no rule of its pair converts (`properties.<id>`, `relations.<id>`, `team`). */
             unmapped: string[];
         };
         CatalogDocumentsResponse: {
-            /** @description The converted documents, exactly what `POST /api/v1/files/import` accepts — INVALID rows are not in it. Entity-id order. */
+            /** @description The converted documents, exactly what `POST /api/v1/files/import` accepts — INVALID rows are not in it, so it holds exactly the rows that have a document, in row order. */
             files: components["schemas"]["CatalogFileRequest"][];
             /** @description One entry per SELECTED entity, in entity-id order. */
             rows: components["schemas"]["ConversionRow"][];
@@ -3988,12 +4059,17 @@ export interface components {
              * @description The stored entity of the same (blueprint, identifier) — the one the document was merged over when `merge` is on, the one a `replaceExisting` import would overwrite; absent without a match.
              */
             existingId?: number;
+            /**
+             * Format: int64
+             * @description The `updatedAt` (epoch milliseconds) of that stored entity at conversion time — the write-version token an import expects; present exactly when `existingId` is.
+             */
+            existingUpdatedAt?: number;
             findings: components["schemas"]["ConversionFinding"][];
             /** @description Backstage fields the document carries that no rule of its pair addresses (`metadata.description`, `spec.dependencyOf`, `metadata.labels.<key>`, `metadata.tags.<tag>`, ...). */
             unmapped: string[];
         };
         EntityDocumentsResponse: {
-            /** @description The converted entities, exactly what `POST /api/v1/entities/import` accepts (blueprint, identifier, title, icon?, team?, properties, relations) — a SKIPPED or INVALID row has none. */
+            /** @description The converted entities, exactly what `POST /api/v1/entities/import` accepts (blueprint, identifier, title, icon?, team?, properties, relations) — a SKIPPED or INVALID row has none, so it holds exactly the rows that have a document, in row order. */
             documents: {
                 [key: string]: unknown;
             }[];

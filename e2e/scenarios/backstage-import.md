@@ -28,14 +28,21 @@
      rows read "Would be created".
 6. They press **Import**.
    - *Expected*: nothing is written yet — a confirm dialog ("Import into Port") opens, converts
-     afresh and dry-runs: both rows read "Would be created" and no Merge-off warning shows.
+     once and dry-runs: both rows read "Would be created" and no Merge-off warning shows.
 7. They press **Confirm import**.
-   - *Expected*: the dialog converts once more, then `POST /entities/import` answers `200`; both
+   - *Expected*: the dialog imports exactly the batch it previewed (no second conversion) —
+     `POST /entities/import` answers `200`; both
      rows read "Created". After closing, reading the service back through the API shows its `owner`
      relation pointing at the imported team.
-8. They press **Import** again, check the dialog and confirm.
-   - *Expected*: the dialog predicts "Would be updated" for both, and after Confirm both read
-     "Updated" — replace-existing is implicit for a conversion import.
+8. They press **Import** again and, while the dialog is open, the admin edits the team entity
+   through the API (`PUT /entities/{id}`, a changed title), then they press **Confirm import**.
+   - *Expected*: the dialog first predicts "Would be updated" for both; after Confirm exactly one
+     row reads "Changed meanwhile" (the team — its previewed write-version is out of date and it is
+     left as edited, the stored title keeps the edit) and the other reads "Updated" — replace-existing
+     is implicit for a conversion import.
+9. They close the dialog and press **Import** once more.
+   - *Expected*: the dialog converts afresh, so both rows read "Would be updated" again; **Cancel**
+     stores nothing.
 
 ## Not covered here (and why)
 

@@ -559,13 +559,7 @@ class CatalogFileService(
      */
     suspend fun readActiveSources(reservation: ReadLedger.Reservation, identities: Set<EntityIdentity>): List<CatalogSource> {
         if (identities.isEmpty()) return emptyList()
-        var predicate: Op<Boolean> = active() and
-            (CatalogFiles.kind.lowerCase() inList identities.map { it.kind }.toSet()) and
-            (CatalogFiles.namespace inList identities.map { it.namespace }.toSet())
-        if (identities.size <= IDENTITY_NAME_NARROWING_LIMIT) {
-            predicate = predicate and (CatalogFiles.name.lowerCase() inList identities.map { it.name }.toSet())
-        }
-        val narrowed = predicate
+        val narrowed = narrowedTo(identities)
         try {
             return suspendTransaction(database) {
                 reserveContent(reservation, narrowed, CATALOG_EXPORT_FOOTPRINT_RATIO)
@@ -573,6 +567,46 @@ class CatalogFileService(
             }
         } catch (cause: ReadBudgetExceeded) {
             throwReadBudgetHttp(cause, "catalog")
+        }
+    }
+
+    /**
+     * The ACTIVE rows that may hold one of [identities]: a superset narrowing (kind, namespace and — up to
+     * [IDENTITY_NAME_NARROWING_LIMIT] identities — name each `IN` their identities' values); the exact identity
+     * match is made in memory by the caller.
+     */
+    private fun narrowedTo(identities: Set<EntityIdentity>): Op<Boolean> {
+        var predicate: Op<Boolean> = active() and
+            (CatalogFiles.kind.lowerCase() inList identities.map { it.kind }.toSet()) and
+            (CatalogFiles.namespace inList identities.map { it.namespace }.toSet())
+        if (identities.size <= IDENTITY_NAME_NARROWING_LIMIT) {
+            predicate = predicate and (CatalogFiles.name.lowerCase() inList identities.map { it.name }.toSet())
+        }
+        return predicate
+    }
+
+    /**
+     * The id and write-version ([CatalogFiles.revision]) of each active file holding one of [identities]
+     * (lowercased `(kind, namespace, name)`) — the conversion export's `existingId`/`existingRevision`,
+     * reported whether or not it merges. IDENTITY-ONLY: no `content` crosses the wire, so like
+     * [readIdentities] it sits outside the read ledger (`.claude/docs/security.md`, the ledger's
+     * exceptions). Narrowed like [readActiveSources].
+     */
+    suspend fun readStoredRevisions(identities: Set<EntityIdentity>): Map<EntityIdentity, StoredRevision> {
+        if (identities.isEmpty()) return emptyMap()
+        val narrowed = narrowedTo(identities)
+        return suspendTransaction(database) {
+            CatalogFiles.select(CatalogFiles.id, CatalogFiles.revision, CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name)
+                .where { narrowed }
+                .map {
+                    val identity = EntityIdentity(
+                        it[CatalogFiles.kind].lowercase(), it[CatalogFiles.namespace].lowercase(), it[CatalogFiles.name].lowercase(),
+                    )
+                    identity to StoredRevision(it[CatalogFiles.id].value, it[CatalogFiles.revision])
+                }
+                .toList()
+                .filter { (identity, _) -> identity in identities }
+                .toMap()
         }
     }
 
@@ -642,14 +676,27 @@ class CatalogFileService(
             (CatalogFiles.name.lowerCase() eq file.metadata.name.lowercase())
 
     /**
-     * The id of the ACTIVE file holding the (namespace-resolved) [file]'s identity — the
-     * import's `replaceExisting` lookup. A soft-deleted twin is invisible here, exactly as it is
-     * to the partial unique index, so its identity imports as a plain create.
+     * The id and `revision` of the ACTIVE file holding the (namespace-resolved) [file]'s identity — the
+     * import's `replaceExisting`/`expected` lookup. A soft-deleted twin is invisible here, exactly as it is
+     * to the partial unique index, so its identity imports as a plain create (or, expecting a counterpart, STALE).
      */
-    internal suspend fun activeIdOf(file: CatalogFile): UInt? = suspendTransaction(database) {
-        CatalogFiles.select(CatalogFiles.id).where { identityPredicate(file) }
-            .toList().singleOrNull()?.get(CatalogFiles.id)?.value
+    internal suspend fun activeRowOf(file: CatalogFile): StoredRevision? = suspendTransaction(database) {
+        CatalogFiles.select(CatalogFiles.id, CatalogFiles.revision).where { identityPredicate(file) }
+            .toList().singleOrNull()?.let { StoredRevision(it[CatalogFiles.id].value, it[CatalogFiles.revision]) }
     }
+
+    /** Every active file's lowercased identity with its id and `revision` — the dry-run's [activeRowOf], read once. */
+    private suspend fun activeRevisions(): Map<EntityIdentity, StoredRevision> =
+        CatalogFiles.select(CatalogFiles.id, CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name, CatalogFiles.revision)
+            .where { active() }
+            .toList()
+            .associate {
+                EntityIdentity(
+                    kind = it[CatalogFiles.kind].lowercase(),
+                    namespace = it[CatalogFiles.namespace].lowercase(),
+                    name = it[CatalogFiles.name].lowercase(),
+                ) to StoredRevision(it[CatalogFiles.id].value, it[CatalogFiles.revision])
+            }
 
     /**
      * The dry-run's prediction of [update] for the active file holding [file]'s identity:
@@ -671,21 +718,21 @@ class CatalogFileService(
 
     /**
      * One snapshot transaction for the import DRY-RUN (see CatalogFileImport.kt — the same
-     * feature, split into its own file): the active identities, the registry snapshot, an
+     * feature, split into its own file): the active identities with their revisions, the registry snapshot, an
      * in-transaction namespace resolver, and the `replaceExisting` prediction, handed to [block]
      * so the dry-run classifies against exactly what a real run would see. Internal-only seam —
      * everything it exposes stays private to this class.
      */
     internal suspend fun <T> withImportSnapshot(
         block: suspend (
-            active: Set<EntityIdentity>,
+            active: Map<EntityIdentity, StoredRevision>,
             registries: RegistrySnapshot,
             resolve: suspend (CatalogFile) -> CatalogFile,
             predict: suspend (CatalogFile, SourceWrite) -> ReplacePrediction,
         ) -> T,
     ): T = suspendTransaction(database) {
         block(
-            activeIdentities(),
+            activeRevisions(),
             registryReader.loadSnapshot(),
             { file -> file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace)) },
             { file, sourceWrite -> predictReplace(file, sourceWrite) },

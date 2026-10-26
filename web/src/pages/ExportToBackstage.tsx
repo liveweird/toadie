@@ -16,6 +16,7 @@ import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 import { useEntityQuery } from "../hooks/useEntityQuery";
 import { useHierarchies } from "../hooks/useHierarchies";
 import { useQueryDiagnostics } from "../hooks/useQueryDiagnostics";
+import { expectedFileStates } from "../utils/catalogBatches";
 import { catalogInfoMultiYaml, downloadYaml } from "../utils/catalogYaml";
 import { IMPORT_CHUNK_SIZE } from "../utils/ontologyImport";
 import { conversionMappingsPath, editConversionMappingPath } from "../utils/conversionLinks";
@@ -223,10 +224,14 @@ export default function ExportToBackstage() {
       )}
 
       {creating && convert.variables && (
-        // The dialog converts AGAIN with the selection that produced the shown result, on open and
-        // on Confirm, so it acts on files merged against the catalog as it is now.
+        // The dialog converts AGAIN with the selection that produced the shown result, once on
+        // open, so what it previews (and Confirm imports) is merged against the catalog as it is
+        // now; each file carries the revision it was merged over.
         <CatalogFilesBatchModal
-          convert={async () => (await getCatalogDocuments(convert.variables!.mappingId, convert.variables!.selection)).files}
+          convert={async () => {
+            const { files, rows: converted } = await getCatalogDocuments(convert.variables!.mappingId, convert.variables!.selection);
+            return { files, expected: expectedFileStates(converted, files.length) };
+          }}
           onClose={() => setCreating(false)}
         />
       )}

@@ -172,7 +172,8 @@
       "UNCHANGED": "Bez zmian",
       "CONFLICT": "Już istnieje",
       "INVALID": "Nieprawidłowy",
-      "ERROR": "Niepowodzenie"
+      "ERROR": "Niepowodzenie",
+      "STALE": "Zmienione w międzyczasie"
     },
     "checkStatus": {
       "CREATED": "Zostałby utworzony",
@@ -182,7 +183,8 @@
       "UNCHANGED": "Pozostałby bez zmian",
       "CONFLICT": "Już istnieje",
       "INVALID": "Nieprawidłowy",
-      "ERROR": "Niepowodzenie"
+      "ERROR": "Niepowodzenie",
+      "STALE": "Zmienione w międzyczasie"
     },
     "failedTitle": "Import nie powiódł się",
     "tooMany": "Za dużo dokumentów w jednym imporcie (limit to 200).",

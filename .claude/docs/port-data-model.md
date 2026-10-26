@@ -685,7 +685,20 @@ it; renders gray in the SPA, not red — nothing failed), `INVALID` (shape/regis
 validation failure, an unresolvable target, a registry cap, or a cycle through a MANDATORY
 reference — see below), `CONFLICT` (an in-batch duplicate identifier, case-insensitive; the
 later document loses), `ERROR` (an unexpected storage failure, or a pass-2 residual — see
-below). The response is `200` even when every document failed. The status vocabulary is deliberately NOT the catalog import's (`CREATED`/`CREATED_WITH_FINDINGS`/`UPDATED`/`UPDATED_WITH_FINDINGS`/`UNCHANGED`/`INVALID`/`CONFLICT`/`ERROR`): a catalog import always waives soft findings and replaces only under its own `replaceExisting` (`.claude/docs/persistence.md` "Catalog import"), while an ontology import reports an untouched existing row (`EXISTS`) and a replaced one always as `UPDATED`.
+below), `STALE` (2.29.0, ENTITY imports only — blueprints never emit it: the request's `expected`
+write-version for this document no longer holds because its counterpart changed, vanished or
+appeared since it was converted; nothing stored, `id` names the counterpart when one exists, rendered
+red as "Changed meanwhile"; see "Entity import expectations" below). The response is `200` even when every document failed. The status vocabulary is deliberately NOT the catalog import's (`CREATED`/`CREATED_WITH_FINDINGS`/`UPDATED`/`UPDATED_WITH_FINDINGS`/`UNCHANGED`/`INVALID`/`CONFLICT`/`ERROR`): a catalog import always waives soft findings and replaces only under its own `replaceExisting` (`.claude/docs/persistence.md` "Catalog import"), while an ontology import reports an untouched existing row (`EXISTS`) and a replaced one always as `UPDATED`.
+
+**Entity import expectations (2.29.0).** `EntityImportRequest.expected` is an optional list of
+`{index, updatedAt}`: the write-version each guarded document expects of its stored counterpart
+(`entities.updated_at` — a conversion row's `existingUpdatedAt`; `0` = "expect no counterpart"; an
+index without an entry = unguarded). The token never rides inside a document (the
+`requireNoDocumentSourceUrl` rule). A `STALE` row is classified where `EXISTS` is, before findings,
+so it takes no part in the findings fixpoint: an updated-but-stale entity still exists for its
+referrers, a vanished one does not (they fail `RELATION_TARGET_MISSING`). The semantics table, the
+under-the-lock comparison, pass two and the residuals live in ONE place: `.claude/docs/persistence.md`
+"Import expectations (entities and catalog files)".
 
 **Entity import source references (2.9.0).** `EntityImportRequest.sourceUrl` is an optional
 batch-level https URL — the catalog import's own fetch-from-URL rule, one level up: every

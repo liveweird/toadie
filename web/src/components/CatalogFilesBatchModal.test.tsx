@@ -8,7 +8,10 @@ import { renderWithProviders } from "../test/render";
 import CatalogFilesBatchModal from "./CatalogFilesBatchModal";
 
 const file = (name: string): CatalogFileRequest => ({ kind: "Component", metadata: { name }, spec: {} });
-const files = (n: number) => Array.from({ length: n }, (_, i) => file(`f${i}`));
+const files = (n: number) => {
+  const list = Array.from({ length: n }, (_, i) => file(`f${i}`));
+  return { files: list, expected: list.map((_, i) => ({ revision: i + 1, fileId: 50 + i })) };
+};
 
 type Body = { files: CatalogFileRequest[] };
 const rowsFor = (init: RequestInit | undefined, status: string, withIds = false) =>
@@ -37,7 +40,7 @@ describe("CatalogFilesBatchModal", () => {
 
   const calls = (path: string) => fetchMock.mock.calls.filter(([url]) => url === path);
 
-  test("converts fresh on open and again on Confirm, so neither step acts on the page's snapshot", async () => {
+  test("converts once; the import body carries expected and Confirm imports the previewed batch", async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
       jsonResponse(200, { results: rowsFor(init, "CREATED", !url.endsWith("/check")) }),
     );
@@ -47,13 +50,37 @@ describe("CatalogFilesBatchModal", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Create / update catalog files" });
     expect(await within(dialog).findAllByText("Would be created")).toHaveLength(2);
-    expect(convert).toHaveBeenCalledTimes(1);
     expect(calls("/api/v1/files/import")).toHaveLength(0);
+    const checkBody = JSON.parse((calls("/api/v1/files/import/check")[0][1] as RequestInit).body as string);
+    expect(checkBody.expected).toEqual([{ index: 0, revision: 1, fileId: 50 }, { index: 1, revision: 2, fileId: 51 }]);
 
     await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
     expect(await within(dialog).findAllByText("Created")).toHaveLength(2);
-    expect(convert).toHaveBeenCalledTimes(2);
-    expect(calls("/api/v1/files/import")).toHaveLength(1);
+    expect(convert).toHaveBeenCalledTimes(1);
+    const importBody = JSON.parse((calls("/api/v1/files/import")[0][1] as RequestInit).body as string);
+    expect(importBody.replaceExisting).toBe(true);
+    expect(importBody.files.map((f: CatalogFileRequest) => f.metadata.name)).toEqual(["f0", "f1"]);
+    expect(importBody.expected).toEqual([{ index: 0, revision: 1, fileId: 50 }, { index: 1, revision: 2, fileId: 51 }]);
+  });
+
+  test("a STALE row renders red as Changed meanwhile", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const results = rowsFor(init, "UPDATED", !url.endsWith("/check")).map((row) =>
+        row.name === "f1" ? { ...row, status: "STALE", message: "Changed since it was converted" } : row,
+      );
+      return jsonResponse(200, { results });
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<CatalogFilesBatchModal convert={async () => files(2)} onClose={() => undefined} />);
+
+    const dialog = await screen.findByRole("dialog", { name: "Create / update catalog files" });
+    await within(dialog).findAllByText("Changed meanwhile");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    const badge = (await within(dialog).findAllByText("Changed meanwhile"))[0];
+    expect(badge.closest("[class*='Badge-root']")!.getAttribute("style")).toContain("red");
+    // The import-mode label for the same status, and the untouched row beside it.
+    expect(within(dialog).getByText("Updated")).toBeInTheDocument();
   });
 
   test("a failed second chunk shows the STORED rows with a stopped-after notice, hides the predictions and still refreshes the catalog", async () => {

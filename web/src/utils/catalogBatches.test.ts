@@ -1,9 +1,40 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { CatalogFileRequest } from "../api/catalogFiles";
-import { batchCause, CatalogBatchError, runCatalogFileBatches } from "./catalogBatches";
+import type { ConversionRow } from "../api/conversionMappings";
+import { batchCause, CatalogBatchError, expectedFileStates, runCatalogFileBatches } from "./catalogBatches";
 import { jsonResponse } from "../test/http";
 
 const file = (name: string): CatalogFileRequest => ({ kind: "Component", metadata: { name }, spec: {} });
+
+const batchOf = (files: CatalogFileRequest[], revision = 3) => ({ files, expected: files.map(() => ({ revision })) });
+
+const conversionRow = (index: number, status: ConversionRow["status"], existingRevision?: number): ConversionRow => ({
+  index,
+  status,
+  blueprint: "svc",
+  identifier: `e${index}`,
+  entityId: index + 1,
+  findings: [],
+  unmapped: [],
+  ...(existingRevision === undefined ? {} : { existingId: 10 + index, existingRevision }),
+});
+
+describe("expectedFileStates", () => {
+  test("pairs the revision and file id of each document-bearing row, revision 0 for a row with no counterpart", () => {
+    const rows = [
+      conversionRow(0, "CONVERTED", 7),
+      conversionRow(1, "SKIPPED"),
+      conversionRow(2, "CONVERTED_WITH_FINDINGS"),
+      conversionRow(3, "INVALID"),
+      conversionRow(4, "CONVERTED", 2),
+    ];
+    expect(expectedFileStates(rows, 3)).toEqual([{ revision: 7, fileId: 10 }, { revision: 0 }, { revision: 2, fileId: 14 }]);
+  });
+
+  test("a row count that does not pair with the files throws", () => {
+    expect(() => expectedFileStates([conversionRow(0, "CONVERTED", 7)], 2)).toThrow(/do not pair/);
+  });
+});
 
 describe("runCatalogFileBatches", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -26,7 +57,7 @@ describe("runCatalogFileBatches", () => {
 
   test("splits at 200 documents, sends replaceExisting and re-indexes rows against the full input", async () => {
     const files = Array.from({ length: 250 }, (_, i) => file(`f${i}`));
-    const rows = await runCatalogFileBatches("import", files);
+    const rows = await runCatalogFileBatches("import", batchOf(files));
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const sizes = fetchMock.mock.calls.map(([, init]) => (JSON.parse((init as RequestInit).body as string) as { files: unknown[] }).files.length);
@@ -38,8 +69,27 @@ describe("runCatalogFileBatches", () => {
     expect(rows[249]).toMatchObject({ index: 249, name: "f249" });
   });
 
+  test("sends each file's expected revision rebased to its position inside the chunk", async () => {
+    const files = Array.from({ length: 202 }, (_, i) => file(`f${i}`));
+    await runCatalogFileBatches("import", { files, expected: files.map((_, i) => ({ revision: i + 1, fileId: 100 + i })) });
+
+    const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string) as { expected: { index: number; revision: number; fileId?: number }[] });
+    expect(bodies[0].expected).toHaveLength(200);
+    expect(bodies[0].expected[199]).toEqual({ index: 199, revision: 200, fileId: 299 });
+    // File 200 of the full input is index 0 of the second chunk; its revision stays its own.
+    expect(bodies[1].expected).toEqual([
+      { index: 0, revision: 201, fileId: 300 },
+      { index: 1, revision: 202, fileId: 301 },
+    ]);
+  });
+
+  test("a file expecting no counterpart carries revision 0 and no file id on the wire", async () => {
+    await runCatalogFileBatches("check", { files: [file("a")], expected: [{ revision: 0 }] });
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string).expected).toEqual([{ index: 0, revision: 0 }]);
+  });
+
   test("check mode uses the dry-run endpoint", async () => {
-    await runCatalogFileBatches("check", [file("a")]);
+    await runCatalogFileBatches("check", batchOf([file("a")]));
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/files/import/check");
   });
 
@@ -49,7 +99,7 @@ describe("runCatalogFileBatches", () => {
       return jsonResponse(200, { results: body.files.map((f, index) => ({ index, kind: "Component", namespace: "default", name: f.metadata.name, status: "CREATED" })) });
     });
     fetchMock.mockResolvedValueOnce(jsonResponse(500, { title: "x", status: 500 }));
-    const error = await runCatalogFileBatches("import", Array.from({ length: 201 }, (_, i) => file(`f${i}`))).catch((err: unknown) => err);
+    const error = await runCatalogFileBatches("import", batchOf(Array.from({ length: 201 }, (_, i) => file(`f${i}`)))).catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(CatalogBatchError);
     const batch = error as CatalogBatchError;
@@ -61,7 +111,7 @@ describe("runCatalogFileBatches", () => {
   });
 
   test("an empty input sends nothing", async () => {
-    expect(await runCatalogFileBatches("check", [])).toEqual([]);
+    expect(await runCatalogFileBatches("check", batchOf([]))).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

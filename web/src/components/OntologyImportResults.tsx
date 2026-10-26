@@ -16,6 +16,8 @@ const STATUS_COLOR: Record<OntologyRowStatus, string> = {
   INVALID: "red",
   CONFLICT: "red",
   ERROR: "red",
+  // A conversion's `expected` write-version no longer held: nothing stored, convert again.
+  STALE: "red",
   // The one client-only status: a blueprint document skipped because the caller isn't (or is
   // no longer) an admin — never sent to the server.
   FORBIDDEN: "red",

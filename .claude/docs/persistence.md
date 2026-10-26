@@ -899,8 +899,8 @@ row that later fails to store (the existing Errors-report residual).
 
 **Catalog import: `replaceExisting`.**
 - **Applies when:** `POST /files/import` or `/files/import/check` carries `replaceExisting: true` (default `false` — the request is then byte-identical to before), or when changing `CatalogFileImport.kt` / `CatalogFileService.update`'s `sourceWrite` handling.
-- **Requirement:** an identity (kind + namespace + case-insensitive name, the namespace resolved exactly as for a create) held by an ACTIVE file is replaced IN PLACE through the ordinary `CatalogFileService.update` — its own per-document transaction with the history event inside it; never a delete-and-create — instead of `CONFLICT`. Soft findings are waived as always (hard structural rules stay hard). Rows: `UPDATED` (replaced), `UPDATED_WITH_FINDINGS` (`message` lists the waived findings), `UNCHANGED` (the replace records no field change; `message` still lists the findings the file carries; `fileId` is the file) — decided identically in both runs by the structural `documentChanges` check (plus the reference's pseudo-field). The ontology imports have no such status (their `replaceExisting` reports a no-op PUT as `UPDATED`); the catalog can say so because it suppresses no-op history events. **Source reference (the D3 rule of "Entity source references (V37)")**: a batch WITHOUT `sourceUrl` is `SourceWrite.Keep` — the reference and sync state are untouched, and an `UNCHANGED` row writes NOTHING (no event, no revision bump, no stamp change). A batch WITH one is `SourceWrite.Synced` — an import from a URL IS a repo sync, so the write follows `syncFromRepo` exactly: `updated_at`, `last_synced_at` and the `synced_content` baseline are stamped together, the revision always bumps, and a history event is always recorded (the field-diff `UPDATED` event when the document or the reference changed — the row then reads `UPDATED` — else the empty `SYNCED` event a matching sync records, the row still reading `UNCHANGED`: the document did not change, the sync is still recorded). A soft-deleted file with the same identity is invisible to the lookup (the partial unique index covers active rows only), so that document is `CREATED`. A repeat of an identity the batch already stored or replaced is `CONFLICT`, tracked per batch in the real run (a replace, unlike a create, has no 23505 to catch it) and by the dry-run's seen-set, checked before any replace prediction. Should the matched file vanish between the lookup and the locked update, the document is created. Import-replace is headerless by design: it sends no `X-Expected-Revision` (a batch has no per-file revision to carry), and a concurrent editor still gets its `409` on its own guarded save. The dry-run predicts the same rows through the same `replacedRow` classification, reading only the matched file's `content`/`source_url` (one single-row read per replaced identity, never a workspace content read); its `fileId` stays null. The route audits every replaced row as `catalog_file.updated` (`import: true`, `waivedFindings` count, `withFindings` on `UPDATED_WITH_FINDINGS`) — also `UNCHANGED`, as a no-op PUT is audited.
-- **Reference:** `CatalogFileImport.kt`, `CatalogFileService.update`/`activeIdOf`/`predictReplace`, `syncFromRepo` (the semantics mirrored).
+- **Requirement:** an identity (kind + namespace + case-insensitive name, the namespace resolved exactly as for a create) held by an ACTIVE file is replaced IN PLACE through the ordinary `CatalogFileService.update` — its own per-document transaction with the history event inside it; never a delete-and-create — instead of `CONFLICT`. Soft findings are waived as always (hard structural rules stay hard). Rows: `UPDATED` (replaced), `UPDATED_WITH_FINDINGS` (`message` lists the waived findings), `UNCHANGED` (the replace records no field change; `message` still lists the findings the file carries; `fileId` is the file) — decided identically in both runs by the structural `documentChanges` check (plus the reference's pseudo-field). The ontology imports have no such status (their `replaceExisting` reports a no-op PUT as `UPDATED`); the catalog can say so because it suppresses no-op history events. **Source reference (the D3 rule of "Entity source references (V37)")**: a batch WITHOUT `sourceUrl` is `SourceWrite.Keep` — the reference and sync state are untouched, and an `UNCHANGED` row writes NOTHING (no event, no revision bump, no stamp change). A batch WITH one is `SourceWrite.Synced` — an import from a URL IS a repo sync, so the write follows `syncFromRepo` exactly: `updated_at`, `last_synced_at` and the `synced_content` baseline are stamped together, the revision always bumps, and a history event is always recorded (the field-diff `UPDATED` event when the document or the reference changed — the row then reads `UPDATED` — else the empty `SYNCED` event a matching sync records, the row still reading `UNCHANGED`: the document did not change, the sync is still recorded). A soft-deleted file with the same identity is invisible to the lookup (the partial unique index covers active rows only), so that document is `CREATED`. A repeat of an identity the batch already stored or replaced is `CONFLICT`, tracked per batch in the real run (a replace, unlike a create, has no 23505 to catch it) and by the dry-run's seen-set, checked before any replace prediction. Should the matched file vanish between the lookup and the locked update, an unguarded document is created. Import-replace is guarded WHEN REQUESTED (2.29.0): it never sends the `X-Expected-Revision` header (a batch has no single revision to carry), but the request's optional per-file `expected` list makes `update` compare the revision under the row lock — see "Import expectations (entities and catalog files)"; an entry-less file is unguarded, last-write-wins as before, and a concurrent editor still gets its `409` on its own guarded save. The dry-run predicts the same rows through the same `replacedRow` classification, reading only the matched file's `content`/`source_url` (one single-row read per replaced identity, never a workspace content read); its `fileId` stays null. The route audits every replaced row as `catalog_file.updated` (`import: true`, `waivedFindings` count, `withFindings` on `UPDATED_WITH_FINDINGS`) — also `UNCHANGED`, as a no-op PUT is audited.
+- **Reference:** `CatalogFileImport.kt`, `CatalogFileService.update`/`activeRowOf`/`predictReplace`, `syncFromRepo` (the semantics mirrored).
 - **Enforcement:** `CatalogImportReplaceTest`; the replace case of `CatalogFileAtomicHistoryTest` (a failed history insert rolls back that replace and leaves adjacent rows intact).
 - **Exception:** none.
 
@@ -966,7 +966,9 @@ document does not. A changed or cleared `sourceUrl` on an ordinary PUT resets `l
 to `0` and `synced_content` to `null` (the reference and its sync history travel together);
 `updatedAt` bumps on every entity PUT REGARDLESS of whether the document changed (D2 — unlike
 the catalog, which only bumps on an actual content change), so the SPA's "Local changes" badge
-means "saved in Toadie since the sync", not "the document differs from the baseline". Import-
+means "saved in Toadie since the sync", not "the document differs from the baseline" — and, since 2.29.0,
+the same stamp doubles as the write-version token a conversion row reports (`existingUpdatedAt`) and an
+entity import can expect (see "Import expectations (entities and catalog files)"). Import-
 from-URL (a batch `sourceUrl` on `POST …/entities/import`) stamps the reference and the sync
 baseline on BOTH the pass-one write and, for a row deferred through the two-pass ontology-import
 protocol (`.claude/docs/port-data-model.md` "Import and export"), the pass-two restoration —
@@ -995,11 +997,72 @@ and the sync request schemas in OpenAPI.
 Enforcement: `EntitySyncTest` and `BlueprintSyncTest`; frontend modal regressions. Exception:
 batch imports stamp their own source reference and do not use this sync guard.
 
+**Import expectations (entities and catalog files).**
+
+- **Applies when:** a client imports documents it converted earlier (Backstage -> Port through
+  `POST …/entity-documents` then `POST /entities/import`; Port -> Backstage through
+  `GET …/catalog-documents` then `POST /files/import`) and must not overwrite an edit made
+  between the read and the write.
+- **Requirement:** the import request may carry `expected`, one entry per guarded document by
+  `documents` index: entities `{index, updatedAt}` (the token is `entities.updated_at`, no
+  migration; the conversion row's `existingUpdatedAt`), catalog files `{index, revision}`
+  (`catalog_files.revision`, V40; the row's `existingRevision`), plus an optional `fileId` (the row's
+  `existingId`; a `400` beside revision `0`) because a revision restarts at 1 per row — a file
+  deleted and re-created, or renamed into the identity, at an equal revision is another file and
+  `STALE` (the entity `updated_at` is a millisecond stamp, so a re-created entity cannot equal the
+  old one and needs no id). A positive value is the counterpart's token, `0` means "expect no stored
+  counterpart"; an entry-less document is unguarded exactly as
+  before. The planner/`checkOne` classify from the snapshot (so the dry-run agrees), and the real
+  write compares the expectation against the row read under the existing write lock (the V28
+  two-table lock / the catalog `FOR UPDATE`), via `EntityService.update(expectedUpdatedAt)` /
+  `CatalogFileService.update(expectedRevision)`: for entities BEFORE validation and mutation; for
+  catalog files under the row lock before any mutation, after the document's own validation,
+  namespace resolution and `requireOrWaive` (a guarded file whose namespace was removed meanwhile
+  reads `INVALID`; nothing is written either way). The located counterpart's id is what the update
+  targets, so a delete-and-recreate swap between the lookup and the lock lands on a soft-deleted row
+  and reads `STALE` (vanished), never a create. A
+  counterpart that changed, vanished or appeared is the per-row `STALE` status (report-and-skip
+  inside the per-document transaction; nothing written: no history event, no revision bump, no
+  audit event, no new problem type — `EntityStaleException` never escapes a route). With
+  `replaceExisting` off an existing counterpart stays `EXISTS`/`CONFLICT`; only a vanished one
+  (positive token, no row) is `STALE`, so a create never resurrects what the conversion merged
+  over. A unique-violation race on a row that expected no counterpart (`E=0`) reports `STALE` in
+  both imports, with `replaceExisting` on or off. A multi-pass entity import expects, in pass two, the stamp pass one left: an edit between
+  the passes becomes the existing "Stored without its deferred references" `ERROR` with the committed
+  id. A malformed list (index outside `0..documents-1`, a repeated index, a negative value) is a
+  `400` for the whole batch on the real run and the check alike (`requireExpectedStates`, inside
+  `ontologyImportPreflight` / the catalog preflight, after the batch-size cap and before the
+  `sourceUrl` guards). A stale row is refused before its findings run; computed values never move
+  `updated_at`, so a blueprint edit never makes an entity `STALE`; a batch `sourceUrl` composes.
+- **Reference:** `infra/importing/ImportBatch.kt` (`OntologyImportStatus.STALE`,
+  `requireExpectedStates`), `entities/EntityImport.kt` (`staleReason`, `writeEntityRow`,
+  `pass2Entity`), `entities/EntityService.kt` (`applyUpdate`), `catalog/Import.kt`
+  (`ExpectedFileState` with its optional `fileId`, `ImportResultStatus.STALE`), `catalog/CatalogFileImport.kt` (`staleReason`,
+  `importOne`, `checkOne`), `catalog/CatalogFileService.kt` (`update`'s `requireExpectedRevision`,
+  `activeRowOf`); `.claude/docs/conversion-mapping.md` (the tokens on the conversion rows).
+- **Enforcement:** `EntityImportPlanTest` (one case per cell of the semantics table, EXISTS
+  precedence, no cascade), `EntityImportTest` (match, edit in between, appeared/vanished, dry-run
+  parity, malformed `expected`, the pass-two pin), `SampleImportConversionTest` (stale re-post),
+  and, for catalog files, `CatalogImportReplaceTest` (match, stale with no event / revision bump /
+  `catalog_file.updated` audit, the stale no-op, `0` against an active twin, a soft-deleted or
+  seam-vanished counterpart never resurrected, a delete-and-recreate at an equal revision, the
+  under-the-lock check via the lookup seam, duplicates after a STALE, dry-run parity, malformed
+  `expected`); `EntityImportTest` also pins the under-the-lock check (a trigger moving a guarded row's
+  `updated_at` after the plan).
+- **Exception:** legacy clients, the sample `load.sh` scripts and the MCP import tools send no
+  `expected` and behave exactly as before; blueprint imports never carry it. Residuals: a write
+  landing between a conversion's snapshot and its merge read leaves the token older than the merged
+  document (a spurious, safe `STALE`); the planner's snapshot can go stale before the lock (a
+  predicted `UPDATED` becomes `STALE`); the write lock serialises writers but does not force distinct
+  stamps, so two entity writes within the same millisecond can share an `updated_at` — a stale token
+  can then pass, only for a write landing within the same millisecond as the conversion's read; a case-only identifier rename inside a deferral-bearing batch
+  bumps referrers through the rename cascade, which pass two then reports as `ERROR`.
+
 **Import dry-run preflight (files, blueprints, entities).** Applies when a `POST …/import` and its
 `POST …/import/check` dry-run accept a batch-level `sourceUrl`. Requirement: both run ONE route-side
 preflight, after the route's own guard and `receive` (so 401/403 win over any 400) and before any
-service call: the batch-size cap, then the `sourceUrl`'s static guards (`sanitizedSourceUrl`, the
-one home of those rules). An invalid value is therefore the same
+service call: the batch-size cap, the optional `expected` list ("Import expectations", entities and
+catalog files), then the `sourceUrl`'s static guards (`sanitizedSourceUrl`, the one home of those rules). An invalid value is therefore the same
 `400` problem on both; a valid one changes no row prediction. The check validates and never fetches;
 only the real run stamps the reference and the synced baseline. Reference:
 `infra/importing/ontologyImportPreflight` (blueprints, entities), `catalogImportPreflight` in

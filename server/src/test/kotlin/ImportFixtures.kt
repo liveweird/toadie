@@ -82,6 +82,8 @@ internal object ImportFixtures {
         mapping: MappingDocument = ExportFixtures.mapping,
         defaultNamespace: String = "default",
         blueprints: Map<String, ch.nokillswit.blueprints.BlueprintDefinition> = ExportFixtures.blueprints,
+        /** The `updated_at` stamp of each [existing] entity by id; an entity not listed reports none. */
+        updatedAt: Map<UInt, Long> = emptyMap(),
     ): EntityDocumentsResponse {
         val directory = PortDirectory { blueprint, identifier ->
             existing.firstOrNull { it.blueprint == blueprint && it.identifier.equals(identifier, ignoreCase = true) }?.identifier
@@ -97,6 +99,10 @@ internal object ImportFixtures {
                 directory = directory,
                 existingId = { blueprint, identifier ->
                     existing.firstOrNull { it.blueprint == blueprint && it.identifier.equals(identifier, ignoreCase = true) }?.id
+                },
+                existingUpdatedAt = { blueprint, identifier ->
+                    existing.firstOrNull { it.blueprint == blueprint && it.identifier.equals(identifier, ignoreCase = true) }
+                        ?.let { updatedAt[it.id] }
                 },
                 merge = merge,
             ),

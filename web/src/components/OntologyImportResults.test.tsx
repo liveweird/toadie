@@ -97,4 +97,20 @@ describe("OntologyImportResults", () => {
     );
     expect(screen.getByText(/Imported 2 of 3 — 1 created, 1 updated, 1 unchanged/)).toBeInTheDocument();
   });
+
+  test("a STALE row reads \"Changed meanwhile\" in both modes and is counted nowhere in the summary", () => {
+    const stale: OntologyResultRow = {
+      ...ENTITY_ROW,
+      index: 4,
+      status: "STALE",
+      message: "the entity changed since it was read — convert again",
+    };
+    const { unmount } = renderWithProviders(<OntologyImportResults rows={[stale]} mode="import" showSource={false} />);
+    expect(screen.getByText("Changed meanwhile")).toBeInTheDocument();
+    expect(screen.getByText("the entity changed since it was read — convert again")).toBeInTheDocument();
+    expect(screen.getByText(/Imported 0 of 1 — 0 created, 0 updated, 0 unchanged/)).toBeInTheDocument();
+    unmount();
+    renderWithProviders(<OntologyImportResults rows={[stale]} mode="check" showSource={false} />);
+    expect(screen.getByText("Changed meanwhile")).toBeInTheDocument();
+  });
 });

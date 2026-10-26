@@ -279,7 +279,9 @@ class ConversionRoutesTest {
 
             val merged = world.documents("?blueprint=${world.svc.enc()}")
             assertEquals(stored.id, merged.rows.single { it.identifier == world.a1 }.existingId)
+            assertEquals(stored.revision, merged.rows.single { it.identifier == world.a1 }.existingRevision)
             assertNull(merged.rows.single { it.identifier == world.a2 }.existingId)
+            assertNull(merged.rows.single { it.identifier == world.a2 }.existingRevision)
             val file = merged.files.single { it.metadata.name == world.a1 }
             assertEquals(mapOf(foreignLabel to "v1", "gdpr" to "yes"), file.metadata.labels)
             assertEquals(listOf("template:default/starter", "resource:default/${world.b1}"), file.spec.dependsOn)
@@ -287,7 +289,9 @@ class ConversionRoutesTest {
             assertEquals("production", file.spec.lifecycle)
 
             val bare = world.documents("?blueprint=${world.svc.enc()}&merge=false")
-            assertNull(bare.rows.single { it.identifier == world.a1 }.existingId)
+            // The counterpart is named merge or not (the identity-only revision read); only the document differs.
+            assertEquals(stored.id, bare.rows.single { it.identifier == world.a1 }.existingId)
+            assertEquals(stored.revision, bare.rows.single { it.identifier == world.a1 }.existingRevision)
             assertEquals(mapOf("gdpr" to "yes"), bare.files.single { it.metadata.name == world.a1 }.metadata.labels)
             assertEquals(listOf("resource:default/${world.b1}"), bare.files.single { it.metadata.name == world.a1 }.spec.dependsOn)
         } finally {

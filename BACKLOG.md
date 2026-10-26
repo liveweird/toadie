@@ -44,17 +44,21 @@ promotes it. A finished item is removed, not ticked.
 
 ## Product
 
-- [new] **Export API definition URLs to Backstage.** The conversion keeps `api.definition_url` lossy:
+- [next] **Export API definition URLs to Backstage.** The conversion keeps `api.definition_url` lossy:
   Backstage expresses a remote definition as the `backstage.io/definition-at-location` annotation (or a
   `$text` object substitution), and that key is not in the V22-seeded annotation registry. Registering it
   for API (a new registry migration) and adding a mapping rule would let the export carry the URL instead
   of only an inline `definition`.
-- [next] **Guard the conversion's read-then-write gap.** The Backstage → Port import merges each document
-  over the stored entity when it is converted, but the SPA imports it later through
-  `POST /entities/import` with `replaceExisting`, which carries no expected revision: a Port-only
-  edit made between the conversion and the import is overwritten. Phase 5's SPA re-converts
-  immediately before importing; a durable fix is an optional per-document expected `updatedAt` on the
-  entity import that refuses a stale replace (the catalog's `X-Expected-Revision` twin).
+- [next] **Link APIs and datasets to their Covenant contracts.** Covenant already records which Toadie
+  entity each contract covers (`contract_toadie_links`, keyed by the connection's target blueprint),
+  but Toadie shows no way back. Add a calculated `contract` property (`format: url`) to the sample
+  `api` and `dataset` blueprints: jq `"<covenant base>/toadie/<blueprint>/" + (.identifier | @uri)`,
+  with the base URL as admin-editable blueprint data. Covenant owns the link and resolves that URL to
+  the linked contract(s); its side is the handoff note `covenant-contract-link-handoff.md` (copied
+  into the Covenant repo). Zero server code here: verify that jackson-jq 1.3.0 supports `@uri` (else
+  pick an encoding Covenant can decode), decide whether the stored `dataset.contract_url` stays as the
+  ODCS document link, and update `ontology.md`, the sample README and the computed-property counts
+  `SampleBlueprintsTest` pins.
 - [new] **Treat empty and absent blueprint maps as equal in the sync modal.** After a sync the stored
   blueprint renders empty `relations`, `mirrorProperties`, `calculationProperties` and
   `aggregationProperties` maps, so a source document that omits them never reads "in sync": reopening

@@ -5,7 +5,7 @@
 // Thin endpoint wrappers: transport (authedFetch/ApiError) in ./http, types from ./schema.
 
 import { ApiError, buildQuery, jsonRequest, voidRequest } from "./http";
-import type { paths } from "./schema";
+import type { components, paths } from "./schema";
 
 export type Entity =
   paths["/api/v1/entities"]["get"]["responses"]["200"]["content"]["application/json"]["items"][number];
@@ -172,29 +172,37 @@ export async function checkEntityQuery(query: string): Promise<EntityQueryCheckR
 export type EntityImportResponse =
   paths["/api/v1/entities/import"]["post"]["responses"]["200"]["content"]["application/json"];
 
+/** One per-document write-version expectation (2.29.0): `index` into the chunk's `documents`,
+ *  `updatedAt` the stored counterpart's token from the conversion (0 = expect none). */
+export type ExpectedEntityState = components["schemas"]["ExpectedEntityState"];
+
 async function postEntityImportBatch(
   path: "import" | "import/check",
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
   sourceUrl?: string,
+  expected?: ExpectedEntityState[],
 ): Promise<EntityImportResponse> {
   return jsonRequest<EntityImportResponse>(`/api/v1/entities/${path}`, {
     method: "POST",
-    body: JSON.stringify({ documents, replaceExisting, sourceUrl }),
+    // `expected` rides the wire only when non-empty, so a plain import's body is unchanged.
+    body: JSON.stringify({ documents, replaceExisting, sourceUrl, expected: expected?.length ? expected : undefined }),
   });
 }
 
 /**
  * `sourceUrl` (2.9.0, the fetch-from-URL import flow, one level down from
  * `importCatalogFiles`): every CREATED/UPDATED row gets it as its source reference AND starts
- * synced. Omit for pasted/uploaded batches.
+ * synced. Omit for pasted/uploaded batches. `expected` (2.29.0, a conversion's guard) refuses a
+ * document whose stored counterpart no longer carries the write-version it was converted over.
  */
 export async function importEntities(
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
   sourceUrl?: string,
+  expected?: ExpectedEntityState[],
 ): Promise<EntityImportResponse> {
-  return postEntityImportBatch("import", documents, replaceExisting, sourceUrl);
+  return postEntityImportBatch("import", documents, replaceExisting, sourceUrl, expected);
 }
 
 /** The dry-run: identical row shape, nothing stored or audited. `sourceUrl` is validated exactly
@@ -203,8 +211,9 @@ export async function checkEntityImport(
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
   sourceUrl?: string,
+  expected?: ExpectedEntityState[],
 ): Promise<EntityImportResponse> {
-  return postEntityImportBatch("import/check", documents, replaceExisting, sourceUrl);
+  return postEntityImportBatch("import/check", documents, replaceExisting, sourceUrl, expected);
 }
 
 // -- Source references & HTTP re-sync (2.9.0) — the `api/catalogFiles.ts` twin, one level

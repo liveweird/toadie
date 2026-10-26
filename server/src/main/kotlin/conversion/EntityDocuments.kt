@@ -35,6 +35,11 @@ data class EntityDocumentRow(
     val identifier: String? = null,
     /** The stored entity the document was merged over; absent without `merge` or a match. */
     val existingId: UInt? = null,
+    /**
+     * The stored entity's `updated_at` (epoch millis) at conversion time — the write-version token an
+     * import expects; absent exactly when [existingId] is.
+     */
+    val existingUpdatedAt: Long? = null,
     val findings: List<ConversionFinding>,
     /** Backstage fields the document carries that no rule of its pair addresses (`spec.dependencyOf`, `metadata.labels.<key>`, ...). */
     val unmapped: List<String>,

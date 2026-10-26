@@ -11,6 +11,7 @@ import ch.nokillswit.infra.fetch.fetchForCaller
 import ch.nokillswit.infra.fetch.UrlFetcher
 import ch.nokillswit.infra.fetch.UrlFetcherKey
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
+import ch.nokillswit.infra.importing.requireExpectedStates
 import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalString
 import ch.nokillswit.infra.paging.parsePaging
@@ -98,12 +99,17 @@ class CatalogFiles {
 /**
  * The ONE route-side preflight of `POST …/files/import` AND its `/import/check` dry-run (the
  * ontology twin is `infra/importing/ontologyImportPreflight`), run after the guard and `receive`,
- * before any service call: the batch cap, then the batch-level `sourceUrl`'s static guards.
+ * before any service call: the batch cap, the optional `expected` revisions
+ * ([requireExpectedStates]), then the batch-level `sourceUrl`'s static guards.
  * Validation only — never a fetch. Returns the trimmed URL for the real run to stamp.
  */
 private fun catalogImportPreflight(request: ImportRequest): String? {
     if (request.files.size > MAX_IMPORT_FILES) {
         throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
+    }
+    requireExpectedStates(request.files.size, request.expected.map { it.index to it.revision })
+    if (request.expected.any { it.fileId != null && it.revision == 0L }) {
+        throw BadRequestException("expected fileId names a stored counterpart, so its revision must be positive")
     }
     return sanitizedSourceUrl(request.sourceUrl)
 }
@@ -238,6 +244,7 @@ fun Application.configureCatalogFileRoutes() {
                     request.files,
                     replaceExisting = request.replaceExisting,
                     sourceUrl = sourceUrl,
+                    expected = request.expected.associateBy { it.index },
                 )
                 call.respond(HttpStatusCode.OK, ImportResponse(results = results))
             }
@@ -253,6 +260,7 @@ fun Application.configureCatalogFileRoutes() {
                     caller.userId,
                     sourceUrl = sourceUrl,
                     replaceExisting = request.replaceExisting,
+                    expected = request.expected.associateBy { it.index },
                 )
                 // Replaced rows audit exactly like the ordinary replace (`catalog_file.updated`,
                 // `waivedFindings` = the waived count), marked `import` — the UNCHANGED no-op

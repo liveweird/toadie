@@ -236,19 +236,22 @@ fun Application.configureEntityRoutes() {
             post<EntitiesRoute.Import.Check> {
                 call.caller()
                 val request = call.receive<EntityImportRequest>()
-                ontologyImportPreflight(request.documents.size, request.sourceUrl)
-                val rows = entityService.importCheck(request.documents, request.replaceExisting)
+                ontologyImportPreflight(request.documents.size, request.sourceUrl, request.expected.map { it.index to it.updatedAt })
+                val rows = entityService.importCheck(request.documents, request.replaceExisting, request.expected.byIndex())
                 call.respondEntity(HttpStatusCode.OK, EntityImportResponse(rows))
             }
             post<EntitiesRoute.Import> {
                 val caller = call.caller()
                 val request = call.receive<EntityImportRequest>()
-                val sourceUrl = ontologyImportPreflight(request.documents.size, request.sourceUrl)
+                val sourceUrl = ontologyImportPreflight(
+                    request.documents.size, request.sourceUrl, request.expected.map { it.index to it.updatedAt },
+                )
                 val rows = entityService.import(
                     request.documents,
                     caller.userId,
                     request.replaceExisting,
                     sourceUrl = sourceUrl,
+                    expected = request.expected.byIndex(),
                 ) { mutation ->
                     auditImportedEntityMutation(caller.userId, mutation)
                 }

@@ -50,10 +50,11 @@ class EntityImportPlanTest {
         total: Long = existing.size.toLong(),
         documentBytes: Long = 0L,
         bytesById: Map<UInt, Long> = emptyMap(),
+        updatedAtById: Map<UInt, Long> = emptyMap(),
     ): EntityImportSnapshot {
         val byBlueprint = existing.groupBy({ it.first }, { it.second to it.third })
         val counts = existing.groupingBy { it.first }.eachCount().mapValues { it.value.toLong() }
-        return EntityImportSnapshot(blueprints, byBlueprint, total, counts, documentBytes, bytesById)
+        return EntityImportSnapshot(blueprints, byBlueprint, total, counts, documentBytes, bytesById, updatedAtById)
     }
 
     private fun request(blueprint: String, identifier: String, relations: JsonObject = JsonObject(emptyMap())) =
@@ -133,6 +134,94 @@ class EntityImportPlanTest {
         val onPlan = planEntityImport(listOf(doc(request("a", "x"))), snapshot(listOf(a), existing), true)
         val onVerdict = onPlan.verdicts[0] as EntityPlanVerdict.Store
         assertEquals(99u, onVerdict.existingId)
+    }
+
+    // -- expected write-versions (2.29.0): one case per cell of the semantics table --------------------------------
+
+    private val stored = 1_000L // the counterpart's updated_at in every snapshot below
+
+    /** The verdict of ONE document `a/x` against a snapshot that holds it ([present]) or not, expecting [expected]. */
+    private fun verdictFor(replace: Boolean, present: Boolean, expected: Long?): EntityPlanVerdict {
+        val a = blueprint("a", 1u, BlueprintDefinition())
+        val snapshot = snapshot(
+            listOf(a),
+            existing = if (present) listOf(Triple(1u, "x", 99u)) else emptyList(),
+            updatedAtById = if (present) mapOf(99u to stored) else emptyMap(),
+        )
+        return planEntityImport(
+            listOf(doc(request("a", "x"))), snapshot, replace, expected = expected?.let { mapOf(0 to it) } ?: emptyMap(),
+        ).verdicts.single()
+    }
+
+    private fun EntityPlanVerdict.row() = (this as EntityPlanVerdict.Rejected).row
+
+    private fun EntityPlanVerdict.assertStale(id: UInt?) {
+        val row = row()
+        assertEquals(OntologyImportStatus.STALE, row.status)
+        assertEquals(id, row.id, "STALE names the counterpart when there is one")
+        assertTrue(!row.message.isNullOrBlank(), "STALE names its reason")
+    }
+
+    private fun EntityPlanVerdict.assertStore(existingId: UInt?, expected: Long?) {
+        val store = this as EntityPlanVerdict.Store
+        assertEquals(existingId, store.existingId)
+        assertEquals(expected, store.expectedUpdatedAt)
+    }
+
+    @Test
+    fun `replaceExisting on - a matching token updates, a differing one or a vanished counterpart is STALE`() {
+        verdictFor(replace = true, present = true, expected = stored).assertStore(99u, stored)
+        verdictFor(replace = true, present = true, expected = stored + 1).assertStale(99u)
+        verdictFor(replace = true, present = false, expected = stored).assertStale(null)
+    }
+
+    @Test
+    fun `replaceExisting on - expecting none is STALE against a counterpart and creates without one`() {
+        verdictFor(replace = true, present = true, expected = 0).assertStale(99u)
+        verdictFor(replace = true, present = false, expected = 0).assertStore(null, 0L)
+    }
+
+    @Test
+    fun `replaceExisting off - EXISTS keeps precedence over a token, a vanished counterpart is STALE, expecting none creates`() {
+        listOf(stored, stored + 1, 0L).forEach { token ->
+            val row = verdictFor(replace = false, present = true, expected = token).row()
+            assertEquals(OntologyImportStatus.EXISTS, row.status, "token $token")
+            assertEquals(99u, row.id)
+        }
+        verdictFor(replace = false, present = false, expected = stored).assertStale(null)
+        verdictFor(replace = false, present = false, expected = 0).assertStore(null, 0L)
+    }
+
+    @Test
+    fun `a row without an expectation is unguarded, exactly as before`() {
+        verdictFor(replace = true, present = true, expected = null).assertStore(99u, null)
+        verdictFor(replace = true, present = false, expected = null).assertStore(null, null)
+        assertEquals(OntologyImportStatus.EXISTS, verdictFor(replace = false, present = true, expected = null).row().status)
+    }
+
+    @Test
+    fun `STALE does not cascade - an updated counterpart still resolves for its referrers, a vanished one does not`() {
+        val bp = blueprint("bp", 1u, relationOnlyDefinition(target = "bp"))
+        val referrer = doc(request("bp", "b", relations = buildJsonObject { put("peer", "a") }))
+        val replaced = doc(request("bp", "a"))
+        val present = snapshot(listOf(bp), existing = listOf(Triple(1u, "a", 99u)), updatedAtById = mapOf(99u to stored))
+
+        val changed = planEntityImport(listOf(replaced, referrer), present, true, expected = mapOf(0 to stored + 1))
+        changed.verdicts[0].assertStale(99u)
+        assertTrue(changed.verdicts[1] is EntityPlanVerdict.Store, "the stored entity still exists, so the reference resolves")
+
+        val gone = planEntityImport(listOf(replaced, referrer), snapshot(listOf(bp)), true, expected = mapOf(0 to stored))
+        gone.verdicts[0].assertStale(null)
+        val referrerRow = gone.verdicts[1].row()
+        assertEquals(OntologyImportStatus.INVALID, referrerRow.status)
+        assertTrue(referrerRow.message!!.contains("peer"), referrerRow.message!!)
+    }
+
+    @Test
+    fun `a pass-one unique violation is STALE only for a row that expected no counterpart`() {
+        val race = R2dbcDataIntegrityViolationException("dup", "23505")
+        assertEquals(OntologyImportStatus.STALE, storageFailureRow(race, 0, "a", "x", expectedNone = true).status)
+        assertEquals(OntologyImportStatus.EXISTS, storageFailureRow(race, 0, "a", "x").status)
     }
 
     @Test

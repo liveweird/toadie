@@ -9,6 +9,7 @@ import ch.nokillswit.entities.EntityImportRequest
 import ch.nokillswit.entities.EntityImportResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
+import ch.nokillswit.entities.ExpectedEntityState
 import ch.nokillswit.entities.import
 import ch.nokillswit.entities.importCheck
 import ch.nokillswit.infra.importing.OntologyImportStatus
@@ -16,13 +17,16 @@ import ch.nokillswit.infra.importing.IMPORT_SCHEMA_MESSAGE
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import java.util.UUID
 import java.sql.DriverManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -63,7 +67,33 @@ class EntityImportTest {
     private fun sqlLiteral(value: String): String = "'${value.replace("'", "''")}'"
 
     /** Fails only the pass-2 UPDATE that restores this fixture's `peer` relation. */
-    private suspend fun <T> withFailingRestoration(identifier: String, block: suspend () -> T): T {
+    private suspend fun <T> withFailingRestoration(identifier: String, block: suspend () -> T): T =
+        withEntityTrigger(
+            event = "UPDATE",
+            body = """
+                IF NEW.identifier = ${sqlLiteral(identifier)}
+                   AND NOT COALESCE((OLD.document::jsonb -> 'relations') ? 'peer', FALSE)
+                   AND COALESCE((NEW.document::jsonb -> 'relations') ? 'peer', FALSE) THEN
+                    RAISE EXCEPTION 'forced entity import restoration failure';
+                END IF;
+            """.trimIndent(),
+            block = block,
+        )
+
+    /**
+     * Simulates a foreign edit of [edited] landing between the two import passes: when the pass-one INSERT of [after]
+     * happens (it is written after [edited]), [edited]'s `updated_at` moves on, so pass two's expectation no longer holds.
+     */
+    private suspend fun <T> withEditBetweenPasses(edited: String, after: String, block: suspend () -> T): T =
+        withEntityTrigger(
+            event = "INSERT",
+            body = "IF NEW.identifier = ${sqlLiteral(after)} THEN " +
+                "UPDATE entities SET updated_at = updated_at + 1 WHERE identifier = ${sqlLiteral(edited)}; END IF;",
+            block = block,
+        )
+
+    /** Installs a row trigger on `entities` while [block] runs: [body] is a plpgsql fragment run BEFORE [event] (`INSERT`/`UPDATE`). */
+    private suspend fun <T> withEntityTrigger(event: String, body: String, block: suspend () -> T): T {
         val suffix = UUID.randomUUID().toString().replace("-", "")
         val function = "fail_entity_import_$suffix"
         val trigger = "fail_entity_import_trigger_$suffix"
@@ -77,22 +107,12 @@ class EntityImportTest {
                 ).use { connection ->
                     connection.createStatement().use { statement ->
                         statement.execute(
-                            """
-                                CREATE FUNCTION $function() RETURNS trigger LANGUAGE plpgsql AS ${'$'}body${'$'}
-                                BEGIN
-                                    IF NEW.identifier = ${sqlLiteral(identifier)}
-                                       AND NOT COALESCE((OLD.document::jsonb -> 'relations') ? 'peer', FALSE)
-                                       AND COALESCE((NEW.document::jsonb -> 'relations') ? 'peer', FALSE) THEN
-                                        RAISE EXCEPTION 'forced entity import restoration failure';
-                                    END IF;
-                                    RETURN NEW;
-                                END
-                                ${'$'}body${'$'}
-                            """.trimIndent(),
+                            "CREATE FUNCTION $function() RETURNS trigger LANGUAGE plpgsql AS ${'$'}body${'$'}\n" +
+                                "BEGIN\n$body\nRETURN NEW;\nEND\n${'$'}body${'$'}",
                         )
                         try {
                             statement.execute(
-                                "CREATE TRIGGER $trigger BEFORE UPDATE ON entities " +
+                                "CREATE TRIGGER $trigger BEFORE $event ON entities " +
                                     "FOR EACH ROW EXECUTE FUNCTION $function()",
                             )
                             installed = true
@@ -328,6 +348,182 @@ class EntityImportTest {
             assertTrue(TestEntities.rawRows().none { !it.markedAsDeleted && it.identifier == id })
         } finally {
             TestEntities.remove(id)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    // -- expected write-versions (2.29.0) ----------------------------------------------------------------
+
+    private suspend fun HttpClient.edit(entity: EntityResponse, title: String): EntityResponse {
+        delay(3) // updatedAt is epoch millis: guarantee the edit gets a later stamp than the read it races
+        val response = putJson(
+            "/api/v1/entities/${entity.id}",
+            EntityRequest(blueprint = entity.blueprint, identifier = entity.identifier, title = title),
+        )
+        assertEquals(HttpStatusCode.NoContent, response.status, response.bodyAsText())
+        return get("/api/v1/entities/${entity.id}").body<EntityResponse>().also { assertTrue(it.updatedAt != entity.updatedAt) }
+    }
+
+    @Test
+    fun `a matching token updates, an edit in between is STALE with the edit kept, and the dry-run agrees row by row`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("ent-import-admin"), UserRole.ADMIN)
+        val bpId = identifier("bp-expected")
+        val fresh = identifier("ent-fresh")
+        val stale = identifier("ent-stale")
+        val unguarded = identifier("ent-unguarded")
+        try {
+            admin.createBlueprint(BlueprintRequest(identifier = bpId, title = "T", schema = BlueprintSchema()))
+            val freshRead = admin.createEntity(EntityRequest(blueprint = bpId, identifier = fresh, title = "Before"))
+            val staleRead = admin.createEntity(EntityRequest(blueprint = bpId, identifier = stale, title = "Before"))
+            admin.createEntity(EntityRequest(blueprint = bpId, identifier = unguarded, title = "Before"))
+            val edited = admin.edit(staleRead, "Edited elsewhere")
+            val request = EntityImportRequest(
+                replaceExisting = true,
+                documents = listOf(fresh, stale, unguarded).map {
+                    doc(EntityRequest(blueprint = bpId, identifier = it, title = "Imported"))
+                },
+                // fresh: matching; stale: the pre-edit token; unguarded: no entry at all.
+                expected = listOf(ExpectedEntityState(0, freshRead.updatedAt), ExpectedEntityState(1, staleRead.updatedAt)),
+            )
+
+            val check = admin.importCheck(request).body<EntityImportResponse>().results
+            val expectedStatuses = listOf(OntologyImportStatus.UPDATED, OntologyImportStatus.STALE, OntologyImportStatus.UPDATED)
+            assertEquals(expectedStatuses, check.map { it.status })
+            assertEquals(edited.id, check[1].id, "STALE names the counterpart")
+            assertTrue(!check[1].message.isNullOrBlank())
+
+            withAuditCapture { capture ->
+                val real = admin.import(request).body<EntityImportResponse>().results
+                assertEquals(check.map { it.status }, real.map { it.status }, "dry-run parity")
+                assertEquals(check.map { it.id }, real.map { it.id }, "dry-run parity on the ids")
+                assertEquals(check[1].message, real[1].message)
+                assertEquals(1, capture.events.count { it.message == "entity.updated" && it.hasKeyValue("identifier", fresh) })
+                assertEquals(1, capture.events.count { it.message == "entity.updated" && it.hasKeyValue("identifier", unguarded) })
+                assertTrue(capture.events.none { it.hasKeyValue("identifier", stale) }, "a STALE row emits nothing")
+            }
+            assertEquals("Imported", admin.get("/api/v1/entities/${freshRead.id}").body<EntityResponse>().title)
+            val kept = admin.get("/api/v1/entities/${staleRead.id}").body<EntityResponse>()
+            assertEquals("Edited elsewhere", kept.title, "the concurrent edit survives")
+            assertEquals(edited.updatedAt, kept.updatedAt, "and the row was not touched")
+        } finally {
+            TestEntities.remove(fresh, stale, unguarded)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `expecting none is STALE against an appeared counterpart, a vanished counterpart is STALE`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("ent-import-admin"), UserRole.ADMIN)
+        val bpId = identifier("bp-expected-none")
+        val present = identifier("ent-present")
+        val absent = identifier("ent-absent")
+        val gone = identifier("ent-gone")
+        try {
+            admin.createBlueprint(BlueprintRequest(identifier = bpId, title = "T", schema = BlueprintSchema()))
+            admin.createEntity(EntityRequest(blueprint = bpId, identifier = present, title = "Appeared"))
+            val goneRead = admin.createEntity(EntityRequest(blueprint = bpId, identifier = gone, title = "Soon gone"))
+            assertEquals(HttpStatusCode.NoContent, admin.delete("/api/v1/entities/${goneRead.id}").status)
+            val request = EntityImportRequest(
+                replaceExisting = true,
+                documents = listOf(present, absent, gone).map { doc(EntityRequest(blueprint = bpId, identifier = it, title = "Imported")) },
+                expected = listOf(ExpectedEntityState(0, 0), ExpectedEntityState(1, 0), ExpectedEntityState(2, goneRead.updatedAt)),
+            )
+            val expectedStatuses = listOf(OntologyImportStatus.STALE, OntologyImportStatus.CREATED, OntologyImportStatus.STALE)
+            val check = admin.importCheck(request).body<EntityImportResponse>().results
+            val real = admin.import(request).body<EntityImportResponse>().results
+            assertEquals(expectedStatuses, check.map { it.status })
+            assertEquals(expectedStatuses, real.map { it.status })
+            assertNotNull(real[0].id, "the appeared counterpart is named")
+            assertEquals(null, real[2].id, "a vanished counterpart has no id")
+            assertEquals("Appeared", admin.get("/api/v1/entities/${real[0].id}").body<EntityResponse>().title)
+            val resurrected = TestEntities.rawRows().any { !it.markedAsDeleted && it.identifier == gone }
+            assertTrue(!resurrected, "the vanished entity is not resurrected")
+        } finally {
+            TestEntities.remove(present, absent, gone)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `a malformed expected list is 400 on both endpoints and stores nothing`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("ent-import-admin"), UserRole.ADMIN)
+        val documents = listOf(doc(EntityRequest(blueprint = "whatever", identifier = identifier("ent-bad"), title = "T")))
+        val before = TestEntities.rawRows().size
+        listOf(
+            listOf(ExpectedEntityState(1, 5)), // beyond the documents
+            listOf(ExpectedEntityState(-1, 5)),
+            listOf(ExpectedEntityState(0, 5), ExpectedEntityState(0, 6)), // duplicate index
+            listOf(ExpectedEntityState(0, -1)), // negative token
+        ).forEach { expected ->
+            val request = EntityImportRequest(documents = documents, expected = expected)
+            assertEquals(HttpStatusCode.BadRequest, admin.import(request).status, expected.toString())
+            assertEquals(HttpStatusCode.BadRequest, admin.importCheck(request).status, expected.toString())
+        }
+        assertEquals(before, TestEntities.rawRows().size)
+    }
+
+    @Test
+    fun `a row edited after the plan but before its write is STALE under the lock - id kept, row untouched, no audit`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("ent-import-admin"), UserRole.ADMIN)
+        val bpId = identifier("bp-lock")
+        val first = identifier("ent-lock-first")
+        val guarded = identifier("ent-lock-guarded")
+        try {
+            admin.createBlueprint(BlueprintRequest(identifier = bpId, title = "T", schema = BlueprintSchema()))
+            val guardedRead = admin.createEntity(EntityRequest(blueprint = bpId, identifier = guarded, title = "Before"))
+            val request = EntityImportRequest(
+                replaceExisting = true,
+                documents = listOf(first, guarded).map { doc(EntityRequest(blueprint = bpId, identifier = it, title = "Imported")) },
+                expected = listOf(ExpectedEntityState(1, guardedRead.updatedAt)),
+            )
+            // The plan sees the matching token; the INSERT of the first row (written before the guarded one) then
+            // moves the guarded row's updated_at, so only the comparison under the write lock can catch it.
+            withAuditCapture { capture ->
+                val rows = withEditBetweenPasses(edited = guarded, after = first) {
+                    admin.import(request).body<EntityImportResponse>().results
+                }
+                assertEquals(listOf(OntologyImportStatus.CREATED, OntologyImportStatus.STALE), rows.map { it.status })
+                assertEquals(guardedRead.id, rows[1].id, "STALE names the counterpart")
+                assertTrue(capture.events.none { it.message == "entity.updated" && it.hasKeyValue("identifier", guarded) })
+            }
+            assertEquals("Before", admin.get("/api/v1/entities/${guardedRead.id}").body<EntityResponse>().title, "the row was not written")
+        } finally {
+            TestEntities.remove(first, guarded)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `an edit landing between the passes is a pass-2 ERROR with the committed id, never an overwrite`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("ent-import-admin"), UserRole.ADMIN)
+        val bpId = identifier("bp-between-passes")
+        val a = identifier("ent-pass-a")
+        val b = identifier("ent-pass-b")
+        try {
+            admin.createBlueprint(
+                BlueprintRequest(
+                    identifier = bpId, title = "T", schema = BlueprintSchema(),
+                    relations = mapOf("peer" to RelationDefinition(title = "Peer", target = bpId, required = false, many = false)),
+                ),
+            )
+            val request = EntityImportRequest(
+                documents = listOf(
+                    doc(EntityRequest(blueprint = bpId, identifier = a, title = "A", relations = buildJsonObject { put("peer", b) })),
+                    doc(EntityRequest(blueprint = bpId, identifier = b, title = "B", relations = buildJsonObject { put("peer", a) })),
+                ),
+            )
+            val rows = withEditBetweenPasses(edited = a, after = b) { admin.import(request).body<EntityImportResponse>().results }
+            assertEquals(listOf(OntologyImportStatus.ERROR, OntologyImportStatus.CREATED), rows.map { it.status })
+            assertNotNull(rows[0].id)
+            assertTrue(rows[0].message!!.contains("Stored without its deferred references"), rows[0].message!!)
+            assertTrue(admin.get("/api/v1/entities/${rows[0].id}").body<EntityResponse>().relations.isEmpty(), "pass two wrote nothing")
+        } finally {
+            TestEntities.remove(a, b)
             TestBlueprints.remove(bpId)
         }
     }

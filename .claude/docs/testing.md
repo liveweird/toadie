@@ -337,7 +337,15 @@ revision +1 and `updated_at == last_synced_at`, a matching re-sync doing the sam
 `POST …/sync`); the `sourceUrl` keep / move / re-stamp rule; in-batch duplicates (including
 case-variants) staying `CONFLICT`; replacing through a differently-cased name; a blank namespace
 resolving to the default; a soft-deleted identity `CREATED` with a new id; the vanished-file create
-fallback (via the `activeIdLookup` seam); and real-vs-dry-run row parity on a mixed batch.
+fallback (via the `activeRowLookup` seam); and real-vs-dry-run row parity on a mixed batch.
+Expected revisions (2.29.0) add: a matching token `UPDATED`/`UNCHANGED`; a stale one `STALE` with no
+history event, no revision bump and no `catalog_file.updated` audit, the concurrent edit kept, the
+real run naming the counterpart's `fileId` while the dry-run keeps it null; the stale no-op (an
+identical document with a wrong token is `STALE`); `0` against an active twin `STALE`, creating
+otherwise, and `CONFLICT` kept without `replaceExisting`; a soft-deleted identity and a counterpart
+vanishing at the lookup seam `STALE` rather than resurrected; dry-run parity; and a malformed
+`expected` `400` on both endpoints. The rule: `.claude/docs/persistence.md` "Import expectations
+(entities and catalog files)".
 `CatalogFileAtomicHistoryTest` adds the fault injection (a failing history insert rolls back that
 replace whole, audits nothing for the row; adjacent rows still commit). Frontend:
 `ImportCatalogFiles.test.tsx` (the switch reaches Check and Import, the three statuses and
@@ -562,6 +570,19 @@ PUT-shaped blueprint change on an entity staying `INVALID`, and — the load-bea
 parity**: `/import/check` returns the identical row set the real run would produce (an `id` only
 on `EXISTS`/`UPDATED` rows), storing and auditing nothing, while the real run's `CREATED`/
 `UPDATED` rows carry `import: true` on their `blueprint.*`/`entity.*` audit events.
+**Entity import expectations (2.29.0):** `EntityImportPlanTest` pins one case per cell of the
+`expected` semantics table (`replaceExisting` on/off x matching/differing/vanished/`0` x counterpart
+present/absent, EXISTS precedence, an unguarded row unchanged) plus the no-cascade property (a stale
+updated row's referrers still resolve, a vanished one's go `INVALID`) and the unique-violation-to-`STALE`
+mapping; `EntityImportTest` drives the routes with `withAuditCapture` — a matching token `UPDATED`, a PUT
+in between `STALE` with the edit kept, no `entity.updated` audit and the row untouched, `E=0` against an
+appeared counterpart and a deleted counterpart with `E>0` `STALE` (never resurrected), real-run/dry-run
+parity row by row, a malformed `expected` `400` on both endpoints, and the pass-two pin (a trigger that
+moves the pass-one row's `updated_at` between the passes -> pass-2 `ERROR` carrying the committed id,
+`withEditBetweenPasses`); `SampleImportConversionTest` re-posts the pre-edit sample conversion with its
+tokens (the two edited entities `STALE`, the rest `UPDATED`) and then a fresh conversion that imports
+cleanly. The rule: `.claude/docs/persistence.md` "Import expectations (entities and catalog files)".
+
 `SampleBlueprintsTest` and `SampleEntitiesTest` each gain one case proving the baseline ontology
 sample sets are valid import BATCHES, not just the sequential POST/PUT scripts the earlier cases
 pin: the fifteen blueprint files POSTed as ONE `/blueprints/import` batch with

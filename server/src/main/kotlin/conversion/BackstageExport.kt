@@ -5,6 +5,7 @@ import ch.nokillswit.catalog.CatalogFile
 import ch.nokillswit.catalog.CatalogSource
 import ch.nokillswit.catalog.EntityIdentity
 import ch.nokillswit.catalog.RegistrySnapshot
+import ch.nokillswit.catalog.StoredRevision
 import ch.nokillswit.catalog.REF_FIELD_DEFAULT_KINDS
 import ch.nokillswit.catalog.identityOf
 import ch.nokillswit.catalog.resolveTarget
@@ -45,6 +46,8 @@ internal data class ExportInput(
     val entities: List<ExportEntity>,
     /** The stored catalog files to merge over; null = do not merge. */
     val existing: List<CatalogSource>?,
+    /** The active stored file (id + revision) of each identity the export can write to — read with or without a merge. */
+    val revisions: Map<EntityIdentity, StoredRevision> = emptyMap(),
 )
 
 internal fun exportCatalogDocuments(input: ExportInput): CatalogDocumentsResponse = ExportRun(input).run()
@@ -196,7 +199,7 @@ private class ExportRun(private val input: ExportInput) : ExportLookup {
         val identity = entry.converted
         val findings = entry.findings.toMutableList()
         var document: CatalogFile? = null
-        var stored: CatalogSource? = null
+        var stored: StoredRevision? = null
         if (entry.problem != null) {
             findings += entry.problem
         } else {
@@ -204,8 +207,8 @@ private class ExportRun(private val input: ExportInput) : ExportLookup {
             val ctx = contextOf(entity, findings, pair)
             pair.rules.filter { it.writesOnExport && !it.isNamespaceRule() }.forEach { exportRule(it, ctx, builder) }
             val generated = builder.toFile(pair.kind, entity.identifier, identity.namespace)
-            stored = existingByIdentity[identity.key]
-            val merged = stored?.let { merge(pair, entity, generated, it.file) } ?: generated
+            stored = input.revisions[identity.key]
+            val merged = existingByIdentity[identity.key]?.let { merge(pair, entity, generated, it.file) } ?: generated
             document = sanitizedCatalogFile(merged)
             try {
                 validateCatalogFile(document)
@@ -228,6 +231,7 @@ private class ExportRun(private val input: ExportInput) : ExportLookup {
             namespace = identity.namespace,
             name = identity.name,
             existingId = stored?.id,
+            existingRevision = stored?.revision,
             findings = findings,
             unmapped = unmappedFields(entity, pair),
         )

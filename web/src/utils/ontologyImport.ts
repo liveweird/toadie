@@ -8,8 +8,9 @@
 // this module has no dependency on the generated schema types those wrappers use.
 
 import { ApiError } from "../api/http";
+import type { components } from "../api/schema";
 import type { Blueprint } from "../api/blueprints";
-import type { EntityFinding } from "../api/entities";
+import type { EntityFinding, ExpectedEntityState } from "../api/entities";
 import { computedPropertyIds } from "./computedProperties";
 
 /** The server's per-request document cap (`MAX_IMPORT_DOCUMENTS` — `.claude/docs/port-data-model.md`
@@ -39,6 +40,9 @@ export type OntologyDocument = {
   strippedComputed: string[];
   /** The source's label — the file name, or the pasted-text placeholder. */
   source: string;
+  /** Entity documents only (2.29.0, a conversion's guard): the stored counterpart's `updatedAt`
+   *  the document was converted over — 0 = "expected none". Absent = unguarded. */
+  expectedUpdatedAt?: number;
 };
 
 type ParseOntologyResult = {
@@ -285,10 +289,14 @@ export function summarizeStripped(documents: readonly OntologyDocument[]): Strip
 
 // -- The orchestrator ---------------------------------------------------------------------
 
+/** The server's import-row vocabulary, straight from the contract (STALE is entity-only on the wire,
+ *  but the shared enum is one type). */
+type ServerRowStatus = components["schemas"]["OntologyImportStatus"];
+
 /** The row statuses the server reports, plus the one CLIENT-only status: a blueprint document
  *  skipped because the caller isn't (or is no longer) an admin — never sent to the server at
  *  all, so it carries no server message. */
-export type OntologyRowStatus = "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR" | "FORBIDDEN";
+export type OntologyRowStatus = ServerRowStatus | "FORBIDDEN";
 
 export type OntologyResultRow = {
   index: number;
@@ -302,7 +310,6 @@ export type OntologyResultRow = {
   findings?: EntityFinding[];
 };
 
-type ServerRowStatus = Exclude<OntologyRowStatus, "FORBIDDEN">;
 
 type BlueprintRowResult = {
   index: number;
@@ -335,6 +342,7 @@ type EntityImportCaller = (
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
   sourceUrl?: string,
+  expected?: ExpectedEntityState[],
 ) => Promise<{ results: EntityRowResult[] }>;
 
 type RunImportBatchDeps = {
@@ -385,6 +393,14 @@ function entityRow(doc: OntologyDocument, result: EntityRowResult): OntologyResu
     message: result.message,
     findings: result.findings,
   };
+}
+
+/** The chunk-LOCAL expectations: `index` is the document's position inside the chunk, as the
+ *  server reads it. Only guarded documents appear; an unguarded chunk yields an empty list. */
+function chunkExpectations(chunk: readonly OntologyDocument[]): ExpectedEntityState[] {
+  return chunk.flatMap((doc, index) =>
+    doc.expectedUpdatedAt === undefined ? [] : [{ index, updatedAt: doc.expectedUpdatedAt }],
+  );
 }
 
 function isForbidden(err: unknown): boolean {
@@ -452,11 +468,13 @@ export async function runImportBatch(deps: RunImportBatchDeps): Promise<Ontology
   }
 
   for (const chunk of chunked(entityDocs, IMPORT_CHUNK_SIZE)) {
-    const callEntities =
-      deps.sourceUrl !== undefined
-        ? (documents: Record<string, unknown>[], replaceExisting: boolean) =>
-            deps.importEntitiesChunk(documents, replaceExisting, deps.sourceUrl)
-        : deps.importEntitiesChunk;
+    const expected = chunkExpectations(chunk);
+    const callEntities = (documents: Record<string, unknown>[], replaceExisting: boolean) => {
+      if (expected.length > 0) return deps.importEntitiesChunk(documents, replaceExisting, deps.sourceUrl, expected);
+      return deps.sourceUrl !== undefined
+        ? deps.importEntitiesChunk(documents, replaceExisting, deps.sourceUrl)
+        : deps.importEntitiesChunk(documents, replaceExisting);
+    };
     reportChunk(await runOneChunk(chunk, callEntities, deps.replaceExisting, entityRow));
   }
 
@@ -466,5 +484,5 @@ export async function runImportBatch(deps: RunImportBatchDeps): Promise<Ontology
 /** Whether any row of a (possibly partial) import report stored something — the condition for
  *  refreshing the cached blueprints/entities, also after a batch that failed part-way. */
 export function anyStored(rows: readonly OntologyResultRow[]): boolean {
-  return rows.some((row) => row.id != null && row.status !== "EXISTS");
+  return rows.some((row) => row.id != null && row.status !== "EXISTS" && row.status !== "STALE");
 }

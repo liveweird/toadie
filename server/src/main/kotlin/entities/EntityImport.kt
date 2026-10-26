@@ -50,7 +50,22 @@ data class EntityImportRequest(
      * row state belongs to the whole request, not one document.
      */
     val sourceUrl: String? = null,
+    /**
+     * Optional per-document write-version expectations (2.29.0), by `documents` index: a positive
+     * `updatedAt` is the stored counterpart's token (a conversion row's `existingUpdatedAt`), `0` means
+     * "expect NO stored counterpart". A document whose counterpart changed, vanished or appeared is
+     * refused as STALE; a document without an entry is unguarded, exactly as before. The token never
+     * rides inside a document ([requireNoDocumentSourceUrl]'s rule). See `.claude/docs/persistence.md`
+     * "Import expectations (entities and catalog files)".
+     */
+    val expected: List<ExpectedEntityState> = emptyList(),
 )
+
+/** One [EntityImportRequest.expected] entry: the write-version [updatedAt] document [index] expects (0 = no counterpart). */
+@Serializable
+data class ExpectedEntityState(val index: Int, val updatedAt: Long)
+
+internal fun List<ExpectedEntityState>.byIndex(): Map<Int, Long> = associate { it.index to it.updatedAt }
 
 @Serializable
 data class EntityImportRow(
@@ -84,6 +99,8 @@ class EntityImportSnapshot(
     val documentBytes: Long,
     /** Per-row byte size (by entity id), keyed the same way [total]/[countsByBlueprint] are — never the row's text. */
     private val bytesById: Map<UInt, Long>,
+    /** Per-row `updated_at` (by entity id) — the write-version token the conversion reports beside `existingId` (2.29.0). */
+    private val updatedAtById: Map<UInt, Long> = emptyMap(),
 ) {
     private val blueprintsByIdentifier: Map<String, EntityImportBlueprint> = blueprints.associateBy { it.identifier }
     private val exactByBlueprint: Map<UInt, Map<String, UInt>> = identifiersByBlueprint.mapValues { it.value.toMap() }
@@ -102,6 +119,9 @@ class EntityImportSnapshot(
     /** Case-insensitive within one blueprint — the partial-unique-index rule (`uq_entities_blueprint_identifier_active`). */
     fun existingId(blueprint: String, identifier: String): UInt? =
         blueprintsByIdentifier[blueprint]?.let { foldedByBlueprint[it.id]?.get(identifier.lowercase()) }
+
+    /** The `updated_at` stamp of the active entity [existingId] names, null when there is none — the conversion's write-version token. */
+    fun existingUpdatedAt(blueprint: String, identifier: String): Long? = existingId(blueprint, identifier)?.let { updatedAtById[it] }
 
     /**
      * The identifier as STORED for the active entity of [blueprint] that [identifier] names
@@ -127,6 +147,8 @@ sealed interface EntityPlanVerdict {
         val existingId: UInt?,
         val deferred: Set<String>,
         val pass1: EntityRequest,
+        /** The row's `expected` write-version (0 = expects no counterpart); null = unguarded. */
+        val expectedUpdatedAt: Long? = null,
     ) : EntityPlanVerdict
 }
 
@@ -149,6 +171,7 @@ private data class Candidate(
     val identifier: String,
     val request: EntityRequest,
     val existingId: UInt?,
+    val expected: Long?,
 )
 
 /** Steps 1-4: decode, structural validation, the blueprint lookup, in-batch duplicates (per blueprint), and the registry match. */
@@ -156,6 +179,7 @@ private fun classifyDocuments(
     documents: List<JsonObject>,
     snapshot: EntityImportSnapshot,
     replaceExisting: Boolean,
+    expected: Map<Int, Long>,
     verdicts: Array<EntityPlanVerdict?>,
 ): List<Candidate> {
     val seen = mutableMapOf<Pair<String, String>, Int>()
@@ -173,7 +197,7 @@ private fun classifyDocuments(
             return@forEachIndexed
         }
         val sanitized = sanitizedEntityRequest(decoded)
-        classifyOne(index, sanitized, snapshot, seen, replaceExisting, verdicts)?.let { candidates += it }
+        classifyOne(index, sanitized, snapshot, seen, replaceExisting, expected[index], verdicts)?.let { candidates += it }
     }
     return candidates
 }
@@ -185,6 +209,7 @@ private fun classifyOne(
     snapshot: EntityImportSnapshot,
     seen: MutableMap<Pair<String, String>, Int>,
     replaceExisting: Boolean,
+    expected: Long?,
     verdicts: Array<EntityPlanVerdict?>,
 ): Candidate? {
     try {
@@ -216,7 +241,40 @@ private fun classifyOne(
         )
         return null
     }
-    return Candidate(index, sanitized.blueprint, blueprint.id, blueprint.definition, sanitized.identifier, sanitized, existingId)
+    // STALE sits where EXISTS sits: after decode/shape/duplicate checks, before findings. It is judged from the
+    // snapshot here (the dry-run's whole verdict); the real write re-checks atomically under the lock.
+    staleReason(expected, existingId, snapshot.existingUpdatedAt(sanitized.blueprint, sanitized.identifier))?.let { reason ->
+        verdicts[index] = EntityPlanVerdict.Rejected(
+            EntityImportRow(
+                index, sanitized.blueprint, sanitized.identifier, OntologyImportStatus.STALE,
+                id = existingId, message = staleMessage(reason),
+            ),
+        )
+        return null
+    }
+    return Candidate(index, sanitized.blueprint, blueprint.id, blueprint.definition, sanitized.identifier, sanitized, existingId, expected)
+}
+
+private const val STALE_VANISHED = "the entity it was read from no longer exists"
+private const val STALE_APPEARED = "an entity with this identifier was created since it was read"
+
+/** The reason [EntityService.applyUpdate] gives when the row's `updated_at` is no longer the expected one. */
+internal const val STALE_CHANGED = "the entity changed since it was read"
+
+/** A STALE row's message: the reason, then what to do about it. */
+private fun staleMessage(reason: String) = "$reason — convert again"
+
+/**
+ * The reason a row's [expected] write-version no longer holds against the snapshot's counterpart
+ * ([existingId] and its [currentUpdatedAt]), null when it holds or the row is unguarded. Reached only for a
+ * row that would write: with `replaceExisting` off an existing counterpart already ended in EXISTS.
+ */
+private fun staleReason(expected: Long?, existingId: UInt?, currentUpdatedAt: Long?): String? = when {
+    expected == null -> null
+    existingId == null -> if (expected > 0) STALE_VANISHED else null
+    expected == 0L -> STALE_APPEARED
+    expected != currentUpdatedAt -> STALE_CHANGED
+    else -> null
 }
 
 /** Every sibling reference a document's relations/team/format-properties name — the ordering graph's edges. */
@@ -440,16 +498,20 @@ private fun stripPropertyValue(def: PropertyDefinition, value: JsonElement, defe
  * The batch classification: steps 1-4 (decode/validate/blueprint/duplicate/registry-match), the
  * step-6 fixpoint (findings against `registry ∪ will-store`, the caps), then ordering with
  * deferral — a mandatory-reference cycle rejects its document and re-runs the fixpoint, since one
- * fewer candidate can change what other documents resolve against.
+ * fewer candidate can change what other documents resolve against. [expected] (document index to
+ * write-version, 0 = no counterpart) turns a row whose counterpart changed, vanished or appeared into a
+ * STALE verdict at the EXISTS step; a STALE row stores nothing and takes no part in the fixpoint, so its
+ * referrers still resolve against the registry (an updated row exists) or fail it (a vanished row does not).
  */
 fun planEntityImport(
     documents: List<JsonObject>,
     snapshot: EntityImportSnapshot,
     replaceExisting: Boolean,
     workspaceDocumentBytes: Long = MAX_WORKSPACE_DOCUMENT_BYTES,
+    expected: Map<Int, Long> = emptyMap(),
 ): EntityImportPlan {
     val verdicts = arrayOfNulls<EntityPlanVerdict>(documents.size)
-    var remaining = classifyDocuments(documents, snapshot, replaceExisting, verdicts)
+    var remaining = classifyDocuments(documents, snapshot, replaceExisting, expected, verdicts)
     remaining = fixpointFindingsAndCap(remaining, snapshot, verdicts, workspaceDocumentBytes)
 
     while (true) {
@@ -461,7 +523,9 @@ fun planEntityImport(
                 val c = byIndex.getValue(idx)
                 val deferred = attempt.deferredByIndex[idx].orEmpty()
                 val pass1 = withDeferredStripped(c.request, c.definition, deferred)
-                EntityPlanVerdict.Store(c.request, c.existingId, deferred.map { "${it.first}/${it.second}" }.toSet(), pass1)
+                EntityPlanVerdict.Store(
+                    c.request, c.existingId, deferred.map { "${it.first}/${it.second}" }.toSet(), pass1, c.expected,
+                )
             }
             attempt.order.forEach { idx -> verdicts[idx] = storeByIndex.getValue(idx) }
             return EntityImportPlan(verdicts.map { it ?: error("entity import document left unclassified") }, attempt.order)
@@ -480,7 +544,8 @@ fun planEntityImport(
 private const val ENTITY_STORAGE_FAILED = "Storage failed"
 
 // Per-document isolation, shared by both writer passes: rethrow cancellation, classify a
-// pass-1 unique-violation race (no committed id) as EXISTS, and every pass-2 failure as an
+// pass-1 unique-violation race (no committed id) as EXISTS — or STALE when the row expected no
+// counterpart (`expectedNone`: it was created meanwhile) — and every pass-2 failure as an
 // ERROR retaining its committed id — never let an unexpected failure escape the batch.
 @Suppress("TooGenericExceptionCaught")
 internal fun storageFailureRow(
@@ -489,9 +554,12 @@ internal fun storageFailureRow(
     blueprint: String?,
     identifier: String?,
     id: UInt? = null,
+    expectedNone: Boolean = false,
     messageFor: (String) -> String = { it },
 ): EntityImportRow = if (id == null && e.isUniqueViolation()) {
-    EntityImportRow(index, blueprint, identifier, OntologyImportStatus.EXISTS, id = id, message = messageFor("created concurrently"))
+    val status = if (expectedNone) OntologyImportStatus.STALE else OntologyImportStatus.EXISTS
+    val message = if (expectedNone) staleMessage(STALE_APPEARED) else "created concurrently"
+    EntityImportRow(index, blueprint, identifier, status, id = id, message = messageFor(message))
 } else {
     EntityImportRow(index, blueprint, identifier, OntologyImportStatus.ERROR, id = id, message = messageFor(ENTITY_STORAGE_FAILED))
 }
@@ -506,9 +574,10 @@ suspend fun EntityService.import(
     callerId: UInt,
     replaceExisting: Boolean,
     sourceUrl: String? = null,
+    expected: Map<Int, Long> = emptyMap(),
     onCommitted: (ImportMutation) -> Unit,
 ): List<EntityImportRow> {
-    val plan = planEntityImport(documents, importSnapshot(), replaceExisting, workspaceDocumentBytes)
+    val plan = planEntityImport(documents, importSnapshot(), replaceExisting, workspaceDocumentBytes, expected)
     // D3 (`.claude/docs/persistence.md` "V37"): a batch WITH a `sourceUrl` moves/re-stamps every
     // stored row; without one, `replaceExisting` keeps a row's existing reference untouched.
     val source: SourceWrite = sanitizedSourceUrl(sourceUrl) // re-checked service-side too
@@ -517,9 +586,12 @@ suspend fun EntityService.import(
     plan.verdicts.forEachIndexed { idx, verdict -> if (verdict is EntityPlanVerdict.Rejected) rows[idx] = verdict.row }
 
     val storedIds = mutableMapOf<Int, UInt>()
+    // The updated_at each pass-1 write left on its row: pass 2 expects exactly that, so an edit landing between
+    // the passes is an ERROR carrying the committed id, never a silent overwrite.
+    val stamps = mutableMapOf<Int, Long>()
     for (idx in plan.order) {
         val verdict = plan.verdicts[idx] as? EntityPlanVerdict.Store ?: continue
-        val write = writeEntityRow(idx, verdict, callerId, storedIds, source)
+        val write = writeEntityRow(idx, verdict, callerId, storedIds, stamps, source)
         rows[idx] = write.row
         // Keep committed mutation facts separate from pass 2's final verdict. The callback is
         // deliberately outside storage classification and runs exactly once per pass-1 write.
@@ -529,7 +601,8 @@ suspend fun EntityService.import(
         val verdict = plan.verdicts[idx] as? EntityPlanVerdict.Store ?: continue
         if (verdict.deferred.isEmpty()) continue
         val id = storedIds[idx] ?: continue
-        rows[idx] = pass2Entity(id, verdict, rows[idx] ?: error("entity import row $idx missing after pass 1"), source)
+        val previous = rows[idx] ?: error("entity import row $idx missing after pass 1")
+        rows[idx] = pass2Entity(id, verdict, previous, source, stamps[idx])
     }
     return rows.map { it ?: error("entity import row left unset") }
 }
@@ -543,32 +616,34 @@ private suspend fun EntityService.writeEntityRow(
     verdict: EntityPlanVerdict.Store,
     callerId: UInt,
     storedIds: MutableMap<Int, UInt>,
+    stamps: MutableMap<Int, Long>,
     source: SourceWrite,
 ): EntityPass1Write {
     val blueprint = verdict.request.blueprint
     val identifier = verdict.request.identifier
+    // A positive expectation guards the update atomically under the lock; 0 (expects no counterpart) guards the create.
+    val expected = verdict.expectedUpdatedAt
     return try {
         if (verdict.existingId == null) {
             val created = create(verdict.pass1, callerId, source)
             storedIds[index] = created.id
+            stamps[index] = created.updatedAt
             EntityPass1Write(
                 EntityImportRow(index, blueprint, identifier, OntologyImportStatus.CREATED, id = created.id),
                 ImportMutation(ImportMutationKind.CREATED, created.id, identifier, blueprint = blueprint),
             )
         } else {
-            val result = update(verdict.existingId, verdict.pass1, source)
-            if (result.affected == 0) {
-                EntityPass1Write(EntityImportRow(index, blueprint, identifier, OntologyImportStatus.ERROR, message = "Entity vanished"))
-            } else {
-                storedIds[index] = verdict.existingId
-                EntityPass1Write(
-                    EntityImportRow(index, blueprint, identifier, OntologyImportStatus.UPDATED, id = verdict.existingId),
-                    ImportMutation(ImportMutationKind.UPDATED, verdict.existingId, identifier, blueprint = blueprint),
-                )
-            }
+            replaceRow(index, verdict, verdict.existingId, source, storedIds, stamps)
         }
     } catch (e: CancellationException) {
         throw e
+    } catch (e: EntityStaleException) {
+        EntityPass1Write(
+            EntityImportRow(
+                index, blueprint, identifier, OntologyImportStatus.STALE, id = verdict.existingId,
+                message = staleMessage(e.message ?: STALE_CHANGED),
+            ),
+        )
     } catch (e: EntityInvalidException) {
         EntityPass1Write(
             EntityImportRow(index, blueprint, identifier, OntologyImportStatus.INVALID, message = e.message, findings = e.findings),
@@ -576,8 +651,37 @@ private suspend fun EntityService.writeEntityRow(
     } catch (e: BadRequestException) {
         EntityPass1Write(EntityImportRow(index, blueprint, identifier, OntologyImportStatus.INVALID, message = e.message))
     } catch (e: Exception) {
-        EntityPass1Write(storageFailureRow(e, index, blueprint, identifier))
+        EntityPass1Write(storageFailureRow(e, index, blueprint, identifier, expectedNone = expected == 0L))
     }
+}
+
+/** Pass one's replace of an existing entity, guarded by the row's expectation when it has one (a positive `updatedAt`). */
+private suspend fun EntityService.replaceRow(
+    index: Int,
+    verdict: EntityPlanVerdict.Store,
+    existingId: UInt,
+    source: SourceWrite,
+    storedIds: MutableMap<Int, UInt>,
+    stamps: MutableMap<Int, Long>,
+): EntityPass1Write {
+    val blueprint = verdict.request.blueprint
+    val identifier = verdict.request.identifier
+    val result = update(existingId, verdict.pass1, source, expectedUpdatedAt = verdict.expectedUpdatedAt)
+    if (result.affected == 0) {
+        // Vanished between the snapshot and the lock: with an expectation that is the stale-counterpart case.
+        val row = if (verdict.expectedUpdatedAt != null) {
+            EntityImportRow(index, blueprint, identifier, OntologyImportStatus.STALE, message = staleMessage(STALE_VANISHED))
+        } else {
+            EntityImportRow(index, blueprint, identifier, OntologyImportStatus.ERROR, message = "Entity vanished")
+        }
+        return EntityPass1Write(row)
+    }
+    storedIds[index] = existingId
+    result.updatedAt?.let { stamps[index] = it }
+    return EntityPass1Write(
+        EntityImportRow(index, blueprint, identifier, OntologyImportStatus.UPDATED, id = existingId),
+        ImportMutation(ImportMutationKind.UPDATED, existingId, identifier, blueprint = blueprint),
+    )
 }
 
 // Per-document isolation, the writeEntityRow precedent: an unexpected pass-2 storage failure is
@@ -588,9 +692,10 @@ private suspend fun EntityService.pass2Entity(
     verdict: EntityPlanVerdict.Store,
     previousRow: EntityImportRow,
     source: SourceWrite,
+    pass1Stamp: Long?,
 ): EntityImportRow =
     try {
-        val result = update(id, verdict.request, source)
+        val result = update(id, verdict.request, source, expectedUpdatedAt = pass1Stamp)
         if (result.affected == 0) {
             previousRow.copy(
                 status = OntologyImportStatus.ERROR,
@@ -602,6 +707,11 @@ private suspend fun EntityService.pass2Entity(
         }
     } catch (e: CancellationException) {
         throw e
+    } catch (e: EntityStaleException) {
+        previousRow.copy(
+            status = OntologyImportStatus.ERROR, id = id,
+            message = "Stored without its deferred references: ${e.message}",
+        )
     } catch (e: EntityInvalidException) {
         previousRow.copy(
             status = OntologyImportStatus.ERROR, id = id, findings = e.findings,
@@ -616,8 +726,12 @@ private suspend fun EntityService.pass2Entity(
     }
 
 /** The dry-run: the identical classification, storing nothing. */
-suspend fun EntityService.importCheck(documents: List<JsonObject>, replaceExisting: Boolean): List<EntityImportRow> {
-    val plan = planEntityImport(documents, importSnapshot(), replaceExisting, workspaceDocumentBytes)
+suspend fun EntityService.importCheck(
+    documents: List<JsonObject>,
+    replaceExisting: Boolean,
+    expected: Map<Int, Long> = emptyMap(),
+): List<EntityImportRow> {
+    val plan = planEntityImport(documents, importSnapshot(), replaceExisting, workspaceDocumentBytes, expected)
     return plan.verdicts.mapIndexed { idx, verdict ->
         when (verdict) {
             is EntityPlanVerdict.Rejected -> verdict.row

@@ -34,7 +34,25 @@ data class ImportRequest(
      * `UPDATED_WITH_FINDINGS` or `UNCHANGED`. See `.claude/docs/persistence.md` "Catalog import".
      */
     val replaceExisting: Boolean = false,
+    /**
+     * Optional per-file write-version expectations (2.29.0), by `files` index: a positive `revision`
+     * is the stored counterpart's `revision` (a conversion row's `existingRevision`), `0` means
+     * "expect NO stored counterpart" (each entry may also pin the counterpart's `fileId`). A file whose
+     * counterpart changed, was replaced by another file, vanished or appeared is refused as `STALE`;
+     * a file without an entry is unguarded, exactly as before. See
+     * `.claude/docs/persistence.md` "Import expectations (entities and catalog files)".
+     */
+    val expected: List<ExpectedFileState> = emptyList(),
 )
+
+/**
+ * One [ImportRequest.expected] entry: the `revision` file [index] expects of its stored counterpart (0 = none).
+ * A revision restarts at 1 for every row, so [fileId] — the counterpart's id, a conversion row's `existingId` —
+ * pins WHICH file the revision belongs to: a file deleted and re-created (or renamed into the identity) at an
+ * equal revision is a different file, hence STALE. Optional; only valid beside a positive revision.
+ */
+@Serializable
+data class ExpectedFileState(val index: Int, val revision: Long, val fileId: UInt? = null)
 
 @Serializable
 enum class ImportResultStatus {
@@ -76,6 +94,14 @@ enum class ImportResultStatus {
 
     /** An unexpected storage failure for this document; the rest of the batch proceeded. */
     ERROR,
+
+    /**
+     * The request's `expected` revision for this file no longer holds: its stored counterpart
+     * changed, vanished or appeared since the conversion that produced the document. Nothing is
+     * stored (no history event, no revision bump); `fileId` names the counterpart on the real run
+     * when one exists, and stays null on the dry-run like every prediction.
+     */
+    STALE,
 }
 
 @Serializable

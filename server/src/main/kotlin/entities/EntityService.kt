@@ -56,8 +56,12 @@ val EntityServiceKey = AttributeKey<EntityService>("EntityService")
 /** [EntityService.list]'s outcome — [items], [total], and V39 [revision] share one read snapshot. */
 data class EntityListResult(val items: List<EntityResponse>, val total: Long, val revision: Long)
 
-/** [EntityService.update]'s outcome: affected-row count plus what the rename cascaded (for the audit). */
-data class EntityUpdateResult(val affected: Int, val cascaded: List<String>, val renamedFrom: String?)
+/**
+ * [EntityService.update]'s outcome: affected-row count plus what the rename cascaded (for the audit), and
+ * [updatedAt] — the stamp the write left on the row (null when nothing was written), which a multi-pass
+ * import hands back as the next write's expectation.
+ */
+data class EntityUpdateResult(val affected: Int, val cascaded: List<String>, val renamedFrom: String?, val updatedAt: Long? = null)
 
 /** [EntityService.delete]'s outcome: affected-row count plus the deleted identity (for the audit). */
 data class EntityDeleteResult(val affected: Int, val blueprint: String?, val identifier: String?)
@@ -448,13 +452,15 @@ class EntityService(
         val blueprints = activeBlueprints.map { EntityImportBlueprint(it.id, it.identifier, it.definition) }
         val documentBytesExpr = octetLength(Entities.document)
         val teamBytesExpr = octetLength(Entities.team)
-        val rows = Entities.select(Entities.blueprintId, Entities.identifier, Entities.id, documentBytesExpr, teamBytesExpr)
+        val rows = Entities
+            .select(Entities.blueprintId, Entities.identifier, Entities.id, Entities.updatedAt, documentBytesExpr, teamBytesExpr)
             .where { active() }
             .map {
                 ImportSnapshotRow(
                     it[Entities.blueprintId].value,
                     it[Entities.identifier],
                     it[Entities.id].value,
+                    it[Entities.updatedAt],
                     (it.getOrNull(documentBytesExpr) ?: 0L) + (it.getOrNull(teamBytesExpr) ?: 0L),
                 )
             }
@@ -462,14 +468,24 @@ class EntityService(
         val identifiersByBlueprint = rows.groupBy({ it.blueprintId }, { it.identifier to it.id })
         val countsByBlueprint = rows.groupingBy { it.blueprintId }.eachCount().mapValues { it.value.toLong() }
         val bytesById = rows.associate { it.id to it.bytes }
+        val updatedAtById = rows.associate { it.id to it.updatedAt }
         EntityImportSnapshot(
             blueprints, identifiersByBlueprint, rows.size.toLong(), countsByBlueprint,
-            documentBytes = rows.sumOf { it.bytes }, bytesById = bytesById,
+            documentBytes = rows.sumOf { it.bytes }, bytesById = bytesById, updatedAtById = updatedAtById,
         )
     }
 
-    /** One [importSnapshot] row's identity plus its stored document+team byte size — never the text (`.claude/docs/persistence.md`). */
-    private data class ImportSnapshotRow(val blueprintId: UInt, val identifier: String, val id: UInt, val bytes: Long)
+    /**
+     * One [importSnapshot] row's identity, its write-version stamp ([Entities.updatedAt]) and its stored
+     * document+team byte size — never the text (`.claude/docs/persistence.md`).
+     */
+    private data class ImportSnapshotRow(
+        val blueprintId: UInt,
+        val identifier: String,
+        val id: UInt,
+        val updatedAt: Long,
+        val bytes: Long,
+    )
 
     suspend fun create(
         request: EntityRequest,
@@ -582,19 +598,32 @@ class EntityService(
         id: UInt,
         request: EntityRequest,
         source: SourceWrite = SourceWrite.FromRequest,
+        expectedUpdatedAt: Long? = null,
     ): EntityUpdateResult = writeTransaction {
         val row = Entities.selectAll().where { (Entities.id eq id) and active() }.singleOrNull()
             ?: return@writeTransaction EntityUpdateResult(0, emptyList(), null)
-        applyUpdate(id, row, request, source)
+        applyUpdate(id, row, request, source, expectedUpdatedAt)
     }
 
     /**
      * The shared body of [update] and `entities/EntitySync.kt`'s `syncFromSource`, once the row
      * is known to exist: validation, the blueprint-immutability rule, the self-reference rename
      * rewrite, findings, and the rename cascade — parameterized only by [source] (the
-     * `sourceUrl`/sync-stamp write policy, `.claude/docs/persistence.md` "V37").
+     * `sourceUrl`/sync-stamp write policy, `.claude/docs/persistence.md` "V37") and by [expectedUpdatedAt],
+     * the import's optional write-version expectation: compared against the row as read under the lock,
+     * BEFORE any validation or mutation (the "cheap row checks first" posture of `entities/EntitySync.kt`),
+     * and refused with [EntityStaleException]. Null = unguarded.
      */
-    internal suspend fun applyUpdate(id: UInt, row: ResultRow, request: EntityRequest, source: SourceWrite): EntityUpdateResult {
+    internal suspend fun applyUpdate(
+        id: UInt,
+        row: ResultRow,
+        request: EntityRequest,
+        source: SourceWrite,
+        expectedUpdatedAt: Long? = null,
+    ): EntityUpdateResult {
+        if (expectedUpdatedAt != null && row[Entities.updatedAt] != expectedUpdatedAt) {
+            throw EntityStaleException(STALE_CHANGED)
+        }
         validateEntityRequest(request) // re-checked service-side so direct callers stay guarded
         val activeBlueprints = loadActiveBlueprints()
         val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
@@ -655,7 +684,7 @@ class EntityService(
         } else {
             emptyList()
         }
-        return EntityUpdateResult(affected, cascaded, if (renamed) currentIdentifier else null)
+        return EntityUpdateResult(affected, cascaded, if (renamed) currentIdentifier else null, updatedAt = now)
     }
 
     /**

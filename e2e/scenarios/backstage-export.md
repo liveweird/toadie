@@ -25,12 +25,16 @@
      `Group:default/<team>` — and the YAML preview shows both documents, the Component's `owner`
      rendered as `group:default/<team>`.
 4. They press **Create / update catalog files**.
-   - *Expected*: the dialog converts afresh (it never trusts the page's snapshot), then predicts
-     "Would be created" for both rows; **Confirm** converts once more and stores
+   - *Expected*: the dialog converts once (it never trusts the page's snapshot) and predicts
+     "Would be created" for both rows; **Confirm** imports exactly that previewed batch and stores
      them (`POST /files/import`, `200`), the rows read "Created" and link to the new files.
 5. They close the dialog and press **Convert** again, then **Create / update catalog files**.
    - *Expected*: the merge finds the stored files (the service row now links to its catalog
-     file) and the dry run predicts "Would stay unchanged" for both; **Cancel** stores nothing.
+     file) and the dry run predicts "Would stay unchanged" for both.
+   - While the dialog is open the admin edits the Group's catalog file through the API (a headerless
+     `PUT /files/{id}` adding a description), then presses **Confirm**: `POST /files/import` answers
+     `200`, the Group row reads "Changed meanwhile" (its previewed revision is out of date; the file
+     keeps the edit) and the Component row reads "Unchanged".
 6. They follow the service row's link.
    - *Expected*: the catalog file editor opens on the created file (its Name field carries the
      entity's identifier).

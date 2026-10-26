@@ -150,7 +150,8 @@
         "UNCHANGED": "Bez zmian",
         "INVALID": "Niepoprawne",
         "CONFLICT": "Konflikt",
-        "ERROR": "Niepowodzenie"
+        "ERROR": "Niepowodzenie",
+        "STALE": "Zmienione w międzyczasie"
       },
       "checkStatus": {
         "CREATED": "Zostałby utworzony",
@@ -160,7 +161,8 @@
         "UNCHANGED": "Pozostałby bez zmian",
         "INVALID": "Zostałby odrzucony",
         "CONFLICT": "Byłby w konflikcie",
-        "ERROR": "Zakończyłby się błędem"
+        "ERROR": "Zakończyłby się błędem",
+        "STALE": "Zmienione w międzyczasie"
       },
       "summary": "Zapisano {{stored}} z {{total}} — {{created}} utworzonych, {{updated}} zaktualizowanych, {{unchanged}} bez zmian",
       "checkSummary": "Zostałoby zapisanych {{stored}} z {{total}} — {{created}} utworzonych, {{updated}} zaktualizowanych, {{unchanged}} bez zmian",

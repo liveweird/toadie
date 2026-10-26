@@ -168,7 +168,8 @@
       "UNCHANGED": "Unchanged",
       "CONFLICT": "Already exists",
       "INVALID": "Invalid",
-      "ERROR": "Failed"
+      "ERROR": "Failed",
+      "STALE": "Changed meanwhile"
     },
     "checkStatus": {
       "CREATED": "Would be created",
@@ -178,7 +179,8 @@
       "UNCHANGED": "Would stay unchanged",
       "CONFLICT": "Already exists",
       "INVALID": "Invalid",
-      "ERROR": "Failed"
+      "ERROR": "Failed",
+      "STALE": "Changed meanwhile"
     },
     "failedTitle": "Import failed",
     "tooMany": "Too many documents for one import (the limit is 200).",

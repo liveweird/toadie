@@ -87,8 +87,10 @@ data class ConversionRow(
     val kind: String? = null,
     val namespace: String? = null,
     val name: String? = null,
-    /** The stored catalog file of the same identity the document was merged over; absent without `merge` or a match. */
+    /** The active stored catalog file of the same identity, whether or not the export merged over it; absent without a match. */
     val existingId: UInt? = null,
+    /** That file's `revision` (>= 1) at conversion time: the write-version token; present exactly when [existingId] is. */
+    val existingRevision: Long? = null,
     val findings: List<ConversionFinding>,
     /** Port-side fields the entity carries that no rule of the pair converts: `properties.<id>`, `relations.<id>`, `team`. */
     val unmapped: List<String>,
