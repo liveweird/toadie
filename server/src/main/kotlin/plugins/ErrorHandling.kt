@@ -285,11 +285,13 @@ fun Application.configureErrorHandling() {
             call.respondProblem(HttpStatusCode.Unauthorized, cause.message ?: "Unauthorized")
         }
         exception<ForbiddenException> { call, cause ->
-            // Denials are part of the security audit trail: who tried what they may not do.
+            // Denials are part of the security audit trail: who tried what they may not do. The PATH
+            // only, never the query string: it can carry search text (an email on the Users list),
+            // filter values or an entity query's text - the catch-all 500 line's rule.
             audit(
                 "authz.denied",
                 "method" to call.request.local.method.value,
-                "path" to call.request.local.uri,
+                "path" to call.request.path(),
                 "byUserId" to call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong(),
                 "detail" to cause.message,
             )
