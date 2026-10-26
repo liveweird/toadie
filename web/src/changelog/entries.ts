@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.26.0",
+    date: "2026-10-26",
+    en: `**Import Backstage catalog files as Port entities.** A stored conversion mapping can now turn Backstage catalog files into Port entities, ready for the entity import: references to entities that cannot be found are dropped and reported rather than failing the import, and merging over existing entities never removes data that Backstage cannot express — extra teams, icons, relations or properties the mapping does not manage, or links and tags it cannot carry. The page to run conversions from follows in a later release.`,
+    pl: `**Import plików katalogu Backstage jako encji Port.** Zapisane mapowanie konwersji może teraz zamieniać pliki katalogu Backstage w encje Port gotowe do importu encji: odwołania do encji, których nie da się znaleźć, są pomijane i zgłaszane zamiast przerywać import, a scalanie z istniejącymi encjami nigdy nie usuwa danych, których Backstage nie potrafi wyrazić — dodatkowych zespołów, ikon, relacji ani właściwości, którymi mapowanie nie zarządza, ani linków i tagów, których nie da się przenieść. Strona do uruchamiania konwersji pojawi się w późniejszym wydaniu.`,
+  },
+  {
     version: "2.25.0",
     date: "2026-10-26",
     en: `**Export Port entities as Backstage catalog files.** A stored conversion mapping can now turn Port entities into Backstage catalog files: the result shows, per entity, the catalog file it becomes and anything that could not be carried over, and it can be merged with the catalog files you already have without losing labels, tags, links or references the mapping does not manage. The commerce-payments Backstage demo is now generated from the Port demo this way and has grown to 42 files. The page to run this from follows in a later release.`,
