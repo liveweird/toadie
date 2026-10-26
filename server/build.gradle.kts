@@ -117,6 +117,7 @@ kover {
                     "ch.nokillswit.blueprints.BlueprintImportRow", "ch.nokillswit.blueprints.BlueprintImportRow$*",
                     "ch.nokillswit.blueprints.BlueprintImportResponse", "ch.nokillswit.blueprints.BlueprintImportResponse$*",
                     "ch.nokillswit.entities.EntityImportRequest", "ch.nokillswit.entities.EntityImportRequest$*",
+                    "ch.nokillswit.entities.ExpectedEntityState", "ch.nokillswit.entities.ExpectedEntityState$*",
                     "ch.nokillswit.entities.EntityImportRow", "ch.nokillswit.entities.EntityImportRow$*",
                     "ch.nokillswit.entities.EntityImportResponse", "ch.nokillswit.entities.EntityImportResponse$*",
                     // Phase 7 (2.0.0, entity query bar — PR2): the entity-query wire DTOs, the SAME

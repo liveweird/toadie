@@ -2199,10 +2199,15 @@ export interface paths {
          *     relation or a `format: team|user` property named in `schema.required` — carrying the
          *     full `findings` array when the rejection came from the blueprint's own rule table),
          *     `CONFLICT` (an in-batch duplicate identifier within the same blueprint,
-         *     case-insensitive), `ERROR` (an unexpected storage failure, or a pass-2 residual — see
-         *     below). The response is `200` even when every document failed; a `400` covers only
-         *     the batch itself (an undecodable body, a non-object element, or more than 200
-         *     documents).
+         *     case-insensitive), `STALE` (the request's `expected` write-version for this document no
+         *     longer holds — its counterpart changed, vanished or appeared since it was converted;
+         *     nothing stored, `id` names the counterpart when one exists, no audit event), `ERROR`
+         *     (an unexpected storage failure, or a pass-2 residual — see below). The response is
+         *     `200` even when every document failed; a `400` covers only the batch itself (an
+         *     undecodable body, a non-object element, more than 200 documents, an invalid
+         *     batch-level `sourceUrl`, or a malformed `expected` list — an out-of-range or repeated
+         *     index, a negative value). A pass-two write expects exactly the stamp pass one left, so
+         *     an edit landing between the two passes is the pass-2 `ERROR`, never an overwrite.
          *
          *     The batch is topologically ordered over every sibling reference a document's
          *     `relations`, `team`, and `format: team|user` properties name (the same three sources
@@ -2247,7 +2252,9 @@ export interface paths {
          *     and `EXISTS`. A pure computation: no audit events. The report is a snapshot — a
          *     concurrent write between the check and the real import can change the actual outcome.
          *     The same `400` covers only the batch itself (an undecodable body, a non-object
-         *     element, more than 200 documents, or an invalid batch-level `sourceUrl`). The
+         *     element, more than 200 documents, an invalid batch-level `sourceUrl`, or a malformed
+         *     `expected` list). `expected` is classified exactly as the real import classifies it
+         *     (`STALE` rows with the counterpart's `id`). The
          *     `sourceUrl` is validated exactly as `importEntities` validates it (same preflight, same
          *     order, same problem body) but never fetched; a valid one changes no prediction.
          */
@@ -3497,10 +3504,10 @@ export interface components {
             items: components["schemas"]["Blueprint"][];
         };
         /**
-         * @description Shared by the blueprint and entity bulk-import reports (phase 6, v1.28.0). CREATED — stored as a new row. UPDATED — an existing row was replaced (`replaceExisting: true`). EXISTS — an existing row was found but `replaceExisting` is off; nothing was stored (renders gray, not red — by design, not a failure). INVALID — failed shape/registry/ reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts, a concurrent-change residual). Deliberately not the catalog import's vocabulary (`CREATED_WITH_FINDINGS`, `UPDATED_WITH_FINDINGS`, `UNCHANGED`): a catalog import always waives soft findings and replaces only under its own `replaceExisting`, while an ontology import reports an untouched existing row (`EXISTS`) and has no findings vocabulary.
+         * @description Shared by the blueprint and entity bulk-import reports (phase 6, v1.28.0). CREATED — stored as a new row. UPDATED — an existing row was replaced (`replaceExisting: true`). EXISTS — an existing row was found but `replaceExisting` is off; nothing was stored (renders gray, not red — by design, not a failure). INVALID — failed shape/registry/ reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts, a concurrent-change residual). STALE — ENTITY imports only (a blueprint import never emits it): the row carried an `expected` write-version and the stored counterpart changed, vanished or appeared since the conversion that produced the document; nothing was stored (renders red, report-and-skip). Deliberately not the catalog import's vocabulary (`CREATED_WITH_FINDINGS`, `UPDATED_WITH_FINDINGS`, `UNCHANGED`): a catalog import always waives soft findings and replaces only under its own `replaceExisting`, while an ontology import reports an untouched existing row (`EXISTS`) and has no findings vocabulary.
          * @enum {string}
          */
-        OntologyImportStatus: "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR";
+        OntologyImportStatus: "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR" | "STALE";
         BlueprintImportRequest: {
             /** @description The blueprint documents to import (the supported Port-shaped request, one per entry). Unknown members, including upstream read-only metadata, are rejected as INVALID for that row. Toadie's exports omit response metadata. Each document is decoded and classified INDEPENDENTLY, so one malformed document never fails the batch. */
             documents: {
@@ -3770,6 +3777,20 @@ export interface components {
             replaceExisting: boolean;
             /** @description The URL the batch was fetched from (2.9.0, the `ImportRequest.sourceUrl` twin, one level down) — every CREATED/UPDATED entity row gets it as its source reference AND starts synced (the document IS the remote copy at import time); blueprints never carry it. Omit for pasted batches. A per-document `sourceUrl` member is `INVALID` for that row — it is row state for the whole request, not one document. The real import and the dry-run check alike require an absolute credential-free https URL of at most 2048 characters, else `400` for the whole batch. */
             sourceUrl?: string | null;
+            /** @description Optional per-document write-version expectations (2.29.0), by `documents` index — the conversion's guard (`EntityDocumentRow.existingUpdatedAt`). A positive `updatedAt` is the stored counterpart's token: the row is written only if the counterpart still carries exactly it (checked atomically under the write lock, so a concurrent edit makes the row `STALE`, never a silent overwrite); `0` means "expect no stored counterpart" (a counterpart that appeared meanwhile is `STALE`). A positive expectation whose counterpart is gone is `STALE` too. A document without an entry is unguarded, exactly as before. An index outside `0..documents-1`, a repeated index or a negative `updatedAt` is a `400` for the whole batch, on the real import and the dry-run alike. */
+            expected?: components["schemas"]["ExpectedEntityState"][];
+        };
+        ExpectedEntityState: {
+            /**
+             * Format: int32
+             * @description The 0-based position of the document in `documents`.
+             */
+            index: number;
+            /**
+             * Format: int64
+             * @description The stored counterpart's `updatedAt` (epoch milliseconds) the document expects; 0 = no stored counterpart.
+             */
+            updatedAt: number;
         };
         EntityImportRow: {
             /** @description The document's 0-based position in the submitted batch. */
@@ -3781,7 +3802,7 @@ export interface components {
             status: components["schemas"]["OntologyImportStatus"];
             /**
              * Format: int32
-             * @description The entity's id — present for a stored row, for `EXISTS` (the row that already holds this identity), and for a dry-run's `UPDATED` prediction. A pass-two ERROR retains the earlier committed id, even if the row was subsequently deleted. Absent (never `null`) for a dry-run CREATED prediction or a rejection before storage.
+             * @description The entity's id — present for a stored row, for `EXISTS` (the row that already holds this identity), for a `STALE` row whose counterpart still exists, and for a dry-run's `UPDATED` prediction. A pass-two ERROR retains the earlier committed id, even if the row was subsequently deleted. Absent (never `null`) for a dry-run CREATED prediction or a rejection before storage.
              */
             id?: number;
             /** @description Present on every status except a clean `CREATED`/`UPDATED`. */

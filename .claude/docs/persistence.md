@@ -966,7 +966,9 @@ document does not. A changed or cleared `sourceUrl` on an ordinary PUT resets `l
 to `0` and `synced_content` to `null` (the reference and its sync history travel together);
 `updatedAt` bumps on every entity PUT REGARDLESS of whether the document changed (D2 — unlike
 the catalog, which only bumps on an actual content change), so the SPA's "Local changes" badge
-means "saved in Toadie since the sync", not "the document differs from the baseline". Import-
+means "saved in Toadie since the sync", not "the document differs from the baseline" — and, since 2.29.0,
+the same stamp doubles as the write-version token a conversion row reports (`existingUpdatedAt`) and an
+entity import can expect (see "Import expectations (entities and catalog files)"). Import-
 from-URL (a batch `sourceUrl` on `POST …/entities/import`) stamps the reference and the sync
 baseline on BOTH the pass-one write and, for a row deferred through the two-pass ontology-import
 protocol (`.claude/docs/port-data-model.md` "Import and export"), the pass-two restoration —
@@ -995,11 +997,55 @@ and the sync request schemas in OpenAPI.
 Enforcement: `EntitySyncTest` and `BlueprintSyncTest`; frontend modal regressions. Exception:
 batch imports stamp their own source reference and do not use this sync guard.
 
+**Import expectations (entities and catalog files).**
+
+- **Applies when:** a client imports documents it converted earlier (Backstage -> Port through
+  `POST …/entity-documents` then `POST /entities/import`; Port -> Backstage through
+  `GET …/catalog-documents` then `POST /files/import`) and must not overwrite an edit made
+  between the read and the write.
+- **Requirement:** the import request may carry `expected`, one entry per guarded document by
+  `documents` index: entities `{index, updatedAt}` (the token is `entities.updated_at`, no
+  migration; the conversion row's `existingUpdatedAt`), catalog files `{index, revision}`
+  (`catalog_files.revision`, V40; the row's `existingRevision`). A positive value is the counterpart's
+  token, `0` means "expect no stored counterpart"; an entry-less document is unguarded exactly as
+  before. The planner/`checkOne` classify from the snapshot (so the dry-run agrees), and the real
+  write compares the expectation against the row read under the existing write lock (the V28
+  two-table lock / the catalog `FOR UPDATE`) BEFORE validation and mutation, via
+  `EntityService.update(expectedUpdatedAt)` / `CatalogFileService.update(expectedRevision)`. A
+  counterpart that changed, vanished or appeared is the per-row `STALE` status (report-and-skip
+  inside the per-document transaction; nothing written: no history event, no revision bump, no
+  audit event, no new problem type — `EntityStaleException` never escapes a route). With
+  `replaceExisting` off an existing counterpart stays `EXISTS`/`CONFLICT`; only a vanished one
+  (positive token, no row) is `STALE`, so a create never resurrects what the conversion merged
+  over. A multi-pass entity import expects, in pass two, the stamp pass one left: an edit between
+  the passes becomes the existing "Stored without its deferred references" `ERROR` with the committed
+  id. A malformed list (index outside `0..documents-1`, a repeated index, a negative value) is a
+  `400` for the whole batch on the real run and the check alike (`requireExpectedStates`, inside
+  `ontologyImportPreflight` / the catalog preflight, after the batch-size cap and before the
+  `sourceUrl` guards). A stale row is refused before its findings run; computed values never move
+  `updated_at`, so a blueprint edit never makes an entity `STALE`; a batch `sourceUrl` composes.
+- **Reference:** `infra/importing/ImportBatch.kt` (`OntologyImportStatus.STALE`,
+  `requireExpectedStates`), `entities/EntityImport.kt` (`staleReason`, `writeEntityRow`,
+  `pass2Entity`), `entities/EntityService.kt` (`applyUpdate`), `catalog/Import.kt` and
+  `catalog/CatalogFileImport.kt` (the catalog half, a later commit of the same release);
+  `.claude/docs/conversion-mapping.md` (the tokens on the conversion rows).
+- **Enforcement:** `EntityImportPlanTest` (one case per cell of the semantics table, EXISTS
+  precedence, no cascade), `EntityImportTest` (match, edit in between, appeared/vanished, dry-run
+  parity, malformed `expected`, the pass-two pin), `SampleImportConversionTest` (stale re-post),
+  and, for catalog files, `CatalogImportReplaceTest`.
+- **Exception:** legacy clients, the sample `load.sh` scripts and the MCP import tools send no
+  `expected` and behave exactly as before; blueprint imports never carry it. Residuals: a write
+  landing between a conversion's snapshot and its merge read leaves the token older than the merged
+  document (a spurious, safe `STALE`); the planner's snapshot can go stale before the lock (a
+  predicted `UPDATED` becomes `STALE`); the millisecond token is exact only under the write lock's
+  serialisation (a single replica); a case-only identifier rename inside a deferral-bearing batch
+  bumps referrers through the rename cascade, which pass two then reports as `ERROR`.
+
 **Import dry-run preflight (files, blueprints, entities).** Applies when a `POST …/import` and its
 `POST …/import/check` dry-run accept a batch-level `sourceUrl`. Requirement: both run ONE route-side
 preflight, after the route's own guard and `receive` (so 401/403 win over any 400) and before any
-service call: the batch-size cap, then the `sourceUrl`'s static guards (`sanitizedSourceUrl`, the
-one home of those rules). An invalid value is therefore the same
+service call: the batch-size cap, the optional `expected` list ("Import expectations", entities and
+catalog files), then the `sourceUrl`'s static guards (`sanitizedSourceUrl`, the one home of those rules). An invalid value is therefore the same
 `400` problem on both; a valid one changes no row prediction. The check validates and never fetches;
 only the real run stamps the reference and the synced baseline. Reference:
 `infra/importing/ontologyImportPreflight` (blueprints, entities), `catalogImportPreflight` in

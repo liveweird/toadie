@@ -19,6 +19,7 @@ import ch.nokillswit.entities.EntityImportRequest
 import ch.nokillswit.entities.EntityImportResponse
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
+import ch.nokillswit.entities.ExpectedEntityState
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
@@ -223,6 +224,7 @@ class SampleImportConversionTest {
             )
 
             // ── a merge keeps what only Port holds ──────────────────────────────────────────
+            val beforeEdit = convert(sample) // the documents and write-version tokens a client would hold while someone edits
             val gateway = afterFirstImport.getValue("payments-gateway")
             val worker = afterFirstImport.getValue("ledger-worker")
             val twoTeams = JsonArray(listOf(JsonPrimitive("payments-squad"), JsonPrimitive("platform-tribe")))
@@ -242,6 +244,21 @@ class SampleImportConversionTest {
             }
             edit(gateway, twoTeams, emptyMap(), "Rocket")
             edit(worker, worker.team, mapOf("schedule" to str("*/5 * * * *")), "Zap")
+            // ── the write-version guard: the two edited entities are STALE, every other row still lands ──
+            val guarded = admin.postJson(
+                "/api/v1/entities/import",
+                EntityImportRequest(beforeEdit.documents, replaceExisting = true, expected = beforeEdit.expectedStates()),
+            ).body<EntityImportResponse>().results
+            assertEquals(
+                setOf("payments-gateway", "ledger-worker"),
+                guarded.filter { it.status == OntologyImportStatus.STALE }.map { it.identifier }.toSet(),
+                "exactly the edited entities are refused",
+            )
+            val others = guarded.filter { it.status != OntologyImportStatus.STALE }
+            assertTrue(others.all { it.status == OntologyImportStatus.UPDATED }, guarded.toString())
+            assertEquals(twoTeams, admin.states(ids).getValue("payments-gateway").team, "the edit survived the stale re-post")
+
+            // Converting again yields fresh tokens, and that batch imports cleanly.
             val merged = convert(sample)
             val gatewayDoc = merged.documents.single { it.identity() == "service/payments-gateway" }
             assertEquals(twoTeams, gatewayDoc["team"], "a stored team already containing the converted owner is kept")
@@ -251,7 +268,10 @@ class SampleImportConversionTest {
             assertEquals(str("Zap"), workerDoc["icon"])
             val bare = convert(sample, merge = false).documents.single { it.identity() == "service/ledger-worker" }
             assertTrue("schedule" !in bare.getValue("properties").jsonObject && "icon" !in bare, "merge=false is the bare conversion")
-            val remerge = admin.postJson("/api/v1/entities/import", EntityImportRequest(merged.documents, replaceExisting = true))
+            val remerge = admin.postJson(
+                "/api/v1/entities/import",
+                EntityImportRequest(merged.documents, replaceExisting = true, expected = merged.expectedStates()),
+            )
             assertTrue(remerge.body<EntityImportResponse>().results.all { it.status == OntologyImportStatus.UPDATED })
             val finalStates = admin.states(ids)
             assertEquals(twoTeams, finalStates.getValue("payments-gateway").team)
@@ -275,6 +295,12 @@ class SampleImportConversionTest {
             }
         }
     }
+
+    /** The `expected` list a client builds from a conversion: each row that has a document, in row order, 0 = no counterpart. */
+    private fun EntityDocumentsResponse.expectedStates() = rows
+        .filter { it.status == ConversionRowStatus.CONVERTED || it.status == ConversionRowStatus.CONVERTED_WITH_FINDINGS }
+        .mapIndexed { index, row -> ExpectedEntityState(index, row.existingUpdatedAt ?: 0L) }
+        .also { assertEquals(documents.size, it.size, "documents pair with the rows that have one") }
 
     @Test
     fun `converting the Backstage sample over the loaded Port sample with merge loses nothing Port-only`() = testApplication {

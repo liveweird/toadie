@@ -41,6 +41,13 @@ enum class OntologyImportStatus {
 
     /** An unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts — a concurrent-change residual). */
     ERROR,
+
+    /**
+     * ENTITIES ONLY (blueprint imports never emit it): the row carried an `expected` write-version and the stored
+     * counterpart no longer matches it — changed, vanished or appeared since the conversion that produced the
+     * document. Nothing is stored; report-and-skip, identical in the dry-run.
+     */
+    STALE,
 }
 
 /** A pass-1 write that committed, independent of the row's eventual pass-2 import verdict. */
@@ -89,15 +96,34 @@ fun requireBatchSize(size: Int) {
 }
 
 /**
+ * A malformed per-document write-version expectation list is a `400` for the whole batch: each
+ * `(index, value)` must name a document of the request (`0 until documentCount`) at most once,
+ * and [value] is never negative (0 = "expect no stored counterpart", a positive value = the
+ * counterpart's write-version token; `.claude/docs/persistence.md` "Import expectations").
+ * Shared by the entity import (`updatedAt`) and the catalog import (`revision`).
+ */
+fun requireExpectedStates(documentCount: Int, expected: List<Pair<Int, Long>>) {
+    val seen = mutableSetOf<Int>()
+    expected.forEach { (index, value) ->
+        if (index !in 0 until documentCount) throw BadRequestException("expected index $index does not name a document of this request")
+        if (!seen.add(index)) throw BadRequestException("expected has more than one entry for document $index")
+        if (value < 0) throw BadRequestException("expected values must not be negative")
+    }
+}
+
+/**
  * The ONE route-side preflight of the ontology imports, run in this order by BOTH the real
  * `POST …/import` and its `POST …/import/check` dry-run — after the route's own guard and
- * `receive`, before any service call: the batch-size cap, then the batch-level `sourceUrl`'s
- * static guards ([sanitizedSourceUrl]: absolute https, no credentials, bounded length). Pure
- * validation: nothing is fetched and the public-host check stays a fetch-time concern. Returns
- * the trimmed URL (null when omitted/blank) for the real run to stamp; the dry-run discards it.
+ * `receive`, before any service call: the batch-size cap, the optional [expected]
+ * `(index, value)` expectations ([requireExpectedStates]; blueprints pass none), then the
+ * batch-level `sourceUrl`'s static guards ([sanitizedSourceUrl]: absolute https, no
+ * credentials, bounded length). Pure validation: nothing is fetched and the public-host check
+ * stays a fetch-time concern. Returns the trimmed URL (null when omitted/blank) for the real
+ * run to stamp; the dry-run discards it.
  */
-fun ontologyImportPreflight(documentCount: Int, sourceUrl: String?): String? {
+fun ontologyImportPreflight(documentCount: Int, sourceUrl: String?, expected: List<Pair<Int, Long>> = emptyList()): String? {
     requireBatchSize(documentCount)
+    requireExpectedStates(documentCount, expected)
     return sanitizedSourceUrl(sourceUrl)
 }
 

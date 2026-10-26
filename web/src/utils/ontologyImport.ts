@@ -8,6 +8,7 @@
 // this module has no dependency on the generated schema types those wrappers use.
 
 import { ApiError } from "../api/http";
+import type { components } from "../api/schema";
 import type { Blueprint } from "../api/blueprints";
 import type { EntityFinding } from "../api/entities";
 import { computedPropertyIds } from "./computedProperties";
@@ -285,10 +286,14 @@ export function summarizeStripped(documents: readonly OntologyDocument[]): Strip
 
 // -- The orchestrator ---------------------------------------------------------------------
 
+/** The server's import-row vocabulary, straight from the contract (STALE is entity-only on the wire,
+ *  but the shared enum is one type). */
+type ServerRowStatus = components["schemas"]["OntologyImportStatus"];
+
 /** The row statuses the server reports, plus the one CLIENT-only status: a blueprint document
  *  skipped because the caller isn't (or is no longer) an admin — never sent to the server at
  *  all, so it carries no server message. */
-export type OntologyRowStatus = "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR" | "FORBIDDEN";
+export type OntologyRowStatus = ServerRowStatus | "FORBIDDEN";
 
 export type OntologyResultRow = {
   index: number;
@@ -302,7 +307,6 @@ export type OntologyResultRow = {
   findings?: EntityFinding[];
 };
 
-type ServerRowStatus = Exclude<OntologyRowStatus, "FORBIDDEN">;
 
 type BlueprintRowResult = {
   index: number;
@@ -466,5 +470,5 @@ export async function runImportBatch(deps: RunImportBatchDeps): Promise<Ontology
 /** Whether any row of a (possibly partial) import report stored something — the condition for
  *  refreshing the cached blueprints/entities, also after a batch that failed part-way. */
 export function anyStored(rows: readonly OntologyResultRow[]): boolean {
-  return rows.some((row) => row.id != null && row.status !== "EXISTS");
+  return rows.some((row) => row.id != null && row.status !== "EXISTS" && row.status !== "STALE");
 }

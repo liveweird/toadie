@@ -3,6 +3,7 @@ import { ApiError } from "../api/http";
 import type { Blueprint } from "../api/blueprints";
 import {
   IMPORT_CHUNK_SIZE,
+  anyStored,
   buildComputedIdsByBlueprint,
   chunked,
   detectKind,
@@ -13,6 +14,7 @@ import {
   summarizeStripped,
   unwrapEnvelope,
   type OntologyDocument,
+  type OntologyResultRow,
 } from "./ontologyImport";
 
 function blueprintDoc(overrides: Partial<Record<string, unknown>> = {}) {
@@ -463,5 +465,24 @@ describe("runImportBatch", () => {
     expect(rows).toHaveLength(201);
     expect(rows.map((r) => r.index)).toEqual(Array.from({ length: 201 }, (_, i) => i));
     expect(rows.map((r) => r.status)).toEqual(Array(201).fill("CREATED"));
+  });
+});
+
+describe("anyStored", () => {
+  const row = (status: OntologyResultRow["status"], id?: number): OntologyResultRow => ({
+    index: 0,
+    kind: "entity",
+    source: "pasted",
+    status,
+    id,
+  });
+
+  test("a STALE row names its counterpart but stored nothing", () => {
+    expect(anyStored([row("STALE", 7), row("EXISTS", 8), row("INVALID")])).toBe(false);
+  });
+
+  test("a created or updated row counts, also beside refused ones", () => {
+    expect(anyStored([row("STALE", 7), row("UPDATED", 9)])).toBe(true);
+    expect(anyStored([row("CREATED", 10)])).toBe(true);
   });
 });

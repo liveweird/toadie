@@ -48,6 +48,7 @@
       "INVALID": "Nieprawidłowy",
       "CONFLICT": "Duplikat w partii",
       "ERROR": "Błąd",
+      "STALE": "Zmienione w międzyczasie",
       "FORBIDDEN": "Zabronione"
     },
     "checkStatus": {
@@ -57,6 +58,7 @@
       "INVALID": "Nieprawidłowy",
       "CONFLICT": "Duplikat w partii",
       "ERROR": "Błąd",
+      "STALE": "Zmienione w międzyczasie",
       "FORBIDDEN": "Zabronione"
     },
     "showFindings_one": "Pokaż {{count}} ustalenie",

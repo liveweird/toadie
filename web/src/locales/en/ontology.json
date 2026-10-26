@@ -46,6 +46,7 @@
       "INVALID": "Invalid",
       "CONFLICT": "Duplicate in batch",
       "ERROR": "Failed",
+      "STALE": "Changed meanwhile",
       "FORBIDDEN": "Forbidden"
     },
     "checkStatus": {
@@ -55,6 +56,7 @@
       "INVALID": "Invalid",
       "CONFLICT": "Duplicate in batch",
       "ERROR": "Failed",
+      "STALE": "Changed meanwhile",
       "FORBIDDEN": "Forbidden"
     },
     "showFindings_one": "Show {{count}} finding",

@@ -56,8 +56,12 @@ val EntityServiceKey = AttributeKey<EntityService>("EntityService")
 /** [EntityService.list]'s outcome — [items], [total], and V39 [revision] share one read snapshot. */
 data class EntityListResult(val items: List<EntityResponse>, val total: Long, val revision: Long)
 
-/** [EntityService.update]'s outcome: affected-row count plus what the rename cascaded (for the audit). */
-data class EntityUpdateResult(val affected: Int, val cascaded: List<String>, val renamedFrom: String?)
+/**
+ * [EntityService.update]'s outcome: affected-row count plus what the rename cascaded (for the audit), and
+ * [updatedAt] — the stamp the write left on the row (null when nothing was written), which a multi-pass
+ * import hands back as the next write's expectation.
+ */
+data class EntityUpdateResult(val affected: Int, val cascaded: List<String>, val renamedFrom: String?, val updatedAt: Long? = null)
 
 /** [EntityService.delete]'s outcome: affected-row count plus the deleted identity (for the audit). */
 data class EntityDeleteResult(val affected: Int, val blueprint: String?, val identifier: String?)
@@ -594,19 +598,32 @@ class EntityService(
         id: UInt,
         request: EntityRequest,
         source: SourceWrite = SourceWrite.FromRequest,
+        expectedUpdatedAt: Long? = null,
     ): EntityUpdateResult = writeTransaction {
         val row = Entities.selectAll().where { (Entities.id eq id) and active() }.singleOrNull()
             ?: return@writeTransaction EntityUpdateResult(0, emptyList(), null)
-        applyUpdate(id, row, request, source)
+        applyUpdate(id, row, request, source, expectedUpdatedAt)
     }
 
     /**
      * The shared body of [update] and `entities/EntitySync.kt`'s `syncFromSource`, once the row
      * is known to exist: validation, the blueprint-immutability rule, the self-reference rename
      * rewrite, findings, and the rename cascade — parameterized only by [source] (the
-     * `sourceUrl`/sync-stamp write policy, `.claude/docs/persistence.md` "V37").
+     * `sourceUrl`/sync-stamp write policy, `.claude/docs/persistence.md` "V37") and by [expectedUpdatedAt],
+     * the import's optional write-version expectation: compared against the row as read under the lock,
+     * BEFORE any validation or mutation (the "cheap row checks first" posture of `entities/EntitySync.kt`),
+     * and refused with [EntityStaleException]. Null = unguarded.
      */
-    internal suspend fun applyUpdate(id: UInt, row: ResultRow, request: EntityRequest, source: SourceWrite): EntityUpdateResult {
+    internal suspend fun applyUpdate(
+        id: UInt,
+        row: ResultRow,
+        request: EntityRequest,
+        source: SourceWrite,
+        expectedUpdatedAt: Long? = null,
+    ): EntityUpdateResult {
+        if (expectedUpdatedAt != null && row[Entities.updatedAt] != expectedUpdatedAt) {
+            throw EntityStaleException(STALE_CHANGED)
+        }
         validateEntityRequest(request) // re-checked service-side so direct callers stay guarded
         val activeBlueprints = loadActiveBlueprints()
         val blueprintsByIdentifier = activeBlueprints.associateBy { it.identifier }
@@ -667,7 +684,7 @@ class EntityService(
         } else {
             emptyList()
         }
-        return EntityUpdateResult(affected, cascaded, if (renamed) currentIdentifier else null)
+        return EntityUpdateResult(affected, cascaded, if (renamed) currentIdentifier else null, updatedAt = now)
     }
 
     /**

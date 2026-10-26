@@ -91,6 +91,13 @@ class EntityInvalidException(val findings: List<EntityFinding>) :
         )
 }
 
+/**
+ * An import row's `expected` write-version no longer matches the counterpart read under the write lock
+ * ([EntityService.update]'s `expectedUpdatedAt`). Internal to the import: `writeEntityRow`/`pass2Entity` turn it into
+ * a STALE row (pass two: an ERROR), so it never reaches `plugins/ErrorHandling.kt` and has no problem type.
+ */
+internal class EntityStaleException(message: String) : RuntimeException(message)
+
 /** The referrer refusal behind `EntityService.delete` (MCP groundwork, 2.15.0): a `ConflictException`
  *  subclass so REST keeps its 409 through the same handler while a non-HTTP caller reads the
  *  target and referrers structurally. */
