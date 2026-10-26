@@ -173,6 +173,9 @@ export function softRejectionFindings(err: unknown): DocumentCheckFinding[] | nu
 export type ImportResult =
   paths["/api/v1/files/import"]["post"]["responses"]["200"]["content"]["application/json"];
 export type ImportFileResult = components["schemas"]["ImportFileResult"];
+/** One per-file write-version expectation (2.29.0): `index` into the chunk's `files`, `revision`
+ *  the stored counterpart's revision from the conversion (0 = expect none). */
+export type ExpectedFileState = components["schemas"]["ExpectedFileState"];
 
 
 /**
@@ -180,16 +183,19 @@ export type ImportFileResult = components["schemas"]["ImportFileResult"];
  * `sourceUrl` (the fetch-from-URL flow) makes every stored row carry the reference and
  * start synced — an import from a repo URL IS a sync. `replaceExisting` turns an identity
  * clash into an in-place replace (UPDATED / UPDATED_WITH_FINDINGS / UNCHANGED rows); it is
- * only put on the wire when on, so a default import's body is unchanged.
+ * only put on the wire when on, so a default import's body is unchanged. `expected` (2.29.0, a
+ * conversion's guard) is likewise sent only when non-empty: a file whose stored counterpart no
+ * longer carries the revision it was converted over comes back `STALE`.
  */
 export async function importCatalogFiles(
   files: CatalogFileRequest[],
   sourceUrl?: string,
   replaceExisting = false,
+  expected?: ExpectedFileState[],
 ): Promise<ImportResult> {
   return jsonRequest<ImportResult>("/api/v1/files/import", {
     method: "POST",
-    body: JSON.stringify({ files, sourceUrl, replaceExisting: replaceExisting || undefined }),
+    body: JSON.stringify({ files, sourceUrl, replaceExisting: replaceExisting || undefined, expected: expected?.length ? expected : undefined }),
   });
 }
 
@@ -203,10 +209,11 @@ export async function checkImportCatalogFiles(
   files: CatalogFileRequest[],
   sourceUrl?: string,
   replaceExisting = false,
+  expected?: ExpectedFileState[],
 ): Promise<ImportResult> {
   return jsonRequest<ImportResult>("/api/v1/files/import/check", {
     method: "POST",
-    body: JSON.stringify({ files, sourceUrl, replaceExisting: replaceExisting || undefined }),
+    body: JSON.stringify({ files, sourceUrl, replaceExisting: replaceExisting || undefined, expected: expected?.length ? expected : undefined }),
   });
 }
 

@@ -36,6 +36,7 @@ const DOCUMENTS = {
       namespace: "default",
       name: "checkout",
       existingId: 21,
+      existingRevision: 5,
       findings: [{ code: "OWNER_TRUNCATED", field: "team", message: "kept the first team" }],
       unmapped: ["properties.tier", "relations.uses"],
     },
@@ -211,7 +212,7 @@ describe("ExportToBackstage page", () => {
     expect(await screen.findByText(/More than 200 files are written in chunks of 200/)).toBeInTheDocument();
   });
 
-  test("the Create / update dialog converts AGAIN on open and on Confirm, with the selection that produced the result", async () => {
+  test("the Create / update dialog converts ONCE on open, with the selection that produced the result, and Confirm imports that batch", async () => {
     const user = userEvent.setup();
     const fetchStub = render([
       { match: /\/catalog-documents/, respond: { status: 200, body: DOCUMENTS } },
@@ -240,7 +241,7 @@ describe("ExportToBackstage page", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
     await within(dialog).findByText("Updated");
-    expect(convertCalls(fetchStub)).toHaveLength(3);
+    expect(convertCalls(fetchStub)).toHaveLength(2);
     const searches = convertCalls(fetchStub).map((url) => url.search);
     expect(new Set(searches).size).toBe(1);
   });
@@ -269,7 +270,7 @@ describe("ExportToBackstage page", () => {
     const dialog = await screen.findByRole("dialog", { name: "Create / update catalog files" });
     expect(await within(dialog).findByText("Would be updated")).toBeInTheDocument();
     const checkCall = fetchStub.mock.calls.find(([url]) => url === "/api/v1/files/import/check")!;
-    expect(JSON.parse((checkCall[1] as RequestInit).body as string)).toEqual({ files: [FILE], replaceExisting: true });
+    expect(JSON.parse((checkCall[1] as RequestInit).body as string)).toEqual({ files: [FILE], replaceExisting: true, expected: [{ index: 0, revision: 5 }] });
     expect(fetchStub.mock.calls.some(([url]) => url === "/api/v1/files/import")).toBe(false);
 
     await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
@@ -277,7 +278,7 @@ describe("ExportToBackstage page", () => {
     expect(await within(dialog).findByText("Updated")).toBeInTheDocument();
     expect(within(dialog).getByRole("link", { name: "Edit checkout" })).toHaveAttribute("href", "/files/21/edit");
     const importCall = fetchStub.mock.calls.find(([url]) => url === "/api/v1/files/import")!;
-    expect(JSON.parse((importCall[1] as RequestInit).body as string)).toEqual({ files: [FILE], replaceExisting: true });
+    expect(JSON.parse((importCall[1] as RequestInit).body as string)).toEqual({ files: [FILE], replaceExisting: true, expected: [{ index: 0, revision: 5 }] });
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });

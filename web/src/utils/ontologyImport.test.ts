@@ -376,6 +376,25 @@ describe("runImportBatch", () => {
     );
   });
 
+  test("entity chunks carry CHUNK-LOCAL expectations; unguarded documents and blueprint chunks carry none", async () => {
+    const documents = Array.from({ length: 202 }, (_, i) => ({ ...makeDoc("entity", i, `e${i}`), expectedUpdatedAt: i === 5 ? undefined : 1000 + i }));
+    const importBlueprintsChunk = vi.fn();
+    const importEntitiesChunk = vi.fn().mockResolvedValue({ results: [] });
+
+    await runImportBatch({ documents, replaceExisting: true, admin: true, importBlueprintsChunk, importEntitiesChunk, sourceUrl: "https://example.com/x.json" });
+
+    expect(importBlueprintsChunk).not.toHaveBeenCalled();
+    const [first, second] = importEntitiesChunk.mock.calls as [unknown[], boolean, string, { index: number; updatedAt: number }[]][];
+    expect(first[3]).toHaveLength(199);
+    expect(first[3].find((e) => e.index === 5)).toBeUndefined();
+    expect(first[3][5]).toEqual({ index: 6, updatedAt: 1006 });
+    // Documents 200 and 201 are positions 0 and 1 of the second chunk.
+    expect(second[3]).toEqual([
+      { index: 0, updatedAt: 1200 },
+      { index: 1, updatedAt: 1201 },
+    ]);
+  });
+
   test("a non-admin caller marks every blueprint document FORBIDDEN client-side and never calls the blueprint endpoint; entities still import", async () => {
     const documents = [makeDoc("blueprint", 0, "b1"), makeDoc("entity", 1, "e1")];
     const importBlueprintsChunk = vi.fn();

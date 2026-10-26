@@ -242,10 +242,13 @@ identities of the stored catalog and of the Port workspace, optionally the store
   `["c","b"]`; a stored scalar is simply replaced); a dropped owner keeps the stored team. The merge starts
   from the STORED document (`entities/EntityMergeRead.kt`), never the computed read view. `merge=false` is
   the bare conversion, and importing it with `replaceExisting` overwrites the entity wholesale; the row's
-  `existingId` names the entity of the same identity either way. **Read-then-write caveat:** nothing guards
-  the later `POST /entities/import` against a Port-only edit made between this conversion and that import
-  (the entity import has no expected-revision guard), so a caller must convert IMMEDIATELY before importing
-  — the SPA does.
+  `existingId` names the entity of the same identity either way. **Read-then-write guard (2.29.0):** the row's
+  `existingUpdatedAt` is the write-version token of the stored entity the document was merged over (0 / absent
+  = none matched), and a caller sends it back as the later `POST /entities/import`'s `expected` entry for that
+  document, so a Port-side edit made in between turns the row `STALE` instead of being overwritten (the rule:
+  `persistence.md` "Import expectations (entities and catalog files)"). The SPA converts ONCE when the confirm
+  dialog opens and Confirm imports exactly that previewed batch with its tokens; a `STALE` row asks the user to
+  convert again. A caller that sends no `expected` keeps the old last-write-wins behaviour.
 - **One leaf, one rule.** A validated mapping has one import-reading rule per Port leaf. The engine is defensive
   where contributions still meet: array values union, and any `Kept`/`Union` contributor makes the result a
   `Union` with the stored values, so one rule's failure to convert never lets another's value remove what is stored.

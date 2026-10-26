@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { CatalogFileRequest } from "../api/catalogFiles";
-import { convertCatalogFiles, toOntologyDocuments } from "./conversionBatches";
+import type { EntityDocumentRow } from "../api/conversionMappings";
+import { ImportPhaseError } from "./conversionErrors";
+import { convertCatalogFiles, expectedEntityStates, toOntologyDocuments } from "./conversionBatches";
 import { jsonResponse } from "../test/http";
 
 const file = (name: string): CatalogFileRequest => ({ kind: "Component", metadata: { name }, spec: {} });
@@ -38,8 +40,39 @@ describe("convertCatalogFiles", () => {
   });
 
   test("toOntologyDocuments wraps converted bodies for the ontology import orchestrator", () => {
-    const docs = toOntologyDocuments([{ blueprint: "svc", identifier: "a" }, { title: "odd" }], "Backstage");
-    expect(docs[0]).toMatchObject({ index: 0, kind: "entity", blueprint: "svc", identifier: "a", source: "Backstage", stripped: [] });
-    expect(docs[1]).toMatchObject({ index: 1, identifier: undefined, blueprint: undefined });
+    const docs = toOntologyDocuments([{ blueprint: "svc", identifier: "a" }, { title: "odd" }], "Backstage", [5, 0]);
+    expect(docs[0]).toMatchObject({ index: 0, kind: "entity", blueprint: "svc", identifier: "a", source: "Backstage", stripped: [], expectedUpdatedAt: 5 });
+    expect(docs[1]).toMatchObject({ index: 1, identifier: undefined, blueprint: undefined, expectedUpdatedAt: 0 });
+  });
+});
+
+const row = (index: number, status: EntityDocumentRow["status"], existingUpdatedAt?: number): EntityDocumentRow => ({
+  index,
+  status,
+  kind: "Component",
+  namespace: "default",
+  name: `n${index}`,
+  findings: [],
+  unmapped: [],
+  ...(existingUpdatedAt === undefined ? {} : { existingId: 10 + index, existingUpdatedAt }),
+});
+
+describe("expectedEntityStates", () => {
+  test("pairs the token of each document-bearing row in row order, 0 for a row with no counterpart", () => {
+    const rows = [row(0, "CONVERTED", 1700), row(1, "SKIPPED"), row(2, "CONVERTED_WITH_FINDINGS"), row(3, "INVALID"), row(4, "CONVERTED", 42)];
+    expect(expectedEntityStates(rows, 3)).toEqual([1700, 0, 42]);
+  });
+
+  test("a document count that does not pair with the rows throws a convert-phase error", () => {
+    const error = (() => {
+      try {
+        expectedEntityStates([row(0, "CONVERTED", 1700)], 2);
+      } catch (err) {
+        return err;
+      }
+      return null;
+    })();
+    expect(error).toBeInstanceOf(ImportPhaseError);
+    expect((error as ImportPhaseError).phase).toBe("convert");
   });
 });

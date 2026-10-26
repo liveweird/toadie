@@ -33,6 +33,7 @@ const CONVERTED = {
       blueprint: "service",
       identifier: "checkout",
       existingId: 12,
+      existingUpdatedAt: 1700,
       findings: [{ code: "OWNER_DROPPED", field: "spec.owner", message: "no such team" }],
       unmapped: ["metadata.description"],
     },
@@ -95,7 +96,7 @@ describe("BackstageCatalogImport", () => {
     expect(callsTo(fetchStub, "/api/v1/entities/import/check")).toHaveLength(0);
   });
 
-  test("Import opens a confirm dialog with a fresh conversion and dry run, and writes only on Confirm after converting again", async () => {
+  test("Import opens a confirm dialog with a fresh conversion and dry run, and Confirm writes the previewed batch without converting again", async () => {
     const user = userEvent.setup();
     const fetchStub = render([
       { method: "POST", match: "/api/v1/entities/import/check", respond: { status: 200, body: { results: [ENTITY_ROW] } } },
@@ -123,16 +124,15 @@ describe("BackstageCatalogImport", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Confirm import" }));
 
-    // Confirm converts AGAIN, then writes with replaceExisting.
+    // Confirm imports exactly what was previewed (no third conversion), guarded by the token.
     expect(await within(dialog).findByText("Updated")).toBeInTheDocument();
-    expect(conversions()).toBe(3);
+    expect(conversions()).toBe(2);
     const [importCall] = callsTo(fetchStub, "/api/v1/entities/import");
     expect(JSON.parse((importCall[1] as RequestInit).body as string)).toMatchObject({
       documents: [DOCUMENT],
       replaceExisting: true,
+      expected: [{ index: 0, updatedAt: 1700 }],
     });
-    const order = fetchStub.mock.calls.map(([url]) => url as string);
-    expect(order.lastIndexOf("/api/v1/conversion-mappings/3/entity-documents")).toBeLessThan(order.indexOf("/api/v1/entities/import"));
     expect(within(dialog).getAllByRole("link", { name: "Edit service / checkout" })[0]).toHaveAttribute("href", "/entities/12/edit");
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());

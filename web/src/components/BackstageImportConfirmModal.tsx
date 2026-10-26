@@ -2,7 +2,7 @@ import { useId } from "react";
 import { Alert, Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { convertThenImport, type ConvertedBatch } from "../utils/conversionBatches";
+import { convertForImport, importConverted, type ConvertedBatch, type PairedBatch } from "../utils/conversionBatches";
 import { ImportPhaseError, importFlowError } from "../utils/conversionErrors";
 import { importDisplayRows } from "../utils/conversionRows";
 import { anyStored, type OntologyResultRow } from "../utils/ontologyImport";
@@ -12,14 +12,15 @@ import OntologyImportResults from "./OntologyImportResults";
 
 /**
  * The confirm step of the Backstage catalog import. Importing here is `replaceExisting`, so it
- * never fires from a bare click: opening the dialog converts FRESH and dry-runs the entity import
- * (the conversion report and the predicted rows are shown), and only Confirm writes — converting
- * AGAIN inside the confirm handler, just before `POST /entities/import`, so the merge read the write
- * relies on is as recent as the client can make it (nothing guards the import against a Port-only
- * edit in between; `.claude/docs/conversion-mapping.md` "Read-then-write caveat"). With Merge off
- * the converted document replaces the stored entity wholesale, and the dialog says so. A chunk
- * that fails part-way keeps the rows of the chunks that stored, with how many chunks went through.
- * Mount it only while the dialog should be open.
+ * never fires from a bare click: opening the dialog converts ONCE and dry-runs the entity import
+ * (the conversion report and the predicted rows are shown), and Confirm imports exactly that
+ * previewed batch — it never converts again. Each document travels with the write-version of the
+ * Port entity it was converted over (`expected`, from the conversion rows), so one edited since
+ * the preview comes back as a red "Changed meanwhile" `STALE` row, untouched; the user converts
+ * again (reopens the dialog) to import it. With Merge off the converted document replaces the
+ * stored entity wholesale, and the dialog says so. A chunk that fails part-way keeps the rows of
+ * the chunks that stored, with how many chunks went through (`.claude/docs/conversion-mapping.md`
+ * "Read-then-write guard"). Mount it only while the dialog should be open.
  */
 export default function BackstageImportConfirmModal({
   convert,
@@ -39,14 +40,15 @@ export default function BackstageImportConfirmModal({
 
   const check = useQuery({
     queryKey: ["backstageImportCheck", openId],
-    queryFn: () => convertThenImport({ convert, mode: "check", sourceLabel }),
+    queryFn: async () => importConverted(await convertForImport(convert), "check", { sourceLabel }),
     staleTime: 0,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
   });
   const run = useMutation({
-    mutationFn: () => convertThenImport({ convert, mode: "import", sourceLabel }),
+    // Imports the PREVIEWED batch: no second conversion (the guard is the batch's own `expected`).
+    mutationFn: (previewed: PairedBatch) => importConverted(previewed, "import", { sourceLabel }),
     // Refresh the cached entities whenever anything stored — also after a batch that failed part-way.
     onSettled: async (data, error) => {
       const rows = data?.rows ?? (error instanceof ImportPhaseError ? error.rows : []);
@@ -60,7 +62,7 @@ export default function BackstageImportConfirmModal({
   const checkFailure = check.isError ? importFlowError(check.error, t) : null;
 
   // Once the real run happened (or failed) the predictions are history and are not shown.
-  let converted: ConvertedBatch | undefined;
+  let converted: PairedBatch | undefined;
   let rows: OntologyResultRow[] | undefined;
   let mode: "check" | "import" = "check";
   if (run.isSuccess) {
@@ -132,7 +134,7 @@ export default function BackstageImportConfirmModal({
                 {t("conversion.import.confirm.cancel")}
               </Button>
               <Button
-                onClick={() => run.mutate()}
+                onClick={() => check.data && run.mutate(check.data.converted)}
                 loading={busy}
                 disabled={!check.isSuccess || check.data.converted.documents.length === 0}
               >

@@ -10,7 +10,7 @@
 import { ApiError } from "../api/http";
 import type { components } from "../api/schema";
 import type { Blueprint } from "../api/blueprints";
-import type { EntityFinding } from "../api/entities";
+import type { EntityFinding, ExpectedEntityState } from "../api/entities";
 import { computedPropertyIds } from "./computedProperties";
 
 /** The server's per-request document cap (`MAX_IMPORT_DOCUMENTS` — `.claude/docs/port-data-model.md`
@@ -40,6 +40,9 @@ export type OntologyDocument = {
   strippedComputed: string[];
   /** The source's label — the file name, or the pasted-text placeholder. */
   source: string;
+  /** Entity documents only (2.29.0, a conversion's guard): the stored counterpart's `updatedAt`
+   *  the document was converted over — 0 = "expected none". Absent = unguarded. */
+  expectedUpdatedAt?: number;
 };
 
 type ParseOntologyResult = {
@@ -339,6 +342,7 @@ type EntityImportCaller = (
   documents: Record<string, unknown>[],
   replaceExisting: boolean,
   sourceUrl?: string,
+  expected?: ExpectedEntityState[],
 ) => Promise<{ results: EntityRowResult[] }>;
 
 type RunImportBatchDeps = {
@@ -389,6 +393,14 @@ function entityRow(doc: OntologyDocument, result: EntityRowResult): OntologyResu
     message: result.message,
     findings: result.findings,
   };
+}
+
+/** The chunk-LOCAL expectations: `index` is the document's position inside the chunk, as the
+ *  server reads it. Only guarded documents appear; an unguarded chunk yields an empty list. */
+function chunkExpectations(chunk: readonly OntologyDocument[]): ExpectedEntityState[] {
+  return chunk.flatMap((doc, index) =>
+    doc.expectedUpdatedAt === undefined ? [] : [{ index, updatedAt: doc.expectedUpdatedAt }],
+  );
 }
 
 function isForbidden(err: unknown): boolean {
@@ -456,11 +468,13 @@ export async function runImportBatch(deps: RunImportBatchDeps): Promise<Ontology
   }
 
   for (const chunk of chunked(entityDocs, IMPORT_CHUNK_SIZE)) {
-    const callEntities =
-      deps.sourceUrl !== undefined
-        ? (documents: Record<string, unknown>[], replaceExisting: boolean) =>
-            deps.importEntitiesChunk(documents, replaceExisting, deps.sourceUrl)
-        : deps.importEntitiesChunk;
+    const expected = chunkExpectations(chunk);
+    const callEntities = (documents: Record<string, unknown>[], replaceExisting: boolean) => {
+      if (expected.length > 0) return deps.importEntitiesChunk(documents, replaceExisting, deps.sourceUrl, expected);
+      return deps.sourceUrl !== undefined
+        ? deps.importEntitiesChunk(documents, replaceExisting, deps.sourceUrl)
+        : deps.importEntitiesChunk(documents, replaceExisting);
+    };
     reportChunk(await runOneChunk(chunk, callEntities, deps.replaceExisting, entityRow));
   }
 

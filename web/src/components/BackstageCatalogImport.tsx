@@ -8,7 +8,7 @@ import { fetchCatalogUrl, type CatalogFileRequest } from "../api/catalogFiles";
 import { useConversionMappings } from "../hooks/useConversionMappings";
 import { parseCatalogYaml } from "../utils/catalogImport";
 import { conversionMappingsPath, editConversionMappingPath } from "../utils/conversionLinks";
-import { convertCatalogFiles, convertThenImport } from "../utils/conversionBatches";
+import { convertCatalogFiles, convertForImport, importConverted } from "../utils/conversionBatches";
 import { ImportPhaseError, importFlowError } from "../utils/conversionErrors";
 import { importDisplayRows } from "../utils/conversionRows";
 import { IMPORT_CHUNK_SIZE, type OntologyResultRow } from "../utils/ontologyImport";
@@ -110,9 +110,7 @@ export default function BackstageCatalogImport() {
         });
         return;
       }
-      const { rows } = await convertThenImport({
-        convert,
-        mode,
+      const { rows } = await importConverted(await convertForImport(convert), mode, {
         sourceLabel: t("conversion.import.sourceLabel"),
         onProgress: (sent, total) => setProgress({ sent, total }),
         onRows: (partial) => setResults({ mode, rows: partial }),

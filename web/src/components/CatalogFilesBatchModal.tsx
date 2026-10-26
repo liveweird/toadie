@@ -2,8 +2,8 @@ import { useId } from "react";
 import { Alert, Badge, Button, Group, Modal, Stack, Table, Text } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import type { CatalogFileRequest, ImportFileResult } from "../api/catalogFiles";
-import { batchCause, CatalogBatchError, runCatalogFileBatches } from "../utils/catalogBatches";
+import type { ImportFileResult } from "../api/catalogFiles";
+import { batchCause, CatalogBatchError, runCatalogFileBatches, type CatalogBatch } from "../utils/catalogBatches";
 import { MAX_DIALOG_ROWS, problemsFirst } from "../utils/rowOrder";
 import { loadErrorMessage } from "../utils/saveError";
 import CatalogFileNameLink from "./CatalogFileNameLink";
@@ -35,22 +35,23 @@ const STORED: ReadonlySet<ImportFileResult["status"]> = new Set([
 ]);
 
 /**
- * The confirm step of "Create / update catalog files". It owns its own conversion: `convert`
- * re-runs the Port -> Backstage conversion, so the dry run (`/files/import/check` with
- * `replaceExisting`, the predicted rows) and — on Confirm — the real chunked import both act on
- * files merged against the CURRENT stored catalog, never on the page's earlier snapshot (nothing
- * guards the import against a catalog edit made in between; keeping the window short is the only
- * defence). Mount it only while the dialog should be open. The check is keyed OUTSIDE the
- * `["catalogFiles"]` prefix with no caching (recomputed per open, never refreshed by an unrelated
- * mutation); the real import invalidates the whole prefix, even after a partial failure. A failed
- * chunk keeps the rows of the chunks that did store, with a "stopped after N of M files" notice,
- * and the predictions are no longer shown.
+ * The confirm step of "Create / update catalog files". Opening the dialog converts ONCE (`convert`
+ * re-runs the Port -> Backstage conversion, so the batch is merged against the CURRENT stored
+ * catalog) and dry-runs it (`/files/import/check` with `replaceExisting`, the predicted rows);
+ * Confirm imports exactly that previewed batch — it never converts again. Each file carries the
+ * revision of the stored file it was converted over (`expected`), so one edited since the preview
+ * comes back as a red "Changed meanwhile" `STALE` row, untouched; the user converts again
+ * (reopens the dialog) to import it. Mount it only while the dialog should be open. The check is
+ * keyed OUTSIDE the `["catalogFiles"]` prefix with no caching (recomputed per open, never
+ * refreshed by an unrelated mutation); the real import invalidates the whole prefix, even after
+ * a partial failure. A failed chunk keeps the rows of the chunks that did store, with a
+ * "stopped after N of M files" notice, and the predictions are no longer shown.
  */
 export default function CatalogFilesBatchModal({
   convert,
   onClose,
 }: {
-  convert: () => Promise<readonly CatalogFileRequest[]>;
+  convert: () => Promise<CatalogBatch>;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -59,21 +60,25 @@ export default function CatalogFilesBatchModal({
 
   const check = useQuery({
     queryKey: ["catalogFilesBatchCheck", openId],
-    queryFn: async () => runCatalogFileBatches("check", await convert()),
+    queryFn: async () => {
+      const batch = await convert();
+      return { batch, rows: await runCatalogFileBatches("check", batch) };
+    },
     staleTime: 0,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
   });
   const run = useMutation({
-    mutationFn: async () => runCatalogFileBatches("import", await convert()),
+    // Imports the PREVIEWED batch: no second conversion (the guard is the batch's own `expected`).
+    mutationFn: (previewed: CatalogBatch) => runCatalogFileBatches("import", previewed),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["catalogFiles"] }),
   });
 
   const done = run.isSuccess;
   const stopped = run.error instanceof CatalogBatchError ? run.error : null;
   // Once the real run happened (or failed), the predictions are history and are not shown.
-  const rows = done ? run.data : run.isError ? (stopped?.rows ?? []) : check.data;
+  const rows = done ? run.data : run.isError ? (stopped?.rows ?? []) : check.data?.rows;
   const busy = run.isPending;
 
   return (
@@ -121,7 +126,11 @@ export default function CatalogFilesBatchModal({
               <Button variant="default" onClick={onClose} disabled={busy}>
                 {t("conversion.export.createModal.cancel")}
               </Button>
-              <Button onClick={() => run.mutate()} loading={busy} disabled={!check.isSuccess || check.data.length === 0}>
+              <Button
+                onClick={() => check.data && run.mutate(check.data.batch)}
+                loading={busy}
+                disabled={!check.isSuccess || check.data.batch.files.length === 0}
+              >
                 {t("conversion.export.createModal.confirm")}
               </Button>
             </>
