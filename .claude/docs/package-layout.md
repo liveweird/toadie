@@ -331,6 +331,24 @@ ch.nokillswit
 │                       SavedEntityQueryService.kt (the lenses/ clone over V35's `entity_queries`:
 │                       own + PUBLIC list, creator-only mutations via the hybrid 404/403 verdict),
 │                       SavedEntityQueryRoutes.kt (`/api/v1/entity-queries`, any authenticated)
+├── conversion/         Backstage <-> Port conversion, phase 1 (Toadie-first): the stored MAPPING
+│                       DOCUMENT that says how a Port blueprint corresponds to a Backstage kind, and
+│                       its registry (the mapping-is-data rule: `.claude/docs/conversion-mapping.md`).
+│                       MappingDocument.kt (the typed model: pairs, rules, sealed
+│                       PortAddress / BackstageAddress / Codec — the format reference is
+│                       `.claude/docs/conversion-mapping.md`), MappingParser.kt (the one strict
+│                       JsonElement -> model reader: every defect a positioned SCHEMA finding, `null`
+│                       and unknown members refused, `jq` reserved), MappingValidation.kt +
+│                       MappingPairValidation.kt + MappingRuleValidation.kt (the PURE validator over
+│                       (document, active blueprints, RegistrySnapshot): blocking findings vs
+│                       report-only drift; it reads the Backstage structural tables from
+│                       `catalog/CatalogFileValidation.kt` — `allowedSpecFields`, `requiredSpecFields`,
+│                       `SPEC_SHAPES` — instead of copying them), ConversionMapping.kt (wire DTOs, the
+│                       finding/drift codes, the findings-bearing 400), ConversionMappingService.kt
+│                       (V45's `conversion_mappings`: validation reads happen INSIDE the write
+│                       transaction, no lock beyond the create cap; findings/drift recomputed on every
+│                       read), ConversionMappingRoutes.kt (`/api/v1/conversion-mappings`, ADMIN
+│                       writes), MappingErrors.kt (the Port Errors report's `mappings` rows).
 ├── integration/        the machine API: the read-only Port GraphQL adapter (v2.7.0 — committed SDL,
 │                       service-backed resolvers, bounded execution, separate machine authentication)
 │                       and, since 2.15.0, the MCP endpoint `POST /integration/mcp` (Mcp.kt — a

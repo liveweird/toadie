@@ -30,6 +30,12 @@ const QUERY_DIAGNOSTIC_CODES = codesFrom(/code: "SYNTAX"[^;]+;/);
 
 const ALL_CODES = [...new Set([...ENTITY_FINDING_CODES, ...QUERY_DIAGNOSTIC_CODES])];
 
+// The conversion-mapping rows' two unions live under `mapping.code`/`mapping.explain` (their
+// vocabulary overlaps EntityFindingCode's — UNKNOWN_PROPERTY means something different there).
+const MAPPING_FINDING_CODES = codesFrom(/MappingFindingCode: "[^;]+;/);
+const MAPPING_DRIFT_CODES = codesFrom(/MappingDriftCode: "[^;]+;/);
+const ALL_MAPPING_CODES = [...MAPPING_FINDING_CODES, ...MAPPING_DRIFT_CODES];
+
 describe("entityErrors.json covers every EntityFindingCode and QueryDiagnostic code", () => {
   it("found a non-trivial set of codes in schema.ts (the extraction itself didn't silently break)", () => {
     expect(ENTITY_FINDING_CODES.length).toBeGreaterThan(20);
@@ -46,5 +52,18 @@ describe("entityErrors.json covers every EntityFindingCode and QueryDiagnostic c
     expect(enEntityErrors.explain).toHaveProperty(code);
     expect(typeof (enEntityErrors.explain as Record<string, string>)[code]).toBe("string");
     expect((enEntityErrors.explain as Record<string, string>)[code].length).toBeGreaterThan(0);
+  });
+});
+
+describe("entityErrors.json covers every MappingFindingCode and MappingDriftCode", () => {
+  it("found the mapping codes in schema.ts", () => {
+    expect(MAPPING_FINDING_CODES).toHaveLength(13);
+    expect(MAPPING_DRIFT_CODES).toHaveLength(4);
+  });
+
+  it.each(ALL_MAPPING_CODES)("%s has a mapping code label and explanation", (code) => {
+    const mapping = enEntityErrors.mapping as { code: Record<string, string>; explain: Record<string, string> };
+    expect(mapping.code[code]?.length).toBeGreaterThan(0);
+    expect(mapping.explain[code]?.length).toBeGreaterThan(0);
   });
 });

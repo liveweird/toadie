@@ -46,6 +46,7 @@ class AuditCatalogTest {
         "tag_category.",
         "lens.",
         "blueprint.",
+        "conversion_mapping.",
         "entity.",
         "entity_types.",
         "authz.",

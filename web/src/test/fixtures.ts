@@ -53,9 +53,11 @@ export function entityErrorsReport(overrides: Partial<EntityErrorsReport> = {}):
     entities: [],
     blueprints: [],
     savedQueries: [],
+    mappings: [],
     checkedEntities: 0,
     checkedBlueprints: 0,
     checkedSavedQueries: 0,
+    checkedMappings: 0,
     ...overrides,
   };
 }

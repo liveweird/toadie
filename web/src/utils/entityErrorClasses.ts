@@ -4,17 +4,19 @@ import type { components } from "../api/schema";
 type EntityFindingCode = components["schemas"]["EntityFindingCode"];
 
 /**
- * The Port-world Errors report's pill classes (v2.5.0, five since 2.9.1) — over the report's
+ * The Port-world Errors report's pill classes (v2.5.0, five since 2.9.1, plus the conversion-mapping class) — over the report's
  * `EntityFindingCode` findings (entity AND blueprint rows share the same code vocabulary) plus
  * one class for every saved-query row, which carries `QueryDiagnostic`s instead: `stale` is the
  * 19 codes every strict entity save already enforces (HARD on the entity's next save); `source`
  * (2.9.1) is the opposite kind of report-only class — an entity's missing `sourceUrl`, never a
  * save blocker, the catalog Errors report's own `source` class one level down; the remaining
  * three are report-only and soft (HARD would be misleading for something that never blocks a
- * save). See `.claude/docs/port-data-model.md` "Computed-property health" and
+ * save); `mappings` is one class for every stored conversion-mapping row, whose blocking
+ * findings and report-only drift (`MappingFinding`/`MappingDrift`, a vocabulary disjoint from
+ * `EntityFindingCode`) all count toward it. See `.claude/docs/port-data-model.md` "Computed-property health" and
  * `getEntityErrors`'s own OpenAPI description for the full rule table.
  */
-export const ENTITY_ERROR_CLASSES = ["stale", "ownership", "queries", "computed", "source"] as const;
+export const ENTITY_ERROR_CLASSES = ["stale", "ownership", "queries", "computed", "source", "mappings"] as const;
 
 export type EntityErrorClass = (typeof ENTITY_ERROR_CLASSES)[number];
 
@@ -66,5 +68,6 @@ export function countByEntityClass(report: EntityErrorsReport): Record<EntityErr
     for (const finding of row.findings) counts[classOfEntityCode(finding.code)] += 1;
   }
   for (const row of report.savedQueries) counts.queries += row.diagnostics.length;
+  for (const row of report.mappings) counts.mappings += row.findings.length + row.drift.length;
   return counts;
 }

@@ -99,42 +99,74 @@ fun sanitizedCatalogFile(file: CatalogFile): CatalogFile = file.copy(
 
 // ─── The per-kind spec table ────────────────────────────────────────────────────────────────
 
+/**
+ * What a spec field holds, as far as a mapping between a Port entity and this document needs to
+ * know: [TEXT] a plain single-word/free string (`type`, `lifecycle`, `definition`), [REF] one
+ * entity reference, [REF_LIST] a list of them, [PROFILE] the structured `profile` object. Read
+ * by `conversion/MappingValidation.kt` (a codec's target must have a compatible shape) — kept
+ * next to the field table so the two can never drift.
+ */
+internal enum class SpecShape { TEXT, REF, REF_LIST, PROFILE }
+
+/**
+ * The names of the spec fields the rest of the server has to single out: `type` (the field the
+ * per-kind type dictionaries govern and a conversion mapping's selector reads), `lifecycle` (the
+ * lifecycles dictionary's field) and `profile` (the structured Group/User object). Named here, where
+ * the descriptor format lives, so `conversion/` never spells them as literals.
+ */
+internal const val SPEC_TYPE = "type"
+internal const val SPEC_LIFECYCLE = "lifecycle"
+internal const val SPEC_PROFILE = "profile"
+
 /** One spec field: how to detect it's present and how to validate it when it is. */
 private class SpecField(
     val name: String,
+    val shape: SpecShape,
     val isPresent: (EntitySpec) -> Boolean,
     val validate: (EntitySpec) -> Unit,
 )
 
-private fun scalar(name: String, get: (EntitySpec) -> String?, validate: (String) -> Unit) =
-    SpecField(name, { get(it) != null }, { get(it)?.let(validate) })
+private fun text(name: String, get: (EntitySpec) -> String?, validate: (String) -> Unit) =
+    SpecField(name, SpecShape.TEXT, { get(it) != null }, { get(it)?.let(validate) })
+
+private fun ref(name: String, get: (EntitySpec) -> String?) =
+    SpecField(
+        name,
+        SpecShape.REF,
+        { get(it) != null },
+        { spec -> get(spec)?.let { validateEntityRef(it, "spec.$name") } },
+    )
 
 private fun refList(name: String, get: (EntitySpec) -> List<String>?) =
     SpecField(
         name,
+        SpecShape.REF_LIST,
         { !get(it).isNullOrEmpty() },
         { spec -> get(spec)?.let { validateRefArray(it, "spec.$name") } },
     )
 
 private val SPEC_FIELDS: List<SpecField> = listOf(
-    scalar("type", { it.type }) { validateSingleWord(it, "spec.type") },
-    scalar("lifecycle", { it.lifecycle }) { validateSingleWord(it, "spec.lifecycle") },
-    scalar("owner", { it.owner }) { validateEntityRef(it, "spec.owner") },
-    scalar("system", { it.system }) { validateEntityRef(it, "spec.system") },
-    scalar("subcomponentOf", { it.subcomponentOf }) { validateEntityRef(it, "spec.subcomponentOf") },
+    text(SPEC_TYPE, { it.type }) { validateSingleWord(it, "spec.type") },
+    text(SPEC_LIFECYCLE, { it.lifecycle }) { validateSingleWord(it, "spec.lifecycle") },
+    ref("owner") { it.owner },
+    ref("system") { it.system },
+    ref("subcomponentOf") { it.subcomponentOf },
     refList("providesApis") { it.providesApis },
     refList("consumesApis") { it.consumesApis },
     refList("dependsOn") { it.dependsOn },
     refList("dependencyOf") { it.dependencyOf },
-    scalar("definition", { it.definition }) { validateDefinition(it) },
-    SpecField("profile", { it.profile != null }, { it.profile?.let(::validateProfile) }),
-    scalar("parent", { it.parent }) { validateEntityRef(it, "spec.parent") },
+    text("definition", { it.definition }) { validateDefinition(it) },
+    SpecField(SPEC_PROFILE, SpecShape.PROFILE, { it.profile != null }, { it.profile?.let(::validateProfile) }),
+    ref("parent") { it.parent },
     refList("children") { it.children },
     refList("members") { it.members },
     refList("memberOf") { it.memberOf },
-    scalar("domain", { it.domain }) { validateEntityRef(it, "spec.domain") },
-    scalar("subdomainOf", { it.subdomainOf }) { validateEntityRef(it, "spec.subdomainOf") },
+    ref("domain") { it.domain },
+    ref("subdomainOf") { it.subdomainOf },
 )
+
+/** Every spec field name with its [SpecShape] — derived from [SPEC_FIELDS], so it cannot drift from it. */
+internal val SPEC_SHAPES: Map<String, SpecShape> = SPEC_FIELDS.associate { it.name to it.shape }
 
 // Which spec fields each kind may carry, and which it must (the descriptor reference's rules).
 // children/memberOf requiredness means PRESENT — an empty list satisfies it (checked apart,
@@ -158,6 +190,16 @@ private val ALLOWED_FIELDS: Map<String, Set<String>> = mapOf(
  * so the two can never drift.
  */
 val TYPE_BEARING_KINDS: List<String> = SUPPORTED_KINDS.filter { "type" in ALLOWED_FIELDS.getValue(it) }
+
+/**
+ * The spec fields kind [kind] may carry (the descriptor reference's rules) — read by
+ * `conversion/MappingValidation.kt` so a conversion mapping reuses the ONE table the catalog
+ * validator enforces instead of copying it. Null for an unsupported kind.
+ */
+internal fun allowedSpecFields(kind: String): Set<String>? = ALLOWED_FIELDS[kind]
+
+/** The spec fields kind [kind] must carry (see [allowedSpecFields]); null for an unsupported kind. */
+internal fun requiredSpecFields(kind: String): Set<String>? = REQUIRED_FIELDS[kind]
 
 private val REQUIRED_FIELDS: Map<String, Set<String>> = mapOf(
     "Component" to setOf("type", "lifecycle", "owner"),

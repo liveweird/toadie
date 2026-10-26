@@ -5,18 +5,18 @@ import ch.nokillswit.blueprints.BlueprintImportRequest
 import ch.nokillswit.blueprints.BlueprintImportResponse
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintResponse
-import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.blueprints.isSystemIdentifier
+import ch.nokillswit.conversion.ConversionMapping
+import ch.nokillswit.conversion.ConversionMappingRequest
 import ch.nokillswit.dictionaries.DictionaryEntryList
 import ch.nokillswit.entities.EntityErrorsReport
 import ch.nokillswit.infra.importing.OntologyImportStatus
 import ch.nokillswit.labels.LabelList
-import ch.nokillswit.tags.TagCategoryList
-import ch.nokillswit.types.EntityTypesList
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -27,6 +27,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -45,12 +46,11 @@ import kotlin.test.assertTrue
  * desired definition, base shape included, so byte-for-structure equality still holds), and then
  * pins the four contracts the set makes:
  *
- * 1. **Vocabulary**: every enum that mirrors a V22-seeded registry (the per-kind type
- *    dictionaries, the lifecycles dictionary, the labels' closed value lists, the tag
- *    categories) carries EXACTLY the registry's values, read back from the running app — so a
- *    Backstage export is a copy and a registry edit that forgets the blueprint fails here; the
- *    yes/no regulatory booleans (2.17.0) must also be boolean properties whose label applies to
- *    the blueprint's Backstage kind.
+ * 1. **Vocabulary and the Backstage round trip**: the default conversion mapping
+ *    (`sample-data/port/commerce-payments/mapping/backstage.json`) is stored through the real
+ *    API and must come back with zero blocking findings AND zero drift — the mapping is the
+ *    single source of which enum mirrors which registry (type dictionaries, lifecycles, label
+ *    values, tag categories), so the test-side tables this contract used to keep are gone.
  * 2. **Hierarchy**: `hierarchyRelations` (v1.32.0, a map — several PARALLEL hierarchies) names
  *    TWO forests: `composition` — the org tree (`_team` → `_team`) and the architecture tree
  *    (domain → system → service/library/api/resource/dataset → workload, cluster → environment,
@@ -104,7 +104,7 @@ class SampleBlueprintsTest {
             assertHierarchy(requests)
             assertOwnership(requests)
             assertComputedProperties(requests)
-            assertVocabulary(admin, requests)
+            assertDefaultMapping(admin, requests)
         } finally {
             try {
                 TestBlueprints.restoreSystemBlueprints()
@@ -304,67 +304,71 @@ class SampleBlueprintsTest {
         }
     }
 
-    private suspend fun assertVocabulary(admin: HttpClient, requests: Map<String, BlueprintRequest>) {
-        val types = admin.get("/api/v1/entity-types").body<EntityTypesList>().items.associate { it.kind to it.types.toSet() }
+    /**
+     * The default conversion mapping (`sample-data/port/commerce-payments/mapping/backstage.json`,
+     * the conversion work) is the SINGLE source of the Backstage round-trip contract: it names which blueprint
+     * property is which label, tag category, annotation, spec field or link, and the validator
+     * (`conversion/MappingValidation.kt`) checks that against the CURRENT blueprints and the
+     * V22-seeded registries — enum <-> closed label values, the lifecycles dictionary, the tag
+     * categories (engine = Database + Events), the per-kind type dictionaries (Component = the
+     * service enum + the library constant), the namespace dictionary, every label/annotation/
+     * category key and the kinds they apply to. Loading it through the real API therefore
+     * asserts BOTH zero blocking findings and zero drift; a registry edit (or a blueprint enum
+     * edit) that forgets the other side fails here with the validator's own message. What no
+     * mapping can cover — the Port-only `dataset` and `_user.employment_type` — keeps a few
+     * explicit assertions below.
+     */
+    private suspend fun assertDefaultMapping(admin: HttpClient, requests: Map<String, BlueprintRequest>) {
+        val file = File("../sample-data/port/commerce-payments/mapping/backstage.json")
+        val name = "sample-${java.util.UUID.randomUUID().toString().take(8)}"
+        val created = admin.postJson(
+            "/api/v1/conversion-mappings",
+            ConversionMappingRequest(name = name, document = Json.parseToJsonElement(file.readText())),
+        )
+        assertEquals(HttpStatusCode.Created, created.status, "POST the default mapping: ${created.bodyAsText()}")
+        val mapping = created.body<ConversionMapping>()
+        try {
+            assertEquals(emptyList(), mapping.findings, "the default mapping must validate with zero blocking findings")
+            assertEquals(emptyList(), mapping.drift, "the default mapping must show zero drift against the registries and blueprints")
+            // The same verdict is what every read recomputes, and the Errors report stays quiet about it.
+            val reread = admin.get("/api/v1/conversion-mappings/${mapping.id}").body<ConversionMapping>()
+            assertEquals(emptyList(), reread.findings)
+            assertEquals(emptyList(), reread.drift)
+            val report = admin.get("/api/v1/entities/errors").body<EntityErrorsReport>()
+            assertTrue(
+                report.mappings.none { it.id == mapping.id },
+                "the Errors report must not flag the default mapping: ${report.mappings}",
+            )
+        } finally {
+            admin.delete("/api/v1/conversion-mappings/${mapping.id}")
+        }
+
+        // Port-only facts no mapping can state: `dataset` has no Backstage kind (its lifecycle still speaks
+        // the lifecycles dictionary, its regulatory flags are plain booleans) and `_user.employment_type` has
+        // no Backstage twin.
         val lifecycles = admin.get("/api/v1/dictionaries/lifecycles").body<DictionaryEntryList>().items.map { it.value }.toSet()
-        val labelRows = admin.get("/api/v1/labels").body<LabelList>().items.associateBy { it.key }
-        val labels = labelRows.mapValues { it.value.values.toSet() }
-        val tags = admin.get("/api/v1/tag-categories").body<TagCategoryList>().items.associate { it.name to it.tags.toSet() }
-
-        fun enumOf(blueprint: String, property: String): Set<String> {
-            val definition = assertNotNull(requests.getValue(blueprint).schema.properties[property], "$blueprint.$property")
-            val enum = definition.enum ?: definition.items?.enum
-            return assertNotNull(enum, "$blueprint.$property must be an enum").map { it.content }.toSet()
-        }
-
-        // Per-kind type dictionaries: the blueprint's `type` enum IS the kind's dictionary
-        // (service = Component minus `library`, which is its own blueprint).
-        assertEquals(types.getValue("Group"), enumOf("_team", "type"))
-        assertEquals(types.getValue("Domain"), enumOf("domain", "type"))
-        assertEquals(types.getValue("System"), enumOf("system", "type"))
-        assertEquals(types.getValue("Component") - "library", enumOf("service", "type"))
-        assertTrue("library" in types.getValue("Component"), "the Component dictionary must still carry library")
-        assertEquals(types.getValue("API"), enumOf("api", "type"))
-        assertEquals(types.getValue("Resource"), enumOf("resource", "type"))
-
-        // The lifecycles dictionary on every Backstage kind that carries spec.lifecycle, plus
-        // the Port-only `dataset` (2.13.0), whose `type` stays uncompared (no Backstage twin).
-        listOf("service", "library", "api", "dataset").forEach { assertEquals(lifecycles, enumOf(it, "lifecycle"), "$it.lifecycle") }
-
-        // Labels: closed value lists, verbatim (the yes/no label twins are checked as booleans below).
-        LABEL_PROPERTIES.forEach { (label, sites) ->
-            sites.forEach { (blueprint, property) ->
-                assertEquals(labels.getValue(label), enumOf(blueprint, property), "$blueprint.$property ↔ label $label")
-            }
-        }
-        // The regulatory flags (2.17.0): plain booleans on the Port side, closed yes/no labels in
-        // the registry, and the label must apply to the blueprint's Backstage kind.
-        BOOLEAN_LABEL_PROPERTIES.forEach { (label, sites) ->
-            val row = labelRows.getValue(label)
-            assertEquals(setOf("yes", "no"), row.values.toSet(), "label $label values")
-            sites.forEach { (blueprint, property) ->
-                assertEquals("boolean", requests.getValue(blueprint).schema.properties.getValue(property).type, "$blueprint.$property")
-                val kind = BACKSTAGE_KIND.getValue(blueprint)
-                assertTrue(kind in row.kinds, "label $label must apply to $blueprint's Backstage kind $kind")
-            }
-        }
-        // Port-only twins: dataset has no label and no Backstage kind; employment_type has no Backstage field.
+        assertEquals(lifecycles, enumOf(requests, "dataset", "lifecycle"), "dataset.lifecycle")
         listOf("gdpr", "pci_dss", "banking_outsourcing").forEach { property ->
             assertEquals("boolean", requests.getValue("dataset").schema.properties.getValue(property).type, "dataset.$property")
         }
-        assertEquals(setOf("employee", "contractor"), enumOf("_user", "employment_type"))
-
-        // Tag categories: languages/frameworks as unique-item arrays, engine as the Database ∪ Events union.
+        assertEquals(setOf("employee", "contractor"), enumOf(requests, "_user", "employment_type"))
+        // `cluster` has no pair (no Backstage Resource export yet) but still speaks the hosting-model label's closed list.
+        val hostingModel = admin.get("/api/v1/labels").body<LabelList>().items.single { it.key == "hosting-model" }
+        assertEquals(hostingModel.values.toSet(), enumOf(requests, "cluster", "hosting_model"), "cluster.hosting_model")
+        // Tag-mapped arrays hold each tag once: the tagCategory codec requires it and the blueprints declare it.
         listOf("service", "library").forEach { blueprint ->
-            assertEquals(tags.getValue("Languages"), enumOf(blueprint, "languages"), "$blueprint.languages")
-            assertEquals(tags.getValue("Framework"), enumOf(blueprint, "frameworks"), "$blueprint.frameworks")
             listOf("languages", "frameworks").forEach { property ->
-                val definition: PropertyDefinition = requests.getValue(blueprint).schema.properties.getValue(property)
+                val definition = requests.getValue(blueprint).schema.properties.getValue(property)
                 assertEquals("array", definition.type, "$blueprint.$property")
                 assertEquals(true, definition.uniqueItems, "$blueprint.$property must be uniqueItems")
             }
         }
-        assertEquals(tags.getValue("Database") + tags.getValue("Events"), enumOf("resource", "engine"))
+    }
+
+    private fun enumOf(requests: Map<String, BlueprintRequest>, blueprint: String, property: String): Set<String> {
+        val definition = assertNotNull(requests.getValue(blueprint).schema.properties[property], "$blueprint.$property")
+        val enum = definition.enum ?: definition.items?.enum
+        return assertNotNull(enum, "$blueprint.$property must be an enum").map { it.content }.toSet()
     }
 
     private companion object {
@@ -454,34 +458,5 @@ class SampleBlueprintsTest {
             "api_adoption" to setOf("api_lifecycle"),
             "dataset_adoption" to setOf("dataset_lifecycle"),
         )
-
-        /** label key → the (blueprint, property) enums that mirror its closed value list. */
-        val LABEL_PROPERTIES = mapOf(
-            "criticality-tier" to listOf("system" to "criticality"),
-            "support-mode" to listOf("system" to "support_mode"),
-            "exposure" to listOf("system" to "exposure", "service" to "exposure", "api" to "exposure", "resource" to "exposure"),
-            "hosting-model" to listOf(
-                "system" to "hosting_model", "service" to "hosting_model", "api" to "hosting_model",
-                "resource" to "hosting_model", "cluster" to "hosting_model",
-            ),
-            "technology-status" to listOf(
-                "service" to "technology_status", "library" to "technology_status", "resource" to "technology_status",
-            ),
-            "data-classification" to listOf("resource" to "data_classification"),
-        )
-
-        /** yes/no label key → the (blueprint, property) booleans that mirror it (2.17.0). */
-        val BOOLEAN_LABEL_PROPERTIES = mapOf(
-            "gdpr" to listOf("service" to "gdpr", "api" to "gdpr", "resource" to "gdpr"),
-            "pci-dss" to listOf("service" to "pci_dss", "api" to "pci_dss", "resource" to "pci_dss"),
-            "banking-outsourcing" to listOf(
-                "service" to "banking_outsourcing", "api" to "banking_outsourcing", "resource" to "banking_outsourcing",
-            ),
-            "cash-flow-impact" to listOf("service" to "cash_flow_impact"),
-            "dora-cif" to listOf("service" to "dora_cif"),
-        )
-
-        /** blueprint → the Backstage kind its labels are written on. */
-        val BACKSTAGE_KIND = mapOf("service" to "Component", "api" to "API", "resource" to "Resource")
     }
 }

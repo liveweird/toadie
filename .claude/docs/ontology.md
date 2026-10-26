@@ -136,30 +136,38 @@ loader (`sample-data/port/commerce-payments/blueprints/load.sh`, `SampleData.loa
 passes: every file first, with `aggregationProperties` stripped, then a second pass PUTs the
 full file back onto every blueprint that declares one, once every target exists.
 
-**Backstage export mapping (the round-trip contract).**
+**Backstage mapping (the round-trip contract).** The contract that used to be prose and
+test-side tables here is now DATA with one canonical home:
+[`sample-data/port/commerce-payments/mapping/backstage.json`](../../sample-data/port/commerce-payments/mapping/backstage.json),
+a conversion mapping document (`.claude/docs/conversion-mapping.md` has the format) — eight pairs
+and 110 rules saying which property is which label, tag category, annotation, link or spec field,
+which blueprint is which kind (`library` is Component selected by `spec.type: library`), how
+`external: true` becomes the `external` namespace, how ownership (`$team` -> `spec.owner`) and the
+relations map, and which Group fields (`children`/`members`) are derived from the reverse side. It is
+validated against the sample blueprints and the V22-seeded registries by `SampleBlueprintsTest`
+(zero blocking findings, zero drift); do not restate its contents here. What stays prose:
 
-- Meta: `identifier` → `metadata.name`; `title`/`description` → `metadata.title`/`description`;
-  `links` → `metadata.links`; `external: true` → namespace `external`, else `default`.
-- Kind + `spec.type`: per the table; `service.type` is the Component type, `library` → `library`.
-- Labels ← `criticality` (`criticality-tier`), `support_mode`, `exposure`, `hosting_model`,
-  `technology_status`, `data_classification`, and the booleans `gdpr`/`pci_dss`/`banking_outsourcing`
-  (Component/API/Resource) and `cash_flow_impact`/`dora_cif` (`cash-flow-impact`/`dora-cif`, Component)
-  → `yes`/`no`; `dataset`'s booleans and `_user.employment_type` have no label (Port-only).
-- Tags ← `languages` ∪ `frameworks` (Component), `engine` (Resource: Database ∪ Events).
-- Annotations ← `repository` (`backstage.io/source-location`), `docs` (`techdocs-ref`),
-  `kubernetes_id`, `kubernetes_label_selector`.
-- Ownership: entity `team` field (string for single, array for multiple) → `spec.owner`; read-only
-  on Inherited blueprints, computed from the ownership path.
-- Relations: `system`/`domain`/`parent`/`parent_domain`/`subcomponent_of` → their fields;
-  `depends_on` ∪ `uses` ∪ `uses_libraries` → `dependsOn`; `provides_apis` → `providesApis`,
-  `consumes_apis` → `consumesApis`; `_user.team` → `memberOf`; Group `children`/`members`
-  and API providers are derived from the reverse side; `api.definition_url` → `definition:
-  {$text: <url>}`, `api.definition` → the inline text.
-- Lossy (Port-only): `product`, `dataset`, `api_adoption`, `dataset_adoption` (the whole
-  blueprints), `system.products`, `service.produces_datasets`, `service.consumes_datasets`,
-  `api.adoption_count`, `environment`, `cluster`, `workload`, `service.schedule`, `library.artifact`,
-  `resource.hosted_on`. No registry change is needed for the baseline; `kubernetes-cluster` joins
-  the Resource types only if clusters are ever exported.
+- **Port-only (no pair, dropped on export)**: `product`, `dataset`, `api_adoption`,
+  `dataset_adoption`, `environment`, `cluster`, `workload` — and, inside mapped blueprints, the
+  properties and relations each pair lists under `lossy`: `_user.employment_type`, `system.products`,
+  `service.schedule`/`produces_datasets`/`consumes_datasets`, `library.artifact`,
+  `resource.hosted_on`. No registry change is needed for the baseline; `kubernetes-cluster` joins the
+  Resource types only if clusters are ever exported.
+- **Backstage-side fields the baseline does not carry yet**, declared under `lossy.backstage` so the
+  mapping shows zero drift today: `metadata.description` (no sample blueprint has a `description`
+  property), `spec.dependencyOf` (the inverse of `dependsOn`), `profile.picture` on Group, and on
+  `library` `spec.subcomponentOf`/`providesApis`/`consumesApis`. They leave the list when the
+  blueprints grow the matching properties (the planned sample reconciliation of the conversion work —
+  `BACKLOG.md`).
+- **`api` definitions**: the inline `definition` is written as `spec.definition`; an API without
+  one gets a placeholder (`exportDefault`, also the rule's `importIgnore`, so it is never imported
+  back as a definition) because Backstage requires the field. `definition_url` is declared `lossy`
+  for now: a Backstage `$text` substitution is an OBJECT (`{$text: <url>}`), not a string, so
+  writing it properly (and reading a definition-at-location back) is later conversion work.
+- **Links**: `links` (array of `{title, url}`) <-> `metadata.links`; the named link properties
+  (`ci_pipeline`, `dashboard`, `logs`, `runbook`, `slack_channel`) are `link` rules with a fixed title.
+- Ownership: the entity `team` field (string for single, array for multiple) is `spec.owner`; it is
+  read-only on Inherited blueprints, computed from the ownership path.
 
 **Deliberately out.** `deployment` and `incident` (Port defaults) — event-like records that only
 make sense fed by CI/CD or the incident tool; add them with the first integration. An

@@ -723,6 +723,35 @@ object TestSavedEntityQueries {
 }
 
 /**
+ * Raw-row access to the conversion-mappings table (V45). Tests mint unique `cm-<uuid8>`
+ * names and clean up in `finally` via [remove]; the cap test fills only the free slots with its
+ * own rows, so no test ever touches another test's mappings.
+ */
+object TestConversionMappings {
+    data class RawRow(val id: UInt, val name: String, val markedAsDeleted: Boolean)
+
+    suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.conversion.ConversionMappingService.ConversionMappings
+        t.selectAll().map { RawRow(it[t.id].value, it[t.name], it[t.markedAsDeleted]) }.toList()
+    }
+
+    /** Soft-deletes the given ids directly (a no-op for an absent id). */
+    suspend fun remove(vararg ids: UInt) {
+        if (ids.isEmpty()) return
+        suspendTransaction(sharedTestDatabase) {
+            val t = ch.nokillswit.conversion.ConversionMappingService.ConversionMappings
+            t.update({ t.id inList ids.toList() }) { it[markedAsDeleted] = true }
+        }
+    }
+
+    /** The stored document TEXT of one row — what the column actually holds. */
+    suspend fun rawDocument(id: UInt): String = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.conversion.ConversionMappingService.ConversionMappings
+        t.selectAll().where { t.id eq id }.map { it[t.document] }.toList().single()
+    }
+}
+
+/**
  * Direct access to the SHARED annotation-key registry (V17, seeded by V22) — the label
  * registry's sibling (keys + kinds, no values), suite state every catalog write's annotation
  * keys are checked against. Tests only ever mint UNIQUE keys (the `uniqueAnnotationKey`

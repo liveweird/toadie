@@ -1452,6 +1452,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversion-mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the conversion mappings
+         * @description Any authenticated user. Returns every active mapping, name-ordered case-insensitively —
+         *     deliberately unpaged (the registry holds at most 20), NOT a standard list endpoint. A
+         *     conversion mapping (`.claude/docs/conversion-mapping.md`) is the DATA that says how a Port
+         *     blueprint's entities correspond to a Backstage kind's catalog files. Each item carries its `findings` and `drift`
+         *     RECOMPUTED against the current blueprints and registries (a stored mapping goes stale
+         *     when a blueprint or registry is edited after the fact; it is never rewritten).
+         */
+        get: operations["listConversionMappings"];
+        put?: never;
+        /**
+         * Store a conversion mapping
+         * @description ADMIN only, guarded BEFORE the body is read. The `document` (schemaVersion 1, see the
+         *     `ConversionMappingDocument` schema) is validated against the CURRENT blueprints and
+         *     registries inside the write: ANY blocking finding refuses the write with the
+         *     `ConversionMappingInvalid` `400` listing every finding. Report-only `drift` never blocks
+         *     — it is returned on the created mapping. A name already held by an active mapping
+         *     (case-insensitively) is a `409`; the registry holds at most 20 active mappings and a
+         *     document is at most 256 KiB (`400` otherwise). The document is stored as compact,
+         *     re-serialised JSON — whitespace dropped, escapes normalised, and a duplicated key
+         *     collapses to its last value (the reader cannot report duplicates) — and round-trips
+         *     byte-identically from the first save on; `null` anywhere inside it is a `SCHEMA` finding,
+         *     so no stored or returned document member is ever `null`.
+         */
+        post: operations["createConversionMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversion-mappings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get a conversion mapping
+         * @description Any authenticated user. `findings` and `drift` are recomputed against the current blueprints and registries.
+         */
+        get: operations["getConversionMapping"];
+        /**
+         * Replace a conversion mapping
+         * @description ADMIN only — whole-mapping replacement (rename included), guarded BEFORE the id is
+         *     looked up. The mapping's existence is checked FIRST: an unknown or deleted id is `404`
+         *     even when the body is invalid (404 wins over 400; the blueprint PUT rule). Same
+         *     validation and `409` rules as create.
+         */
+        put: operations["replaceConversionMapping"];
+        post?: never;
+        /**
+         * Delete a conversion mapping
+         * @description ADMIN only — soft delete; the name becomes reusable by a NEW mapping.
+         */
+        delete: operations["deleteConversionMapping"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/blueprints": {
         parameters: {
             query?: never;
@@ -1882,7 +1954,7 @@ export interface paths {
          * @description Any authenticated user; no admin gate. The `catalog/Errors.kt` Errors report's Port-world
          *     twin (2.5.0): a workspace-wide sweep over the ACTIVE entity/blueprint/saved-query
          *     registries, unpaged, never audited (the same rule as `GET …/files/errors`,
-         *     `POST …/entities/query/check`, and export). Five finding classes, one report:
+         *     `POST …/entities/query/check`, and export). Six finding classes, one report:
          *
          *     1. **Stale entities** — the same 19 `EntityFindingCode` values every strict save already
          *        enforces (`Entity.findings`), re-evaluated against each entity's blueprint's CURRENT
@@ -1939,6 +2011,11 @@ export interface paths {
          *        report-only finding from classes 2-3 above: the reference is optional on writes, so
          *        this is never a save blocker, just a standing report entry. Never emitted on
          *        saved-query rows.
+         *     6. **Conversion mappings** — every stored Backstage <-> Port mapping
+         *        (`/api/v1/conversion-mappings`) that carries blocking `findings` (it went stale after
+         *        a blueprint or registry edit) and/or report-only `drift`, the SAME lists
+         *        `GET …/conversion-mappings` answers for it. Workspace-wide: never narrowed by
+         *        `blueprint`/`q`/`team`.
          *
          *     Filter semantics (REPORTED vs SHOWN, the catalog Errors report's own asymmetry):
          *     `blueprint` (any-of, case-insensitive, unknown identifiers ignored — an all-unknown list
@@ -1950,7 +2027,7 @@ export interface paths {
          *     by any of the three filters — only by the caller's own visibility.
          *
          *     Rows with zero findings/diagnostics are omitted; `checkedEntities`/`checkedBlueprints`/
-         *     `checkedSavedQueries` count everything considered, findings or not. Since 2.4.0 the
+         *     `checkedSavedQueries`/`checkedMappings` count everything considered, findings or not. Since 2.4.0 the
          *     combined shown-plus-lookup-target row set is checked against the process-wide entity read
          *     memory budget before any document is decoded (`.claude/docs/security.md` "Entity read
          *     memory budget"), the same as the plain graph: a workspace too large on its own answers
@@ -3593,11 +3670,95 @@ export interface components {
             query: string;
             diagnostics: components["schemas"]["QueryDiagnostic"][];
         };
+        /** @description The mapping document, schemaVersion 1 — an OPEN JSON object here because it is parsed strictly by the server's own reader, which reports every defect as a positioned `SCHEMA` finding (unknown members, wrong types, `null` anywhere, the reserved `jq` codec). Members: `schemaVersion` (1), `apiVersion` (`backstage.io/v1alpha1`), `pairs` — each `{blueprint, kind, select?: {spec, in[]}, rules[], lossy?: {properties[], relations[], backstage[]}}`; a rule is `{port, backstage, codec, direction?, ...codec options}` with codecs `copy` (prefix, exportDefault, importIgnore), `valueMap` (map; a bijection), `tagCategory`, `ref`, `derive` (export-only), `link`, `constant` (export-only, no `port`); `jq` is reserved. Port addresses: `{meta: title|icon|team}`, `{property}`, `{relation}`, `{reverse: {blueprint, relation}}`; Backstage addresses: `{metadata: title|description|namespace}`, `{label}`, `{annotation}`, `{tags: <category>}`, `{links: rest}`, `{link: {title, icon?}}`, `{profile: displayName|email|picture}`, `{spec: <field>}`. `.claude/docs/ontology.md` and the sample at `sample-data/port/commerce-payments/mapping/backstage.json` are the worked reference. */
+        ConversionMappingDocument: {
+            [key: string]: unknown;
+        };
+        /**
+         * @description The blocking codes. `SCHEMA` — the document is not well-formed (also: a blueprint mapped twice, a field both mapped and declared lossy). `UNKNOWN_BLUEPRINT`/`UNKNOWN_PROPERTY`/ `UNKNOWN_RELATION` — a name that is not (or no longer) in the active blueprints. `COMPUTED_PROPERTY` — a mirror/calculation/aggregation id named by a rule or `lossy` (never mappable). `UNKNOWN_KIND` — not one of the seven Backstage kinds. `FIELD_NOT_ALLOWED` — a Backstage address outside the kind's allowed spec fields. `AMBIGUOUS_SELECTOR` — two selector-less pairs for one kind. `UNDECLARED_FIELD` — a schema property or relation neither mapped nor declared lossy. `CODEC_TYPE_MISMATCH` — the codec does not fit its Port or Backstage end (or its direction, or a tag array is not `uniqueItems`). `REQUIRED_UNMAPPED` — a required spec field of the kind that no rule writes on export, or a property/relation the blueprint REQUIRES declared `lossy`. `TARGET_UNMAPPED` — a `ref`/`derive` rule whose far-end blueprint has no pair. `REF_KIND_MISMATCH` — the far-end blueprint is mapped to a kind the spec field may not reference. `AMBIGUOUS_SELECTOR` also covers overlapping selectors and a pair exporting a value another pair's selector claims.
+         * @enum {string}
+         */
+        MappingFindingCode: "SCHEMA" | "UNKNOWN_BLUEPRINT" | "UNKNOWN_PROPERTY" | "UNKNOWN_RELATION" | "COMPUTED_PROPERTY" | "UNKNOWN_KIND" | "FIELD_NOT_ALLOWED" | "AMBIGUOUS_SELECTOR" | "UNDECLARED_FIELD" | "CODEC_TYPE_MISMATCH" | "REQUIRED_UNMAPPED" | "TARGET_UNMAPPED" | "REF_KIND_MISMATCH";
+        /**
+         * @description The report-only codes — they never block a write. `VOCABULARY_DRIFT` — an enum or value set differs from the registry list it mirrors (label values, the lifecycles or namespaces dictionary, a tag category, the per-kind type dictionary). `REGISTRY_KEY_MISSING` — a label key, annotation key or tag category the mapping names is not registered. `REGISTRY_KIND_MISMATCH` — it is registered but does not apply to the pair's kind. `BACKSTAGE_FIELD_UNMAPPED` — an allowed Backstage field that no rule writes and `lossy.backstage` does not list.
+         * @enum {string}
+         */
+        MappingDriftCode: "VOCABULARY_DRIFT" | "REGISTRY_KEY_MISSING" | "REGISTRY_KIND_MISMATCH" | "BACKSTAGE_FIELD_UNMAPPED";
+        MappingFinding: {
+            code: components["schemas"]["MappingFindingCode"];
+            /** @description JSON pointer (RFC 6901) into the mapping document; the empty string is the document itself. */
+            path: string;
+            message: string;
+        };
+        MappingDrift: {
+            code: components["schemas"]["MappingDriftCode"];
+            /** @description JSON pointer (RFC 6901) into the mapping document. */
+            path: string;
+            message: string;
+        };
+        ConversionMappingRequest: {
+            /** @description Single-line display name (trimmed; control characters rejected); unique case-insensitively among active mappings. */
+            name: string;
+            document: components["schemas"]["ConversionMappingDocument"];
+        };
+        ConversionMapping: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            document: components["schemas"]["ConversionMappingDocument"];
+            /** @description Blocking findings RECOMPUTED against the current blueprints and registries — always empty on a just-written mapping (a document with findings is refused), non-empty only after a later blueprint/registry edit made the stored document stale. */
+            findings: components["schemas"]["MappingFinding"][];
+            /** @description Report-only drift against the current registries, recomputed on every read. */
+            drift: components["schemas"]["MappingDrift"][];
+            /** Format: int32 */
+            createdBy: number;
+            creatorName: string;
+            creatorDeleted: boolean;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            createdAt: number;
+            /**
+             * Format: int64
+             * @description Epoch millis.
+             */
+            updatedAt: number;
+        };
+        ConversionMappingList: {
+            items: components["schemas"]["ConversionMapping"][];
+        };
+        /** @description RFC 7807 problem detail (`ProblemDetail`'s own shape) plus the full `findings` list — the conversion-mapping create/replace `400` body only (`ConversionMappingInvalid` response). Other `400`s on those operations omit `findings`. Repeats `ProblemDetail`'s members on purpose (see `EntityInvalidProblem`). */
+        ConversionMappingInvalidProblem: {
+            /**
+             * @description A URI reference identifying the problem type.
+             * @default about:blank
+             */
+            type: string;
+            /** @description Short, human-readable summary of the problem type. */
+            title: string;
+            /** @description HTTP status code. */
+            status: number;
+            /** @description Human-readable explanation specific to this occurrence. */
+            detail?: string;
+            /** @description URI reference of the specific occurrence (the request path). */
+            instance?: string;
+            findings?: components["schemas"]["MappingFinding"][];
+        };
+        /** @description One stored conversion mapping flagged by `getEntityErrors`: it carries blocking findings (it went stale after a blueprint or registry edit) and/or report-only drift. */
+        MappingErrorRow: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            findings: components["schemas"]["MappingFinding"][];
+            drift: components["schemas"]["MappingDrift"][];
+        };
         /** @description The Port-world Errors report (2.5.0) — see `getEntityErrors` for the full class/code rule table. Rows with zero findings/diagnostics are omitted from every array. */
         EntityErrorsReport: {
             entities: components["schemas"]["EntityErrorRow"][];
             blueprints: components["schemas"]["BlueprintErrorRow"][];
             savedQueries: components["schemas"]["SavedQueryErrorRow"][];
+            mappings: components["schemas"]["MappingErrorRow"][];
             /**
              * Format: int32
              * @description Every SHOWN entity considered, findings or not.
@@ -3613,6 +3774,11 @@ export interface components {
              * @description Every saved query visible to the caller, findings or not.
              */
             checkedSavedQueries: number;
+            /**
+             * Format: int32
+             * @description Every active conversion mapping considered, findings or not.
+             */
+            checkedMappings: number;
         };
         /** @description RFC 7807 problem detail. Served as `application/problem+json`. */
         ProblemDetail: {
@@ -3720,6 +3886,15 @@ export interface components {
             };
             content: {
                 "application/problem+json": components["schemas"]["EntityQueryProblem"];
+            };
+        };
+        /** @description The mapping document carries blocking findings — the full `findings` list names every one (`code`, JSON-pointer `path` into the document, `message`). Other `400`s on the same operations — a malformed body, a blank or over-long name, an over-long document, a full registry — carry no `findings` member. */
+        ConversionMappingInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ConversionMappingInvalidProblem"];
             };
         };
         /** @description The entity payload violates its blueprint's current `schema`/`relations` (including Phase 4 ownership: `team`/`format: team|user` target rules) — the full `findings` list is the SAME validation a strict save enforces, one entry per violated rule. Other `400`s on the same operations (an unknown blueprint, a malformed body) carry no `findings` member. */
@@ -5773,6 +5948,140 @@ export interface operations {
         };
     };
     deleteEntityQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listConversionMappings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversionMappingList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createConversionMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversionMappingRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new conversion mapping resource */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversionMapping"];
+                };
+            };
+            400: components["responses"]["ConversionMappingInvalid"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getConversionMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversionMapping"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    replaceConversionMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversionMappingRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ConversionMappingInvalid"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteConversionMapping: {
         parameters: {
             query?: never;
             header?: never;

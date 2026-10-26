@@ -324,10 +324,16 @@ create racing its target's delete (one wins, never a dangling target). `SampleBl
 is executable documentation for `sample-data/port/commerce-payments/blueprints/` — since
 v1.25.3 the baseline
 ontology in `.claude/docs/ontology.md`: it POSTs the fifteen files in dependency order, pins the
-round trip, and asserts the model contracts — every registry-mirroring enum
-(per-kind types, lifecycles, label value lists, tag categories, and — 2.17.0 — the yes/no label
-booleans, whose label must allow the blueprint's Backstage kind) equals the seeded registry read
-back through the API, the `hierarchyRelations` map defines the `composition` and `deployment`
+round trip, and asserts the model contracts — now every registry-mirroring enum
+(per-kind types, lifecycles, label value lists, tag categories, the yes/no label booleans and
+their kind applicability) is checked by ONE call: the default conversion mapping
+(`sample-data/port/commerce-payments/mapping/backstage.json`) is POSTed to
+`/api/v1/conversion-mappings` and must answer ZERO blocking findings AND ZERO drift (the test-side
+`LABEL_PROPERTIES`/`BOOLEAN_LABEL_PROPERTIES`/`BACKSTAGE_KIND` tables are gone — the mapping is the
+single source), and stays quiet on the Errors report; only the Port-only facts no mapping can state
+(`dataset`'s lifecycle and flags, `_user.employment_type`, the Port-only `cluster.hosting_model` against
+the `hosting-model` label, and `uniqueItems` on the tag-mapped `languages`/`frameworks` arrays) keep explicit assertions. The
+`hierarchyRelations` map defines the `composition` and `deployment`
 forests, direct and inherited ownership match the declared model, and the protected system
 blueprints remain the seeded rows. (The
 v1.23.1–v1.25.2 feature-showcase set and its union assertions were retired with it; the pure
@@ -693,6 +699,31 @@ none) surfaces `SOURCE_MISSING` as that row's ONLY finding.
 **World switch (v2.3.0).** The four unit suites: `navigation.test.ts` pins the world model (worlds, `sectionsFor` filtering per world, `worldOf` longest-prefix resolution), `hooks/useWorld.test.tsx` pins the storage key, `readStoredWorld` fallback, the route-driven sidebar flip, and `switchTo` navigation, `components/WorldSwitch.test.tsx` pins the segment control + navigation, `App.test.tsx` cases pin the route-to-world mapping and the redirects at `/`. E2E: `helpers.ts` `switchWorld(page, "Backstage" | "Port")` switches the sidebar; a fresh Playwright context after sign-in lands on Port, so a spec opening a Backstage leaf calls `switchWorld` first. `world-switch.spec.ts` journey "the world switch follows the route, remembers the last world, and scopes the command palette" pins that deep-linking to a Backstage leaf flips the sidebar, the switch's click navigates to the other world's home, and the palette's pages/actions change. `accessibility.spec.ts`'s `AUTHED_PAGES` lists `/hierarchy` (never `/`) plus the Port pages, and both suite's headings after sign-in are asserted with `exact: true` (the "Entity hierarchy" vs "Hierarchy" substring trap).
 
 **Quality-review regressions (2.3.2).** Throttle capacity/eviction cases in `LoginThrottleTest`/`PasswordResetThrottleTest` and the 255-character email 400s; the entity rename + stale self-relation case in `EntityTest` and the catalog rename + stale `subcomponentOf` case in `CatalogFileTest`; the relation-key/hierarchy-id collision cases in `QueryEvaluatorTest`; the reused-variable property case in `QueryValidatorTest`; the pure pass-2 storage-failure classifier cases for both importers; the control-character ordering cases in `LensTest`/`SavedEntityQueryTest`; the `roles: ["USER"]` 400 in `UserRoutesTest`; the held-lock label/annotation-key create cases; and on the web side the auth-boundary cache clear, the ownership-aware logout in `api.test.ts`, the world-switch write-sequence case in `useWorld.test.tsx` (spy on localStorage writes, never a sleep), and the ontology-import redefinition case. None adds a production timing hook; the world-switch e2e journey stays as the integration pin.
+
+### Conversion mappings
+
+`MappingValidationTest` is the pure-validator suite: no database, a hand-built world (three
+blueprints and a `RegistrySnapshot`) plus one fully valid baseline document; every case breaks the
+baseline in exactly ONE way and pins the code AND the JSON-pointer path of the finding — one case per
+blocking code (`SCHEMA` in its several forms incl. `null`, unknown members and the reserved `jq`
+codec; `UNKNOWN_*`; `COMPUTED_PROPERTY`; `FIELD_NOT_ALLOWED`; `AMBIGUOUS_SELECTOR`;
+`UNDECLARED_FIELD`; `CODEC_TYPE_MISMATCH` across the codec matrix, the valueMap bijection, the
+export-only codecs, the Inherited-ownership team rule and `uniqueItems` tag arrays; `TARGET_UNMAPPED` and
+`REF_KIND_MISMATCH` for a reference's far end; the three overlapping-selector `AMBIGUOUS_SELECTOR` shapes;
+a required Port property/relation declared lossy; duplicate lossy entries and link titles; `REQUIRED_UNMAPPED`, incl. an import-only rule not satisfying it and a constant
+satisfying it) and per drift code (`VOCABULARY_DRIFT` for labels, lifecycles, namespaces, tag-category
+unions and the per-kind `spec.type` union; `REGISTRY_KEY_MISSING`; `REGISTRY_KIND_MISMATCH`;
+`BACKSTAGE_FIELD_UNMAPPED`). `ConversionMappingTest` is the HTTP suite (the OpenAPI-conformant
+`jsonClient`): ADMIN CRUD with soft delete and name reuse, no `null` member on any response, USER
+reads but every mutation is `403` BEFORE the body is read or the id looked up, the findings-bearing
+`400` (and nothing stored), the not-an-object document and malformed body, PUT `404` before `400`,
+case-insensitive `409` on create and rename, name validation, the 256 KiB gate (answered before the
+document is judged), the 20-row cap, the audit events, and the stored-text rules (compact re-serialised JSON, a duplicated key collapsing to its last value, a GET-then-PUT storing the same bytes) and recomputation — a mapping created clean
+becomes stale when its blueprint is removed (findings on `GET`, the list and the Errors report's
+`mappings` rows) without its stored document changing. `AnonymousAccessTest`'s spec sweep covers the new
+operations automatically; `MigrationChecksumTest` pins V45; `AuditCatalogTest` knows the
+`conversion_mapping.` prefix. Frontend: the Errors page's mappings section (`EntityErrors.test.tsx`),
+`entityErrorClasses.test.ts` (the `mappings` class) and the locale-parity test.
 
 ### Reset-link regressions (V26)
 
