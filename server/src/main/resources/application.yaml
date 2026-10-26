@@ -253,7 +253,7 @@ monitoring:
 
 telemetry:
   # The in-app telemetry sampler (telemetry/, `.claude/docs/observability.md` "Telemetry"): the process writes its own
-  # memory/JVM/pool figures to telemetry_samples. All values are validated on every boot, enabled or not.
+  # memory/JVM/pool/pressure/requests/workspace figures to telemetry_samples. All values are validated on every boot, enabled or not.
   enabled: "$TELEMETRY_ENABLED:true"
   # How often the process samples itself (whole seconds, 60..1800 and a divisor of 3600, so an hour's samples tile it); stored as
   # the raw rows' `resolution`. Also the window of the request timers, capped at 300.

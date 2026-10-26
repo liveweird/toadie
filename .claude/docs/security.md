@@ -450,7 +450,35 @@ more than the heap can actually hold.
 - **Requirement:** the read opens a `ReadLedger` reservation (`infra/concurrency/ReadLedger.kt`) and reserves its whole conservative estimate in ONE all-or-nothing step, inside its read transaction and before any document crosses the wire; a refusal is `throwReadBudgetHttp` — `400` when the read is too large on its own, `429` when other reads hold the room — and audits nothing (one operational INFO line). The catalog estimate is `SUM(octet_length(content))` x `CATALOG_READ_FOOTPRINT_RATIO` (`catalog/CatalogFileService.kt`'s `readWorkspace`); the entity estimate is the per-row ratios above. One ledger for the whole process: the composition root (`infra/db/Database.kt`) passes the SAME `ReadLedger` to both services. The conversion export (`conversion/ConversionExportService.kt`) opens ONE reservation and holds it across everything that keeps its decoded snapshot alive — the entity read (`entities/EntityExportRead.kt`: the Entity graph's `shownScope` + `loadReadSet`, shown rows of mapped blueprints prepaid at the graph ratio, other context rows at the target ratio), the catalog read when merging (`CatalogFileService.readActiveSources`, narrowed to the identities the export will emit, at the export footprint ratio), the conversion and the response encoding — so the two reads' costs ADD on that reservation (a ledger that fits the larger read but not their sum refuses the merge), and it is released only when the answer is built; it has no ledger of its own. The conversion import (`conversion/ConversionImportService.kt`) reads only identities outside the ledger (`CatalogFileService.readIdentities`, `EntityService.importSnapshot`) and admits its merge read (`entities/EntityMergeRead.kt`, at most 200 rows at the shown-row ratio from their known stored sizes) on its OWN single reservation, held until the response body is encoded.
 - **Reference:** the bullets above; `.claude/docs/persistence.md` "Catalog whole-workspace reads (2.19.0)".
 - **Enforcement:** `CatalogFileReadBudgetTest`, `ReadLedgerTest`, and the entity suites (`EntityReadBudgetTest`, `EntityQueryRouteTest`, `EntityErrorsTest`, `OntologyIntegrationFilterBudgetTest`), and `ConversionRoutesTest` for the conversion export (400 own-request, 429 contention, and the two reads ADDING on one reservation) and `ConversionImportRoutesTest` for the conversion import (its merge read, the conversion and the response encoding share one reservation).
-- **Exception:** writers under a lock (`create`/`update` pass no reservation), the bounded page itself of a paged list (its page is capped by `pageSize`; only its lookup targets are reserved), identity-only reads, and registries capped at <= 200 rows.
+- **Exception:** writers under a lock (`create`/`update` pass no reservation), the bounded page itself of a paged list (its page is capped by `pageSize`; only its lookup targets are reserved), identity-only reads (the telemetry storage collector's `count(*)` and catalog size reads select no content column, so they reserve nothing), and registries capped at <= 200 rows.
+
+### Telemetry
+
+The in-app telemetry sampler (`.claude/docs/observability.md` "Telemetry") stores figures about the process in
+`telemetry_processes`/`telemetry_samples`; the panel's ADMIN-only read API (a later change; its authorization rule will live in
+`authorization.md`) will be the only reader - until then the rows are reachable only in the database.
+
+- **Applies when:** adding or changing a telemetry metric, label, collector or seam.
+- **Requirement:** what is recorded is numbers and fixed-vocabulary labels only - the process identity (pod/container name, JVM
+  start, optional build version/commit), memory and CPU figures, the pool, per-route request counts, latencies, 5xx and 429 counts,
+  pressure figures (read-ledger bytes, permits, queue depths, refusal counts), the database and table-group sizes, and the active
+  row counts of six workspace tables plus all rows of `catalog_file_events`. The never-recorded list lives only in
+  `.claude/docs/observability.md` "Telemetry". Cardinality is bounded by construction, because a registered metric name is never
+  evicted and a label is a stored row: route labels come from the `isLabelled` shape rule over the real routing tree
+  (`observability.md` lists them) and `*`; Ktor's per-route instruments are admitted by `TelemetryRegistry` only for ROUTED calls
+  and never when the name holds a `?` (a flood of unrouted or rate-limited URLs registers nothing), capped at 2,000 names; table
+  labels come from the fixed `COUNTED_TABLES` and group names, never from input; `Reading` truncates every label to 120
+  characters. The pressure seams count, they never decide: `ReadLedger.snapshot()`/`refusals`, `EntityService.pressure()`/
+  `queryRefusals`, `JqEvaluator.poolStats()`, `UrlFetcher.poolStats()` and `IntegrationPressureKey` (`IntegrationLimits.inUse`/
+  `refusals`, `IntegrationRetainedLedger.inFlightBytes`) add counters and read-only snapshots; no limit, executor size or
+  accounting moves to add one, and reading one cannot admit, refuse or queue anything.
+- **Reference:** `.claude/docs/observability.md` "Telemetry" (the collectors and the label rule), `persistence.md` "Telemetry (V46)".
+- **Enforcement:** `LatencyCollectorTest` (the label rule against the real routing tree, no query string in a label, templates only),
+  `TelemetryRegistryTest` (the `?` and cap bounds), `StorageCollectorsTest` (every table in exactly one group; the counted tables are grouped),
+  `PressureCollectorTest` and the seam tests (`ReadLedgerTest`, `IntegrationLimitsTest`, `JqCalculationTest`, `UrlFetchTest`);
+  manual review for the rest - in particular that no collector selects a content column, and that a new metric or label is a
+  number or a fixed-vocabulary label.
+- **Exception:** none.
 
 ### Not yet ported from Lettuce
 

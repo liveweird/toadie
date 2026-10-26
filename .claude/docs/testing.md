@@ -905,4 +905,16 @@ largest max, complete hours only, idempotent, forward-only), the strict prune bo
 the V46 CHECK and that `RAW_RESOLUTIONS` equals the widths it allows; `TelemetrySamplerTest` the tick, the failure isolation (one WARN
 and one "recovered" per episode, a database failure logged by class and SQLSTATE only), the savepoint undo, the once-per-interval
 cluster section across two samplers, the rollup + prune riding it (and no prune after a rollup that inserted nothing), the vanished
-process row and the tick budget. `MigrationChecksumTest` pins V46; the `ConnectionPoolTest` metrics case pins `pool.metrics`.
+process row and the tick budget. `MigrationChecksumTest` pins V46; the `ConnectionPoolTest` metrics case pins `pool.metrics`. The collectors: `LatencyCollectorTest`
+(deltas, p50/p95, 5xx/429 over synthetic routes; the exclusions; unrouted requests registering nothing; every REAL rate-limited route
+counting each 429 once (`observability.md` "Telemetry" says exactly which routes and query strings are driven); the series names Ktor writes for Toadie's typed routes; and the `isLabelled`
+rule against the real routing tree, which names the labelled routes (`observability.md` "Telemetry") so a new heavy route or a renamed one fails here),
+`StorageCollectorsTest` (every `public` table but Flyway's history in exactly one group; counts against an independent `count(*)`,
+soft-deleted rows excluded, a created event counted), `HeavyCollectorsTest` (storage claimed hourly, a failing heavy collector
+claims its marker and is not retried this interval, a stuck one cancelled at its budget with one WARN), `PressureCollectorTest`
+(each seam figure as a row, refusal deltas, no integration rows without the key, the keys the composition root publishes), `TelemetryCommitTest` (a
+failed insert loses no interval: the next tick reports both intervals' 5xx, refusals and the ledger peak; a collector that threw is not
+committed; a tick at or before the newest stored bucket, i.e. a clock step back, is skipped and its deltas roll forward), `MultiRowInsertTest` (the multi-row insert equals `batchInsert` column for column, hostile `'`/`?`/`\` values, chunking, NULLs, client defaults,
+first-write-wins on conflicts, the contract refusals) and the seam cases added to `ReadLedgerTest`, `IntegrationLimitsTest`, `JqCalculationTest`, `UrlFetchTest` and `EntityQueryRouteTest`.
+`telemetryStore()` and `wipeTelemetry` migrate the shared container once per JVM (Flyway, idempotent), so a telemetry test class run
+alone on a fresh container finds its tables.

@@ -63,6 +63,10 @@ fun Application.configureIntegration() {
         ?.also { require(it >= 0) { "integration.admissionPermits must be >= 0" } }
         ?.let { IntegrationLimits(concurrentRequests = it) } ?: IntegrationLimits()
     val retainedLedger = IntegrationRetainedLedger()
+    // The telemetry sampler's seam (a function, so it reads live figures); absent when the API is disabled (the early return above).
+    attributes.put(IntegrationPressureKey) {
+        IntegrationPressure(limits.inUse, limits.admissionPermits, limits.refusals, retainedLedger.inFlightBytes, retainedLedger.capacity)
+    }
     val executor = IntegrationExecutor()
     monitor.subscribe(ApplicationStopped) { executor.close() }
 

@@ -33,6 +33,8 @@ class Reading(val metric: MetricDef, val value: Double, label: String = "") {
 object TelemetryMetrics {
     private fun gauge(name: String, unit: MetricUnit, group: MetricGroup) = MetricDef(name, MetricKind.GAUGE, unit, group)
     private fun delta(name: String, unit: MetricUnit, group: MetricGroup) = MetricDef(name, MetricKind.DELTA, unit, group)
+    private fun percentile(name: String, unit: MetricUnit, group: MetricGroup) =
+        MetricDef(name, MetricKind.PERCENTILE, unit, group)
 
     val HEAP_USED = gauge("mem.heap_used", MetricUnit.BYTES, MetricGroup.MEMORY)
     val HEAP_COMMITTED = gauge("mem.heap_committed", MetricUnit.BYTES, MetricGroup.MEMORY)
@@ -65,17 +67,63 @@ object TelemetryMetrics {
     val POOL_PENDING = gauge("pool.pending", MetricUnit.COUNT, MetricGroup.JVM)
     val POOL_ALLOCATED = gauge("pool.allocated", MetricUnit.COUNT, MetricGroup.JVM)
 
+    /** Requests, per label (`*` or a labelled route, `LatencyCollector.kt`): the interval's count, 5xx responses and 429 responses. */
+    val HTTP_COUNT = delta("http.count", MetricUnit.COUNT, MetricGroup.REQUESTS)
+    val HTTP_5XX = delta("http.5xx", MetricUnit.COUNT, MetricGroup.REQUESTS)
+    val HTTP_429 = delta("http.429", MetricUnit.COUNT, MetricGroup.REQUESTS)
+    val HTTP_P50 = percentile("http.p50", MetricUnit.MILLISECONDS, MetricGroup.REQUESTS)
+    val HTTP_P95 = percentile("http.p95", MetricUnit.MILLISECONDS, MetricGroup.REQUESTS)
+
+    /** The read ledger (`infra/concurrency/ReadLedger.kt`): bytes held now, the interval's peak, and the reads refused in the interval. */
+    val LEDGER_IN_FLIGHT = gauge("ledger.in_flight", MetricUnit.BYTES, MetricGroup.PRESSURE)
+    val LEDGER_PEAK = gauge("ledger.peak", MetricUnit.BYTES, MetricGroup.PRESSURE)
+    val LEDGER_REFUSALS = delta("ledger.refusals", MetricUnit.COUNT, MetricGroup.PRESSURE)
+
+    /** Entity-query permits taken, and the queries refused in the interval. */
+    val QUERY_IN_USE = gauge("query.in_use", MetricUnit.COUNT, MetricGroup.PRESSURE)
+    val QUERY_REFUSALS = delta("query.refusals", MetricUnit.COUNT, MetricGroup.PRESSURE)
+
+    /** The jq pool: expressions quarantined on this instance, busy workers, queued tasks. */
+    val JQ_QUARANTINED = gauge("jq.quarantined", MetricUnit.COUNT, MetricGroup.PRESSURE)
+    val JQ_ACTIVE = gauge("jq.active", MetricUnit.COUNT, MetricGroup.PRESSURE)
+    val JQ_QUEUED = gauge("jq.queued", MetricUnit.COUNT, MetricGroup.PRESSURE)
+
+    /** The outbound fetch pool: busy workers, queued fetches. */
+    val FETCH_ACTIVE = gauge("fetch.active", MetricUnit.COUNT, MetricGroup.PRESSURE)
+    val FETCH_QUEUED = gauge("fetch.queued", MetricUnit.COUNT, MetricGroup.PRESSURE)
+
+    /** The integration API (only while it is enabled): admission permits taken, retained result bytes, refusals in the interval. */
+    val INTEGRATION_IN_USE = gauge("integration.in_use", MetricUnit.COUNT, MetricGroup.PRESSURE)
+    val INTEGRATION_RETAINED = gauge("integration.retained", MetricUnit.BYTES, MetricGroup.PRESSURE)
+    val INTEGRATION_REFUSALS = delta("integration.refusals", MetricUnit.COUNT, MetricGroup.PRESSURE)
+
+    /** The database's total size, and the sum of the relation sizes of one table group (the label, `StorageCollectors.kt`). */
+    val DB_SIZE = gauge("db.size", MetricUnit.BYTES, MetricGroup.WORKSPACE)
+    val DB_GROUP_SIZE = gauge("db.group.size", MetricUnit.BYTES, MetricGroup.WORKSPACE)
+
+    /** The rows of one workspace table (the label): active rows, or all rows for the append-only history. */
+    val WS_ROWS = gauge("ws.rows", MetricUnit.COUNT, MetricGroup.WORKSPACE)
+
     /**
      * How long the cluster section of a tick took. Also the cluster section's marker: its presence at a bucket's `ts` is how a
      * second process finds the bucket already served (`TelemetrySampler.kt`).
      */
     val CLUSTER_TICK = gauge("telemetry.cluster_ms", MetricUnit.MILLISECONDS, MetricGroup.TELEMETRY)
 
+    /**
+     * How long the heavy phase's storage run took. Also its claim marker: the cluster section writes it as 0 when the run is due
+     * (so at most one attempt is made per `storageIntervalSeconds`, whatever its outcome), and the run sets the duration (at least
+     * 1 ms) once it completed - a marker still at 0 is a claim that did not.
+     */
+    val STORAGE_TICK = gauge("telemetry.storage_ms", MetricUnit.MILLISECONDS, MetricGroup.TELEMETRY)
+
     val all: List<MetricDef> by lazy {
         listOf(
             HEAP_USED, HEAP_COMMITTED, OLD_GEN_PEAK, NON_HEAP_USED, DIRECT_BUFFERS, RSS, CGROUP_CURRENT, CGROUP_ANON,
             CGROUP_WORKING_SET, CGROUP_PEAK, CPU_RATIO, THREADS, GC_COUNT, GC_TIME, POOL_ACQUIRED, POOL_IDLE, POOL_PENDING,
-            POOL_ALLOCATED, CLUSTER_TICK,
+            POOL_ALLOCATED, HTTP_COUNT, HTTP_5XX, HTTP_429, HTTP_P50, HTTP_P95, LEDGER_IN_FLIGHT, LEDGER_PEAK, LEDGER_REFUSALS,
+            QUERY_IN_USE, QUERY_REFUSALS, JQ_QUARANTINED, JQ_ACTIVE, JQ_QUEUED, FETCH_ACTIVE, FETCH_QUEUED, INTEGRATION_IN_USE,
+            INTEGRATION_RETAINED, INTEGRATION_REFUSALS, DB_SIZE, DB_GROUP_SIZE, WS_ROWS, CLUSTER_TICK, STORAGE_TICK,
         )
     }
 }

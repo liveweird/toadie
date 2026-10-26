@@ -117,6 +117,7 @@ internal suspend fun <T> EntityService.withParsedQuery(query: String?, block: su
     val schema = suspendTransaction(database) { loadQuerySchema() }
     val (parsed, slots) = requireValidEntityQuery(text, schema)
     if (!querySlots.tryAcquire()) {
+        queryRefusals.incrementAndGet()
         throw TooManyRequestsException("Too many entity queries are being evaluated — retry shortly")
     }
     try {

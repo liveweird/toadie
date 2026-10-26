@@ -1,5 +1,6 @@
 package ch.nokillswit.telemetry
 
+import ch.nokillswit.infra.db.insertRowsIgnoringConflicts
 import kotlinx.coroutines.flow.toList
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.and
@@ -12,7 +13,6 @@ import org.jetbrains.exposed.v1.core.min
 import org.jetbrains.exposed.v1.core.statements.StatementType
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.R2dbcTransaction
-import org.jetbrains.exposed.v1.r2dbc.batchInsert
 import org.jetbrains.exposed.v1.r2dbc.deleteWhere
 import org.jetbrains.exposed.v1.r2dbc.insertAndGetId
 import org.jetbrains.exposed.v1.r2dbc.select
@@ -157,12 +157,13 @@ class TelemetryStore(private val database: R2dbcDatabase) {
 }
 
 /**
- * Inserts [rows] in the caller's transaction as one `batchInsert`; a row that already exists (same resolution, metric, ts,
- * process, label) is kept (`ON CONFLICT DO NOTHING`). A tick writes about 100 rows at most, so Exposed's per-row batch is enough.
+ * Inserts [rows] in the caller's transaction as parameterized multi-row `INSERT ... ON CONFLICT DO NOTHING` statements, one per
+ * power-of-two chunk (98 rows go out as 64 + 32 + 2; `infra/db/MultiRowInsert.kt`). A row that already exists (same resolution,
+ * metric, ts, process, label) is kept: the first write wins. A tick writes about 100 rows, where per-row `batchInsert` executions
+ * were 60 % of the tick (`.claude/docs/observability.md` "Telemetry", Measured cost).
  */
 internal suspend fun R2dbcTransaction.insertSampleRows(rows: List<SampleRow>) {
-    if (rows.isEmpty()) return
-    TelemetryStore.Samples.batchInsert(rows, ignore = true, shouldReturnGeneratedValues = false) {
+    TelemetryStore.Samples.insertRowsIgnoringConflicts(rows) {
         this[TelemetryStore.Samples.resolution] = it.resolution
         this[TelemetryStore.Samples.ts] = it.ts
         this[TelemetryStore.Samples.processId] = it.processId
@@ -171,6 +172,18 @@ internal suspend fun R2dbcTransaction.insertSampleRows(rows: List<SampleRow>) {
         this[TelemetryStore.Samples.n] = it.n
         this[TelemetryStore.Samples.avg] = it.avg
         this[TelemetryStore.Samples.max] = it.max
+    }
+}
+
+/** Sets the figure of the raw row ([metric], [ts], [processId], no label) that a heavy collector claimed with 0 and now completes. */
+internal suspend fun R2dbcTransaction.completeSample(resolution: Int, metric: MetricDef, ts: Long, processId: Int, value: Double) {
+    val samples = TelemetryStore.Samples
+    samples.update({
+        (samples.resolution eq resolution) and (samples.metric eq metric.name) and (samples.ts eq ts) and
+            (samples.processId eq processId) and (samples.label eq "")
+    }) {
+        it[samples.avg] = value
+        it[samples.max] = value
     }
 }
 

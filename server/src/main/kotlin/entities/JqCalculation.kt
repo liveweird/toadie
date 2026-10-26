@@ -2,6 +2,7 @@ package ch.nokillswit.entities
 
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.infra.concurrency.awaitBounded
+import ch.nokillswit.infra.concurrency.stats
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -77,8 +78,8 @@ const val DEFAULT_JQ_DEADLINE_MILLIS = 500L
 /** Upper bound accepted for `computed.jq.deadlineMillis` (config validation, `infra/db/Database.kt`). */
 const val MAX_JQ_DEADLINE_MILLIS = 60_000L
 
-private const val JQ_WORKERS = 4
-private const val JQ_QUEUE_CAPACITY = 64
+internal const val JQ_WORKERS = 4
+internal const val JQ_QUEUE_CAPACITY = 64
 
 /** Compile-cache ceiling per [JqEvaluator] instance — cleared wholesale on overflow, never LRU-evicted one at a time. */
 internal const val MAX_CACHED_EXPRESSIONS = 4096
@@ -161,6 +162,12 @@ sealed interface CalculationVerdict {
     data class CompileFailed(val message: String) : CalculationVerdict
 }
 
+/**
+ * One reading of the jq pool for the telemetry sampler ([JqEvaluator.poolStats]): the expressions quarantined on this instance
+ * and the `entity-jq` pool's busy workers, queued tasks and fixed bounds (zeros for a test's non-thread-pool executor).
+ */
+class JqPoolStats(val quarantined: Int, val active: Int, val queued: Int, val workers: Int, val queueCapacity: Int)
+
 /** The [evaluateBounded] worker's result, wrapped so a legitimate `null` (absent) is never confused with a timeout's `null`. */
 private class Outcome(val value: JsonElement?)
 
@@ -199,6 +206,12 @@ class JqEvaluator internal constructor(
 
     /** Test/observability seam: how many distinct expressions are currently quarantined. */
     internal val quarantinedCount: Int get() = quarantined.size
+
+    /** The telemetry sampler's reading of this evaluator's pool (`.claude/docs/observability.md` "Telemetry"); changes nothing. */
+    fun poolStats(): JqPoolStats {
+        val pool = executor.stats()
+        return JqPoolStats(quarantined.size, pool.active, pool.queued, pool.workers, pool.queueCapacity)
+    }
 
     /** De-dupes the saturation warning to one per episode (busy → idle → busy again re-warns). */
     private val saturated = AtomicBoolean(false)

@@ -3,6 +3,7 @@ package ch.nokillswit.integration
 import ch.nokillswit.entities.estimatedHeapBytes
 import ch.nokillswit.authz.TooManyRequestsException
 import io.ktor.server.plugins.BadRequestException
+import io.ktor.util.AttributeKey
 import java.util.LinkedHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.Executors
@@ -25,6 +26,22 @@ private const val CLIENT_BUCKET_CAPACITY = 1_024
 private const val WINDOW_MILLIS = 60_000L
 internal const val MAX_RETAINED_GRAPHQL_HEAP_BYTES = 32L * 1024 * 1024
 
+/**
+ * One reading of the integration API's bounded resources for the telemetry sampler: admission permits taken of [permits], the
+ * refusals so far (admission and per-client rate refusals; a cumulative counter), the retained-result bytes held of
+ * [retainedCapacity]. Published as a function under [IntegrationPressureKey] only when the API is enabled.
+ */
+class IntegrationPressure(
+    val inUse: Int,
+    val permits: Int,
+    val refusals: Long,
+    val retainedBytes: Long,
+    val retainedCapacity: Long,
+)
+
+/** Absent when `integration.enabled` is false (`Integration.kt`); the sampler then writes no `integration.*` rows. */
+val IntegrationPressureKey = AttributeKey<() -> IntegrationPressure>("IntegrationPressure")
+
 /** Bounded admission (taken after authentication since 2.16.0) and a bounded, authenticated-client-only rate map.
  * Invalid credentials never become map keys, and saturation never queues a coroutine. */
 internal class IntegrationLimits(
@@ -34,6 +51,8 @@ internal class IntegrationLimits(
     private val bucketCapacity: Int = CLIENT_BUCKET_CAPACITY,
 ) {
     private val admission = Semaphore(concurrentRequests)
+    private val permits = concurrentRequests
+    private val refusalCount = AtomicLong(0)
     private val buckets = LinkedHashMap<UInt, Window>(16, 0.75f, true)
 
     internal class Lease(private val semaphore: Semaphore) : AutoCloseable {
@@ -49,10 +68,28 @@ internal class IntegrationLimits(
 
     private data class Window(var startedAt: Long, var requests: Int)
 
-    fun tryAcquire(): Lease? = if (admission.tryAcquire()) Lease(admission) else null
+    /** Admission permits taken right now (telemetry). */
+    val inUse: Int get() = permits - admission.availablePermits()
+
+    /** The admission permits this instance allows at once (telemetry). */
+    val admissionPermits: Int get() = permits
+
+    /**
+     * Admission and per-client-allowance refusals so far (telemetry): each is one refusal, not necessarily one HTTP `429` (an MCP
+     * tool call refused by the allowance is answered inside a `200`).
+     */
+    val refusals: Long get() = refusalCount.get()
+
+    fun tryAcquire(): Lease? {
+        if (admission.tryAcquire()) return Lease(admission)
+        refusalCount.incrementAndGet()
+        return null
+    }
+
+    fun allow(clientId: UInt): Boolean = admit(clientId).also { if (!it) refusalCount.incrementAndGet() }
 
     @Synchronized
-    fun allow(clientId: UInt): Boolean {
+    private fun admit(clientId: UInt): Boolean {
         val now = nowMillis()
         val window = buckets[clientId]
         if (window == null) {
@@ -84,8 +121,11 @@ internal fun String.utf8Size(): Int = toByteArray(Charsets.UTF_8).size
 
 /** Process-wide budget for result objects retained after a domain service releases its own read
  * reservation. Each GraphQL request holds one reservation until its response is encoded. */
-internal class IntegrationRetainedLedger(private val capacity: Long = MAX_RETAINED_GRAPHQL_HEAP_BYTES) {
+internal class IntegrationRetainedLedger(val capacity: Long = MAX_RETAINED_GRAPHQL_HEAP_BYTES) {
     private val inFlight = AtomicLong(0)
+
+    /** The bytes retained across every open reservation (telemetry). */
+    val inFlightBytes: Long get() = inFlight.get()
 
     fun open(): Reservation = Reservation()
 

@@ -389,6 +389,51 @@ class JqCalculationTest {
             executor.shutdownNow()
         }
     }
+
+    @Test
+    fun `poolStats reports the quarantine and the pool's busy, queued and fixed figures`() = runBlocking {
+        val releaseWorker = CountDownLatch(1)
+        val workerBusy = CountDownLatch(1)
+        val executor = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(4))
+        val evaluator = JqEvaluator(deadline = Duration.ofMillis(50), executor = executor)
+        try {
+            val idle = evaluator.poolStats()
+            assertEquals(listOf(0, 0, 0, 1, 4), listOf(idle.quarantined, idle.active, idle.queued, idle.workers, idle.queueCapacity))
+
+            executor.execute {
+                workerBusy.countDown()
+                releaseWorker.await()
+            }
+            assertTrue(workerBusy.await(2, TimeUnit.SECONDS))
+            executor.execute { }
+            executor.execute { }
+            val busy = evaluator.poolStats()
+            assertEquals(listOf(1, 2, 1, 4), listOf(busy.active, busy.queued, busy.workers, busy.queueCapacity))
+        } finally {
+            releaseWorker.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `poolStats counts a quarantined expression and answers zeros for a non-thread-pool executor`() = runBlocking {
+        val releaseWorker = CountDownLatch(1)
+        val executor = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(4))
+        val evaluator = JqEvaluator(
+            deadline = Duration.ofMillis(50),
+            executor = executor,
+            beforeEvaluate = { awaitIgnoringInterrupts(releaseWorker) },
+        )
+        try {
+            assertNull(evaluator.evaluateBounded(".a", buildJsonObject { put("a", 1) }, "ctx"))
+            assertEquals(1, evaluator.poolStats().quarantined)
+        } finally {
+            releaseWorker.countDown()
+            executor.shutdownNow()
+        }
+        val inline = JqEvaluator(executor = Executor { it.run() }).poolStats()
+        assertEquals(listOf(0, 0, 0, 0, 0), listOf(inline.quarantined, inline.active, inline.queued, inline.workers, inline.queueCapacity))
+    }
 }
 
 /**

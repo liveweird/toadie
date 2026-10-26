@@ -33,6 +33,7 @@ import ch.nokillswit.entityquery.MAX_ENTITY_QUERY_DEADLINE_MILLIS
 import ch.nokillswit.entityquery.SavedEntityQueryService
 import ch.nokillswit.entityquery.SavedEntityQueryServiceKey
 import ch.nokillswit.infra.concurrency.ReadLedger
+import ch.nokillswit.infra.concurrency.ReadLedgerKey
 import ch.nokillswit.labels.LabelService
 import ch.nokillswit.labels.LabelServiceKey
 import ch.nokillswit.lenses.LensService
@@ -296,6 +297,7 @@ suspend fun Application.configureDatabase() {
     attributes.put(EntityGraphLayoutServiceKey, GraphLayoutService(database, GraphLayoutService.EntityGraphLayouts))
     // ONE process-wide read ledger for every whole-workspace content read (catalog + entities).
     val readLedger = ReadLedger()
+    attributes.put(ReadLedgerKey, readLedger)
     val catalogFileEventService = CatalogFileEventService(database)
     val catalogFileService = CatalogFileService(database, catalogFileEventService, readLedger)
     attributes.put(CatalogFileServiceKey, catalogFileService)

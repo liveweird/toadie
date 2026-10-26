@@ -52,7 +52,7 @@
 
 **Not audit events.** The telemetry sampler's (`telemetry/`, "Telemetry" below) WARN/INFO lines on
 `ch.nokillswit.telemetry.TelemetrySampler` — one WARN per failing collector per episode ("Telemetry collector <name> failed: ..."),
-one INFO when it recovers, never a stack, at most 300 characters, a database failure rendered by class and SQLSTATE only — are
+one INFO when it recovers (the heavy phase's budget miss is the same kind, collector "heavy"), never a stack, at most 300 characters, a database failure rendered by class and SQLSTATE only — are
 operational signals, not audit events: the sampler reads the process's own counters and mutates no project data, so it
 emits no `audit(...)` event at all. The entity query engine's (phase 7, v2.0.0) ONE DEBUG line on
 `ch.nokillswit.entityquery` per evaluation-budget miss — the refusal code (`DEADLINE_EXCEEDED`/
@@ -112,30 +112,106 @@ Never log secrets (passwords, tokens); emails/ids are fine. Never log a throwabl
 ### Telemetry
 
 The in-app telemetry sampler (`telemetry/`, ported from Flow 1.17.0; the ADMIN read API and the panel arrive in later changes)
-records the process's OWN vital signs into `telemetry_processes`/`telemetry_samples` (V46, `.claude/docs/persistence.md` "Telemetry
+records the process's OWN vital signs (memory, JVM, requests, workspace storage, pressure) into `telemetry_processes`/`telemetry_samples` (V46, `.claude/docs/persistence.md` "Telemetry
 (V46)"). Numbers and labels only; it is a best-effort observer that never touches readiness or request handling.
 
 - **Sampler.** `configureTelemetry` validates `telemetry.*` on every boot (enabled or not), then on `ApplicationStarted` builds one
   `TelemetrySampler` (published as `TelemetrySamplerKey`) whose loop ticks 5 s after start and then aligned to
   `telemetry.sampleIntervalSeconds` (env `TELEMETRY_SAMPLE_INTERVAL_SECONDS`, default 300, 60..1800 and a divisor of 3600, so an
   hour's samples tile it; the stored raw `resolution` and, capped at 300 s, the request timers' window). `TELEMETRY_ENABLED=false`
-  starts none; `TELEMETRY_STORAGE_INTERVAL_SECONDS` (900..86400, default 3600) is read and validated now for the workspace
-  measurement a later change adds. `ApplicationStopping` cancels the scope and joins it for at most 2 s, BEFORE the pool is
+  starts none; `TELEMETRY_STORAGE_INTERVAL_SECONDS` (900..86400, default 3600) is how often the workspace is measured (the heavy
+  phase below). `ApplicationStopping` cancels the scope and joins it for at most 2 s, BEFORE the pool is
   disposed on `ApplicationStopped`.
-- **A tick** runs under `interval / 2`: the collectors (JVM, cgroup, pool; each in `catchingFailures`, isolated, one WARN per
-  episode and one INFO "recovered"), the process row's `last_seen` stamp (re-registering if the row vanished), one `batchInsert`
-  of the readings (non-finite values dropped), then the CLUSTER section — `pg_try_advisory_xact_lock` in one transaction, skipped
+- **A tick** runs under `interval / 2`: the collectors (JVM, cgroup, pool, requests, pressure; each in `catchingFailures`, isolated, one WARN per
+  episode and one INFO "recovered"), the process row's `last_seen` stamp (re-registering if the row vanished), the
+  readings written as multi-row `INSERT ... ON CONFLICT DO NOTHING` statements, one per power-of-two chunk, all in one
+  transaction (98 rows go out as 64 + 32 + 2; `infra/db/MultiRowInsert.kt`, fully parameterized; non-finite values dropped), then the collectors' COMMIT steps (below), then the CLUSTER section — `pg_try_advisory_xact_lock` in one transaction, skipped
   when the `telemetry.cluster_ms` marker already sits at this bucket, else the retention (hourly rollup of every complete hour that
   ended at least `max(10 min, interval / 2)` ago; prune only after a rollup that inserted) in a savepoint, then the marker. Raw rows
   live 7 days, hourly rollups and silent processes 90. The process identity (`HOSTNAME`, else a resolver lookup that can block for
   seconds) is resolved inside the sampler's coroutine before the first tick, never in the synchronous startup handler.
+- **Delta baselines advance only for what was stored.** The collectors that difference a cumulative figure (requests: `previous`;
+  pressure: the refusal counters, and the read ledger's interval peak) keep their baseline until the sampler has durably inserted
+  the tick's readings and then calls the collector's `commit` (`ProcessCollector.commit`): a failed insert (a database outage)
+  therefore loses no interval - the next tick reports both intervals' 5xx, 429s, refusals and the ledger's peak. The ledger's
+  `snapshot()` resets nothing; `endInterval()` does, at commit, handing the next interval the highest total reached since that
+  snapshot (a burst between the snapshot and the commit is kept). Each collector commits on its own, and one that threw is not
+  committed, so no collector consumes another's baseline. A tick whose bucket is not newer than the newest one stored (the wall
+  clock stepped back, or a second tick in the same bucket) is skipped before it collects and before the cluster section (a failed
+cluster section is retried in the next bucket, not the same one), because its insert would write nothing
+  (`ON CONFLICT` keeps the first row) yet commit the baselines: its deltas roll into the next bucket. (`JvmProbe`'s CPU and GC
+  deltas, and `mem.old_gen_peak`, which is reset on read, still advance when read: a failed insert loses them.) **Delivery is
+  at-least-once:** an insert whose outcome is unknown - a lost reply to COMMIT, or the tick budget cancelling while it awaits the
+  COMMIT - is not committed by the sampler, so if the rows were in fact stored the next tick counts that interval again (the
+  deltas of both intervals land in the next bucket). `TelemetryCommitTest`.
+- **The heavy phase** (the workspace measurement; budget `2/5 interval`, so the light phase plus the heavy one always fit in an
+  interval). The cluster section only DECIDES that a heavy collector is due (its marker is absent or at least
+  `storageIntervalSeconds` old) and CLAIMS the run by writing its marker row `telemetry.storage_ms` with value 0, committed with the
+  cheap collectors' readings; the run itself starts AFTER that transaction, so a scan never sits inside the lock transaction. It
+  reads through a `HeavyReader`: every statement a SHORT transaction of its own (no lock held across scans, so a deploy's `ALTER`
+  is never queued behind them), then one more transaction inserts the readings and sets the marker to the run's duration (at least
+  1 ms). A run is attempted at most once per interval whatever its outcome: a failing collector is one WARN per episode, a run that
+  outruns the budget is cancelled with one WARN ("heavy"), and a marker still at 0 is a claim that did not complete - not retried
+  before the next interval. No statement carries a `queryTimeout` of its own (the global statement timeout and the budget bound
+  it).
 - **Metrics** (`TelemetryMetrics.kt`): `mem.*` (heap, committed, interval old-gen peak, non-heap, direct buffers; cgroup current,
   anon, working set, lifetime peak and `VmRSS` — a figure the host cannot tell is no row), `jvm.cpu_ratio`, `jvm.threads`,
-  `jvm.gc_count`/`jvm.gc_time_ms` (per collector, deltas), `pool.*` (the R2DBC pool, read through `ConnectionPoolKey`) and the
-  `telemetry.cluster_ms` marker. Process identity is the pod/container name (`HOSTNAME`), the JVM start and the optional
+  `jvm.gc_count`/`jvm.gc_time_ms` (per collector, deltas), `pool.*` (the R2DBC pool, read through `ConnectionPoolKey`), `http.*`
+  (requests), `ledger.*`/`query.*`/`jq.*`/`fetch.*`/`integration.*` (pressure), `db.size`/`db.group.size`/`ws.rows` (workspace) and
+  the `telemetry.cluster_ms`/`telemetry.storage_ms` markers. Process identity is the pod/container name (`HOSTNAME`), the JVM start and the optional
   `TOADIE_BUILD_VERSION`/`TOADIE_BUILD_COMMIT` image variables (Dockerfile build args, empty = null).
-- **Never recorded:** JVM arguments, environment, system properties, request paths with identifiers (route templates only, `{id}`
-  literal), document contents, query text, labels longer than 120 characters. The probes read counters and sizes only — never a
+- **Requests** (`LatencyCollector.kt`): reads Ktor's `ktor.calls.<route>.timer` and `.<status>` series out of the registry
+  (`MetricRegistryKey`; never a gauge) into `http.count`/`http.5xx`/`http.429` (DELTAS of the cumulative counts against the last COMMITTED
+  read, kept in memory, the first tick counting since start) and `http.p50`/`http.p95` (the timers' windowed snapshots, merged per label so the total's
+  percentile is a real one). Label `*` is every `/api/` and `/integration/` route except `/api/v1/telemetry*` (`/healthz`,
+  `/readyz` and the static/SPA routes are not API traffic). A route additionally gets a label of its own when its NORMALISED path
+  ends with `/graph`, `/errors`, `/export`, `/import`, `/import/check`, `/fetch` or `-documents`, or starts with `/integration/`
+  (`isLabelled`: a shape rule, so a future heavy route is labelled with no code change; 19 today, pinned against the real routing
+  tree by `LatencyCollectorTest`); every other route counts in `*` only. `normaliseRoute` strips every parenthesised selector from
+  the name Ktor 3.6 writes (`/(authenticate "default")/api/v1/entities/graph/(method:GET)` becomes `/api/v1/entities/graph`) and
+  keeps `{id}` literal. A label has rows only in an interval that saw something. **No 429 correction.** Flow subtracted the surplus
+  of a route's status meters over its timer from its `429` count, because Ktor marks StatusPages' second answer to the RateLimit
+  plugin's bodiless 429 under the routed name a second time. Here the second answer is named from the call's routing attributes,
+  falls back to the URI name, and `TelemetryRegistry` refuses that name whenever the route has a selector, a path parameter or a
+  query string; the double mark survives only on a selector-free route whose template equals its URI. Every `rateLimit {}` route of
+  Toadie carries the `(RateLimit x)` selector (login, MFA, refresh, both password-reset routes, the three `/integration/` routes),
+  and `LatencyCollectorTest` drives EACH of those routes past its bucket - login, refresh and password-reset with a limiter
+  override, MFA and the reset confirmation at their fixed 10/min, `/integration/graphql`, `/schema` and `/mcp` through the shared
+  integration bucket - and asserts the `429` count equals the rejections and `http.count` the requests sent; every route except
+  the three integration ones is also hit with varying query strings (on the integration routes, only `/integration/graphql`
+  is). So the correction was dropped. A hand-written bare `/api/` route answering a bodiless 429 itself would double-count - none exists;
+  throw `TooManyRequestsException` instead, which is answered once.
+- **Workspace** (`StorageCollectors.kt`, the heavy phase): `db.size` (`pg_database_size`), `db.group.size` per hand-listed table group
+  (`catalog`, `ontology`, `registries`, `views`, `accounts`, `telemetry`: the sum of `pg_total_relation_size`, heap + TOAST +
+  indexes, of its tables) and `ws.rows` per table (`catalog_files`, `blueprints`, `entities`, `conversion_mappings`, `lenses`,
+  `entity_queries`: `NOT marked_as_deleted`; `catalog_file_events`: every row). The only identifiers interpolated into SQL are the fixed
+  `COUNTED_TABLES` names (guarded by a plain-name check; the group names are only map lookups and labels, and `StorageCollectorsTest`
+  asserts every counted table is a grouped one); `StorageCollectorsTest` fails when a `public` table (Flyway's history aside) is in no
+  group or in two, so a migration that adds a table must assign it. No content column is ever selected.
+- **Pressure** (`PressureCollector.kt`): the five bounded things that answer "is Toadie near a limit?", each read through a seam
+  that only counts - `ReadLedger.snapshot()` (`ledger.in_flight`, `ledger.peak` since the previous committed interval, `ledger.refusals`;
+  the ledger is published as `ReadLedgerKey` by `configureDatabase`), `EntityService.pressure()` (`query.in_use` permits taken
+  of `MAX_CONCURRENT_ENTITY_QUERIES`, `query.refusals`, and `JqEvaluator.poolStats()`: `jq.quarantined`, `jq.active`,
+  `jq.queued`), `UrlFetcher.poolStats()` (`fetch.active`, `fetch.queued` of the shared `url-fetch` pool), and
+  `IntegrationPressureKey` (`integration.in_use`, `integration.retained`, `integration.refusals` - admission AND per-client
+  rate refusals; the key is absent, and the rows with it, while the integration API is disabled). Refusal figures are DELTAS
+  of cumulative counters. No limit and no behaviour changed: counters and snapshots only. Seam tests: `ReadLedgerTest`,
+  `IntegrationLimitsTest`, `JqCalculationTest`, `UrlFetchTest`, `EntityQueryRouteTest`; `PressureCollectorTest`.
+- **Measured cost.** Method: 20 warm-up ticks then 200 timed ticks on the shared Testcontainers PostgreSQL 18 (macOS/OrbStack, 18
+  CPUs); allocation is summed over all threads. Before the multi-row insert (per-row `batchInsert`), p50 (p95): a tick holding the
+  cluster section 27.4 ms (34.1), 4.79 MiB; a skipping tick (another process served the interval) 24.7 ms (30.4), 4.68 MiB; the
+  rollup + prune tick 31.3 ms (36.5), 4.86 MiB; a tick after 15k requests in the interval 28.7 ms (33.6), 5.95 MiB; the heavy
+  storage pass 37.2 ms (43.9), 8.08 MiB, with one 66 ms spike; the probes alone 0.1 ms; about 99 rows per bucket. The 98-row
+  `insertSampleRows` alone was 15.4 ms and 2.67 MiB with `batchInsert` (60 % of the tick) - which is why the ported
+  `MultiRowInsert` replaced it. Timed again in a temporary test on the final code (98 rows in one transaction, warm-up 20 + 200
+  timed): 8.2 ms (p95 10.5-11.7) and 1.62 MiB against 17.4 ms (p95 22-26) and 2.68 MiB for the per-row insert on the same
+  machine - about half. Steady state for one process: 250,560 rows = 49.2 MiB, 206 B/row (heap 90, indexes 116), SEEDED at 60
+  rows per bucket (a real tick writes about 99) across both tiers: 7 days of raw buckets (2,016 x 60 = 120,960) plus 90 days of
+  hourly buckets (2,160 x 60 = 129,600); a delete-churned table can sit far above that until autovacuum catches up (728 B/row seen
+  before a TRUNCATE). Not measured: a cold disk, a CPU-limited pod, a live cgroup.
+- **Never recorded** (the one home of this list): JVM arguments, environment, system properties, request paths with identifiers
+  (route templates only, `{id}` literal), query strings, document contents or any content column, query text, a user, client or
+  file identity, labels longer than 120 characters. The probes read counters and sizes only — never a
   thread dump.
 - **The registry.** `plugins/Monitoring.kt`'s `TelemetryRegistry` (the Ktor `DropwizardMetrics` registry, published as
   `MetricRegistryKey`) gives every ROUTE timer (`ktor.calls.<route>.timer`) a true sliding window

@@ -203,4 +203,71 @@ class ReadLedgerTest {
         assertEquals(4, admitted.count { it })
         assertEquals(0L, ledger.inFlightBytes)
     }
+
+    // -- The telemetry seam (`snapshot()`, `refusals`): read by the sampler once per interval.
+
+    @Test
+    fun `a snapshot resets nothing, the interval ends only when its peak was stored`() {
+        val ledger = ReadLedger(capacity = 1000)
+        ledger.open().use { it.reserve(300) }
+        val first = ledger.snapshot()
+        assertEquals(0L, first.inFlightBytes)
+        assertEquals(300L, first.intervalPeak, "the burst that already ended is still the interval's peak")
+        assertEquals(1000L, first.capacity)
+        assertEquals(300L, ledger.snapshot().intervalPeak, "reading again resets nothing: a failed write loses no peak")
+        ledger.endInterval()
+        assertEquals(0L, ledger.snapshot().intervalPeak, "the next interval starts from what is held now")
+        assertEquals(300L, ledger.peak, "the lifetime peak seam is untouched")
+
+        ledger.open().use { held ->
+            held.reserve(200)
+            val spanning = ledger.snapshot()
+            assertEquals(200L, spanning.intervalPeak)
+            ledger.endInterval()
+            val next = ledger.snapshot()
+            assertEquals(200L, next.inFlightBytes)
+            assertEquals(200L, next.intervalPeak, "a long read is the peak of every interval it spans")
+        }
+    }
+
+    @Test
+    fun `a peak reached after the stored snapshot belongs to the next interval`() {
+        val ledger = ReadLedger(capacity = 1000)
+        ledger.open().use { first ->
+            first.reserve(100)
+            ledger.snapshot() // the stored figures: starts the since-snapshot accumulator
+            ledger.open().use { second ->
+                second.reserve(150) // 250 held: above what was stored
+                ledger.endInterval()
+                assertEquals(250L, ledger.snapshot().intervalPeak)
+            }
+        }
+    }
+
+    @Test
+    fun `a burst between the stored snapshot and the commit, however small, is the next interval's peak`() {
+        val ledger = ReadLedger(capacity = 1000)
+        ledger.open().use { it.reserve(100) }
+        val stored = ledger.snapshot()
+        assertEquals(100L, stored.intervalPeak)
+        ledger.open().use { it.reserve(50) } // reserved and released before the commit; lower than the stored 100
+        ledger.endInterval()
+        val next = ledger.snapshot()
+        assertEquals(0L, next.inFlightBytes)
+        assertEquals(50L, next.intervalPeak, "the 50-byte burst belongs to the interval that follows the stored one")
+    }
+
+    @Test
+    fun `every refusal is counted, the caller's own and contention alike`() {
+        val ledger = ReadLedger(capacity = 100)
+        assertEquals(0L, ledger.refusals)
+        ledger.open().use { first ->
+            first.reserve(60)
+            ledger.open().use { second -> assertFailsWith<ReadBudgetExceeded> { second.reserve(60) } }
+            ledger.open().use { third -> assertFailsWith<ReadBudgetExceeded> { third.charge(500) } }
+            assertEquals(2L, ledger.snapshot().refusals)
+        }
+        ledger.open().use { it.reserve(50) }
+        assertEquals(2L, ledger.refusals, "an admitted read is not a refusal")
+    }
 }

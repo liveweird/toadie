@@ -260,4 +260,37 @@ class IntegrationLimitsTest {
             ledger.open().use { afterCancel -> afterCancel.charge("y".repeat(10)) }
         }
     }
+
+    // -- The telemetry seam: permits taken, refusals, retained bytes.
+
+    @Test
+    fun `permits taken and every refusal are counted for the telemetry sampler`() {
+        var now = 1_000L
+        val limits = IntegrationLimits(nowMillis = { now }, concurrentRequests = 2, requestsPerMinute = 1)
+        assertEquals(0, limits.inUse)
+        assertEquals(2, limits.admissionPermits)
+        val first = assertNotNull(limits.tryAcquire())
+        val second = assertNotNull(limits.tryAcquire())
+        assertEquals(2, limits.inUse)
+        assertNull(limits.tryAcquire())
+        assertEquals(1L, limits.refusals, "an admission refusal")
+        assertTrue(limits.allow(7u))
+        assertFalse(limits.allow(7u))
+        assertEquals(2L, limits.refusals, "a per-client allowance refusal")
+        first.close()
+        second.close()
+        assertEquals(0, limits.inUse)
+        assertEquals(2L, limits.refusals, "releases and admitted calls are not refusals")
+    }
+
+    @Test
+    fun `the retained ledger reports its bytes and capacity`() {
+        val ledger = IntegrationRetainedLedger(capacity = 10_000)
+        assertEquals(10_000L, ledger.capacity)
+        ledger.open().use { reservation ->
+            reservation.charge("x".repeat(50))
+            assertEquals(estimatedRetainedBytes("x".repeat(50)), ledger.inFlightBytes)
+        }
+        assertEquals(0L, ledger.inFlightBytes)
+    }
 }
