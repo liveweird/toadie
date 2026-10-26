@@ -384,22 +384,50 @@ class PortImportTest {
             ((it["port"] as? JsonObject)?.get("relation") as? JsonPrimitive)?.content == "uses"
         }
         val webFile = component("web", spec = EntitySpec(system = "system:default/shop"))
-        val result = importDocs(listOf(squad, shop, webFile), listOf(existingWeb, portDb), mapping = mapping)
+        val result = importDocs(
+            listOf(squad, shop, webFile), listOf(existingWeb, portDb), mapping = mapping,
+            updatedAt = mapOf(existingWeb.id to 1_700_000_000_123L),
+        )
         val web = result.document("svc", "web")
         assertEquals(JsonPrimitive("port-only note"), web.properties()["note"])
         assertEquals(JsonPrimitive(3), web.properties()["replicas"])
         assertEquals(JsonArray(listOf(JsonPrimitive("db"))), web.relations()["uses"], "an unowned relation is untouched")
         assertEquals(JsonPrimitive("Rocket"), web["icon"], "no rule reads the icon, so the stored one stays")
         assertEquals(existingWeb.id, result.row("web").existingId)
+        assertEquals(1_700_000_000_123L, result.row("web").existingUpdatedAt, "the token rides beside existingId")
+        assertNull(result.row("squad").existingUpdatedAt, "no counterpart, no token")
     }
 
     @Test
     fun `without merge nothing of the stored entity leaks into the document`() {
-        val result = importDocs(listOf(squad, shop, component("web")), listOf(existingWeb), merge = false)
+        val result = importDocs(
+            listOf(squad, shop, component("web")), listOf(existingWeb), merge = false,
+            updatedAt = mapOf(existingWeb.id to 42L),
+        )
         val web = result.document("svc", "web")
         assertFalse("note" in web.properties())
         assertFalse("icon" in web)
         assertEquals(existingWeb.id, result.row("web").existingId, "named either way: the entity a replaceExisting import overwrites")
+        assertEquals(42L, result.row("web").existingUpdatedAt, "and so is its write-version token")
+    }
+
+    @Test
+    fun `documents are exactly the rows that have one, in row order - the pairing the SPA's expected list relies on`() {
+        val result = importDocs(
+            listOf(squad, group("outsider", namespace = "external"), shop, component("web")),
+            listOf(existingWeb),
+            updatedAt = mapOf(existingWeb.id to 7L),
+        )
+        val withDocument = result.rows.filter {
+            it.status == ConversionRowStatus.CONVERTED || it.status == ConversionRowStatus.CONVERTED_WITH_FINDINGS
+        }
+        assertTrue(result.rows.size > withDocument.size, "the fixture includes a row without a document")
+        assertEquals(
+            withDocument.map { it.blueprint to it.identifier },
+            result.documents.map {
+                (it.getValue("blueprint") as JsonPrimitive).content to (it.getValue("identifier") as JsonPrimitive).content
+            },
+        )
     }
 
     @Test

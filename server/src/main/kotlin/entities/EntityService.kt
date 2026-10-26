@@ -448,13 +448,15 @@ class EntityService(
         val blueprints = activeBlueprints.map { EntityImportBlueprint(it.id, it.identifier, it.definition) }
         val documentBytesExpr = octetLength(Entities.document)
         val teamBytesExpr = octetLength(Entities.team)
-        val rows = Entities.select(Entities.blueprintId, Entities.identifier, Entities.id, documentBytesExpr, teamBytesExpr)
+        val rows = Entities
+            .select(Entities.blueprintId, Entities.identifier, Entities.id, Entities.updatedAt, documentBytesExpr, teamBytesExpr)
             .where { active() }
             .map {
                 ImportSnapshotRow(
                     it[Entities.blueprintId].value,
                     it[Entities.identifier],
                     it[Entities.id].value,
+                    it[Entities.updatedAt],
                     (it.getOrNull(documentBytesExpr) ?: 0L) + (it.getOrNull(teamBytesExpr) ?: 0L),
                 )
             }
@@ -462,14 +464,24 @@ class EntityService(
         val identifiersByBlueprint = rows.groupBy({ it.blueprintId }, { it.identifier to it.id })
         val countsByBlueprint = rows.groupingBy { it.blueprintId }.eachCount().mapValues { it.value.toLong() }
         val bytesById = rows.associate { it.id to it.bytes }
+        val updatedAtById = rows.associate { it.id to it.updatedAt }
         EntityImportSnapshot(
             blueprints, identifiersByBlueprint, rows.size.toLong(), countsByBlueprint,
-            documentBytes = rows.sumOf { it.bytes }, bytesById = bytesById,
+            documentBytes = rows.sumOf { it.bytes }, bytesById = bytesById, updatedAtById = updatedAtById,
         )
     }
 
-    /** One [importSnapshot] row's identity plus its stored document+team byte size — never the text (`.claude/docs/persistence.md`). */
-    private data class ImportSnapshotRow(val blueprintId: UInt, val identifier: String, val id: UInt, val bytes: Long)
+    /**
+     * One [importSnapshot] row's identity, its write-version stamp ([Entities.updatedAt]) and its stored
+     * document+team byte size — never the text (`.claude/docs/persistence.md`).
+     */
+    private data class ImportSnapshotRow(
+        val blueprintId: UInt,
+        val identifier: String,
+        val id: UInt,
+        val updatedAt: Long,
+        val bytes: Long,
+    )
 
     suspend fun create(
         request: EntityRequest,

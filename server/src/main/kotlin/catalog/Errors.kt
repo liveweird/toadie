@@ -158,6 +158,9 @@ data class CatalogSource(
  */
 data class StoredIdentity(val kind: String, val namespace: String, val name: String, val spec: Map<String, String>)
 
+/** A stored file's [id] and write-version [revision] (`catalog_files.revision`, V40); no content. */
+data class StoredRevision(val id: UInt, val revision: Long)
+
 /** The lowercased kinds the editor stores — references to them are RESOLVABLE. */
 internal val STORED_KINDS: Set<String> = SUPPORTED_KINDS.map { it.lowercase() }.toSet()
 

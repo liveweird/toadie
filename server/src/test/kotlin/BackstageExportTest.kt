@@ -9,6 +9,8 @@ import ch.nokillswit.catalog.CatalogLink
 import ch.nokillswit.catalog.CatalogSource
 import ch.nokillswit.catalog.EntityProfile
 import ch.nokillswit.catalog.EntitySpec
+import ch.nokillswit.catalog.StoredRevision
+import ch.nokillswit.catalog.identityOf
 import ch.nokillswit.conversion.ConversionFindingCode
 import ch.nokillswit.conversion.ConversionRowStatus
 import ch.nokillswit.conversion.validateMapping
@@ -393,6 +395,7 @@ class BackstageExportTest {
         )
         val row = result.rows.single { it.identifier == "web" }
         assertEquals(77u, row.existingId)
+        assertEquals(1L, row.existingRevision, "the token rides beside existingId")
         val merged = result.files.single { it.metadata.name == "web" }
         // Owned leaves come from Port...
         assertEquals("New title", merged.metadata.title)
@@ -444,6 +447,29 @@ class BackstageExportTest {
         val merged = convert(entities, existing = listOf(source(9u, other)))
         assertEquals(unmerged.files, merged.files)
         assertNull(merged.rows.single { it.identifier == "web" }.existingId)
+        assertNull(merged.rows.single { it.identifier == "web" }.existingRevision, "no counterpart, no token")
+    }
+
+    @Test
+    fun `the counterpart is named without a merge, with its revision, and files are exactly the rows that have a document in row order`() {
+        val stored = ExportFixtures.file(kind = "Component", name = "web", spec = EntitySpec(type = "service"))
+        val identity = identityOf(stored)
+        // No `existing` (merge off), only the identity-only revision read.
+        val result = convert(
+            listOf(squad, service("web"), entity("plain", "loose")),
+            revisions = mapOf(identity to StoredRevision(31u, 5L)),
+        )
+        val row = result.rows.single { it.identifier == "web" }
+        assertEquals(31u, row.existingId)
+        assertEquals(5L, row.existingRevision)
+        val withDocument = result.rows.filter {
+            it.status == ConversionRowStatus.CONVERTED || it.status == ConversionRowStatus.CONVERTED_WITH_FINDINGS
+        }
+        assertTrue(result.rows.size > withDocument.size, "the fixture includes a row without a document")
+        assertEquals(withDocument.map { it.identifier }, result.files.map { it.metadata.name })
+        // Without a merge the document is the generated one: nothing of the stored file leaks in.
+        val bare = convert(listOf(squad, service("web"))).files.single { it.metadata.name == "web" }
+        assertEquals(bare, result.files.single { it.metadata.name == "web" })
     }
 
     @Test

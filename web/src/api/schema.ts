@@ -1559,13 +1559,17 @@ export interface paths {
          *     file of the same identity: only the leaves the pair's rules own are replaced (labels and
          *     annotations by key, tags by tag category, links by title, reference-list entries by the
          *     blueprint they resolve to), everything else in the stored file survives — a hand-added
-         *     label, a foreign tag, a `template:` dependency. `existingId` names the merged file. A
+         *     label, a foreign tag, a `template:` dependency. `existingId` names the active stored file
+         *     of the same identity — with `merge` or without it (an identity-only read; `merge` decides
+         *     only whether the document is merged over it) — and `existingRevision` is that file's
+         *     write-version at conversion time (`>= 1`), present exactly when `existingId` is. `files`
+         *     holds exactly the rows that have a document, in row order. A
          *     document the catalog's own validator refuses is an `INVALID` row and is NOT in `files`. A
          *     stored reference to a Port entity that was deleted resolves to nothing and survives the merge.
          *
          *     A mapping that carries blocking findings (it went stale after a blueprint or registry
          *     edit) answers `409` — fix the mapping first. The entity read and the catalog
-         *     read (only when merging, narrowed to the files the export can write to) are admitted as ONE
+         *     content read (only when merging, narrowed to the files the export can write to) are admitted as ONE
          *     reservation against the process-wide read memory budget, held until the answer is built —
          *     their costs add (too large on its own `400`, contention `429`; `.claude/docs/security.md` "Entity read memory budget"), with the
          *     entity query's rules (`EntityQueryInvalid` `400`, at most four concurrent evaluations)
@@ -1627,7 +1631,9 @@ export interface paths {
          *     converted owner stands for the FIRST stored team: equal, the stored team is kept; different,
          *     only that first entry is replaced and the extra teams stay. Nothing guards the later entity
          *     import against a Port-only edit made after this call, so convert immediately before importing. `existingId` names the
-         *     merged entity; `merge: false` produces the bare document.
+         *     merged entity; `merge: false` produces the bare document. `existingUpdatedAt` is that entity's
+         *     `updatedAt` at conversion time (the write-version token), present exactly when `existingId` is.
+         *     `documents` holds exactly the rows that have a document, in row order.
          *
          *     A mapping that carries blocking findings answers `409`. The stored entities a merge reads
          *     are admitted against the process-wide read memory budget (too large on its own `400`,
@@ -3944,15 +3950,20 @@ export interface components {
             name?: string;
             /**
              * Format: int32
-             * @description The stored catalog file of the same identity the document was merged over; absent without `merge` or a match.
+             * @description The active stored catalog file of the same identity, whether or not the document was merged over it (`merge` only decides that); absent without a match.
              */
             existingId?: number;
+            /**
+             * Format: int64
+             * @description The `revision` of that stored file at conversion time — the write-version token an import expects; present exactly when `existingId` is.
+             */
+            existingRevision?: number;
             findings: components["schemas"]["ConversionFinding"][];
             /** @description Port-side fields the entity carries that no rule of its pair converts (`properties.<id>`, `relations.<id>`, `team`). */
             unmapped: string[];
         };
         CatalogDocumentsResponse: {
-            /** @description The converted documents, exactly what `POST /api/v1/files/import` accepts — INVALID rows are not in it. Entity-id order. */
+            /** @description The converted documents, exactly what `POST /api/v1/files/import` accepts — INVALID rows are not in it, so it holds exactly the rows that have a document, in row order. */
             files: components["schemas"]["CatalogFileRequest"][];
             /** @description One entry per SELECTED entity, in entity-id order. */
             rows: components["schemas"]["ConversionRow"][];
@@ -3988,12 +3999,17 @@ export interface components {
              * @description The stored entity of the same (blueprint, identifier) — the one the document was merged over when `merge` is on, the one a `replaceExisting` import would overwrite; absent without a match.
              */
             existingId?: number;
+            /**
+             * Format: int64
+             * @description The `updatedAt` (epoch milliseconds) of that stored entity at conversion time — the write-version token an import expects; present exactly when `existingId` is.
+             */
+            existingUpdatedAt?: number;
             findings: components["schemas"]["ConversionFinding"][];
             /** @description Backstage fields the document carries that no rule of its pair addresses (`metadata.description`, `spec.dependencyOf`, `metadata.labels.<key>`, `metadata.tags.<tag>`, ...). */
             unmapped: string[];
         };
         EntityDocumentsResponse: {
-            /** @description The converted entities, exactly what `POST /api/v1/entities/import` accepts (blueprint, identifier, title, icon?, team?, properties, relations) — a SKIPPED or INVALID row has none. */
+            /** @description The converted entities, exactly what `POST /api/v1/entities/import` accepts (blueprint, identifier, title, icon?, team?, properties, relations) — a SKIPPED or INVALID row has none, so it holds exactly the rows that have a document, in row order. */
             documents: {
                 [key: string]: unknown;
             }[];

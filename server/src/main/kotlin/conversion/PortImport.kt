@@ -66,6 +66,8 @@ internal class ImportInput(
     val directory: PortDirectory,
     /** The id of the active entity of (blueprint, identifier), case-insensitively; null = none. */
     val existingId: (blueprint: String, identifier: String) -> UInt?,
+    /** The `updated_at` of that same entity (the write-version token the row reports); null = none. */
+    val existingUpdatedAt: (blueprint: String, identifier: String) -> Long? = { _, _ -> null },
     val merge: Boolean,
 )
 
@@ -266,6 +268,7 @@ internal class ImportRun(private val input: ImportInput) {
         pair.rules.filter { it.readsOnImport }.forEach { importRule(it, ctx, draft) }
         importRefFields(ctx, draft)
         val existingId = input.existingId(pair.blueprint, stage.identifier)
+        val existingUpdatedAt = existingId?.let { input.existingUpdatedAt(pair.blueprint, stage.identifier) }
         val counterpart = if (input.merge) existingId?.let { stored?.get(it) } else null
         val relations = input.blueprints[pair.blueprint]?.relations.orEmpty()
         val converted = mergeEntity(draft, counterpart, importFootprintOf(pair), stage.identifier) { relation, identifier ->
@@ -288,7 +291,7 @@ internal class ImportRun(private val input: ImportInput) {
             else -> ConversionRowStatus.CONVERTED_WITH_FINDINGS
         }
         val target = pair.blueprint to stage.identifier
-        val row = rowOf(stage.index, stage.file, status, target, findings, unmappedFields(stage.file, pair), existingId)
+        val row = rowOf(stage.index, stage.file, status, target, findings, unmappedFields(stage.file, pair), existingId, existingUpdatedAt)
         val document = if (refusal == null) {
             blueprintJson.encodeToJsonElement(EntityRequest.serializer(), sanitizedEntityRequest(request)).jsonObject
         } else {
@@ -330,6 +333,7 @@ internal class ImportRun(private val input: ImportInput) {
         findings: List<ConversionFinding>,
         unmapped: List<String>,
         existingId: UInt?,
+        existingUpdatedAt: Long? = null,
     ) = EntityDocumentRow(
         index = index,
         status = status,
@@ -339,6 +343,7 @@ internal class ImportRun(private val input: ImportInput) {
         blueprint = target?.first,
         identifier = target?.second,
         existingId = existingId,
+        existingUpdatedAt = existingUpdatedAt,
         findings = findings,
         unmapped = unmapped,
     )

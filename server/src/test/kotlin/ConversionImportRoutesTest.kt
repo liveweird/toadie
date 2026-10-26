@@ -174,6 +174,10 @@ class ConversionImportRoutesTest {
             assertEquals(5, first.documents.size)
             assertTrue(first.rows.all { it.status == ConversionRowStatus.CONVERTED }, first.rows.toString())
             assertTrue(first.rows.all { it.existingId == world.entityIds[it.identifier] }, "every row merged over its stored entity")
+            assertTrue(
+                first.rows.all { it.existingUpdatedAt == before.getValue(it.identifier!!).updatedAt },
+                "every row reports its stored entity's updatedAt as the write-version token",
+            )
             // The Port-only `note` survives the merge; without merge it is not in the document.
             val a1Doc = first.documents.single { (it.getValue("identifier") as JsonPrimitive).content == world.a1 }
             assertEquals(JsonPrimitive("port-only"), (a1Doc.getValue("properties") as JsonObject)["note"])
@@ -196,7 +200,14 @@ class ConversionImportRoutesTest {
                     "importing the merged conversion changes nothing of $id",
                 )
             }
-            assertEquals(first, world.convert(files), "a second conversion is identical")
+            // The replace bumped every entity's updatedAt (V39: a PUT always bumps), so only the tokens differ.
+            val second = world.convert(files)
+            assertEquals(
+                first.copy(rows = first.rows.map { it.copy(existingUpdatedAt = null) }),
+                second.copy(rows = second.rows.map { it.copy(existingUpdatedAt = null) }),
+                "a second conversion is identical",
+            )
+            assertTrue(second.rows.all { it.existingUpdatedAt == world.state(it.identifier!!).updatedAt }, "and carries the fresh tokens")
         } finally {
             world.cleanup()
         }
@@ -305,6 +316,7 @@ class ConversionImportRoutesTest {
         val world = World(admin, admin).create()
         try {
             val text = admin.postJson(world.path, EntityDocumentsRequest(world.exported())).bodyAsText()
+            assertTrue("existingUpdatedAt" in text, "the fixture exercises the optional token: $text")
             assertTrue("null" !in text, "no JSON null member on the wire: $text")
         } finally {
             world.cleanup()

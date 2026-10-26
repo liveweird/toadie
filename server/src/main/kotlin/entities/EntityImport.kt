@@ -84,6 +84,8 @@ class EntityImportSnapshot(
     val documentBytes: Long,
     /** Per-row byte size (by entity id), keyed the same way [total]/[countsByBlueprint] are — never the row's text. */
     private val bytesById: Map<UInt, Long>,
+    /** Per-row `updated_at` (by entity id) — the write-version token the conversion reports beside `existingId` (2.29.0). */
+    private val updatedAtById: Map<UInt, Long> = emptyMap(),
 ) {
     private val blueprintsByIdentifier: Map<String, EntityImportBlueprint> = blueprints.associateBy { it.identifier }
     private val exactByBlueprint: Map<UInt, Map<String, UInt>> = identifiersByBlueprint.mapValues { it.value.toMap() }
@@ -102,6 +104,9 @@ class EntityImportSnapshot(
     /** Case-insensitive within one blueprint — the partial-unique-index rule (`uq_entities_blueprint_identifier_active`). */
     fun existingId(blueprint: String, identifier: String): UInt? =
         blueprintsByIdentifier[blueprint]?.let { foldedByBlueprint[it.id]?.get(identifier.lowercase()) }
+
+    /** The `updated_at` stamp of the active entity [existingId] names, null when there is none — the conversion's write-version token. */
+    fun existingUpdatedAt(blueprint: String, identifier: String): Long? = existingId(blueprint, identifier)?.let { updatedAtById[it] }
 
     /**
      * The identifier as STORED for the active entity of [blueprint] that [identifier] names

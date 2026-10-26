@@ -559,13 +559,7 @@ class CatalogFileService(
      */
     suspend fun readActiveSources(reservation: ReadLedger.Reservation, identities: Set<EntityIdentity>): List<CatalogSource> {
         if (identities.isEmpty()) return emptyList()
-        var predicate: Op<Boolean> = active() and
-            (CatalogFiles.kind.lowerCase() inList identities.map { it.kind }.toSet()) and
-            (CatalogFiles.namespace inList identities.map { it.namespace }.toSet())
-        if (identities.size <= IDENTITY_NAME_NARROWING_LIMIT) {
-            predicate = predicate and (CatalogFiles.name.lowerCase() inList identities.map { it.name }.toSet())
-        }
-        val narrowed = predicate
+        val narrowed = narrowedTo(identities)
         try {
             return suspendTransaction(database) {
                 reserveContent(reservation, narrowed, CATALOG_EXPORT_FOOTPRINT_RATIO)
@@ -573,6 +567,46 @@ class CatalogFileService(
             }
         } catch (cause: ReadBudgetExceeded) {
             throwReadBudgetHttp(cause, "catalog")
+        }
+    }
+
+    /**
+     * The ACTIVE rows that may hold one of [identities]: a superset narrowing (kind, namespace and — up to
+     * [IDENTITY_NAME_NARROWING_LIMIT] identities — name each `IN` their identities' values); the exact identity
+     * match is made in memory by the caller.
+     */
+    private fun narrowedTo(identities: Set<EntityIdentity>): Op<Boolean> {
+        var predicate: Op<Boolean> = active() and
+            (CatalogFiles.kind.lowerCase() inList identities.map { it.kind }.toSet()) and
+            (CatalogFiles.namespace inList identities.map { it.namespace }.toSet())
+        if (identities.size <= IDENTITY_NAME_NARROWING_LIMIT) {
+            predicate = predicate and (CatalogFiles.name.lowerCase() inList identities.map { it.name }.toSet())
+        }
+        return predicate
+    }
+
+    /**
+     * The id and write-version ([CatalogFiles.revision]) of each active file holding one of [identities]
+     * (lowercased `(kind, namespace, name)`) — the conversion export's `existingId`/`existingRevision`,
+     * reported whether or not it merges. IDENTITY-ONLY: no `content` crosses the wire, so like
+     * [readIdentities] it sits outside the read ledger (`.claude/docs/security.md`, the ledger's
+     * exceptions). Narrowed like [readActiveSources].
+     */
+    suspend fun readStoredRevisions(identities: Set<EntityIdentity>): Map<EntityIdentity, StoredRevision> {
+        if (identities.isEmpty()) return emptyMap()
+        val narrowed = narrowedTo(identities)
+        return suspendTransaction(database) {
+            CatalogFiles.select(CatalogFiles.id, CatalogFiles.revision, CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name)
+                .where { narrowed }
+                .map {
+                    val identity = EntityIdentity(
+                        it[CatalogFiles.kind].lowercase(), it[CatalogFiles.namespace].lowercase(), it[CatalogFiles.name].lowercase(),
+                    )
+                    identity to StoredRevision(it[CatalogFiles.id].value, it[CatalogFiles.revision])
+                }
+                .toList()
+                .filter { (identity, _) -> identity in identities }
+                .toMap()
         }
     }
 

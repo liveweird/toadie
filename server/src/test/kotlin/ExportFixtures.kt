@@ -5,8 +5,11 @@ import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.catalog.CatalogFile
 import ch.nokillswit.catalog.CatalogFileMetadata
 import ch.nokillswit.catalog.CatalogSource
+import ch.nokillswit.catalog.EntityIdentity
 import ch.nokillswit.catalog.EntitySpec
 import ch.nokillswit.catalog.RegistrySnapshot
+import ch.nokillswit.catalog.StoredRevision
+import ch.nokillswit.catalog.identityOf
 import ch.nokillswit.conversion.CatalogDocumentsResponse
 import ch.nokillswit.conversion.ExportInput
 import ch.nokillswit.conversion.MappingDocument
@@ -227,7 +230,10 @@ internal object ExportFixtures {
         existing: List<CatalogSource>? = null,
         defaultNamespace: String = "default",
         registry: RegistrySnapshot = this.registry,
+        /** The stored files' id + revision per identity; defaults to those of [existing] (a merge reads both). */
+        revisions: Map<EntityIdentity, StoredRevision> =
+            existing.orEmpty().associate { identityOf(it.file) to StoredRevision(it.id, it.revision) },
     ): CatalogDocumentsResponse = exportCatalogDocuments(
-        ExportInput(mapping, blueprints, registry, defaultNamespace, entities, existing),
+        ExportInput(mapping, blueprints, registry, defaultNamespace, entities, existing, revisions),
     )
 }

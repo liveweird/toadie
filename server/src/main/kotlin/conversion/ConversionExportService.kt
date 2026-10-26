@@ -58,9 +58,12 @@ class ConversionExportService(
                 entities = entities,
                 existing = null,
             )
+            // The stored counterparts' id + revision are named merge or not (an identity-only read, outside the ledger).
+            val identities = exportedIdentities(input)
+            val revisions = catalogFileService.readStoredRevisions(identities)
             // Merge only over the stored files the export can write to: a narrow export reads (and reserves) little.
-            val existing = if (merge) catalogFileService.readActiveSources(reservation, exportedIdentities(input)) else null
-            val response = exportCatalogDocuments(input.copy(existing = existing))
+            val existing = if (merge) catalogFileService.readActiveSources(reservation, identities) else null
+            val response = exportCatalogDocuments(input.copy(existing = existing, revisions = revisions))
             return finish(response)
         }
     }
