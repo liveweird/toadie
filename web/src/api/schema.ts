@@ -1524,6 +1524,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversion-mappings/{id}/catalog-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Convert stored Port entities into Backstage catalog documents
+         * @description Any authenticated user. Phase 2 of the Backstage <-> Port conversion
+         *     (`.claude/docs/conversion-mapping.md`): the Port -> Backstage half, a PURE read — nothing
+         *     is stored, locked or audited. The selected entities are converted through the mapping
+         *     `{id}` and answered as `files` (the documents `POST /api/v1/files/import` accepts, in
+         *     entity-id order) beside one `rows` entry per SELECTED entity.
+         *
+         *     The selection is the Entity graph's filter set: `blueprint` (any-of), `q`, `team` and
+         *     `query` mean exactly what they mean on `GET /api/v1/entities/graph`, and `entityId`
+         *     narrows the selection to one stored entity. The filters decide what is CONVERTED, never
+         *     what is KNOWN: references and the reverse (derive) rules always see every entity of the
+         *     mapped blueprints, so a filter cannot drop an edge. An entity of a blueprint with no pair
+         *     is a `SKIPPED` row. References are rendered from the TARGET's own converted identity
+         *     (its namespace, not the referrer's), several reference rules onto one spec field
+         *     concatenate in rule order (a many-valued relation in its stored array order, a reverse
+         *     rule in entity order), and a many-team entity keeps the first team as the owner with an
+         *     `OWNER_TRUNCATED` finding. An identity the catalog would refuse — an invalid name, a
+         *     namespace outside the namespaces dictionary, or one several entities share — makes its own
+         *     row `INVALID` (all the entities sharing it, whatever the filter) and every reference to it
+         *     is dropped from the other documents with a `TARGET_INVALID` finding.
+         *
+         *     `merge` (default true) reads the stored catalog files and merges each document over the
+         *     file of the same identity: only the leaves the pair's rules own are replaced (labels and
+         *     annotations by key, tags by tag category, links by title, reference-list entries by the
+         *     blueprint they resolve to), everything else in the stored file survives — a hand-added
+         *     label, a foreign tag, a `template:` dependency. `existingId` names the merged file. A
+         *     document the catalog's own validator refuses is an `INVALID` row and is NOT in `files`. A
+         *     stored reference to a Port entity that was deleted resolves to nothing and survives the merge.
+         *
+         *     A mapping that carries blocking findings (it went stale after a blueprint or registry
+         *     edit) answers `409` — fix the mapping first. The entity read and the catalog
+         *     read (only when merging, narrowed to the files the export can write to) are admitted as ONE
+         *     reservation against the process-wide read memory budget, held until the answer is built —
+         *     their costs add (too large on its own `400`, contention `429`; `.claude/docs/security.md` "Entity read memory budget"), with the
+         *     entity query's rules (`EntityQueryInvalid` `400`, at most four concurrent evaluations)
+         *     when `query` is given. Unpaged by design — a report-style computation, NOT a standard
+         *     list endpoint.
+         */
+        get: operations["getConversionCatalogDocuments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/blueprints": {
         parameters: {
             query?: never;
@@ -3724,6 +3781,54 @@ export interface components {
              * @description Epoch millis.
              */
             updatedAt: number;
+        };
+        /**
+         * @description CONVERTED: nothing to report. CONVERTED_WITH_FINDINGS: converted, but a finding says something was dropped. SKIPPED: the entity's blueprint has no pair. INVALID: a document was built but cannot be stored (it is not in `files`).
+         * @enum {string}
+         */
+        ConversionRowStatus: "CONVERTED" | "CONVERTED_WITH_FINDINGS" | "SKIPPED" | "INVALID";
+        /**
+         * @description OWNER_TRUNCATED: several teams, one owner — the first was kept. TARGET_UNMAPPED: a relation target's blueprint has no pair. TARGET_MISSING: a relation names an entity that no longer exists. TARGET_INVALID: the target's own row is INVALID, so the reference was dropped. VALUE_UNMAPPED: a valueMap rule met a value its map does not list. NO_PAIR: the blueprint has no pair (SKIPPED rows). IDENTITY_CONFLICT: two selected entities convert to one Backstage identity. DOCUMENT_INVALID: the descriptor format refuses the document (`message` says why).
+         * @enum {string}
+         */
+        ConversionFindingCode: "OWNER_TRUNCATED" | "TARGET_UNMAPPED" | "TARGET_MISSING" | "TARGET_INVALID" | "VALUE_UNMAPPED" | "NO_PAIR" | "IDENTITY_CONFLICT" | "DOCUMENT_INVALID";
+        ConversionFinding: {
+            code: components["schemas"]["ConversionFindingCode"];
+            /** @description The Port-side field concerned (`team`, `relations.<id>`, `properties.<id>`); empty for the document as a whole. */
+            field: string;
+            message: string;
+        };
+        ConversionRow: {
+            /**
+             * Format: int32
+             * @description Position in `rows`.
+             */
+            index: number;
+            status: components["schemas"]["ConversionRowStatus"];
+            blueprint: string;
+            identifier: string;
+            /** Format: int32 */
+            entityId: number;
+            /** @description The Backstage kind the entity converted to; absent on a SKIPPED row. */
+            kind?: string;
+            /** @description The Backstage namespace of the converted identity; absent on a SKIPPED row. */
+            namespace?: string;
+            /** @description The Backstage `metadata.name` of the converted identity; absent on a SKIPPED row. */
+            name?: string;
+            /**
+             * Format: int32
+             * @description The stored catalog file of the same identity the document was merged over; absent without `merge` or a match.
+             */
+            existingId?: number;
+            findings: components["schemas"]["ConversionFinding"][];
+            /** @description Port-side fields the entity carries that no rule of its pair converts (`properties.<id>`, `relations.<id>`, `team`). */
+            unmapped: string[];
+        };
+        CatalogDocumentsResponse: {
+            /** @description The converted documents, exactly what `POST /api/v1/files/import` accepts — INVALID rows are not in it. Entity-id order. */
+            files: components["schemas"]["CatalogFileRequest"][];
+            /** @description One entry per SELECTED entity, in entity-id order. */
+            rows: components["schemas"]["ConversionRow"][];
         };
         ConversionMappingList: {
             items: components["schemas"]["ConversionMapping"][];
@@ -6103,6 +6208,47 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getConversionCatalogDocuments: {
+        parameters: {
+            query?: {
+                /** @description Any-of (IN) match over blueprint identifiers, case-insensitive — repetition is the documented IN idiom on this parameter (alongside `kind` and `labelValue`). Unknown identifiers are ignored; if every supplied identifier is unknown the graph is empty. */
+                blueprint?: components["parameters"]["EntityBlueprintFilter"];
+                /** @description Free-text search (API-LIST-005). Case- and accent-insensitive substring match; the matched fields are declared per endpoint. */
+                q?: components["parameters"]["Q"];
+                /** @description Case-insensitive match against the entity's EFFECTIVE team — the stored value for Direct/absent ownership, the value computed along `ownership.path` for Inherited ownership, i.e. exactly what the response's `team` field carries — OR the row itself being the `_team` entity named by this value, so a team-filtered graph keeps that team's own node. Blank is absent; repetition is `400`. An Inherited entity whose path does not resolve has no team and never matches. */
+                team?: components["parameters"]["EntityTeamFilter"];
+                /** @description An entity query (2.0.0 — `.claude/docs/entity-query-language.md`): a read-only, openCypher-shaped subset (`MATCH`+, trailing `OPTIONAL MATCH`*, `WHERE`, `RETURN` of node variables only, `LIMIT`) evaluated over the FULL active workspace; the entities its `RETURN` variables bind to become the shown set, intersected with the other filters. Blank is absent; repetition is `400`; longer than 2000 characters is a plain `400`; a refused query is the `EntityQueryInvalid` `400` carrying `diagnostics`. */
+                query?: components["parameters"]["EntityQueryFilter"];
+                /** @description Convert only this stored entity (intersected with the other filters). Not a positive integer is `400`. */
+                entityId?: number;
+                /** @description Merge each document over the stored catalog file of the same identity (default), or produce the bare exported document only. Anything but `true`/`false` is `400`. */
+                merge?: boolean;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The converted documents and the per-entity report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogDocumentsResponse"];
+                };
+            };
+            400: components["responses"]["EntityQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };

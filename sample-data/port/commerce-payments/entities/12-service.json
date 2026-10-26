@@ -6,6 +6,7 @@
     "icon": "Microservice",
     "team": "retail-tribe",
     "properties": {
+      "description": "The customer-facing shop. Server-side rendered product pages, a client-side cart, and the checkout flow.",
       "type": "website",
       "lifecycle": "production",
       "languages": ["typescript", "javascript"],
@@ -42,6 +43,7 @@
     "title": "Storefront BFF",
     "team": "retail-tribe",
     "properties": {
+      "description": "Backend-for-frontend serving the storefront web app.",
       "type": "service",
       "lifecycle": "production",
       "languages": ["typescript"],
@@ -69,6 +71,7 @@
     "title": "Catalog Service",
     "team": "retail-tribe",
     "properties": {
+      "description": "Product master data, search indexing and availability.",
       "type": "service",
       "lifecycle": "production",
       "languages": ["java"],
@@ -100,6 +103,7 @@
     "title": "Checkout Service",
     "team": "retail-tribe",
     "properties": {
+      "description": "Turns a cart into an order, then asks the payments gateway to collect.",
       "type": "service",
       "lifecycle": "production",
       "languages": ["java"],
@@ -134,6 +138,7 @@
     "title": "Live Cart Gateway",
     "team": "retail-tribe",
     "properties": {
+      "description": "Pushes cart and stock changes to open browser sessions.",
       "type": "service",
       "lifecycle": "experimental",
       "languages": ["typescript"],
@@ -157,8 +162,9 @@
     "blueprint": "service",
     "identifier": "payments-gateway",
     "title": "Payments Gateway",
-    "team": ["platform-tribe", "payments-squad"],
+    "team": ["payments-squad", "platform-tribe"],
     "properties": {
+      "description": "Card authorisation and capture against the acquirer.",
       "type": "service",
       "lifecycle": "production",
       "languages": ["java"],
@@ -193,6 +199,7 @@
     "title": "Ledger Worker",
     "team": "payments-squad",
     "properties": {
+      "description": "Double-entry booking of every authorised and captured payment.",
       "type": "job",
       "lifecycle": "production",
       "languages": ["java"],
@@ -222,6 +229,7 @@
     "title": "Settlement Pipeline",
     "team": "payments-squad",
     "properties": {
+      "description": "Nightly reconciliation of acquirer settlement files into the reporting warehouse. Being replaced, so it is marked sunsetting rather than deprecated.",
       "type": "data-pipeline",
       "lifecycle": "sunsetting",
       "languages": ["python"],
@@ -249,6 +257,7 @@
     "title": "Legacy Invoicing",
     "team": "payments-squad",
     "properties": {
+      "description": "The pre-2019 invoicing batch job, on its way out. Being retired, so it is marked deprecated.",
       "type": "service",
       "lifecycle": "deprecated",
       "languages": ["php"],
@@ -275,6 +284,7 @@
     "title": "Toadie",
     "team": "platform-tribe",
     "properties": {
+      "description": "The Backstage catalog helper this demo is loaded into.",
       "type": "website",
       "lifecycle": "experimental",
       "languages": ["kotlin", "typescript"],

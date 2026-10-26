@@ -15,7 +15,7 @@ describe("Backstage commerce/payments sample", () => {
     const result = parseCatalogYaml(readFileSync(SAMPLE_PATH, "utf8"));
 
     expect(result.errors).toEqual([]);
-    expect(result.documents).toHaveLength(34);
+    expect(result.documents).toHaveLength(42);
 
     const byName = new Map(result.documents.map((document) => [document.metadata.name, document]));
     expect(byName.get("catalog-service")?.spec.dependsOn).toContain(

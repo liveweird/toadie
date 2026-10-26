@@ -1,11 +1,16 @@
 {
   "identifier": "library",
   "title": "Library",
-  "description": "Shared code that is built and published but never deployed on its own — an SDK, a starter, a shared module. Backstage kind: Component of type library (system → spec.system, the team field → spec.owner, depends_on → spec.dependsOn, languages/frameworks → tags, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref).",
+  "description": "Shared code that is built and published but never deployed on its own — an SDK, a starter, a shared module. Backstage kind: Component of type library (system → spec.system, the team field → spec.owner, subcomponent_of → spec.subcomponentOf, depends_on → spec.dependsOn, languages/frameworks → tags, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref).",
   "icon": "Package",
   "hierarchyRelations": {"composition": "system"},
   "schema": {
     "properties": {
+      "description": {
+        "type": "string",
+        "title": "Description",
+        "description": "What it is, in a sentence or two - Backstage metadata.description."
+      },
       "lifecycle": {
         "type": "string",
         "title": "Lifecycle",
@@ -76,6 +81,13 @@
     "system": {
       "title": "System",
       "target": "system",
+      "required": false,
+      "many": false
+    },
+    "subcomponent_of": {
+      "title": "Subcomponent of",
+      "description": "The library this one is a part of (a module of a bundle). Targets library, not service: service already references library (uses_libraries), and a blueprint can only target one that exists.",
+      "target": "library",
       "required": false,
       "many": false
     },

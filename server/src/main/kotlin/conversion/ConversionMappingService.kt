@@ -3,6 +3,7 @@ package ch.nokillswit.conversion
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.BlueprintService
 import ch.nokillswit.catalog.CatalogRegistryReader
+import ch.nokillswit.catalog.DEFAULT_NAMESPACE
 import ch.nokillswit.catalog.RegistrySnapshot
 import ch.nokillswit.infra.db.lockingTransaction
 import ch.nokillswit.users.UserService
@@ -29,6 +30,15 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
 
 val ConversionMappingServiceKey = AttributeKey<ConversionMappingService>("ConversionMappingService")
+
+/** What [ConversionMappingService.exportBasis] hands the export; [document] is null exactly when [mapping] has blocking findings. */
+internal class ExportBasis(
+    val mapping: ConversionMapping,
+    val document: MappingDocument?,
+    val blueprints: Map<String, BlueprintDefinition>,
+    val registry: RegistrySnapshot,
+    val defaultNamespace: String,
+)
 
 /**
  * The stored conversion-mapping registry (V45). ADMIN-curated, readable by everyone, capped at
@@ -120,6 +130,28 @@ class ConversionMappingService(
             .where { (ConversionMappings.id eq id) and active() }
             .map { it.toResponse(snapshot) }
             .singleOrNull()
+    }
+
+    /**
+     * Everything the Port -> Backstage export needs about one mapping, read in ONE plain transaction
+     * (the validation reads of [read], no lock): the mapping with its recomputed findings, the typed
+     * document (null while the mapping has blocking findings — the export refuses those with a `409`),
+     * the active blueprints, one registry snapshot and the workspace's default namespace.
+     */
+    internal suspend fun exportBasis(id: UInt): ExportBasis? = suspendTransaction(database) {
+        val snapshot = loadSnapshot()
+        val mapping = joined().selectAll()
+            .where { (ConversionMappings.id eq id) and active() }
+            .map { it.toResponse(snapshot) }
+            .singleOrNull()
+            ?: return@suspendTransaction null
+        ExportBasis(
+            mapping = mapping,
+            document = if (mapping.findings.isEmpty()) parseMappingDocument(mapping.document).document else null,
+            blueprints = snapshot.blueprints,
+            registry = snapshot.registry,
+            defaultNamespace = registryReader.flaggedDefaultNamespace() ?: DEFAULT_NAMESPACE,
+        )
     }
 
     /** The stored text of a validated document — compact JSON, never rewritten, no `null` members (the parser refuses them). */

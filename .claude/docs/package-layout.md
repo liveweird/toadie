@@ -331,7 +331,7 @@ ch.nokillswit
 │                       SavedEntityQueryService.kt (the lenses/ clone over V35's `entity_queries`:
 │                       own + PUBLIC list, creator-only mutations via the hybrid 404/403 verdict),
 │                       SavedEntityQueryRoutes.kt (`/api/v1/entity-queries`, any authenticated)
-├── conversion/         Backstage <-> Port conversion, phase 1 (Toadie-first): the stored MAPPING
+├── conversion/         Backstage <-> Port conversion, phases 1-2 (Toadie-first): the stored MAPPING
 │                       DOCUMENT that says how a Port blueprint corresponds to a Backstage kind, and
 │                       its registry (the mapping-is-data rule: `.claude/docs/conversion-mapping.md`).
 │                       MappingDocument.kt (the typed model: pairs, rules, sealed
@@ -349,6 +349,21 @@ ch.nokillswit
 │                       transaction, no lock beyond the create cap; findings/drift recomputed on every
 │                       read), ConversionMappingRoutes.kt (`/api/v1/conversion-mappings`, ADMIN
 │                       writes), MappingErrors.kt (the Port Errors report's `mappings` rows).
+│                       Phase 2, the Port -> Backstage EXPORT (pure read, no audit):
+│                       BackstageExport.kt (the PURE engine: identities, documents, derive pass,
+│                       footprint merge, catalog validation — `ExportInput` in, a
+│                       `CatalogDocumentsResponse` out), Codecs.kt (each codec's export half + the
+│                       `ExportLookup` seam), DocumentBuilder.kt (`DocBuilder`: what a repeated write
+│                       to one leaf means), FootprintMerge.kt (`Footprint`:
+│                       the leaves a pair owns, derived from its rules), CatalogDocuments.kt (the
+│                       response DTOs and finding codes), ConversionExportService.kt (the mapping
+│                       basis (a registry-sized read) and then the two ledger-admitted reads —
+│                       `entities/EntityExportRead.kt` and `CatalogFileService.readActiveSources` —
+│                       on ONE reservation held until the answer is encoded, then the pure engine); the route is
+│                       `GET /api/v1/conversion-mappings/{id}/catalog-documents` in
+│                       ConversionMappingRoutes.kt. The Backstage spec-field accessors the engine writes through
+│                       (`specOf`, `specStrings`, `specLists`) live in `catalog/EntitySpecAccess.kt`, beside the
+│                       field table they mirror.
 ├── integration/        the machine API: the read-only Port GraphQL adapter (v2.7.0 — committed SDL,
 │                       service-backed resolvers, bounded execution, separate machine authentication)
 │                       and, since 2.15.0, the MCP endpoint `POST /integration/mcp` (Mcp.kt — a

@@ -114,6 +114,23 @@ object SampleData {
         }
     }
 
+    /**
+     * The checked-in Backstage sample (`sample-data/backstage/commerce-payments/catalog-info.yaml`) as catalog
+     * documents - the multi-document YAML read with Jackson, `apiVersion` dropped (the catalog document has
+     * none). The one reader behind [SampleCatalogTest] and [SampleConversionTest].
+     */
+    fun backstageSampleFiles(): List<ch.nokillswit.catalog.CatalogFile> {
+        val text = File("../sample-data/backstage/commerce-payments/catalog-info.yaml").readText()
+        val yaml = com.fasterxml.jackson.databind.ObjectMapper(com.fasterxml.jackson.dataformat.yaml.YAMLFactory())
+        val json = com.fasterxml.jackson.databind.ObjectMapper()
+        val documents = yaml.readerFor(com.fasterxml.jackson.databind.JsonNode::class.java)
+            .readValues<com.fasterxml.jackson.databind.JsonNode>(text).readAll()
+        return documents.filterNot { it.isNull }.map { document ->
+            (document as com.fasterxml.jackson.databind.node.ObjectNode).remove("apiVersion")
+            Json.decodeFromString(json.writeValueAsString(document))
+        }
+    }
+
     val requiredHierarchies = arrayOf("composition", "deployment")
 
     /** Snapshots the shared hierarchy dictionary, retaining ids so referenced rows stay updates. */

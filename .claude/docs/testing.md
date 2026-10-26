@@ -286,9 +286,30 @@ Backend tests live flat in `server/src/test/kotlin/` (kotlin.test + `io.ktor.ser
 
 **Sample catalogs.** `SampleCatalogTest` loads
 `sample-data/backstage/commerce-payments/catalog-info.yaml` through the real import API and pins
-the 32 `CREATED` / 2 `CREATED_WITH_FINDINGS` result, the four intentional reference findings,
-and the 34 report-only `SOURCE_MISSING` findings. The frontend's
+the 40 `CREATED` / 2 `CREATED_WITH_FINDINGS` result, the four intentional reference findings,
+and the 42 report-only `SOURCE_MISSING` findings. The frontend's
 `sampleCatalogImport.test.ts` parses the same moved fixture with the production YAML parser.
+
+**Conversion export (phase 2).** The Port -> Backstage engine is tested in four layers, none leaning on
+the real ontology's names except the last: `CodecsTest` (each codec's export half and the `DocBuilder`
+write rules, plus the drift guard that `specOf`/`specStrings`/`specLists` cover every field the
+catalog's own `SPEC_SHAPES` declares), `BackstageExportTest` (the whole pure pipeline over the
+`ExportFixtures` world: identities, target-namespace references, rule-order unions, the derive pass
+over a filtered snapshot, `OWNER_TRUNCATED`/`TARGET_*` findings, the footprint merge preserving
+unowned labels/tags/links/foreign `dependsOn` entries, `INVALID` rows kept out of `files`),
+`ConversionRoutesTest` (the endpoint over a throwaway mapping: filters, `entityId`, `merge`, the 400
+ordering (including 400 before 404), `404`, the `409` for a stale mapping, no audit, the ledger `400`/`429`
+at the service seam, the proof that ONE reservation spans both reads — `peak(merge) == peak(no merge) +
+the catalog read's own cost` — and that a narrow export reserves only the files it can merge over, no
+`null` member on the wire) and
+`SampleConversionTest` — **flagship test A**: the Port sample, loaded through the real APIs and
+converted by the default mapping, equals the checked-in Backstage sample modulo an EXPLICIT deviation
+list (the three hand-restored edits that carry the four reference findings; no wildcard tolerance, and a listed deviation
+that stops differing fails too), with zero mapping findings/drift, SKIPPED rows exactly the Port-only
+entity counts, the two `OWNER_TRUNCATED` rows, every row's `unmapped` inside the pair's declared
+`lossy`, and a second export identical. `TOADIE_DUMP_BACKSTAGE_SAMPLE=<file>` makes that test write
+the raw export response — the first step of regenerating the Backstage sample
+(`sample-data/backstage/commerce-payments/README.md`).
 
 **Catalog import `replaceExisting`.** `CatalogImportReplaceTest` pins: the flag off or omitted
 behaves as before (`CONFLICT`, file untouched); `UPDATED` in place (same `fileId`, revision +1, the

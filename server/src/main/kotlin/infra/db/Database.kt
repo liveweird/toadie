@@ -17,6 +17,8 @@ import ch.nokillswit.catalog.CatalogFileEventService
 import ch.nokillswit.catalog.CatalogFileEventServiceKey
 import ch.nokillswit.catalog.CatalogFileService
 import ch.nokillswit.catalog.CatalogFileServiceKey
+import ch.nokillswit.conversion.ConversionExportService
+import ch.nokillswit.conversion.ConversionExportServiceKey
 import ch.nokillswit.conversion.ConversionMappingService
 import ch.nokillswit.conversion.ConversionMappingServiceKey
 import ch.nokillswit.dictionaries.DictionaryService
@@ -293,7 +295,8 @@ suspend fun Application.configureDatabase() {
     // ONE process-wide read ledger for every whole-workspace content read (catalog + entities).
     val readLedger = ReadLedger()
     val catalogFileEventService = CatalogFileEventService(database)
-    attributes.put(CatalogFileServiceKey, CatalogFileService(database, catalogFileEventService, readLedger))
+    val catalogFileService = CatalogFileService(database, catalogFileEventService, readLedger)
+    attributes.put(CatalogFileServiceKey, catalogFileService)
     attributes.put(CatalogFileEventServiceKey, catalogFileEventService)
     attributes.put(DictionaryServiceKey, DictionaryService(database))
     attributes.put(LabelServiceKey, LabelService(database))
@@ -304,7 +307,8 @@ suspend fun Application.configureDatabase() {
     attributes.put(AnnotationKeyServiceKey, AnnotationKeyService(database))
     val blueprintService = BlueprintService(database)
     attributes.put(BlueprintServiceKey, blueprintService)
-    attributes.put(ConversionMappingServiceKey, ConversionMappingService(database, blueprintService))
+    val conversionMappingService = ConversionMappingService(database, blueprintService)
+    attributes.put(ConversionMappingServiceKey, conversionMappingService)
     val jqDeadlineMillis = environment.config.property("computed.jq.deadlineMillis").getString().toLong()
         .also { require(it in 1..MAX_JQ_DEADLINE_MILLIS) { "computed.jq.deadlineMillis must be between 1 and $MAX_JQ_DEADLINE_MILLIS" } }
     val entityQueryDeadlineMillis = environment.config.property("entityQuery.deadlineMillis").getString().toLong()
@@ -313,14 +317,16 @@ suspend fun Application.configureDatabase() {
                 "entityQuery.deadlineMillis must be between 1 and $MAX_ENTITY_QUERY_DEADLINE_MILLIS"
             }
         }
+    val entityService = EntityService(
+        database,
+        JqEvaluator(deadlineMillis = jqDeadlineMillis),
+        queryDeadlineMillis = entityQueryDeadlineMillis,
+        readLedger = readLedger,
+    )
+    attributes.put(EntityServiceKey, entityService)
     attributes.put(
-        EntityServiceKey,
-        EntityService(
-            database,
-            JqEvaluator(deadlineMillis = jqDeadlineMillis),
-            queryDeadlineMillis = entityQueryDeadlineMillis,
-            readLedger = readLedger,
-        ),
+        ConversionExportServiceKey,
+        ConversionExportService(conversionMappingService, entityService, catalogFileService, readLedger),
     )
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
     attributes.put(AuthSessionServiceKey, AuthSessionService(database))

@@ -5,6 +5,11 @@
   "icon": "User",
   "schema": {
     "properties": {
+      "description": {
+        "type": "string",
+        "title": "Description",
+        "description": "What it is, in a sentence or two - Backstage metadata.description."
+      },
       "email": {
         "type": "string",
         "title": "Email",

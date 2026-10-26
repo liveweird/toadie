@@ -5,6 +5,7 @@
     "title": "Platform Tribe",
     "icon": "Team",
     "properties": {
+      "description": "Owns the shared platform; the payments squad reports into it.",
       "type": "org-division",
       "email": "platform-tribe@toadie.local",
       "slack_channel": "https://acme.slack.com/archives/platform-tribe",
@@ -20,6 +21,7 @@
     "title": "Retail Tribe",
     "icon": "Team",
     "properties": {
+      "description": "Owns the storefront system end to end.",
       "type": "org-unit",
       "email": "retail-tribe@toadie.local",
       "slack_channel": "https://acme.slack.com/archives/retail-tribe"
@@ -32,6 +34,7 @@
     "title": "Payments Squad",
     "icon": "Team",
     "properties": {
+      "description": "Owns the payments capability. Part of the Platform Tribe.",
       "type": "team",
       "email": "payments-squad@toadie.local",
       "slack_channel": "https://acme.slack.com/archives/payments-squad"
@@ -43,6 +46,7 @@
     "identifier": "storefront-squad",
     "title": "Storefront Squad",
     "properties": {
+      "description": "Owns the storefront services; part of the Retail Tribe.",
       "type": "team",
       "email": "storefront-squad@toadie.local"
     },

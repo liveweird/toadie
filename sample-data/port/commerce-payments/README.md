@@ -172,13 +172,13 @@ owner: a rerun reports `exists, skipped` for every query and never overwrites an
 [`mapping/backstage.json`](mapping/backstage.json) is a conversion mapping document
 (`schemaVersion` 1): the stored DATA — never server code — that says which Port blueprint is which
 Backstage kind and which property, relation or title field becomes which label, tag category,
-annotation, link or spec field. It holds eight pairs and 110 rules: `_team` → Group, `_user` →
+annotation, link or spec field. It holds eight pairs and 119 rules: `_team` → Group, `_user` →
 User, `domain` → Domain, `system` → System, `service` and `library` → Component (the library pair
 is selected by `spec.type: library` and writes that type as a constant), `api` → API and
 `resource` → Resource. `product`, `dataset`, `environment`, `cluster`, `workload`, `api_adoption`
 and `dataset_adoption` are Port-only and have no pair. What a pair deliberately does not carry is
 declared under its `lossy` member, on both sides (Port properties and relations, and Backstage
-fields such as `metadata.description`). The wire format is the `ConversionMappingDocument` schema
+fields such as `spec.dependencyOf`). The wire format is the `ConversionMappingDocument` schema
 in the OpenAPI contract; `.claude/docs/ontology.md` ("Backstage export mapping") has the
 design notes.
 
@@ -188,8 +188,18 @@ registry's list, a label key that was deleted) is reported but never blocks. `Sa
 stores this file and requires zero findings and zero drift, so a blueprint enum or a registry that
 changes without the other fails the build. Load it with `mapping/load.sh` (after the blueprints;
 `TOADIE_MAPPING_NAME` renames it; a rerun reports `exists, skipped`), review it on the Port Errors
-report, and read it back with `GET /api/v1/conversion-mappings`. Nothing converts documents yet —
-the export and import engines are later phases.
+report, and read it back with `GET /api/v1/conversion-mappings`.
+
+The mapping also drives the Port → Backstage export: `GET /api/v1/conversion-mappings/{id}/catalog-documents`
+converts the stored entities of the eight mapped blueprints into catalog documents (optionally filtered
+like the Entity graph, and merged over matching stored catalog files). The checked-in Backstage sample
+[`catalog-info.yaml`](../../backstage/commerce-payments/catalog-info.yaml) is that export of THIS sample,
+bar three hand-restored edits that carry its four deliberate findings — `SampleConversionTest` keeps the two in step, so a change
+to a mapped blueprint or entity here means regenerating the Backstage file (see its README). The 34
+entities of the Port-only blueprints come back as `SKIPPED` rows. The eight mapped blueprints each carry
+a `description` property (Backstage `metadata.description`); the two entities with several `team` values
+(`domain` `payments`, `service` `payments-gateway`) keep their FIRST team as the Backstage owner and the
+export reports `OWNER_TRUNCATED`, so the primary team is listed first. The import engine is a later phase.
 
 ## Remove the demo
 

@@ -6,6 +6,7 @@
     "icon": "Box",
     "team": "retail-tribe",
     "properties": {
+      "description": "The public shop — browsing, cart and checkout.",
       "type": "product",
       "criticality": "critical",
       "support_mode": "24-7",
@@ -27,6 +28,7 @@
     "icon": "Box",
     "team": "payments-squad",
     "properties": {
+      "description": "Card authorisation, the ledger and settlement reporting.",
       "type": "capability",
       "criticality": "critical",
       "support_mode": "24-7",
@@ -42,6 +44,7 @@
     "title": "Acquirer (third party)",
     "team": "payments-squad",
     "properties": {
+      "description": "The card acquirer we authorise against. Lives in the `external` namespace — we model it because we depend on it, but we do not own or run it.",
       "type": "capability",
       "criticality": "critical",
       "support_mode": "business-hours",
@@ -59,6 +62,7 @@
     "title": "Invoicing",
     "team": "payments-squad",
     "properties": {
+      "description": "Customer invoicing and the legacy batch tooling around it.",
       "type": "capability",
       "criticality": "non-critical",
       "support_mode": "business-days",
@@ -73,6 +77,7 @@
     "title": "Developer Portal",
     "team": "platform-tribe",
     "properties": {
+      "description": "The internal developer portal and its supporting database.",
       "type": "product",
       "criticality": "non-critical",
       "support_mode": "best-effort",

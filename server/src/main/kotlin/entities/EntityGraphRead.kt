@@ -56,10 +56,10 @@ private val QUERY_DISPATCHER = Executors.newFixedThreadPool(
 ).asCoroutineDispatcher()
 
 /** [graph]'s parse/validate result — produced OUTSIDE any transaction, before the workspace rows are loaded. */
-private data class ParsedQuery(val query: Query, val slots: VariableSlots, val hierarchies: Set<String>, val textLength: Int)
+internal data class ParsedQuery(val query: Query, val slots: VariableSlots, val hierarchies: Set<String>, val textLength: Int)
 
 /** [graph]'s query orchestration payload — non-null only when [EntityGraphFilter.query] is present. */
-private data class GraphQueryPlan(
+internal data class GraphQueryPlan(
     val query: Query,
     val slots: VariableSlots,
     /** Undecoded on purpose — [WorkspaceRow.skeleton] decodes/charges on the query pool by [evaluateEntityQuery]. */
@@ -103,15 +103,24 @@ private data class GraphMaterialized(
  * other filters hide may still be a hop along the way), and only the `RETURN`ed entities
  * narrow the shown rows.
  */
-suspend fun EntityService.graph(filter: EntityGraphFilter): EntityGraph {
-    val text = filter.query ?: return graphWithPlan(filter, null)
+suspend fun EntityService.graph(filter: EntityGraphFilter): EntityGraph =
+    withParsedQuery(filter.query) { parsed -> graphWithPlan(filter, parsed) }
+
+/**
+ * The query prologue every `query`-bearing entity read shares ([graph], the conversion export): with no
+ * [query] text, [block] runs with `null`; otherwise the text is parsed/validated OUTSIDE any transaction
+ * (a refused query never reads an entity row), one `entity-query` permit is taken (none free -> `429`,
+ * before any workspace is loaded) and released when [block] ends.
+ */
+internal suspend fun <T> EntityService.withParsedQuery(query: String?, block: suspend (ParsedQuery?) -> T): T {
+    val text = query ?: return block(null)
     val schema = suspendTransaction(database) { loadQuerySchema() }
-    val (query, slots) = requireValidEntityQuery(text, schema)
+    val (parsed, slots) = requireValidEntityQuery(text, schema)
     if (!querySlots.tryAcquire()) {
         throw TooManyRequestsException("Too many entity queries are being evaluated — retry shortly")
     }
     try {
-        return graphWithPlan(filter, ParsedQuery(query, slots, schema.hierarchies, text.length))
+        return block(ParsedQuery(parsed, slots, schema.hierarchies, text.length))
     } finally {
         querySlots.release()
     }
@@ -219,7 +228,7 @@ private suspend fun EntityService.narrowByQuery(
  * syntax error) or non-empty validator diagnostics both become [EntityQueryInvalidException],
  * the ONE findings-bearing `400` this endpoint throws for a refused query.
  */
-private fun requireValidEntityQuery(text: String, schema: QuerySchema): Pair<Query, VariableSlots> {
+internal fun requireValidEntityQuery(text: String, schema: QuerySchema): Pair<Query, VariableSlots> {
     val query = try {
         parseEntityQuery(text)
     } catch (cause: QueryException) {
@@ -240,7 +249,7 @@ private fun requireValidEntityQuery(text: String, schema: QuerySchema): Pair<Que
  * with ONE [QueryDiagnostic] naming the budget code; [kotlinx.coroutines.CancellationException]
  * propagates unchanged.
  */
-private suspend fun EntityService.evaluateEntityQuery(plan: GraphQueryPlan): QueryResult {
+internal suspend fun EntityService.evaluateEntityQuery(plan: GraphQueryPlan): QueryResult {
     val budget = QueryBudget(queryDeadlineMillis, nanoTime = queryClock)
     try {
         return withContext(QUERY_DISPATCHER) {

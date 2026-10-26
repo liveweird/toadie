@@ -6,6 +6,11 @@
   "hierarchyRelations": {"composition": "domain"},
   "schema": {
     "properties": {
+      "description": {
+        "type": "string",
+        "title": "Description",
+        "description": "What it is, in a sentence or two - Backstage metadata.description."
+      },
       "type": {
         "type": "string",
         "title": "Type",

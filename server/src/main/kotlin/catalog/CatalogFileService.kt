@@ -127,6 +127,9 @@ const val CATALOG_READ_FOOTPRINT_RATIO = 3L
  */
 const val CATALOG_EXPORT_FOOTPRINT_RATIO = 6L
 
+/** Above this many wanted identities the export-merge read stops narrowing by name (kind and namespace still do). */
+const val IDENTITY_NAME_NARROWING_LIMIT = 1000
+
 class CatalogFileService(
     private val database: R2dbcDatabase,
     private val eventService: CatalogFileEventService = CatalogFileEventService(database),
@@ -545,6 +548,42 @@ class CatalogFileService(
     }
 
     /**
+     * The active files holding one of [identities] (lowercased `(kind, namespace, name)`), WITH their ids —
+     * the conversion export's footprint-merge read. It is charged to the CALLER's [reservation] (the
+     * caller keeps it open while the sources are alive, so a narrow export reads and reserves only the
+     * files it can merge over): the matching rows' `content` bytes x the export footprint ratio are
+     * reserved BEFORE any content crosses the wire, exactly as [export] does for the whole workspace. The SQL
+     * predicate is a superset narrowing (kind, namespace and — up to [IDENTITY_NAME_NARROWING_LIMIT]
+     * identities — name each `IN` their identities' values); the exact identity match is made in memory.
+     */
+    suspend fun readActiveSources(reservation: ReadLedger.Reservation, identities: Set<EntityIdentity>): List<CatalogSource> {
+        if (identities.isEmpty()) return emptyList()
+        var predicate: Op<Boolean> = active() and
+            (CatalogFiles.kind.lowerCase() inList identities.map { it.kind }.toSet()) and
+            (CatalogFiles.namespace inList identities.map { it.namespace }.toSet())
+        if (identities.size <= IDENTITY_NAME_NARROWING_LIMIT) {
+            predicate = predicate and (CatalogFiles.name.lowerCase() inList identities.map { it.name }.toSet())
+        }
+        val narrowed = predicate
+        try {
+            return suspendTransaction(database) {
+                reserveContent(reservation, narrowed, CATALOG_EXPORT_FOOTPRINT_RATIO)
+                activeSources(narrowed).filter { identityOf(it.file) in identities }
+            }
+        } catch (cause: ReadBudgetExceeded) {
+            throwReadBudgetHttp(cause, "catalog")
+        }
+    }
+
+    /** Reserves [ratio] x the stored `content` bytes of the rows [predicate] matches on [reservation], before they are read. */
+    private suspend fun reserveContent(reservation: ReadLedger.Reservation, predicate: Op<Boolean>, ratio: Long) {
+        val contentSum = Sum(octetLength(CatalogFiles.content), LongColumnType())
+        val row = CatalogFiles.select(contentSum).where { predicate }.singleOrNull()
+            ?: error("an aggregate SELECT without GROUP BY must always answer exactly one row")
+        reservation.reserve((row.getOrNull(contentSum) ?: 0L) * ratio)
+    }
+
+    /**
      * Runs a whole-workspace content read ([errors]/[graph]/[export]) in one transaction after
      * admitting it against the process-wide [readLedger] (2.19.0 — `.claude/docs/security.md`
      * "Entity read memory budget"): the whole conservative estimate of the rows [predicate] matches
@@ -560,10 +599,7 @@ class CatalogFileService(
         readLedger.open().use { reservation ->
             try {
                 suspendTransaction(database) {
-                    val contentSum = Sum(octetLength(CatalogFiles.content), LongColumnType())
-                    val row = CatalogFiles.select(contentSum).where { predicate }.singleOrNull()
-                        ?: error("an aggregate SELECT without GROUP BY must always answer exactly one row")
-                    reservation.reserve((row.getOrNull(contentSum) ?: 0L) * ratio)
+                    reserveContent(reservation, predicate, ratio)
                     block()
                 }
             } catch (cause: ReadBudgetExceeded) {
@@ -629,9 +665,9 @@ class CatalogFileService(
         )
     }
 
-    private suspend fun activeSources(): List<CatalogSource> =
+    private suspend fun activeSources(predicate: Op<Boolean> = active()): List<CatalogSource> =
         CatalogFiles.selectAll()
-            .where { active() }
+            .where { predicate }
             .map {
                 CatalogSource(
                     id = it[CatalogFiles.id].value,

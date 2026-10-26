@@ -6,6 +6,7 @@
     "icon": "Package",
     "team": "platform-tribe",
     "properties": {
+      "description": "Shared utilities used by most JVM services.",
       "lifecycle": "production",
       "languages": ["java"],
       "artifact": "com.acme:commons",
@@ -22,6 +23,7 @@
     "icon": "Package",
     "team": "payments-squad",
     "properties": {
+      "description": "The client library other teams use to talk to the payments gateway.",
       "lifecycle": "production",
       "languages": ["java"],
       "frameworks": ["spring-boot"],
@@ -36,6 +38,7 @@
     },
     "relations": {
       "system": "payments",
+      "subcomponent_of": "acme-commons",
       "depends_on": ["acme-commons"]
     }
   }

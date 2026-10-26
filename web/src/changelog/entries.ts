@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.25.0",
+    date: "2026-10-26",
+    en: `**Export Port entities as Backstage catalog files.** A stored conversion mapping can now turn Port entities into Backstage catalog files: the result shows, per entity, the catalog file it becomes and anything that could not be carried over, and it can be merged with the catalog files you already have without losing labels, tags, links or references the mapping does not manage. The commerce-payments Backstage demo is now generated from the Port demo this way and has grown to 42 files. The page to run this from follows in a later release.`,
+    pl: `**Eksport encji Port jako plików katalogu Backstage.** Zapisane mapowanie konwersji może teraz zamieniać encje Port w pliki katalogu Backstage: wynik pokazuje dla każdej encji plik katalogu, którym się staje, oraz wszystko, czego nie dało się przenieść, i można go scalić z istniejącymi plikami katalogu bez utraty etykiet, tagów, linków czy odwołań, którymi mapowanie nie zarządza. Demo Backstage commerce-payments jest teraz generowane w ten sposób z demo Port i rozrosło się do 42 plików. Strona do uruchamiania eksportu pojawi się w późniejszym wydaniu.`,
+  },
+  {
     version: "2.24.0",
     date: "2026-10-26",
     en: `**Conversion mappings (groundwork).** Administrators can now store mapping documents that describe how Port blueprints correspond to Backstage kinds — which property becomes which label, tag, annotation or field, and which relations become references. Toadie checks every mapping against the current blueprints and registries, and the Port Errors report lists any mapping a later change has broken. The commerce-payments demo ships a ready-made mapping. Converting entities and catalog files with it follows in a later release.`,
