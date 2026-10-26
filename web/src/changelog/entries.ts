@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.24.0",
+    date: "2026-10-26",
+    en: `**Conversion mappings (groundwork).** Administrators can now store mapping documents that describe how Port blueprints correspond to Backstage kinds — which property becomes which label, tag, annotation or field, and which relations become references. Toadie checks every mapping against the current blueprints and registries, and the Port Errors report lists any mapping a later change has broken. The commerce-payments demo ships a ready-made mapping. Converting entities and catalog files with it follows in a later release.`,
+    pl: `**Mapowania konwersji (podstawy).** Administratorzy mogą teraz zapisywać dokumenty mapowania, które opisują, jak blueprinty Port odpowiadają rodzajom Backstage — która właściwość staje się którą etykietą, tagiem, adnotacją lub polem, a które relacje stają się odwołaniami. Toadie sprawdza każde mapowanie względem bieżących blueprintów i rejestrów, a raport Błędy Port wymienia mapowania zepsute przez późniejszą zmianę. Demo commerce-payments zawiera gotowe mapowanie. Konwersja encji i plików katalogu z jego użyciem pojawi się w późniejszym wydaniu.`,
+  },
+  {
     version: "2.23.0",
     date: "2026-10-26",
     en: `**Re-import updates existing files.** The Import files page has a new "Replace existing files" switch: when it is on, a file whose kind, namespace and name already exist is updated in place instead of being reported as a conflict, with its change recorded in the file's History. Files that already match are reported as unchanged. A batch imported from a URL re-stamps each file's source reference as synced.`,
