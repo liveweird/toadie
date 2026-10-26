@@ -8,9 +8,5 @@
       "source_note": { "type": "string", "title": "Source note" }
     },
     "required": []
-  },
-  "relations": {},
-  "mirrorProperties": {},
-  "calculationProperties": {},
-  "aggregationProperties": {}
+  }
 }

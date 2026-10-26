@@ -65,9 +65,9 @@ branch, so later edits to the fixture or the sample data cannot change what the 
      `lastSyncedAt`.
 6. They reopen the modal.
    - *Expected*: "Toadie and the source are in sync" and **Overwrite stored copy** disabled; they
-     cancel. (The fixture spells out the four empty maps `relations`/`mirrorProperties`/
+     cancel. (The fixture omits the four maps `relations`/`mirrorProperties`/
      `calculationProperties`/`aggregationProperties` on purpose: the stored copy always renders
-     them, and a source that omits them is never "in sync" in the modal.)
+     them as empty, and the modal compares an empty map and an absent one as equal.)
 
 The blueprint is deleted through the API in `finally`.
 

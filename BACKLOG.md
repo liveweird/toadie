@@ -59,12 +59,6 @@ promotes it. A finished item is removed, not ticked.
   pick an encoding Covenant can decode), decide whether the stored `dataset.contract_url` stays as the
   ODCS document link, and update `ontology.md`, the sample README and the computed-property counts
   `SampleBlueprintsTest` pins.
-- [new] **Treat empty and absent blueprint maps as equal in the sync modal.** After a sync the stored
-  blueprint renders empty `relations`, `mirrorProperties`, `calculationProperties` and
-  `aggregationProperties` maps, so a source document that omits them never reads "in sync": reopening
-  the modal still shows a diff and keeps Overwrite enabled (`canonicalBlueprintDocumentJson` over
-  `blueprintExportDocument(detail)` vs. the picked source). The e2e fixture spells the four empty maps
-  out to work around it. Normalise both sides the same way and pin it with a vitest.
 
 ## Housekeeping
 

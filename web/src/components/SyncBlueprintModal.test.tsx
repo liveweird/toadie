@@ -187,6 +187,34 @@ describe("SyncBlueprintModal", () => {
     expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
   });
 
+  test("a source omitting the empty relation/mirror/calculation/aggregation maps reads as in sync", async () => {
+    const omitting = {
+      identifier: "service",
+      title: "Old title",
+      schema: { properties: { language: { type: "string", title: "Language" } }, required: [] },
+    };
+    mockRoutes(mockFetch, { fetch: jsonResponse(200, { content: JSON.stringify(omitting) }) });
+    renderModal();
+
+    expect(await screen.findByText("Toadie and the source are in sync")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeDisabled();
+  });
+
+  test("a source omitting the empty maps still shows a real difference, with no phantom empty-map lines", async () => {
+    const omitting = {
+      identifier: "service",
+      title: "New title",
+      schema: { properties: { language: { type: "string", title: "Language" } }, required: [] },
+    };
+    mockRoutes(mockFetch, { fetch: jsonResponse(200, { content: JSON.stringify(omitting) }) });
+    renderModal();
+
+    const diff = await screen.findByRole("group", { name: "Changes between the stored copy and the source copy" });
+    expect(diff).toHaveTextContent('"title": "New title"');
+    expect(diff).not.toHaveTextContent("relations");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Overwrite stored copy" })).toBeEnabled());
+  });
+
   test("a refused fetch shows the public-https message and disables the overwrite", async () => {
     mockRoutes(mockFetch, { fetch: jsonResponse(400, { title: "Bad Request", status: 400, detail: "blocked" }) });
     renderModal();
