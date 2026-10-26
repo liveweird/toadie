@@ -44,21 +44,6 @@ promotes it. A finished item is removed, not ticked.
 
 ## Product
 
-- [next] **In-app telemetry panel (a port of Flow 1.17.0).** An ADMIN-only, hideable side panel on every
-  page of both worlds showing Toadie's own vital signs, each with a 24 h / 7 d / 90 d trend: Memory (the
-  working set as a share of the container limit, High at 80 %, Critical at 90 %), Workspace (database and
-  per-table-group sizes; counts of catalog files, history events, blueprints, entities, mappings, lenses
-  and saved queries), Pressure (the read ledger, entity-query permits, the jq pool and quarantine, the
-  outbound fetch pool, integration admission: in use, peak, refusals), Requests (the total plus the heavy
-  routes: count, p50/p95, 5xx, 429) and JVM (CPU, threads, GC, the connection pool). The process samples
-  itself every 5 min into two new tables, rolled up hourly and pruned (raw 7 days, hourly 90 days); never
-  JVM arguments, environment, identifiers in paths or document contents. Four PRs: (1) sampler, store,
-  V46 and the Dropwizard reporter moved from a fixed 10 s to a configurable 300 s; (2) the requests,
-  workspace and pressure collectors plus a measured sampler cost; (3) the ADMIN read API
-  `GET /api/v1/telemetry/current|history` with a per-user 30/min bucket; (4) the panel, `@mantine/charts`,
-  e2e and the release. Accepted decisions: tables in `public`, Flow's advisory-lock cluster section kept
-  (replica-safe), per-route rows by a suffix rule, no per-transaction statement timeout, optional
-  `TOADIE_BUILD_VERSION`/`TOADIE_BUILD_COMMIT` build args.
 - [new] **Export API definition URLs to Backstage.** The conversion keeps `api.definition_url` lossy:
   Backstage expresses a remote definition as the `backstage.io/definition-at-location` annotation (or a
   `$text` object substitution), and that key is not in the V22-seeded annotation registry. Registering it

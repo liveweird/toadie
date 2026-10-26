@@ -105,6 +105,31 @@ describe("UserMenu", () => {
     expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
   });
 
+  test("an admin's menu has the Telemetry panel toggle, which flips the stored flag and marks itself on", async () => {
+    stubFetch(() => undefined);
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
+    const item = await screen.findByRole("menuitem", { name: "Telemetry panel" });
+    expect(item).not.toHaveAttribute("aria-current");
+    await user.click(item);
+    expect(localStorage.getItem("toadie.viewSettings.telemetry.panelOpen")).toBe("true");
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
+    expect(await screen.findByRole("menuitem", { name: "Telemetry panel" })).toHaveAttribute("aria-current", "true");
+    await user.click(screen.getByRole("menuitem", { name: "Telemetry panel" }));
+    expect(localStorage.getItem("toadie.viewSettings.telemetry.panelOpen")).toBe("false");
+  });
+
+  test("a regular user's menu has no Telemetry panel item", async () => {
+    localStorage.setItem("toadie.auth.roles", JSON.stringify(["USER"]));
+    stubFetch(() => undefined);
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
+    await screen.findByRole("menuitem", { name: /Changelog/ });
+    expect(screen.queryByRole("menuitem", { name: "Telemetry panel" })).not.toBeInTheDocument();
+  });
+
   test("Sign out clears the session and lands on the login route", async () => {
     stubFetch(() => undefined);
     const user = userEvent.setup();

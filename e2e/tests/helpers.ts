@@ -472,16 +472,20 @@ export async function pickNamespace(page: Page, ns: string): Promise<void> {
 
 /**
  * The accessibility spec's axe scan (WCAG 2.0/2.1 A+AA, its documented `color-contrast` waiver),
- * scoped to `<main>` and asserted in place — for journeys that REACH a state the page-level scan
- * cannot count on seeing (a collapsed fold pill, the top-level badge on a large graph). The
- * page-level scan depends on whatever the shared database holds; this one runs against the state
- * the calling journey just built.
+ * scoped to `<main>` by default and asserted in place — for journeys that REACH a state the
+ * page-level scan cannot count on seeing (a collapsed fold pill, the top-level badge on a large
+ * graph). The page-level scan depends on whatever the shared database holds; this one runs
+ * against the state the calling journey just built. A surface that lives outside `<main>` (the
+ * telemetry panel is the shell's `<aside>`) passes its own `include` list.
  */
-export async function expectNoAccessibilityViolations(page: Page): Promise<void> {
-  const scan = await new AxeBuilder({ page })
+export async function expectNoAccessibilityViolations(
+  page: Page,
+  { include = ["main"] }: { include?: string[] } = {},
+): Promise<void> {
+  const builder = new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .disableRules(["color-contrast"])
-    .include("main")
-    .analyze();
+    .disableRules(["color-contrast"]);
+  for (const selector of include) builder.include(selector);
+  const scan = await builder.analyze();
   expect(scan.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 }

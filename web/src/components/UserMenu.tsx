@@ -13,13 +13,14 @@ import {
   UnstyledButton,
   useMantineColorScheme,
 } from "@mantine/core";
-import { IconCheck, IconChevronDown, IconHistory, IconKey, IconLogout } from "@tabler/icons-react";
+import { IconActivity, IconCheck, IconChevronDown, IconHistory, IconKey, IconLogout } from "@tabler/icons-react";
 import { logout } from "../api/auth";
 import { getUserId, isAdmin } from "../api/session";
 import { getUser, setUserLanguage } from "../api/users";
 import { flagSignedOut, notifyAuthChange } from "../auth";
 import { asSupportedLanguage, NATIVE_LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from "../i18n";
 import { useChangelogUnseen } from "../hooks/useChangelogSeen";
+import { setTelemetryPanelOpen, useTelemetryPanelOpen } from "../hooks/useTelemetryPanel";
 import classes from "../theme.module.css";
 
 const IDENTITY_STALE_MS = 5 * 60_000;
@@ -55,6 +56,7 @@ export default function UserMenu() {
   const queryClient = useQueryClient();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const changelogUnseen = useChangelogUnseen();
+  const telemetryOpen = useTelemetryPanelOpen();
   const userId = getUserId();
   const current = asSupportedLanguage(i18n.resolvedLanguage);
 
@@ -178,6 +180,17 @@ export default function UserMenu() {
         >
           {t("appShell.nav.changelog")}
         </Menu.Item>
+        {isAdmin() && (
+          // ADMIN only. A toggle: the check mark (and aria-current, since Mantine fixes the item's role) says it is on.
+          <Menu.Item
+            leftSection={<IconActivity size={14} />}
+            rightSection={telemetryOpen ? <IconCheck size={14} /> : undefined}
+            aria-current={telemetryOpen ? "true" : undefined}
+            onClick={() => setTelemetryPanelOpen(!telemetryOpen)}
+          >
+            {t("telemetry.menuItem")}
+          </Menu.Item>
+        )}
         <Menu.Divider />
         <Menu.Item color="red" leftSection={<IconLogout size={14} />} onClick={() => void handleSignOut()}>
           {t("appShell.userMenu.signOut")}

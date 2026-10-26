@@ -12,11 +12,15 @@ import LoadingBlock from "./components/LoadingBlock";
 import UserMenu from "./components/UserMenu";
 import VersionStamp from "./components/VersionStamp";
 import WorldSwitch from "./components/WorldSwitch";
-import { RouteErrorBoundary } from "./components/ErrorBoundary";
+import ErrorBoundary, { RouteErrorBoundary } from "./components/ErrorBoundary";
+import TelemetryPanelCrash from "./components/TelemetryPanelCrash";
+import { setTelemetryPanelOpen, useTelemetryPanelOpen } from "./hooks/useTelemetryPanel";
 import { useWorld } from "./hooks/useWorld";
 import { activeNavPath, hierarchyPath, homeOf, sectionsFor, type NavLeaf } from "./utils/navigation";
 import classes from "./theme.module.css";
 
+// The ADMIN telemetry panel: a lazy chunk a non-admin never downloads (it is only mounted for an ADMIN with the panel open).
+const TelemetryPanel = lazy(() => import("./components/TelemetryPanel"));
 const Login = lazy(() => import("./pages/Login"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ConfirmPasswordReset = lazy(() => import("./pages/ConfirmPasswordReset"));
@@ -69,6 +73,10 @@ function Shell() {
   const [opened, { toggle, close }] = useDisclosure();
   const { pathname } = useLocation();
   const { world, switchTo } = useWorld();
+  // The telemetry panel: the stored flag is device-level, but a stored `true` shows nothing to a non-admin.
+  const panelStored = useTelemetryPanelOpen();
+  const showPanel = isAdmin() && panelStored;
+  const closePanel = () => setTelemetryPanelOpen(false);
 
   // The nav model lives in utils/navigation.ts (shared with the command palette): ONE
   // world's sections plus the global ones, admin-only leaves filtered per session (the
@@ -100,6 +108,9 @@ function Shell() {
     <AppShell
       header={{ height: 48 }}
       navbar={{ width: 240, breakpoint: "sm", collapsed: { mobile: !opened } }}
+      // 420 px beside the page from `lg` up (the content gives way: at 1200 px the 240 px navbar and the panel still leave ~540 px);
+      // below it the panel covers the page edge to edge, since a pushed 420 px next to the navbar would leave a sliver.
+      aside={{ width: 420, breakpoint: "lg", collapsed: { desktop: !showPanel, mobile: !showPanel } }}
       padding="md"
     >
       <AppShell.Header>
@@ -168,6 +179,17 @@ function Shell() {
           </Suspense>
         </RouteErrorBoundary>
       </AppShell.Main>
+
+      {showPanel && (
+        <AppShell.Aside aria-label={t("telemetry.title")}>
+          {/* Outside every route boundary: its own, with a way to close it (the open flag survives a reload). */}
+          <ErrorBoundary fallback={<TelemetryPanelCrash onClose={closePanel} />}>
+            <Suspense fallback={<LoadingBlock />}>
+              <TelemetryPanel onClose={closePanel} />
+            </Suspense>
+          </ErrorBoundary>
+        </AppShell.Aside>
+      )}
     </AppShell>
   );
 }

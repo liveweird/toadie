@@ -120,6 +120,39 @@ describe("CommandPalette", () => {
     });
   });
 
+  describe("the telemetry action", () => {
+    test("an admin's palette has it in both worlds; it toggles the panel flag and says what it will do", async () => {
+      localStorage.setItem("toadie.auth.roles", JSON.stringify(["ADMIN"]));
+      vi.stubGlobal("fetch", vi.fn());
+      const user = userEvent.setup();
+      renderPalette("port");
+      palette.open();
+      await user.click(await screen.findByRole("button", { name: /Show telemetry panel/ }));
+      expect(localStorage.getItem("toadie.viewSettings.telemetry.panelOpen")).toBe("true");
+      palette.open();
+      await user.click(await screen.findByRole("button", { name: /Hide telemetry panel/ }));
+      expect(localStorage.getItem("toadie.viewSettings.telemetry.panelOpen")).toBe("false");
+    });
+
+    test("it is found by its keywords, not only its label", async () => {
+      localStorage.setItem("toadie.auth.roles", JSON.stringify(["ADMIN"]));
+      vi.stubGlobal("fetch", vi.fn());
+      const user = userEvent.setup();
+      renderPalette("backstage");
+      palette.open();
+      await user.type(await screen.findByPlaceholderText("Search files or jump to a page…"), "vitals");
+      expect(await screen.findByRole("button", { name: /Show telemetry panel/ })).toBeInTheDocument();
+    });
+
+    test("a regular session's palette has no telemetry action", async () => {
+      vi.stubGlobal("fetch", vi.fn());
+      renderPalette("backstage");
+      palette.open();
+      await screen.findByRole("button", { name: /New catalog file/ });
+      expect(screen.queryByRole("button", { name: /telemetry/i })).not.toBeInTheDocument();
+    });
+  });
+
   describe("port world", () => {
     test("the palette lists the Port pages and the ontology actions, never the Backstage files page", async () => {
       vi.stubGlobal("fetch", vi.fn());

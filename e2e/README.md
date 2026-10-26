@@ -392,6 +392,12 @@ the same commit** — this list is the coverage map, the scenario file is the de
   external-network dependency**: the app container needs outbound https; missing network skips
   locally and fails in CI (the Mailpit policy); the throwaway blueprint owns the reserved
   identifier `e2e-bpsync-source`.
+- [`telemetry.spec.ts`](scenarios/telemetry.md) — the ADMIN telemetry panel (Toadie's own vital signs): after the
+  sampler's first sample and workspace measurement (awaited through the API) the admin opens it from the account menu
+  and reads Memory (the compose app's 512 MB container limit and the share of it), Workspace (database and table-group
+  sizes, row counts) and Pressure (the read memory budget "of 64 MB"); the open panel and its expanded sections survive
+  a reload and close with their own button; a regular user has no menu item and a hand-stored open flag shows nothing;
+  an axe scan of `<main>` and the panel's `<aside>` with every section open (read-only apart from its one throwaway user).
 - [`backstage-export.spec.ts`](scenarios/backstage-export.md) — Export to Backstage (conversion
   phase 5b): an API-seeded team + service world and mapping; the admin picks the mapping, narrows
   the selection with an entity query, converts, reads the two report rows and the YAML preview,
