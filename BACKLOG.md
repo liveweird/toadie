@@ -70,7 +70,8 @@ promotes it. A finished item is removed, not ticked.
   sample and must equal the Port sample, modulo an explicit deviation list. Phases, one PR each:
   mapping registry + validator + default mapping (V45, Opus review); exporter + sample
   reconciliation; `replaceExisting` on the catalog import (independent); importer (Opus review);
-  SPA. Roughly 11 days in total. Shipped so far: (5) `replaceExisting` on the catalog import (2.23.0).
+  SPA. Roughly 11 days in total. Shipped so far: (5) `replaceExisting` on the catalog import (2.23.0); phase 1, the mapping
+  registry + validator + default mapping (2.24.0).
 - [new] **Treat empty and absent blueprint maps as equal in the sync modal.** After a sync the stored
   blueprint renders empty `relations`, `mirrorProperties`, `calculationProperties` and
   `aggregationProperties` maps, so a source document that omits them never reads "in sync": reopening

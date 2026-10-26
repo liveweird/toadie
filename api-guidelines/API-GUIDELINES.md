@@ -697,7 +697,7 @@ against Toadie's write surface — the previous inventory described Lettuce's):
   writers are few and scoped (the registries are single-ADMIN-curated and users PUT is
   ADMIN-only): users PUT, per-user features PUT
   (wholesale replace by design), the dictionaries whole-document PUT (namespaces, lifecycles),
-  and the labels / annotation-keys / tag-categories / entity-types PUTs. Two admins editing the
+  and the labels / annotation-keys / tag-categories / entity-types / conversion-mappings PUTs. Two admins editing the
   same registry entry simultaneously can overwrite each other — a deliberate, documented
   trade-off at this scale.
 - **Domain-guarded** — none yet: Toadie has no lifecycle-status resources; the class returns

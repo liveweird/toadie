@@ -17,6 +17,8 @@ import ch.nokillswit.catalog.CatalogFileEventService
 import ch.nokillswit.catalog.CatalogFileEventServiceKey
 import ch.nokillswit.catalog.CatalogFileService
 import ch.nokillswit.catalog.CatalogFileServiceKey
+import ch.nokillswit.conversion.ConversionMappingService
+import ch.nokillswit.conversion.ConversionMappingServiceKey
 import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.dictionaries.DictionaryServiceKey
 import ch.nokillswit.entities.EntityService
@@ -300,7 +302,9 @@ suspend fun Application.configureDatabase() {
     attributes.put(TagCategoryServiceKey, TagCategoryService(database))
     attributes.put(EntityTypesServiceKey, EntityTypesService(database))
     attributes.put(AnnotationKeyServiceKey, AnnotationKeyService(database))
-    attributes.put(BlueprintServiceKey, BlueprintService(database))
+    val blueprintService = BlueprintService(database)
+    attributes.put(BlueprintServiceKey, blueprintService)
+    attributes.put(ConversionMappingServiceKey, ConversionMappingService(database, blueprintService))
     val jqDeadlineMillis = environment.config.property("computed.jq.deadlineMillis").getString().toLong()
         .also { require(it in 1..MAX_JQ_DEADLINE_MILLIS) { "computed.jq.deadlineMillis must be between 1 and $MAX_JQ_DEADLINE_MILLIS" } }
     val entityQueryDeadlineMillis = environment.config.property("entityQuery.deadlineMillis").getString().toLong()

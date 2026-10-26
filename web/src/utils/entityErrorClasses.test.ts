@@ -65,7 +65,7 @@ describe("colorOfEntityClass", () => {
 });
 
 describe("countByEntityClass", () => {
-  test("classifies entity and blueprint findings, and counts every saved-query diagnostic as queries", () => {
+  test("classifies entity and blueprint findings, counts every saved-query diagnostic as queries and every mapping finding or drift as mappings", () => {
     const report = entityErrorsReport({
       entities: [
         {
@@ -104,6 +104,17 @@ describe("countByEntityClass", () => {
           ],
         },
       ],
+      mappings: [
+        {
+          id: 4,
+          name: "m1",
+          findings: [{ code: "UNKNOWN_BLUEPRINT", path: "/pairs/0/blueprint", message: "m" }],
+          drift: [
+            { code: "VOCABULARY_DRIFT", path: "/pairs/0/rules/1", message: "m" },
+            { code: "REGISTRY_KEY_MISSING", path: "/pairs/0/rules/2/backstage/label", message: "m" },
+          ],
+        },
+      ],
     });
 
     expect(countByEntityClass(report)).toEqual({
@@ -112,6 +123,7 @@ describe("countByEntityClass", () => {
       computed: 1,
       queries: 2,
       source: 1,
+      mappings: 3,
     });
   });
 
@@ -122,6 +134,7 @@ describe("countByEntityClass", () => {
       computed: 0,
       queries: 0,
       source: 0,
+      mappings: 0,
     });
   });
 });

@@ -4,6 +4,12 @@ import ch.nokillswit.blueprints.AggregationPropertyDefinition
 import ch.nokillswit.blueprints.BlueprintDefinition
 import ch.nokillswit.blueprints.CalculationPropertyDefinition
 import ch.nokillswit.blueprints.MirrorPropertyDefinition
+import ch.nokillswit.catalog.CatalogRegistryReader
+import ch.nokillswit.catalog.RegistrySnapshot
+import ch.nokillswit.conversion.MappingErrorRow
+import ch.nokillswit.conversion.StoredMapping
+import ch.nokillswit.conversion.loadStoredMappings
+import ch.nokillswit.conversion.mappingErrorRows
 import ch.nokillswit.entityquery.QUERY_META_PROPERTIES
 import ch.nokillswit.entityquery.QueryDiagnostic
 import ch.nokillswit.entityquery.QueryException
@@ -20,6 +26,7 @@ import ch.nokillswit.infra.db.currentOntologyRevision
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -70,6 +77,11 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
  *    blocks a save, just a standing report entry. Emitted on `_team`/`_user` too when
  *    source-less — no special case. Never emitted on saved-query rows.
  *
+ * 6. **Conversion mappings** — every stored Backstage <-> Port mapping (`conversion/`) that
+ *    carries blocking findings (the mapping went stale after a blueprint/registry edit) and/or
+ *    report-only drift, recomputed by the same pure validator the registry's reads use. Workspace-wide,
+ *    never narrowed by the filters, REST report only (the ontology-only shape omits them).
+ *
  * Blueprint rows exist because classes 2 and 3 are properties of the BLUEPRINT's definition, not
  * of any one entity — one broken mirror path affects every entity of that blueprint alike, so
  * reporting it once (on the blueprint) rather than once per entity is both cheaper and more
@@ -116,15 +128,22 @@ data class SavedQueryErrorRow(
     val diagnostics: List<QueryDiagnostic>,
 )
 
-/** Rows with zero findings/diagnostics are omitted from every list — a clean workspace answers three empty arrays. */
+/**
+ * Rows with zero findings/diagnostics are omitted from every list — a clean workspace answers
+ * four empty arrays. [mappings] are the stored conversion mappings carrying blocking
+ * findings and/or drift, workspace-wide: like saved queries they are never narrowed by the
+ * `blueprint`/`q`/`team` filters.
+ */
 @Serializable
 data class EntityErrorsReport(
     val entities: List<EntityErrorRow> = emptyList(),
     val blueprints: List<BlueprintErrorRow> = emptyList(),
     val savedQueries: List<SavedQueryErrorRow> = emptyList(),
+    val mappings: List<MappingErrorRow> = emptyList(),
     val checkedEntities: Int,
     val checkedBlueprints: Int,
     val checkedSavedQueries: Int,
+    val checkedMappings: Int = 0,
 )
 
 // ---------------------------------------------------------------------------------------------
@@ -174,6 +193,9 @@ internal data class EntityErrorSubjects(
     val definitionsByIdentifier: Map<String, BlueprintDefinition>,
     val savedQueries: List<SavedQueryCandidate>,
     val querySchema: QuerySchema?,
+    /** The stored conversion mappings and the registry snapshot they are judged against (empty/null for the ontology-only report). */
+    val mappings: List<StoredMapping> = emptyList(),
+    val registry: RegistrySnapshot? = null,
 )
 
 /**
@@ -352,7 +374,12 @@ private suspend fun EntityService.readErrorReport(
                     loadActiveHierarchies(),
                 )
                 val savedQueries = callerId?.let { loadVisibleSavedQueries(it) }.orEmpty()
-                EntityErrorSubjects(entitySubjects, blueprintCandidates, definitionsByIdentifier, savedQueries, querySchema) to revision
+                // Conversion mappings ride the REST report only: machine clients get the ontology-only shape.
+                val mappings = if (callerId == null) emptyList() else loadStoredMappings()
+                val registry = if (callerId == null) null else CatalogRegistryReader(Json).loadSnapshot()
+                EntityErrorSubjects(
+                    entitySubjects, blueprintCandidates, definitionsByIdentifier, savedQueries, querySchema, mappings, registry,
+                ) to revision
             }
             return entityErrorsReport(subjects, budget, jq::calculationVerdict) to revision
         } catch (cause: ReadBudgetExceeded) {
@@ -748,12 +775,16 @@ internal fun entityErrorsReport(
             }
         }
 
+    val mappingRows = subjects.registry?.let { mappingErrorRows(subjects.mappings, subjects.definitionsByIdentifier, it) }.orEmpty()
+
     return EntityErrorsReport(
         entities = entityRows,
         blueprints = blueprintRows,
         savedQueries = savedQueryRows,
+        mappings = mappingRows,
         checkedEntities = subjects.entities.size,
         checkedBlueprints = subjects.blueprintCandidates.size,
         checkedSavedQueries = subjects.savedQueries.size,
+        checkedMappings = subjects.mappings.size,
     )
 }

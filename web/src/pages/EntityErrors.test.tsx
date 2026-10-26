@@ -170,6 +170,39 @@ describe("EntityErrors page", () => {
     ).toContain("orange");
   });
 
+  test("a stored conversion mapping renders its recomputed findings red and its drift orange, and the Conversion mappings chip hides it", async () => {
+    const mappingReport = entityErrorsReport({
+      mappings: [
+        {
+          id: 7,
+          name: "Backstage catalog",
+          findings: [{ code: "UNKNOWN_BLUEPRINT", path: "/pairs/2/blueprint", message: "no active blueprint 'ghost'" }],
+          drift: [
+            { code: "VOCABULARY_DRIFT", path: "/pairs/0/rules/5/backstage/label", message: "registry has bronze the rule lacks" },
+          ],
+        },
+      ],
+      checkedMappings: 1,
+    });
+    mockReport(mockFetch, mappingReport);
+    renderPage();
+
+    const row = (await screen.findByText("Backstage catalog")).closest("tr")!;
+    expect(within(row).getByText("Mapping")).toBeInTheDocument();
+    expect(within(row).getByText("/pairs/2/blueprint")).toBeInTheDocument();
+    expect(within(row).getByText("/pairs/0/rules/5/backstage/label")).toBeInTheDocument();
+    expect(within(row).getByText("Blocking")).toBeInTheDocument();
+    expect(within(row).getByText("Drift")).toBeInTheDocument();
+    // "Unknown blueprint" is also the saved-query code label in another namespace; scope to the row.
+    expect(within(row).getByText("Unknown blueprint").closest("[class*='Badge-root']")!.getAttribute("style")).toContain("red");
+    expect(within(row).getByText("Vocabulary drift").closest("[class*='Badge-root']")!.getAttribute("style")).toContain("orange");
+    await waitFor(() => expect(tileValue("Errors")).toBe("2"));
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Conversion mappings" }));
+    expect(screen.queryByText("Backstage catalog")).not.toBeInTheDocument();
+    expect(await screen.findByText(/no errors/i)).toBeInTheDocument();
+  });
+
   test("a blueprint row links to its editor for an admin", async () => {
     mockReport(mockFetch);
     localStorage.setItem(ROLES_KEY, JSON.stringify(["ADMIN"]));

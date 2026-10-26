@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": "backstage.io/v1alpha1",
+  "pairs": [
+    {
+      "blueprint": "_team",
+      "kind": "Group",
+      "rules": [
+        {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
+        {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"meta": "title"}, "backstage": {"profile": "displayName"}, "codec": "copy", "direction": "export"},
+        {"port": {"property": "email"}, "backstage": {"profile": "email"}, "codec": "copy"},
+        {"port": {"property": "slack_channel"}, "backstage": {"link": {"title": "Slack channel", "icon": "chat"}}, "codec": "link"},
+        {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
+        {"port": {"relation": "parent"}, "backstage": {"spec": "parent"}, "codec": "ref"},
+        {"port": {"reverse": {"blueprint": "_team", "relation": "parent"}}, "backstage": {"spec": "children"}, "codec": "derive"},
+        {"port": {"reverse": {"blueprint": "_user", "relation": "team"}}, "backstage": {"spec": "members"}, "codec": "derive"}
+      ],
+      "lossy": {"backstage": ["metadata.description", "profile.picture"]}
+    },
+    {
+      "blueprint": "_user",
+      "kind": "User",
+      "rules": [
+        {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"meta": "title"}, "backstage": {"profile": "displayName"}, "codec": "copy", "direction": "export"},
+        {"port": {"property": "email"}, "backstage": {"profile": "email"}, "codec": "copy"},
+        {"port": {"property": "picture"}, "backstage": {"profile": "picture"}, "codec": "copy"},
+        {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
+        {"port": {"relation": "team"}, "backstage": {"spec": "memberOf"}, "codec": "ref"}
+      ],
+      "lossy": {"properties": ["employment_type"], "backstage": ["metadata.description"]}
+    },
+    {
+      "blueprint": "domain",
+      "kind": "Domain",
+      "rules": [
+        {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
+        {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
+        {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
+        {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
+        {"port": {"relation": "parent_domain"}, "backstage": {"spec": "subdomainOf"}, "codec": "ref"}
+      ],
+      "lossy": {"backstage": ["metadata.description"]}
+    },
+    {
+      "blueprint": "system",
+      "kind": "System",
+      "rules": [
+        {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
+        {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
+        {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
+        {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
+        {"port": {"property": "external"}, "backstage": {"metadata": "namespace"}, "codec": "valueMap", "map": {"true": "external", "false": "default"}},
+        {"port": {"property": "kubernetes_id"}, "backstage": {"annotation": "backstage.io/kubernetes-id"}, "codec": "copy"},
+        {"port": {"property": "criticality"}, "backstage": {"label": "criticality-tier"}, "codec": "copy"},
+        {"port": {"property": "support_mode"}, "backstage": {"label": "support-mode"}, "codec": "copy"},
+        {"port": {"property": "exposure"}, "backstage": {"label": "exposure"}, "codec": "copy"},
+        {"port": {"property": "hosting_model"}, "backstage": {"label": "hosting-model"}, "codec": "copy"},
+        {"port": {"relation": "domain"}, "backstage": {"spec": "domain"}, "codec": "ref"}
+      ],
+      "lossy": {"relations": ["products"], "backstage": ["metadata.description"]}
+    },
+    {
+      "blueprint": "service",
+      "kind": "Component",
+      "rules": [
+        {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
+        {"port": {"property": "lifecycle"}, "backstage": {"spec": "lifecycle"}, "codec": "copy"},
+        {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
+        {"port": {"property": "repository"}, "backstage": {"annotation": "backstage.io/source-location"}, "codec": "copy", "prefix": "url:"},
+        {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
+        {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
+        {"port": {"property": "kubernetes_id"}, "backstage": {"annotation": "backstage.io/kubernetes-id"}, "codec": "copy"},
+        {"port": {"property": "kubernetes_label_selector"}, "backstage": {"annotation": "backstage.io/kubernetes-label-selector"}, "codec": "copy"},
+        {"port": {"property": "languages"}, "backstage": {"tags": "Languages"}, "codec": "tagCategory"},
+        {"port": {"property": "frameworks"}, "backstage": {"tags": "Framework"}, "codec": "tagCategory"},
+        {"port": {"property": "exposure"}, "backstage": {"label": "exposure"}, "codec": "copy"},
+        {"port": {"property": "hosting_model"}, "backstage": {"label": "hosting-model"}, "codec": "copy"},
+        {"port": {"property": "technology_status"}, "backstage": {"label": "technology-status"}, "codec": "copy"},
+        {"port": {"property": "gdpr"}, "backstage": {"label": "gdpr"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "pci_dss"}, "backstage": {"label": "pci-dss"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "banking_outsourcing"}, "backstage": {"label": "banking-outsourcing"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "cash_flow_impact"}, "backstage": {"label": "cash-flow-impact"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "dora_cif"}, "backstage": {"label": "dora-cif"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "ci_pipeline"}, "backstage": {"link": {"title": "CI pipeline"}}, "codec": "link"},
+        {"port": {"property": "dashboard"}, "backstage": {"link": {"title": "Dashboard", "icon": "dashboard"}}, "codec": "link"},
+        {"port": {"property": "logs"}, "backstage": {"link": {"title": "Logs"}}, "codec": "link"},
+        {"port": {"property": "runbook"}, "backstage": {"link": {"title": "Runbook", "icon": "docs"}}, "codec": "link"},
+        {"port": {"relation": "system"}, "backstage": {"spec": "system"}, "codec": "ref"},
+        {"port": {"relation": "subcomponent_of"}, "backstage": {"spec": "subcomponentOf"}, "codec": "ref"},
+        {"port": {"relation": "depends_on"}, "backstage": {"spec": "dependsOn"}, "codec": "ref"},
+        {"port": {"relation": "uses"}, "backstage": {"spec": "dependsOn"}, "codec": "ref"},
+        {"port": {"relation": "uses_libraries"}, "backstage": {"spec": "dependsOn"}, "codec": "ref"},
+        {"port": {"relation": "provides_apis"}, "backstage": {"spec": "providesApis"}, "codec": "ref"},
+        {"port": {"relation": "consumes_apis"}, "backstage": {"spec": "consumesApis"}, "codec": "ref"}
+      ],
+      "lossy": {"properties": ["schedule"], "relations": ["produces_datasets", "consumes_datasets"], "backstage": ["metadata.description", "spec.dependencyOf"]}
+    },
+    {
+      "blueprint": "library",
+      "kind": "Component",
+      "select": {"spec": "type", "in": ["library"]},
+      "rules": [
+        {"backstage": {"spec": "type"}, "codec": "constant", "value": "library"},
+        {"port": {"property": "lifecycle"}, "backstage": {"spec": "lifecycle"}, "codec": "copy"},
+        {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
+        {"port": {"property": "repository"}, "backstage": {"annotation": "backstage.io/source-location"}, "codec": "copy", "prefix": "url:"},
+        {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
+        {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
+        {"port": {"property": "languages"}, "backstage": {"tags": "Languages"}, "codec": "tagCategory"},
+        {"port": {"property": "frameworks"}, "backstage": {"tags": "Framework"}, "codec": "tagCategory"},
+        {"port": {"property": "technology_status"}, "backstage": {"label": "technology-status"}, "codec": "copy"},
+        {"port": {"property": "ci_pipeline"}, "backstage": {"link": {"title": "CI pipeline"}}, "codec": "link"},
+        {"port": {"relation": "system"}, "backstage": {"spec": "system"}, "codec": "ref"},
+        {"port": {"relation": "depends_on"}, "backstage": {"spec": "dependsOn"}, "codec": "ref"}
+      ],
+      "lossy": {"properties": ["artifact"], "backstage": ["metadata.description", "spec.subcomponentOf", "spec.providesApis", "spec.consumesApis", "spec.dependencyOf"]}
+    },
+    {
+      "blueprint": "api",
+      "kind": "API",
+      "rules": [
+        {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
+        {"port": {"property": "lifecycle"}, "backstage": {"spec": "lifecycle"}, "codec": "copy"},
+        {"port": {"property": "definition"}, "backstage": {"spec": "definition"}, "codec": "copy", "exportDefault": "# no definition recorded", "importIgnore": ["# no definition recorded"]},
+        {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
+        {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
+        {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
+        {"port": {"property": "external"}, "backstage": {"metadata": "namespace"}, "codec": "valueMap", "map": {"true": "external", "false": "default"}},
+        {"port": {"property": "exposure"}, "backstage": {"label": "exposure"}, "codec": "copy"},
+        {"port": {"property": "hosting_model"}, "backstage": {"label": "hosting-model"}, "codec": "copy"},
+        {"port": {"property": "gdpr"}, "backstage": {"label": "gdpr"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "pci_dss"}, "backstage": {"label": "pci-dss"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "banking_outsourcing"}, "backstage": {"label": "banking-outsourcing"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"relation": "system"}, "backstage": {"spec": "system"}, "codec": "ref"}
+      ],
+      "lossy": {"properties": ["definition_url"], "backstage": ["metadata.description"]}
+    },
+    {
+      "blueprint": "resource",
+      "kind": "Resource",
+      "rules": [
+        {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
+        {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
+        {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
+        {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
+        {"port": {"property": "kubernetes_id"}, "backstage": {"annotation": "backstage.io/kubernetes-id"}, "codec": "copy"},
+        {"port": {"property": "kubernetes_label_selector"}, "backstage": {"annotation": "backstage.io/kubernetes-label-selector"}, "codec": "copy"},
+        {"port": {"property": "engine"}, "backstage": {"tags": "Database"}, "codec": "tagCategory"},
+        {"port": {"property": "engine"}, "backstage": {"tags": "Events"}, "codec": "tagCategory"},
+        {"port": {"property": "data_classification"}, "backstage": {"label": "data-classification"}, "codec": "copy"},
+        {"port": {"property": "hosting_model"}, "backstage": {"label": "hosting-model"}, "codec": "copy"},
+        {"port": {"property": "exposure"}, "backstage": {"label": "exposure"}, "codec": "copy"},
+        {"port": {"property": "technology_status"}, "backstage": {"label": "technology-status"}, "codec": "copy"},
+        {"port": {"property": "gdpr"}, "backstage": {"label": "gdpr"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "pci_dss"}, "backstage": {"label": "pci-dss"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "banking_outsourcing"}, "backstage": {"label": "banking-outsourcing"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
+        {"port": {"property": "dashboard"}, "backstage": {"link": {"title": "Dashboard", "icon": "dashboard"}}, "codec": "link"},
+        {"port": {"property": "runbook"}, "backstage": {"link": {"title": "Runbook", "icon": "docs"}}, "codec": "link"},
+        {"port": {"relation": "system"}, "backstage": {"spec": "system"}, "codec": "ref"},
+        {"port": {"relation": "depends_on"}, "backstage": {"spec": "dependsOn"}, "codec": "ref"}
+      ],
+      "lossy": {"relations": ["hosted_on"], "backstage": ["metadata.description", "spec.dependencyOf"]}
+    }
+  ]
+}

@@ -157,6 +157,7 @@ private val UNIQUE_CONSTRAINT_DETAILS = mapOf(
     "uq_entity_queries_owner_name_active" to "You already have a saved query with this name",
     "uq_blueprints_identifier_active" to "A blueprint with this identifier already exists",
     "uq_entities_blueprint_identifier_active" to "An entity with this identifier already exists in this blueprint",
+    "uq_conversion_mappings_name_active" to "A conversion mapping with this name already exists",
 )
 
 private fun Throwable.uniqueViolationDetail(): String {

@@ -112,6 +112,9 @@ const DYNAMIC_KEY_PREFIXES: ReadonlyArray<string> = [
   // (an `EntityFindingCode` or `QueryDiagnostic` code driven).
   "entityErrors.code.",
   "entityErrors.explain.",
+  // t(`entityErrors.mapping.code.${code}`) / explain / t(`entityErrors.mapping.${kind}`) — pages/EntityErrors.tsx
+  // (a `MappingFindingCode` or `MappingDriftCode` driven row; kind is "finding" | "drift").
+  "entityErrors.mapping.",
 ];
 
 function usedDynamically(key: string): boolean {

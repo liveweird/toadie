@@ -10,6 +10,7 @@ import {
   type BlueprintErrorRow,
   type EntityErrorRow,
   type EntityFinding,
+  type MappingErrorRow,
   type SavedQueryErrorRow,
 } from "../api/entities";
 import { getUserId, isAdmin } from "../api/session";
@@ -46,11 +47,12 @@ interface MeasureProps {
   index: number;
 }
 
-/** The three row kinds, concatenated into ONE indexed list (entities, blueprints, saved queries) so it can be windowed. */
+/** The row kinds, concatenated into ONE indexed list (entities, blueprints, saved queries, mappings) so it can be windowed. */
 type ErrorTableRow =
   | { type: "entity"; key: string; row: EntityErrorRow }
   | { type: "blueprint"; key: string; row: BlueprintErrorRow }
-  | { type: "savedQuery"; key: string; row: SavedQueryErrorRow };
+  | { type: "savedQuery"; key: string; row: SavedQueryErrorRow }
+  | { type: "mapping"; key: string; row: MappingErrorRow };
 
 /**
  * The Port-world Errors report at /ontology/errors (v2.5.0) — `pages/Errors.tsx`'s twin one
@@ -61,7 +63,9 @@ type ErrorTableRow =
  * row), broken saved queries (the caller's own + everyone's PUBLIC, re-parsed against the
  * CURRENT active blueprints/hierarchies), and missing source references (2.9.1, report-only;
  * since 2.10.0 on either an ENTITY or a BLUEPRINT row — gray, an optional reference's absence
- * rather than a defect). `blueprint`/`q`/`team` narrow which entity AND
+ * rather than a defect), and stored Backstage <-> Port conversion mappings that went
+ * stale (blocking findings) or drifted from the registries (report-only drift), never narrowed
+ * by the filters either. `blueprint`/`q`/`team` narrow which entity AND
  * blueprint rows are REPORTED — reference resolution stays workspace-wide, so narrowing never
  * manufactures a finding a wider view wouldn't also show (the catalog Errors report's own
  * REPORTED-vs-SHOWN asymmetry); saved queries are never narrowed by these filters. The
@@ -109,14 +113,19 @@ export default function EntityErrors() {
   const savedQueryRows = classFilter.has("queries")
     ? (report?.savedQueries ?? []).filter((row) => row.diagnostics.length > 0)
     : [];
+  const mappingRows = classFilter.has("mappings")
+    ? (report?.mappings ?? []).filter((row) => row.findings.length + row.drift.length > 0)
+    : [];
   const shownErrors =
     entityRows.reduce((sum, row) => sum + row.findings.length, 0) +
     blueprintRows.reduce((sum, row) => sum + row.findings.length, 0) +
-    savedQueryRows.reduce((sum, row) => sum + row.diagnostics.length, 0);
+    savedQueryRows.reduce((sum, row) => sum + row.diagnostics.length, 0) +
+    mappingRows.reduce((sum, row) => sum + row.findings.length + row.drift.length, 0);
   const tableRows: ErrorTableRow[] = [
     ...entityRows.map((row): ErrorTableRow => ({ type: "entity", key: `entity-${row.id}`, row })),
     ...blueprintRows.map((row): ErrorTableRow => ({ type: "blueprint", key: `blueprint-${row.id}`, row })),
     ...savedQueryRows.map((row): ErrorTableRow => ({ type: "savedQuery", key: `savedQuery-${row.id}`, row })),
+    ...mappingRows.map((row): ErrorTableRow => ({ type: "mapping", key: `mapping-${row.id}`, row })),
   ];
   const rowCount = tableRows.length;
   // Above the virtualization threshold only the rows in view are mounted (see useVirtualRows);
@@ -204,6 +213,8 @@ export default function EntityErrors() {
                       return <BlueprintRow key={entry.key} row={entry.row} {...measure} />;
                     case "savedQuery":
                       return <SavedQueryRow key={entry.key} row={entry.row} onOpenInGraph={openInGraph} {...measure} />;
+                    case "mapping":
+                      return <MappingRow key={entry.key} row={entry.row} {...measure} />;
                   }
                 })}
                 {paddingBottom > 0 && <VirtualSpacerRow height={paddingBottom} colSpan={COLUMN_COUNT} />}
@@ -388,6 +399,55 @@ function SavedQueryRow({
           <Button variant="subtle" size="xs" px={0} onClick={() => onOpenInGraph(row)}>
             {t("entityErrors.openInGraph")}
           </Button>
+        </Stack>
+      </Table.Td>
+    </Table.Tr>
+  );
+}
+
+/**
+ * A stored conversion mapping flagged by the report: its recomputed blocking findings
+ * (red — HARD on the mapping's next save) and its report-only drift (orange), each with the JSON
+ * pointer into the mapping document. Mappings have no page of their own yet, so the row is not a link.
+ */
+function MappingRow({ row, measureRef, index }: { row: MappingErrorRow } & MeasureProps) {
+  const { t } = useTranslation();
+  const entries = [
+    ...row.findings.map((f) => ({ ...f, color: "red", kind: "finding" as const })),
+    ...row.drift.map((d) => ({ ...d, color: "orange", kind: "drift" as const })),
+  ];
+  return (
+    <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined} aria-rowindex={measureRef ? index + 2 : undefined}>
+      <Table.Td style={{ verticalAlign: "top" }}>
+        <Group gap={6} wrap="nowrap">
+          <Text size="sm">{row.name}</Text>
+          <Badge variant="outline" color="gray" size="sm">
+            {t("entityErrors.subject.mapping")}
+          </Badge>
+        </Group>
+      </Table.Td>
+      <Table.Td style={{ verticalAlign: "top" }}>
+        <Text c="dimmed">—</Text>
+      </Table.Td>
+      <Table.Td style={{ verticalAlign: "top" }}>
+        <Text c="dimmed">—</Text>
+      </Table.Td>
+      <Table.Td>
+        <Stack gap={4}>
+          {entries.map((entry, i) => (
+            <Group gap={6} wrap="nowrap" key={`${entry.kind}-${entry.code}-${entry.path}-${i}`} align="flex-start">
+              <Badge variant="light" size="xs" color={entry.color} title={entry.message} style={{ flexShrink: 0 }}>
+                {t(`entityErrors.mapping.code.${entry.code}`)}
+              </Badge>
+              <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                {t(`entityErrors.mapping.${entry.kind}`)}
+              </Text>
+              <Text size="xs" c="dimmed" ff="monospace" style={{ flexShrink: 0 }}>
+                {entry.path || "/"}
+              </Text>
+              <Text size="xs">{t(`entityErrors.mapping.explain.${entry.code}`)}</Text>
+            </Group>
+          ))}
         </Stack>
       </Table.Td>
     </Table.Tr>

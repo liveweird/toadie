@@ -9,6 +9,10 @@ A third, optional set, [`queries/`](queries/), holds eight public saved entity q
 focus the Entity graph and Entity hierarchy canvases on the adoption, product, dataset and
 regulatory-flag models. It is loaded after the entities.
 
+A fourth, optional file, [`mapping/backstage.json`](mapping/backstage.json), is the default
+[Backstage conversion mapping](#backstage-conversion-mapping): the data that says how these
+blueprints correspond to Backstage's seven kinds. It is loaded after the blueprints.
+
 The numbering is dependency order. Load all blueprint definitions before any entity instances.
 The related Backstage demo uses the same broad business vocabulary, but neither sample depends on
 the other.
@@ -54,6 +58,7 @@ The scripts need `bash`, `curl`, and `jq`. They log in with the seed admin by de
 sample-data/port/commerce-payments/blueprints/load.sh
 sample-data/port/commerce-payments/entities/load.sh
 sample-data/port/commerce-payments/queries/load.sh   # optional: the saved queries below
+sample-data/port/commerce-payments/mapping/load.sh   # optional: the Backstage conversion mapping below
 ```
 
 The blueprint loader ensures both `composition` and `deployment` exist in the `hierarchies`
@@ -162,11 +167,36 @@ the Entity graph and Entity hierarchy pages; picking one runs it. Their names st
 blueprints and entities first. Rows are owned by the loading user and a name is unique per
 owner: a rerun reports `exists, skipped` for every query and never overwrites an edited row.
 
+## Backstage conversion mapping
+
+[`mapping/backstage.json`](mapping/backstage.json) is a conversion mapping document
+(`schemaVersion` 1): the stored DATA — never server code — that says which Port blueprint is which
+Backstage kind and which property, relation or title field becomes which label, tag category,
+annotation, link or spec field. It holds eight pairs and 110 rules: `_team` → Group, `_user` →
+User, `domain` → Domain, `system` → System, `service` and `library` → Component (the library pair
+is selected by `spec.type: library` and writes that type as a constant), `api` → API and
+`resource` → Resource. `product`, `dataset`, `environment`, `cluster`, `workload`, `api_adoption`
+and `dataset_adoption` are Port-only and have no pair. What a pair deliberately does not carry is
+declared under its `lossy` member, on both sides (Port properties and relations, and Backstage
+fields such as `metadata.description`). The wire format is the `ConversionMappingDocument` schema
+in the OpenAPI contract; `.claude/docs/ontology.md` ("Backstage export mapping") has the
+design notes.
+
+The server validates the document against the CURRENT blueprints and registries when it is stored
+and again on every read: blocking findings refuse the write, drift (an enum that is no longer the
+registry's list, a label key that was deleted) is reported but never blocks. `SampleBlueprintsTest`
+stores this file and requires zero findings and zero drift, so a blueprint enum or a registry that
+changes without the other fails the build. Load it with `mapping/load.sh` (after the blueprints;
+`TOADIE_MAPPING_NAME` renames it; a rerun reports `exists, skipped`), review it on the Port Errors
+report, and read it back with `GET /api/v1/conversion-mappings`. Nothing converts documents yet —
+the export and import engines are later phases.
+
 ## Remove the demo
 
-Delete saved queries first (optional), then entity instances before definitions:
+Delete the mapping and saved queries first (optional), then entity instances before definitions:
 
 ```bash
+sample-data/port/commerce-payments/mapping/load.sh --delete
 sample-data/port/commerce-payments/queries/load.sh --delete
 sample-data/port/commerce-payments/entities/load.sh --delete
 sample-data/port/commerce-payments/blueprints/load.sh --delete

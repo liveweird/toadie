@@ -13,12 +13,14 @@
     "ownership": "Ownership",
     "queries": "Saved queries",
     "computed": "Computed properties",
-    "source": "Source"
+    "source": "Source",
+    "mappings": "Conversion mappings"
   },
   "subject": {
     "entity": "Entity",
     "blueprint": "Blueprint",
-    "savedQuery": "Saved query"
+    "savedQuery": "Saved query",
+    "mapping": "Mapping"
   },
   "yours": "Yours",
   "field": {
@@ -115,5 +117,47 @@
     "DEADLINE_EXCEEDED": "The query ran out of its evaluation time budget — narrow the pattern or add more selective filters.",
     "BINDING_LIMIT": "The query produced more candidate bindings than the cap allows — narrow the pattern or add a LIMIT.",
     "WORKSPACE_TOO_LARGE": "The active workspace is too large for this query to evaluate within the read-memory budget — narrow the filters."
+  },
+  "mapping": {
+    "code": {
+      "SCHEMA": "Malformed document",
+      "UNKNOWN_BLUEPRINT": "Unknown blueprint",
+      "UNKNOWN_PROPERTY": "Unknown property",
+      "UNKNOWN_RELATION": "Unknown relation",
+      "COMPUTED_PROPERTY": "Computed property mapped",
+      "UNKNOWN_KIND": "Unknown kind",
+      "FIELD_NOT_ALLOWED": "Field not allowed",
+      "AMBIGUOUS_SELECTOR": "Ambiguous pairs",
+      "UNDECLARED_FIELD": "Undeclared field",
+      "CODEC_TYPE_MISMATCH": "Codec mismatch",
+      "REQUIRED_UNMAPPED": "Required field unmapped",
+      "VOCABULARY_DRIFT": "Vocabulary drift",
+      "REGISTRY_KEY_MISSING": "Registry entry missing",
+      "REGISTRY_KIND_MISMATCH": "Registry kind mismatch",
+      "BACKSTAGE_FIELD_UNMAPPED": "Backstage field unmapped",
+      "TARGET_UNMAPPED": "Reference target unmapped",
+      "REF_KIND_MISMATCH": "Reference kind mismatch"
+    },
+    "explain": {
+      "SCHEMA": "The mapping document is not well-formed — an unknown member, a wrong type, a null, an unsupported version, a blueprint mapped twice, or the reserved jq codec. Fix the document at the path shown.",
+      "UNKNOWN_BLUEPRINT": "The mapping names a blueprint that no longer exists — restore the blueprint or remove the pair.",
+      "UNKNOWN_PROPERTY": "A rule or lossy entry names a property the blueprint does not declare — fix the name or remove it.",
+      "UNKNOWN_RELATION": "A rule or lossy entry names a relation the blueprint does not declare — fix the name or remove it.",
+      "COMPUTED_PROPERTY": "A mirror, calculation or aggregation property is named — computed properties are never mapped or declared lossy.",
+      "UNKNOWN_KIND": "The pair names a kind outside the seven Backstage kinds.",
+      "FIELD_NOT_ALLOWED": "A Backstage address is not a field the pair's kind may carry — check the kind's allowed spec fields.",
+      "AMBIGUOUS_SELECTOR": "Two pairs for one kind have no selector — give all but one a select.",
+      "UNDECLARED_FIELD": "A property or relation of the blueprint is neither mapped nor declared lossy — map it or add it to lossy.",
+      "CODEC_TYPE_MISMATCH": "The rule's codec does not fit its Port or Backstage side, its direction, or its value map is not a bijection.",
+      "REQUIRED_UNMAPPED": "The kind requires a spec field that no rule writes on export — add a rule or a constant.",
+      "VOCABULARY_DRIFT": "An enum or value list in the mapping no longer matches the registry list it mirrors — edit the blueprint or the registry so both agree.",
+      "REGISTRY_KEY_MISSING": "The mapping names a label, annotation key or tag category that is not registered.",
+      "REGISTRY_KIND_MISMATCH": "The label, annotation key or tag category is registered but does not apply to the pair's kind.",
+      "BACKSTAGE_FIELD_UNMAPPED": "A field the kind allows is carried by no rule — map it or list it under lossy.backstage.",
+      "TARGET_UNMAPPED": "A reference points at a blueprint that has no pair in the mapping — map that blueprint to a kind, or drop the rule.",
+      "REF_KIND_MISMATCH": "The blueprint on the far end of this reference is mapped to a kind the spec field may not reference — check the field or that blueprint's kind."
+    },
+    "finding": "Blocking",
+    "drift": "Drift"
   }
 }

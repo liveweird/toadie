@@ -139,6 +139,7 @@ export type EntityErrorsReport =
 export type EntityErrorRow = EntityErrorsReport["entities"][number];
 export type BlueprintErrorRow = EntityErrorsReport["blueprints"][number];
 export type SavedQueryErrorRow = EntityErrorsReport["savedQueries"][number];
+export type MappingErrorRow = EntityErrorsReport["mappings"][number];
 
 export type EntityErrorsQuery = Pick<GetEntityGraphQuery, "blueprints" | "team" | "q">;
 

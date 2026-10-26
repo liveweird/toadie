@@ -13,12 +13,14 @@
     "ownership": "Własność",
     "queries": "Zapisane zapytania",
     "computed": "Właściwości obliczane",
-    "source": "Źródło"
+    "source": "Źródło",
+    "mappings": "Mapowania konwersji"
   },
   "subject": {
     "entity": "Encja",
     "blueprint": "Blueprint",
-    "savedQuery": "Zapisane zapytanie"
+    "savedQuery": "Zapisane zapytanie",
+    "mapping": "Mapowanie"
   },
   "yours": "Twoje",
   "field": {
@@ -115,5 +117,47 @@
     "DEADLINE_EXCEEDED": "Zapytaniu skończył się budżet czasu na wykonanie — zawęź wzorzec albo dodaj bardziej selektywne filtry.",
     "BINDING_LIMIT": "Zapytanie wytworzyło więcej kandydujących dopasowań, niż pozwala limit — zawęź wzorzec albo dodaj LIMIT.",
     "WORKSPACE_TOO_LARGE": "Aktywna przestrzeń robocza jest zbyt duża, aby to zapytanie mogło się wykonać w ramach budżetu pamięci odczytu — zawęź filtry."
+  },
+  "mapping": {
+    "code": {
+      "SCHEMA": "Dokument niepoprawny",
+      "UNKNOWN_BLUEPRINT": "Nieznany blueprint",
+      "UNKNOWN_PROPERTY": "Nieznana właściwość",
+      "UNKNOWN_RELATION": "Nieznana relacja",
+      "COMPUTED_PROPERTY": "Zmapowana właściwość obliczana",
+      "UNKNOWN_KIND": "Nieznany rodzaj",
+      "FIELD_NOT_ALLOWED": "Pole niedozwolone",
+      "AMBIGUOUS_SELECTOR": "Niejednoznaczne pary",
+      "UNDECLARED_FIELD": "Niezadeklarowane pole",
+      "CODEC_TYPE_MISMATCH": "Niezgodny kodek",
+      "REQUIRED_UNMAPPED": "Wymagane pole niezmapowane",
+      "VOCABULARY_DRIFT": "Rozjazd słownika",
+      "REGISTRY_KEY_MISSING": "Brak wpisu w rejestrze",
+      "REGISTRY_KIND_MISMATCH": "Rodzaj niezgodny z rejestrem",
+      "BACKSTAGE_FIELD_UNMAPPED": "Pole Backstage niezmapowane",
+      "TARGET_UNMAPPED": "Cel odwołania niezmapowany",
+      "REF_KIND_MISMATCH": "Rodzaj odwołania niezgodny"
+    },
+    "explain": {
+      "SCHEMA": "Dokument mapowania jest źle sformułowany — nieznany element, zły typ, null, nieobsługiwana wersja, blueprint zmapowany dwa razy albo zarezerwowany kodek jq. Popraw dokument w podanej ścieżce.",
+      "UNKNOWN_BLUEPRINT": "Mapowanie wskazuje blueprint, który już nie istnieje — przywróć blueprint albo usuń parę.",
+      "UNKNOWN_PROPERTY": "Reguła lub wpis lossy wskazuje właściwość, której blueprint nie deklaruje — popraw nazwę albo ją usuń.",
+      "UNKNOWN_RELATION": "Reguła lub wpis lossy wskazuje relację, której blueprint nie deklaruje — popraw nazwę albo ją usuń.",
+      "COMPUTED_PROPERTY": "Wskazano właściwość typu mirror, calculation lub aggregation — właściwości obliczane nigdy nie są mapowane ani oznaczane jako lossy.",
+      "UNKNOWN_KIND": "Para wskazuje rodzaj spoza siedmiu rodzajów Backstage.",
+      "FIELD_NOT_ALLOWED": "Adres Backstage nie jest polem, które może mieć rodzaj tej pary — sprawdź dozwolone pola spec rodzaju.",
+      "AMBIGUOUS_SELECTOR": "Dwie pary tego samego rodzaju nie mają selektora — nadaj select wszystkim oprócz jednej.",
+      "UNDECLARED_FIELD": "Właściwość lub relacja blueprintu nie jest ani zmapowana, ani oznaczona jako lossy — zmapuj ją albo dodaj do lossy.",
+      "CODEC_TYPE_MISMATCH": "Kodek reguły nie pasuje do jej strony Port lub Backstage, do kierunku, albo mapa wartości nie jest bijekcją.",
+      "REQUIRED_UNMAPPED": "Rodzaj wymaga pola spec, którego żadna reguła nie zapisuje przy eksporcie — dodaj regułę lub stałą.",
+      "VOCABULARY_DRIFT": "Enum lub lista wartości w mapowaniu nie zgadza się już z listą rejestru, którą odzwierciedla — zmień blueprint lub rejestr, aby się zgadzały.",
+      "REGISTRY_KEY_MISSING": "Mapowanie wskazuje etykietę, klucz adnotacji lub kategorię tagów, które nie są zarejestrowane.",
+      "REGISTRY_KIND_MISMATCH": "Etykieta, klucz adnotacji lub kategoria tagów są zarejestrowane, ale nie dotyczą rodzaju tej pary.",
+      "BACKSTAGE_FIELD_UNMAPPED": "Pole dozwolone dla rodzaju nie jest niesione przez żadną regułę — zmapuj je lub wpisz do lossy.backstage.",
+      "TARGET_UNMAPPED": "Odwołanie wskazuje blueprint, który nie ma pary w mapowaniu — zmapuj go na rodzaj albo usuń regułę.",
+      "REF_KIND_MISMATCH": "Blueprint po drugiej stronie odwołania jest zmapowany na rodzaj, do którego to pole spec nie może się odwoływać — sprawdź pole lub rodzaj tego blueprintu."
+    },
+    "finding": "Blokujące",
+    "drift": "Rozjazd"
   }
 }
