@@ -6,7 +6,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { APP_VERSION } from "./changelog/version";
-import { mockFetch } from "./test/http";
+import { mockFetch, type MockRoute } from "./test/http";
+import { currentFixture, historyFixture } from "./test/telemetryFixtures";
+
+// The telemetry panel's lazy chart chunk draws with recharts, which has no layout under happy-dom.
+vi.mock("@mantine/charts", () => ({ LineChart: () => <div data-testid="line-chart" /> }));
 
 const TOKEN_KEY = "toadie.auth.token";
 const WORLD_KEY = "toadie.viewSettings.appShell.world";
@@ -28,8 +32,9 @@ function renderApp(route: string) {
 
 /** Every fetch the two worlds' home/registry pages might issue, all answering an empty
  *  workspace — the tests below only care about shell chrome (sections, the switch, headings). */
-function stubWorldFetches() {
+function stubWorldFetches(extra: MockRoute[] = []) {
   return mockFetch([
+    ...extra,
     { match: "/api/v1/dictionaries/namespaces", respond: { status: 200, body: { items: [] } } },
     { match: "/api/v1/dictionaries/hierarchies", respond: { status: 200, body: { items: [] } } },
     { match: "/api/v1/files/graph", respond: { status: 200, body: { nodes: [], edges: [] } } },
@@ -93,6 +98,80 @@ describe("App shell", () => {
         "href",
         "/integration-clients",
       );
+    });
+
+    describe("the telemetry panel", () => {
+      const PANEL_KEY = "toadie.viewSettings.telemetry.panelOpen";
+
+      function stubTelemetry(current: unknown = currentFixture()) {
+        const fetchMock = stubWorldFetches([
+          { match: "/api/v1/telemetry/current", respond: { status: 200, body: current } },
+          { match: "/api/v1/telemetry/history", respond: { status: 200, body: historyFixture("memory", "24h", []) } },
+        ]);
+        vi.stubGlobal("fetch", fetchMock);
+        return fetchMock;
+      }
+
+      test("an admin opens it from the account menu (it lands in an aside), and closes it with its own button, which hands focus to the page", async () => {
+        localStorage.setItem("toadie.auth.roles", JSON.stringify(["ADMIN"]));
+        stubTelemetry();
+        const user = userEvent.setup();
+        renderApp("/hierarchy");
+        await user.click(await screen.findByRole("button", { name: /Account menu$/ }));
+        const item = await screen.findByRole("menuitem", { name: "Telemetry panel" });
+        expect(item).not.toHaveAttribute("aria-current");
+        await user.click(item);
+        const aside = await screen.findByRole("complementary", { name: "Telemetry" });
+        expect(await within(aside).findByRole("button", { name: "Memory" })).toHaveAttribute("aria-expanded", "true");
+        expect(localStorage.getItem(PANEL_KEY)).toBe("true");
+        await user.click(within(aside).getByRole("button", { name: "Close" }));
+        await waitFor(() => expect(screen.queryByRole("complementary", { name: "Telemetry" })).not.toBeInTheDocument());
+        expect(localStorage.getItem(PANEL_KEY)).toBe("false");
+        expect(document.getElementById("main-content")).toHaveFocus();
+      });
+
+      test("a stored open flag never shows it to a regular user, and nothing is requested", async () => {
+        localStorage.setItem(PANEL_KEY, "true");
+        const fetchMock = stubTelemetry();
+        renderApp("/hierarchy");
+        await screen.findByRole("heading", { level: 2, name: "Hierarchy" });
+        expect(screen.queryByRole("complementary", { name: "Telemetry" })).not.toBeInTheDocument();
+        expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/telemetry/"))).toBe(false);
+        // A regular user's account menu has no item for it either.
+        await userEvent.setup().click(screen.getByRole("button", { name: /Account menu$/ }));
+        await screen.findByRole("menuitem", { name: /Changelog/ });
+        expect(screen.queryByRole("menuitem", { name: "Telemetry panel" })).not.toBeInTheDocument();
+      });
+
+      test("an admin with the flag stored finds it open after a reload, in the Port world too", async () => {
+        localStorage.setItem("toadie.auth.roles", JSON.stringify(["ADMIN"]));
+        localStorage.setItem(PANEL_KEY, "true");
+        stubTelemetry();
+        renderApp("/blueprints");
+        expect(await screen.findByRole("radio", { name: "Port" })).toBeChecked();
+        expect(await screen.findByRole("complementary", { name: "Telemetry" })).toBeInTheDocument();
+      });
+
+      test("a render crash inside the panel keeps the page and offers Close panel, which clears the stored flag", async () => {
+        localStorage.setItem("toadie.auth.roles", JSON.stringify(["ADMIN"]));
+        localStorage.setItem(PANEL_KEY, "true");
+        // A malformed answer (no processes) crashes the panel's render.
+        stubTelemetry({ generatedAt: 1 });
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        const user = userEvent.setup();
+        try {
+          renderApp("/hierarchy");
+          const aside = await screen.findByRole("complementary", { name: "Telemetry" });
+          expect(await within(aside).findByText("The telemetry panel stopped working")).toBeInTheDocument();
+          // The shell around it survives.
+          expect(screen.getByRole("heading", { level: 2, name: "Hierarchy" })).toBeInTheDocument();
+          await user.click(within(aside).getByRole("button", { name: "Close panel" }));
+          await waitFor(() => expect(screen.queryByRole("complementary", { name: "Telemetry" })).not.toBeInTheDocument());
+          expect(localStorage.getItem(PANEL_KEY)).toBe("false");
+        } finally {
+          consoleError.mockRestore();
+        }
+      });
     });
 
     test("the account menu holds the Changelog link; the stamp links there and the trigger carries the dot", async () => {

@@ -33,6 +33,7 @@ import enNamespaces from "./locales/en/namespaces.json";
 import enOntology from "./locales/en/ontology.json";
 import enSync from "./locales/en/sync.json";
 import enTags from "./locales/en/tags.json";
+import enTelemetry from "./locales/en/telemetry.json";
 import enTypes from "./locales/en/types.json";
 import enUsers from "./locales/en/users.json";
 
@@ -97,6 +98,7 @@ export const en = {
   ontology: enOntology,
   sync: enSync,
   tags: enTags,
+  telemetry: enTelemetry,
   types: enTypes,
   users: enUsers,
 };

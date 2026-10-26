@@ -920,3 +920,24 @@ committed; a tick at or before the newest stored bucket, i.e. a clock step back,
 first-write-wins on conflicts, the contract refusals) and the seam cases added to `ReadLedgerTest`, `IntegrationLimitsTest`, `JqCalculationTest`, `UrlFetchTest` and `EntityQueryRouteTest`.
 `telemetryStore()` and `wipeTelemetry` migrate the shared container once per JVM (Flyway, idempotent), so a telemetry test class run
 alone on a fresh container finds its tables.
+
+**The telemetry panel's web and e2e tests.**
+
+- **Applies when:** writing or changing a test of the SPA's telemetry panel (`web/src/components/Telemetry*.tsx`, `FiguresDisclosure.tsx`,
+  `hooks/useTelemetryPanel.ts`, `utils/telemetry*.ts`, `utils/chartColors.ts`) or of `e2e/tests/telemetry.spec.ts`.
+- **Requirement:** (1) `vi.mock("@mantine/charts")` in every test that can reach the lazy chart chunk, with a stub `LineChart` that
+  records its `series` (recharts has no layout under happy-dom); `src/test/telemetryFixtures.ts` holds the shared `current`/`history`
+  answers. (2) Under the test provider Mantine's `Collapse` may mount a panel's body twice in its first render, so a test of "which
+  history was requested" compares the SET of URLs (`new Set(calls)`), never a call count. (3) Colours are pinned from the theme:
+  `chartColors.test.ts` recomputes the 3:1 contrast on all four chart surfaces and the neighbour distance (ΔE2000 >= 15) of the
+  palette, and a new colour is run through the dataviz skill's `validate_palette.js` first. (4) E2E waits for the sampler THROUGH THE
+  API, bounded (90 s, so the file sets `test.describe.configure({ timeout: 150_000 })`), for the first sample of the MOST RECENTLY
+  STARTED live (non-stale) process AND the first workspace measurement, polling slowly (the read API shares a 30-per-minute per-user
+  bucket with the panel), and scopes the Memory and Pressure tables by that instance's name (a stack rebuilt within the hour still
+  lists the previous container: live for three sample intervals after it stopped, stale after). (5) The panel lives in the shell's `<aside>`, outside
+  `<main>`, so its axe scan is `expectNoAccessibilityViolations(page, { include: ["main", "aside"] })`.
+- **Reference:** `TelemetryPanel.test.tsx` (the set-of-URLs history test, fake-timer refresh tests), `TelemetryTrend.test.tsx`,
+  `TelemetryTrendChart.test.tsx`, `chartColors.test.ts`, `App.test.tsx` ("the telemetry panel"), `e2e/tests/telemetry.spec.ts`.
+- **Enforcement:** `cd web && npm run test:coverage` (the suite above, `unusedKeys`/`parity` included); `cd e2e && npm run typecheck && npm run check:scenarios`
+  (the spec's scenario file and coverage-map line); the Playwright spec in the E2E workflow.
+- **Exception:** none.

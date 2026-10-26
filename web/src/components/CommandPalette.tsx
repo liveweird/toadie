@@ -6,10 +6,11 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ActionIcon, Kbd, Text, UnstyledButton } from "@mantine/core";
 import { useDebouncedValue, useOs } from "@mantine/hooks";
 import { Spotlight, type SpotlightActionGroupData } from "@mantine/spotlight";
-import { IconBox, IconFileImport, IconPlus, IconSearch } from "@tabler/icons-react";
+import { IconActivity, IconBox, IconFileImport, IconPlus, IconSearch } from "@tabler/icons-react";
 import { listCatalogFiles } from "../api/catalogFiles";
 import { listEntities } from "../api/entities";
 import { isAdmin } from "../api/session";
+import { setTelemetryPanelOpen, useTelemetryPanelOpen } from "../hooks/useTelemetryPanel";
 import { ACCOUNT_NAV, sectionsFor, type World } from "../utils/navigation";
 import { editCatalogFilePath, importCatalogFilesPath, newCatalogFilePath } from "../utils/catalogFileLinks";
 import { editEntityPath, entitiesPath } from "../utils/entityLinks";
@@ -47,6 +48,7 @@ export default function CommandPalette({ world }: { world: World }) {
   const os = useOs();
   const [opened, setOpened] = useState(false);
   const [query, setQuery] = useState("");
+  const telemetryOpen = useTelemetryPanelOpen();
   const [debounced] = useDebouncedValue(query.trim(), DEBOUNCE_MS);
   const searching = opened && debounced.length >= MIN_QUERY;
 
@@ -83,10 +85,25 @@ export default function CommandPalette({ world }: { world: World }) {
       },
     ),
   };
+  // The ADMIN-only toggle of the telemetry panel (the same flag as the account menu's item), in both worlds.
+  const telemetryAction: SpotlightActionGroupData["actions"] = isAdmin()
+    ? [
+        {
+          id: "action:telemetry-panel",
+          label: telemetryOpen ? t("telemetry.palette.hide") : t("telemetry.palette.show"),
+          keywords: t("telemetry.palette.keywords").split(" "),
+          leftSection: <IconActivity size={18} stroke={1.5} />,
+          onClick: () => {
+            palette.close();
+            setTelemetryPanelOpen(!telemetryOpen);
+          },
+        },
+      ]
+    : [];
   const actions: SpotlightActionGroupData = {
     group: t("appShell.palette.groupActions"),
-    actions:
-      world === "backstage"
+    actions: [
+      ...(world === "backstage"
         ? [
             {
               id: "action:new-file",
@@ -115,7 +132,9 @@ export default function CommandPalette({ world }: { world: World }) {
               leftSection: <IconFileImport size={18} stroke={1.5} />,
               onClick: () => go(ontologyImportPath),
             },
-          ],
+          ]),
+      ...telemetryAction,
+    ],
   };
   const fileGroup: SpotlightActionGroupData[] =
     world === "backstage" && searching && files.data && files.data.items.length > 0
