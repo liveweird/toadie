@@ -73,7 +73,7 @@ promotes it. A finished item is removed, not ticked.
   SPA. Roughly 11 days in total. Shipped so far: (5) `replaceExisting` on the catalog import (2.23.0); phase 1, the mapping
   registry + validator + default mapping (2.24.0); phase 2, the Port → Backstage exporter
   (`GET /conversion-mappings/{id}/catalog-documents`) and the sample reconciliation (the Backstage
-  sample is now generated from the Port sample, 42 documents; `SampleConversionTest`). Left from
+  sample is now generated from the Port sample, 42 documents; `SampleConversionTest`; 2.25.0). Left from
   (4): registering `backstage.io/definition-at-location` for API (a registry migration) and with it
   exporting `definition_url`; `library.subcomponent_of` targets `library`, not `service`, because
   `service` already references `library`.
