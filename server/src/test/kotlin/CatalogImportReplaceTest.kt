@@ -6,11 +6,13 @@ import ch.nokillswit.catalog.CatalogFileEventType
 import ch.nokillswit.catalog.CatalogFileResponse
 import ch.nokillswit.catalog.CatalogFileServiceKey
 import ch.nokillswit.catalog.CatalogFileWriteRequest
+import ch.nokillswit.catalog.ExpectedFileState
 import ch.nokillswit.catalog.ImportFileResult
 import ch.nokillswit.catalog.ImportRequest
 import ch.nokillswit.catalog.ImportResponse
 import ch.nokillswit.catalog.ImportResultStatus
 import ch.nokillswit.catalog.SyncCatalogFileRequest
+import ch.nokillswit.catalog.StoredRevision
 import ch.nokillswit.catalog.SyncStateResponse
 import ch.nokillswit.catalog.`import`
 import ch.nokillswit.users.UserRole
@@ -39,18 +41,20 @@ class CatalogImportReplaceTest {
         files: List<CatalogFile>,
         replaceExisting: Boolean = true,
         sourceUrl: String? = null,
+        expected: List<ExpectedFileState> = emptyList(),
     ): List<ImportFileResult> = postJson(
         "$CATALOG_FILES_PATH/import",
-        ImportRequest(files = files, sourceUrl = sourceUrl, replaceExisting = replaceExisting),
+        ImportRequest(files = files, sourceUrl = sourceUrl, replaceExisting = replaceExisting, expected = expected),
     ).body<ImportResponse>().results
 
     private suspend fun HttpClient.checkFiles(
         files: List<CatalogFile>,
         replaceExisting: Boolean = true,
         sourceUrl: String? = null,
+        expected: List<ExpectedFileState> = emptyList(),
     ): List<ImportFileResult> = postJson(
         "$CATALOG_FILES_PATH/import/check",
-        ImportRequest(files = files, sourceUrl = sourceUrl, replaceExisting = replaceExisting),
+        ImportRequest(files = files, sourceUrl = sourceUrl, replaceExisting = replaceExisting, expected = expected),
     ).body<ImportResponse>().results
 
     private suspend fun HttpClient.file(id: UInt): CatalogFileResponse = get("$CATALOG_FILES_PATH/$id").body()
@@ -451,10 +455,160 @@ class CatalogImportReplaceTest {
             listOf(componentFile(name, namespace = ns)),
             userId,
             replaceExisting = true,
-            activeIdLookup = { gone.id },
+            activeRowLookup = { StoredRevision(gone.id, 1) },
         ).single()
         assertEquals(ImportResultStatus.CREATED, row.status)
         assertNotEquals(gone.id, row.fileId)
         assertEquals(HttpStatusCode.OK, client.get("$CATALOG_FILES_PATH/${row.fileId}").status)
+    }
+
+    // -- expected revisions (2.29.0) -----------------------------------------------------------------------
+
+    /** Edits the file through the ordinary PUT and returns its new revision. */
+    private suspend fun HttpClient.edit(id: UInt, file: CatalogFile): Long {
+        val response = putJson("$CATALOG_FILES_PATH/$id", file)
+        assertTrue(response.status.value in 200..299, response.status.toString())
+        return file(id).revision
+    }
+
+    @Test
+    fun `a matching revision replaces as before, UNCHANGED included, and a stale one is STALE with nothing written`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("implace-exp")
+        val ns = uniqueNamespace("replexp")
+        val fresh = uniqueEntityName("fresh")
+        val stale = uniqueEntityName("stale")
+        val freshFile = client.createCatalogFile(componentFile(fresh, namespace = ns, title = "Old"))
+        val staleFile = client.createCatalogFile(componentFile(stale, namespace = ns, title = "Old"))
+        val editedRevision = client.edit(staleFile.id, componentFile(stale, namespace = ns, title = "Edited elsewhere"))
+        assertEquals(staleFile.revision + 1, editedRevision)
+        val eventsBefore = client.events(staleFile.id).items.size
+        val batch = listOf(componentFile(fresh, namespace = ns, title = "New"), componentFile(stale, namespace = ns, title = "New"))
+        // file 0 holds the matching token, file 1 the pre-edit one.
+        val expected = listOf(ExpectedFileState(0, freshFile.revision), ExpectedFileState(1, staleFile.revision))
+
+        val predicted = client.checkFiles(batch, expected = expected)
+        assertEquals(listOf(ImportResultStatus.UPDATED, ImportResultStatus.STALE), predicted.map { it.status })
+        assertNull(predicted[1].fileId, "the dry-run keeps fileId null")
+        assertTrue(!predicted[1].message.isNullOrBlank(), "STALE names its reason")
+
+        withAuditCapture { capture ->
+            val rows = client.importFiles(batch, expected = expected)
+            assertEquals(predicted.map { it.status }, rows.map { it.status }, "dry-run parity")
+            assertEquals(predicted[1].message, rows[1].message)
+            assertEquals(staleFile.id, rows[1].fileId, "the real run names the counterpart")
+            assertEquals(freshFile.id, rows[0].fileId)
+            fun updatedAudit(id: UInt) = { event: ch.qos.logback.classic.spi.ILoggingEvent ->
+                event.message == "catalog_file.updated" && event.hasKeyValue("catalogFileId", id.toLong())
+            }
+            assertTrue(capture.events.none(updatedAudit(staleFile.id)), "a STALE row emits nothing")
+            assertNotNull(capture.awaitEvent(updatedAudit(freshFile.id)))
+        }
+        val kept = client.file(staleFile.id)
+        assertEquals("Edited elsewhere", kept.metadata.title, "the concurrent edit survives")
+        assertEquals(editedRevision, kept.revision, "no revision bump")
+        assertEquals(eventsBefore, client.events(staleFile.id).items.size, "no history event")
+        assertEquals("New", client.file(freshFile.id).metadata.title)
+
+        // With the current token the second file replaces, and a repeat of the same document is UNCHANGED.
+        val second = batch.drop(1)
+        val updated = client.importFiles(second, expected = listOf(ExpectedFileState(0, editedRevision))).single()
+        assertEquals(ImportResultStatus.UPDATED, updated.status)
+        val afterUpdate = client.file(staleFile.id).revision
+        val repeated = client.importFiles(second, expected = listOf(ExpectedFileState(0, afterUpdate))).single()
+        assertEquals(ImportResultStatus.UNCHANGED, repeated.status)
+    }
+
+    @Test
+    fun `the stale no-op - an identical document with a wrong token is STALE, with the right one UNCHANGED`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("implace-noop")
+        val ns = uniqueNamespace("replnoop")
+        val name = uniqueEntityName("noop")
+        val created = client.createCatalogFile(componentFile(name, namespace = ns, title = "Same"))
+        val same = listOf(componentFile(name, namespace = ns, title = "Same"))
+        val wrong = listOf(ExpectedFileState(0, created.revision + 5))
+        assertEquals(ImportResultStatus.STALE, client.checkFiles(same, expected = wrong).single().status)
+        assertEquals(ImportResultStatus.STALE, client.importFiles(same, expected = wrong).single().status)
+        val right = listOf(ExpectedFileState(0, created.revision))
+        assertEquals(ImportResultStatus.UNCHANGED, client.importFiles(same, expected = right).single().status)
+    }
+
+    @Test
+    fun `expecting none is STALE against an active twin and creates otherwise, with or without replaceExisting`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("implace-none")
+        val ns = uniqueNamespace("replnone")
+        val present = uniqueEntityName("present")
+        val absent = uniqueEntityName("absent")
+        val created = client.createCatalogFile(componentFile(present, namespace = ns, title = "Appeared"))
+        val batch = listOf(componentFile(present, namespace = ns, title = "New"), componentFile(absent, namespace = ns))
+        val expected = listOf(ExpectedFileState(0, 0), ExpectedFileState(1, 0))
+
+        val predicted = client.checkFiles(batch, expected = expected).map { it.status }
+        assertEquals(listOf(ImportResultStatus.STALE, ImportResultStatus.CREATED), predicted)
+        assertEquals(predicted, client.importFiles(batch, expected = expected).map { it.status })
+        assertEquals("Appeared", client.file(created.id).metadata.title)
+        // Without replaceExisting an existing twin stays the ordinary CONFLICT, whatever the expectation.
+        val off = client.importFiles(batch.take(1), replaceExisting = false, expected = expected.take(1)).single()
+        assertEquals(ImportResultStatus.CONFLICT, off.status)
+        val offCheck = client.checkFiles(batch.take(1), replaceExisting = false, expected = expected.take(1)).single()
+        assertEquals(ImportResultStatus.CONFLICT, offCheck.status)
+    }
+
+    @Test
+    fun `a counterpart that vanished is STALE and never resurrected - soft-deleted identity and the lookup seam`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("implace-gone")
+        val userId = TestUsers.seed(uniqueEmail("implace-gone-actor"), "pw", role = UserRole.USER)
+        val service = application.attributes[CatalogFileServiceKey]
+        val ns = uniqueNamespace("replgone")
+        val name = uniqueEntityName("gone")
+        val seam = uniqueEntityName("seam")
+        val gone = client.createCatalogFile(componentFile(name, namespace = ns))
+        val seamFile = client.createCatalogFile(componentFile(seam, namespace = ns))
+        assertEquals(HttpStatusCode.NoContent, client.delete("$CATALOG_FILES_PATH/${gone.id}").status)
+        assertEquals(HttpStatusCode.NoContent, client.delete("$CATALOG_FILES_PATH/${seamFile.id}").status)
+
+        // Soft-deleted identity: the conversion merged over a file that is gone, in both modes.
+        val batch = listOf(componentFile(name, namespace = ns))
+        val expected = listOf(ExpectedFileState(0, gone.revision))
+        listOf(true, false).forEach { replace ->
+            assertEquals(ImportResultStatus.STALE, client.checkFiles(batch, replaceExisting = replace, expected = expected).single().status)
+            val row = client.importFiles(batch, replaceExisting = replace, expected = expected).single()
+            assertEquals(ImportResultStatus.STALE, row.status)
+            assertNull(row.fileId)
+        }
+        // The lookup seam still answers the (now soft-deleted) id: the locked update finds no active row.
+        val seamRow = service.import(
+            listOf(componentFile(seam, namespace = ns)), userId, replaceExisting = true,
+            expected = mapOf(0 to seamFile.revision),
+            activeRowLookup = { StoredRevision(seamFile.id, seamFile.revision) },
+        ).single()
+        assertEquals(ImportResultStatus.STALE, seamRow.status)
+        // Nothing was created for either identity: an unguarded import still finds both identities free.
+        val both = listOf(componentFile(name, namespace = ns), componentFile(seam, namespace = ns))
+        val fresh = client.importFiles(both, replaceExisting = false)
+        assertEquals(listOf(ImportResultStatus.CREATED, ImportResultStatus.CREATED), fresh.map { it.status })
+    }
+
+    @Test
+    fun `a malformed expected list is 400 on both endpoints and stores nothing`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("implace-bad")
+        val ns = uniqueNamespace("replbad")
+        val batch = listOf(componentFile(uniqueEntityName("bad"), namespace = ns))
+        listOf(
+            listOf(ExpectedFileState(1, 1)),
+            listOf(ExpectedFileState(-1, 1)),
+            listOf(ExpectedFileState(0, 1), ExpectedFileState(0, 2)),
+            listOf(ExpectedFileState(0, -1)),
+        ).forEach { expected ->
+            val request = ImportRequest(files = batch, replaceExisting = true, expected = expected)
+            assertEquals(HttpStatusCode.BadRequest, client.postJson("$CATALOG_FILES_PATH/import", request).status, expected.toString())
+            val check = client.postJson("$CATALOG_FILES_PATH/import/check", request)
+            assertEquals(HttpStatusCode.BadRequest, check.status, expected.toString())
+        }
+        assertEquals(ImportResultStatus.CREATED, client.importFiles(batch, replaceExisting = false).single().status, "nothing was stored")
     }
 }

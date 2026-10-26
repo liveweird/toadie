@@ -771,7 +771,19 @@ export interface paths {
          *     already holds the kind+namespace+name identity — nothing is overwritten unless
          *     `replaceExisting` is on), or `ERROR` (an unexpected storage failure). The response is `200` even when every document failed
          *     — the result rows are the outcome; a `400` covers only the batch itself (an
-         *     undecodable body, more than 200 entries, or an invalid `sourceUrl`).
+         *     undecodable body, more than 200 entries, an invalid `sourceUrl`, or a malformed
+         *     `expected` list — an out-of-range or repeated index, a negative revision).
+         *
+         *     With `expected` (2.29.0) a file is imported only if its stored counterpart still carries
+         *     the revision it was converted over (`ConversionRow.existingRevision`); `0` expects no
+         *     counterpart. A counterpart that changed, vanished or appeared meanwhile makes the row
+         *     `STALE` (nothing stored: no history event, no revision bump, no audit event; `fileId`
+         *     names the counterpart when one exists). The revision is compared under the row lock,
+         *     before anything else, so even a document identical to the stored one is `STALE` on a
+         *     wrong token. Without `replaceExisting` an existing counterpart stays the ordinary
+         *     `CONFLICT` whatever the expectation; only a vanished one (positive revision, no active
+         *     file) is `STALE`, so nothing the conversion merged over is resurrected. A file without
+         *     an entry is unguarded, exactly as before.
          *
          *     With `sourceUrl` set (the fetch-from-URL flow), every STORED row gets it as its
          *     source reference and starts synced — an import from a repo URL IS a sync.
@@ -825,8 +837,9 @@ export interface paths {
          *     A pure computation: nothing is stored, nothing is audited; POST only because the
          *     batch travels in the body. The report is a snapshot — a concurrent write between
          *     the check and the real import can change the actual outcome. The same `400` covers
-         *     only the batch itself (an undecodable body, more than 200 entries, or an invalid
-         *     batch-level `sourceUrl`). The `sourceUrl` is validated exactly as `importCatalogFiles`
+         *     only the batch itself (an undecodable body, more than 200 entries, an invalid
+         *     batch-level `sourceUrl`, or a malformed `expected` list). `expected` is classified exactly
+         *     as the real import classifies it (`STALE` rows, `fileId` null like every prediction). The `sourceUrl` is validated exactly as `importCatalogFiles`
          *     validates it (same preflight, same order, same problem body) but never fetched; a
          *     valid one changes no prediction, except whether a `replaceExisting` replace would move
          *     an existing file's source reference.
@@ -2745,6 +2758,20 @@ export interface components {
              * @default false
              */
             replaceExisting: boolean;
+            /** @description Optional per-file write-version expectations (2.29.0), by `files` index — the conversion's guard (`ConversionRow.existingRevision`). A positive `revision` is the stored counterpart's revision: the file is written only if the counterpart still carries exactly it (compared atomically under the row lock), else the row is `STALE`; `0` means "expect no stored counterpart" (one that appeared meanwhile is `STALE`). A positive expectation whose counterpart is gone is `STALE` too. A file without an entry is unguarded. An index outside `0..files-1`, a repeated index or a negative revision is a `400` for the whole batch, on the real import and the dry-run alike. */
+            expected?: components["schemas"]["ExpectedFileState"][];
+        };
+        ExpectedFileState: {
+            /**
+             * Format: int32
+             * @description The 0-based position of the file in `files`.
+             */
+            index: number;
+            /**
+             * Format: int64
+             * @description The stored counterpart's `revision` the file expects; 0 = no stored counterpart.
+             */
+            revision: number;
         };
         ImportResponse: {
             /** @description One result per submitted document, in submission order. */
@@ -2760,13 +2787,13 @@ export interface components {
             /** @description The sanitized entity name. */
             name: string;
             /**
-             * @description CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite soft findings, which import always waives (`fileId` set, `message` lists the findings; the Errors report tracks them). UPDATED / UPDATED_WITH_FINDINGS — `replaceExisting` only: the active file holding this identity was replaced in place (`fileId` is that file; the latter waived soft findings, listed in `message`). UNCHANGED — `replaceExisting` only: the file already held this exact document and source reference. Without a batch `sourceUrl` nothing was recorded or changed; with one the row is still a repo sync and records a SYNCED history event, bumps the revision and re-stamps the sync state. `message` still lists any findings the file carries. INVALID — failed the structural descriptor-format validation or namespace resolution (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document.
+             * @description CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite soft findings, which import always waives (`fileId` set, `message` lists the findings; the Errors report tracks them). UPDATED / UPDATED_WITH_FINDINGS — `replaceExisting` only: the active file holding this identity was replaced in place (`fileId` is that file; the latter waived soft findings, listed in `message`). UNCHANGED — `replaceExisting` only: the file already held this exact document and source reference. Without a batch `sourceUrl` nothing was recorded or changed; with one the row is still a repo sync and records a SYNCED history event, bumps the revision and re-stamps the sync state. `message` still lists any findings the file carries. INVALID — failed the structural descriptor-format validation or namespace resolution (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document. STALE — the request's `expected` revision for this file no longer holds (its counterpart changed, vanished or appeared since it was converted); nothing was stored, `fileId` names the counterpart on the real run when one exists.
              * @enum {string}
              */
-            status: "CREATED" | "CREATED_WITH_FINDINGS" | "UPDATED" | "UPDATED_WITH_FINDINGS" | "UNCHANGED" | "INVALID" | "CONFLICT" | "ERROR";
+            status: "CREATED" | "CREATED_WITH_FINDINGS" | "UPDATED" | "UPDATED_WITH_FINDINGS" | "UNCHANGED" | "INVALID" | "CONFLICT" | "ERROR" | "STALE";
             /**
              * Format: int32
-             * @description The new (or, for UPDATED/UPDATED_WITH_FINDINGS/UNCHANGED, the replaced) file's id, only when the document was stored (always null on the dry-run's predicted rows).
+             * @description The new (or, for UPDATED/UPDATED_WITH_FINDINGS/UNCHANGED, the replaced) file's id, only when the document was stored (always null on the dry-run's predicted rows); on a real-run `STALE` row, the counterpart's id when one exists.
              */
             fileId?: number | null;
             /** @description The failure or finding detail, absent on a clean CREATED/UPDATED. */

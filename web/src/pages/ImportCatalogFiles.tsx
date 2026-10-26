@@ -44,6 +44,8 @@ const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
   CONFLICT: "red",
   INVALID: "red",
   ERROR: "red",
+  // An `expected` revision no longer held: nothing was stored.
+  STALE: "red",
 };
 
 export default function ImportCatalogFiles() {

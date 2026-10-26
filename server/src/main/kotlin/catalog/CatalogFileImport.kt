@@ -22,6 +22,29 @@ private sealed interface Preflight {
 
 private const val STORAGE_FAILED_MESSAGE = "Storage failed"
 
+private const val STALE_VANISHED = "the file it was read from no longer exists"
+private const val STALE_APPEARED = "a file with this identity was created since it was read"
+private const val STALE_CHANGED = "the file changed since it was read"
+
+/** A STALE row's message: the reason, then what to do about it. */
+private fun staleMessage(reason: String) = "$reason — convert again"
+
+/**
+ * The reason a file's [expected] revision no longer holds against its counterpart's [current] revision
+ * (null = no active counterpart), or null when it holds or the file is unguarded — ONE verdict for both runs.
+ * Without `replaceExisting` an existing counterpart is the ordinary CONFLICT, whatever the expectation;
+ * only a vanished one (positive token, no file) is STALE, so a create never resurrects what the
+ * conversion merged over.
+ */
+private fun staleReason(expected: Long?, current: Long?, replaceExisting: Boolean): String? = when {
+    expected == null -> null
+    current == null -> if (expected > 0) STALE_VANISHED else null
+    !replaceExisting -> null
+    expected == 0L -> STALE_APPEARED
+    expected != current -> STALE_CHANGED
+    else -> null
+}
+
 private fun rowBase(index: Int, f: CatalogFile) = ImportFileResult(
     index = index,
     kind = f.kind,
@@ -139,9 +162,11 @@ suspend fun CatalogFileService.import(
     // sync). A pasted/uploaded batch passes null and the rows read "no source".
     sourceUrl: String? = null,
     replaceExisting: Boolean = false,
-    // Test seam: the replace lookup, so a regression can make the matched file vanish between
-    // the lookup and the locked update (the create fallback) without a flaky race.
-    activeIdLookup: suspend (CatalogFile) -> UInt? = { activeIdOf(it) },
+    // The per-file write-version expectations (index -> revision, 0 = no counterpart); empty = unguarded.
+    expected: Map<Int, Long> = emptyMap(),
+    // Test seam: the active-counterpart lookup, so a regression can make the matched file vanish between
+    // the lookup and the locked update (the create fallback / STALE) without a flaky race.
+    activeRowLookup: suspend (CatalogFile) -> StoredRevision? = { activeRowOf(it) },
 ): List<ImportFileResult> {
     // The batch universe: sibling documents resolve against each other ORDER-INDEPENDENTLY
     // (a real export's entities are interdependent — the round trip must survive). Only
@@ -154,7 +179,7 @@ suspend fun CatalogFileService.import(
     // (the create path's 23505 catches it by itself, a replace would not).
     val handled = mutableSetOf<EntityIdentity>()
     return files.mapIndexed { index, raw ->
-        importOne(index, raw, createdByUserId, batchIdentities, sourceUrl, replaceExisting, handled, activeIdLookup)
+        importOne(index, raw, createdByUserId, batchIdentities, sourceUrl, replaceExisting, expected[index], handled, activeRowLookup)
     }
 }
 
@@ -187,6 +212,7 @@ suspend fun CatalogFileService.importCheck(
     // The route's already-sanitized batch URL. Only the replace prediction reads it (does it
     // move an existing reference / turn the row into a sync?).
     sourceUrl: String? = null,
+    expected: Map<Int, Long> = emptyMap(),
 ): List<ImportFileResult> {
     val batchIdentities = batchIdentities(files)
     val sourceWrite = replaceSourceWrite(sanitizedSourceUrl(sourceUrl))
@@ -195,7 +221,7 @@ suspend fun CatalogFileService.importCheck(
         // first occurrence and 23505-CONFLICTs the second — mirror that ordering.
         val seen = mutableSetOf<EntityIdentity>()
         files.mapIndexed { index, raw ->
-            checkOne(index, raw, batchIdentities, active, registries, seen, resolve) { file ->
+            checkOne(index, raw, batchIdentities, active, registries, seen, resolve, replaceExisting, expected[index]) { file ->
                 if (replaceExisting) predict(file, sourceWrite) else null
             }
         }
@@ -206,10 +232,12 @@ private suspend fun checkOne(
     index: Int,
     raw: CatalogFile,
     batchIdentities: Set<EntityIdentity>,
-    active: Set<EntityIdentity>,
+    active: Map<EntityIdentity, Long>,
     registries: RegistrySnapshot,
     seen: MutableSet<EntityIdentity>,
     resolve: suspend (CatalogFile) -> CatalogFile,
+    replaceExisting: Boolean,
+    expected: Long?,
     // Non-null only under replaceExisting: the would-it-change verdict for an existing identity.
     predictReplace: suspend (CatalogFile) -> ReplacePrediction?,
 ): ImportFileResult {
@@ -222,12 +250,16 @@ private suspend fun checkOne(
     if (!seen.add(identity)) {
         return rowBase(index, stored).copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
     }
+    // STALE sits after the in-batch CONFLICT, before any replace prediction or create; the dry-run's fileId stays null.
+    staleReason(expected, active[identity], replaceExisting)?.let { reason ->
+        return rowBase(index, stored).copy(status = ImportResultStatus.STALE, message = staleMessage(reason))
+    }
     val replacement = if (identity in active) predictReplace(stored) else null
     // `identity in active` without a replacement verdict = replaceExisting is off: the clash stands.
     if (identity in active && replacement == null) {
         return rowBase(index, stored).copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
     }
-    val findings = checkDocument(stored, active + batchIdentities).findings
+    val findings = checkDocument(stored, active.keys + batchIdentities).findings
         .map { SoftFinding(it, referenceFindingMessage(it)) } +
         registryFindings(stored, registries)
     return if (replacement != null) {
@@ -251,8 +283,9 @@ private suspend fun CatalogFileService.importOne(
     batchIdentities: Set<EntityIdentity>,
     sourceUrl: String?,
     replaceExisting: Boolean,
+    expected: Long?,
     handled: MutableSet<EntityIdentity>,
-    activeIdLookup: suspend (CatalogFile) -> UInt?,
+    activeRowLookup: suspend (CatalogFile) -> StoredRevision?,
 ): ImportFileResult {
     val file = when (val outcome = preflight(index, raw) { resolveNamespace(it) }) {
         is Preflight.Rejected -> return outcome.row
@@ -264,13 +297,27 @@ private suspend fun CatalogFileService.importOne(
         return base.copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
     }
     return try {
+        // The active counterpart, looked up once: replaceExisting replaces it, an expectation judges it.
+        val located = if (replaceExisting || expected != null) activeRowLookup(file) else null
+        staleReason(expected, located?.revision, replaceExisting)?.let { reason ->
+            return base.copy(status = ImportResultStatus.STALE, fileId = located?.id, message = staleMessage(reason))
+        }
+        // Expecting a counterpart without replaceExisting: the ordinary CONFLICT stands (nothing overwritten).
+        if (located != null && !replaceExisting) {
+            return base.copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
+        }
         // replaceExisting: an ACTIVE twin is replaced through the ordinary update (its own
-        // transaction, history event and no-op rule). Should the twin vanish between the lookup
-        // and the locked update (rows == 0), the identity is free and the document is created.
+        // transaction, history event and no-op rule) — which, for a positive expectation, compares the
+        // revision under the row lock before anything else. Should the twin vanish between the lookup
+        // and the locked update (rows == 0), the identity is free and an unguarded document is created;
+        // one that expected the twin is STALE instead (creating would resurrect what it was merged over).
         val replaced = if (replaceExisting) {
-            replaceExistingFile(file, createdByUserId, batchIdentities, sourceUrl, activeIdLookup)
+            replaceExistingFile(file, located?.id, createdByUserId, batchIdentities, sourceUrl, expected?.takeIf { it > 0 })
         } else {
             null
+        }
+        if (replaced == null && located != null && (expected ?: 0L) > 0) {
+            return base.copy(status = ImportResultStatus.STALE, message = staleMessage(STALE_VANISHED))
         }
         val row = replaced?.let { (id, result) ->
             replacedRow(base, result.waived, fileId = id, unchanged = result.changes.isEmpty())
@@ -291,12 +338,21 @@ private suspend fun CatalogFileService.importOne(
     } catch (e: CancellationException) {
         // Cancellation is not a per-document failure — a gone client must stop the batch.
         throw e
+    } catch (e: CatalogRevisionConflictException) {
+        // The locked update found a revision other than the expected one: a concurrent edit won. Nothing was written.
+        base.copy(
+            status = ImportResultStatus.STALE,
+            message = staleMessage("$STALE_CHANGED (revision ${e.currentRevision}, expected ${e.expectedRevision})"),
+        )
     } catch (e: BadRequestException) {
         // create()'s own rule rejections (the namespace resolution re-check) are INVALID
         // rows, exactly like the pre-flight validator's.
         base.copy(status = ImportResultStatus.INVALID, message = e.message)
     } catch (e: Exception) {
-        if (e.isUniqueViolation()) {
+        if (e.isUniqueViolation() && expected == 0L) {
+            // Expected no counterpart, and one was created meanwhile.
+            base.copy(status = ImportResultStatus.STALE, message = staleMessage(STALE_APPEARED))
+        } else if (e.isUniqueViolation()) {
             base.copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
         } else {
             base.copy(status = ImportResultStatus.ERROR, message = STORAGE_FAILED_MESSAGE)
@@ -304,19 +360,24 @@ private suspend fun CatalogFileService.importOne(
     }
 }
 
-/** The replaced file's id and the update's result, or null when no active file holds the identity (any more). */
+/**
+ * The replaced file's id and the update's result, or null when no active file holds the identity (any
+ * more). [id] is the located counterpart (null = none); [expectedRevision] guards the update atomically.
+ */
 private suspend fun CatalogFileService.replaceExistingFile(
     file: CatalogFile,
+    id: UInt?,
     actingUserId: UInt,
     batchIdentities: Set<EntityIdentity>,
     sourceUrl: String?,
-    activeIdLookup: suspend (CatalogFile) -> UInt?,
+    expectedRevision: Long?,
 ): Pair<UInt, CatalogFileUpdateResult>? {
-    val id = activeIdLookup(file) ?: return null
+    if (id == null) return null
     val result = update(
         id,
         file,
         actingUserId,
+        expectedRevision = expectedRevision,
         allowInvalid = true,
         extraIdentities = batchIdentities,
         sourceWrite = replaceSourceWrite(sourceUrl),

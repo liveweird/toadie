@@ -21,6 +21,8 @@ const STATUS_COLOR: Record<ImportFileResult["status"], string> = {
   CONFLICT: "red",
   INVALID: "red",
   ERROR: "red",
+  // The conversion's `expected` revision no longer held: nothing was stored (not in CLEAN/STORED).
+  STALE: "red",
 };
 
 const CLEAN: ReadonlySet<ImportFileResult["status"]> = new Set(["CREATED", "UPDATED", "UNCHANGED"]);

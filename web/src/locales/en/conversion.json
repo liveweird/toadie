@@ -144,7 +144,8 @@
         "UNCHANGED": "Unchanged",
         "INVALID": "Invalid",
         "CONFLICT": "Conflict",
-        "ERROR": "Failed"
+        "ERROR": "Failed",
+        "STALE": "Changed meanwhile"
       },
       "checkStatus": {
         "CREATED": "Would be created",
@@ -154,7 +155,8 @@
         "UNCHANGED": "Would stay unchanged",
         "INVALID": "Would be refused",
         "CONFLICT": "Would conflict",
-        "ERROR": "Would fail"
+        "ERROR": "Would fail",
+        "STALE": "Changed meanwhile"
       },
       "summary": "{{stored}} of {{total}} stored — {{created}} created, {{updated}} updated, {{unchanged}} unchanged",
       "checkSummary": "{{stored}} of {{total}} would be stored — {{created}} created, {{updated}} updated, {{unchanged}} unchanged",

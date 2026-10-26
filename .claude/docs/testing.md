@@ -337,7 +337,15 @@ revision +1 and `updated_at == last_synced_at`, a matching re-sync doing the sam
 `POST …/sync`); the `sourceUrl` keep / move / re-stamp rule; in-batch duplicates (including
 case-variants) staying `CONFLICT`; replacing through a differently-cased name; a blank namespace
 resolving to the default; a soft-deleted identity `CREATED` with a new id; the vanished-file create
-fallback (via the `activeIdLookup` seam); and real-vs-dry-run row parity on a mixed batch.
+fallback (via the `activeRowLookup` seam); and real-vs-dry-run row parity on a mixed batch.
+Expected revisions (2.29.0) add: a matching token `UPDATED`/`UNCHANGED`; a stale one `STALE` with no
+history event, no revision bump and no `catalog_file.updated` audit, the concurrent edit kept, the
+real run naming the counterpart's `fileId` while the dry-run keeps it null; the stale no-op (an
+identical document with a wrong token is `STALE`); `0` against an active twin `STALE`, creating
+otherwise, and `CONFLICT` kept without `replaceExisting`; a soft-deleted identity and a counterpart
+vanishing at the lookup seam `STALE` rather than resurrected; dry-run parity; and a malformed
+`expected` `400` on both endpoints. The rule: `.claude/docs/persistence.md` "Import expectations
+(entities and catalog files)".
 `CatalogFileAtomicHistoryTest` adds the fault injection (a failing history insert rolls back that
 replace whole, audits nothing for the row; adjacent rows still commit). Frontend:
 `ImportCatalogFiles.test.tsx` (the switch reaches Check and Import, the three statuses and

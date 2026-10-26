@@ -676,14 +676,27 @@ class CatalogFileService(
             (CatalogFiles.name.lowerCase() eq file.metadata.name.lowercase())
 
     /**
-     * The id of the ACTIVE file holding the (namespace-resolved) [file]'s identity — the
-     * import's `replaceExisting` lookup. A soft-deleted twin is invisible here, exactly as it is
-     * to the partial unique index, so its identity imports as a plain create.
+     * The id and `revision` of the ACTIVE file holding the (namespace-resolved) [file]'s identity — the
+     * import's `replaceExisting`/`expected` lookup. A soft-deleted twin is invisible here, exactly as it is
+     * to the partial unique index, so its identity imports as a plain create (or, expecting a counterpart, STALE).
      */
-    internal suspend fun activeIdOf(file: CatalogFile): UInt? = suspendTransaction(database) {
-        CatalogFiles.select(CatalogFiles.id).where { identityPredicate(file) }
-            .toList().singleOrNull()?.get(CatalogFiles.id)?.value
+    internal suspend fun activeRowOf(file: CatalogFile): StoredRevision? = suspendTransaction(database) {
+        CatalogFiles.select(CatalogFiles.id, CatalogFiles.revision).where { identityPredicate(file) }
+            .toList().singleOrNull()?.let { StoredRevision(it[CatalogFiles.id].value, it[CatalogFiles.revision]) }
     }
+
+    /** Every active file's lowercased identity with its `revision` — the dry-run's [activeRowOf], read once. */
+    private suspend fun activeRevisions(): Map<EntityIdentity, Long> =
+        CatalogFiles.select(CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name, CatalogFiles.revision)
+            .where { active() }
+            .toList()
+            .associate {
+                EntityIdentity(
+                    kind = it[CatalogFiles.kind].lowercase(),
+                    namespace = it[CatalogFiles.namespace].lowercase(),
+                    name = it[CatalogFiles.name].lowercase(),
+                ) to it[CatalogFiles.revision]
+            }
 
     /**
      * The dry-run's prediction of [update] for the active file holding [file]'s identity:
@@ -705,21 +718,21 @@ class CatalogFileService(
 
     /**
      * One snapshot transaction for the import DRY-RUN (see CatalogFileImport.kt — the same
-     * feature, split into its own file): the active identities, the registry snapshot, an
+     * feature, split into its own file): the active identities with their revisions, the registry snapshot, an
      * in-transaction namespace resolver, and the `replaceExisting` prediction, handed to [block]
      * so the dry-run classifies against exactly what a real run would see. Internal-only seam —
      * everything it exposes stays private to this class.
      */
     internal suspend fun <T> withImportSnapshot(
         block: suspend (
-            active: Set<EntityIdentity>,
+            active: Map<EntityIdentity, Long>,
             registries: RegistrySnapshot,
             resolve: suspend (CatalogFile) -> CatalogFile,
             predict: suspend (CatalogFile, SourceWrite) -> ReplacePrediction,
         ) -> T,
     ): T = suspendTransaction(database) {
         block(
-            activeIdentities(),
+            activeRevisions(),
             registryReader.loadSnapshot(),
             { file -> file.withNamespace(registryReader.resolveNamespace(file.metadata.namespace)) },
             { file, sourceWrite -> predictReplace(file, sourceWrite) },

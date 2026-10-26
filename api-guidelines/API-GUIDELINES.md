@@ -669,7 +669,7 @@ prioritized. Reviewers cite these as "registered gap"; the Spectral ruleset carr
 | API-ERR-007 | Generic unique-violation `409`s carry no `instance` URI | `ConflictException` rides `ProblemDetail` (`plugins/ErrorHandling.kt`); no Toadie conflict site populates `instance` yet — adopt it where the service knows the conflicting row's id (the tag-claim and last-admin `409`s could; the generic 23505 handler never can, and existence-disclosure rules apply per API-ERR-006) |
 | API-RATE-001 | No `Retry-After` / `RateLimit-*` headers on `429`s | Set `Retry-After` where the wait is known (login lockout knows its window); add headers to the shared `TooManyRequests` response |
 | API-CACHE-001/002 | No `ETag`/`304`; `Cache-Control` only on CSS | Install `ConditionalHeaders`; extend the `CachingHeaders` config in `plugins/Http.kt` with deliberate per-class policies (`no-store` on API responses) |
-| API-CACHE-003 | No `If-Match`/`ETag`/`412` conditional writes; catalog files offer an optional revision/typed-`409` guard, while headerless catalog clients and the remaining full-document writes are last-write-wins (see the inventory below) | Require a new API version before making the catalog header mandatory; add `ETag` + `If-Match` or the same explicit revision alternative to other writes where contention materializes |
+| API-CACHE-003 | No `If-Match`/`ETag`/`412` conditional writes; catalog files offer an optional revision/typed-`409` guard, while headerless catalog clients and the remaining full-document writes are last-write-wins, except the conversion imports' optional per-document `expected` (see the inventory below) | Require a new API version before making the catalog header mandatory; add `ETag` + `If-Match` or the same explicit revision alternative to other writes where contention materializes |
 | API-IDEM-001 | No `Idempotency-Key` handling | Domain no-duplicate `409`s cover double-submits today; adopt the header if external/retrying clients appear |
 | API-HTTP-001 | HTTP/1.1 only (Netty defaults; no edge HTTP/2) | Configure HTTP/2 at the TLS-terminating ingress when one exists |
 | API-META-001/002 | No `x-sla`, no `info.termsOfService` in the spec | Add both to `documentation.yaml` when commitments/terms exist to publish |
@@ -688,6 +688,14 @@ against Toadie's write surface — the previous inventory described Lettuce's):
   answers `409` with type `urn:toadie:catalog-revision-conflict`; every state-changing write
   advances the per-file counter, including headerless legacy writes. The header cannot become
   required within released `/api/v1`, so omitted-header requests remain last-write-wins.
+- **Expectation-guarded when requested** — the two conversion imports, `POST /entities/import`
+  and `POST /files/import` (and their `/import/check` dry-runs), accept an optional per-document
+  `expected` list (`{index, updatedAt}` / `{index, revision}`, `0` = expect no counterpart) taken
+  from the conversion row's `existingUpdatedAt` / `existingRevision`. The row is written only if
+  the stored counterpart still carries it, compared under the existing write lock before any
+  mutation; otherwise the row is `STALE` (report-and-skip, nothing written, no audit). Legacy
+  callers, the sample loaders and the MCP tools omit it and stay last-write-wins; a malformed list
+  is a `400`. The rule: `.claude/docs/persistence.md` "Import expectations (entities and catalog files)".
 - **Source-reference-guarded when requested** — Port blueprint/entity sync accepts optional
   `expectedSourceUrl` beside the submitted document. The SPA supplies the stored reference
   observed before fetch. A changed or cleared reference answers typed `409` under the existing
