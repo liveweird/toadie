@@ -53,6 +53,8 @@ tags:
   - name: entities
   - name: integration-clients
     description: Administrator-managed technical clients (API keys) for the separate integration surface — the read-only GraphQL API and the MCP endpoint.
+  - name: telemetry
+    description: Toadie's own vital signs — ADMIN-only reads of the in-app telemetry the process samples about itself (memory, workspace storage, pressure, requests, JVM).
 
 paths:
   /api/v1/integration-clients:
@@ -3291,6 +3293,85 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/telemetry/current:
+    get:
+      tags: [telemetry]
+      operationId: getTelemetryCurrent
+      summary: Toadie's own vital signs — process, limits, workspace storage, request latency
+      description: |
+        ADMIN only (operational data: process sizes, container limits, pressure and storage figures), read-only, no audit event
+        (a denial is the generic `authz.denied`). Rate-limited per user (`429` when exceeded).
+        `.claude/docs/observability.md` "Telemetry".
+        `processes` lists each sampling process (a JVM run) with its latest raw sample: every live process, every stale one seen
+        within the last hour, and the newest older stale one (seen within the last day) when none is alive; at most 1000 are
+        returned, the most recently seen kept. With i the sample interval, `stale` means `lastSeenAt` or the newest sample is more than
+        3i away from now (an absolute age, so a timestamp in the future beyond that is stale too), or the process has no sample and
+        started more than 3i ago; a sample is only read from the rows within 2i of `lastSeenAt`, so a process that ticks but stores
+        nothing turns stale after about 2i. A figure the process could not measure is null (no container limit outside a cgroup, no `memory.peak` on an old
+        kernel, no integration figures while that API is off) — never zero; `percentOfLimit` is the cgroup working set over the
+        container limit, in percent. Each `pressure` count is the value at the latest sample; the `*Refusals` and `ledgerPeakBytes`
+        describe the latest sample interval. `limits` carries the capacities those figures are measured against (read live from the
+        server, not sampled). `workspace` is the newest database / table-group size and row-count measurement (null before the first
+        one); `rows` counts the active rows of each table (all rows of the append-only history). `requests` is the latest sample
+        interval of the live processes: the `*` total (every `/api/` and `/integration/` route but the telemetry's own) and the 15
+        busiest labelled routes. The interval is the newest bucket every contributing live process has written (the oldest of their
+        newest buckets); a live process more than one interval behind the newest does not contribute. With several processes the
+        counts add up, the p50 is weighted by each process's request count and the p95 is the largest.
+      responses:
+        '200':
+          description: The current figures
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryCurrent'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+  /api/v1/telemetry/history:
+    get:
+      tags: [telemetry]
+      operationId: getTelemetryHistory
+      summary: The trend of one telemetry section over 24 hours, 7 days or 90 days
+      description: |
+        ADMIN only (guard before the query is read: `403` outranks `400`), read-only, no audit event. `group` picks the section and
+        `range` the span; both are required, and an unknown, blank or repeated value is a `400`. Buckets: `24h` = the raw sample
+        interval (widened to a whole multiple of it when that would exceed 400 points), `7d` = one hour (the hourly rollups plus the raw
+        rows of the hours not yet rolled up), `90d` = six hours; `bucketSeconds` says which. At most 400 points per series and 40 series
+        (`truncated` when more matched); a series has points only for the buckets that hold data. Every process merges into one series
+        per metric and label, so a trend survives a restart. `requests` keeps the `*` total (count, p50, p95, 5xx, 429) and the ten
+        busiest routes of the range (count, p50, p95). A DELTA series' `avg` is the bucket's TOTAL and its `max` the largest single
+        sample interval; a GAUGE or PERCENTILE series' `avg` is the n-weighted mean and `max` the largest sample. `historyFrom` is the
+        oldest instant the range can actually hold: the first sampler boot still retained (a fresh install, or retention shorter than
+        the range).
+      parameters:
+        - name: group
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [memory, workspace, pressure, requests, jvm]
+          description: The panel section.
+        - name: range
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [24h, 7d, 90d]
+          description: How far back the history reaches.
+      responses:
+        '200':
+          description: The series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryHistory'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3508,9 +3589,10 @@ components:
     TooManyRequests:
       description: >-
         Throttled — either the per-IP rate-limit bucket is exhausted (generic detail), on
-        /login the per-account lockout is active (account-specific detail), or a
-        whole-workspace read found no room in the read memory budget. All carry a
-        ProblemDetail body.
+        /login the per-account lockout is active (account-specific detail), a
+        whole-workspace read found no room in the read memory budget, or, on a telemetry read
+        (`/api/v1/telemetry/**`), the per-USER telemetry bucket is exhausted. All carry
+        a ProblemDetail body.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
@@ -6652,6 +6734,236 @@ components:
         checkedBlueprints: { type: integer, format: int32, description: "Every SHOWN blueprint considered, findings or not." }
         checkedSavedQueries: { type: integer, format: int32, description: "Every saved query visible to the caller, findings or not." }
         checkedMappings: { type: integer, format: int32, description: "Every active conversion mapping considered, findings or not." }
+
+    TelemetryCurrent:
+      type: object
+      required: [generatedAt, sampleIntervalSeconds, limits, processes, workspace, requests]
+      properties:
+        generatedAt: { type: integer, format: int64, description: Epoch millis }
+        sampleIntervalSeconds: { type: integer, format: int32, description: The cadence of the raw samples; also the `requests` window. }
+        limits: { $ref: '#/components/schemas/TelemetryLimits' }
+        processes:
+          type: array
+          maxItems: 1000
+          items: { $ref: '#/components/schemas/TelemetryProcess' }
+        workspace:
+          allOf: [{ $ref: '#/components/schemas/TelemetryWorkspace' }]
+          nullable: true
+          description: The newest workspace measurement; null until the first one has been taken.
+        requests: { $ref: '#/components/schemas/TelemetryRequests' }
+    TelemetryLimits:
+      type: object
+      description: The capacities the pressure figures are measured against, read live from the server (not sampled).
+      required:
+        - readLedgerBytes
+        - entityQueryPermits
+        - jqWorkers
+        - jqQueueCapacity
+        - fetchWorkers
+        - fetchQueueCapacity
+        - integrationEnabled
+        - integrationPermits
+        - integrationRetainedBytes
+        - poolMaxSize
+      properties:
+        readLedgerBytes: { type: integer, format: int64, description: The read ledger's capacity — the process-wide budget of whole-workspace reads. }
+        entityQueryPermits: { type: integer, format: int32, description: Entity-query evaluations allowed at once. }
+        jqWorkers: { type: integer, format: int32, description: Workers of the jq calculation pool. }
+        jqQueueCapacity: { type: integer, format: int32, description: Tasks the jq pool queues before refusing. }
+        fetchWorkers: { type: integer, format: int32, description: Workers of the outbound fetch pool. }
+        fetchQueueCapacity: { type: integer, format: int32, description: Fetches the pool queues before refusing. }
+        integrationEnabled: { type: boolean, description: Whether the integration API (GraphQL and MCP) is switched on. }
+        integrationPermits: { type: integer, format: int32, nullable: true, description: Concurrent integration requests admitted; null while the API is off. }
+        integrationRetainedBytes: { type: integer, format: int64, nullable: true, description: The integration API's retained-result byte budget; null while the API is off. }
+        poolMaxSize: { type: integer, format: int32, description: '`postgres.pool.maxSize` — the database connection pool bound.' }
+    TelemetryProcess:
+      type: object
+      description: One sampling process (a JVM run) with its latest raw sample.
+      required: [id, instance, startedAt, lastSeenAt, sampledAt, stale, version, commit, memory, jvm, pressure]
+      properties:
+        id: { type: integer, format: int32 }
+        instance: { type: string, description: The pod or host name. }
+        startedAt: { type: integer, format: int64, description: Epoch millis of the JVM start }
+        lastSeenAt: { type: integer, format: int64, description: Epoch millis of the latest sample tick }
+        sampledAt: { type: integer, format: int64, nullable: true, description: The bucket of the sample the figures come from; null when none is retained. }
+        stale: { type: boolean, description: 'Nothing for more than three sample intervals: the last tick or the newest sample is that far from now (absolute age), or there is no sample for a process started that long ago.' }
+        version: { type: string, nullable: true, description: The image build version (null outside a stamped image). }
+        commit: { type: string, nullable: true, description: The image build commit (null outside a stamped image). }
+        memory: { $ref: '#/components/schemas/TelemetryMemory' }
+        jvm: { $ref: '#/components/schemas/TelemetryJvm' }
+        pressure: { $ref: '#/components/schemas/TelemetryPressure' }
+    TelemetryMemory:
+      type: object
+      description: Bytes; a figure the process could not measure is null.
+      required:
+        - heapUsedBytes
+        - heapCommittedBytes
+        - heapMaxBytes
+        - oldGenPeakBytes
+        - nonHeapBytes
+        - directBytes
+        - rssBytes
+        - cgroupCurrentBytes
+        - cgroupAnonBytes
+        - workingSetBytes
+        - cgroupPeakBytes
+        - containerLimitBytes
+        - percentOfLimit
+      properties:
+        heapUsedBytes: { type: integer, format: int64, nullable: true }
+        heapCommittedBytes: { type: integer, format: int64, nullable: true }
+        heapMaxBytes: { type: integer, format: int64 }
+        oldGenPeakBytes: { type: integer, format: int64, nullable: true, description: The old generation's peak over the latest sample interval. }
+        nonHeapBytes: { type: integer, format: int64, nullable: true }
+        directBytes: { type: integer, format: int64, nullable: true }
+        rssBytes: { type: integer, format: int64, nullable: true }
+        cgroupCurrentBytes: { type: integer, format: int64, nullable: true }
+        cgroupAnonBytes: { type: integer, format: int64, nullable: true }
+        workingSetBytes: { type: integer, format: int64, nullable: true, description: '`memory.current - inactive_file`: what the kubelet evicts on.' }
+        cgroupPeakBytes: { type: integer, format: int64, nullable: true, description: The cgroup's LIFETIME peak. }
+        containerLimitBytes: { type: integer, format: int64, nullable: true }
+        percentOfLimit:
+          type: number
+          format: double
+          nullable: true
+          description: '`workingSetBytes` over `containerLimitBytes`, in percent (one decimal; may exceed 100); null without a limit or a working set.'
+    TelemetryJvm:
+      type: object
+      required: [cpuRatio, threads, gcCount, gcTimeMs, poolAcquired, poolIdle, poolPending, poolAllocated]
+      properties:
+        cpuRatio: { type: number, format: double, nullable: true, description: Process CPU time over wall time as a fraction of the available processors (0..1). }
+        threads: { type: integer, format: int32, nullable: true }
+        gcCount: { type: integer, format: int64, nullable: true, description: 'Collections over the latest sample interval, all collectors summed.' }
+        gcTimeMs: { type: integer, format: int64, nullable: true, description: 'Collection time over the latest sample interval, all collectors summed.' }
+        poolAcquired: { type: integer, format: int32, nullable: true, description: Database connections in use. }
+        poolIdle: { type: integer, format: int32, nullable: true }
+        poolPending: { type: integer, format: int32, nullable: true, description: Callers waiting for a connection. }
+        poolAllocated: { type: integer, format: int32, nullable: true, description: Connections open. }
+    TelemetryPressure:
+      type: object
+      description: >-
+        The bounded things at the latest sample, against `limits`. Counts are the value at the sample; the refusal counts and
+        `ledgerPeakBytes` describe the latest sample interval. A figure not written is null (the integration figures while that API is off).
+      required:
+        - ledgerInFlightBytes
+        - ledgerPeakBytes
+        - ledgerRefusals
+        - queryInUse
+        - queryRefusals
+        - jqQuarantined
+        - jqActive
+        - jqQueued
+        - fetchActive
+        - fetchQueued
+        - integrationInUse
+        - integrationRetainedBytes
+        - integrationRefusals
+      properties:
+        ledgerInFlightBytes: { type: integer, format: int64, nullable: true, description: Bytes the read ledger holds now. }
+        ledgerPeakBytes: { type: integer, format: int64, nullable: true, description: The highest in-flight total in the latest interval. }
+        ledgerRefusals: { type: integer, format: int64, nullable: true, description: Reads the ledger refused in the latest interval. }
+        queryInUse: { type: integer, format: int32, nullable: true, description: Entity-query permits taken. }
+        queryRefusals: { type: integer, format: int64, nullable: true, description: Entity queries refused for want of a permit in the latest interval. }
+        jqQuarantined: { type: integer, format: int32, nullable: true, description: jq expressions quarantined on this instance after missing their deadline. }
+        jqActive: { type: integer, format: int32, nullable: true, description: Busy jq workers. }
+        jqQueued: { type: integer, format: int32, nullable: true, description: jq tasks waiting for a worker. }
+        fetchActive: { type: integer, format: int32, nullable: true, description: Busy outbound-fetch workers. }
+        fetchQueued: { type: integer, format: int32, nullable: true, description: Fetches waiting for a worker. }
+        integrationInUse: { type: integer, format: int32, nullable: true, description: Integration admission permits taken; null while the API is off. }
+        integrationRetainedBytes: { type: integer, format: int64, nullable: true, description: Integration result bytes retained; null while the API is off. }
+        integrationRefusals: { type: integer, format: int64, nullable: true, description: Integration requests refused (admission or per-client rate) in the latest interval; null while the API is off. }
+    TelemetryWorkspace:
+      type: object
+      description: The newest measurement of what the workspace takes in the database.
+      required: [measuredAt, databaseBytes, groups, rows]
+      properties:
+        measuredAt: { type: integer, format: int64, description: Epoch millis of the measurement's bucket }
+        databaseBytes: { type: integer, format: int64, description: '`pg_database_size`.' }
+        groups:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/TelemetryGroupSize' }
+        rows:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/TelemetryRowCount' }
+    TelemetryGroupSize:
+      type: object
+      required: [name, bytes]
+      properties:
+        name: { type: string, description: 'The table group: catalog, ontology, registries, views, accounts or telemetry (its own cost).' }
+        bytes: { type: integer, format: int64, description: "Heap, TOAST and indexes of the group's tables." }
+    TelemetryRowCount:
+      type: object
+      required: [name, count]
+      properties:
+        name: { type: string, description: The table. }
+        count: { type: integer, format: int64, minimum: 0, description: Active rows (all rows for the append-only `catalog_file_events`). }
+    TelemetryRequests:
+      type: object
+      required: [windowSeconds, percentileWindowSeconds, measuredAt, total, routes]
+      properties:
+        windowSeconds: { type: integer, format: int32, description: The window of the counts — the latest sample interval. }
+        percentileWindowSeconds:
+          type: integer
+          format: int32
+          description: The window p50 and p95 cover — the sample interval capped at 300 s (the request timers' reservoir), so it can be shorter than `windowSeconds`.
+        measuredAt: { type: integer, format: int64, nullable: true, description: The sample bucket the figures describe; null when no live process has a sample. }
+        total: { $ref: '#/components/schemas/TelemetryRouteStats' }
+        routes:
+          type: array
+          maxItems: 15
+          items: { $ref: '#/components/schemas/TelemetryRouteStats' }
+    TelemetryRouteStats:
+      type: object
+      description: One route (or `*`, every `/api/` and `/integration/` route except the telemetry's own) over the latest sample interval.
+      required: [route, count, p50Ms, p95Ms, serverErrors, rateLimited]
+      properties:
+        route: { type: string, description: 'The normalised route template (`/api/v1/entities/graph`; `{id}` stays literal) or `*`.' }
+        count: { type: integer, format: int64, minimum: 0 }
+        p50Ms: { type: number, format: double, nullable: true, description: Null when nothing was served. }
+        p95Ms: { type: number, format: double, nullable: true, description: Null when nothing was served. }
+        serverErrors: { type: integer, format: int64, minimum: 0, description: 5xx responses. }
+        rateLimited: { type: integer, format: int64, minimum: 0, description: 429 responses. }
+    TelemetryHistory:
+      type: object
+      required: [group, range, bucketSeconds, from, to, historyFrom, truncated, series]
+      properties:
+        group: { type: string, enum: [memory, workspace, pressure, requests, jvm] }
+        range: { type: string, enum: [24h, 7d, 90d] }
+        bucketSeconds: { type: integer, format: int32, description: The width of a point's bucket. }
+        from: { type: integer, format: int64, description: Epoch millis of the range start (the first bucket may begin up to one bucket earlier). }
+        to: { type: integer, format: int64, description: Epoch millis of the read }
+        historyFrom: { type: integer, format: int64, description: The oldest instant the range can actually hold data for. }
+        truncated: { type: boolean, description: More series matched than were returned (40). }
+        series:
+          type: array
+          maxItems: 40
+          items: { $ref: '#/components/schemas/TelemetrySeries' }
+    TelemetrySeries:
+      type: object
+      description: One chart line; `points` are the buckets that hold data, ascending, at most 400.
+      required: [key, metric, label, unit, kind, points]
+      properties:
+        key: { type: string, description: 'Unique within the response (`<metric>:<label>`, the label left out when empty).' }
+        metric: { type: string, description: 'The metric name (`mem.heap_used`, `http.p95`, `ws.rows`, ...).' }
+        label: { type: string, description: 'A route, a GC collector, a table group or a table; empty when the metric has none.' }
+        unit: { type: string, enum: [BYTES, MILLISECONDS, COUNT, RATIO] }
+        kind:
+          type: string
+          enum: [GAUGE, DELTA, PERCENTILE]
+          description: A DELTA point's `avg` is the bucket's total; for the others it is the n-weighted mean.
+        points:
+          type: array
+          maxItems: 400
+          items: { $ref: '#/components/schemas/TelemetryPoint' }
+    TelemetryPoint:
+      type: object
+      required: [t, avg, max]
+      properties:
+        t: { type: integer, format: int64, description: Epoch millis of the bucket start }
+        avg: { type: number, format: double }
+        max: { type: number, format: double }
 
     ProblemDetail:
       type: object

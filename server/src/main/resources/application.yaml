@@ -53,6 +53,9 @@ ktor:
       - ch.nokillswit.conversion.ConversionMappingRoutesKt.configureConversionMappingRoutes
       - ch.nokillswit.auth.AuthRoutesKt.configureAuthRoutes
       - ch.nokillswit.auth.PasswordResetRoutesKt.configurePasswordResetRoutes
+      # The ADMIN telemetry reads (`.claude/docs/observability.md` "Telemetry"): after configureAuthRoutes, which installs the
+      # RateLimit plugin and registers the per-user `telemetry` bucket the routes mount; the pressure seams are read per request.
+      - ch.nokillswit.telemetry.TelemetryRoutesKt.configureTelemetryRoutes
       # — catch-all router
       - ch.nokillswit.integration.IntegrationClientRoutesKt.configureIntegrationClientRoutes
       - ch.nokillswit.integration.IntegrationKt.configureIntegration

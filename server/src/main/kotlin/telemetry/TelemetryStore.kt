@@ -19,9 +19,9 @@ import org.jetbrains.exposed.v1.r2dbc.select
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.r2dbc.update
 
-private const val MILLIS_PER_MINUTE = 60_000L
-private const val MILLIS_PER_HOUR = 60 * MILLIS_PER_MINUTE
-private const val MILLIS_PER_DAY = 24 * MILLIS_PER_HOUR
+internal const val MILLIS_PER_MINUTE = 60_000L
+internal const val MILLIS_PER_HOUR = 60 * MILLIS_PER_MINUTE
+internal const val MILLIS_PER_DAY = 24 * MILLIS_PER_HOUR
 
 /**
  * `telemetry_samples.resolution` of an hourly rollup. A raw sample stores the sampler's REAL interval in seconds (60..1800, a

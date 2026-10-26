@@ -890,7 +890,9 @@ not separately exercised with a live HTTP fixture: `BlueprintSync`/`EntitySync`'
   the telemetry tests: each empties them in a `@BeforeTest` (`wipeTelemetry`) and scopes its assertions by its own process ids,
   because the hourly rollup reads the tables globally. `testIdentity()` mints a unique process per call.
 - **Reference:** `TelemetryFixtures.kt` (`telemetryStore`, `testIdentity`, `wipeTelemetry`, `samples`, `processId`, `processView`),
-  `TelemetryStoreTest`, `TelemetrySamplerTest`, `TelemetryLifecycleTest`.
+  `TelemetryRoutesFixtures.kt` (`rawRow`, `hourlyRow`, `put`, `seedProcess`) with `TelemetryRoutesTest` (the read API over rows
+  seeded straight into the tables with the clock pinned through `TelemetryOverridesKey`; isolation comes from `wipeTelemetry` before
+  each test and from test classes running serially, not from the pinned time), `TelemetryStoreTest`, `TelemetrySamplerTest`, `TelemetryLifecycleTest`.
 - **Enforcement:** manual review (a stray `"telemetry.enabled" to "true"` outside the telemetry tests); `TelemetryLifecycleTest`
   pins that the default boot publishes no `TelemetrySamplerKey`.
 - **Exception:** none.

@@ -455,8 +455,9 @@ more than the heap can actually hold.
 ### Telemetry
 
 The in-app telemetry sampler (`.claude/docs/observability.md` "Telemetry") stores figures about the process in
-`telemetry_processes`/`telemetry_samples`; the panel's ADMIN-only read API (a later change; its authorization rule will live in
-`authorization.md`) will be the only reader - until then the rows are reachable only in the database.
+`telemetry_processes`/`telemetry_samples`; the panel's ADMIN-only read API (`GET /api/v1/telemetry/current` and `/history`, whose
+authorization rule lives in `authorization.md` and whose shapes in `observability.md` "Telemetry", "Read API") is the only reader
+besides the database itself.
 
 - **Applies when:** adding or changing a telemetry metric, label, collector or seam.
 - **Requirement:** what is recorded is numbers and fixed-vocabulary labels only - the process identity (pod/container name, JVM
@@ -478,6 +479,21 @@ The in-app telemetry sampler (`.claude/docs/observability.md` "Telemetry") store
   `PressureCollectorTest` and the seam tests (`ReadLedgerTest`, `IntegrationLimitsTest`, `JqCalculationTest`, `UrlFetchTest`);
   manual review for the rest - in particular that no collector selects a content column, and that a new metric or label is a
   number or a fixed-vocabulary label.
+- **Exception:** none.
+
+The read API's throttle is its own rule:
+
+- **Applies when:** adding or changing a telemetry read route, or the `telemetry` rate bucket.
+- **Requirement:** every telemetry read is mounted `authenticate { rateLimit(RateLimitName(TELEMETRY_RATE_LIMIT)) { … } }` - the
+  bucket INSIDE `authenticate`, so its key is the verified user id (`user:<id>` from the JWT's `userId` claim), never the client
+  address: an administrator behind a shared proxy keeps their own allowance and cannot spend someone else's. The bucket is 30 requests
+  a minute per user in every mode, shared by all telemetry reads (the panel polls `current` every 60 s and reads one history per
+  open section), is registered in `auth/AuthRoutes.kt`'s single `install(RateLimit)` (Ktor installs the plugin once) and answers the
+  generic `429` problem. It runs before the ADMIN guard, so a non-ADMIN's refused requests spend their own bucket too. The address
+  fallback of the key is unreachable behind `authenticate` and only keeps a mis-mounted bucket from throwing.
+- **Reference:** `auth/AuthRoutes.kt` (`TELEMETRY_RATE_LIMIT`), `telemetry/TelemetryRoutes.kt`, `authorization.md` (the route bullet).
+- **Enforcement:** `TelemetryRoutesTest` (both routes share one bucket of 30; the bucket is per user, not per address; a USER's 403s
+  spend their own), `RateLimitResponseTest` (the exhausted bucket answers a problem+json `429`).
 - **Exception:** none.
 
 ### Not yet ported from Lettuce

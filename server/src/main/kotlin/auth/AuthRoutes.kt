@@ -40,8 +40,10 @@ private const val LOGIN_RATE_LIMIT = "login"
 private const val REFRESH_RATE_LIMIT = "refresh"
 private const val MFA_RATE_LIMIT = "mfa"
 internal const val INTEGRATION_RATE_LIMIT = "integration"
+internal const val TELEMETRY_RATE_LIMIT = "telemetry"
 
 private const val DEFAULT_REFRESH_LIMIT_PER_MINUTE = 30
+private const val TELEMETRY_REQUESTS_PER_MINUTE = 30
 
 @Serializable
 data class LoginRequest(val email: String, val password: String)
@@ -221,6 +223,15 @@ fun Application.configureAuthRoutes() {
         register(RateLimitName(INTEGRATION_RATE_LIMIT)) {
             rateLimiter(limit = integrationLimit, refillPeriod = 60.seconds)
             requestKey { call -> call.request.origin.remoteHost }
+        }
+        // The telemetry reads (telemetry/TelemetryRoutes.kt), 30/min PER USER: the routes mount it INSIDE `authenticate`, so the
+        // verified principal's userId is the key (never the address: an admin behind a shared proxy keeps their own bucket). The
+        // host fallback is unreachable there and only keeps a mis-mounted bucket from throwing.
+        register(RateLimitName(TELEMETRY_RATE_LIMIT)) {
+            rateLimiter(limit = TELEMETRY_REQUESTS_PER_MINUTE, refillPeriod = 60.seconds)
+            requestKey { call ->
+                call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()?.let { "user:$it" } ?: call.request.origin.remoteHost
+            }
         }
     }
 

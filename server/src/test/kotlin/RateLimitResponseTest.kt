@@ -1,6 +1,7 @@
 package ch.nokillswit
 
 import ch.nokillswit.auth.integrationRateLimit
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -46,6 +47,25 @@ class RateLimitResponseTest {
             assertEquals(HttpStatusCode.Unauthorized, client.post("/integration/graphql").status)
         }
         val throttled = client.post("/integration/graphql")
+
+        assertEquals(HttpStatusCode.TooManyRequests, throttled.status)
+        assertTrue(
+            throttled.headers["Content-Type"]?.startsWith("application/problem+json") == true,
+            "the RateLimit plugin's bodiless 429 must be dressed as problem+json",
+        )
+        assertContains(throttled.bodyAsText(), "Rate limit exceeded")
+    }
+
+    @Test
+    fun `exhausting the per-user telemetry bucket answers a 429 problem body`() = testApplication {
+        configureApp()
+        startApplication()
+        val admin = seededClient("telemetry-429", ch.nokillswit.users.UserRole.ADMIN)
+
+        repeat(30) {
+            assertEquals(HttpStatusCode.OK, admin.get("/api/v1/telemetry/current").status)
+        }
+        val throttled = admin.get("/api/v1/telemetry/current")
 
         assertEquals(HttpStatusCode.TooManyRequests, throttled.status)
         assertTrue(
