@@ -124,7 +124,7 @@ the matching definitions; reimporting unchanged entities with replacement disabl
 | `api_adoption` | 4 declared API consumptions, one major-line-less |
 | `dataset_adoption` | 3 declared dataset consumptions, one contract-version-less |
 
-Ten blueprints define twenty-two computed properties evaluated on reads:
+Ten blueprints define twenty-four computed properties evaluated on reads:
 
 | Blueprint | Computed properties |
 |---|---|
@@ -132,8 +132,8 @@ Ten blueprints define twenty-two computed properties evaluated on reads:
 | `domain` | aggregation `critical_systems` |
 | `product` | aggregations `system_count`, `critical_systems`, `service_count` |
 | `system` | aggregations `service_count`, `cif_services`, `cash_flow_services`, `workload_replicas`, `deploys_per_week` |
-| `dataset` | aggregations `producer_count`, `consumer_count`, `adoption_count` |
-| `api` | aggregation `adoption_count` |
+| `dataset` | aggregations `producer_count`, `consumer_count`, `adoption_count`; calculation `covenant_contract` |
+| `api` | aggregation `adoption_count`; calculation `covenant_contract` |
 | `service` | mirror `domain_title`; calculations `stack`, `risk` |
 | `workload` | mirrors `service_lifecycle`, `env_type`, `languages` |
 | `api_adoption` | mirror `api_lifecycle` |

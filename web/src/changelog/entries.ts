@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.30.0",
+    date: "2026-10-27",
+    en: `**APIs and datasets in the commerce-payments demo now link to their contract in Covenant.** Covenant is Toadie's companion contract-management app. Every API and dataset in the demo gets a new computed *Covenant contract* property, a link that opens whatever contract or contracts Covenant has linked to that entity. Toadie stores nothing about those contracts; it only builds the address. An administrator changes the Covenant address for a deployment by editing the property's calculation in the API or Dataset blueprint.`,
+    pl: `**API i zbiory danych w demo commerce-payments prowadzą teraz do swojego kontraktu w Covenant.** Covenant to aplikacja towarzysząca Toadie, służąca do zarządzania kontraktami API i danych. Każde API i każdy zbiór danych w demo ma nową obliczaną właściwość *Covenant contract*, czyli link, który otwiera kontrakt lub kontrakty powiązane z tą encją w Covenant. Toadie nie przechowuje żadnych danych o tych kontraktach, tylko buduje adres. Administratorzy/ki zmieniają adres Covenant dla danego wdrożenia, edytując obliczenie tej właściwości w blueprincie API lub Dataset.`,
+  },
+  {
     version: "2.29.0",
     date: "2026-10-27",
     en: `**Conversion imports no longer overwrite changes made meanwhile.** When you import a Backstage catalog into Port, or create catalog files with Export to Backstage, the confirmation now imports exactly the preview you checked instead of converting again. If an entity or catalog file was edited, created or removed after the preview was made, that row is reported as "Changed meanwhile" and left as it is, and the rest of the batch goes ahead. Convert again to pick up the latest data. Export to Backstage now also links each entity to its existing catalog file when merging is off.`,
