@@ -1,0 +1,202 @@
+{
+  "mappings": {
+    "title": "Mapowania konwersji",
+    "intro": "Jak schematy (blueprints) Port odpowiadają rodzajom Backstage. Mapowanie to dane — administratorzy i administratorki edytują je jako JSON; korzystają z niego zarówno eksport do Backstage, jak i import z Backstage.",
+    "empty": "Nie ma jeszcze żadnych mapowań konwersji",
+    "loadFailed": "Nie udało się wczytać mapowań konwersji",
+    "newMapping": "Nowe mapowanie",
+    "errorsLink": "Raport błędów",
+    "column": {
+      "name": "Nazwa",
+      "pairs": "Pary",
+      "status": "Stan",
+      "creator": "Utworzył/a",
+      "updated": "Zmieniono"
+    },
+    "status": {
+      "ok": "Poprawne",
+      "findings_one": "{{count}} blokujące ustalenie",
+      "findings_few": "{{count}} blokujące ustalenia",
+      "findings_many": "{{count}} blokujących ustaleń",
+      "findings_other": "{{count}} blokującego ustalenia",
+      "drift_one": "{{count}} rozjazd",
+      "drift_few": "{{count}} rozjazdy",
+      "drift_many": "{{count}} rozjazdów",
+      "drift_other": "{{count}} rozjazdu"
+    },
+    "createTitle": "Nowe mapowanie konwersji",
+    "editTitle": "Edytuj mapowanie konwersji",
+    "backToList": "Wróć do mapowań konwersji",
+    "notFound": "To mapowanie konwersji już nie istnieje",
+    "field": {
+      "name": "Nazwa",
+      "nameHint": "Jednowierszowa nazwa wyświetlana, unikalna wśród mapowań (do 100 znaków)",
+      "document": "Dokument mapowania (JSON)",
+      "documentHint": "schemaVersion 1: pary schematu i rodzaju Backstage, każda z regułami. Przy zapisie sprawdzany względem bieżących schematów i rejestrów."
+    },
+    "validation": {
+      "nameRequired": "Podaj nazwę",
+      "nameLength": "Najwyżej 100 znaków",
+      "documentRequired": "Podaj dokument mapowania",
+      "documentSyntax": "Dokument nie jest poprawnym JSON-em ({{message}})",
+      "documentObject": "Dokument musi być obiektem JSON"
+    },
+    "findings": {
+      "rejectedTitle": "Mapowanie nie zostało zapisane — ma blokujące ustalenia",
+      "storedTitle": "Blokujące ustalenia — mapowanie się zdezaktualizowało i nie da się go zapisać, dopóki ich nie naprawisz",
+      "driftTitle": "Rozjazd — mapowanie nie zgadza się już z rejestrem, który odzwierciedla (nie blokuje zapisu)",
+      "clean": "Brak ustaleń i rozjazdów względem bieżących schematów i rejestrów.",
+      "root": "(dokument)"
+    },
+    "saveForbidden": "Tylko administratorzy/ki mogą edytować mapowania konwersji",
+    "saveConflict": "Mapowanie konwersji o tej nazwie już istnieje",
+    "saveInvalid": "Mapowanie odrzucono — rejestr może być pełny (20 mapowań) albo dokument większy niż 256 KiB",
+    "saveGone": "To mapowanie konwersji już nie istnieje — odśwież stronę",
+    "deleteTitle": "Usunąć mapowanie konwersji?",
+    "deleteBody": "Mapowanie „{{name}}\" zostanie usunięte. Konwersja między Backstage a Port z jego użyciem nie będzie już możliwa.",
+    "deleteFailed": "Nie udało się usunąć mapowania konwersji",
+    "toast": {
+      "created": "Utworzono mapowanie konwersji",
+      "saved": "Zapisano mapowanie konwersji",
+      "deleted": "Usunięto mapowanie konwersji"
+    }
+  },
+  "rows": {
+    "status": {
+      "CONVERTED": "Przekonwertowano",
+      "CONVERTED_WITH_FINDINGS": "Przekonwertowano z ustaleniami",
+      "SKIPPED": "Pominięto",
+      "INVALID": "Niepoprawne"
+    },
+    "findingCode": {
+      "OWNER_TRUNCATED": "Właściciel obcięty",
+      "TARGET_UNMAPPED": "Cel bez mapowania",
+      "TARGET_MISSING": "Brak celu",
+      "TARGET_INVALID": "Cel niepoprawny",
+      "VALUE_UNMAPPED": "Wartość bez mapowania",
+      "NO_PAIR": "Brak pary",
+      "IDENTITY_CONFLICT": "Konflikt tożsamości",
+      "DOCUMENT_INVALID": "Dokument niepoprawny",
+      "REFERENCE_DROPPED": "Odwołanie pominięte",
+      "OWNER_DROPPED": "Właściciel pominięty",
+      "NAMESPACE_UNMAPPED": "Przestrzeń nazw bez mapowania"
+    },
+    "column": {
+      "status": "Wynik",
+      "findings": "Ustalenia",
+      "unmapped": "Nieprzekonwertowane"
+    },
+    "unmappedCount_one": "{{count}} pole",
+    "unmappedCount_few": "{{count}} pola",
+    "unmappedCount_many": "{{count}} pól",
+    "unmappedCount_other": "{{count}} pola",
+    "summary": "{{total}} wierszy — {{converted}} przekonwertowano, {{withFindings}} z ustaleniami, {{skipped}} pominięto, {{invalid}} niepoprawnych",
+    "truncated": "Pokazano pierwsze {{shown}} z {{total}} wierszy — liczby powyżej obejmują wszystkie.",
+    "none": "—"
+  },
+  "error": {
+    "mappingGone": "To mapowanie konwersji już nie istnieje — odśwież stronę.",
+    "mappingStale": "To mapowanie ma blokujące ustalenia i nie może konwertować, dopóki ich nie naprawisz.",
+    "busy": "Serwer jest zajęty odczytem przestrzeni roboczej — spróbuj ponownie za chwilę.",
+    "failedStatus": "Konwersja nie powiodła się (status {{status}}).",
+    "failedNetwork": "Konwersja nie powiodła się. Sprawdź połączenie i spróbuj ponownie.",
+    "refusedExport": "Żądanie odrzucono — zapytanie o encje jest niepoprawne (zobacz jego diagnostykę) albo wybór jest zbyt duży na jedną konwersję.",
+    "refusedImport": "Dokumenty odrzucono — jedno żądanie przyjmuje ich najwyżej 200, a niepoprawny dokument jest odrzucany."
+  },
+  "export": {
+    "title": "Eksport do Backstage",
+    "intro": "Zamień zapisane encje Port na pliki katalogu Backstage za pomocą mapowania konwersji. Sama konwersja niczego nie zapisuje — pliki powstają lub są aktualizowane dopiero po potwierdzeniu.",
+    "mappingLabel": "Mapowanie konwersji",
+    "mappingPlaceholder": "Wybierz mapowanie",
+    "mappingStaleSuffix": "(nieaktualne)",
+    "noMappings": "Nie ma jeszcze żadnych mapowań konwersji.",
+    "manageMappings": "Mapowania konwersji",
+    "mappingStaleAlert": "Mapowanie zdezaktualizowało się po zmianie schematu lub rejestru — najpierw napraw jego blokujące ustalenia.",
+    "merge": "Scal z istniejącymi plikami katalogu",
+    "mergeHint": "Włączone: w zapisanym pliku o tej samej tożsamości podmieniane są tylko pola, którymi zarządza mapowanie; reszta zostaje. Wyłączone: sam przekonwertowany dokument.",
+    "convert": "Konwertuj",
+    "noBlueprints": "Wszystkie schematy są ukryte — nic nie jest wybrane.",
+    "queryHint": "Konwersja używa ZASTOSOWANEGO zapytania o encje (ostatnio uruchomionego — jest współdzielone z grafem i hierarchią encji), filtrów i widocznych schematów.",
+    "loadFailed": "Konwersja nie powiodła się",
+    "resultsTitle": "Wynik",
+    "tableLabel": "Wiersze konwersji",
+    "fromColumn": "Encja Port",
+    "toColumn": "Plik Backstage",
+    "yamlTitle": "YAML katalogu Backstage",
+    "yamlEmpty": "Brak plików katalogu do pokazania — nic nie przekonwertowano.",
+    "download": "Pobierz YAML",
+    "createFiles": "Utwórz / zaktualizuj pliki katalogu",
+    "createModal": {
+      "title": "Utwórz / zaktualizuj pliki katalogu",
+      "checkFailed": "Sprawdzenie nie powiodło się.",
+      "previewBody": "Tak zadziałałby import, według świeżej konwersji. Pliki o istniejącej tożsamości są podmieniane w miejscu (miękkie ustalenia są pomijane, jak w każdym imporcie). Nic nie jest zapisywane przed potwierdzeniem, a Potwierdź konwertuje jeszcze raz tuż przed zapisem.",
+      "doneTitle": "Gotowe — to są zapisane wyniki.",
+      "confirm": "Potwierdź",
+      "close": "Zamknij",
+      "cancel": "Anuluj",
+      "resultsLabel": "Wyniki dla plików katalogu",
+      "column": {
+        "kind": "Rodzaj",
+        "namespace": "Przestrzeń nazw",
+        "name": "Nazwa",
+        "result": "Wynik",
+        "detail": "Szczegóły"
+      },
+      "status": {
+        "CREATED": "Utworzono",
+        "CREATED_WITH_FINDINGS": "Utworzono z ustaleniami",
+        "UPDATED": "Zaktualizowano",
+        "UPDATED_WITH_FINDINGS": "Zaktualizowano z ustaleniami",
+        "UNCHANGED": "Bez zmian",
+        "INVALID": "Niepoprawne",
+        "CONFLICT": "Konflikt",
+        "ERROR": "Niepowodzenie"
+      },
+      "checkStatus": {
+        "CREATED": "Zostałby utworzony",
+        "CREATED_WITH_FINDINGS": "Zostałby utworzony z ustaleniami",
+        "UPDATED": "Zostałby zaktualizowany",
+        "UPDATED_WITH_FINDINGS": "Zostałby zaktualizowany z ustaleniami",
+        "UNCHANGED": "Pozostałby bez zmian",
+        "INVALID": "Zostałby odrzucony",
+        "CONFLICT": "Byłby w konflikcie",
+        "ERROR": "Zakończyłby się błędem"
+      },
+      "summary": "Zapisano {{stored}} z {{total}} — {{created}} utworzonych, {{updated}} zaktualizowanych, {{unchanged}} bez zmian",
+      "checkSummary": "Zostałoby zapisanych {{stored}} z {{total}} — {{created}} utworzonych, {{updated}} zaktualizowanych, {{unchanged}} bez zmian",
+      "storedBeforeFailure": "Te pliki zapisano przed błędem:",
+      "importFailedTitle": "Import został przerwany",
+      "stoppedAfter": "Przerwano po {{sent}} z {{total}} plików — pliki powyżej zapisano, reszty nie wysłano.",
+      "nothingStored": "Nic nie zapisano.",
+      "truncated": "Pokazano pierwsze {{shown}} z {{total}} wierszy, najpierw te wymagające uwagi — liczby powyżej obejmują wszystkie."
+    },
+    "chunkNote": "Więcej niż {{size}} plików jest zapisywanych partiami po {{size}}; odwołanie między plikami z różnych partii pojawia się jako ustalenie przy późniejszym pliku."
+  },
+  "import": {
+    "intro": "Wklej, wybierz lub pobierz plik catalog-info.yaml z Backstage i zamień go na encje Port za pomocą mapowania konwersji. Import zastępuje istniejące encje o tym samym schemacie i identyfikatorze.",
+    "sourceLabel": "Katalog Backstage",
+    "merge": "Scal z istniejącymi encjami",
+    "mergeHint": "Włączone: w zapisanej encji podmieniane są tylko pola, którymi zarządza mapowanie; dane tylko z Port zostają. Wyłączone: sam przekonwertowany dokument nadpisuje encję.",
+    "replaceNote": "Import zastępuje istniejące encje o tym samym schemacie i identyfikatorze. Sprawdzenie i import konwertują YAML ponownie tuż przed uruchomieniem, więc zmiana w Port wykonana po ostatnim podglądzie nie zostanie nadpisana nieaktualnym scaleniem.",
+    "chunkNote": "Więcej niż {{size}} dokumentów jest konwertowanych w partiach; odwołanie między plikami z różnych partii jest rozwiązywane tylko względem tego, co już zapisano.",
+    "convertButton": "Konwertuj",
+    "conversionTitle": "Konwersja",
+    "resultsTitle": "Import",
+    "tableLabel": "Wiersze konwersji",
+    "fromColumn": "Plik Backstage",
+    "toColumn": "Encja Port",
+    "convertFailedTitle": "Konwersja nie powiodła się",
+    "confirm": {
+      "title": "Import do Port",
+      "mergeOff": "Scalanie jest wyłączone: każdy przekonwertowany dokument zastępuje encję w Port w całości — właściwości, relacje i własność istniejące tylko w Port przepadną.",
+      "preview": "Świeża konwersja i próba, do której prowadzi. Nic nie jest zapisywane przed potwierdzeniem; Potwierdź konwertuje jeszcze raz tuż przed importem.",
+      "done": "Zaimportowano — zapisana konwersja i zapisane wiersze.",
+      "storedBeforeFailure": "Te encje zapisano przed błędem:",
+      "stoppedAfter": "Przerwano po {{sent}} z {{total}} partii — ukończone partie zapisano, reszty nie wysłano.",
+      "nothingStored": "Nic nie zapisano.",
+      "confirm": "Potwierdź import",
+      "cancel": "Anuluj",
+      "close": "Zamknij"
+    }
+  }
+}

@@ -30,6 +30,7 @@ import { useEntityQueryStoredState } from "../hooks/useEntityQueryStoredState";
 import { isStringArray, useStoredState } from "../hooks/useStoredState";
 import { useVirtualRows } from "../hooks/useVirtualRows";
 import { editBlueprintPath } from "../utils/blueprintLinks";
+import { editConversionMappingPath } from "../utils/conversionLinks";
 import { classOfEntityCode, colorOfEntityClass, ENTITY_ERROR_CLASSES } from "../utils/entityErrorClasses";
 import { editEntityPath, entityGraphPath } from "../utils/entityLinks";
 import { loadErrorMessage } from "../utils/saveError";
@@ -408,7 +409,8 @@ function SavedQueryRow({
 /**
  * A stored conversion mapping flagged by the report: its recomputed blocking findings
  * (red — HARD on the mapping's next save) and its report-only drift (orange), each with the JSON
- * pointer into the mapping document. Mappings have no page of their own yet, so the row is not a link.
+ * pointer into the mapping document. An ADMIN's row name links to the mapping's editor (the only
+ * role that can fix it); everyone else reads it as plain text.
  */
 function MappingRow({ row, measureRef, index }: { row: MappingErrorRow } & MeasureProps) {
   const { t } = useTranslation();
@@ -420,7 +422,18 @@ function MappingRow({ row, measureRef, index }: { row: MappingErrorRow } & Measu
     <Table.Tr ref={measureRef} data-index={measureRef ? index : undefined} aria-rowindex={measureRef ? index + 2 : undefined}>
       <Table.Td style={{ verticalAlign: "top" }}>
         <Group gap={6} wrap="nowrap">
-          <Text size="sm">{row.name}</Text>
+          {isAdmin() ? (
+            <Anchor
+              component={RouterLink}
+              to={editConversionMappingPath(row.id)}
+              size="sm"
+              aria-label={t("common.action.editAria", { name: row.name })}
+            >
+              {row.name}
+            </Anchor>
+          ) : (
+            <Text size="sm">{row.name}</Text>
+          )}
           <Badge variant="outline" color="gray" size="sm">
             {t("entityErrors.subject.mapping")}
           </Badge>

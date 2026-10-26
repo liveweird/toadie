@@ -62,7 +62,12 @@
     "hideFindings": "Hide findings",
     "failedTitle": "Import failed",
     "failedStatus": "Import failed ({{status}})",
-    "failedNetwork": "Import failed. Check your connection and try again."
+    "failedNetwork": "Import failed. Check your connection and try again.",
+    "source": {
+      "label": "Import source",
+      "port": "Port JSON",
+      "backstage": "Backstage catalog (YAML)"
+    }
   },
   "export": {
     "button": "Export JSON"

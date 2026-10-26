@@ -185,6 +185,13 @@ from Lettuce, that any new or edited spec must satisfy:
   `entity-errors` owns one throwaway `e2e-ee-*` blueprint, its one `e2e-ee-*` entity, and its
   one throwaway `e2e-ee-*`-named saved entity query (run as the seed admin — entities and
   saved queries carry no admin gate);
+  `conversion-mappings` owns its one throwaway `e2e-cm-*` conversion mapping (the mapping registry
+  is shared run-state — unique names, at most 20 active mappings — and no spec edits or deletes a
+  foreign mapping); `backstage-export` owns its two throwaway `e2e-be-*` blueprints, their two
+  entities, one `e2e-be-*` mapping and the two catalog files it creates (default namespace, names
+  carrying the run marker); `backstage-import` owns its two throwaway `e2e-bi-*` blueprints, one
+  `e2e-bi-*` mapping and the two entities its import creates (the first two are ordinary
+  blueprint-registry writers, see the dedicated bullet below);
   `labels` owns its throwaway label, the one file carrying it, and its user; `annotations`
   owns its throwaway annotation key, the one file carrying it, and its user; `tags` owns its
   throwaway tag category, the one file carrying a tag, and its user; `types` owns the one
@@ -247,13 +254,14 @@ from Lettuce, that any new or edited spec must satisfy:
   `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries),
   `entity-errors.spec.ts` (`e2e-ee-*` — the Ontology Errors report, v2.5.0), and
   `entity-sync.spec.ts` (`e2e-esync-*` — entity source references & re-sync, 2.9.0), and
-  `tiers.spec.ts` (`e2e-tier-*` — fill-in tiers, 2.18.0); the
+  `tiers.spec.ts` (`e2e-tier-*` — fill-in tiers, 2.18.0), `backstage-export.spec.ts` (`e2e-be-*` —
+  conversion phase 5b), and `backstage-import.spec.ts` (`e2e-bi-*` — conversion phase 5c); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
   what makes their concurrent creates safe — the same rule the other registries' single
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
   `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-query-builder-*`, `e2e-layout-*`, `e2e-eqs-*`, `e2e-ee-*`,
-  `e2e-esync-*` today) and is removed by that same spec
+  `e2e-esync-*`, `e2e-be-*`, `e2e-bi-*` today) and is removed by that same spec
   before it returns, so a future entity-creating spec can join safely as long as it never
   touches another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
@@ -384,6 +392,22 @@ the same commit** — this list is the coverage map, the scenario file is the de
   external-network dependency**: the app container needs outbound https; missing network skips
   locally and fails in CI (the Mailpit policy); the throwaway blueprint owns the reserved
   identifier `e2e-bpsync-source`.
+- [`backstage-export.spec.ts`](scenarios/backstage-export.md) — Export to Backstage (conversion
+  phase 5b): an API-seeded team + service world and mapping; the admin picks the mapping, narrows
+  the selection with an entity query, converts, reads the two report rows and the YAML preview,
+  creates the two catalog files through the dry-run-then-confirm dialog, and converts again to see
+  the merge find the stored files (the dry run predicts "Would stay unchanged"); the blueprint
+  registry's writer for its own `e2e-be-*` rows.
+- [`backstage-import.spec.ts`](scenarios/backstage-import.md) — the Backstage catalog source of the
+  Ontology import (conversion phase 5c): the admin switches the import source, pastes a Group + a
+  Component it owns, picks the API-seeded mapping, previews the conversion, runs Check (would be
+  created), imports through the confirm dialog (fresh conversion + dry run, then Confirm: created,
+  the owner relation resolved inside the batch) and imports again (updated, replace-existing implicit); the blueprint registry's writer for its own `e2e-bi-*` rows.
+- [`conversion-mappings.spec.ts`](scenarios/conversion-mappings.md) — the conversion-mapping
+  registry (conversion phase 5a): a document naming an unknown blueprint is refused with its
+  positioned finding beside the editor and nothing is stored, the minimal valid document is created
+  (Valid chip), renamed through the editor and deleted through the confirm dialog; owns only its
+  `e2e-cm-*` mapping.
 - [`blueprints.spec.ts`](scenarios/blueprints.md) — the blueprint registry (Port
   compatibility, phase 1; + Phase 4 system-blueprint protections, v1.26.0): the seeded `_team`
   system row's System badge/disabled Delete and its editor's read-only identifier + locked

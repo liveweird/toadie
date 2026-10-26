@@ -53,6 +53,24 @@ describe("ImportOntology page", () => {
     expect(screen.getByRole("switch", { name: /Replace existing definitions/ })).not.toBeChecked();
   });
 
+  test("the source switch swaps the Port JSON form for the Backstage catalog import", async () => {
+    baseRoutes(mockFetch, {
+      "GET /api/v1/conversion-mappings": () => jsonResponse(200, { items: [] }),
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<ImportOntology />);
+
+    expect(await screen.findByLabelText("JSON content")).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Backstage catalog (YAML)" }));
+
+    expect(await screen.findByLabelText("YAML content")).toBeInTheDocument();
+    expect(screen.queryByLabelText("JSON content")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Import ontology" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "Port JSON" }));
+    expect(await screen.findByLabelText("JSON content")).toBeInTheDocument();
+  });
+
   test("pasting a batch shows the ready summary and the stripped-keys note", async () => {
     baseRoutes(mockFetch);
     renderWithProviders(<ImportOntology />);
@@ -227,6 +245,32 @@ describe("ImportOntology page", () => {
     await waitFor(() => expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ["blueprints"] }));
     await waitFor(() => expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ["entities"] }));
 
+    invalidateQueriesSpy.mockRestore();
+  });
+
+  test("a later chunk failing still refreshes the caches for what the earlier chunk stored", async () => {
+    const invalidateQueriesSpy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    let entityCalls = 0;
+    baseRoutes(mockFetch, {
+      "POST /api/v1/entities/import": (init) => {
+        entityCalls += 1;
+        if (entityCalls > 1) return jsonResponse(500, { title: "boom", status: 500 });
+        const documents = bodyOf(init).documents as { identifier: string }[];
+        return jsonResponse(200, {
+          results: documents.map((doc, index) => ({ index, blueprint: "service", identifier: doc.identifier, status: "CREATED", id: 100 + index })),
+        });
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<ImportOntology />);
+
+    const entities = Array.from({ length: 201 }, (_, i) => ({ ...ENTITY_DOC, identifier: `svc-${i}` }));
+    fireEvent.change(await screen.findByLabelText("JSON content"), { target: { value: JSON.stringify(entities) } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Import" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(await screen.findByText("Import failed (500)")).toBeInTheDocument();
+    await waitFor(() => expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ["entities"] }));
     invalidateQueriesSpy.mockRestore();
   });
 

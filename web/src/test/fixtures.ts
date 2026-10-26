@@ -5,6 +5,7 @@
 
 import type { CatalogFileListItem, CatalogFileResponse } from "../api/catalogFiles";
 import type { Blueprint } from "../api/blueprints";
+import type { ConversionMapping } from "../api/conversionMappings";
 import type { EntityErrorsReport } from "../api/entities";
 
 const EPOCH = 1_700_000_000_000;
@@ -41,6 +42,23 @@ export function blueprintResponse(overrides: Partial<Blueprint> = {}): Blueprint
     updatedAt: EPOCH,
     system: false,
     lastSyncedAt: 0,
+    ...overrides,
+  };
+}
+
+/** A `ConversionMapping` registry row — a valid empty-pairs document, no findings, no drift. */
+export function conversionMappingResponse(overrides: Partial<ConversionMapping> = {}): ConversionMapping {
+  return {
+    id: 1,
+    name: "Default mapping",
+    document: { schemaVersion: 1, apiVersion: "backstage.io/v1alpha1", pairs: [] },
+    findings: [],
+    drift: [],
+    createdBy: 1,
+    creatorName: "Alice Creator",
+    creatorDeleted: false,
+    createdAt: EPOCH,
+    updatedAt: EPOCH,
     ...overrides,
   };
 }

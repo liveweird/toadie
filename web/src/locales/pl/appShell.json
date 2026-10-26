@@ -11,6 +11,8 @@
     "entityGraph": "Graf encji",
     "entityHierarchy": "Hierarchia encji",
     "ontologyErrors": "Błędy",
+    "conversionMappings": "Mapowania konwersji",
+    "exportBackstage": "Eksport do Backstage",
     "ontologyImport": "Import",
     "namespaces": "Przestrzenie nazw",
     "labels": "Etykiety",

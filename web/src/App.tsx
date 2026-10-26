@@ -31,6 +31,10 @@ const EntityGraph = lazy(() => import("./pages/EntityGraph"));
 const EntityHierarchy = lazy(() => import("./pages/EntityHierarchy"));
 const EntityErrorsPage = lazy(() => import("./pages/EntityErrors"));
 const ImportOntology = lazy(() => import("./pages/ImportOntology"));
+const ExportToBackstage = lazy(() => import("./pages/ExportToBackstage"));
+const ConversionMappings = lazy(() => import("./pages/ConversionMappings"));
+const CreateConversionMapping = lazy(() => import("./pages/CreateConversionMapping"));
+const EditConversionMapping = lazy(() => import("./pages/EditConversionMapping"));
 const CatalogFiles = lazy(() => import("./pages/CatalogFiles"));
 const CreateCatalogFile = lazy(() => import("./pages/CreateCatalogFile"));
 const ImportCatalogFiles = lazy(() => import("./pages/ImportCatalogFiles"));
@@ -200,6 +204,10 @@ export default function App() {
             <Route path="entity-hierarchy" element={<EntityHierarchy />} />
             <Route path="ontology/errors" element={<EntityErrorsPage />} />
             <Route path="ontology/import" element={<ImportOntology />} />
+            <Route path="ontology/export-backstage" element={<ExportToBackstage />} />
+            <Route path="ontology/mappings" element={<ConversionMappings />} />
+            <Route path="ontology/mappings/new" element={<CreateConversionMapping />} />
+            <Route path="ontology/mappings/:id/edit" element={<EditConversionMapping />} />
             <Route path="errors" element={<ErrorsPage />} />
             <Route path="graph" element={<Graph />} />
             <Route path="namespaces" element={<Namespaces />} />

@@ -1,8 +1,10 @@
 import type { ParseKeys } from "i18next";
 import {
+  IconArrowsExchange,
   IconBox,
   IconCategory,
   IconFileDescription,
+  IconFileExport,
   IconFileImport,
   IconFolders,
   IconHash,
@@ -22,6 +24,7 @@ import {
 } from "@tabler/icons-react";
 import { blueprintsPath } from "./blueprintLinks";
 import { catalogFilesPath } from "./catalogFileLinks";
+import { conversionMappingsPath, exportBackstagePath } from "./conversionLinks";
 import { entitiesBasePath, entityGraphPath, entityHierarchyPath } from "./entityLinks";
 import { ontologyErrorsPath, ontologyImportPath } from "./ontologyLinks";
 
@@ -102,6 +105,8 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
       { to: entityGraphPath, label: "appShell.nav.entityGraph", icon: IconTopologyStar3 },
       { to: entityHierarchyPath, label: "appShell.nav.entityHierarchy", icon: IconSitemap },
       { to: ontologyErrorsPath, label: "appShell.nav.ontologyErrors", icon: IconListCheck },
+      { to: conversionMappingsPath, label: "appShell.nav.conversionMappings", icon: IconArrowsExchange },
+      { to: exportBackstagePath, label: "appShell.nav.exportBackstage", icon: IconFileExport },
       { to: ontologyImportPath, label: "appShell.nav.ontologyImport", icon: IconFileImport },
     ],
   },

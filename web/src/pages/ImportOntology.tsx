@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
-import { Alert, Button, FileButton, Group, Paper, Pill, Progress, Stack, Switch, Text, Textarea, TextInput } from "@mantine/core";
+import { Alert, Button, FileButton, Group, Paper, Pill, Progress, SegmentedControl, Stack, Switch, Text, Textarea, TextInput } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { IconDownload, IconFileImport, IconListCheck, IconUpload } from "@tabler/icons-react";
 import { isAdmin } from "../api/session";
 import { checkBlueprintImport, importBlueprints } from "../api/blueprints";
 import { checkEntityImport, fetchEntityUrl, importEntities } from "../api/entities";
 import {
+  anyStored,
   parseOntologySources,
   runImportBatch,
   summarizeStripped,
@@ -17,6 +18,7 @@ import {
 import { FETCH_URL_ERROR_KEYS, saveErrorMessage } from "../utils/saveError";
 import { normalizeSourceUrl } from "../utils/sourceUrl";
 import { useBlueprints } from "../hooks/useBlueprints";
+import BackstageCatalogImport from "../components/BackstageCatalogImport";
 import OntologyImportResults from "../components/OntologyImportResults";
 import PageHeader from "../components/PageHeader";
 
@@ -26,7 +28,39 @@ function combineSources(pastedText: string, files: readonly ImportSource[], past
   return sources;
 }
 
+type ImportSourceKind = "port" | "backstage";
+
+/**
+ * The Ontology import page. Two sources share it (conversion phase 5c): the original Port-style
+ * JSON batch (default) and a Backstage catalog (YAML) converted through a conversion
+ * mapping (`BackstageCatalogImport`) — a switch, not two pages, so the entity-import flow they both
+ * end in stays in one place.
+ */
 export default function ImportOntology() {
+  const { t } = useTranslation();
+  const [source, setSource] = useState<ImportSourceKind>("port");
+  return (
+    <Stack gap="md">
+      <PageHeader
+        title={t("ontology.import.title")}
+        description={source === "port" ? t("ontology.import.intro") : t("conversion.import.intro")}
+      />
+      <SegmentedControl
+        aria-label={t("ontology.import.source.label")}
+        value={source}
+        onChange={(value) => setSource(value as ImportSourceKind)}
+        data={[
+          { value: "port", label: t("ontology.import.source.port") },
+          { value: "backstage", label: t("ontology.import.source.backstage") },
+        ]}
+        w="fit-content"
+      />
+      {source === "port" ? <PortJsonImport /> : <BackstageCatalogImport />}
+    </Stack>
+  );
+}
+
+function PortJsonImport() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { blueprints: registryBlueprints } = useBlueprints();
@@ -109,6 +143,9 @@ export default function ImportOntology() {
     setBusy(true);
     setSubmitError(null);
     setProgress(null);
+    // The rows reported so far: a later chunk's failure must still refresh the caches for what the
+    // earlier chunks stored, so the invalidation lives in `finally`, not after the happy path.
+    let reported: OntologyResultRow[] = [];
     try {
       const rows = await runImportBatch({
         documents: current.documents,
@@ -118,13 +155,13 @@ export default function ImportOntology() {
         importEntitiesChunk: mode === "import" ? importEntities : checkEntityImport,
         sourceUrl: fetchedFrom ?? undefined,
         onProgress: (sent, total) => setProgress({ sent, total }),
-        onRows: (partial) => setResults({ mode, rows: partial }),
+        onRows: (partial) => {
+          reported = partial;
+          setResults({ mode, rows: partial });
+        },
       });
+      reported = rows;
       setResults({ mode, rows });
-      if (mode === "import" && rows.some((row) => row.id != null && row.status !== "EXISTS")) {
-        await queryClient.invalidateQueries({ queryKey: ["blueprints"] });
-        await queryClient.invalidateQueries({ queryKey: ["entities"] });
-      }
     } catch (err) {
       // Rows already reported via onRows stay visible — only the failure banner is new.
       setSubmitError(
@@ -136,13 +173,15 @@ export default function ImportOntology() {
     } finally {
       setBusy(false);
       setProgress(null);
+      if (mode === "import" && anyStored(reported)) {
+        await queryClient.invalidateQueries({ queryKey: ["blueprints"] });
+        await queryClient.invalidateQueries({ queryKey: ["entities"] });
+      }
     }
   }
 
   return (
     <Stack gap="md">
-      <PageHeader title={t("ontology.import.title")} description={t("ontology.import.intro")} />
-
       <Paper withBorder p="lg" radius="md">
         <Stack gap="md">
           <Group align="flex-end" gap="xs">

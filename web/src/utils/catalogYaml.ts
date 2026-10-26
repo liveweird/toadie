@@ -83,3 +83,9 @@ export function catalogInfoYaml(file: CatalogFileRequest): string {
 export function downloadYaml(text: string, filename = "catalog-info.yaml") {
   downloadTextFile(text, filename, "application/yaml");
 }
+
+/** Several documents as one multi-document YAML stream (`---`-separated), the shape the Files
+ *  import page parses back — the Backstage export's preview and download. */
+export function catalogInfoMultiYaml(files: readonly CatalogFileRequest[]): string {
+  return files.map(catalogInfoYaml).join("---\n");
+}
