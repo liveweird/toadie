@@ -143,8 +143,11 @@ private class ExportRun(private val input: ExportInput) : ExportLookup {
         return message?.let { ConversionFinding(ConversionFindingCode.DOCUMENT_INVALID, "", it) }
     }
 
-    private fun contextOf(entity: ExportEntity, findings: MutableList<ConversionFinding>) =
-        ExportContext(entity, input.blueprints[entity.blueprint], input.registry, this, findings)
+    private fun contextOf(entity: ExportEntity, findings: MutableList<ConversionFinding>, pair: MappingPair? = null) =
+        ExportContext(
+            entity, input.blueprints[entity.blueprint], input.registry, this, findings,
+            pair?.rules?.mapNotNull { (it.backstage as? BackstageAddress.Link)?.title }?.toSet().orEmpty(),
+        )
 
     private fun MappingRule.isNamespaceRule() = backstage == BackstageAddress.Metadata(MetadataField.NAMESPACE)
 
@@ -198,7 +201,7 @@ private class ExportRun(private val input: ExportInput) : ExportLookup {
             findings += entry.problem
         } else {
             val builder = DocBuilder()
-            val ctx = contextOf(entity, findings)
+            val ctx = contextOf(entity, findings, pair)
             pair.rules.filter { it.writesOnExport && !it.isNamespaceRule() }.forEach { exportRule(it, ctx, builder) }
             val generated = builder.toFile(pair.kind, entity.identifier, identity.namespace)
             stored = existingByIdentity[identity.key]

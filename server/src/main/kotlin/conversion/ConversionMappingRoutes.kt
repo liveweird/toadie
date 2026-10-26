@@ -6,6 +6,7 @@ import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
 import ch.nokillswit.entities.entityGraphFilter
 import ch.nokillswit.entities.requireQueryLength
+import ch.nokillswit.infra.importing.requireBatchSize
 import ch.nokillswit.infra.paging.optionalBoolean
 import ch.nokillswit.infra.paging.optionalString
 import io.ktor.http.ContentType
@@ -39,6 +40,11 @@ class ConversionMappingsRoute {
         @Serializable
         @Resource("catalog-documents")
         class CatalogDocuments(val parent: Id)
+
+        /** Phase 4: Backstage -> Port, a pure computation (`ConversionImportService`). */
+        @Serializable
+        @Resource("entity-documents")
+        class EntityDocuments(val parent: Id)
     }
 }
 
@@ -47,6 +53,7 @@ private fun ConversionMapping.pairCount(): Int = (document["pairs"] as? JsonArra
 fun Application.configureConversionMappingRoutes() {
     val mappingService = attributes[ConversionMappingServiceKey]
     val exportService = attributes[ConversionExportServiceKey]
+    val importService = attributes[ConversionImportServiceKey]
 
     routing {
         authenticate {
@@ -80,6 +87,18 @@ fun Application.configureConversionMappingRoutes() {
                 // ledger reservation is still held: an absent value is an absent member, never an explicit null.
                 val body = exportService.catalogDocumentsJson(route.parent.id, filter, entityId, merge)
                     .orNotFound("Conversion mapping")
+                call.respond(TextContent(body, ContentType.Application.Json.withCharset(Charsets.UTF_8), HttpStatusCode.OK))
+            }
+            // Phase 4: the Backstage -> Port conversion. A pure computation behind POST only because the
+            // input is a body of up to 200 documents — it stores, locks and audits nothing (the
+            // `/check`/export idiom), any authenticated user (it reads what the Files and Entities pages
+            // already show). Order: the body (400 malformed), the batch cap (400), then the mapping
+            // lookup (404) and the mapping's own health (409).
+            post<ConversionMappingsRoute.Id.EntityDocuments> { route ->
+                call.caller()
+                val request = call.receive<EntityDocumentsRequest>()
+                requireBatchSize(request.files.size)
+                val body = importService.entityDocumentsBody(route.parent.id, request).orNotFound("Conversion mapping")
                 call.respond(TextContent(body, ContentType.Application.Json.withCharset(Charsets.UTF_8), HttpStatusCode.OK))
             }
             post<ConversionMappingsRoute> {

@@ -2265,6 +2265,74 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/conversion-mappings/{id}/entity-documents:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      tags: [conversion-mappings]
+      operationId: convertToEntityDocuments
+      summary: Convert Backstage catalog documents into Port entity documents
+      description: |
+        Any authenticated user. Phase 4 of the Backstage <-> Port conversion
+        (`.claude/docs/conversion-mapping.md`): the Backstage -> Port half, a PURE computation
+        (`POST` only because the input is a body of up to 200 documents) — nothing is stored,
+        locked or audited; the writes happen later, through `POST /api/v1/entities/import` with
+        `replaceExisting: true`, which audits as usual. The `files` are converted through the
+        mapping `{id}` and answered as `documents` — exactly what the entity import accepts, a
+        document per CONVERTED row, none for a SKIPPED or INVALID one — beside one `rows` entry
+        per submitted file, in request order.
+
+        Each file is sanitized and validated by the catalog's own rules (INVALID otherwise),
+        routed to a pair by its kind and the pair's selector (`NO_PAIR` SKIPPED when none), and its
+        namespace checked against the pair's namespace rule: a namespace the mapping does not
+        carry is SKIPPED (`NAMESPACE_UNMAPPED`), never collapsed onto another identity. Documents
+        that would become one Port entity (same blueprint, same identifier case-insensitively, or
+        differing from a stored entity only in case) are ALL refused as `IDENTITY_CONFLICT`,
+        whatever their order. A reference resolves against the batch, then the stored catalog's
+        identities, then the Port workspace by kind; the several `ref` rules onto one spec field
+        partition its entries by the blueprint each names. An entry that cannot become a relation
+        value is dropped with a `REFERENCE_DROPPED` (`OWNER_DROPPED` for the owner) finding, so the
+        strict entity import that follows never meets a relation target that does not exist; a
+        document the entity import's shape rules refuse is INVALID alone and its referrers drop
+        the reference instead.
+
+        `merge` (default true) merges each document over the stored entity of the same
+        (blueprint, identifier) — only the leaves the pair's import rules own are touched: a
+        Backstage leaf with a value replaces the Port leaf, a cleanly ABSENT one removes it, one
+        that could not be converted (an ignored placeholder, an unlisted value, an unresolved
+        reference or owner) leaves the stored leaf alone, and everything no rule reads — lossy
+        properties and relations, the icon, the title of a document without one — survives. A
+        many-valued relation of which only some entries resolved keeps its stored targets. The
+        converted owner stands for the FIRST stored team: equal, the stored team is kept; different,
+        only that first entry is replaced and the extra teams stay. Nothing guards the later entity
+        import against a Port-only edit made after this call, so convert immediately before importing. `existingId` names the
+        merged entity; `merge: false` produces the bare document.
+
+        A mapping that carries blocking findings answers `409`. The stored entities a merge reads
+        are admitted against the process-wide read memory budget (too large on its own `400`,
+        contention `429`; `.claude/docs/security.md` "Entity read memory budget") under ONE
+        reservation held until the response is built. Unpaged by design — a report-style
+        computation, NOT a standard list endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityDocumentsRequest'
+      responses:
+        '200':
+          description: The converted entity documents and the per-file report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityDocumentsResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/blueprints:
     get:
       tags: [blueprints]
@@ -6276,6 +6344,8 @@ components:
         - UNKNOWN_KIND
         - FIELD_NOT_ALLOWED
         - AMBIGUOUS_SELECTOR
+        - AMBIGUOUS_REF_PARTITION
+        - DUPLICATE_IMPORT_TARGET
         - UNDECLARED_FIELD
         - CODEC_TYPE_MISMATCH
         - REQUIRED_UNMAPPED
@@ -6296,7 +6366,12 @@ components:
         `TARGET_UNMAPPED` — a `ref`/`derive` rule whose far-end blueprint has no pair.
         `REF_KIND_MISMATCH` — the far-end blueprint is mapped to a kind the spec field may not
         reference. `AMBIGUOUS_SELECTOR` also covers overlapping selectors and a pair exporting a
-        value another pair's selector claims.
+        value another pair's selector claims. `AMBIGUOUS_REF_PARTITION` — two import-reading `ref`
+        rules on one spec field whose relations target the same blueprint (`{meta: team}` counts
+        as `_team`): import splits the field's entries by target blueprint and could not tell which
+        rule an entry belongs to. `DUPLICATE_IMPORT_TARGET` — two import-reading
+        rules write one Port leaf (a property, a relation, or title/icon/team); several `tagCategory`
+        rules into one property are the one allowed shape.
 
     MappingDriftCode:
       type: string
@@ -6377,14 +6452,19 @@ components:
 
     ConversionFindingCode:
       type: string
-      enum: [OWNER_TRUNCATED, TARGET_UNMAPPED, TARGET_MISSING, TARGET_INVALID, VALUE_UNMAPPED, NO_PAIR, IDENTITY_CONFLICT, DOCUMENT_INVALID]
+      enum: [OWNER_TRUNCATED, TARGET_UNMAPPED, TARGET_MISSING, TARGET_INVALID, VALUE_UNMAPPED, NO_PAIR, IDENTITY_CONFLICT, DOCUMENT_INVALID, REFERENCE_DROPPED, OWNER_DROPPED, NAMESPACE_UNMAPPED]
       description: >-
         OWNER_TRUNCATED: several teams, one owner — the first was kept. TARGET_UNMAPPED: a
         relation target's blueprint has no pair. TARGET_MISSING: a relation names an entity that
         no longer exists. TARGET_INVALID: the target's own row is INVALID, so the reference was dropped. VALUE_UNMAPPED: a valueMap rule met a value its map does not list.
         NO_PAIR: the blueprint has no pair (SKIPPED rows). IDENTITY_CONFLICT: two selected
-        entities convert to one Backstage identity. DOCUMENT_INVALID: the descriptor format
-        refuses the document (`message` says why).
+        entities convert to one Backstage identity (on import: two documents become one Port
+        entity, or a document differs from a stored entity only in case — all refused).
+        DOCUMENT_INVALID: the descriptor format (export) or the entity import's shape rules
+        (import) refuse the document (`message` says why). Import only: REFERENCE_DROPPED — an
+        entry of a reference field could not become a relation value; OWNER_DROPPED — the same for
+        the owner (the stored team, if any, is kept); NAMESPACE_UNMAPPED — the document's namespace
+        is one the mapping does not carry (SKIPPED).
 
     ConversionFinding:
       type: object
@@ -6393,7 +6473,10 @@ components:
         code: { $ref: '#/components/schemas/ConversionFindingCode' }
         field:
           type: string
-          description: The Port-side field concerned (`team`, `relations.<id>`, `properties.<id>`); empty for the document as a whole.
+          description: >-
+            The field concerned; empty for the document as a whole. On an export row the Port-side
+            field (`team`, `relations.<id>`, `properties.<id>`), on an import row the Backstage-side
+            one (`spec.owner`, `metadata.labels.<key>`, `metadata.namespace`, ...).
         message: { type: string }
 
     ConversionRow:
@@ -6435,6 +6518,63 @@ components:
           type: array
           description: One entry per SELECTED entity, in entity-id order.
           items: { $ref: '#/components/schemas/ConversionRow' }
+
+    EntityDocumentsRequest:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          maxItems: 200
+          description: The Backstage documents to convert (client-parsed YAML, or stored files).
+          items: { $ref: '#/components/schemas/CatalogFileRequest' }
+        merge:
+          type: boolean
+          default: true
+          description: Merge each document over the stored entity of the same (blueprint, identifier); off = the bare converted document.
+
+    EntityDocumentRow:
+      type: object
+      required: [index, status, kind, namespace, name, findings, unmapped]
+      properties:
+        index: { type: integer, format: int32, minimum: 0, description: "Position in the request's `files` (and in `rows`)." }
+        status: { $ref: '#/components/schemas/ConversionRowStatus' }
+        kind: { type: string, description: "The submitted document's kind." }
+        namespace: { type: string, description: "The submitted document's namespace, lowercased and with a blank one resolved to the workspace default." }
+        name: { type: string, description: "The submitted document's `metadata.name`." }
+        blueprint: { type: string, description: "The blueprint the document converts to; absent on a SKIPPED row and on one refused before it was converted." }
+        identifier: { type: string, description: "The Port identifier (the `metadata.name`); absent exactly when `blueprint` is." }
+        existingId:
+          type: integer
+          format: int32
+          minimum: 0
+          description: The stored entity of the same (blueprint, identifier) — the one the document was merged over when `merge` is on, the one a `replaceExisting` import would overwrite; absent without a match.
+        findings:
+          type: array
+          items: { $ref: '#/components/schemas/ConversionFinding' }
+        unmapped:
+          type: array
+          description: >-
+            Backstage fields the document carries that no rule of its pair addresses (`metadata.description`,
+            `spec.dependencyOf`, `metadata.labels.<key>`, `metadata.tags.<tag>`, ...).
+          items: { type: string }
+
+    EntityDocumentsResponse:
+      type: object
+      required: [documents, rows]
+      properties:
+        documents:
+          type: array
+          description: >-
+            The converted entities, exactly what `POST /api/v1/entities/import` accepts (blueprint,
+            identifier, title, icon?, team?, properties, relations) — a SKIPPED or INVALID row has none.
+          items:
+            type: object
+            additionalProperties: true
+        rows:
+          type: array
+          description: One entry per submitted file, in request order.
+          items: { $ref: '#/components/schemas/EntityDocumentRow' }
 
     ConversionMappingList:
       type: object

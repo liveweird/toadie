@@ -1581,6 +1581,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversion-mappings/{id}/entity-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert Backstage catalog documents into Port entity documents
+         * @description Any authenticated user. Phase 4 of the Backstage <-> Port conversion
+         *     (`.claude/docs/conversion-mapping.md`): the Backstage -> Port half, a PURE computation
+         *     (`POST` only because the input is a body of up to 200 documents) — nothing is stored,
+         *     locked or audited; the writes happen later, through `POST /api/v1/entities/import` with
+         *     `replaceExisting: true`, which audits as usual. The `files` are converted through the
+         *     mapping `{id}` and answered as `documents` — exactly what the entity import accepts, a
+         *     document per CONVERTED row, none for a SKIPPED or INVALID one — beside one `rows` entry
+         *     per submitted file, in request order.
+         *
+         *     Each file is sanitized and validated by the catalog's own rules (INVALID otherwise),
+         *     routed to a pair by its kind and the pair's selector (`NO_PAIR` SKIPPED when none), and its
+         *     namespace checked against the pair's namespace rule: a namespace the mapping does not
+         *     carry is SKIPPED (`NAMESPACE_UNMAPPED`), never collapsed onto another identity. Documents
+         *     that would become one Port entity (same blueprint, same identifier case-insensitively, or
+         *     differing from a stored entity only in case) are ALL refused as `IDENTITY_CONFLICT`,
+         *     whatever their order. A reference resolves against the batch, then the stored catalog's
+         *     identities, then the Port workspace by kind; the several `ref` rules onto one spec field
+         *     partition its entries by the blueprint each names. An entry that cannot become a relation
+         *     value is dropped with a `REFERENCE_DROPPED` (`OWNER_DROPPED` for the owner) finding, so the
+         *     strict entity import that follows never meets a relation target that does not exist; a
+         *     document the entity import's shape rules refuse is INVALID alone and its referrers drop
+         *     the reference instead.
+         *
+         *     `merge` (default true) merges each document over the stored entity of the same
+         *     (blueprint, identifier) — only the leaves the pair's import rules own are touched: a
+         *     Backstage leaf with a value replaces the Port leaf, a cleanly ABSENT one removes it, one
+         *     that could not be converted (an ignored placeholder, an unlisted value, an unresolved
+         *     reference or owner) leaves the stored leaf alone, and everything no rule reads — lossy
+         *     properties and relations, the icon, the title of a document without one — survives. A
+         *     many-valued relation of which only some entries resolved keeps its stored targets. The
+         *     converted owner stands for the FIRST stored team: equal, the stored team is kept; different,
+         *     only that first entry is replaced and the extra teams stay. Nothing guards the later entity
+         *     import against a Port-only edit made after this call, so convert immediately before importing. `existingId` names the
+         *     merged entity; `merge: false` produces the bare document.
+         *
+         *     A mapping that carries blocking findings answers `409`. The stored entities a merge reads
+         *     are admitted against the process-wide read memory budget (too large on its own `400`,
+         *     contention `429`; `.claude/docs/security.md` "Entity read memory budget") under ONE
+         *     reservation held until the response is built. Unpaged by design — a report-style
+         *     computation, NOT a standard list endpoint.
+         */
+        post: operations["convertToEntityDocuments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/blueprints": {
         parameters: {
             query?: never;
@@ -3732,10 +3793,10 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * @description The blocking codes. `SCHEMA` — the document is not well-formed (also: a blueprint mapped twice, a field both mapped and declared lossy). `UNKNOWN_BLUEPRINT`/`UNKNOWN_PROPERTY`/ `UNKNOWN_RELATION` — a name that is not (or no longer) in the active blueprints. `COMPUTED_PROPERTY` — a mirror/calculation/aggregation id named by a rule or `lossy` (never mappable). `UNKNOWN_KIND` — not one of the seven Backstage kinds. `FIELD_NOT_ALLOWED` — a Backstage address outside the kind's allowed spec fields. `AMBIGUOUS_SELECTOR` — two selector-less pairs for one kind. `UNDECLARED_FIELD` — a schema property or relation neither mapped nor declared lossy. `CODEC_TYPE_MISMATCH` — the codec does not fit its Port or Backstage end (or its direction, or a tag array is not `uniqueItems`). `REQUIRED_UNMAPPED` — a required spec field of the kind that no rule writes on export, or a property/relation the blueprint REQUIRES declared `lossy`. `TARGET_UNMAPPED` — a `ref`/`derive` rule whose far-end blueprint has no pair. `REF_KIND_MISMATCH` — the far-end blueprint is mapped to a kind the spec field may not reference. `AMBIGUOUS_SELECTOR` also covers overlapping selectors and a pair exporting a value another pair's selector claims.
+         * @description The blocking codes. `SCHEMA` — the document is not well-formed (also: a blueprint mapped twice, a field both mapped and declared lossy). `UNKNOWN_BLUEPRINT`/`UNKNOWN_PROPERTY`/ `UNKNOWN_RELATION` — a name that is not (or no longer) in the active blueprints. `COMPUTED_PROPERTY` — a mirror/calculation/aggregation id named by a rule or `lossy` (never mappable). `UNKNOWN_KIND` — not one of the seven Backstage kinds. `FIELD_NOT_ALLOWED` — a Backstage address outside the kind's allowed spec fields. `AMBIGUOUS_SELECTOR` — two selector-less pairs for one kind. `UNDECLARED_FIELD` — a schema property or relation neither mapped nor declared lossy. `CODEC_TYPE_MISMATCH` — the codec does not fit its Port or Backstage end (or its direction, or a tag array is not `uniqueItems`). `REQUIRED_UNMAPPED` — a required spec field of the kind that no rule writes on export, or a property/relation the blueprint REQUIRES declared `lossy`. `TARGET_UNMAPPED` — a `ref`/`derive` rule whose far-end blueprint has no pair. `REF_KIND_MISMATCH` — the far-end blueprint is mapped to a kind the spec field may not reference. `AMBIGUOUS_SELECTOR` also covers overlapping selectors and a pair exporting a value another pair's selector claims. `AMBIGUOUS_REF_PARTITION` — two import-reading `ref` rules on one spec field whose relations target the same blueprint (`{meta: team}` counts as `_team`): import splits the field's entries by target blueprint and could not tell which rule an entry belongs to. `DUPLICATE_IMPORT_TARGET` — two import-reading rules write one Port leaf (a property, a relation, or title/icon/team); several `tagCategory` rules into one property are the one allowed shape.
          * @enum {string}
          */
-        MappingFindingCode: "SCHEMA" | "UNKNOWN_BLUEPRINT" | "UNKNOWN_PROPERTY" | "UNKNOWN_RELATION" | "COMPUTED_PROPERTY" | "UNKNOWN_KIND" | "FIELD_NOT_ALLOWED" | "AMBIGUOUS_SELECTOR" | "UNDECLARED_FIELD" | "CODEC_TYPE_MISMATCH" | "REQUIRED_UNMAPPED" | "TARGET_UNMAPPED" | "REF_KIND_MISMATCH";
+        MappingFindingCode: "SCHEMA" | "UNKNOWN_BLUEPRINT" | "UNKNOWN_PROPERTY" | "UNKNOWN_RELATION" | "COMPUTED_PROPERTY" | "UNKNOWN_KIND" | "FIELD_NOT_ALLOWED" | "AMBIGUOUS_SELECTOR" | "AMBIGUOUS_REF_PARTITION" | "DUPLICATE_IMPORT_TARGET" | "UNDECLARED_FIELD" | "CODEC_TYPE_MISMATCH" | "REQUIRED_UNMAPPED" | "TARGET_UNMAPPED" | "REF_KIND_MISMATCH";
         /**
          * @description The report-only codes — they never block a write. `VOCABULARY_DRIFT` — an enum or value set differs from the registry list it mirrors (label values, the lifecycles or namespaces dictionary, a tag category, the per-kind type dictionary). `REGISTRY_KEY_MISSING` — a label key, annotation key or tag category the mapping names is not registered. `REGISTRY_KIND_MISMATCH` — it is registered but does not apply to the pair's kind. `BACKSTAGE_FIELD_UNMAPPED` — an allowed Backstage field that no rule writes and `lossy.backstage` does not list.
          * @enum {string}
@@ -3788,13 +3849,13 @@ export interface components {
          */
         ConversionRowStatus: "CONVERTED" | "CONVERTED_WITH_FINDINGS" | "SKIPPED" | "INVALID";
         /**
-         * @description OWNER_TRUNCATED: several teams, one owner — the first was kept. TARGET_UNMAPPED: a relation target's blueprint has no pair. TARGET_MISSING: a relation names an entity that no longer exists. TARGET_INVALID: the target's own row is INVALID, so the reference was dropped. VALUE_UNMAPPED: a valueMap rule met a value its map does not list. NO_PAIR: the blueprint has no pair (SKIPPED rows). IDENTITY_CONFLICT: two selected entities convert to one Backstage identity. DOCUMENT_INVALID: the descriptor format refuses the document (`message` says why).
+         * @description OWNER_TRUNCATED: several teams, one owner — the first was kept. TARGET_UNMAPPED: a relation target's blueprint has no pair. TARGET_MISSING: a relation names an entity that no longer exists. TARGET_INVALID: the target's own row is INVALID, so the reference was dropped. VALUE_UNMAPPED: a valueMap rule met a value its map does not list. NO_PAIR: the blueprint has no pair (SKIPPED rows). IDENTITY_CONFLICT: two selected entities convert to one Backstage identity (on import: two documents become one Port entity, or a document differs from a stored entity only in case — all refused). DOCUMENT_INVALID: the descriptor format (export) or the entity import's shape rules (import) refuse the document (`message` says why). Import only: REFERENCE_DROPPED — an entry of a reference field could not become a relation value; OWNER_DROPPED — the same for the owner (the stored team, if any, is kept); NAMESPACE_UNMAPPED — the document's namespace is one the mapping does not carry (SKIPPED).
          * @enum {string}
          */
-        ConversionFindingCode: "OWNER_TRUNCATED" | "TARGET_UNMAPPED" | "TARGET_MISSING" | "TARGET_INVALID" | "VALUE_UNMAPPED" | "NO_PAIR" | "IDENTITY_CONFLICT" | "DOCUMENT_INVALID";
+        ConversionFindingCode: "OWNER_TRUNCATED" | "TARGET_UNMAPPED" | "TARGET_MISSING" | "TARGET_INVALID" | "VALUE_UNMAPPED" | "NO_PAIR" | "IDENTITY_CONFLICT" | "DOCUMENT_INVALID" | "REFERENCE_DROPPED" | "OWNER_DROPPED" | "NAMESPACE_UNMAPPED";
         ConversionFinding: {
             code: components["schemas"]["ConversionFindingCode"];
-            /** @description The Port-side field concerned (`team`, `relations.<id>`, `properties.<id>`); empty for the document as a whole. */
+            /** @description The field concerned; empty for the document as a whole. On an export row the Port-side field (`team`, `relations.<id>`, `properties.<id>`), on an import row the Backstage-side one (`spec.owner`, `metadata.labels.<key>`, `metadata.namespace`, ...). */
             field: string;
             message: string;
         };
@@ -3829,6 +3890,49 @@ export interface components {
             files: components["schemas"]["CatalogFileRequest"][];
             /** @description One entry per SELECTED entity, in entity-id order. */
             rows: components["schemas"]["ConversionRow"][];
+        };
+        EntityDocumentsRequest: {
+            /** @description The Backstage documents to convert (client-parsed YAML, or stored files). */
+            files: components["schemas"]["CatalogFileRequest"][];
+            /**
+             * @description Merge each document over the stored entity of the same (blueprint, identifier); off = the bare converted document.
+             * @default true
+             */
+            merge: boolean;
+        };
+        EntityDocumentRow: {
+            /**
+             * Format: int32
+             * @description Position in the request's `files` (and in `rows`).
+             */
+            index: number;
+            status: components["schemas"]["ConversionRowStatus"];
+            /** @description The submitted document's kind. */
+            kind: string;
+            /** @description The submitted document's namespace, lowercased and with a blank one resolved to the workspace default. */
+            namespace: string;
+            /** @description The submitted document's `metadata.name`. */
+            name: string;
+            /** @description The blueprint the document converts to; absent on a SKIPPED row and on one refused before it was converted. */
+            blueprint?: string;
+            /** @description The Port identifier (the `metadata.name`); absent exactly when `blueprint` is. */
+            identifier?: string;
+            /**
+             * Format: int32
+             * @description The stored entity of the same (blueprint, identifier) — the one the document was merged over when `merge` is on, the one a `replaceExisting` import would overwrite; absent without a match.
+             */
+            existingId?: number;
+            findings: components["schemas"]["ConversionFinding"][];
+            /** @description Backstage fields the document carries that no rule of its pair addresses (`metadata.description`, `spec.dependencyOf`, `metadata.labels.<key>`, `metadata.tags.<tag>`, ...). */
+            unmapped: string[];
+        };
+        EntityDocumentsResponse: {
+            /** @description The converted entities, exactly what `POST /api/v1/entities/import` accepts (blueprint, identifier, title, icon?, team?, properties, relations) — a SKIPPED or INVALID row has none. */
+            documents: {
+                [key: string]: unknown;
+            }[];
+            /** @description One entry per submitted file, in request order. */
+            rows: components["schemas"]["EntityDocumentRow"][];
         };
         ConversionMappingList: {
             items: components["schemas"]["ConversionMapping"][];
@@ -6245,6 +6349,38 @@ export interface operations {
                 };
             };
             400: components["responses"]["EntityQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    convertToEntityDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityDocumentsRequest"];
+            };
+        };
+        responses: {
+            /** @description The converted entity documents and the per-file report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityDocumentsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];

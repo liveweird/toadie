@@ -62,5 +62,8 @@ report-and-skip shape, one level up.
 document and one report row per SELECTED entity, bounded by the workspace cap and admitted through
 the read ledger like the Entity graph it shares its filter set with (`blueprint` any-of, `q`, `team`,
 `query`, plus `entityId` and `merge`) — a report-style computation, the `entities/errors` posture.
+Its phase-4 twin `POST /api/v1/conversion-mappings/{id}/entity-documents` (Backstage -> Port) answers an unpaged
+`{documents, rows}` — one report row per submitted file in request order, bounded by the 200-document
+`MAX_IMPORT_DOCUMENTS` cap of its body rather than by paging.
 
 **Substring filters:** every per-column substring filter must be case- AND accent-insensitive — use `containsNormalized` (`infra/db/Sql.kt`, rendering `LOWER(public.unaccent(col)) LIKE LOWER(public.unaccent(?))`, extension enabled in V4); never hand-roll `lowerCase() like containsPattern(...)`, and keep unaccent-before-LOWER (the reverse breaks uppercase-diacritic input under a C-locale database). The SPA mirrors the rule client-side via the theme-level `foldedOptionsFilter` (`web/src/utils/text.ts`, wired as the Select/MultiSelect/TagsInput default filter in `theme.ts`).

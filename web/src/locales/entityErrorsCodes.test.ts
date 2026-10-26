@@ -57,7 +57,7 @@ describe("entityErrors.json covers every EntityFindingCode and QueryDiagnostic c
 
 describe("entityErrors.json covers every MappingFindingCode and MappingDriftCode", () => {
   it("found the mapping codes in schema.ts", () => {
-    expect(MAPPING_FINDING_CODES).toHaveLength(13);
+    expect(MAPPING_FINDING_CODES).toHaveLength(15);
     expect(MAPPING_DRIFT_CODES).toHaveLength(4);
   });
 

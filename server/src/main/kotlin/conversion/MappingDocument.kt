@@ -85,6 +85,13 @@ data class MappingRule(
 ) {
     /** True when the rule writes its Backstage address on EXPORT (Port -> Backstage). */
     val writesOnExport: Boolean get() = direction != Direction.IMPORT
+
+    /**
+     * True when the rule READS its Backstage address on IMPORT (Backstage -> Port): any rule that is
+     * not export-only. `derive` and `constant` are export-only by construction (a `constant` still
+     * takes part in pair SELECTION, which is not a rule's import half).
+     */
+    val readsOnImport: Boolean get() = direction != Direction.EXPORT && codec !is Codec.Derive && codec !is Codec.Constant
 }
 
 enum class PortMeta(val wire: String) {

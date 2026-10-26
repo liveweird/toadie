@@ -364,6 +364,13 @@ ch.nokillswit
 │                       ConversionMappingRoutes.kt. The Backstage spec-field accessors the engine writes through
 │                       (`specOf`, `specStrings`, `specLists`) live in `catalog/EntitySpecAccess.kt`, beside the
 │                       field table they mirror.
+│                       Phase 4 (Backstage -> Port) adds PortImport.kt
+│                       (`ImportRun`: staging, reference resolution and partition, the fixpoint that
+│                       demotes a shape-invalid document), CodecsImport.kt (each codec's import half and
+│                       the `Leaf` verdicts), ImportMerge.kt (`ImportFootprint` + `mergeEntity`, the
+│                       never-wipe-Port-only-data merge), EntityDocuments.kt (the wire shapes) and
+│                       ConversionImportService.kt (ONE ledger reservation across the merge read, the
+│                       conversion and the encoding); the route is `POST …/{id}/entity-documents`.
 ├── integration/        the machine API: the read-only Port GraphQL adapter (v2.7.0 — committed SDL,
 │                       service-backed resolvers, bounded execution, separate machine authentication)
 │                       and, since 2.15.0, the MCP endpoint `POST /integration/mcp` (Mcp.kt — a

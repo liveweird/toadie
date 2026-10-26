@@ -73,10 +73,18 @@ promotes it. A finished item is removed, not ticked.
   SPA. Roughly 11 days in total. Shipped so far: (5) `replaceExisting` on the catalog import (2.23.0); phase 1, the mapping
   registry + validator + default mapping (2.24.0); phase 2, the Port → Backstage exporter
   (`GET /conversion-mappings/{id}/catalog-documents`) and the sample reconciliation (the Backstage
-  sample is now generated from the Port sample, 42 documents; `SampleConversionTest`; 2.25.0). Left from
+  sample is now generated from the Port sample, 42 documents; `SampleConversionTest`; 2.25.0); phase 4,
+  the Backstage → Port importer (`POST /conversion-mappings/{id}/entity-documents`,
+  `SampleImportConversionTest`; 2.26.0). Remaining: phase 5, the SPA. Left from
   (4): registering `backstage.io/definition-at-location` for API (a registry migration) and with it
   exporting `definition_url`; `library.subcomponent_of` targets `library`, not `service`, because
   `service` already references `library`.
+- [new] **Guard the conversion's read-then-write gap.** The Backstage → Port import merges each document
+  over the stored entity when it is converted, but the SPA imports it later through
+  `POST /entities/import` with `replaceExisting`, which carries no expected revision: a Port-only
+  edit made between the conversion and the import is overwritten. Phase 5's SPA re-converts
+  immediately before importing; a durable fix is an optional per-document expected `updatedAt` on the
+  entity import that refuses a stale replace (the catalog's `X-Expected-Revision` twin).
 - [new] **Treat empty and absent blueprint maps as equal in the sync modal.** After a sync the stored
   blueprint renders empty `relations`, `mirrorProperties`, `calculationProperties` and
   `aggregationProperties` maps, so a source document that omits them never reads "in sync": reopening
