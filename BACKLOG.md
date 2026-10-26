@@ -49,7 +49,7 @@ promotes it. A finished item is removed, not ticked.
   `$text` object substitution), and that key is not in the V22-seeded annotation registry. Registering it
   for API (a new registry migration) and adding a mapping rule would let the export carry the URL instead
   of only an inline `definition`.
-- [new] **Guard the conversion's read-then-write gap.** The Backstage → Port import merges each document
+- [next] **Guard the conversion's read-then-write gap.** The Backstage → Port import merges each document
   over the stored entity when it is converted, but the SPA imports it later through
   `POST /entities/import` with `replaceExisting`, which carries no expected revision: a Port-only
   edit made between the conversion and the import is overwritten. Phase 5's SPA re-converts
