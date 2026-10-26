@@ -3,6 +3,7 @@ package ch.nokillswit.catalog
 import ch.nokillswit.infra.concurrency.ReadBudgetExceeded
 import ch.nokillswit.infra.concurrency.ReadLedger
 import ch.nokillswit.infra.concurrency.throwReadBudgetHttp
+import ch.nokillswit.infra.db.jsonTextAt
 import ch.nokillswit.infra.db.octetLength
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
 import ch.nokillswit.infra.fetch.SourceWrite
@@ -581,6 +582,32 @@ class CatalogFileService(
         val row = CatalogFiles.select(contentSum).where { predicate }.singleOrNull()
             ?: error("an aggregate SELECT without GROUP BY must always answer exactly one row")
         reservation.reserve((row.getOrNull(contentSum) ?: 0L) * ratio)
+    }
+
+    /**
+     * Every active file's IDENTITY plus the plain-text `spec.<field>` projections named by
+     * [specFields] — no `content` crosses the wire (each projection is one short value extracted
+     * in SQL), which is why this is an identity-only read outside the read ledger
+     * (`.claude/docs/security.md`, the ledger's exceptions). The conversion import uses it to tell
+     * which mapping pair a REFERENCED stored file belongs to (kind plus the pair selector's field)
+     * without decoding the workspace. [specFields] must be simple identifiers.
+     */
+    suspend fun readIdentities(specFields: Set<String>): List<StoredIdentity> = suspendTransaction(database) {
+        val projections = specFields.sorted().map { it to CatalogFiles.content.jsonTextAt(listOf("spec", it)) }
+        val identity = listOf<Expression<*>>(CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name)
+        val columns = identity + projections.map { it.second }
+        CatalogFiles.select(columns)
+            .where { active() }
+            .orderBy(CatalogFiles.id to SortOrder.ASC)
+            .map { row ->
+                StoredIdentity(
+                    kind = row[CatalogFiles.kind],
+                    namespace = row[CatalogFiles.namespace],
+                    name = row[CatalogFiles.name],
+                    spec = projections.mapNotNull { (field, expression) -> row[expression]?.let { field to it } }.toMap(),
+                )
+            }
+            .toList()
     }
 
     /**

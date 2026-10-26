@@ -42,6 +42,9 @@ enum class ConversionRowStatus {
  * [NO_PAIR]: see [ConversionRowStatus.SKIPPED]. [IDENTITY_CONFLICT]: two selected entities convert
  * to one Backstage identity — the later one is not emitted. [DOCUMENT_INVALID]: the descriptor
  * format refuses the built document (`message` carries the validator's reason).
+ * The import-only codes: [REFERENCE_DROPPED] a reference field entry that could not become a
+ * relation value, [OWNER_DROPPED] the same for the owner, [NAMESPACE_UNMAPPED] the document sits
+ * in a namespace the mapping cannot place (SKIPPED).
  */
 @Serializable
 enum class ConversionFindingCode {
@@ -53,9 +56,22 @@ enum class ConversionFindingCode {
     NO_PAIR,
     IDENTITY_CONFLICT,
     DOCUMENT_INVALID,
+
+    /** Import: a reference could not become a relation (unresolvable, unmapped kind, untaken blueprint, or no such Port entity). */
+    REFERENCE_DROPPED,
+
+    /** Import: the owner reference could not be turned into a team — the stored team, if any, is kept. */
+    OWNER_DROPPED,
+
+    /** Import: the document's namespace is one the mapping does not carry — the document is skipped. */
+    NAMESPACE_UNMAPPED,
 }
 
-/** [field] is the Port-side field concerned (`team`, `relations.<id>`, `properties.<id>`), or empty for the whole document. */
+/**
+ * [field] is the field concerned, or empty for the whole document: on an EXPORT row the Port-side
+ * field (`team`, `relations.<id>`, `properties.<id>`), on an IMPORT row the Backstage-side one
+ * (`spec.owner`, `metadata.labels.<key>`, `metadata.namespace`, ...).
+ */
 @Serializable
 data class ConversionFinding(val code: ConversionFindingCode, val field: String, val message: String)
 

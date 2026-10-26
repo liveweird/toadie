@@ -173,6 +173,20 @@ internal object ExportFixtures {
         return parse(JsonObject(root + ("pairs" to JsonArray(pairs))))
     }
 
+    /** The fixture mapping with the rules of [blueprint]'s pair matching [drop] removed — a rule the mapping no longer reads. */
+    fun withoutRule(blueprint: String, drop: (JsonObject) -> Boolean): MappingDocument {
+        val root = Json.parseToJsonElement(MAPPING).jsonObject
+        val pairs = root.getValue("pairs").jsonArray.map { pair ->
+            val obj = pair.jsonObject
+            if (obj.getValue("blueprint").jsonPrimitive.content != blueprint) {
+                obj
+            } else {
+                JsonObject(obj + ("rules" to JsonArray(obj.getValue("rules").jsonArray.filterNot { drop(it.jsonObject) })))
+            }
+        }
+        return parse(JsonObject(root + ("pairs" to JsonArray(pairs))))
+    }
+
     /** Builds a JSON object from `"key" to value` pairs: strings, booleans, numbers, lists of strings, null, or a ready [JsonElement]. */
     fun json(vararg members: Pair<String, Any?>): JsonObject = JsonObject(members.associate { (k, v) -> k to element(v) })
 

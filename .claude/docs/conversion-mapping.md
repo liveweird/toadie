@@ -1,4 +1,4 @@
-### Conversion mappings (Backstage <-> Port, phases 1-2)
+### Conversion mappings (Backstage <-> Port, phases 1, 2 and 4)
 
 **The mapping mirrors the ontology as DATA — no code branches on ontology names.**
 
@@ -27,14 +27,15 @@
 
 Phase 1 ships the document model, the strict parser, the pure validator, the ADMIN registry (V45,
 `/api/v1/conversion-mappings`), mapping rows on the Port Errors report, and the default mapping. Phase 2
-adds the Port -> Backstage EXPORT engine and its read endpoint (below). There is NO import engine yet.
-Code: `conversion/` (`.claude/docs/package-layout.md`).
+adds the Port -> Backstage EXPORT engine and its read endpoint, phase 4 the Backstage -> Port IMPORT
+engine and its endpoint (both below). Code: `conversion/` (`.claude/docs/package-layout.md`).
 
 **The document (`schemaVersion` 1)** — `{schemaVersion, apiVersion: "backstage.io/v1alpha1", pairs[]}`;
 a pair is `{blueprint, kind, select?, rules[], lossy?}`; a blueprint appears in at most one pair.
 
-- `select: {"spec": "type", "in": [..]}` — the pair applies to a Backstage file whose plain-text spec
-  field is one of the values. Among the pairs of ONE kind, selector pairs are tried in order and the
+- `select: {"spec": "type", "in": [..]}` — the pair applies to a Backstage file whose single-word spec
+  field (`type` or `lifecycle` — never a free-text field such as `definition`: import projects the
+  selector field of every stored file it resolves a reference to, without decoding content) is one of the values. Among the pairs of ONE kind, selector pairs are tried in order and the
   single selector-less pair is the fallback. `AMBIGUOUS_SELECTOR` also covers: two selector pairs whose
   `in` sets intersect; a selector-less pair that can export a value another pair selects; and a
   selector pair exporting a value outside its own `in` (import would route it elsewhere).
@@ -77,7 +78,12 @@ a pair is `{blueprint, kind, select?, rules[], lossy?}`; a blueprint appears in 
 **Validation** (`validateMapping`, pure; findings are `{code, path, message}`, `path` a JSON pointer).
 Blocking — a write with any is the `ConversionMappingInvalid` `400` listing all of them, and every
 read recomputes them: `SCHEMA`, `UNKNOWN_BLUEPRINT`, `UNKNOWN_PROPERTY`, `UNKNOWN_RELATION`,
-`COMPUTED_PROPERTY`, `UNKNOWN_KIND`, `FIELD_NOT_ALLOWED`, `AMBIGUOUS_SELECTOR`, `UNDECLARED_FIELD`
+`COMPUTED_PROPERTY`, `UNKNOWN_KIND`, `FIELD_NOT_ALLOWED`, `AMBIGUOUS_SELECTOR`, `AMBIGUOUS_REF_PARTITION` (two import-reading `ref` rules on one spec
+field whose relations target the same blueprint, `{"meta":"team"}` counting as `_team` — import splits a field's
+entries by target blueprint, so the second rule would be emptied), `DUPLICATE_IMPORT_TARGET` (two
+import-reading rules write one Port property, relation or title/icon/team — their contributions would fight;
+several `tagCategory` rules into one property, each reading its own category, are the one allowed shape),
+`UNDECLARED_FIELD`
 (a schema property/relation neither mapped nor lossy), `CODEC_TYPE_MISMATCH` (the codec does not fit
 its Port or Backstage end or its direction, `valueMap` is not a bijection, a tag array is not
 `uniqueItems`), `REQUIRED_UNMAPPED` (a required spec field of the kind that no export-writing rule or
@@ -100,8 +106,8 @@ audit events: `.claude/docs/authorization.md`, `.claude/docs/observability.md`; 
 
 **Proof** — `SampleBlueprintsTest` stores the default mapping and requires zero findings AND zero
 drift against the sample blueprints and the V22-seeded registries; `MappingValidationTest` pins one
-case per code (`.claude/docs/testing.md`); the export engine is "The export (phase 2)" below. Later phases (the import
-engine, SPA pages) are tracked in `BACKLOG.md`.
+case per code (`.claude/docs/testing.md`); the export engine is "The export (phase 2)" and the import engine "The import (phase 4)" below. Later phases
+(the SPA pages) are tracked in `BACKLOG.md`.
 
 **The export (phase 2)** — `GET /api/v1/conversion-mappings/{id}/catalog-documents`, a pure read (no
 write, no lock, no audit; any authenticated user). Its selection is the Entity graph's filter set
@@ -157,13 +163,104 @@ snapshot, optionally the stored catalog files):
 - **Reads** go through the read ledger (`.claude/docs/security.md`) on ONE reservation held until the
   answer is encoded: the entity workspace through the Entity graph's `shownScope` + `loadReadSet`
   (`entities/EntityExportRead.kt`; the selected rows plus every entity of the mapped blueprints as context —
-  a context row is decoded to its skeleton (relations and team) and charged as overflow, except for a blueprint
-  whose namespace rule reads a property, whose rows are decoded in full, filtered to those properties and
-  prepaid at the shown ratio — and a
-  SKIPPED row's properties are never decoded), then, only when merging, the stored catalog files the export
+  a context row is decoded to its skeleton (relations and team) and charged as overflow, except for a blueprint whose
+  namespace rule reads a property, whose rows are decoded in full, filtered to those properties and prepaid at the
+  shown ratio — and a SKIPPED row's properties are never decoded), then, only when merging, the stored catalog files the export
   can write to (`CatalogFileService.readActiveSources`, narrowed to the emitted identities). The mapping and
   its blueprints/registries are read first, outside the ledger (a registry-sized read).
 
 The Backstage sample is GENERATED by this engine from the Port sample — see
 `sample-data/backstage/commerce-payments/README.md` "Regenerating this file" — and
 `SampleConversionTest` pins the equality modulo three hand-restored edits that carry the four deliberate findings.
+
+**The import (phase 4)** — `POST /api/v1/conversion-mappings/{id}/entity-documents`, a pure computation
+(no write, no lock, no audit; any authenticated user; `POST` only because the input is a body of at most
+`MAX_IMPORT_DOCUMENTS` Backstage documents). Body `{files, merge}` (`merge` default true), answer
+`{documents, rows}`: `documents` post to `POST /api/v1/entities/import` with `replaceExisting: true`
+verbatim (the entity import's planner orders `_team` before its owners, unchanged), one `EntityDocumentRow`
+per submitted file in request order (`CONVERTED`, `CONVERTED_WITH_FINDINGS`, `SKIPPED`, `INVALID`; no
+`null` member). A stale mapping is a `409`, an unknown one a `404`, a malformed or over-cap body a `400`.
+The engine (`conversion/PortImport.kt`, the codecs' import halves in `CodecsImport.kt`, the merge in
+`ImportMerge.kt`) is a pure function of (typed document, blueprints, one registry snapshot, the batch, the
+identities of the stored catalog and of the Port workspace, optionally the stored entities to merge over):
+
+- **Staging.** Each file goes through the catalog's own `sanitizedCatalogFile` + `validateCatalogFile`
+  (else `INVALID`, `DOCUMENT_INVALID`), is routed to a pair by kind and selector (selector pairs in
+  document order, the selector-less pair as fallback; none is `SKIPPED`, `NO_PAIR`), and its namespace is
+  checked against the pair's namespace rule: every import-reading rule on `metadata.namespace` must accept
+  it (a `valueMap` must list it), and with no such rule only the workspace's flagged default namespace is
+  the pair's — anything else is `SKIPPED`, `NAMESPACE_UNMAPPED`, never an identity collapse (Port
+  identifiers are the bare `metadata.name`). Port identity is `(blueprint, name)` folded to lower case:
+  documents of ONE batch claiming the same identity, or a document differing from a stored entity only in
+  case, are ALL `INVALID` with `IDENTITY_CONFLICT`, whatever their order.
+- **Leaf semantics (`Leaf`).** Every rule's import half yields, per Port leaf, `Value` (the Backstage side
+  has it), `Absent` (it holds nothing) or `Kept` (it holds something this engine could not convert: an
+  `importIgnore` placeholder, a value without the rule's `prefix`, a `valueMap` value its map does not
+  list — `VALUE_UNMAPPED` — an unresolved reference or owner). `copy` strips the `prefix`, parses a number
+  property, and a `links: rest` property takes the links no `link` rule claims by title; `valueMap` is the
+  inverse bijection (a boolean property gets a boolean); `tagCategory` collects the tags the registry places
+  in the category (all, in document order, for an array property, the first for a scalar one; several rules
+  from one property add up); `link` reads the URL of the link with the rule's title; `derive` and
+  `constant` are export-only (a `constant` still takes part in pair selection); `{"meta":"title"}` falls
+  back to the stored title, else the identifier.
+- **References.** `ref` rules reading one spec field PARTITION its entries by the blueprint each names (the
+  relation's target, `_team` for `{"meta":"team"}`): an entry goes to the first rule, in document order,
+  whose target is its blueprint. An entry resolves with `resolveTarget` and the field's default kind (the
+  catalog's own grammar), against — in this order — the batch, the stored catalog (identity and selector
+  fields only, never content), then the Port workspace by kind. The target must be a Port entity that
+  exists or will after this batch; anything else is dropped with `REFERENCE_DROPPED` (`OWNER_DROPPED` when
+  a team rule reads the field), so the strict entity import that follows never meets a missing relation
+  target. A document the entity import's shape rules refuse (`validateEntityRequest`) is `INVALID` alone:
+  it leaves the batch and the conversion runs again, so its referrers drop the reference with a finding
+  instead of invalidating. A one-valued relation fed several entries keeps the first and reports the rest.
+- **Footprint merge (`merge=true`).** The pair's import footprint (`ImportFootprint`) is the Port leaves
+  its import-reading rules write. Over the stored entity of the same `(blueprint, identifier)`: properties
+  and relations OUTSIDE the footprint (the pair's `lossy` declarations, anything added to the blueprint
+  later), the icon when no rule reads it and the whole `team` when no team rule reads it survive untouched;
+  INSIDE it, `Value` replaces, `Absent` removes and `Kept` leaves the stored leaf alone — our own failure
+  to convert is never evidence that the Port value is wrong, and only a cleanly absent Backstage leaf
+  removes anything. Concretely: a relation rule left with nothing is `Absent` only when every entry of its
+  spec field was usable, else `Kept`; a MANY-valued relation of which only some entries resolved is a
+  `Union` — the stored targets that still exist stay, in their order, and the newly resolved ones are
+  appended (a stored target whose entity is gone is dropped: the strict import would refuse it); a
+  tag-backed property is `found ∪ (stored values its categories do not cover)` — a stored value no registered
+  tag of the property's categories names is never wiped, a covered one goes when its tag is missing (so
+  unknown tags next to known ones never replace the array); the `links: rest` property merges the extra keys of
+  a stored item with the same `url` into the Backstage link (items sharing a `url` pair up in order) and keeps
+  stored items without a usable `url` or whose title a `link` rule owns — the export skips such rest items, so
+  the import never reads a rest item's url into the `link` rule's property; a `copy` namespace rule lets its `importIgnore`/`exportDefault`
+  placeholders through as `Kept`. `team` is positional: the converted owner stands for the FIRST stored
+  team (a multi-team entity exports its first team as the owner) — equal to it, the stored team is kept as
+  it is; different, it replaces ONLY that first entry and the extra teams stay (`["a","b"]` + owner `c` →
+  `["c","b"]`; a stored scalar is simply replaced); a dropped owner keeps the stored team. The merge starts
+  from the STORED document (`entities/EntityMergeRead.kt`), never the computed read view. `merge=false` is
+  the bare conversion, and importing it with `replaceExisting` overwrites the entity wholesale; the row's
+  `existingId` names the entity of the same identity either way. **Read-then-write caveat:** nothing guards
+  the later `POST /entities/import` against a Port-only edit made between this conversion and that import
+  (the entity import has no expected-revision guard), so a caller must convert IMMEDIATELY before importing
+  — the SPA does.
+- **One leaf, one rule.** A validated mapping has one import-reading rule per Port leaf. The engine is defensive
+  where contributions still meet: array values union, and any `Kept`/`Union` contributor makes the result a
+  `Union` with the stored values, so one rule's failure to convert never lets another's value remove what is stored.
+- **Value rules.** Each converted document is also run through the entity import's own pure
+  `entityFindings` (required, enum, format, type, relation and team targets, with the batch plus the Port
+  workspace as the targets that exist), so a document the strict import would refuse is `INVALID` here and,
+  through the same fixpoint as the shape rules, its referrers drop the reference with a finding.
+- **`unmapped`** on a row lists the Backstage fields the document carries that NO rule of the pair
+  addresses in any direction (an export-only or `derive` rule covers its field — the export regenerates it):
+  for a valid mapping the `metadata.*`/`spec.*`/`profile.*` entries are exactly the pair's
+  `lossy.backstage`; labels, annotations, tags and links no rule claims are listed individually
+  (`metadata.labels.<key>`, `metadata.tags.<tag>`, ...).
+- **Reads** (`conversion/ConversionImportService.kt`): the mapping basis, the stored catalog's identities
+  (`CatalogFileService.readIdentities` — kind, namespace, name and the selector fields, an identity-only
+  read outside the read ledger by its documented exception), the Port identities (`EntityService.importSnapshot`),
+  and — only when merging — the stored documents of the at most 200 entities the batch overwrites
+  (`readStoredEntities`), admitted at the shown-row ratio from their known stored sizes. That read, the
+  conversion and the JSON encoding of the response share ONE ledger reservation, released only when the
+  finished body exists.
+
+`SampleImportConversionTest` is the flagship (flagship B): the Backstage sample converted into an empty Port
+workspace is the Port sample's mapped entities modulo the declared lossy fields and an explicit deviation list
+(each names the identity, the field, the converted value and the Port value), passes the entity import's dry run,
+imports, converts again to the same documents, re-imports as a no-op, keeps Port-only data under a merge, and
+exports back to the Backstage sample except for the one dependency the import had to drop.

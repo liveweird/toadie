@@ -311,6 +311,21 @@ entity counts, the two `OWNER_TRUNCATED` rows, every row's `unmapped` inside the
 the raw export response — the first step of regenerating the Backstage sample
 (`sample-data/backstage/commerce-payments/README.md`).
 
+**Conversion import (phase 4).** The Backstage -> Port engine mirrors the export's layers, again on the
+`ExportFixtures` world: `PortImportSafetyTest` (the never-lose-Port-data cases: a partly resolved many-valued relation, two rules shadowing one field, unknown tags, `links: rest` item merging and claimed titles, inexpressible tag values, shadowed and duplicated import targets, placeholder namespaces, the entity value rules keeping a document and its referrers' relations out of the batch), `ImportCodecsTest` (each codec's import half and the `Leaf` verdict algebra, plus
+the property that `import(export(x)) == x` over a whole fixture workspace modulo the pairs' declared
+lossy properties and the single-owner truncation), `PortImportTest` (selector pairs and the fallback,
+`dependsOn` partitioned by the target's blueprint, dropped references and owners reported, namespace
+skip, identity collisions refused for BOTH documents whatever their order, a shape-invalid document
+INVALID alone while its referrers drop the reference, team containment, Port-only properties/relations/
+icon preserved, `Absent` removing only a cleanly absent leaf and `Kept` never removing, INVALID rows
+absent from `documents`), `ConversionImportRoutesTest` (the endpoint over a throwaway mapping: the
+export-import-convert-again identity, no audit, `404`/`400`/`409`, the ledger `400`/`429` at the service
+seam with every reservation released, no `null` member) and `SampleImportConversionTest` — **flagship test B**
+(see `conversion-mapping.md`; a second test converts the sample OVER the loaded Port sample with `merge` and asserts only the two unavoidable difference classes): each deviation is a `(identity, path, converted value, Port value)` record whose
+converted value is asserted before the Port side is consulted, with no wildcard and no field overwritten
+wholesale.
+
 **Catalog import `replaceExisting`.** `CatalogImportReplaceTest` pins: the flag off or omitted
 behaves as before (`CONFLICT`, file untouched); `UPDATED` in place (same `fileId`, revision +1, the
 UPDATED event with the field diff, dry-run `UPDATED` with a null `fileId` and nothing stored);

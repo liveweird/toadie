@@ -412,6 +412,44 @@ class MappingValidationTest {
     }
 
     @Test
+    fun `a selector cannot read a free-text field such as the API definition`() {
+        val v = verdict {
+            extraPairs += """{"blueprint": "plain", "kind": "API", "select": {"spec": "definition", "in": ["x"]},
+                "rules": [], "lossy": {"properties": ["name"]}}"""
+        }
+        assertFinding(v, MappingFindingCode.FIELD_NOT_ALLOWED, "/pairs/1/select/spec")
+    }
+
+    @Test
+    fun `two import-reading rules must not write one Port leaf, except several tagCategory rules into one property`() {
+        val tier = """{"port": {"property": "tier"}, "backstage": {"annotation": "example.com/source"}, "codec": "copy"}"""
+        val twice = verdict { svc += tier }
+        assertFinding(twice, MappingFindingCode.DUPLICATE_IMPORT_TARGET, "/pairs/0/rules/13")
+        val exportOnly = verdict { svc += tier.replace("\"codec\": \"copy\"", "\"codec\": \"copy\", \"direction\": \"export\"") }
+        assertTrue(exportOnly.findings.none { it.code == MappingFindingCode.DUPLICATE_IMPORT_TARGET }, "${exportOnly.findings}")
+        val twoMetas = verdict { svc += """{"port": {"meta": "title"}, "backstage": {"label": "tier"}, "codec": "copy"}""" }
+        assertFinding(twoMetas, MappingFindingCode.DUPLICATE_IMPORT_TARGET, "/pairs/0/rules/13")
+        val tagRules = verdict { svc += """{"port": {"property": "stack"}, "backstage": {"tags": "Other"}, "codec": "tagCategory"}""" }
+        assertTrue(tagRules.findings.none { it.code == MappingFindingCode.DUPLICATE_IMPORT_TARGET }, "${tagRules.findings}")
+        val mixed = verdict { svc += """{"port": {"property": "stack"}, "backstage": {"label": "tier"}, "codec": "copy"}""" }
+        assertFinding(mixed, MappingFindingCode.DUPLICATE_IMPORT_TARGET, "/pairs/0/rules/13")
+    }
+
+    @Test
+    fun `two import-reading ref rules on one field must target distinct blueprints`() {
+        val deps = """{"port": {"relation": "deps"}, "backstage": {"spec": "dependsOn"}, "codec": "ref"}"""
+        // The baseline's rule 11 already reads spec.dependsOn into `deps` (target svc): a second one cannot be told apart.
+        val twice = verdict { svc += deps }
+        assertFinding(twice, MappingFindingCode.AMBIGUOUS_REF_PARTITION, "/pairs/0/rules/13")
+        // An export-only duplicate never reads on import, so nothing is split.
+        val exportOnly = verdict { svc += deps.replace("\"codec\": \"ref\"", "\"codec\": \"ref\", \"direction\": \"export\"") }
+        assertTrue(exportOnly.findings.none { it.code == MappingFindingCode.AMBIGUOUS_REF_PARTITION }, "${exportOnly.findings}")
+        // `{meta: team}` counts as `_team`: two team rules onto the owner field collide.
+        val twoTeams = verdict { sys += """{"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"}""" }
+        assertFinding(twoTeams, MappingFindingCode.AMBIGUOUS_REF_PARTITION, "/pairs/1/rules/2")
+    }
+
+    @Test
     fun `two selector-less pairs for one kind are ambiguous, a selector resolves it`() {
         val plainRule = """{"port": {"property": "name"}, "backstage": {"spec": "type"}, "codec": "copy"}"""
         val twoFallbacks = verdict {

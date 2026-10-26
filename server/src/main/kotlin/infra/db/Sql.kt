@@ -2,6 +2,7 @@ package ch.nokillswit.infra.db
 
 import org.jetbrains.exposed.v1.core.CustomFunction
 import org.jetbrains.exposed.v1.core.Expression
+import org.jetbrains.exposed.v1.core.ExpressionWithColumnType
 import org.jetbrains.exposed.v1.core.LikeEscapeOp
 import org.jetbrains.exposed.v1.core.LikePattern
 import org.jetbrains.exposed.v1.core.LongColumnType
@@ -172,6 +173,32 @@ fun Expression<String?>.jsonStringOrArrayContainsFolded(value: String): Op<Boole
  */
 fun octetLength(column: Expression<out String?>): CustomFunction<Long> =
     CustomFunction("octet_length", LongColumnType(), column)
+
+/**
+ * A field nested inside a TEXT column holding a JSON document, as a SELECT projection: renders
+ * `jsonb_extract_path_text(CAST(col AS jsonb), 'a', 'b')`. An absent field is SQL NULL; a scalar comes
+ * back as its text, but an OBJECT or ARRAY comes back as its serialised JSON text — as large as the
+ * subtree — so callers project short scalar fields only (the conversion import's selector lookup is
+ * restricted to the single-word `type`/`lifecycle`, `SELECTOR_SPEC_FIELDS`). [path] segments are
+ * bound parameters, guarded as simple identifiers to keep the contract uniform with the filters above.
+ */
+fun Expression<String>.jsonTextAt(path: List<String>): ExpressionWithColumnType<String?> {
+    requireSimplePath(path)
+    return object : ExpressionWithColumnType<String?>() {
+        override val columnType = TextColumnType()
+
+        override fun toQueryBuilder(queryBuilder: QueryBuilder) {
+            queryBuilder.append("jsonb_extract_path_text(CAST(")
+            queryBuilder.append(this@jsonTextAt)
+            queryBuilder.append(" AS jsonb)")
+            path.forEach {
+                queryBuilder.append(", ")
+                queryBuilder.append(stringParam(it))
+            }
+            queryBuilder.append(")")
+        }
+    }
+}
 
 private fun requireSimplePath(path: List<String>) {
     require(path.isNotEmpty() && path.all { it.matches(SIMPLE_JSON_PATH_SEGMENT) }) {

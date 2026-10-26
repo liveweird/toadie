@@ -57,7 +57,9 @@ operational signal, not an audit event (the text still rides the GET request lin
 proxy logs, like `q`; the server itself never writes it); the graph GET's `query` and `POST …/entities/query/check`
 are pure reads and audit nothing (`.claude/docs/authorization.md`). `GET …/entities/errors` (Phase 8, v2.5.0 — the Port-world Errors report) is the same rule: a pure read, the `/check`/`/errors`/export idiom, and audits nothing; so is
 `GET …/conversion-mappings/{id}/catalog-documents` (conversion phase 2 — the Port -> Backstage export computes
-documents and stores nothing; the writes happen later, through the ordinary imports, which audit as usual). The bounded jq executor's (v1.29.0) two WARN events on
+documents and stores nothing; the writes happen later, through the ordinary imports, which audit as usual), and so is
+`POST …/conversion-mappings/{id}/entity-documents` (phase 4 — the Backstage -> Port conversion is a pure computation behind
+`POST` only because its input is a body). The bounded jq executor's (v1.29.0) two WARN events on
 `ch.nokillswit.entities.computed` — one per calculation quarantine, one per pool-saturation
 episode (see `.claude/docs/security.md` "Computed-property evaluation (jq)") — ride the same
 Logback→OTel pipeline as everything above but are deliberately NOT `audit(...)` events: neither

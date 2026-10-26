@@ -16,7 +16,7 @@ import kotlinx.serialization.json.JsonPrimitive
  * names on the Port entity and writes the leaf the rule names into a [DocBuilder]. They are pure and
  * know nothing about any ontology — which property, relation, label, tag category or spec field is in
  * play comes from the rule, never from a name in this file (`.claude/docs/conversion-mapping.md`).
- * The Backstage -> Port halves arrive with the import engine.
+ * The Backstage -> Port halves are in `CodecsImport.kt`.
  */
 
 /** What a reference to another entity resolves to while a document is built. */
@@ -49,6 +49,8 @@ internal class ExportContext(
     val registry: RegistrySnapshot,
     val lookup: ExportLookup,
     val findings: MutableList<ConversionFinding>,
+    /** Titles of the links some `link` rule owns: a `links: rest` item with one is not exported (the import reads links by title). */
+    val claimedLinkTitles: Set<String> = emptySet(),
 )
 
 /** Runs one rule's export half. A rule whose direction is import-only is the caller's to skip. */
@@ -94,7 +96,9 @@ private fun exportCopy(rule: MappingRule, codec: Codec.Copy, ctx: ExportContext,
         else -> null
     }
     if (rule.backstage == BackstageAddress.LinksRest) {
-        (value as? JsonArray)?.forEach { item -> linkOf(item)?.let { out.links += it } }
+        (value as? JsonArray)?.forEach { item ->
+            linkOf(item)?.takeIf { it.title !in ctx.claimedLinkTitles }?.let { out.links += it }
+        }
         return
     }
     val present = scalarText(value)

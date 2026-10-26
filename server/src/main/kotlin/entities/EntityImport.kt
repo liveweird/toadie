@@ -89,6 +89,8 @@ class EntityImportSnapshot(
     private val exactByBlueprint: Map<UInt, Map<String, UInt>> = identifiersByBlueprint.mapValues { it.value.toMap() }
     private val foldedByBlueprint: Map<UInt, Map<String, UInt>> =
         identifiersByBlueprint.mapValues { (_, pairs) -> pairs.associate { it.first.lowercase() to it.second } }
+    private val canonicalByBlueprint: Map<UInt, Map<String, String>> =
+        identifiersByBlueprint.mapValues { (_, pairs) -> pairs.associate { it.first.lowercase() to it.first } }
 
     fun blueprint(identifier: String): EntityImportBlueprint? = blueprintsByIdentifier[identifier]
 
@@ -100,6 +102,15 @@ class EntityImportSnapshot(
     /** Case-insensitive within one blueprint — the partial-unique-index rule (`uq_entities_blueprint_identifier_active`). */
     fun existingId(blueprint: String, identifier: String): UInt? =
         blueprintsByIdentifier[blueprint]?.let { foldedByBlueprint[it.id]?.get(identifier.lowercase()) }
+
+    /**
+     * The identifier as STORED for the active entity of [blueprint] that [identifier] names
+     * case-insensitively (the unique-index rule), null when none — the spelling a relation value
+     * must use, because relation targets resolve byte-exact ([targetExists]). The conversion
+     * import's read of "does this Port entity exist".
+     */
+    fun canonicalIdentifier(blueprint: String, identifier: String): String? =
+        blueprintsByIdentifier[blueprint]?.let { canonicalByBlueprint[it.id]?.get(identifier.lowercase()) }
 
     fun countFor(blueprintId: UInt): Long = countsByBlueprint[blueprintId] ?: 0L
 

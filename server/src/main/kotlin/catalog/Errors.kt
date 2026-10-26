@@ -151,6 +151,13 @@ data class CatalogSource(
     val sourceUrl: String?,
 )
 
+/**
+ * A stored file's identity as the conversion import reads it — no content: the stored [kind],
+ * [namespace] and [name] columns plus the plain-text `spec.<field>` values a mapping selector
+ * reads ([spec]; an absent field is not in the map). See `CatalogFileService.readIdentities`.
+ */
+data class StoredIdentity(val kind: String, val namespace: String, val name: String, val spec: Map<String, String>)
+
 /** The lowercased kinds the editor stores — references to them are RESOLVABLE. */
 internal val STORED_KINDS: Set<String> = SUPPORTED_KINDS.map { it.lowercase() }.toSet()
 

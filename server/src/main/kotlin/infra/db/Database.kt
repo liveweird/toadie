@@ -19,6 +19,8 @@ import ch.nokillswit.catalog.CatalogFileService
 import ch.nokillswit.catalog.CatalogFileServiceKey
 import ch.nokillswit.conversion.ConversionExportService
 import ch.nokillswit.conversion.ConversionExportServiceKey
+import ch.nokillswit.conversion.ConversionImportService
+import ch.nokillswit.conversion.ConversionImportServiceKey
 import ch.nokillswit.conversion.ConversionMappingService
 import ch.nokillswit.conversion.ConversionMappingServiceKey
 import ch.nokillswit.dictionaries.DictionaryService
@@ -328,6 +330,7 @@ suspend fun Application.configureDatabase() {
         ConversionExportServiceKey,
         ConversionExportService(conversionMappingService, entityService, catalogFileService, readLedger),
     )
+    attributes.put(ConversionImportServiceKey, ConversionImportService(conversionMappingService, entityService, catalogFileService))
     attributes.put(TokenBlocklistServiceKey, TokenBlocklistService(database))
     attributes.put(AuthSessionServiceKey, AuthSessionService(database))
     attributes.put(PasswordResetServiceKey, PasswordResetService(
