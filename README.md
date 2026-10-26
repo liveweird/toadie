@@ -73,6 +73,11 @@ Ports are chosen to coexist with [Lettuce](https://github.com/liveweird/lettuce)
 machine: the app is on **8081**, Postgres is host-mapped to **5433**, and the Vite dev server
 uses **5174**.
 
+The app samples its own memory, JVM and connection-pool figures into the database every five minutes
+(`TELEMETRY_ENABLED=false` turns that off). A release build may stamp them with the image's identity:
+`TOADIE_BUILD_VERSION=… TOADIE_BUILD_COMMIT=… docker compose up --build` (both optional; unset leaves
+them empty and recorded as null).
+
 The database comes up with the admin-curated registries already filled in, but catalog content
 is not seeded. [`sample-data/`](sample-data/README.md) offers two independent commerce/payments
 demos: a [Backstage software catalog](sample-data/backstage/commerce-payments/README.md) with 42

@@ -6,7 +6,10 @@ The per-package map of `server/src/main/kotlin/`, moved out of the root `CLAUDE.
 ch.nokillswit
 ├── main.kt
 ├── plugins/            cross-cutting Ktor wiring (configureXxx that only `install` plugins):
-│                       Http, SecurityHeaders, Monitoring, Serialization, Security (JWT),
+│                       Http, SecurityHeaders, Monitoring (the Dropwizard `TelemetryRegistry` — sliding-
+│                       window timers, `?` names never registered, JVM gauge sets off — published as
+│                       `MetricRegistryKey`, + the `Slf4jReporter` at `monitoring.reporterIntervalSeconds`,
+│                       default 300; also the bounds readers `telemetry/` calls), Serialization, Security (JWT),
 │                       ErrorHandling (RFC 7807), OpenTelemetry, AutoHeadResponse, Resources,
 │                       Routing (SPA catch-all), Health (/healthz liveness + /readyz readiness —
 │                       the k8s probes; unauthenticated, outside /api/, registered after the infra group)
@@ -382,6 +385,17 @@ ch.nokillswit
 │                       IntegrationClientService/Routes manage revocable keys with an immutable
 │                       read/write scope and a paired service account (V36, V42) under ADMIN-only
 │                       `/api/v1/integration-clients`. See `.claude/docs/integration-api.md`.
+├── telemetry/          the in-app telemetry sampler (ported from Flow 1.17.0; V46) — the TOP layer, an
+│                       OBSERVER: it reaches `plugins/` and `infra/db` through attribute keys
+│                       (`MetricRegistryKey`, `DatabaseKey`, `ConnectionPoolKey`) and nothing outside it
+│                       imports it (`TelemetryLayeringTest`). Telemetry.kt (`configureTelemetry`, the
+│                       `TelemetryOverridesKey` test seam, start on `ApplicationStarted`, cancel + bounded
+│                       join on `ApplicationStopping`), TelemetryConfig.kt, TelemetryMetrics.kt (the metric
+│                       registry — a new metric needs no migration), TelemetryStore.kt (the two `public`
+│                       tables, the advisory-lock cluster section, the hourly rollup and the prune),
+│                       TelemetrySampler.kt (the light phase + retention), JvmProbe/CgroupProbe/ProcessIdentity
+│                       (counters and sizes only). See `.claude/docs/observability.md` "Telemetry" and
+│                       `.claude/docs/persistence.md` "Telemetry (V46)".
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),
                         CatalogFileValidation.kt (the sanitizer + per-kind required/forbidden

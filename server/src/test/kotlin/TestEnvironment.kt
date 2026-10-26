@@ -58,6 +58,9 @@ fun ApplicationTestBuilder.configureApp(vararg overrides: Pair<String, String>) 
                 "postgres.password" to PostgresTestSupport.password,
                 "security.csrf.enabled" to "false",
                 "mail.appUrl" to "http://localhost:8081",
+                // The suite starts no telemetry sampler: every test app must not sample into the one shared container
+                // (.claude/docs/testing.md "Telemetry"); telemetry tests build the sampler directly or opt in with "true".
+                "telemetry.enabled" to "false",
                 *overrides,
             )
         )
@@ -252,6 +255,9 @@ private val sharedTestDatabase: R2dbcDatabase by lazy {
         password = PostgresTestSupport.password,
     )
 }
+
+/** The shared container database, for fixtures outside this file (`TelemetryFixtures.kt`'s store). */
+internal fun sharedDatabaseForTests(): R2dbcDatabase = sharedTestDatabase
 
 /**
  * One transaction on the shared container database — for tests that call a transaction-less

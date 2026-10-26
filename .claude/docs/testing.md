@@ -877,3 +877,32 @@ not separately exercised with a live HTTP fixture: `BlueprintSync`/`EntitySync`'
   is a manual local check against the explicit OrbStack context.
 - **Exception:** pod-direct checks do not exercise ingress/TLS or make instance-local MFA and
   throttling suitable for a multi-replica production deployment.
+
+### Telemetry
+
+**The suite starts no sampler.**
+
+- **Applies when:** writing or changing a test that boots the application, or a test of `telemetry/`.
+- **Requirement:** `configureApp` (`TestEnvironment.kt`) sets `telemetry.enabled=false`, so no test application samples into the
+  one shared container. A telemetry test builds `TelemetrySampler` directly over `telemetryStore()` with a pinned clock and fake
+  probes, or opts in with `configureApp("telemetry.enabled" to "true")` plus a `TelemetryOverridesKey` (clock, identity,
+  `firstTickDelayMillis = 0`), as `TelemetryLifecycleTest` does. The two tables `telemetry_processes`/`telemetry_samples` belong to
+  the telemetry tests: each empties them in a `@BeforeTest` (`wipeTelemetry`) and scopes its assertions by its own process ids,
+  because the hourly rollup reads the tables globally. `testIdentity()` mints a unique process per call.
+- **Reference:** `TelemetryFixtures.kt` (`telemetryStore`, `testIdentity`, `wipeTelemetry`, `samples`, `processId`, `processView`),
+  `TelemetryStoreTest`, `TelemetrySamplerTest`, `TelemetryLifecycleTest`.
+- **Enforcement:** manual review (a stray `"telemetry.enabled" to "true"` outside the telemetry tests); `TelemetryLifecycleTest`
+  pins that the default boot publishes no `TelemetrySamplerKey`.
+- **Exception:** none.
+
+The pure suites need no database: `JvmProbeTest` (fake `JvmSources`), `CgroupProbeTest` (fixture files under a temp dir, plus the
+real probe never throwing on this host), `ProcessIdentityTest` (an injected environment that records what was asked),
+`TelemetryConfigTest`/`MonitoringReporterConfigTest` (defaults, edges, refusal naming the key, boot refused with the sampler off),
+`TelemetryMetricsTest`, `TelemetryRegistryTest` (the sliding window, the 5-minute cap, no JVM gauge sets, the `?`-name and
+2,000-name bounds, and a flood of unrouted / 405 / rate-limited requests with varying query strings registering none) and
+`TelemetryLayeringTest` (nothing outside `telemetry/` names the package). `TelemetryStoreTest` pins the rollup (n-weighted mean,
+largest max, complete hours only, idempotent, forward-only), the strict prune boundaries and the cascade, the exclusive advisory lock,
+the V46 CHECK and that `RAW_RESOLUTIONS` equals the widths it allows; `TelemetrySamplerTest` the tick, the failure isolation (one WARN
+and one "recovered" per episode, a database failure logged by class and SQLSTATE only), the savepoint undo, the once-per-interval
+cluster section across two samplers, the rollup + prune riding it (and no prune after a rollup that inserted nothing), the vanished
+process row and the tick budget. `MigrationChecksumTest` pins V46; the `ConnectionPoolTest` metrics case pins `pool.metrics`.
