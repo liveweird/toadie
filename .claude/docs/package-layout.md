@@ -404,7 +404,10 @@ ch.nokillswit
 │                       `UrlFetcher.poolStats()` (`infra/fetch/`; `UrlFetcherKey` is a test seam only, a fresh
 │                       `UrlFetcher()` reads the same shared pool), and `IntegrationPressureKey`
 │                       (`integration/`, absent while the API is disabled); `infra/concurrency/ExecutorStats.kt`
-│                       is the shared pool reading. See `.claude/docs/observability.md` "Telemetry" and
+│                       is the shared pool reading. The ADMIN read API is TelemetryRoutes.kt (the routes +
+│                       `limits` from those seams), TelemetryReads.kt (the SELECTs), TelemetryCurrent.kt,
+│                       TelemetryHistory.kt and TelemetryWire.kt (the wire shapes); its throttle bucket is
+│                       registered in `auth/AuthRoutes.kt`. See `.claude/docs/observability.md` "Telemetry" and
 │                       `.claude/docs/persistence.md` "Telemetry (V46)".
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),

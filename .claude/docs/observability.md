@@ -111,7 +111,7 @@ Never log secrets (passwords, tokens); emails/ids are fine. Never log a throwabl
 
 ### Telemetry
 
-The in-app telemetry sampler (`telemetry/`, ported from Flow 1.17.0; the ADMIN read API and the panel arrive in later changes)
+The in-app telemetry sampler (`telemetry/`, ported from Flow 1.17.0; the ADMIN read API below, the panel arrives in a later change)
 records the process's OWN vital signs (memory, JVM, requests, workspace storage, pressure) into `telemetry_processes`/`telemetry_samples` (V46, `.claude/docs/persistence.md` "Telemetry
 (V46)"). Numbers and labels only; it is a best-effort observer that never touches readiness or request handling.
 
@@ -174,8 +174,9 @@ cluster section is retried in the next bucket, not the same one), because its in
   plugin's bodiless 429 under the routed name a second time. Here the second answer is named from the call's routing attributes,
   falls back to the URI name, and `TelemetryRegistry` refuses that name whenever the route has a selector, a path parameter or a
   query string; the double mark survives only on a selector-free route whose template equals its URI. Every `rateLimit {}` route of
-  Toadie carries the `(RateLimit x)` selector (login, MFA, refresh, both password-reset routes, the three `/integration/` routes),
-  and `LatencyCollectorTest` drives EACH of those routes past its bucket - login, refresh and password-reset with a limiter
+  Toadie carries the `(RateLimit x)` selector (login, MFA, refresh, both password-reset routes, the three `/integration/` routes,
+  and the two telemetry reads - which `isCounted` excludes, so they are never counted and a throttled telemetry read appears in
+  no request row), and `LatencyCollectorTest` drives EACH of the counted ones past its bucket - login, refresh and password-reset with a limiter
   override, MFA and the reset confirmation at their fixed 10/min, `/integration/graphql`, `/schema` and `/mcp` through the shared
   integration bucket - and asserts the `429` count equals the rejections and `http.count` the requests sent; every route except
   the three integration ones is also hit with varying query strings (on the integration routes, only `/integration/graphql`
@@ -208,7 +209,12 @@ cluster section is retried in the next bucket, not the same one), because its in
   machine - about half. Steady state for one process: 250,560 rows = 49.2 MiB, 206 B/row (heap 90, indexes 116), SEEDED at 60
   rows per bucket (a real tick writes about 99) across both tiers: 7 days of raw buckets (2,016 x 60 = 120,960) plus 90 days of
   hourly buckets (2,160 x 60 = 129,600); a delete-churned table can sit far above that until autovacuum catches up (728 B/row seen
-  before a TRUNCATE). Not measured: a cold disk, a CPU-limited pod, a live cgroup.
+  before a TRUNCATE). **Read API** (PR 3 code on the disposable compose stack, OrbStack, 18 CPUs; curl `time_total` over localhost,
+  JSON encoding included, paced under the 30/min bucket; about 415k rows = 90 MB: 7 days of raw rows at 300 s plus 90 days of hourly
+  rows, 99 rows per bucket, plus a live process at 60 s): `current` p50 21 ms (max 23 ms, 4 KB); history 24h p50 30-37 ms (`requests`
+  68 ms), 186-603 KB; history 7d p50 17 ms (`requests` 52 ms), 169 points; history 90d p50 34-48 ms (`requests` 100 ms), max 115 ms,
+  753 KB for 33 series x 334 points. Flow's comparable figures were 31 ms for `current` and 81 ms for its heaviest read. Not
+  measured: a cold disk, a CPU-limited pod, a live cgroup.
 - **Never recorded** (the one home of this list): JVM arguments, environment, system properties, request paths with identifiers
   (route templates only, `{id}` literal), query strings, document contents or any content column, query text, a user, client or
   file identity, labels longer than 120 characters. The probes read counters and sizes only — never a
@@ -229,6 +235,49 @@ cluster section is retried in the next bucket, not the same one), because its in
   name, and is the enforcement of the `?` rule.
 - **Layering.** `telemetry/` is the top layer: it reaches the registry, the database and the pool through attribute keys and nothing
   outside it imports it (`TelemetryLayeringTest`).
+- **Read API.** `GET /api/v1/telemetry/current` and `GET /api/v1/telemetry/history?group=&range=`
+  (`telemetry/TelemetryRoutes.kt`, `TelemetryReads.kt`, `TelemetryCurrent.kt`, `TelemetryHistory.kt`, `TelemetryWire.kt`; the
+  `Telemetry*` schemas of `openapi/documentation.yaml`) are ADMIN only, read-only and emit NO audit event (a denial is the generic
+  `authz.denied`); the guard order, the 400 rule and the per-user bucket are in `authorization.md` and `security.md` "Telemetry". They
+  read whether or not this process samples (`telemetry.enabled`), and every statement runs under the global statement timeout (no
+  per-transaction override). Every raw-tier predicate is `resolution IN (RAW_RESOLUTIONS)`. The clock is `TelemetryOverridesKey`'s
+  when a test sets it.
+  - `current` returns `{generatedAt, sampleIntervalSeconds, limits, processes[], workspace, requests}`. `limits` is NOT sampled: it
+    is read per request from the live seams and the configuration - `ReadLedgerKey` (`snapshot().capacity`),
+    `EntityService.pressure()` (the query permits and the jq pool's workers/queue), `UrlFetcher().poolStats()`,
+    `IntegrationPressureKey` (absent = `integrationEnabled` false and the two integration bounds null) and `postgres.pool.maxSize`.
+    A process carries `memory`, `jvm` and `pressure` blocks from ITS newest raw bucket (rows within two intervals of `last_seen`); a
+    figure that bucket did not write is null, never carried over or zero. `percentOfLimit` = working set / container limit, one
+    decimal. `workspace` is the newest `db.size`/`db.group.size`/`ws.rows` measurement (null before the first), `requests` the
+    latest interval of the LIVE processes: `*` plus the 15 busiest labelled routes, `windowSeconds` the sample interval and
+    `percentileWindowSeconds` the timers' reservoir window (the interval capped at 300 s, so the two can differ). With several
+    live processes the counts and error counts add, the p50 is weighted by each writing process's request count and the p95 is the
+    largest (a mean of quantiles understates a tail) - over the newest bucket every CONTRIBUTING live process has written (the oldest
+    of their newest buckets, so a process lagging one tick is not undercounted; one more than an interval behind the newest does
+    not contribute: it is wedged and the stale rule will flag it, and its bucket is one the healthy processes no longer hold). Trivial with the single replica, stated and tested so a
+    second one never has to re-derive it.
+  - **Stale rule.** With i the sample interval, a process is `stale` when |now - `last_seen`| > 3i, or its newest sample is more
+    than 3i from now (the age is absolute, so a timestamp in the future beyond the limit is stale too), or it has no sample and
+    started more than 3i ago. The newest sample is read only from the rows within 2i of `last_seen` (older ones are not read, so
+    there is none): a process that ticks but stores nothing therefore becomes stale after about 2i through the no-sample branch,
+    and the sample-age branch matters in the band where `last_seen` is 2i-3i old and the sample 3i-5i. Listed: every live process,
+    every stale one seen within the last hour (a wedged process must stay visible, and so does the container a rolling update just
+    replaced), and - only when none is live - the newest stale one seen within the last day; a process unseen for 24 hours is not
+    listed, and at most 1000 are returned (the spec's `maxItems`, the most recently seen kept). The samples are read for the processes last seen within the greater of an hour and 3i together (so a restart's previous run, kept
+    in the list for a day, never drags the read's `ts` floor back over the live process's history), each process's own 2i window is
+    applied in SQL (about three buckets per process cross the wire), and only when nothing fresher exists is the single newest older
+    process sampled by a query of its own.
+  - `history` returns `{group, range, bucketSeconds, from, to, historyFrom, truncated, series[]}` for `group`
+    `memory|workspace|pressure|requests|jvm` and `range` `24h|7d|90d` (both required). Buckets: 24h = the sample interval (widened
+    to a whole multiple only if a day would exceed 400 points), 7d = 3600 s (the hourly rows plus the raw rows after the newest
+    hourly row, nothing counted twice), 90d = 21,600 s. Every process merges into ONE series per `(metric, label)` (`key` =
+    `<metric>[:<label>]`), so a trend survives a restart; a GAUGE or PERCENTILE point is the n-weighted mean and the largest max,
+    a DELTA point the bucket's TOTAL (`avg`) and the largest single interval (`max`) of any one process. The p50 is
+    REQUEST-weighted in `current` (each process's p50 by its request count) but SAMPLE-weighted in `history` (a PERCENTILE point is
+    the n-weighted mean of the stored p50s, quiet and busy intervals alike); the p95 is the largest in both. At most 400 points per series and 40 series
+    (`truncated`); `requests` keeps `*` (five metrics) and the ten busiest routes of the range (count, p50, p95: 35 series).
+    `historyFrom` is the first retained process start clipped to the range.
+  - Tests: `TelemetryRoutesTest` (fixtures `TelemetryRoutesFixtures.kt`).
 - **Tests:** `.claude/docs/testing.md` "Telemetry".
 
 ### Integration audit
