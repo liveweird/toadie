@@ -44,17 +44,11 @@ promotes it. A finished item is removed, not ticked.
 
 ## Product
 
-- [new] **Export API definition URLs to Backstage.** The conversion keeps `api.definition_url` lossy:
+- [next] **Export API definition URLs to Backstage.** The conversion keeps `api.definition_url` lossy:
   Backstage expresses a remote definition as the `backstage.io/definition-at-location` annotation (or a
   `$text` object substitution), and that key is not in the V22-seeded annotation registry. Registering it
   for API (a new registry migration) and adding a mapping rule would let the export carry the URL instead
   of only an inline `definition`.
-- [next] **Guard the conversion's read-then-write gap.** The Backstage → Port import merges each document
-  over the stored entity when it is converted, but the SPA imports it later through
-  `POST /entities/import` with `replaceExisting`, which carries no expected revision: a Port-only
-  edit made between the conversion and the import is overwritten. Phase 5's SPA re-converts
-  immediately before importing; a durable fix is an optional per-document expected `updatedAt` on the
-  entity import that refuses a stale replace (the catalog's `X-Expected-Revision` twin).
 - [new] **Treat empty and absent blueprint maps as equal in the sync modal.** After a sync the stored
   blueprint renders empty `relations`, `mirrorProperties`, `calculationProperties` and
   `aggregationProperties` maps, so a source document that omits them never reads "in sync": reopening

@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.29.0",
+    date: "2026-10-27",
+    en: `**Conversion imports no longer overwrite changes made meanwhile.** When you import a Backstage catalog into Port, or create catalog files with Export to Backstage, the confirmation now imports exactly the preview you checked instead of converting again. If an entity or catalog file was edited, created or removed after the preview was made, that row is reported as "Changed meanwhile" and left as it is, and the rest of the batch goes ahead. Convert again to pick up the latest data. Export to Backstage now also links each entity to its existing catalog file when merging is off.`,
+    pl: `**Importy z konwersji nie nadpisują już zmian wprowadzonych w międzyczasie.** Gdy importujesz katalog Backstage do Port albo tworzysz pliki katalogu przez Eksport do Backstage, potwierdzenie importuje teraz dokładnie sprawdzony podgląd, zamiast konwertować ponownie. Jeśli encja lub plik katalogu zostały zmienione, utworzone lub usunięte po przygotowaniu podglądu, ten wiersz jest zgłaszany jako „Zmienione w międzyczasie” i pozostaje bez zmian, a reszta partii jest importowana. Aby uwzględnić najnowsze dane, przekonwertuj ponownie. Eksport do Backstage łączy teraz także każdą encję z jej istniejącym plikiem katalogu, gdy scalanie jest wyłączone.`,
+  },
+  {
     version: "2.28.1",
     date: "2026-10-26",
     en: `**Denied requests no longer record search text in the audit log.** When a request is refused for lack of permission, the audit log now records only the page address, not the search terms or filters that came with it, such as an email address typed into the Users filter.`,
