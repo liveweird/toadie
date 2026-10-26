@@ -106,8 +106,9 @@ audit events: `.claude/docs/authorization.md`, `.claude/docs/observability.md`; 
 
 **Proof** — `SampleBlueprintsTest` stores the default mapping and requires zero findings AND zero
 drift against the sample blueprints and the V22-seeded registries; `MappingValidationTest` pins one
-case per code (`.claude/docs/testing.md`); the export engine is "The export (phase 2)" and the import engine "The import (phase 4)" below. Later phases
-(the SPA pages) are tracked in `BACKLOG.md`.
+case per code (`.claude/docs/testing.md`); the export engine is "The export (phase 2)" and the import engine "The import (phase 4)" below. The SPA pages (the
+mappings list and editor, Export to Backstage, and the Backstage source of `/ontology/import`) are
+described in `web/CLAUDE.md`.
 
 **The export (phase 2)** — `GET /api/v1/conversion-mappings/{id}/catalog-documents`, a pure read (no
 write, no lock, no audit; any authenticated user). Its selection is the Entity graph's filter set

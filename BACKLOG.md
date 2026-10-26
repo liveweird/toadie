@@ -44,41 +44,11 @@ promotes it. A finished item is removed, not ticked.
 
 ## Product
 
-- [next] **Convert between the Backstage and Port worlds in both directions, driven by a mapping
-  document.** No converter exists today; `.claude/docs/ontology.md` "Backstage export mapping" is prose
-  and `SampleBlueprintsTest` pins only the vocabularies. Accepted design (2026-10-26):
-  (1) a declarative mapping document: blueprint ↔ kind pairs of rules using seven codecs (`copy`,
-  `valueMap`, `tagCategory`, `ref`, `derive`, `link`, `constant`), one rule set read both ways, with a
-  one-directional `jq` codec reserved for later; nothing in code names a blueprint, kind, label,
-  property or relation, and every schema field is mapped or listed `lossy`;
-  (2) stored in an ADMIN-curated `conversion_mappings` registry (soft delete, validated against the
-  live blueprints and registries);
-  (3) the default mapping shipped as `sample-data/port/commerce-payments/mapping/backstage.json` +
-  `load.sh`, never seeded by a migration;
-  (4) the Backstage sample regenerated from the Port sample through the exporter, keeping its four
-  deliberate findings (adds `description` to eight blueprints, `subcomponent_of` to `library`,
-  registers `backstage.io/definition-at-location` for API);
-  (5) `replaceExisting` on `POST /files/import` (+ `/check`) for updating catalog files;
-  (6) pure conversion endpoints (`GET /conversion-mappings/{id}/catalog-documents`,
-  `POST /conversion-mappings/{id}/entity-documents`); the SPA chains the existing imports and their
-  dry runs, so Port-only data is preserved and no new writer exists;
-  (7) a mapping broken by a later edit is refused on write, flagged on read and on the Port Errors
-  report, vocabulary drift report-only;
-  (8) v1 UI in the Port world only (Mappings page, Export-to-Backstage page, a "Backstage catalog"
-  source on `/ontology/import`).
-  Proof: CI exports the Port sample and must equal the Backstage sample, and imports the Backstage
-  sample and must equal the Port sample, modulo an explicit deviation list. Phases, one PR each:
-  mapping registry + validator + default mapping (V45, Opus review); exporter + sample
-  reconciliation; `replaceExisting` on the catalog import (independent); importer (Opus review);
-  SPA. Roughly 11 days in total. Shipped so far: (5) `replaceExisting` on the catalog import (2.23.0); phase 1, the mapping
-  registry + validator + default mapping (2.24.0); phase 2, the Port → Backstage exporter
-  (`GET /conversion-mappings/{id}/catalog-documents`) and the sample reconciliation (the Backstage
-  sample is now generated from the Port sample, 42 documents; `SampleConversionTest`; 2.25.0); phase 4,
-  the Backstage → Port importer (`POST /conversion-mappings/{id}/entity-documents`,
-  `SampleImportConversionTest`; 2.26.0). Remaining: phase 5, the SPA. Left from
-  (4): registering `backstage.io/definition-at-location` for API (a registry migration) and with it
-  exporting `definition_url`; `library.subcomponent_of` targets `library`, not `service`, because
-  `service` already references `library`.
+- [new] **Export API definition URLs to Backstage.** The conversion keeps `api.definition_url` lossy:
+  Backstage expresses a remote definition as the `backstage.io/definition-at-location` annotation (or a
+  `$text` object substitution), and that key is not in the V22-seeded annotation registry. Registering it
+  for API (a new registry migration) and adding a mapping rule would let the export carry the URL instead
+  of only an inline `definition`.
 - [new] **Guard the conversion's read-then-write gap.** The Backstage → Port import merges each document
   over the stored entity when it is converted, but the SPA imports it later through
   `POST /entities/import` with `replaceExisting`, which carries no expected revision: a Port-only
