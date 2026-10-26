@@ -401,14 +401,18 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`backstage-export.spec.ts`](scenarios/backstage-export.md) — Export to Backstage (conversion
   phase 5b): an API-seeded team + service world and mapping; the admin picks the mapping, narrows
   the selection with an entity query, converts, reads the two report rows and the YAML preview,
-  creates the two catalog files through the dry-run-then-confirm dialog, and converts again to see
-  the merge find the stored files (the dry run predicts "Would stay unchanged"); the blueprint
+  creates the two catalog files through the dry-run-then-confirm dialog (one conversion on open,
+  Confirm imports the previewed batch), and converts again to see the merge find the stored files
+  (the dry run predicts "Would stay unchanged"; a Group file edited through the API while the
+  dialog is open comes back "Changed meanwhile", the Component "Unchanged"); the blueprint
   registry's writer for its own `e2e-be-*` rows.
 - [`backstage-import.spec.ts`](scenarios/backstage-import.md) — the Backstage catalog source of the
   Ontology import (conversion phase 5c): the admin switches the import source, pastes a Group + a
   Component it owns, picks the API-seeded mapping, previews the conversion, runs Check (would be
-  created), imports through the confirm dialog (fresh conversion + dry run, then Confirm: created,
-  the owner relation resolved inside the batch) and imports again (updated, replace-existing implicit); the blueprint registry's writer for its own `e2e-bi-*` rows.
+  created), imports through the confirm dialog (one conversion + dry run, then Confirm imports that
+  batch: created, the owner relation resolved inside the batch) and imports again (updated,
+  replace-existing implicit; the team edited through the API while the dialog is open comes back
+  "Changed meanwhile", and a re-opened dialog predicts both as updated); the blueprint registry's writer for its own `e2e-bi-*` rows.
 - [`conversion-mappings.spec.ts`](scenarios/conversion-mappings.md) — the conversion-mapping
   registry (conversion phase 5a): a document naming an unknown blueprint is refused with its
   positioned finding beside the editor and nothing is stored, the minimal valid document is created

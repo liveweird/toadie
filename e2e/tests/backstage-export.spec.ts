@@ -6,7 +6,8 @@ import { expect, login, openQuery, readyDialog, test, uniqueText, waitForApi } f
 // admin selects the service and its owning team with an entity query, converts, reads the report
 // and the YAML preview, creates the two catalog files through the dry-run-then-confirm dialog,
 // and converts again to see the merge find the stored files (the dry run then predicts no change).
-// The dialog converts afresh when it opens and again on Confirm, so each step acts on the catalog as it is then.
+// The dialog converts once when it opens and Confirm imports exactly that previewed batch: a file
+// edited through the API meanwhile is refused as "Changed meanwhile", the untouched one stays Unchanged.
 // Owns only its own `e2e-be-*` blueprints, entities, mapping and the two catalog files they
 // produce (default namespace, names carrying the run marker) — every locator is anchored on the
 // run marker, so parallel specs' rows can never make an assertion ambiguous.
@@ -155,7 +156,7 @@ test("an owned fixture exports to Backstage: rows and YAML, then the catalog fil
     await expect(dialog).toHaveCount(0);
 
     // 5. Convert again: the merge finds the stored files, so the rows link to them and the dry
-    // run predicts nothing to change.
+    // run predicts nothing to change; an edit made while the dialog is open turns one row stale.
     const [again] = await Promise.all([
       page.waitForResponse(
         (r) =>
@@ -169,7 +170,32 @@ test("an owned fixture exports to Backstage: rows and YAML, then the catalog fil
     await page.getByRole("button", { name: "Create / update catalog files" }).click();
     const secondDialog = await readyDialog(page, "Create / update catalog files");
     await expect(secondDialog.getByText("Would stay unchanged", { exact: true })).toHaveCount(2);
-    await secondDialog.getByRole("button", { name: "Cancel" }).click();
+    // While the dialog is open the Group file is edited through the API (a headerless PUT is
+    // accepted): the previewed revision is then out of date, so Confirm refuses that row.
+    const groups = await page.request.get(`/api/v1/files?name=${encodeURIComponent(teamId)}&pageSize=100`, {
+      headers: authHeaders,
+    });
+    const group = ((await groups.json()).items ?? []).find((f: { name: string }) => f.name === teamId) as { id: number };
+    const groupFile = await (await page.request.get(`/api/v1/files/${group.id}`, { headers: authHeaders })).json();
+    const edited = await page.request.put(`/api/v1/files/${group.id}`, {
+      headers: authHeaders,
+      data: {
+        kind: groupFile.kind,
+        metadata: { ...groupFile.metadata, description: "edited meanwhile" },
+        spec: groupFile.spec,
+      },
+    });
+    expect(edited.status(), await edited.text()).toBe(204);
+    const [confirmed] = await Promise.all([
+      waitForApi(page, { method: "POST", path: "/api/v1/files/import" }),
+      secondDialog.getByRole("button", { name: "Confirm" }).click(),
+    ]);
+    expect(confirmed.status()).toBe(200);
+    await expect(secondDialog.getByRole("row").filter({ hasText: teamId }).getByText("Changed meanwhile", { exact: true })).toBeVisible();
+    await expect(secondDialog.getByRole("row").filter({ hasText: serviceId }).getByText("Unchanged", { exact: true })).toBeVisible();
+    const kept = await (await page.request.get(`/api/v1/files/${group.id}`, { headers: authHeaders })).json();
+    expect(kept.metadata.description).toBe("edited meanwhile");
+    await secondDialog.getByRole("button", { name: "Close" }).click();
     await expect(secondDialog).toHaveCount(0);
 
     // 6. The created file is a real catalog file: its editor opens from the report link.

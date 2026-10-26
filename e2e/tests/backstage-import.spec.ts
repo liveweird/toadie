@@ -5,9 +5,11 @@ import { expect, login, readyDialog, test, uniqueText, waitForApi } from "./help
 // conversion mapping that sends Group -> team and Component -> service) is seeded through the API;
 // the admin switches the import to "Backstage catalog (YAML)", pastes a two-document catalog
 // (a Group and a Component it is owned by), picks the mapping, previews the conversion, runs the
-// dry-run Check, imports through the confirm dialog (a fresh conversion and dry run, then Confirm), and
-// imports once more (replace-existing is implicit, so the second import reports Updated). Owns only its own `e2e-bi-*` blueprints, entities and mapping —
-// every locator is anchored on the run marker.
+// dry-run Check, imports through the confirm dialog (it converts once and dry-runs; Confirm imports
+// exactly that previewed batch), and imports once more (replace-existing is implicit, so the second
+// import reports Updated) — this time with the team edited through the API while the dialog is open:
+// that row is refused as "Changed meanwhile" and the re-opened dialog converts afresh. Owns only
+// its own `e2e-bi-*` blueprints, entities and mapping — every locator is anchored on the run marker.
 test("a Backstage catalog converts into Port entities: preview, check, import and re-import", async ({
   page,
 }) => {
@@ -153,18 +155,40 @@ test("a Backstage catalog converts into Port entities: preview, check, import an
     expect(service.identifier).toBe(serviceName);
     expect(service.relations.owner).toBe(teamName);
 
-    // 6. Importing again goes through the dialog again (a fresh conversion merging over the stored
-    // entities) and replaces them in place.
+    // 6. Importing again goes through the dialog again (a conversion merging over the stored
+    // entities). While it is open the team is edited through the API: its previewed token is then
+    // out of date, so Confirm refuses that row ("Changed meanwhile") and still replaces the service.
     await page.getByRole("button", { name: "Import", exact: true }).click();
     const again = await readyDialog(page, "Import into Port");
     await expect(again.getByText("Would be updated", { exact: true })).toHaveCount(2);
+    const teams = await page.request.get(`/api/v1/entities?blueprint=${encodeURIComponent(teamBlueprint)}`, {
+      headers: authHeaders,
+    });
+    const [team] = ((await teams.json()).items ?? []) as { id: number; identifier: string }[];
+    expect(team.identifier).toBe(teamName);
+    const edited = await page.request.put(`/api/v1/entities/${team.id}`, {
+      headers: authHeaders,
+      data: { blueprint: teamBlueprint, identifier: teamName, title: `${run} edited meanwhile`, properties: {}, relations: {} },
+    });
+    expect(edited.status(), await edited.text()).toBe(204);
     const [reimported] = await Promise.all([
       waitForApi(page, { method: "POST", path: "/api/v1/entities/import" }),
       again.getByRole("button", { name: "Confirm import" }).click(),
     ]);
     expect(reimported.status()).toBe(200);
-    await expect(again.getByText("Updated", { exact: true })).toHaveCount(2);
+    await expect(again.getByText("Changed meanwhile", { exact: true })).toHaveCount(1);
+    await expect(again.getByText("Updated", { exact: true })).toHaveCount(1);
     await again.getByRole("button", { name: "Close" }).click();
+    await expect(again).toHaveCount(0);
+    const kept = await page.request.get(`/api/v1/entities/${team.id}`, { headers: authHeaders });
+    expect((await kept.json()).title).toBe(`${run} edited meanwhile`);
+
+    // 7. Opening the dialog again converts afresh, so it carries fresh tokens: both would update.
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+    const fresh = await readyDialog(page, "Import into Port");
+    await expect(fresh.getByText("Would be updated", { exact: true })).toHaveCount(2);
+    await fresh.getByRole("button", { name: "Cancel" }).click();
+    await expect(fresh).toHaveCount(0);
   } finally {
     // Cleanup in dependency order: entities (service before its team), mapping, blueprints.
     for (const blueprint of [serviceBlueprint, teamBlueprint]) {
