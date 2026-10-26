@@ -6,6 +6,7 @@
     "icon": "Folder",
     "team": "retail-tribe",
     "properties": {
+      "description": "Everything a customer touches on the way to a completed order.",
       "type": "core-value",
       "docs": "https://docs.example.com/domains/commerce",
       "links": [
@@ -19,8 +20,12 @@
     "identifier": "payments",
     "title": "Payments",
     "icon": "Folder",
-    "team": ["platform-tribe", "payments-squad"],
-    "properties": { "type": "core-value", "docs": "https://docs.example.com/domains/payments" },
+    "team": ["payments-squad", "platform-tribe"],
+    "properties": {
+      "description": "Money movement, ledgering and settlement. A sub-domain of Commerce.",
+      "type": "core-value",
+      "docs": "https://docs.example.com/domains/payments"
+    },
     "relations": { "parent_domain": "commerce" }
   },
   {
@@ -28,7 +33,10 @@
     "identifier": "platform",
     "title": "Platform",
     "team": "platform-tribe",
-    "properties": { "type": "tech-foundations" },
+    "properties": {
+      "description": "Runtime, delivery and the shared building blocks every product sits on.",
+      "type": "tech-foundations"
+    },
     "relations": {}
   },
   {
@@ -36,7 +44,10 @@
     "identifier": "shared-services",
     "title": "Shared Services",
     "team": "platform-tribe",
-    "properties": { "type": "generic" },
+    "properties": {
+      "description": "Cross-cutting internal services that belong to no single value stream.",
+      "type": "generic"
+    },
     "relations": {}
   },
   {
@@ -44,7 +55,10 @@
     "identifier": "back-office",
     "title": "Back Office",
     "team": "payments-squad",
-    "properties": { "type": "auxiliary" },
+    "properties": {
+      "description": "Invoicing and the other internal back-office processes.",
+      "type": "auxiliary"
+    },
     "relations": { "parent_domain": null }
   }
 ]

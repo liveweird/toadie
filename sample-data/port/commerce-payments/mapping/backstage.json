@@ -8,6 +8,7 @@
       "rules": [
         {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
         {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"property": "description"}, "backstage": {"metadata": "description"}, "codec": "copy"},
         {"port": {"meta": "title"}, "backstage": {"profile": "displayName"}, "codec": "copy", "direction": "export"},
         {"port": {"property": "email"}, "backstage": {"profile": "email"}, "codec": "copy"},
         {"port": {"property": "slack_channel"}, "backstage": {"link": {"title": "Slack channel", "icon": "chat"}}, "codec": "link"},
@@ -16,20 +17,21 @@
         {"port": {"reverse": {"blueprint": "_team", "relation": "parent"}}, "backstage": {"spec": "children"}, "codec": "derive"},
         {"port": {"reverse": {"blueprint": "_user", "relation": "team"}}, "backstage": {"spec": "members"}, "codec": "derive"}
       ],
-      "lossy": {"backstage": ["metadata.description", "profile.picture"]}
+      "lossy": {"backstage": ["profile.picture"]}
     },
     {
       "blueprint": "_user",
       "kind": "User",
       "rules": [
         {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"property": "description"}, "backstage": {"metadata": "description"}, "codec": "copy"},
         {"port": {"meta": "title"}, "backstage": {"profile": "displayName"}, "codec": "copy", "direction": "export"},
         {"port": {"property": "email"}, "backstage": {"profile": "email"}, "codec": "copy"},
         {"port": {"property": "picture"}, "backstage": {"profile": "picture"}, "codec": "copy"},
         {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
         {"port": {"relation": "team"}, "backstage": {"spec": "memberOf"}, "codec": "ref"}
       ],
-      "lossy": {"properties": ["employment_type"], "backstage": ["metadata.description"]}
+      "lossy": {"properties": ["employment_type"]}
     },
     {
       "blueprint": "domain",
@@ -37,12 +39,12 @@
       "rules": [
         {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
         {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"property": "description"}, "backstage": {"metadata": "description"}, "codec": "copy"},
         {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
         {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
         {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
         {"port": {"relation": "parent_domain"}, "backstage": {"spec": "subdomainOf"}, "codec": "ref"}
-      ],
-      "lossy": {"backstage": ["metadata.description"]}
+      ]
     },
     {
       "blueprint": "system",
@@ -50,6 +52,7 @@
       "rules": [
         {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
         {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"property": "description"}, "backstage": {"metadata": "description"}, "codec": "copy"},
         {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
         {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
         {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
@@ -61,7 +64,7 @@
         {"port": {"property": "hosting_model"}, "backstage": {"label": "hosting-model"}, "codec": "copy"},
         {"port": {"relation": "domain"}, "backstage": {"spec": "domain"}, "codec": "ref"}
       ],
-      "lossy": {"relations": ["products"], "backstage": ["metadata.description"]}
+      "lossy": {"relations": ["products"]}
     },
     {
       "blueprint": "service",
@@ -70,6 +73,7 @@
         {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
         {"port": {"property": "lifecycle"}, "backstage": {"spec": "lifecycle"}, "codec": "copy"},
         {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"property": "description"}, "backstage": {"metadata": "description"}, "codec": "copy"},
         {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
         {"port": {"property": "repository"}, "backstage": {"annotation": "backstage.io/source-location"}, "codec": "copy", "prefix": "url:"},
         {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
@@ -98,7 +102,7 @@
         {"port": {"relation": "provides_apis"}, "backstage": {"spec": "providesApis"}, "codec": "ref"},
         {"port": {"relation": "consumes_apis"}, "backstage": {"spec": "consumesApis"}, "codec": "ref"}
       ],
-      "lossy": {"properties": ["schedule"], "relations": ["produces_datasets", "consumes_datasets"], "backstage": ["metadata.description", "spec.dependencyOf"]}
+      "lossy": {"properties": ["schedule"], "relations": ["produces_datasets", "consumes_datasets"], "backstage": ["spec.dependencyOf"]}
     },
     {
       "blueprint": "library",
@@ -108,6 +112,7 @@
         {"backstage": {"spec": "type"}, "codec": "constant", "value": "library"},
         {"port": {"property": "lifecycle"}, "backstage": {"spec": "lifecycle"}, "codec": "copy"},
         {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"property": "description"}, "backstage": {"metadata": "description"}, "codec": "copy"},
         {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
         {"port": {"property": "repository"}, "backstage": {"annotation": "backstage.io/source-location"}, "codec": "copy", "prefix": "url:"},
         {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
@@ -117,9 +122,10 @@
         {"port": {"property": "technology_status"}, "backstage": {"label": "technology-status"}, "codec": "copy"},
         {"port": {"property": "ci_pipeline"}, "backstage": {"link": {"title": "CI pipeline"}}, "codec": "link"},
         {"port": {"relation": "system"}, "backstage": {"spec": "system"}, "codec": "ref"},
+        {"port": {"relation": "subcomponent_of"}, "backstage": {"spec": "subcomponentOf"}, "codec": "ref"},
         {"port": {"relation": "depends_on"}, "backstage": {"spec": "dependsOn"}, "codec": "ref"}
       ],
-      "lossy": {"properties": ["artifact"], "backstage": ["metadata.description", "spec.subcomponentOf", "spec.providesApis", "spec.consumesApis", "spec.dependencyOf"]}
+      "lossy": {"properties": ["artifact"], "backstage": ["spec.providesApis", "spec.consumesApis", "spec.dependencyOf"]}
     },
     {
       "blueprint": "api",
@@ -129,6 +135,7 @@
         {"port": {"property": "lifecycle"}, "backstage": {"spec": "lifecycle"}, "codec": "copy"},
         {"port": {"property": "definition"}, "backstage": {"spec": "definition"}, "codec": "copy", "exportDefault": "# no definition recorded", "importIgnore": ["# no definition recorded"]},
         {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"property": "description"}, "backstage": {"metadata": "description"}, "codec": "copy"},
         {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
         {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
         {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
@@ -140,7 +147,7 @@
         {"port": {"property": "banking_outsourcing"}, "backstage": {"label": "banking-outsourcing"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
         {"port": {"relation": "system"}, "backstage": {"spec": "system"}, "codec": "ref"}
       ],
-      "lossy": {"properties": ["definition_url"], "backstage": ["metadata.description"]}
+      "lossy": {"properties": ["definition_url"]}
     },
     {
       "blueprint": "resource",
@@ -148,6 +155,7 @@
       "rules": [
         {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
         {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
+        {"port": {"property": "description"}, "backstage": {"metadata": "description"}, "codec": "copy"},
         {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
         {"port": {"property": "docs"}, "backstage": {"annotation": "backstage.io/techdocs-ref"}, "codec": "copy", "prefix": "url:", "importIgnore": ["dir:."]},
         {"port": {"property": "links"}, "backstage": {"links": "rest"}, "codec": "copy"},
@@ -167,7 +175,7 @@
         {"port": {"relation": "system"}, "backstage": {"spec": "system"}, "codec": "ref"},
         {"port": {"relation": "depends_on"}, "backstage": {"spec": "dependsOn"}, "codec": "ref"}
       ],
-      "lossy": {"relations": ["hosted_on"], "backstage": ["metadata.description", "spec.dependencyOf"]}
+      "lossy": {"relations": ["hosted_on"], "backstage": ["spec.dependencyOf"]}
     }
   ]
 }

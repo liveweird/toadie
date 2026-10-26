@@ -730,6 +730,11 @@ object TestSavedEntityQueries {
 object TestConversionMappings {
     data class RawRow(val id: UInt, val name: String, val markedAsDeleted: Boolean)
 
+    /** A service over the shared test database - the export-service tests wire it beside tuned entity/catalog services. */
+    val service: ch.nokillswit.conversion.ConversionMappingService by lazy {
+        ch.nokillswit.conversion.ConversionMappingService(sharedTestDatabase, TestBlueprints.service)
+    }
+
     suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
         val t = ch.nokillswit.conversion.ConversionMappingService.ConversionMappings
         t.selectAll().map { RawRow(it[t.id].value, it[t.name], it[t.markedAsDeleted]) }.toList()

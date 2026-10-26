@@ -4,6 +4,7 @@
     "identifier": "anna.kowalska",
     "title": "Anna Kowalska",
     "properties": {
+      "description": "Staff engineer, payments.",
       "email": "anna.kowalska@toadie.local",
       "employment_type": "employee",
       "picture": "https://avatars.example.com/anna.kowalska.png",
@@ -18,6 +19,7 @@
     "identifier": "marek.nowak",
     "title": "Marek Nowak",
     "properties": {
+      "description": "Tech lead, storefront.",
       "email": "marek.nowak@toadie.local",
       "employment_type": "contractor"
     },

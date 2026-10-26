@@ -4,10 +4,18 @@ import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
+import ch.nokillswit.entities.entityGraphFilter
+import ch.nokillswit.entities.requireQueryLength
+import ch.nokillswit.infra.paging.optionalBoolean
+import ch.nokillswit.infra.paging.optionalString
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.TextContent
+import io.ktor.http.withCharset
 import io.ktor.resources.Resource
 import io.ktor.server.application.*
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
 import io.ktor.server.resources.delete
@@ -26,13 +34,19 @@ import kotlinx.serialization.json.JsonArray
 class ConversionMappingsRoute {
     @Serializable
     @Resource("{id}")
-    class Id(val parent: ConversionMappingsRoute = ConversionMappingsRoute(), val id: UInt)
+    class Id(val parent: ConversionMappingsRoute = ConversionMappingsRoute(), val id: UInt) {
+        /** Phase 2: Port -> Backstage, a pure read (`ConversionExportService`). */
+        @Serializable
+        @Resource("catalog-documents")
+        class CatalogDocuments(val parent: Id)
+    }
 }
 
 private fun ConversionMapping.pairCount(): Int = (document["pairs"] as? JsonArray)?.size ?: 0
 
 fun Application.configureConversionMappingRoutes() {
     val mappingService = attributes[ConversionMappingServiceKey]
+    val exportService = attributes[ConversionExportServiceKey]
 
     routing {
         authenticate {
@@ -47,6 +61,26 @@ fun Application.configureConversionMappingRoutes() {
             get<ConversionMappingsRoute.Id> { route ->
                 call.caller()
                 call.respond(HttpStatusCode.OK, mappingService.read(route.id).orNotFound("Conversion mapping"))
+            }
+            // Phase 2: the Port -> Backstage conversion. A pure read — no audit event (the
+            // `/check`/`/errors`/export rule, `.claude/docs/authorization.md`), any authenticated
+            // user (it reads what the Entities and Files pages already show). Malformed filter params are a
+            // 400 before anything is read; then the mapping lookup (404) and the mapping's own health (409).
+            get<ConversionMappingsRoute.Id.CatalogDocuments> { route ->
+                call.caller()
+                val params = call.request.queryParameters
+                val query = params.optionalString("query")
+                requireQueryLength(query)
+                val filter = call.entityGraphFilter(query)
+                val entityId = params.optionalString("entityId")?.let {
+                    it.toUIntOrNull()?.takeIf { id -> id > 0u } ?: throw BadRequestException("entityId must be a positive integer")
+                }
+                val merge = params.optionalBoolean("merge") ?: true
+                // Encoded with blueprintJson (explicitNulls = false, encodeDefaults = true) INSIDE the service, while its
+                // ledger reservation is still held: an absent value is an absent member, never an explicit null.
+                val body = exportService.catalogDocumentsJson(route.parent.id, filter, entityId, merge)
+                    .orNotFound("Conversion mapping")
+                call.respond(TextContent(body, ContentType.Application.Json.withCharset(Charsets.UTF_8), HttpStatusCode.OK))
             }
             post<ConversionMappingsRoute> {
                 val caller = call.caller()

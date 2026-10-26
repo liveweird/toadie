@@ -75,7 +75,7 @@ uses **5174**.
 
 The database comes up with the admin-curated registries already filled in, but catalog content
 is not seeded. [`sample-data/`](sample-data/README.md) offers two independent commerce/payments
-demos: a [Backstage software catalog](sample-data/backstage/commerce-payments/README.md) with 34
+demos: a [Backstage software catalog](sample-data/backstage/commerce-payments/README.md) with 42
 documents and four intentional reference findings, and a
 [Port ontology](sample-data/port/commerce-payments/README.md) with fifteen blueprint definitions
 and 76 entity instances. Each guide names its own import page and loader workflow.

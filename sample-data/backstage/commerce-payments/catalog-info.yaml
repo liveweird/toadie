@@ -1,15 +1,23 @@
 # Toadie Backstage demo — a small e-commerce/payments software catalog.
 #
+# This file is GENERATED, not hand-written: it is what the default conversion mapping
+# (sample-data/port/commerce-payments/mapping/backstage.json) makes of the Port sample
+# (sample-data/port/commerce-payments/) — the 42 entities of the eight blueprints the mapping covers
+# (_team, _user, domain, system, service, library, api, resource); the 34 entities of the Port-only
+# blueprints have no Backstage counterpart. SampleConversionTest pins that every document below IS that
+# export, byte for structure, except the three hand-restored edits that carry the four deliberate reference
+# findings (each marked "on purpose" below). To regenerate after a change to the Port sample or the mapping,
+# follow "Regenerating this file" in README.md, then restore those three edits by hand.
+#
 # Every value in this file comes from the ADMIN-curated registries seeded by V22:
 # the two namespaces, the four lifecycles, each kind's type dictionary, the eleven
 # label keys with their closed value lists, the four tag categories, and the four
 # annotation keys. Registry values are valid, but four deliberate reference findings
 # in catalog-service and legacy-invoicing require the import waiver; see README.md.
 #
-# Between them the documents use every seeded type value bar one (the Domain type
-# `auxiliary` — there are only four Domains and two of them are genuinely `core-value`),
-# which makes the editor's registry-backed Type/Lifecycle/Label/Tag/Annotation pickers
-# checkable without inventing anything the registries would reject.
+# Between them the documents use every seeded type value, which makes the editor's
+# registry-backed Type/Lifecycle/Label/Tag/Annotation pickers checkable without inventing
+# anything the registries would reject.
 #
 # Mind which registry applies to which kind — it is the thing most easily got wrong:
 #   * tags       → Component and Resource only (Languages/Framework vs Database/Events)
@@ -19,13 +27,12 @@
 #                  data-classification is Resource-only, gdpr/pci-dss/banking-outsourcing
 #                  span Component/API/Resource, cash-flow-impact/dora-cif are Component-only
 #
-# Four references are deliberately broken or unresolvable — see README.md.
-#
 # Load it: paste into the SPA's Import page (/files/import), or POST it through
 # /api/v1/files/import (structured JSON — see README.md).
 
 # ---------------------------------------------------------------------------
 # Groups — spec.type from team/org-unit/org-division. No tags, no annotations.
+# children and members are derived from the Port parent and team relations.
 # ---------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: Group
@@ -34,6 +41,12 @@ metadata:
   namespace: default
   title: Platform Tribe
   description: Owns the shared platform; the payments squad reports into it.
+  links:
+    - url: https://acme.slack.com/archives/platform-tribe
+      title: Slack channel
+      icon: chat
+    - url: https://wiki.example.com/platform-tribe
+      title: Tribe wiki
 spec:
   type: org-division
   profile:
@@ -51,12 +64,17 @@ metadata:
   namespace: default
   title: Retail Tribe
   description: Owns the storefront system end to end.
+  links:
+    - url: https://acme.slack.com/archives/retail-tribe
+      title: Slack channel
+      icon: chat
 spec:
   type: org-unit
   profile:
     displayName: Retail Tribe
     email: retail-tribe@toadie.local
-  children: []
+  children:
+    - group:default/storefront-squad
   members:
     - user:default/marek.nowak
 ---
@@ -67,6 +85,10 @@ metadata:
   namespace: default
   title: Payments Squad
   description: Owns the payments capability. Part of the Platform Tribe.
+  links:
+    - url: https://acme.slack.com/archives/payments-squad
+      title: Slack channel
+      icon: chat
 spec:
   type: team
   profile:
@@ -76,6 +98,21 @@ spec:
   children: []
   members:
     - user:default/anna.kowalska
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: storefront-squad
+  namespace: default
+  title: Storefront Squad
+  description: Owns the storefront services; part of the Retail Tribe.
+spec:
+  type: team
+  profile:
+    displayName: Storefront Squad
+    email: storefront-squad@toadie.local
+  parent: group:default/retail-tribe
+  children: []
 ---
 # ---------------------------------------------------------------------------
 # Users — only spec.profile and spec.memberOf exist for this kind.
@@ -87,10 +124,14 @@ metadata:
   namespace: default
   title: Anna Kowalska
   description: Staff engineer, payments.
+  links:
+    - url: https://github.com/anna-kowalska
+      title: GitHub
 spec:
   profile:
     displayName: Anna Kowalska
     email: anna.kowalska@toadie.local
+    picture: https://avatars.example.com/anna.kowalska.png
   memberOf:
     - group:default/platform-tribe
     - group:default/payments-squad
@@ -110,7 +151,7 @@ spec:
     - group:default/retail-tribe
 ---
 # ---------------------------------------------------------------------------
-# Domains — spec.type from core-value/generic/tech-foundations. No lifecycle.
+# Domains — spec.type from core-value/generic/tech-foundations/auxiliary. No lifecycle.
 # techdocs-ref is the only annotation key registered for this kind.
 # ---------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
@@ -121,7 +162,10 @@ metadata:
   title: Commerce
   description: Everything a customer touches on the way to a completed order.
   annotations:
-    backstage.io/techdocs-ref: dir:.
+    backstage.io/techdocs-ref: url:https://docs.example.com/domains/commerce
+  links:
+    - url: https://wiki.example.com/commerce/roadmap
+      title: Roadmap
 spec:
   type: core-value
   owner: group:default/retail-tribe
@@ -133,6 +177,8 @@ metadata:
   namespace: default
   title: Payments
   description: Money movement, ledgering and settlement. A sub-domain of Commerce.
+  annotations:
+    backstage.io/techdocs-ref: url:https://docs.example.com/domains/payments
 spec:
   type: core-value
   owner: group:default/payments-squad
@@ -160,9 +206,21 @@ spec:
   type: generic
   owner: group:default/platform-tribe
 ---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: back-office
+  namespace: default
+  title: Back Office
+  description: Invoicing and the other internal back-office processes.
+spec:
+  type: auxiliary
+  owner: group:default/payments-squad
+---
 # ---------------------------------------------------------------------------
 # Systems — spec.type product/capability. criticality-tier and support-mode are
-# System-only labels; no tags and no lifecycle exist for this kind.
+# System-only labels; no tags and no lifecycle exist for this kind. A Port system
+# flagged external lands in the `external` namespace.
 # ---------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: System
@@ -177,12 +235,11 @@ metadata:
     exposure: public
     hosting-model: public-cloud
   annotations:
+    backstage.io/techdocs-ref: url:https://docs.example.com/systems/storefront
     backstage.io/kubernetes-id: storefront
-    backstage.io/techdocs-ref: dir:.
   links:
     - url: https://shop.example.com
       title: Production storefront
-      icon: web
 spec:
   type: product
   owner: group:default/retail-tribe
@@ -213,20 +270,58 @@ metadata:
   name: acquirer
   namespace: external
   title: Acquirer (third party)
-  description: >-
-    The card acquirer we authorise against. Lives in the `external` namespace —
-    we model it because we depend on it, but we do not own or run it.
+  description: The card acquirer we authorise against. Lives in the `external` namespace — we model it because we depend on it, but we do not own or run it.
   labels:
     criticality-tier: critical
     support-mode: business-hours
     exposure: partner
+  links:
+    - url: https://status.acquirer.example.com
+      title: Acquirer status page
 spec:
   type: capability
   owner: group:default/payments-squad
 ---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: invoicing
+  namespace: default
+  title: Invoicing
+  description: Customer invoicing and the legacy batch tooling around it.
+  labels:
+    criticality-tier: non-critical
+    support-mode: business-days
+    exposure: internal
+    hosting-model: on-premise
+spec:
+  type: capability
+  owner: group:default/payments-squad
+  domain: domain:default/back-office
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: developer-portal
+  namespace: default
+  title: Developer Portal
+  description: The internal developer portal and its supporting database.
+  labels:
+    criticality-tier: non-critical
+    support-mode: best-effort
+    exposure: internal
+    hosting-model: on-premise
+  annotations:
+    backstage.io/techdocs-ref: url:https://docs.example.com/systems/developer-portal
+spec:
+  type: product
+  owner: group:default/platform-tribe
+  domain: domain:default/platform
+---
 # ---------------------------------------------------------------------------
 # Components — spec.type service/website/library/job/data-pipeline, lifecycle
-# from the global dictionary. Tags come from Languages + Framework.
+# from the global dictionary. Tags come from Languages + Framework. The services come
+# from the Port `service` blueprint, the libraries (spec.type library) from `library`.
 # ---------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -234,11 +329,10 @@ metadata:
   name: storefront-web
   namespace: default
   title: Storefront Web
-  description: >-
-    The customer-facing shop. Server-side rendered product pages, a client-side
-    cart, and the checkout flow.
+  description: The customer-facing shop. Server-side rendered product pages, a client-side cart, and the checkout flow.
   tags:
     - typescript
+    - javascript
     - react
   labels:
     exposure: public
@@ -251,12 +345,21 @@ metadata:
     dora-cif: "no"
   annotations:
     backstage.io/source-location: url:https://github.com/acme/storefront-web
-    backstage.io/techdocs-ref: dir:.
+    backstage.io/techdocs-ref: url:https://docs.example.com/services/storefront-web
     backstage.io/kubernetes-id: storefront-web
   links:
+    - url: https://shop.example.com
+      title: Production
+    - url: https://ci.example.com/acme/storefront-web
+      title: CI pipeline
     - url: https://grafana.example.com/d/storefront-web
-      title: Grafana dashboard
+      title: Dashboard
       icon: dashboard
+    - url: https://logs.example.com/app/storefront-web
+      title: Logs
+    - url: https://runbooks.example.com/storefront-web
+      title: Runbook
+      icon: docs
 spec:
   type: website
   lifecycle: production
@@ -268,6 +371,37 @@ spec:
     - api:default/live-cart
   dependsOn:
     - resource:default/session-cache
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: storefront-bff
+  namespace: default
+  title: Storefront BFF
+  description: Backend-for-frontend serving the storefront web app.
+  tags:
+    - typescript
+  labels:
+    exposure: internal
+    hosting-model: public-cloud
+    technology-status: white-list
+    gdpr: "yes"
+    pci-dss: "no"
+    banking-outsourcing: "no"
+    cash-flow-impact: "no"
+    dora-cif: "no"
+  annotations:
+    backstage.io/source-location: url:https://github.com/acme/storefront-web
+    backstage.io/kubernetes-label-selector: app.kubernetes.io/name=storefront-bff
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/retail-tribe
+  system: system:default/storefront
+  subcomponentOf: component:default/storefront-web
+  consumesApis:
+    - api:default/catalog-graphql
+    - api:default/live-cart
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -291,6 +425,12 @@ metadata:
   annotations:
     backstage.io/source-location: url:https://github.com/acme/catalog-service
     backstage.io/kubernetes-label-selector: app=catalog-service
+  links:
+    - url: https://ci.example.com/acme/catalog-service
+      title: CI pipeline
+    - url: https://grafana.example.com/d/catalog-service
+      title: Dashboard
+      icon: dashboard
 spec:
   type: service
   lifecycle: production
@@ -300,6 +440,7 @@ spec:
     - api:default/catalog-graphql
   dependsOn:
     - resource:default/catalog-db
+    - component:default/acme-commons
     # UNVERIFIABLE on purpose: Template is outside the seven kinds toadie stores, so
     # the resolver can only say "cannot be verified" — never "missing".
     - template:default/nodejs-service-template
@@ -325,6 +466,17 @@ metadata:
     dora-cif: "no"
   annotations:
     backstage.io/source-location: url:https://github.com/acme/checkout-service
+  links:
+    - url: https://ci.example.com/acme/checkout-service
+      title: CI pipeline
+    - url: https://grafana.example.com/d/checkout-service
+      title: Dashboard
+      icon: dashboard
+    - url: https://logs.example.com/app/checkout-service
+      title: Logs
+    - url: https://runbooks.example.com/checkout-service
+      title: Runbook
+      icon: docs
 spec:
   type: service
   lifecycle: production
@@ -336,8 +488,11 @@ spec:
   consumesApis:
     - api:default/payments-grpc
   dependsOn:
+    - component:default/catalog-service
     - resource:default/orders-db
     - resource:default/order-bus
+    - component:default/payments-sdk
+    - component:default/acme-commons
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -356,6 +511,8 @@ metadata:
     banking-outsourcing: "no"
     cash-flow-impact: "no"
     dora-cif: "no"
+  annotations:
+    backstage.io/source-location: url:https://github.com/acme/live-cart-gateway
 spec:
   type: service
   lifecycle: experimental
@@ -364,6 +521,7 @@ spec:
   providesApis:
     - api:default/live-cart
   dependsOn:
+    - component:default/checkout-service
     - resource:default/session-cache
 ---
 apiVersion: backstage.io/v1alpha1
@@ -386,7 +544,20 @@ metadata:
     cash-flow-impact: "yes"
     dora-cif: "yes"
   annotations:
+    backstage.io/source-location: url:https://github.com/acme/payments-gateway
+    backstage.io/techdocs-ref: url:https://docs.example.com/services/payments-gateway
     backstage.io/kubernetes-id: payments-gateway
+  links:
+    - url: https://ci.example.com/acme/payments-gateway
+      title: CI pipeline
+    - url: https://grafana.example.com/d/payments-gateway
+      title: Dashboard
+      icon: dashboard
+    - url: https://logs.example.com/app/payments-gateway
+      title: Logs
+    - url: https://runbooks.example.com/payments-gateway
+      title: Runbook
+      icon: docs
 spec:
   type: service
   lifecycle: production
@@ -398,25 +569,7 @@ spec:
     - api:external/acquirer-rest
   dependsOn:
     - resource:default/payments-db
----
-apiVersion: backstage.io/v1alpha1
-kind: Component
-metadata:
-  name: payments-sdk
-  namespace: default
-  title: Payments SDK
-  description: The client library other teams use to talk to the payments gateway.
-  tags:
-    - java
-  labels:
-    exposure: internal
-    technology-status: white-list
-spec:
-  type: library
-  lifecycle: production
-  owner: group:default/payments-squad
-  system: system:default/payments
-  subcomponentOf: component:default/payments-gateway
+    - component:default/payments-sdk
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -431,16 +584,24 @@ metadata:
   labels:
     exposure: internal
     hosting-model: on-premise
+    technology-status: white-list
     gdpr: "yes"
     pci-dss: "yes"
     banking-outsourcing: "yes"
     cash-flow-impact: "yes"
     dora-cif: "yes"
+  annotations:
+    backstage.io/source-location: url:https://github.com/acme/ledger-worker
+  links:
+    - url: https://logs.example.com/app/ledger-worker
+      title: Logs
 spec:
   type: job
   lifecycle: production
   owner: group:default/payments-squad
   system: system:default/payments
+  consumesApis:
+    - api:default/order-events
   dependsOn:
     - resource:default/payments-db
     - resource:default/ledger-log
@@ -451,19 +612,20 @@ metadata:
   name: settlement-pipeline
   namespace: default
   title: Settlement Pipeline
-  description: >-
-    Nightly reconciliation of acquirer settlement files into the reporting
-    warehouse. Being replaced, so it is marked sunsetting rather than deprecated.
+  description: Nightly reconciliation of acquirer settlement files into the reporting warehouse. Being replaced, so it is marked sunsetting rather than deprecated.
   tags:
     - python
   labels:
     exposure: internal
+    hosting-model: on-premise
     technology-status: grey-zone
     gdpr: "yes"
     pci-dss: "yes"
     banking-outsourcing: "yes"
     cash-flow-impact: "yes"
     dora-cif: "yes"
+  annotations:
+    backstage.io/source-location: url:https://github.com/acme/settlement-pipeline
 spec:
   type: data-pipeline
   lifecycle: sunsetting
@@ -479,32 +641,118 @@ metadata:
   name: legacy-invoicing
   namespace: default
   title: Legacy Invoicing
-  description: >-
-    The pre-2019 invoicing batch job, on its way out. Both its owning group and
-    its archive resource point at entities that do not exist in this workspace —
-    deliberate, so the Errors report has real findings to show.
+  description: The pre-2019 invoicing batch job, on its way out. Being retired, so it is marked deprecated.
   tags:
     - php
     - symphony
   labels:
+    exposure: internal
+    hosting-model: on-premise
     technology-status: black-list
     gdpr: "yes"
     pci-dss: "no"
     banking-outsourcing: "no"
     cash-flow-impact: "yes"
     dora-cif: "no"
+  annotations:
+    backstage.io/source-location: url:https://git.example.com/legacy/invoicing
 spec:
   type: service
   lifecycle: deprecated
   # MISSING on purpose: there is no Group `billing-squad` in this workspace.
   owner: group:default/billing-squad
-  system: system:default/payments
+  system: system:default/invoicing
   dependsOn:
     # MISSING on purpose: there is no Resource `invoice-archive` either.
     - resource:default/invoice-archive
     # KIND_REQUIRED on purpose: a dependsOn entry with no `kind:` prefix. Backstage
     # cannot ingest those, so the report flags it even though the target DOES exist.
     - orders-db
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: toadie
+  namespace: default
+  title: Toadie
+  description: The Backstage catalog helper this demo is loaded into.
+  tags:
+    - kotlin
+    - typescript
+    - react
+  labels:
+    exposure: internal
+    hosting-model: on-premise
+    technology-status: white-list
+    gdpr: "no"
+    pci-dss: "no"
+    banking-outsourcing: "no"
+    cash-flow-impact: "no"
+    dora-cif: "no"
+  annotations:
+    backstage.io/source-location: url:https://github.com/liveweird/toadie
+    backstage.io/techdocs-ref: url:https://github.com/liveweird/toadie/blob/master/README.md
+    backstage.io/kubernetes-id: toadie
+  links:
+    - url: https://github.com/liveweird/toadie/actions
+      title: CI pipeline
+spec:
+  type: website
+  lifecycle: experimental
+  owner: group:default/platform-tribe
+  system: system:default/developer-portal
+  dependsOn:
+    - resource:default/portal-db
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: acme-commons
+  namespace: default
+  title: Acme Commons
+  description: Shared utilities used by most JVM services.
+  tags:
+    - java
+  labels:
+    technology-status: white-list
+  annotations:
+    backstage.io/source-location: url:https://github.com/acme/commons
+  links:
+    - url: https://ci.example.com/acme/commons
+      title: CI pipeline
+spec:
+  type: library
+  lifecycle: production
+  owner: group:default/platform-tribe
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: payments-sdk
+  namespace: default
+  title: Payments SDK
+  description: The client library other teams use to talk to the payments gateway.
+  tags:
+    - java
+    - spring-boot
+  labels:
+    technology-status: white-list
+  annotations:
+    backstage.io/source-location: url:https://github.com/acme/payments-sdk
+    backstage.io/techdocs-ref: url:https://docs.example.com/libraries/payments-sdk
+  links:
+    - url: https://github.com/acme/payments-sdk/releases
+      title: Release notes
+    - url: https://ci.example.com/acme/payments-sdk
+      title: CI pipeline
+spec:
+  type: library
+  lifecycle: production
+  owner: group:default/payments-squad
+  system: system:default/payments
+  subcomponentOf: component:default/acme-commons
+  dependsOn:
+    - component:default/acme-commons
 ---
 # ---------------------------------------------------------------------------
 # APIs — spec.type openapi/asyncapi/graphql/grpc/web-sockets, lifecycle, and a
@@ -524,13 +772,13 @@ metadata:
     pci-dss: "no"
     banking-outsourcing: "no"
   annotations:
-    backstage.io/techdocs-ref: dir:.
+    backstage.io/techdocs-ref: url:https://docs.example.com/apis/catalog-graphql
 spec:
   type: graphql
   lifecycle: production
   owner: group:default/retail-tribe
   system: system:default/storefront
-  definition: |
+  definition: |-
     type Product {
       sku: ID!
       title: String!
@@ -552,15 +800,19 @@ metadata:
   description: Cart-to-order conversion used by the storefront.
   labels:
     exposure: public
+    hosting-model: public-cloud
     gdpr: "yes"
     pci-dss: "no"
     banking-outsourcing: "no"
+  links:
+    - url: https://api.example.com/docs/checkout
+      title: API portal
 spec:
   type: openapi
   lifecycle: production
   owner: group:default/retail-tribe
   system: system:default/storefront
-  definition: |
+  definition: |-
     openapi: 3.0.3
     info:
       title: Checkout REST API
@@ -584,6 +836,7 @@ metadata:
   description: Cart and stock updates pushed to an open browser session.
   labels:
     exposure: public
+    hosting-model: public-cloud
     gdpr: "yes"
     pci-dss: "no"
     banking-outsourcing: "no"
@@ -592,7 +845,7 @@ spec:
   lifecycle: experimental
   owner: group:default/retail-tribe
   system: system:default/storefront
-  definition: |
+  definition: |-
     # Frames are newline-delimited JSON, client-initiated subscribe then server push.
     -> {"op":"subscribe","cartId":"c_123"}
     <- {"op":"cart.updated","cartId":"c_123","lines":3,"totalMinor":8940}
@@ -604,12 +857,10 @@ metadata:
   name: order-events
   namespace: default
   title: Order events stream
-  description: >-
-    Order lifecycle events. Published by checkout-service and consumed by nobody
-    in this workspace — deliberate, so the Graph shows a provider with no
-    consumer and the relationship view has a loose end.
+  description: Order lifecycle events published by checkout-service onto the order bus.
   labels:
     exposure: internal
+    hosting-model: on-premise
     gdpr: "no"
     pci-dss: "no"
     banking-outsourcing: "no"
@@ -618,7 +869,7 @@ spec:
   lifecycle: experimental
   owner: group:default/retail-tribe
   system: system:default/storefront
-  definition: |
+  definition: |-
     asyncapi: 2.6.0
     info:
       title: Order events
@@ -646,12 +897,14 @@ metadata:
     gdpr: "yes"
     pci-dss: "yes"
     banking-outsourcing: "yes"
+  annotations:
+    backstage.io/techdocs-ref: url:https://docs.example.com/apis/payments-grpc
 spec:
   type: grpc
   lifecycle: production
   owner: group:default/payments-squad
   system: system:default/payments
-  definition: |
+  definition: |-
     syntax = "proto3";
     package acme.payments.v1;
 
@@ -686,7 +939,7 @@ spec:
   lifecycle: production
   owner: group:default/payments-squad
   system: system:external/acquirer
-  definition: |
+  definition: |-
     openapi: 3.0.3
     info:
       title: Acquirer Authorisation API
@@ -717,11 +970,15 @@ metadata:
   tags:
     - postgresql
   labels:
-    data-classification: internal
+    data-classification: public
+    hosting-model: public-cloud
+    exposure: internal
+    technology-status: white-list
     gdpr: "no"
     pci-dss: "no"
     banking-outsourcing: "no"
-    hosting-model: public-cloud
+  annotations:
+    backstage.io/techdocs-ref: url:https://docs.example.com/resources/catalog-db
 spec:
   type: database
   owner: group:default/retail-tribe
@@ -738,10 +995,15 @@ metadata:
     - postgresql
   labels:
     data-classification: confidential
+    hosting-model: public-cloud
+    technology-status: white-list
     gdpr: "yes"
     pci-dss: "no"
     banking-outsourcing: "no"
-    hosting-model: public-cloud
+  links:
+    - url: https://runbooks.example.com/orders-db
+      title: Runbook
+      icon: docs
 spec:
   type: database
   owner: group:default/retail-tribe
@@ -758,11 +1020,19 @@ metadata:
     - postgresql
   labels:
     data-classification: restricted
+    hosting-model: on-premise
+    exposure: internal
+    technology-status: white-list
     gdpr: "yes"
     pci-dss: "yes"
     banking-outsourcing: "yes"
-    hosting-model: on-premise
-    exposure: internal
+  links:
+    - url: https://grafana.example.com/d/payments-db
+      title: Dashboard
+      icon: dashboard
+    - url: https://runbooks.example.com/payments-db
+      title: Runbook
+      icon: docs
 spec:
   type: database
   owner: group:default/payments-squad
@@ -779,8 +1049,19 @@ metadata:
     - kafka
   labels:
     data-classification: internal
+    hosting-model: on-premise
+    technology-status: white-list
     gdpr: "no"
     banking-outsourcing: "no"
+  annotations:
+    backstage.io/kubernetes-id: order-bus
+    backstage.io/kubernetes-label-selector: app.kubernetes.io/name=order-bus
+  links:
+    - url: https://wiki.example.com/order-bus/topics
+      title: Topic catalogue
+    - url: https://grafana.example.com/d/order-bus
+      title: Dashboard
+      icon: dashboard
 spec:
   type: message-broker
   owner: group:default/platform-tribe
@@ -795,14 +1076,17 @@ metadata:
   description: The immutable booking log behind the ledger worker.
   labels:
     data-classification: restricted
+    hosting-model: on-premise
+    technology-status: grey-zone
     gdpr: "yes"
     pci-dss: "yes"
     banking-outsourcing: "yes"
-    hosting-model: on-premise
 spec:
   type: transaction-log
   owner: group:default/payments-squad
   system: system:default/payments
+  dependsOn:
+    - resource:default/payments-db
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -815,6 +1099,8 @@ metadata:
     - clickhouse
   labels:
     data-classification: confidential
+    hosting-model: on-premise
+    technology-status: white-list
     gdpr: "yes"
     pci-dss: "yes"
     banking-outsourcing: "yes"
@@ -822,6 +1108,9 @@ spec:
   type: analytical-database
   owner: group:default/payments-squad
   system: system:default/payments
+  dependsOn:
+    - resource:default/payments-db
+    - resource:default/ledger-log
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -834,10 +1123,35 @@ metadata:
     - redis
   labels:
     data-classification: internal
+    hosting-model: public-cloud
+    technology-status: white-list
     gdpr: "yes"
     banking-outsourcing: "no"
-    hosting-model: public-cloud
+  annotations:
+    backstage.io/kubernetes-id: session-cache
+    backstage.io/kubernetes-label-selector: app.kubernetes.io/name=session-cache
 spec:
   type: cache
   owner: group:default/platform-tribe
   system: system:default/storefront
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: portal-db
+  namespace: default
+  title: Developer portal database
+  description: PostgreSQL database behind the developer portal.
+  tags:
+    - postgresql
+  labels:
+    data-classification: internal
+    hosting-model: on-premise
+    technology-status: white-list
+    gdpr: "no"
+    pci-dss: "no"
+    banking-outsourcing: "no"
+spec:
+  type: database
+  owner: group:default/platform-tribe
+  system: system:default/developer-portal

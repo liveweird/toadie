@@ -270,10 +270,10 @@ fun Application.configureEntityRoutes() {
 /**
  * `blueprint`/`q`/`team` (the [EntityGraphFilter] shared filter set) shared by
  * `GET …/entities/graph` and 2.5.0's `GET …/entities/errors` (the `catalog/CatalogFileFilter.kt`
- * `catalogFileFilter()` precedent). [query] is the graph route's already-length-checked `query`
+ * `catalogFileFilter()` precedent; also read by the conversion export's route). [query] is the graph route's already-length-checked `query`
  * param — the Errors report has no such param and always passes the default `null`.
  */
-private fun ApplicationCall.entityGraphFilter(query: String? = null): EntityGraphFilter = EntityGraphFilter(
+internal fun ApplicationCall.entityGraphFilter(query: String? = null): EntityGraphFilter = EntityGraphFilter(
     blueprints = request.queryParameters.repeatedValues("blueprint"),
     q = request.queryParameters.optionalString("q"),
     team = request.queryParameters.optionalString("team"),
@@ -281,7 +281,7 @@ private fun ApplicationCall.entityGraphFilter(query: String? = null): EntityGrap
 )
 
 /** The route-level `query` length gate, shared by the graph filter and the check body — a plain 400 before the service ever sees it. */
-private fun requireQueryLength(query: String?) {
+internal fun requireQueryLength(query: String?) {
     if (query != null && query.length > MAX_QUERY_LENGTH) {
         throw BadRequestException("query must be at most $MAX_QUERY_LENGTH characters")
     }

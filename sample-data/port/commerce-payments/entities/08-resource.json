@@ -6,6 +6,7 @@
     "icon": "Database",
     "team": "retail-tribe",
     "properties": {
+      "description": "PostgreSQL cluster holding product master data.",
       "type": "database",
       "engine": "postgresql",
       "data_classification": "public",
@@ -25,6 +26,7 @@
     "title": "Orders database",
     "team": "retail-tribe",
     "properties": {
+      "description": "PostgreSQL cluster holding orders and their state machine.",
       "type": "database",
       "engine": "postgresql",
       "data_classification": "confidential",
@@ -43,6 +45,7 @@
     "title": "Payments database",
     "team": "payments-squad",
     "properties": {
+      "description": "PostgreSQL cluster holding authorisations and the ledger.",
       "type": "database",
       "engine": "postgresql",
       "data_classification": "restricted",
@@ -63,6 +66,7 @@
     "title": "Order event bus",
     "team": "platform-tribe",
     "properties": {
+      "description": "Kafka cluster carrying the order lifecycle events.",
       "type": "message-broker",
       "engine": "kafka",
       "data_classification": "internal",
@@ -85,6 +89,7 @@
     "title": "Ledger append-only log",
     "team": "payments-squad",
     "properties": {
+      "description": "The immutable booking log behind the ledger worker.",
       "type": "transaction-log",
       "data_classification": "restricted",
       "gdpr": true,
@@ -104,6 +109,7 @@
     "title": "Settlement warehouse",
     "team": "payments-squad",
     "properties": {
+      "description": "ClickHouse warehouse behind settlement and finance reporting.",
       "type": "analytical-database",
       "engine": "clickhouse",
       "data_classification": "confidential",
@@ -124,6 +130,7 @@
     "title": "Session cache",
     "team": "platform-tribe",
     "properties": {
+      "description": "Redis cluster holding cart and session state.",
       "type": "cache",
       "engine": "redis",
       "data_classification": "internal",
@@ -142,6 +149,7 @@
     "title": "Developer portal database",
     "team": "platform-tribe",
     "properties": {
+      "description": "PostgreSQL database behind the developer portal.",
       "type": "database",
       "engine": "postgresql",
       "data_classification": "internal",

@@ -2,10 +2,11 @@
 
 **`sample-data/port/commerce-payments/blueprints/` is the fifteen-blueprint model the platform catalog is built on**
 (the baseline ontology, v1.25.2; the sample set itself since v1.25.3, when it replaced the
-feature-showcase set), and `sample-data/port/commerce-payments/entities/` is the same broad
-landscape as `sample-data/backstage/commerce-payments/catalog-info.yaml` re-told as Port entities —
-the two independent demos share a story and vocabulary, which
-is what the Backstage round trip below is about. `sample-data/port/commerce-payments/queries/` holds the public saved queries
+feature-showcase set), and `sample-data/port/commerce-payments/entities/` is the landscape that
+`sample-data/backstage/commerce-payments/catalog-info.yaml` describes as Backstage documents — since
+conversion phase 2 the Backstage file is GENERATED from the Port entities through the default mapping
+(bar three hand-restored edits carrying the four deliberate reference findings; `SampleConversionTest` pins it), which is what
+the Backstage round trip below is about. `sample-data/port/commerce-payments/queries/` holds the public saved queries
 (see `sample-data/port/commerce-payments/README.md` "Saved queries"; pinned by `SampleQueriesTest`).
 The design decisions, taken 2026-09-10: `service` + `library` rather than one `component` or a
 five-way split (a Port relation targets ONE blueprint, so every extra blueprint multiplies the
@@ -140,7 +141,7 @@ full file back onto every blueprint that declares one, once every target exists.
 test-side tables here is now DATA with one canonical home:
 [`sample-data/port/commerce-payments/mapping/backstage.json`](../../sample-data/port/commerce-payments/mapping/backstage.json),
 a conversion mapping document (`.claude/docs/conversion-mapping.md` has the format) — eight pairs
-and 110 rules saying which property is which label, tag category, annotation, link or spec field,
+and 119 rules saying which property is which label, tag category, annotation, link or spec field,
 which blueprint is which kind (`library` is Component selected by `spec.type: library`), how
 `external: true` becomes the `external` namespace, how ownership (`$team` -> `spec.owner`) and the
 relations map, and which Group fields (`children`/`members`) are derived from the reverse side. It is
@@ -154,16 +155,21 @@ validated against the sample blueprints and the V22-seeded registries by `Sample
   `resource.hosted_on`. No registry change is needed for the baseline; `kubernetes-cluster` joins the
   Resource types only if clusters are ever exported.
 - **Backstage-side fields the baseline does not carry yet**, declared under `lossy.backstage` so the
-  mapping shows zero drift today: `metadata.description` (no sample blueprint has a `description`
-  property), `spec.dependencyOf` (the inverse of `dependsOn`), `profile.picture` on Group, and on
-  `library` `spec.subcomponentOf`/`providesApis`/`consumesApis`. They leave the list when the
-  blueprints grow the matching properties (the planned sample reconciliation of the conversion work —
-  `BACKLOG.md`).
+  mapping shows zero drift today: `spec.dependencyOf` (the inverse of `dependsOn`), `profile.picture`
+  on Group, and on `library` `spec.providesApis`/`consumesApis`. They leave the list when the
+  blueprints grow the matching properties. (Conversion phase 2 closed the other two: every mapped
+  blueprint now has a `description` string property — Backstage `metadata.description` — and
+  `library` has `subcomponent_of`, a `many: false` relation to ANOTHER LIBRARY: it cannot target
+  `service`, which already references `library` through `uses_libraries`, and a relation target must
+  exist when the blueprint is created, so the two cannot point at each other.)
 - **`api` definitions**: the inline `definition` is written as `spec.definition`; an API without
   one gets a placeholder (`exportDefault`, also the rule's `importIgnore`, so it is never imported
-  back as a definition) because Backstage requires the field. `definition_url` is declared `lossy`
-  for now: a Backstage `$text` substitution is an OBJECT (`{$text: <url>}`), not a string, so
-  writing it properly (and reading a definition-at-location back) is later conversion work.
+  back as a definition) because Backstage requires the field — the sample gives every API its
+  definition, so the placeholder never appears in it. `definition_url` is declared `lossy`
+  for now: a Backstage `$text` substitution is an OBJECT (`{$text: <url>}`), not a string, and the
+  `backstage.io/definition-at-location` annotation key that would carry a location is not in the
+  V22-seeded annotation registry (registering it is a registry migration of its own), so writing a
+  definition location properly (and reading one back) is later conversion work.
 - **Links**: `links` (array of `{title, url}`) <-> `metadata.links`; the named link properties
   (`ci_pipeline`, `dashboard`, `logs`, `runbook`, `slack_channel`) are `link` rules with a fixed title.
 - Ownership: the entity `team` field (string for single, array for multiple) is `spec.owner`; it is

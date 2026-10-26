@@ -3,8 +3,9 @@
 The sample catalog is available as two independent demos. They describe the same fictional
 commerce and payments landscape with vocabulary suited to each catalog paradigm.
 
-- [Backstage software catalog](backstage/commerce-payments/README.md) — one 34-document
-  `catalog-info.yaml` covering Backstage's seven fixed kinds.
+- [Backstage software catalog](backstage/commerce-payments/README.md) — one 42-document
+  `catalog-info.yaml` covering Backstage's seven fixed kinds, generated from the Port sample through
+  its default conversion mapping.
 - [Port ontology](port/commerce-payments/README.md) — fifteen blueprint definitions and 76
   entity instances, including computed properties and parallel `composition` and `deployment`
   hierarchies, loaded linked to their public raw-GitHub source references by default, plus

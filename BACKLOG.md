@@ -71,7 +71,12 @@ promotes it. A finished item is removed, not ticked.
   mapping registry + validator + default mapping (V45, Opus review); exporter + sample
   reconciliation; `replaceExisting` on the catalog import (independent); importer (Opus review);
   SPA. Roughly 11 days in total. Shipped so far: (5) `replaceExisting` on the catalog import (2.23.0); phase 1, the mapping
-  registry + validator + default mapping (2.24.0).
+  registry + validator + default mapping (2.24.0); phase 2, the Port → Backstage exporter
+  (`GET /conversion-mappings/{id}/catalog-documents`) and the sample reconciliation (the Backstage
+  sample is now generated from the Port sample, 42 documents; `SampleConversionTest`). Left from
+  (4): registering `backstage.io/definition-at-location` for API (a registry migration) and with it
+  exporting `definition_url`; `library.subcomponent_of` targets `library`, not `service`, because
+  `service` already references `library`.
 - [new] **Treat empty and absent blueprint maps as equal in the sync modal.** After a sync the stored
   blueprint renders empty `relations`, `mirrorProperties`, `calculationProperties` and
   `aggregationProperties` maps, so a source document that omits them never reads "in sync": reopening
