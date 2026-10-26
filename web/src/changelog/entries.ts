@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.28.1",
+    date: "2026-10-26",
+    en: `**Denied requests no longer record search text in the audit log.** When a request is refused for lack of permission, the audit log now records only the page address, not the search terms or filters that came with it, such as an email address typed into the Users filter.`,
+    pl: `**Odrzucone żądania nie zapisują już tekstu wyszukiwania w dzienniku audytu.** Gdy żądanie zostaje odrzucone z braku uprawnień, dziennik audytu zapisuje teraz tylko adres strony, bez towarzyszących mu wyszukiwanych fraz ani filtrów, takich jak adres e-mail wpisany w filtr Użytkowników.`,
+  },
+  {
     version: "2.28.0",
     date: "2026-10-26",
     en: `**Telemetry panel.** Administrators can open a telemetry panel beside any page, in both worlds, from the account menu or the command palette. It shows Toadie's own vital signs, with the current figures refreshed every minute: Memory (the working set as a share of the container limit, marked High from 80 % and Critical from 90 %), Workspace (the size of the database and of each group of tables, and how many catalog files, history events, blueprints, entities, mappings, lenses and saved queries it holds), Pressure (how busy the read budget, entity queries, calculations, outbound fetches and the integration API are, and whether anything was refused), Requests (counts, typical and slow response times, and errors overall and for the heaviest operations, such as graphs, imports and the integration API) and JVM (processor, threads, garbage collection and database connections). Each section has a 24-hour, 7-day or 90-day trend chart, and every chart's figures can be shown as a table. Toadie samples itself every five minutes and keeps the detail for 7 days and hourly figures for 90 days.`,

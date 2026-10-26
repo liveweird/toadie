@@ -9,14 +9,18 @@ import ch.nokillswit.entities.EntityResponse
 import io.ktor.client.call.body
 import ch.nokillswit.users.UserRole
 import io.ktor.client.request.delete
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -179,6 +183,26 @@ class AuditTest {
             val event = capture.awaitEvent { it.message == "login.failure" && it.hasKeyValue("email", email) }
             assertNotNull(event, "expected a login.failure audit event for $email")
             assertTrue(event.hasKeyValue("reason", "wrong_password"))
+        }
+    }
+
+    @Test
+    fun `a denial audits the request path without its query string`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("deniedaudit")
+        val userId = TestUsers.seed(email = email, password = "pw", role = UserRole.USER)
+        // A filter value that must never reach the audit log (the Users list filters by email).
+        val secret = "secret-${UUID.randomUUID()}"
+        withAuditCapture { capture ->
+            val response = authedClient(email, "pw").get("/api/v1/users?email=$secret")
+            assertEquals(HttpStatusCode.Forbidden, response.status)
+            val event = capture.awaitEvent { it.message == "authz.denied" && it.hasKeyValue("byUserId", userId.toLong()) }
+            assertNotNull(event, "expected an authz.denied audit event for user $userId")
+            assertTrue(event.hasKeyValue("path", "/api/v1/users"), "the path, without the query: ${event.keyValuePairs}")
+            assertFalse(
+                event.keyValuePairs.orEmpty().any { it.value?.toString()?.contains(secret) == true },
+                "the query-string value must not appear in any field: ${event.keyValuePairs}",
+            )
         }
     }
 }

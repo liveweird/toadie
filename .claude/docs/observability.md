@@ -41,7 +41,7 @@
   `catalog_file.fetch_blocked`/`catalog_file.fetched`; a sync that fails `entityFindings` emits
   nothing (entities have no waiver, so a rejected sync stores nothing to audit),
 - `entity_types.created` (byUserId/entityTypesId/kind/types count) / `entity_types.updated` (same fields) / `entity_types.deleted` (byUserId/entityTypesId) — every type-dictionary mutation; a rejected save emits nothing,
-- `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail),
+- `authz.denied` (every 403, from the `ForbiddenException` handler in `plugins/ErrorHandling.kt`, with method/path/byUserId/detail — the path without its query string, see "A logged request location is its path" below),
 - `integration_client.created` (byUserId/clientId/name/scope/serviceUserId — 2.15.0 adds the immutable key scope and the paired service account's user id) / `integration_client.revoked` (byUserId/clientId/serviceUserId — the paired service account soft-deleted with it, null for a pre-2.15.0 row),
 - `integration.auth_failed` (reason: missing_or_malformed/unknown_or_revoked; no credential text),
 - `integration.rate_limited` (clientId/clientName — the request-level per-client bucket AND, since
@@ -102,12 +102,30 @@ Never log secrets (passwords, tokens); emails/ids are fine. Never log a throwabl
   only the chain's exception classes, the SQLSTATE and the original stack trace: `ExposedR2dbcException`
   appends the failed statements to its message (Exposed 1.6.0 R2DBC renders an unexpandable placeholder,
   which nothing pins) and the driver message can quote data, so no database message is ever logged — a
-  lock wait cancelled by `statement_timeout` (57014) on a catalog write must not risk the document. Any other throwable is logged unchanged. The catch-all 500 line also carries the
-  request PATH only, never the query string (it can hold an entity query's text or filter values).
+  lock wait cancelled by `statement_timeout` (57014) on a catalog write must not risk the document. Any other throwable is logged unchanged. The catch-all 500 line names the request
+  by its path ("A logged request location is its path", below).
 - **Reference:** `plugins/ErrorHandling.kt` (`respondInternalError`, `safeForLog`), `plugins/Health.kt`.
 - **Enforcement:** `DatabaseFailureLogTest` (a real 57014 on a blocked write and a blocked read: SQLSTATE
   present, the document text and the query-string value absent).
 - **Exception:** none.
+
+**A logged request location is its path, never its query string.**
+
+- **Applies when:** an audit event or a log line records which request it concerns.
+- **Requirement:** record `request.path()` (and the method), never `request.uri`, `request.local.uri` or the
+  query string: query parameters carry search text and filter values (the Users list filters by email) and the
+  entity query's text (`GET …/entities/graph?query=`), none of which the server may log. Name the specific
+  parameter when one matters (`group`, `range`), never the whole query.
+- **Reference:** `plugins/ErrorHandling.kt` (the `authz.denied` audit, the catch-all 500 line).
+- **Enforcement:** `AuditTest` "a denial audits the request path without its query string" (a denied
+  `GET /api/v1/users?email=…` audits `/api/v1/users` and no field carries the value), `DatabaseFailureLogTest`
+  (the 500 line); manual review for a new log line.
+- **Exception:** HTTP server trace spans. When an operator enables a trace exporter (`OTEL_TRACES_EXPORTER`,
+  `none` by default), the OpenTelemetry Ktor instrumentation records the HTTP semantic conventions'
+  `url.query`. Its built-in redaction blanks only a fixed set of signature/credential parameters
+  (`AWSAccessKeyId`, `Signature`, `X-Amz-*`, `sig`, `X-Goog-Signature`), so `email`, `q` and `query` values reach
+  the span unchanged — the same exposure class as the GET request line in access and proxy logs, opted into
+  outside the application.
 
 ### Telemetry
 
