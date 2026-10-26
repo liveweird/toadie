@@ -527,13 +527,22 @@ class EntityQueryRouteTest {
                 val held = launch(Dispatchers.IO) { service.graph(filter) }
                 try {
                     withContext(Dispatchers.IO) { assertTrue(started.await(10, TimeUnit.SECONDS), "the held evaluation never started") }
+                    assertEquals(0L, service.pressure().queryRefusals)
                     assertFailsWith<TooManyRequestsException> { service.graph(filter) }
+                    // The telemetry seam: the held permit is "in use" and the refusal is counted.
+                    val saturated = service.pressure()
+                    assertEquals(1, saturated.queryInUse)
+                    assertEquals(1, saturated.queryPermits)
+                    assertEquals(1L, saturated.queryRefusals)
                 } finally {
                     hold.countDown()
                 }
                 held.join()
             }
             assertEquals(ids.toSet(), service.graph(filter).nodes.map { it.identifier }.toSet())
+            val recovered = service.pressure()
+            assertEquals(0, recovered.queryInUse, "the permit is back")
+            assertEquals(1L, recovered.queryRefusals, "a counter, not a gauge")
         } finally {
             TestEntities.remove(*ids.toTypedArray())
             TestBlueprints.remove(bp)

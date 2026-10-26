@@ -25,6 +25,7 @@ import ch.nokillswit.infra.paging.PageRequest
 import ch.nokillswit.users.UserService
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.util.AttributeKey
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.flow.toList
@@ -83,6 +84,9 @@ private fun systemFormatFor(blueprintIdentifier: String): String? = when (bluepr
 private const val LOCK_BLUEPRINTS_SHARE = "LOCK TABLE blueprints IN SHARE MODE"
 private const val LOCK_ENTITIES_SHARE_ROW_EXCLUSIVE = "LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE"
 
+/** One reading of the entity service's bounded resources ([EntityService.pressure]). */
+class EntityPressure(val queryInUse: Int, val queryPermits: Int, val queryRefusals: Long, val jq: JqPoolStats)
+
 class EntityService(
     internal val database: R2dbcDatabase,
     internal val jq: JqEvaluator = JqEvaluator(),
@@ -102,6 +106,14 @@ class EntityService(
 ) {
     /** `tryAcquire` only — a saturated instance answers `429` immediately rather than queueing a workspace load. */
     internal val querySlots = Semaphore(queryPermits)
+    private val queryPermitCount = queryPermits
+
+    /** Queries refused for want of a permit since this instance was built (`EntityGraphRead.kt`'s `withParsedQuery`): telemetry only. */
+    internal val queryRefusals = AtomicLong(0)
+
+    /** The telemetry sampler's reading (`.claude/docs/observability.md` "Telemetry"): permits taken, refusals so far, the jq pool. */
+    fun pressure(): EntityPressure =
+        EntityPressure(queryPermitCount - querySlots.availablePermits, queryPermitCount, queryRefusals.get(), jq.poolStats())
 
     init {
         // The `entity-query` pool (QUERY_DISPATCHER, private to EntityGraphRead.kt) has exactly MAX_CONCURRENT_ENTITY_QUERIES threads: more

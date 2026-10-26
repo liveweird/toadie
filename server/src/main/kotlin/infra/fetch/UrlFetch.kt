@@ -3,7 +3,9 @@ package ch.nokillswit.infra.fetch
 import ch.nokillswit.audit.AuditEvent
 import ch.nokillswit.audit.audit
 import ch.nokillswit.authz.BadGatewayException
+import ch.nokillswit.infra.concurrency.ExecutorStats
 import ch.nokillswit.infra.concurrency.awaitBounded
+import ch.nokillswit.infra.concurrency.stats
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.plugins.BadRequestException
@@ -52,8 +54,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 const val MAX_FETCH_URL_LENGTH = 2048
 const val MAX_FETCH_BYTES = 1_048_576
 private const val FETCH_TIMEOUT_SECONDS = 10L
-private const val FETCH_WORKERS = 4
-private const val FETCH_QUEUE_CAPACITY = 16
+internal const val FETCH_WORKERS = 4
+internal const val FETCH_QUEUE_CAPACITY = 16
 private val DEFAULT_FETCH_TIMEOUT = Duration.ofSeconds(FETCH_TIMEOUT_SECONDS)
 
 /**
@@ -232,6 +234,12 @@ class UrlFetcher internal constructor(
     private val customizeClient: (OkHttpClient.Builder) -> Unit = {},
 ) {
     constructor() : this(::resolveFetchTarget, DEFAULT_FETCH_TIMEOUT, URL_FETCH_EXECUTOR, {})
+
+    /**
+     * The telemetry sampler's reading of the bounded fetch pool (`url-fetch`, shared by every default-constructed fetcher):
+     * busy workers, queued fetches and the fixed bounds. Changes nothing.
+     */
+    fun poolStats(): ExecutorStats = fetchExecutor.stats()
 
     suspend fun fetch(rawUrl: String): FetchedContent {
         try {

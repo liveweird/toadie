@@ -19,7 +19,7 @@ data class TelemetryConfig(
      * (capped at 5 minutes, `plugins/Monitoring.kt`).
      */
     val sampleIntervalSeconds: Int,
-    /** How often the workspace sizes and counts are measured (read by the storage collector, a later commit). */
+    /** How often the workspace sizes and counts are measured (`StorageCollectors.kt`, claimed by the heavy phase). */
     val storageIntervalSeconds: Int,
 ) {
     val sampleIntervalMillis: Long get() = sampleIntervalSeconds * 1000L

@@ -1109,9 +1109,17 @@ five-minute peak survives), kept 90 days.
 - **Raw-tier predicates are equality lists.** Every raw-tier read — the marker lookups, the rollup source, the prune — filters
   `resolution IN (RAW_RESOLUTIONS)`, never `resolution < 3600`, so the primary key gets equality prefixes; `TelemetryStoreTest` pins
   the list against the CHECK.
-- **Writes.** One `batchInsert(ignore = true)` of at most ~100 rows per tick (`ON CONFLICT DO NOTHING`: a duplicate keeps the first),
-  after the tick's collectors ran. No statement carries a per-transaction `queryTimeout`; the global `postgres.statementTimeoutSeconds`
+- **Writes.** Parameterized multi-row `INSERT ... ON CONFLICT DO NOTHING` statements, one per power-of-two chunk, all in the
+  tick's one transaction (`infra/db/MultiRowInsert.kt`, never values interpolated into the SQL): at most ~100 rows per tick, so
+  98 rows go out as 64 + 32 + 2 (a duplicate keeps the first), after the tick's collectors ran. No statement carries a per-transaction `queryTimeout`; the global `postgres.statementTimeoutSeconds`
   (30 s) and the 45 s response deadline bound every one, and the tick's own `interval / 2` budget bounds the whole tick.
 - **Cluster section.** One short transaction under the advisory lock ("Advisory lock (V46 telemetry)" above): it skips when the
   `telemetry.cluster_ms` marker already sits at this bucket, otherwise runs the retention (rollup, then prune) in a savepoint and
   commits the marker with it. Applied V46 is byte-immutable like every migration; its checksum is pinned in `MigrationChecksumTest`.
+- **The storage collector reads the catalog and counts, never content.** The heavy phase (`telemetry/StorageCollectors.kt`, claimed
+  by the `telemetry.storage_ms` marker row in the cluster transaction, run AFTER it) issues `pg_database_size`, one `pg_class`/
+  `pg_namespace` query for `pg_total_relation_size` of the `public` relations and one `SELECT count(*)` per counted table (`WHERE
+  NOT marked_as_deleted` for the soft-deleting ones, every row for `catalog_file_events`), each in a short transaction of its own.
+  The only interpolated identifiers are the fixed `COUNTED_TABLES` names (a plain-name check guards them; the group names are map keys only); no content column is selected, so these are identity-only
+  reads outside the read ledger (`security.md` ledger rule, Exception). A table added by a later migration must be assigned to a
+  group (`StorageCollectorsTest`).

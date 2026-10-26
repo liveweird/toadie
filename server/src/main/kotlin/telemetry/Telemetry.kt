@@ -1,7 +1,13 @@
 package ch.nokillswit.telemetry
 
+import ch.nokillswit.entities.EntityServiceKey
+import ch.nokillswit.infra.concurrency.ReadLedgerKey
 import ch.nokillswit.infra.db.ConnectionPoolKey
 import ch.nokillswit.infra.db.DatabaseKey
+import ch.nokillswit.infra.fetch.UrlFetcher
+import ch.nokillswit.infra.fetch.UrlFetcherKey
+import ch.nokillswit.integration.IntegrationPressureKey
+import ch.nokillswit.plugins.MetricRegistryKey
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStarted
 import io.ktor.server.application.ApplicationStopping
@@ -39,9 +45,9 @@ val TelemetryOverridesKey = AttributeKey<TelemetryOverrides>("TelemetryOverrides
 /**
  * The telemetry sampler's module (`.claude/docs/observability.md` "Telemetry"). `telemetry.*` is validated on every boot, enabled
  * or not; the sampler itself starts on [ApplicationStarted] (so a test's `application {}` overrides are visible and every module,
- * the pressure seams of a later commit included, has published its keys) and is cancelled on [ApplicationStopping], before the
- * connection pool is disposed (`ApplicationStopped`, `infra/db/Database.kt`). Registered right after `configureBootstrap`
- * (`application.yaml`): it reads `DatabaseKey` and `ConnectionPoolKey`.
+ * the pressure seams - `ReadLedgerKey`, `EntityServiceKey`, `UrlFetcherKey`, `IntegrationPressureKey` - has published its keys) and
+ * is cancelled on [ApplicationStopping], before the connection pool is disposed (`ApplicationStopped`, `infra/db/Database.kt`).
+ * Registered right after `configureBootstrap` (`application.yaml`): it reads `DatabaseKey` and `ConnectionPoolKey`.
  */
 fun Application.configureTelemetry() {
     val config = readTelemetryConfig(environment.config)
@@ -50,6 +56,8 @@ fun Application.configureTelemetry() {
     monitor.subscribe(ApplicationStarted) { app ->
         val overrides = app.attributes.getOrNull(TelemetryOverridesKey) ?: TelemetryOverrides()
         val pool = app.attributes.getOrNull(ConnectionPoolKey)
+        val latency = app.attributes.getOrNull(MetricRegistryKey)?.let(::LatencyCollector)
+        val pressure = pressureCollector(app)
         val sampler = TelemetrySampler(
             store = TelemetryStore(app.attributes[DatabaseKey]),
             config = config,
@@ -59,6 +67,11 @@ fun Application.configureTelemetry() {
             jvm = overrides.jvm ?: JvmProbe(),
             cgroup = overrides.cgroup ?: CgroupProbe(),
             poolStats = { pool?.figures() },
+            extraProcessCollectors = listOfNotNull(
+                latency?.let { ProcessCollector("latency", commit = it::commit) { it.collect() } },
+                ProcessCollector("pressure", commit = pressure::commit) { pressure.collect() },
+            ),
+            heavyCollectors = heavyCollectors(config),
             firstTickDelayMillis = overrides.firstTickDelayMillis,
         )
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -71,6 +84,24 @@ fun Application.configureTelemetry() {
             if (rootJob != null) runBlocking { withTimeoutOrNull(SHUTDOWN_JOIN_TIMEOUT_MS) { rootJob.join() } }
         }
     }
+}
+
+/**
+ * The pressure seams, resolved at [ApplicationStarted] (every module has published its keys by then): an absent one writes no rows.
+ * `UrlFetcherKey` is a test seam only - production routes build their own `UrlFetcher()` over the one shared `url-fetch` pool, so a
+ * fresh one reads the same pool.
+ */
+private fun pressureCollector(app: Application): PressureCollector {
+    val ledger = app.attributes.getOrNull(ReadLedgerKey)
+    val entities = app.attributes.getOrNull(EntityServiceKey)
+    val fetcher = app.attributes.getOrNull(UrlFetcherKey) ?: UrlFetcher()
+    return PressureCollector(
+        ledger = ledger?.let { { it.snapshot() } },
+        endLedgerInterval = { ledger?.endInterval() },
+        entities = entities?.let { { it.pressure() } },
+        fetch = { fetcher.poolStats() },
+        integration = app.attributes.getOrNull(IntegrationPressureKey),
+    )
 }
 
 /** The pool's live figures (r2dbc-pool's `PoolMetrics`, pinned present for 1.0.2 by `ConnectionPoolTest`); null when it reports none. */

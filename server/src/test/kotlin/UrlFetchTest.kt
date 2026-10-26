@@ -6,7 +6,9 @@ import ch.nokillswit.infra.fetch.UrlFetcher
 import ch.nokillswit.infra.fetch.UrlFetcherKey
 import ch.nokillswit.infra.fetch.FetchUrlResponse
 import ch.nokillswit.infra.fetch.FetchUrlRequest
+import ch.nokillswit.infra.fetch.FETCH_QUEUE_CAPACITY
 import ch.nokillswit.infra.fetch.FETCH_URL_INVALID_DETAIL
+import ch.nokillswit.infra.fetch.FETCH_WORKERS
 import ch.nokillswit.infra.fetch.MAX_FETCH_BYTES
 import ch.nokillswit.infra.fetch.ValidatedFetchTarget
 import ch.nokillswit.infra.fetch.isBlockedAddress
@@ -1071,5 +1073,35 @@ class UrlFetchTest {
         // blocked anyway, but the point is 403 wins BEFORE the fetcher is ever consulted).
         val response = client.postJson("/api/v1/blueprints/fetch", FetchUrlRequest(url = "https://example.com/bp.json"))
         assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    @Test
+    fun `poolStats reports the fetch pool's busy workers, queued fetches and fixed bounds`() {
+        val release = CountDownLatch(1)
+        val busy = CountDownLatch(1)
+        val executor = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(3))
+        val fetcher = UrlFetcher(fetchExecutor = executor)
+        try {
+            val idle = fetcher.poolStats()
+            assertEquals(listOf(0, 0, 1, 3), listOf(idle.active, idle.queued, idle.workers, idle.queueCapacity))
+            executor.execute {
+                busy.countDown()
+                release.await()
+            }
+            assertTrue(busy.await(2, TimeUnit.SECONDS))
+            executor.execute { }
+            val loaded = fetcher.poolStats()
+            assertEquals(listOf(1, 1, 1, 3), listOf(loaded.active, loaded.queued, loaded.workers, loaded.queueCapacity))
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `the default fetcher reads the production url-fetch pool`() {
+        val stats = UrlFetcher().poolStats()
+        assertEquals(FETCH_WORKERS, stats.workers)
+        assertEquals(FETCH_QUEUE_CAPACITY, stats.queueCapacity)
     }
 }

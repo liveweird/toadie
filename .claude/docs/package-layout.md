@@ -31,7 +31,8 @@ ch.nokillswit
 │                       catalog_file_events, the first and so far only clone) + Locking.kt
 │                       (lockingTransaction — the shared cooperating-writer table-lock helper
 │                       behind BlueprintService/TagCategoryService/EntityService's V27/V11/V28
-│                       protocols) + OntologyRevision.kt (the V39 monotonic ontology-revision
+│                       protocols) + MultiRowInsert.kt (Flow's parameterized multi-row `INSERT ... ON CONFLICT DO
+│                       NOTHING`, used by the telemetry sampler's per-tick writes) + OntologyRevision.kt (the V39 monotonic ontology-revision
 │                       counter — bumpOntologyRevision/ontologyRevisionExpression/
 │                       currentOntologyRevision — behind the GraphQL integration API's
 │                       BlueprintPage/EntityPage/OntologyErrors `revision` field) +
@@ -393,8 +394,17 @@ ch.nokillswit
 │                       join on `ApplicationStopping`), TelemetryConfig.kt, TelemetryMetrics.kt (the metric
 │                       registry — a new metric needs no migration), TelemetryStore.kt (the two `public`
 │                       tables, the advisory-lock cluster section, the hourly rollup and the prune),
-│                       TelemetrySampler.kt (the light phase + retention), JvmProbe/CgroupProbe/ProcessIdentity
-│                       (counters and sizes only). See `.claude/docs/observability.md` "Telemetry" and
+│                       TelemetrySampler.kt (the light phase, retention and the heavy phase),
+│                       LatencyCollector.kt (requests), HeavyCollectors.kt + StorageCollectors.kt (the claimed
+│                       workspace measurement), PressureCollector.kt, JvmProbe/CgroupProbe/ProcessIdentity
+│                       (counters and sizes only). It reads FIVE pressure seams, each a counter/snapshot added
+│                       where the resource lives (limits and behaviour untouched): `ReadLedgerKey` +
+│                       `ReadLedger.snapshot()` (`infra/concurrency/`, published by `configureDatabase`),
+│                       `EntityService.pressure()` + `JqEvaluator.poolStats()` (`entities/`, via `EntityServiceKey`),
+│                       `UrlFetcher.poolStats()` (`infra/fetch/`; `UrlFetcherKey` is a test seam only, a fresh
+│                       `UrlFetcher()` reads the same shared pool), and `IntegrationPressureKey`
+│                       (`integration/`, absent while the API is disabled); `infra/concurrency/ExecutorStats.kt`
+│                       is the shared pool reading. See `.claude/docs/observability.md` "Telemetry" and
 │                       `.claude/docs/persistence.md` "Telemetry (V46)".
 └── catalog/            the catalog-file domain (THE feature reference implementation):
                         CatalogFile.kt (the wire DTOs: kind model + EntitySpec superset),
