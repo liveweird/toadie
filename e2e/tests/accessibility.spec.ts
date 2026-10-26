@@ -79,6 +79,9 @@ const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/entity-hierarchy", heading: "Entity hierarchy" },
   { path: "/ontology/import", heading: "Import ontology" },
   { path: "/ontology/errors", heading: "Errors" },
+  { path: "/ontology/mappings", heading: "Conversion mappings" },
+  { path: "/ontology/mappings/new", heading: "New conversion mapping" },
+  { path: "/ontology/export-backstage", heading: "Export to Backstage" },
   { path: "/labels", heading: "Labels" },
   { path: "/annotations", heading: "Annotations" },
   { path: "/tags", heading: "Tags" },
@@ -98,3 +101,14 @@ for (const { path, heading } of AUTHED_PAGES) {
     await scan(page);
   });
 }
+
+test("/ontology/import with the Backstage catalog source has no WCAG A/AA violations", async ({ page }) => {
+  await login(page);
+  await page.goto("/ontology/import");
+  await expect(page.getByRole("heading", { name: "Import ontology" })).toBeVisible();
+  const source = page.getByRole("radiogroup", { name: "Import source" });
+  await expect(source).toHaveAttribute("data-initialized", "true");
+  await source.getByText("Backstage catalog (YAML)", { exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "YAML content" })).toBeVisible();
+  await scan(page);
+});

@@ -203,6 +203,35 @@ describe("EntityErrors page", () => {
     expect(await screen.findByText(/no errors/i)).toBeInTheDocument();
   });
 
+  test("a mapping row links to its editor for an admin and is plain text otherwise", async () => {
+    const mappingReport = entityErrorsReport({
+      mappings: [
+        {
+          id: 7,
+          name: "Backstage catalog",
+          findings: [{ code: "UNKNOWN_BLUEPRINT", path: "/pairs/2/blueprint", message: "no active blueprint 'ghost'" }],
+          drift: [],
+        },
+      ],
+      checkedMappings: 1,
+    });
+    mockReport(mockFetch, mappingReport);
+    localStorage.setItem(ROLES_KEY, JSON.stringify(["ADMIN"]));
+    const { unmount } = renderPage();
+
+    expect(await screen.findByRole("link", { name: "Edit Backstage catalog" })).toHaveAttribute(
+      "href",
+      "/ontology/mappings/7/edit",
+    );
+    unmount();
+
+    localStorage.setItem(ROLES_KEY, "[]");
+    mockReport(mockFetch, mappingReport);
+    renderPage();
+    expect(await screen.findByText("Backstage catalog")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Edit Backstage catalog" })).not.toBeInTheDocument();
+  });
+
   test("a blueprint row links to its editor for an admin", async () => {
     mockReport(mockFetch);
     localStorage.setItem(ROLES_KEY, JSON.stringify(["ADMIN"]));

@@ -115,6 +115,14 @@ const DYNAMIC_KEY_PREFIXES: ReadonlyArray<string> = [
   // t(`entityErrors.mapping.code.${code}`) / explain / t(`entityErrors.mapping.${kind}`) — pages/EntityErrors.tsx
   // (a `MappingFindingCode` or `MappingDriftCode` driven row; kind is "finding" | "drift").
   "entityErrors.mapping.",
+  // t(`conversion.rows.status.${row.status}`) / t(`conversion.rows.findingCode.${finding.code}`) —
+  // components/ConversionRowsTable.tsx (a `ConversionRowStatus` / `ConversionFindingCode` driven row).
+  "conversion.rows.status.",
+  "conversion.rows.findingCode.",
+  // t(`conversion.export.createModal.status.${status}`) / checkStatus — components/CatalogFilesBatchModal.tsx
+  // (the `ImportFileResult` status enum).
+  "conversion.export.createModal.status.",
+  "conversion.export.createModal.checkStatus.",
 ];
 
 function usedDynamically(key: string): boolean {

@@ -11,6 +11,8 @@
     "entityGraph": "Entity graph",
     "entityHierarchy": "Entity hierarchy",
     "ontologyErrors": "Errors",
+    "conversionMappings": "Conversion mappings",
+    "exportBackstage": "Export to Backstage",
     "ontologyImport": "Import",
     "namespaces": "Namespaces",
     "labels": "Labels",

@@ -19,6 +19,12 @@ generated from a list, so a single scenario section stands in for all of them.
 1. The admin signs in, opens `<path>`, and waits for its heading.
    - *Expected*: an axe scan (same tags and waiver) reports zero violations.
 
+## Scenario: /ontology/import with the Backstage catalog source has no WCAG A/AA violations
+
+1. The admin signs in, opens `/ontology/import`, switches the **Import source** to
+   "Backstage catalog (YAML)" and waits for the YAML textarea.
+   - *Expected*: an axe scan (same tags and waiver) reports zero violations.
+
 ## Scenario: reset confirmation and missing-link states have no WCAG A/AA violations
 
 1. An anonymous visitor opens the confirmation page with a syntactically valid, unissued token.

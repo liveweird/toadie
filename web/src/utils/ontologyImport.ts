@@ -462,3 +462,9 @@ export async function runImportBatch(deps: RunImportBatchDeps): Promise<Ontology
 
   return sortedByIndex(rows);
 }
+
+/** Whether any row of a (possibly partial) import report stored something — the condition for
+ *  refreshing the cached blueprints/entities, also after a batch that failed part-way. */
+export function anyStored(rows: readonly OntologyResultRow[]): boolean {
+  return rows.some((row) => row.id != null && row.status !== "EXISTS");
+}

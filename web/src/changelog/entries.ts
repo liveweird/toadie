@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.27.0",
+    date: "2026-10-26",
+    en: `**Convert between Port and Backstage.** Three new pages in the Port world's Ontology section complete the two-way conversion. *Conversion mappings* lists the stored mappings and their health; administrators create and edit them, with every problem pointed out in place. *Export to Backstage* turns the entities you select into Backstage catalog files — preview them, download the YAML, or create and update the catalog files after a dry run, without losing labels, tags, links or references the mapping does not manage. The *Import* page gains a Backstage catalog source: paste, upload or fetch a catalog-info.yaml, preview the conversion, and import it into Port after a confirmation that converts again at the last moment, so existing Port data the mapping does not cover is kept.`,
+    pl: `**Konwersja między Port a Backstage.** Trzy nowe strony w sekcji Ontologia świata Port domykają dwukierunkową konwersję. *Mapowania konwersji* wymieniają zapisane mapowania i ich stan; administratorzy je tworzą i edytują, a każdy problem jest wskazany na miejscu. *Eksport do Backstage* zamienia wybrane encje w pliki katalogu Backstage — można je obejrzeć, pobrać YAML albo utworzyć i zaktualizować pliki katalogu po próbnym przebiegu, bez utraty etykiet, tagów, linków czy odwołań, którymi mapowanie nie zarządza. Strona *Import* zyskuje źródło katalogu Backstage: wklej, wgraj lub pobierz catalog-info.yaml, obejrzyj konwersję i zaimportuj ją do Port po potwierdzeniu, które w ostatniej chwili konwertuje ponownie, więc istniejące dane Port, których mapowanie nie obejmuje, zostają zachowane.`,
+  },
+  {
     version: "2.26.0",
     date: "2026-10-26",
     en: `**Import Backstage catalog files as Port entities.** A stored conversion mapping can now turn Backstage catalog files into Port entities, ready for the entity import: references to entities that cannot be found are dropped and reported rather than failing the import, and merging over existing entities never removes data that Backstage cannot express — extra teams, icons, relations or properties the mapping does not manage, or links and tags it cannot carry. The page to run conversions from follows in a later release.`,

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { parse } from "yaml";
 import type { CatalogFileRequest } from "../api/catalogFiles";
-import { catalogInfoYaml, downloadYaml } from "./catalogYaml";
+import { parseCatalogYaml } from "./catalogImport";
+import { catalogInfoMultiYaml, catalogInfoYaml, downloadYaml } from "./catalogYaml";
 
 const minimal: CatalogFileRequest = {
   kind: "Component",
@@ -164,3 +165,19 @@ describe("downloadYaml", () => {
   });
 });
 
+
+describe("catalogInfoMultiYaml", () => {
+  test("joins documents with --- and parses back to the same documents", () => {
+    const other: CatalogFileRequest = { ...minimal, metadata: { name: "other-svc", namespace: "default" } };
+    const text = catalogInfoMultiYaml([minimal, other]);
+    expect(text.split("---\n")).toHaveLength(2);
+    const parsed = parseCatalogYaml(text);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.documents.map((d) => d.metadata.name)).toEqual(["my-svc", "other-svc"]);
+  });
+
+  test("a single document is just its own YAML and none is empty", () => {
+    expect(catalogInfoMultiYaml([minimal])).toBe(catalogInfoYaml(minimal));
+    expect(catalogInfoMultiYaml([])).toBe("");
+  });
+});

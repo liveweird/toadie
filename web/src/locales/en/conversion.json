@@ -1,0 +1,196 @@
+{
+  "mappings": {
+    "title": "Conversion mappings",
+    "intro": "How Port blueprints correspond to Backstage kinds. A mapping is data — administrators edit it as JSON; the export to Backstage and the Backstage import both read it.",
+    "empty": "No conversion mappings yet",
+    "loadFailed": "Could not load the conversion mappings",
+    "newMapping": "New mapping",
+    "errorsLink": "Errors report",
+    "column": {
+      "name": "Name",
+      "pairs": "Pairs",
+      "status": "Status",
+      "creator": "Created by",
+      "updated": "Updated"
+    },
+    "status": {
+      "ok": "Valid",
+      "findings_one": "{{count}} blocking finding",
+      "findings_other": "{{count}} blocking findings",
+      "drift_one": "{{count}} drift",
+      "drift_other": "{{count}} drifts"
+    },
+    "createTitle": "New conversion mapping",
+    "editTitle": "Edit conversion mapping",
+    "backToList": "Back to conversion mappings",
+    "notFound": "This conversion mapping no longer exists",
+    "field": {
+      "name": "Name",
+      "nameHint": "A single-line display name, unique among the mappings (up to 100 characters)",
+      "document": "Mapping document (JSON)",
+      "documentHint": "schemaVersion 1: pairs of a blueprint and a Backstage kind, each with its rules. Validated against the current blueprints and registries on save."
+    },
+    "validation": {
+      "nameRequired": "Enter a name",
+      "nameLength": "At most 100 characters",
+      "documentRequired": "Enter the mapping document",
+      "documentSyntax": "The document is not valid JSON ({{message}})",
+      "documentObject": "The document must be a JSON object"
+    },
+    "findings": {
+      "rejectedTitle": "The mapping was not saved — it has blocking findings",
+      "storedTitle": "Blocking findings — this mapping went stale and cannot be saved until they are fixed",
+      "driftTitle": "Drift — the mapping no longer matches a registry it mirrors (does not block saving)",
+      "clean": "No findings and no drift against the current blueprints and registries.",
+      "root": "(document)"
+    },
+    "saveForbidden": "Only administrators can edit conversion mappings",
+    "saveConflict": "A conversion mapping with this name already exists",
+    "saveInvalid": "The mapping was refused — the registry may be full (20 mappings) or the document larger than 256 KiB",
+    "saveGone": "This conversion mapping no longer exists — reload the page",
+    "deleteTitle": "Delete conversion mapping?",
+    "deleteBody": "The mapping \"{{name}}\" will be removed. Converting between Backstage and Port with it will no longer be possible.",
+    "deleteFailed": "Could not delete the conversion mapping",
+    "toast": {
+      "created": "Conversion mapping created",
+      "saved": "Conversion mapping saved",
+      "deleted": "Conversion mapping deleted"
+    }
+  },
+  "rows": {
+    "status": {
+      "CONVERTED": "Converted",
+      "CONVERTED_WITH_FINDINGS": "Converted with findings",
+      "SKIPPED": "Skipped",
+      "INVALID": "Invalid"
+    },
+    "findingCode": {
+      "OWNER_TRUNCATED": "Owner truncated",
+      "TARGET_UNMAPPED": "Target unmapped",
+      "TARGET_MISSING": "Target missing",
+      "TARGET_INVALID": "Target invalid",
+      "VALUE_UNMAPPED": "Value unmapped",
+      "NO_PAIR": "No pair",
+      "IDENTITY_CONFLICT": "Identity conflict",
+      "DOCUMENT_INVALID": "Document invalid",
+      "REFERENCE_DROPPED": "Reference dropped",
+      "OWNER_DROPPED": "Owner dropped",
+      "NAMESPACE_UNMAPPED": "Namespace unmapped"
+    },
+    "column": {
+      "status": "Result",
+      "findings": "Findings",
+      "unmapped": "Not converted"
+    },
+    "unmappedCount_one": "{{count}} field",
+    "unmappedCount_other": "{{count}} fields",
+    "summary": "{{total}} rows — {{converted}} converted, {{withFindings}} with findings, {{skipped}} skipped, {{invalid}} invalid",
+    "truncated": "Showing the first {{shown}} of {{total}} rows — the counts above cover all of them.",
+    "none": "—"
+  },
+  "error": {
+    "mappingGone": "This conversion mapping no longer exists — reload the page.",
+    "mappingStale": "This mapping has blocking findings and cannot convert until they are fixed.",
+    "busy": "The server is busy reading the workspace — try again in a moment.",
+    "failedStatus": "The conversion failed (status {{status}}).",
+    "failedNetwork": "The conversion failed. Check your connection and try again.",
+    "refusedExport": "The request was refused — the entity query is invalid (see its diagnostics) or the selection is too large to convert in one go.",
+    "refusedImport": "The documents were refused — a request takes at most 200 of them, and a malformed one is rejected."
+  },
+  "export": {
+    "title": "Export to Backstage",
+    "intro": "Convert stored Port entities into Backstage catalog files through a conversion mapping. Converting stores nothing — files are only created or updated when you confirm.",
+    "mappingLabel": "Conversion mapping",
+    "mappingPlaceholder": "Pick a mapping",
+    "mappingStaleSuffix": "(stale)",
+    "noMappings": "There are no conversion mappings yet.",
+    "manageMappings": "Conversion mappings",
+    "mappingStaleAlert": "The mapping went stale after a blueprint or registry edit — fix its blocking findings first.",
+    "merge": "Merge into existing catalog files",
+    "mergeHint": "On: only the fields the mapping owns are replaced in a stored file of the same identity; everything else in it survives. Off: the bare converted document.",
+    "convert": "Convert",
+    "noBlueprints": "Every blueprint is hidden — nothing is selected.",
+    "queryHint": "Convert uses the APPLIED entity query (the one you last ran — it is shared with the Entity graph and hierarchy), the filters and the visible blueprints.",
+    "loadFailed": "Conversion failed",
+    "resultsTitle": "Result",
+    "tableLabel": "Conversion rows",
+    "fromColumn": "Port entity",
+    "toColumn": "Backstage file",
+    "yamlTitle": "Backstage catalog YAML",
+    "yamlEmpty": "No catalog files to show — nothing converted.",
+    "download": "Download YAML",
+    "createFiles": "Create / update catalog files",
+    "createModal": {
+      "title": "Create / update catalog files",
+      "checkFailed": "The check failed.",
+      "previewBody": "This is what the import would do, computed from a fresh conversion. Files with an existing identity are replaced in place (soft findings are waived, as in every import). Nothing is stored until you confirm, and Confirm converts once more right before storing.",
+      "doneTitle": "Done — these are the stored results.",
+      "confirm": "Confirm",
+      "close": "Close",
+      "cancel": "Cancel",
+      "resultsLabel": "Catalog file results",
+      "column": {
+        "kind": "Kind",
+        "namespace": "Namespace",
+        "name": "Name",
+        "result": "Result",
+        "detail": "Detail"
+      },
+      "status": {
+        "CREATED": "Created",
+        "CREATED_WITH_FINDINGS": "Created with findings",
+        "UPDATED": "Updated",
+        "UPDATED_WITH_FINDINGS": "Updated with findings",
+        "UNCHANGED": "Unchanged",
+        "INVALID": "Invalid",
+        "CONFLICT": "Conflict",
+        "ERROR": "Failed"
+      },
+      "checkStatus": {
+        "CREATED": "Would be created",
+        "CREATED_WITH_FINDINGS": "Would be created with findings",
+        "UPDATED": "Would be updated",
+        "UPDATED_WITH_FINDINGS": "Would be updated with findings",
+        "UNCHANGED": "Would stay unchanged",
+        "INVALID": "Would be refused",
+        "CONFLICT": "Would conflict",
+        "ERROR": "Would fail"
+      },
+      "summary": "{{stored}} of {{total}} stored — {{created}} created, {{updated}} updated, {{unchanged}} unchanged",
+      "checkSummary": "{{stored}} of {{total}} would be stored — {{created}} created, {{updated}} updated, {{unchanged}} unchanged",
+      "storedBeforeFailure": "These files were stored before the failure:",
+      "importFailedTitle": "The import stopped",
+      "stoppedAfter": "Stopped after {{sent}} of {{total}} files — the files above were stored, the rest were not sent.",
+      "nothingStored": "Nothing was stored.",
+      "truncated": "Showing the first {{shown}} of {{total}} rows, the ones that need attention first — the counts above cover all of them."
+    },
+    "chunkNote": "More than {{size}} files are written in chunks of {{size}}; a reference between files in different chunks surfaces as a finding on the later file."
+  },
+  "import": {
+    "intro": "Paste, pick or fetch a Backstage catalog-info.yaml and convert it into Port entities through a conversion mapping. Importing replaces existing entities of the same blueprint and identifier.",
+    "sourceLabel": "Backstage catalog",
+    "merge": "Merge into existing entities",
+    "mergeHint": "On: only the fields the mapping owns are replaced in a stored entity; Port-only data survives. Off: the bare converted document overwrites the entity.",
+    "replaceNote": "Import replaces existing entities of the same blueprint and identifier. Check and Import convert the YAML again right before they run, so a Port edit made since your last preview is not overwritten by a stale merge.",
+    "chunkNote": "More than {{size}} documents are converted in chunks; a reference between files in different chunks is only resolved against what is already stored.",
+    "convertButton": "Convert",
+    "conversionTitle": "Conversion",
+    "resultsTitle": "Import",
+    "tableLabel": "Conversion rows",
+    "fromColumn": "Backstage file",
+    "toColumn": "Port entity",
+    "convertFailedTitle": "Conversion failed",
+    "confirm": {
+      "title": "Import into Port",
+      "mergeOff": "Merge is off: each converted document replaces its Port entity wholesale — properties, relations and ownership that exist only in Port are lost.",
+      "preview": "A fresh conversion and the dry run it leads to. Nothing is stored until you confirm; Confirm converts once more right before importing.",
+      "done": "Imported — the conversion that was written, and the stored rows.",
+      "storedBeforeFailure": "These entities were stored before the failure:",
+      "stoppedAfter": "Stopped after {{sent}} of {{total}} chunks — the chunks that completed were stored, the rest were not sent.",
+      "nothingStored": "Nothing was stored.",
+      "confirm": "Confirm import",
+      "cancel": "Cancel",
+      "close": "Close"
+    }
+  }
+}

@@ -35,6 +35,8 @@ describe("sectionsFor", () => {
       "/entity-graph",
       "/entity-hierarchy",
       "/ontology/errors",
+      "/ontology/mappings",
+      "/ontology/export-backstage",
       "/ontology/import",
     ]);
     const dictionaries = sections.find((s) => s.label === "appShell.section.portDictionaries");
