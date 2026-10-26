@@ -772,15 +772,21 @@ export interface paths {
          *     `replaceExisting` is on), or `ERROR` (an unexpected storage failure). The response is `200` even when every document failed
          *     — the result rows are the outcome; a `400` covers only the batch itself (an
          *     undecodable body, more than 200 entries, an invalid `sourceUrl`, or a malformed
-         *     `expected` list — an out-of-range or repeated index, a negative revision).
+         *     `expected` list — an out-of-range or repeated index, a negative revision, a `fileId`
+         *     beside revision 0).
          *
          *     With `expected` (2.29.0) a file is imported only if its stored counterpart still carries
          *     the revision it was converted over (`ConversionRow.existingRevision`); `0` expects no
-         *     counterpart. A counterpart that changed, vanished or appeared meanwhile makes the row
-         *     `STALE` (nothing stored: no history event, no revision bump, no audit event; `fileId`
-         *     names the counterpart when one exists). The revision is compared under the row lock,
-         *     before anything else, so even a document identical to the stored one is `STALE` on a
-         *     wrong token. Without `replaceExisting` an existing counterpart stays the ordinary
+         *     counterpart. A revision restarts at 1 for every file, so an entry may also pin the
+         *     counterpart's `fileId` (`ConversionRow.existingId`): another file holding the identity
+         *     — one deleted and re-created, or renamed into it — is `STALE` even at an equal
+         *     revision. A counterpart that changed, was replaced, vanished or appeared meanwhile
+         *     makes the row `STALE` (nothing stored: no history event, no revision bump, no audit
+         *     event; `fileId` names the counterpart when one exists). The revision is compared under
+         *     the row lock, before any mutation, so even a document identical to the stored one is
+         *     `STALE` on a wrong token (the document's own validation and namespace resolution run
+         *     first: a guarded file whose namespace was removed meanwhile reads `INVALID`; nothing is
+         *     written either way). Without `replaceExisting` an existing counterpart stays the ordinary
          *     `CONFLICT` whatever the expectation; only a vanished one (positive revision, no active
          *     file) is `STALE`, so nothing the conversion merged over is resurrected. A file without
          *     an entry is unguarded, exactly as before.
@@ -1642,9 +1648,10 @@ export interface paths {
          *     properties and relations, the icon, the title of a document without one — survives. A
          *     many-valued relation of which only some entries resolved keeps its stored targets. The
          *     converted owner stands for the FIRST stored team: equal, the stored team is kept; different,
-         *     only that first entry is replaced and the extra teams stay. Nothing guards the later entity
-         *     import against a Port-only edit made after this call, so convert immediately before importing. `existingId` names the
-         *     merged entity; `merge: false` produces the bare document. `existingUpdatedAt` is that entity's
+         *     only that first entry is replaced and the extra teams stay. A caller sends each row's
+         *     `existingUpdatedAt` back as the later `POST /entities/import`'s `expected` entry for that
+         *     document, so an entity edited after this call comes back `STALE` instead of being overwritten.
+         *     `existingId` names the merged entity; `merge: false` produces the bare document. `existingUpdatedAt` is that entity's
          *     `updatedAt` at conversion time (the write-version token), present exactly when `existingId` is.
          *     `documents` holds exactly the rows that have a document, in row order.
          *
@@ -2772,6 +2779,11 @@ export interface components {
              * @description The stored counterpart's `revision` the file expects; 0 = no stored counterpart.
              */
             revision: number;
+            /**
+             * Format: int32
+             * @description The stored counterpart's id (a conversion row's `existingId`), pinning WHICH file the `revision` belongs to — revisions restart at 1 per file, so a file deleted and re-created (or renamed into the identity) at an equal revision is another file and the row is `STALE`. Optional; absent for a `revision` of 0, and a `fileId` beside `revision: 0` is a `400`.
+             */
+            fileId?: number;
         };
         ImportResponse: {
             /** @description One result per submitted document, in submission order. */

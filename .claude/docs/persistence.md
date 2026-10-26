@@ -1006,18 +1006,28 @@ batch imports stamp their own source reference and do not use this sync guard.
 - **Requirement:** the import request may carry `expected`, one entry per guarded document by
   `documents` index: entities `{index, updatedAt}` (the token is `entities.updated_at`, no
   migration; the conversion row's `existingUpdatedAt`), catalog files `{index, revision}`
-  (`catalog_files.revision`, V40; the row's `existingRevision`). A positive value is the counterpart's
-  token, `0` means "expect no stored counterpart"; an entry-less document is unguarded exactly as
+  (`catalog_files.revision`, V40; the row's `existingRevision`), plus an optional `fileId` (the row's
+  `existingId`; a `400` beside revision `0`) because a revision restarts at 1 per row — a file
+  deleted and re-created, or renamed into the identity, at an equal revision is another file and
+  `STALE` (the entity `updated_at` is a millisecond stamp, so a re-created entity cannot equal the
+  old one and needs no id). A positive value is the counterpart's token, `0` means "expect no stored
+  counterpart"; an entry-less document is unguarded exactly as
   before. The planner/`checkOne` classify from the snapshot (so the dry-run agrees), and the real
   write compares the expectation against the row read under the existing write lock (the V28
-  two-table lock / the catalog `FOR UPDATE`) BEFORE validation and mutation, via
-  `EntityService.update(expectedUpdatedAt)` / `CatalogFileService.update(expectedRevision)`. A
+  two-table lock / the catalog `FOR UPDATE`), via `EntityService.update(expectedUpdatedAt)` /
+  `CatalogFileService.update(expectedRevision)`: for entities BEFORE validation and mutation; for
+  catalog files under the row lock before any mutation, after the document's own validation,
+  namespace resolution and `requireOrWaive` (a guarded file whose namespace was removed meanwhile
+  reads `INVALID`; nothing is written either way). The located counterpart's id is what the update
+  targets, so a delete-and-recreate swap between the lookup and the lock lands on a soft-deleted row
+  and reads `STALE` (vanished), never a create. A
   counterpart that changed, vanished or appeared is the per-row `STALE` status (report-and-skip
   inside the per-document transaction; nothing written: no history event, no revision bump, no
   audit event, no new problem type — `EntityStaleException` never escapes a route). With
   `replaceExisting` off an existing counterpart stays `EXISTS`/`CONFLICT`; only a vanished one
   (positive token, no row) is `STALE`, so a create never resurrects what the conversion merged
-  over. A multi-pass entity import expects, in pass two, the stamp pass one left: an edit between
+  over. A unique-violation race on a row that expected no counterpart (`E=0`) reports `STALE` in
+  both imports, with `replaceExisting` on or off. A multi-pass entity import expects, in pass two, the stamp pass one left: an edit between
   the passes becomes the existing "Stored without its deferred references" `ERROR` with the committed
   id. A malformed list (index outside `0..documents-1`, a repeated index, a negative value) is a
   `400` for the whole batch on the real run and the check alike (`requireExpectedStates`, inside
@@ -1027,7 +1037,7 @@ batch imports stamp their own source reference and do not use this sync guard.
 - **Reference:** `infra/importing/ImportBatch.kt` (`OntologyImportStatus.STALE`,
   `requireExpectedStates`), `entities/EntityImport.kt` (`staleReason`, `writeEntityRow`,
   `pass2Entity`), `entities/EntityService.kt` (`applyUpdate`), `catalog/Import.kt`
-  (`ExpectedFileState`, `ImportResultStatus.STALE`), `catalog/CatalogFileImport.kt` (`staleReason`,
+  (`ExpectedFileState` with its optional `fileId`, `ImportResultStatus.STALE`), `catalog/CatalogFileImport.kt` (`staleReason`,
   `importOne`, `checkOne`), `catalog/CatalogFileService.kt` (`update`'s `requireExpectedRevision`,
   `activeRowOf`); `.claude/docs/conversion-mapping.md` (the tokens on the conversion rows).
 - **Enforcement:** `EntityImportPlanTest` (one case per cell of the semantics table, EXISTS
@@ -1035,13 +1045,17 @@ batch imports stamp their own source reference and do not use this sync guard.
   parity, malformed `expected`, the pass-two pin), `SampleImportConversionTest` (stale re-post),
   and, for catalog files, `CatalogImportReplaceTest` (match, stale with no event / revision bump /
   `catalog_file.updated` audit, the stale no-op, `0` against an active twin, a soft-deleted or
-  seam-vanished counterpart never resurrected, dry-run parity, malformed `expected`).
+  seam-vanished counterpart never resurrected, a delete-and-recreate at an equal revision, the
+  under-the-lock check via the lookup seam, duplicates after a STALE, dry-run parity, malformed
+  `expected`); `EntityImportTest` also pins the under-the-lock check (a trigger moving a guarded row's
+  `updated_at` after the plan).
 - **Exception:** legacy clients, the sample `load.sh` scripts and the MCP import tools send no
   `expected` and behave exactly as before; blueprint imports never carry it. Residuals: a write
   landing between a conversion's snapshot and its merge read leaves the token older than the merged
   document (a spurious, safe `STALE`); the planner's snapshot can go stale before the lock (a
-  predicted `UPDATED` becomes `STALE`); the millisecond token is exact only under the write lock's
-  serialisation (a single replica); a case-only identifier rename inside a deferral-bearing batch
+  predicted `UPDATED` becomes `STALE`); the write lock serialises writers but does not force distinct
+  stamps, so two entity writes within the same millisecond can share an `updated_at` — a stale token
+  can then pass, only for a write landing within the same millisecond as the conversion's read; a case-only identifier rename inside a deferral-bearing batch
   bumps referrers through the rename cascade, which pass two then reports as `ERROR`.
 
 **Import dry-run preflight (files, blueprints, entities).** Applies when a `POST …/import` and its

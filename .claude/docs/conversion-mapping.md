@@ -248,7 +248,8 @@ identities of the stored catalog and of the Port workspace, optionally the store
   document, so a Port-side edit made in between turns the row `STALE` instead of being overwritten (the rule:
   `persistence.md` "Import expectations (entities and catalog files)"). The SPA converts ONCE when the confirm
   dialog opens and Confirm imports exactly that previewed batch with its tokens; a `STALE` row asks the user to
-  convert again. A caller that sends no `expected` keeps the old last-write-wins behaviour.
+  convert again. A caller that sends no `expected` keeps the old last-write-wins behaviour. The catalog direction is the same
+  with `existingRevision` (and `existingId`, sent as the entry's `fileId`: a revision restarts at 1 per file).
 - **One leaf, one rule.** A validated mapping has one import-reading rule per Port leaf. The engine is defensive
   where contributions still meet: array values union, and any `Kept`/`Union` contributor makes the result a
   `Union` with the stored values, so one rule's failure to convert never lets another's value remove what is stored.

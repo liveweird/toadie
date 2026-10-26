@@ -10,7 +10,7 @@ import CatalogFilesBatchModal from "./CatalogFilesBatchModal";
 const file = (name: string): CatalogFileRequest => ({ kind: "Component", metadata: { name }, spec: {} });
 const files = (n: number) => {
   const list = Array.from({ length: n }, (_, i) => file(`f${i}`));
-  return { files: list, expected: list.map((_, i) => i + 1) };
+  return { files: list, expected: list.map((_, i) => ({ revision: i + 1, fileId: 50 + i })) };
 };
 
 type Body = { files: CatalogFileRequest[] };
@@ -52,7 +52,7 @@ describe("CatalogFilesBatchModal", () => {
     expect(await within(dialog).findAllByText("Would be created")).toHaveLength(2);
     expect(calls("/api/v1/files/import")).toHaveLength(0);
     const checkBody = JSON.parse((calls("/api/v1/files/import/check")[0][1] as RequestInit).body as string);
-    expect(checkBody.expected).toEqual([{ index: 0, revision: 1 }, { index: 1, revision: 2 }]);
+    expect(checkBody.expected).toEqual([{ index: 0, revision: 1, fileId: 50 }, { index: 1, revision: 2, fileId: 51 }]);
 
     await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
     expect(await within(dialog).findAllByText("Created")).toHaveLength(2);
@@ -60,7 +60,7 @@ describe("CatalogFilesBatchModal", () => {
     const importBody = JSON.parse((calls("/api/v1/files/import")[0][1] as RequestInit).body as string);
     expect(importBody.replaceExisting).toBe(true);
     expect(importBody.files.map((f: CatalogFileRequest) => f.metadata.name)).toEqual(["f0", "f1"]);
-    expect(importBody.expected).toEqual([{ index: 0, revision: 1 }, { index: 1, revision: 2 }]);
+    expect(importBody.expected).toEqual([{ index: 0, revision: 1, fileId: 50 }, { index: 1, revision: 2, fileId: 51 }]);
   });
 
   test("a STALE row renders red as Changed meanwhile", async () => {

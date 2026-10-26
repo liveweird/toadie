@@ -27,11 +27,14 @@ type Converted = ReturnType<typeof importDisplayRows>;
  *
  * - **Convert** — previews the per-file conversion report (`POST …/entity-documents`, a pure
  *   computation);
- * - **Check import** / **Import** — each runs a FRESH conversion immediately before talking to
- *   `POST /entities/import(/check)` with `replaceExisting: true`, never reusing the preview's
- *   documents: nothing guards the entity import against a Port-only edit made after a conversion
- *   (`.claude/docs/conversion-mapping.md` "Read-then-write caveat"), so the gap between the merge
- *   read and the write is kept as short as the client can make it.
+ * - **Check import** — converts afresh and immediately runs the dry run
+ *   (`POST /entities/import/check`, `replaceExisting: true`) carrying each document's write-version
+ *   token (the conversion row's `existingUpdatedAt`, 0 = none) as `expected`, so the report predicts
+ *   `STALE` exactly as the real import would;
+ * - **Import** — opens the confirm dialog, which converts ONCE and imports exactly the batch it
+ *   previewed, with the same tokens: an entity edited meanwhile comes back `STALE` ("Changed
+ *   meanwhile") instead of being overwritten (`.claude/docs/conversion-mapping.md` "Read-then-write
+ *   guard").
  */
 export default function BackstageCatalogImport() {
   const { t } = useTranslation();

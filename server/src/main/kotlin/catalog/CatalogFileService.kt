@@ -685,9 +685,9 @@ class CatalogFileService(
             .toList().singleOrNull()?.let { StoredRevision(it[CatalogFiles.id].value, it[CatalogFiles.revision]) }
     }
 
-    /** Every active file's lowercased identity with its `revision` — the dry-run's [activeRowOf], read once. */
-    private suspend fun activeRevisions(): Map<EntityIdentity, Long> =
-        CatalogFiles.select(CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name, CatalogFiles.revision)
+    /** Every active file's lowercased identity with its id and `revision` — the dry-run's [activeRowOf], read once. */
+    private suspend fun activeRevisions(): Map<EntityIdentity, StoredRevision> =
+        CatalogFiles.select(CatalogFiles.id, CatalogFiles.kind, CatalogFiles.namespace, CatalogFiles.name, CatalogFiles.revision)
             .where { active() }
             .toList()
             .associate {
@@ -695,7 +695,7 @@ class CatalogFileService(
                     kind = it[CatalogFiles.kind].lowercase(),
                     namespace = it[CatalogFiles.namespace].lowercase(),
                     name = it[CatalogFiles.name].lowercase(),
-                ) to it[CatalogFiles.revision]
+                ) to StoredRevision(it[CatalogFiles.id].value, it[CatalogFiles.revision])
             }
 
     /**
@@ -725,7 +725,7 @@ class CatalogFileService(
      */
     internal suspend fun <T> withImportSnapshot(
         block: suspend (
-            active: Map<EntityIdentity, Long>,
+            active: Map<EntityIdentity, StoredRevision>,
             registries: RegistrySnapshot,
             resolve: suspend (CatalogFile) -> CatalogFile,
             predict: suspend (CatalogFile, SourceWrite) -> ReplacePrediction,

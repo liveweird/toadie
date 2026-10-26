@@ -582,7 +582,7 @@ class CatalogImportReplaceTest {
         // The lookup seam still answers the (now soft-deleted) id: the locked update finds no active row.
         val seamRow = service.import(
             listOf(componentFile(seam, namespace = ns)), userId, replaceExisting = true,
-            expected = mapOf(0 to seamFile.revision),
+            expected = mapOf(0 to ExpectedFileState(0, seamFile.revision)),
             activeRowLookup = { StoredRevision(seamFile.id, seamFile.revision) },
         ).single()
         assertEquals(ImportResultStatus.STALE, seamRow.status)
@@ -603,6 +603,7 @@ class CatalogImportReplaceTest {
             listOf(ExpectedFileState(-1, 1)),
             listOf(ExpectedFileState(0, 1), ExpectedFileState(0, 2)),
             listOf(ExpectedFileState(0, -1)),
+            listOf(ExpectedFileState(0, 0, fileId = 5u)), // a counterpart id beside "expect none"
         ).forEach { expected ->
             val request = ImportRequest(files = batch, replaceExisting = true, expected = expected)
             assertEquals(HttpStatusCode.BadRequest, client.postJson("$CATALOG_FILES_PATH/import", request).status, expected.toString())
@@ -610,5 +611,88 @@ class CatalogImportReplaceTest {
             assertEquals(HttpStatusCode.BadRequest, check.status, expected.toString())
         }
         assertEquals(ImportResultStatus.CREATED, client.importFiles(batch, replaceExisting = false).single().status, "nothing was stored")
+    }
+
+    @Test
+    fun `the locked update itself refuses a revision that moved after the lookup - nothing is written`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("implace-lock")
+        val userId = TestUsers.seed(uniqueEmail("implace-lock-actor"), "pw", role = UserRole.USER)
+        val service = application.attributes[CatalogFileServiceKey]
+        val ns = uniqueNamespace("repllock")
+        val name = uniqueEntityName("lock")
+        val created = client.createCatalogFile(componentFile(name, namespace = ns, title = "Old"))
+        val editedRevision = client.edit(created.id, componentFile(name, namespace = ns, title = "Edited elsewhere"))
+        val eventsBefore = client.events(created.id).items.size
+
+        // The lookup answers the PRE-edit state (the snapshot went stale before the lock), so only the
+        // revision compared under the row lock can catch it.
+        val row = service.import(
+            listOf(componentFile(name, namespace = ns, title = "Imported")), userId, replaceExisting = true,
+            expected = mapOf(0 to ExpectedFileState(0, created.revision, created.id)),
+            activeRowLookup = { StoredRevision(created.id, created.revision) },
+        ).single()
+        assertEquals(ImportResultStatus.STALE, row.status)
+        assertEquals(created.id, row.fileId, "the lock-path STALE names the counterpart")
+        val kept = client.file(created.id)
+        assertEquals("Edited elsewhere", kept.metadata.title)
+        assertEquals(editedRevision, kept.revision, "no revision bump")
+        assertEquals(eventsBefore, client.events(created.id).items.size, "no history event")
+    }
+
+    @Test
+    fun `a file deleted and re-created at the same revision is another file - STALE in both runs`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("implace-swap")
+        val userId = TestUsers.seed(uniqueEmail("implace-swap-actor"), "pw", role = UserRole.USER)
+        val service = application.attributes[CatalogFileServiceKey]
+        val ns = uniqueNamespace("replswap")
+        val name = uniqueEntityName("swap")
+        val old = client.createCatalogFile(componentFile(name, namespace = ns, title = "Old"))
+        assertEquals(HttpStatusCode.NoContent, client.delete("$CATALOG_FILES_PATH/${old.id}").status)
+        val reborn = client.createCatalogFile(componentFile(name, namespace = ns, title = "Reborn"))
+        assertEquals(old.revision, reborn.revision, "revisions restart at 1 for every row")
+        assertNotEquals(old.id, reborn.id)
+        val batch = listOf(componentFile(name, namespace = ns, title = "Imported"))
+        val expected = listOf(ExpectedFileState(0, old.revision, old.id))
+        val eventsBefore = client.events(reborn.id).items.size
+
+        val check = client.checkFiles(batch, expected = expected).single()
+        val real = client.importFiles(batch, expected = expected).single()
+        assertEquals(ImportResultStatus.STALE, check.status)
+        assertEquals(ImportResultStatus.STALE, real.status)
+        assertEquals(check.message, real.message)
+        // The lookup seam still answers the OLD file (the swap landed between the lookup and the lock):
+        // the update by the old id finds no active row, so it is STALE (vanished), never a create.
+        val seam = service.import(
+            batch, userId, replaceExisting = true, expected = mapOf(0 to expected.single()),
+            activeRowLookup = { StoredRevision(old.id, old.revision) },
+        ).single()
+        assertEquals(ImportResultStatus.STALE, seam.status)
+
+        val kept = client.file(reborn.id)
+        assertEquals("Reborn", kept.metadata.title)
+        assertEquals(reborn.revision, kept.revision)
+        assertEquals(eventsBefore, client.events(reborn.id).items.size)
+        // Without the file id the same revision number cannot tell the files apart - which is why a conversion sends it.
+        val unpinned = client.importFiles(batch, expected = listOf(ExpectedFileState(0, old.revision))).single()
+        assertEquals(ImportResultStatus.UPDATED, unpinned.status)
+    }
+
+    @Test
+    fun `a STALE file consumes its identity - a later duplicate is CONFLICT in both runs`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("implace-dup")
+        val ns = uniqueNamespace("repldup")
+        val name = uniqueEntityName("dup")
+        val created = client.createCatalogFile(componentFile(name, namespace = ns, title = "Old"))
+        client.edit(created.id, componentFile(name, namespace = ns, title = "Edited"))
+        val batch = listOf(componentFile(name, namespace = ns, title = "A"), componentFile(name, namespace = ns, title = "B"))
+        val expected = listOf(ExpectedFileState(0, created.revision, created.id))
+        val statuses = listOf(ImportResultStatus.STALE, ImportResultStatus.CONFLICT)
+
+        assertEquals(statuses, client.checkFiles(batch, expected = expected).map { it.status })
+        assertEquals(statuses, client.importFiles(batch, expected = expected).map { it.status })
+        assertEquals("Edited", client.file(created.id).metadata.title)
     }
 }

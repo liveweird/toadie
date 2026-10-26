@@ -37,16 +37,22 @@ data class ImportRequest(
     /**
      * Optional per-file write-version expectations (2.29.0), by `files` index: a positive `revision`
      * is the stored counterpart's `revision` (a conversion row's `existingRevision`), `0` means
-     * "expect NO stored counterpart". A file whose counterpart changed, vanished or appeared is
-     * refused as `STALE`; a file without an entry is unguarded, exactly as before. See
+     * "expect NO stored counterpart" (each entry may also pin the counterpart's `fileId`). A file whose
+     * counterpart changed, was replaced by another file, vanished or appeared is refused as `STALE`;
+     * a file without an entry is unguarded, exactly as before. See
      * `.claude/docs/persistence.md` "Import expectations (entities and catalog files)".
      */
     val expected: List<ExpectedFileState> = emptyList(),
 )
 
-/** One [ImportRequest.expected] entry: the `revision` file [index] expects of its stored counterpart (0 = none). */
+/**
+ * One [ImportRequest.expected] entry: the `revision` file [index] expects of its stored counterpart (0 = none).
+ * A revision restarts at 1 for every row, so [fileId] — the counterpart's id, a conversion row's `existingId` —
+ * pins WHICH file the revision belongs to: a file deleted and re-created (or renamed into the identity) at an
+ * equal revision is a different file, hence STALE. Optional; only valid beside a positive revision.
+ */
 @Serializable
-data class ExpectedFileState(val index: Int, val revision: Long)
+data class ExpectedFileState(val index: Int, val revision: Long, val fileId: UInt? = null)
 
 @Serializable
 enum class ImportResultStatus {

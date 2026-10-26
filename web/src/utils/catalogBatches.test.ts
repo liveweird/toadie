@@ -6,7 +6,7 @@ import { jsonResponse } from "../test/http";
 
 const file = (name: string): CatalogFileRequest => ({ kind: "Component", metadata: { name }, spec: {} });
 
-const batchOf = (files: CatalogFileRequest[], revision = 3) => ({ files, expected: files.map(() => revision) });
+const batchOf = (files: CatalogFileRequest[], revision = 3) => ({ files, expected: files.map(() => ({ revision })) });
 
 const conversionRow = (index: number, status: ConversionRow["status"], existingRevision?: number): ConversionRow => ({
   index,
@@ -20,7 +20,7 @@ const conversionRow = (index: number, status: ConversionRow["status"], existingR
 });
 
 describe("expectedFileStates", () => {
-  test("pairs the revision of each document-bearing row, 0 for a row with no counterpart", () => {
+  test("pairs the revision and file id of each document-bearing row, revision 0 for a row with no counterpart", () => {
     const rows = [
       conversionRow(0, "CONVERTED", 7),
       conversionRow(1, "SKIPPED"),
@@ -28,7 +28,7 @@ describe("expectedFileStates", () => {
       conversionRow(3, "INVALID"),
       conversionRow(4, "CONVERTED", 2),
     ];
-    expect(expectedFileStates(rows, 3)).toEqual([7, 0, 2]);
+    expect(expectedFileStates(rows, 3)).toEqual([{ revision: 7, fileId: 10 }, { revision: 0 }, { revision: 2, fileId: 14 }]);
   });
 
   test("a row count that does not pair with the files throws", () => {
@@ -71,20 +71,20 @@ describe("runCatalogFileBatches", () => {
 
   test("sends each file's expected revision rebased to its position inside the chunk", async () => {
     const files = Array.from({ length: 202 }, (_, i) => file(`f${i}`));
-    await runCatalogFileBatches("import", { files, expected: files.map((_, i) => i + 1) });
+    await runCatalogFileBatches("import", { files, expected: files.map((_, i) => ({ revision: i + 1, fileId: 100 + i })) });
 
-    const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string) as { expected: { index: number; revision: number }[] });
+    const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string) as { expected: { index: number; revision: number; fileId?: number }[] });
     expect(bodies[0].expected).toHaveLength(200);
-    expect(bodies[0].expected[199]).toEqual({ index: 199, revision: 200 });
+    expect(bodies[0].expected[199]).toEqual({ index: 199, revision: 200, fileId: 299 });
     // File 200 of the full input is index 0 of the second chunk; its revision stays its own.
     expect(bodies[1].expected).toEqual([
-      { index: 0, revision: 201 },
-      { index: 1, revision: 202 },
+      { index: 0, revision: 201, fileId: 300 },
+      { index: 1, revision: 202, fileId: 301 },
     ]);
   });
 
-  test("a file expecting no counterpart carries revision 0 on the wire", async () => {
-    await runCatalogFileBatches("check", { files: [file("a")], expected: [0] });
+  test("a file expecting no counterpart carries revision 0 and no file id on the wire", async () => {
+    await runCatalogFileBatches("check", { files: [file("a")], expected: [{ revision: 0 }] });
     expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string).expected).toEqual([{ index: 0, revision: 0 }]);
   });
 

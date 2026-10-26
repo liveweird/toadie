@@ -30,23 +30,31 @@ export class CatalogBatchError extends Error {
 /** The failure behind a batch error (the batch error itself carries no status). */
 export const batchCause = (err: unknown): unknown => (err instanceof CatalogBatchError ? err.cause : err);
 
+/** What one file was converted over: the stored counterpart's `revision` (0 = expected none) and,
+ *  with a counterpart, its `fileId` — a revision restarts at 1 per file, so the id pins WHICH file. */
+export type ExpectedFile = { revision: number; fileId?: number };
+
 /** A converted batch paired with the write-version each file was converted over: `expected[i]`
- *  belongs to `files[i]` — the stored counterpart's `revision`, or 0 for "expected none". */
+ *  belongs to `files[i]`. */
 export type CatalogBatch = {
   files: readonly CatalogFileRequest[];
-  expected: readonly number[];
+  expected: readonly ExpectedFile[];
 };
 
 /**
  * The write-version token of each file in `files`: the `existingRevision` of every row that HAS a
  * document (`CONVERTED` / `CONVERTED_WITH_FINDINGS`, in row order — the server's pairing
- * contract), 0 when the row matched no stored file. A length that disagrees with the file count
+ * contract) with the id of the file it belongs to, revision 0 (no id) when the row matched no stored file. A length that disagrees with the file count
  * means the pairing broke, so it throws rather than guard the wrong files.
  */
-export function expectedFileStates(rows: readonly ConversionRow[], fileCount: number): number[] {
+export function expectedFileStates(rows: readonly ConversionRow[], fileCount: number): ExpectedFile[] {
   const expected = rows
     .filter((row) => row.status === "CONVERTED" || row.status === "CONVERTED_WITH_FINDINGS")
-    .map((row) => row.existingRevision ?? 0);
+    .map((row): ExpectedFile =>
+      row.existingRevision === undefined || row.existingId === undefined
+        ? { revision: 0 }
+        : { revision: row.existingRevision, fileId: row.existingId },
+    );
   if (expected.length !== fileCount) throw new Error("conversion rows do not pair with the converted files");
   return expected;
 }
@@ -71,9 +79,10 @@ export async function runCatalogFileBatches(
   let offset = 0;
   for (const chunk of chunked(files, IMPORT_CHUNK_SIZE)) {
     const start = offset;
-    const chunkExpected: ExpectedFileState[] = chunk.flatMap((_, index) =>
-      expected[start + index] === undefined ? [] : [{ index, revision: expected[start + index] }],
-    );
+    const chunkExpected: ExpectedFileState[] = chunk.flatMap((_, index) => {
+      const entry = expected[start + index];
+      return entry === undefined ? [] : [{ index, revision: entry.revision, ...(entry.fileId === undefined ? {} : { fileId: entry.fileId }) }];
+    });
     try {
       const response = await send(chunk, undefined, true, chunkExpected);
       rows.push(...response.results.map((row) => ({ ...row, index: row.index + start })));

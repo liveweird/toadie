@@ -108,6 +108,9 @@ private fun catalogImportPreflight(request: ImportRequest): String? {
         throw BadRequestException("files must have at most $MAX_IMPORT_FILES entries")
     }
     requireExpectedStates(request.files.size, request.expected.map { it.index to it.revision })
+    if (request.expected.any { it.fileId != null && it.revision == 0L }) {
+        throw BadRequestException("expected fileId names a stored counterpart, so its revision must be positive")
+    }
     return sanitizedSourceUrl(request.sourceUrl)
 }
 
@@ -241,7 +244,7 @@ fun Application.configureCatalogFileRoutes() {
                     request.files,
                     replaceExisting = request.replaceExisting,
                     sourceUrl = sourceUrl,
-                    expected = request.expected.associate { it.index to it.revision },
+                    expected = request.expected.associateBy { it.index },
                 )
                 call.respond(HttpStatusCode.OK, ImportResponse(results = results))
             }
@@ -257,7 +260,7 @@ fun Application.configureCatalogFileRoutes() {
                     caller.userId,
                     sourceUrl = sourceUrl,
                     replaceExisting = request.replaceExisting,
-                    expected = request.expected.associate { it.index to it.revision },
+                    expected = request.expected.associateBy { it.index },
                 )
                 // Replaced rows audit exactly like the ordinary replace (`catalog_file.updated`,
                 // `waivedFindings` = the waived count), marked `import` — the UNCHANGED no-op

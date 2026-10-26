@@ -466,6 +466,38 @@ class EntityImportTest {
     }
 
     @Test
+    fun `a row edited after the plan but before its write is STALE under the lock - id kept, row untouched, no audit`() = testApplication {
+        usePostgresTestcontainer()
+        val admin = seededClient(identifier("ent-import-admin"), UserRole.ADMIN)
+        val bpId = identifier("bp-lock")
+        val first = identifier("ent-lock-first")
+        val guarded = identifier("ent-lock-guarded")
+        try {
+            admin.createBlueprint(BlueprintRequest(identifier = bpId, title = "T", schema = BlueprintSchema()))
+            val guardedRead = admin.createEntity(EntityRequest(blueprint = bpId, identifier = guarded, title = "Before"))
+            val request = EntityImportRequest(
+                replaceExisting = true,
+                documents = listOf(first, guarded).map { doc(EntityRequest(blueprint = bpId, identifier = it, title = "Imported")) },
+                expected = listOf(ExpectedEntityState(1, guardedRead.updatedAt)),
+            )
+            // The plan sees the matching token; the INSERT of the first row (written before the guarded one) then
+            // moves the guarded row's updated_at, so only the comparison under the write lock can catch it.
+            withAuditCapture { capture ->
+                val rows = withEditBetweenPasses(edited = guarded, after = first) {
+                    admin.import(request).body<EntityImportResponse>().results
+                }
+                assertEquals(listOf(OntologyImportStatus.CREATED, OntologyImportStatus.STALE), rows.map { it.status })
+                assertEquals(guardedRead.id, rows[1].id, "STALE names the counterpart")
+                assertTrue(capture.events.none { it.message == "entity.updated" && it.hasKeyValue("identifier", guarded) })
+            }
+            assertEquals("Before", admin.get("/api/v1/entities/${guardedRead.id}").body<EntityResponse>().title, "the row was not written")
+        } finally {
+            TestEntities.remove(first, guarded)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
     fun `an edit landing between the passes is a pass-2 ERROR with the committed id, never an overwrite`() = testApplication {
         usePostgresTestcontainer()
         val admin = seededClient(identifier("ent-import-admin"), UserRole.ADMIN)

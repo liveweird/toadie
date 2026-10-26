@@ -270,7 +270,7 @@ describe("ExportToBackstage page", () => {
     const dialog = await screen.findByRole("dialog", { name: "Create / update catalog files" });
     expect(await within(dialog).findByText("Would be updated")).toBeInTheDocument();
     const checkCall = fetchStub.mock.calls.find(([url]) => url === "/api/v1/files/import/check")!;
-    expect(JSON.parse((checkCall[1] as RequestInit).body as string)).toEqual({ files: [FILE], replaceExisting: true, expected: [{ index: 0, revision: 5 }] });
+    expect(JSON.parse((checkCall[1] as RequestInit).body as string)).toEqual({ files: [FILE], replaceExisting: true, expected: [{ index: 0, revision: 5, fileId: 21 }] });
     expect(fetchStub.mock.calls.some(([url]) => url === "/api/v1/files/import")).toBe(false);
 
     await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
@@ -278,7 +278,7 @@ describe("ExportToBackstage page", () => {
     expect(await within(dialog).findByText("Updated")).toBeInTheDocument();
     expect(within(dialog).getByRole("link", { name: "Edit checkout" })).toHaveAttribute("href", "/files/21/edit");
     const importCall = fetchStub.mock.calls.find(([url]) => url === "/api/v1/files/import")!;
-    expect(JSON.parse((importCall[1] as RequestInit).body as string)).toEqual({ files: [FILE], replaceExisting: true, expected: [{ index: 0, revision: 5 }] });
+    expect(JSON.parse((importCall[1] as RequestInit).body as string)).toEqual({ files: [FILE], replaceExisting: true, expected: [{ index: 0, revision: 5, fileId: 21 }] });
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
