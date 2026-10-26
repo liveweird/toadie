@@ -393,4 +393,54 @@ describe("ImportCatalogFiles page", () => {
     await waitFor(() => expect(importBodies).toHaveLength(2));
     expect(importBodies[1] as object).not.toHaveProperty("sourceUrl");
   });
+
+  test("the Replace existing switch is sent to Check and Import and the replace statuses render", async () => {
+    const bodies: { url: string; body: Record<string, unknown> }[] = [];
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((url === "/api/v1/files/import" || url === "/api/v1/files/import/check") && init?.method === "POST") {
+        bodies.push({ url, body: JSON.parse(init.body as string) as Record<string, unknown> });
+        const check = url.endsWith("/check");
+        return Promise.resolve(
+          jsonResponse(200, {
+            results: [
+              { index: 0, kind: "Component", namespace: "default", name: "payments-svc", status: "UPDATED", fileId: check ? null : 7 },
+              { index: 1, kind: "Group", namespace: "default", name: "team-a", status: "UNCHANGED", fileId: check ? null : 8 },
+              { index: 2, kind: "Group", namespace: "default", name: "team-b", status: "UPDATED_WITH_FINDINGS", fileId: check ? null : 9, message: "spec.parent does not resolve" },
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderPage();
+    pasteYaml(TWO_DOCS);
+    await screen.findByText("2 documents ready to import");
+
+    // Off by default: the bodies carry no replaceExisting at all.
+    const replace = screen.getByRole("switch", { name: /Replace existing files/ });
+    expect(replace).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Check" }));
+    await screen.findByText("Would stay unchanged");
+    expect(bodies[0]!.body).not.toHaveProperty("replaceExisting");
+
+    // Toggling clears the (now mis-moded) report, and both runs carry the flag.
+    await user.click(replace);
+    expect(screen.queryByText("Would stay unchanged")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Check" }));
+    expect(await screen.findByText("Would be updated")).toBeInTheDocument();
+    expect(screen.getByText("Would be updated with findings")).toBeInTheDocument();
+    expect(screen.getByText("2 of 3 documents would import; 1 already match.")).toBeInTheDocument();
+    expect(bodies[1]).toMatchObject({ url: "/api/v1/files/import/check", body: { replaceExisting: true } });
+
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    expect(await screen.findByText("Imported 2 of 3 documents; 1 already matched.")).toBeInTheDocument();
+    expect(bodies[2]).toMatchObject({ url: "/api/v1/files/import", body: { replaceExisting: true } });
+    expect(screen.getByText("Updated")).toBeInTheDocument();
+    expect(screen.getByText("Unchanged")).toBeInTheDocument();
+    expect(screen.getByText("Updated with findings")).toBeInTheDocument();
+    expect(screen.getByText("spec.parent does not resolve")).toBeInTheDocument();
+    // An unchanged row still links to its file.
+    expect(screen.getByRole("link", { name: "Edit team-a" })).toHaveAttribute("href", "/files/8/edit");
+  });
 });

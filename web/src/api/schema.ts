@@ -768,13 +768,28 @@ export interface paths {
          *     the structural descriptor-format validation or namespace resolution, `message` names
          *     the rule; sibling documents in the SAME batch count as resolution targets, order
          *     independent), `CONFLICT` (an active file
-         *     already holds the kind+namespace+name identity — nothing is overwritten), or `ERROR`
-         *     (an unexpected storage failure). The response is `200` even when every document failed
+         *     already holds the kind+namespace+name identity — nothing is overwritten unless
+         *     `replaceExisting` is on), or `ERROR` (an unexpected storage failure). The response is `200` even when every document failed
          *     — the result rows are the outcome; a `400` covers only the batch itself (an
          *     undecodable body, more than 200 entries, or an invalid `sourceUrl`).
          *
          *     With `sourceUrl` set (the fetch-from-URL flow), every STORED row gets it as its
          *     source reference and starts synced — an import from a repo URL IS a sync.
+         *
+         *     With `replaceExisting: true` an identity an ACTIVE file already holds is replaced in
+         *     place instead of conflicting, through the same path as an ordinary replace
+         *     (`PUT /files/{id}`: the field-diff UPDATED history event, the revision bump, no-op
+         *     suppression — never a delete-and-create): `UPDATED` (replaced), `UPDATED_WITH_FINDINGS`
+         *     (replaced despite soft findings, which import always waives; `message` lists them) or
+         *     `UNCHANGED` (the file already held this exact document and reference; `message` still
+         *     lists any findings it carries); `fileId` is the replaced file. A batch WITHOUT
+         *     `sourceUrl` keeps an existing file's reference and sync state untouched, so an UNCHANGED
+         *     row records nothing, bumps no revision and changes no stamp; a batch WITH one is a repo
+         *     sync (`POST /files/{id}/sync` semantics): it moves/re-stamps the reference and sync
+         *     state and bumps the revision, and an UNCHANGED row still records the always-recorded
+         *     SYNCED history event. A
+         *     soft-deleted file with the same identity does not count: that document is `CREATED`. A
+         *     second occurrence of an identity the batch already stored or replaced is `CONFLICT`.
          *
          *     Each document and its import-origin CREATED history event commit in one transaction.
          *     An unexpected history/storage failure rolls back that document and returns `ERROR`
@@ -803,14 +818,18 @@ export interface paths {
          *     validation, namespace resolution, identity conflicts against the workspace AND
          *     within the batch, soft findings — and returns the same result rows, storing
          *     nothing. Statuses read as PREDICTIONS: `CREATED` = would be created, `CREATED_WITH_
-         *     FINDINGS` = would be created carrying the listed findings; `fileId` is always null.
+         *     FINDINGS` = would be created carrying the listed findings, and — with `replaceExisting` —
+         *     `UPDATED` / `UPDATED_WITH_FINDINGS` / `UNCHANGED` = the existing file would be replaced
+         *     (or would already match), predicted by the very classification the real import uses;
+         *     `fileId` is always null.
          *     A pure computation: nothing is stored, nothing is audited; POST only because the
          *     batch travels in the body. The report is a snapshot — a concurrent write between
          *     the check and the real import can change the actual outcome. The same `400` covers
          *     only the batch itself (an undecodable body, more than 200 entries, or an invalid
          *     batch-level `sourceUrl`). The `sourceUrl` is validated exactly as `importCatalogFiles`
          *     validates it (same preflight, same order, same problem body) but never fetched; a
-         *     valid one changes no prediction.
+         *     valid one changes no prediction, except whether a `replaceExisting` replace would move
+         *     an existing file's source reference.
          */
         post: operations["checkCatalogImport"];
         delete?: never;
@@ -2447,6 +2466,11 @@ export interface components {
             files: components["schemas"]["CatalogFileRequest"][];
             /** @description The URL the batch was fetched from (the import page's fetch-from-URL flow) — every stored row gets it as its source reference AND starts synced (the content IS the repo copy at import time). Omit for pasted/uploaded batches. One URL for the whole request: a multi-document catalog-info.yaml is ONE repo file. Same static guards as a write's `sourceUrl` (absolute https, no credentials, at most 2048 characters), else the whole batch is rejected with `400` — by the real import and by the dry-run check alike. */
             sourceUrl?: string | null;
+            /**
+             * @description Off (default): an identity an active file already holds is a `CONFLICT` and nothing is overwritten. On: that file is replaced in place through the ordinary replace path (history event with the field diff, revision bump, no-op suppression) and reported `UPDATED`, `UPDATED_WITH_FINDINGS` or `UNCHANGED`. Soft findings are always waived; the structural rules stay hard. A batch without `sourceUrl` keeps an existing file's source reference and sync state; one with a `sourceUrl` syncs every replaced file (reference and sync stamps, revision bump, a recorded history event even when the document matched).
+             * @default false
+             */
+            replaceExisting: boolean;
         };
         ImportResponse: {
             /** @description One result per submitted document, in submission order. */
@@ -2462,16 +2486,16 @@ export interface components {
             /** @description The sanitized entity name. */
             name: string;
             /**
-             * @description CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite soft findings, which import always waives (`fileId` set, `message` lists the findings; the Errors report tracks them). INVALID — failed the structural descriptor-format validation or namespace resolution (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document.
+             * @description CREATED — stored clean (`fileId` set). CREATED_WITH_FINDINGS — stored despite soft findings, which import always waives (`fileId` set, `message` lists the findings; the Errors report tracks them). UPDATED / UPDATED_WITH_FINDINGS — `replaceExisting` only: the active file holding this identity was replaced in place (`fileId` is that file; the latter waived soft findings, listed in `message`). UNCHANGED — `replaceExisting` only: the file already held this exact document and source reference. Without a batch `sourceUrl` nothing was recorded or changed; with one the row is still a repo sync and records a SYNCED history event, bumps the revision and re-stamps the sync state. `message` still lists any findings the file carries. INVALID — failed the structural descriptor-format validation or namespace resolution (`message` names the rule). CONFLICT — an active file already holds this identity; nothing was overwritten. ERROR — an unexpected storage failure for this document.
              * @enum {string}
              */
-            status: "CREATED" | "CREATED_WITH_FINDINGS" | "INVALID" | "CONFLICT" | "ERROR";
+            status: "CREATED" | "CREATED_WITH_FINDINGS" | "UPDATED" | "UPDATED_WITH_FINDINGS" | "UNCHANGED" | "INVALID" | "CONFLICT" | "ERROR";
             /**
              * Format: int32
-             * @description The new file's id, only when the document was stored (always null on the dry-run's predicted rows).
+             * @description The new (or, for UPDATED/UPDATED_WITH_FINDINGS/UNCHANGED, the replaced) file's id, only when the document was stored (always null on the dry-run's predicted rows).
              */
             fileId?: number | null;
-            /** @description The failure or finding detail, absent on CREATED. */
+            /** @description The failure or finding detail, absent on a clean CREATED/UPDATED. */
             message?: string | null;
         };
         CatalogFileMetadata: {
@@ -3206,7 +3230,7 @@ export interface components {
             items: components["schemas"]["Blueprint"][];
         };
         /**
-         * @description Shared by the blueprint and entity bulk-import reports (phase 6, v1.28.0). CREATED — stored as a new row. UPDATED — an existing row was replaced (`replaceExisting: true`). EXISTS — an existing row was found but `replaceExisting` is off; nothing was stored (renders gray, not red — by design, not a failure). INVALID — failed shape/registry/ reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts, a concurrent-change residual). Deliberately not the catalog import's vocabulary (`CREATED_WITH_FINDINGS`): a catalog import always waives soft findings and never replaces, while an ontology import can `replaceExisting` (`UPDATED`) and reports an untouched existing row (`EXISTS`).
+         * @description Shared by the blueprint and entity bulk-import reports (phase 6, v1.28.0). CREATED — stored as a new row. UPDATED — an existing row was replaced (`replaceExisting: true`). EXISTS — an existing row was found but `replaceExisting` is off; nothing was stored (renders gray, not red — by design, not a failure). INVALID — failed shape/registry/ reference validation, or a cycle through a mandatory reference. CONFLICT — an in-batch duplicate of an earlier document. ERROR — an unexpected storage failure, or a pass-2 residual (stored WITHOUT its deferred parts, a concurrent-change residual). Deliberately not the catalog import's vocabulary (`CREATED_WITH_FINDINGS`, `UPDATED_WITH_FINDINGS`, `UNCHANGED`): a catalog import always waives soft findings and replaces only under its own `replaceExisting`, while an ontology import reports an untouched existing row (`EXISTS`) and has no findings vocabulary.
          * @enum {string}
          */
         OntologyImportStatus: "CREATED" | "UPDATED" | "EXISTS" | "INVALID" | "CONFLICT" | "ERROR";

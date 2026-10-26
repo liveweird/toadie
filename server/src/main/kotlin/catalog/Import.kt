@@ -1,6 +1,7 @@
 package ch.nokillswit.catalog
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 /**
  * The YAML round-trip's server halves. YAML itself stays a CLIENT concern (the standing
@@ -26,6 +27,13 @@ data class ImportRequest(
      * request on purpose: a multi-document catalog-info.yaml is ONE repo file.
      */
     val sourceUrl: String? = null,
+    /**
+     * Off (default): an identity an active file already holds is a `CONFLICT` and nothing is
+     * overwritten. On: that file is REPLACED in place through the ordinary replace path — the
+     * ontology imports' `replaceExisting`, one level over — reported `UPDATED`,
+     * `UPDATED_WITH_FINDINGS` or `UNCHANGED`. See `.claude/docs/persistence.md` "Catalog import".
+     */
+    val replaceExisting: Boolean = false,
 )
 
 @Serializable
@@ -39,6 +47,26 @@ enum class ImportResultStatus {
      * points at the new file; `message` lists the findings; the Errors report tracks them.
      */
     CREATED_WITH_FINDINGS,
+
+    /**
+     * `replaceExisting`: an active file with this identity was replaced in place (the ordinary
+     * replace path — history event, revision bump); `fileId` points at it. Soft findings are
+     * waived exactly as for CREATED_WITH_FINDINGS.
+     */
+    UPDATED,
+
+    /** [UPDATED] DESPITE soft findings (waived); `message` lists them. */
+    UPDATED_WITH_FINDINGS,
+
+    /**
+     * `replaceExisting`: the active file already held this exact document and source reference,
+     * so nothing changed in the document. Without a batch `sourceUrl` that is the ordinary
+     * replace's no-op (no history event, no revision bump, no stamp change); WITH one the row is
+     * still a repo sync and records the always-recorded SYNCED event, bumps the revision and
+     * re-stamps the sync state, exactly as `POST /files/{id}/sync` does for a matching copy.
+     * `fileId` points at the file; `message` still lists any soft findings it carries.
+     */
+    UNCHANGED,
 
     /** Failed the structural descriptor-format validation or namespace resolution; `message` carries the rule. */
     INVALID,
@@ -60,6 +88,8 @@ data class ImportFileResult(
     val status: ImportResultStatus,
     val fileId: UInt? = null,
     val message: String? = null,
+    /** The soft findings a stored/replaced row waived — server-side only (the route's audit count), never serialized. */
+    @Transient val waivedFindings: Int = 0,
 )
 
 @Serializable

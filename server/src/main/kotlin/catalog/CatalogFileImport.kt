@@ -1,5 +1,7 @@
 package ch.nokillswit.catalog
 
+import ch.nokillswit.infra.fetch.SourceWrite
+import ch.nokillswit.infra.fetch.sanitizedSourceUrl
 import ch.nokillswit.plugins.isUniqueViolation
 import io.ktor.server.plugins.BadRequestException
 import kotlinx.coroutines.CancellationException
@@ -74,8 +76,43 @@ private fun storedRow(base: ImportFileResult, findings: List<SoftFinding>, fileI
             status = ImportResultStatus.CREATED_WITH_FINDINGS,
             fileId = fileId,
             message = findings.joinToString("; ") { it.message },
+            waivedFindings = findings.size,
         )
     }
+
+/**
+ * The `replaceExisting` twin of [storedRow], also shared by both runs: UNCHANGED when the replace
+ * records no field change (the message still lists the soft findings the file carries, so a
+ * re-import of a flawed batch keeps reporting them) — under a batch `sourceUrl` that row is still a
+ * recorded repo sync, see [CatalogFileService.update] — UPDATED / UPDATED_WITH_FINDINGS otherwise.
+ * [fileId] is the replaced file (null on the dry-run's predictions).
+ */
+private fun replacedRow(
+    base: ImportFileResult,
+    findings: List<SoftFinding>,
+    fileId: UInt?,
+    unchanged: Boolean,
+): ImportFileResult {
+    val status = when {
+        unchanged -> ImportResultStatus.UNCHANGED
+        findings.isEmpty() -> ImportResultStatus.UPDATED
+        else -> ImportResultStatus.UPDATED_WITH_FINDINGS
+    }
+    return base.copy(
+        status = status,
+        fileId = fileId,
+        message = findings.takeIf { it.isNotEmpty() }?.joinToString("; ") { it.message },
+        waivedFindings = findings.size,
+    )
+}
+
+/**
+ * The source-reference posture of a replaced row — the ontology imports' D3 rule: a batch WITH
+ * a URL moves/re-stamps every row (an import from a URL is a sync); without one the existing
+ * reference and sync state are KEPT. [sourceUrl] is the sanitized batch URL.
+ */
+private fun replaceSourceWrite(sourceUrl: String?): SourceWrite =
+    if (sourceUrl != null) SourceWrite.Synced(sourceUrl) else SourceWrite.Keep
 
 /**
  * Report & skip: each document imports independently — [preflight] (a rejection becomes its
@@ -85,7 +122,12 @@ private fun storedRow(base: ImportFileResult, findings: List<SoftFinding>, fileI
  * reported as CREATED_WITH_FINDINGS with the finding messages — the point of the round trip
  * is getting the batch IN so errors can be fixed incrementally (the Errors report tracks
  * them). Only structural validation and namespace resolution still skip a document as
- * INVALID. Nothing rethrows except cancellation, so the batch always runs to completion and
+ * INVALID. With [replaceExisting] an identity an ACTIVE file already holds is replaced in
+ * place instead of conflicting — through the ordinary [CatalogFileService.update] (its history
+ * event, revision bump and no-op suppression), never a delete-and-create — reported UPDATED /
+ * UPDATED_WITH_FINDINGS / UNCHANGED; a soft-deleted twin is invisible to the lookup, so that
+ * identity is CREATED; a second occurrence of an identity the batch already stored/replaced is
+ * CONFLICT either way. Nothing rethrows except cancellation, so the batch always runs to completion and
  * the result rows ARE the outcome. Each successful create includes its product-history event
  * in the row transaction; security audits remain route-side.
  */
@@ -96,6 +138,10 @@ suspend fun CatalogFileService.import(
     // synced (the content IS the repo copy at import time — an import from a URL is a
     // sync). A pasted/uploaded batch passes null and the rows read "no source".
     sourceUrl: String? = null,
+    replaceExisting: Boolean = false,
+    // Test seam: the replace lookup, so a regression can make the matched file vanish between
+    // the lookup and the locked update (the create fallback) without a flaky race.
+    activeIdLookup: suspend (CatalogFile) -> UInt? = { activeIdOf(it) },
 ): List<ImportFileResult> {
     // The batch universe: sibling documents resolve against each other ORDER-INDEPENDENTLY
     // (a real export's entities are interdependent — the round trip must survive). Only
@@ -104,7 +150,12 @@ suspend fun CatalogFileService.import(
     // (identity conflict) keeps its dangling reference — the same class as a
     // deletion-created dangling ref, and the Errors report catches it.
     val batchIdentities = batchIdentities(files)
-    return files.mapIndexed { index, raw -> importOne(index, raw, createdByUserId, batchIdentities, sourceUrl) }
+    // Identities this batch already stored/replaced: a repeat must not replace the row again
+    // (the create path's 23505 catches it by itself, a replace would not).
+    val handled = mutableSetOf<EntityIdentity>()
+    return files.mapIndexed { index, raw ->
+        importOne(index, raw, createdByUserId, batchIdentities, sourceUrl, replaceExisting, handled, activeIdLookup)
+    }
 }
 
 /** The identities every batch document may reference (shared by import and its dry-run). */
@@ -130,14 +181,23 @@ private suspend fun CatalogFileService.batchIdentities(files: List<CatalogFile>)
  * semantically equal; the result is a snapshot, so a concurrent write can change the real
  * outcome.
  */
-suspend fun CatalogFileService.importCheck(files: List<CatalogFile>): List<ImportFileResult> {
+suspend fun CatalogFileService.importCheck(
+    files: List<CatalogFile>,
+    replaceExisting: Boolean = false,
+    // The route's already-sanitized batch URL. Only the replace prediction reads it (does it
+    // move an existing reference / turn the row into a sync?).
+    sourceUrl: String? = null,
+): List<ImportFileResult> {
     val batchIdentities = batchIdentities(files)
-    return withImportSnapshot { active, registries, resolve ->
+    val sourceWrite = replaceSourceWrite(sanitizedSourceUrl(sourceUrl))
+    return withImportSnapshot { active, registries, resolve, predict ->
         // The running seen-set predicts INTRA-batch duplicates: the real run stores the
         // first occurrence and 23505-CONFLICTs the second — mirror that ordering.
         val seen = mutableSetOf<EntityIdentity>()
         files.mapIndexed { index, raw ->
-            checkOne(index, raw, batchIdentities, active, registries, seen, resolve)
+            checkOne(index, raw, batchIdentities, active, registries, seen, resolve) { file ->
+                if (replaceExisting) predict(file, sourceWrite) else null
+            }
         }
     }
 }
@@ -150,19 +210,36 @@ private suspend fun checkOne(
     registries: RegistrySnapshot,
     seen: MutableSet<EntityIdentity>,
     resolve: suspend (CatalogFile) -> CatalogFile,
+    // Non-null only under replaceExisting: the would-it-change verdict for an existing identity.
+    predictReplace: suspend (CatalogFile) -> ReplacePrediction?,
 ): ImportFileResult {
     val stored = when (val outcome = preflight(index, raw, resolve)) {
         is Preflight.Rejected -> return outcome.row
         is Preflight.Ready -> outcome.file
     }
     val identity = identityOf(stored)
-    if (identity in active || !seen.add(identity)) {
+    // An in-batch repeat is a CONFLICT before any replace prediction is paid for.
+    if (!seen.add(identity)) {
+        return rowBase(index, stored).copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
+    }
+    val replacement = if (identity in active) predictReplace(stored) else null
+    // `identity in active` without a replacement verdict = replaceExisting is off: the clash stands.
+    if (identity in active && replacement == null) {
         return rowBase(index, stored).copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
     }
     val findings = checkDocument(stored, active + batchIdentities).findings
         .map { SoftFinding(it, referenceFindingMessage(it)) } +
         registryFindings(stored, registries)
-    return storedRow(rowBase(index, stored), findings, fileId = null)
+    return if (replacement != null) {
+        replacedRow(
+            rowBase(index, stored),
+            findings,
+            fileId = null,
+            unchanged = replacement == ReplacePrediction.UNCHANGED,
+        )
+    } else {
+        storedRow(rowBase(index, stored), findings, fileId = null)
+    }
 }
 
 // Per-document isolation: one row's unexpected failure is reported as ERROR and never fails siblings (report & skip).
@@ -173,23 +250,44 @@ private suspend fun CatalogFileService.importOne(
     createdByUserId: UInt,
     batchIdentities: Set<EntityIdentity>,
     sourceUrl: String?,
+    replaceExisting: Boolean,
+    handled: MutableSet<EntityIdentity>,
+    activeIdLookup: suspend (CatalogFile) -> UInt?,
 ): ImportFileResult {
     val file = when (val outcome = preflight(index, raw) { resolveNamespace(it) }) {
         is Preflight.Rejected -> return outcome.row
         is Preflight.Ready -> outcome.file
     }
     val base = rowBase(index, file)
+    val identity = identityOf(file)
+    if (identity in handled) {
+        return base.copy(status = ImportResultStatus.CONFLICT, message = IMPORT_CONFLICT_MESSAGE)
+    }
     return try {
-        val saved = create(
-            file,
-            createdByUserId,
-            batchIdentities,
-            allowInvalid = true,
-            sourceUrl = sourceUrl,
-            markSynced = true,
-            viaImport = true,
-        )
-        storedRow(base, saved.waived, fileId = saved.id)
+        // replaceExisting: an ACTIVE twin is replaced through the ordinary update (its own
+        // transaction, history event and no-op rule). Should the twin vanish between the lookup
+        // and the locked update (rows == 0), the identity is free and the document is created.
+        val replaced = if (replaceExisting) {
+            replaceExistingFile(file, createdByUserId, batchIdentities, sourceUrl, activeIdLookup)
+        } else {
+            null
+        }
+        val row = replaced?.let { (id, result) ->
+            replacedRow(base, result.waived, fileId = id, unchanged = result.changes.isEmpty())
+        } ?: run {
+            val saved = create(
+                file,
+                createdByUserId,
+                batchIdentities,
+                allowInvalid = true,
+                sourceUrl = sourceUrl,
+                markSynced = true,
+                viaImport = true,
+            )
+            storedRow(base, saved.waived, fileId = saved.id)
+        }
+        handled += identity
+        row
     } catch (e: CancellationException) {
         // Cancellation is not a per-document failure — a gone client must stop the batch.
         throw e
@@ -204,4 +302,24 @@ private suspend fun CatalogFileService.importOne(
             base.copy(status = ImportResultStatus.ERROR, message = STORAGE_FAILED_MESSAGE)
         }
     }
+}
+
+/** The replaced file's id and the update's result, or null when no active file holds the identity (any more). */
+private suspend fun CatalogFileService.replaceExistingFile(
+    file: CatalogFile,
+    actingUserId: UInt,
+    batchIdentities: Set<EntityIdentity>,
+    sourceUrl: String?,
+    activeIdLookup: suspend (CatalogFile) -> UInt?,
+): Pair<UInt, CatalogFileUpdateResult>? {
+    val id = activeIdLookup(file) ?: return null
+    val result = update(
+        id,
+        file,
+        actingUserId,
+        allowInvalid = true,
+        extraIdentities = batchIdentities,
+        sourceWrite = replaceSourceWrite(sourceUrl),
+    )
+    return if (result.rows > 0) id to result else null
 }

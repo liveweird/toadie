@@ -3,6 +3,7 @@ import { jsonResponse } from "../test/http";
 import { ApiError } from "./http";
 import {
   checkCatalogFile,
+  checkImportCatalogFiles,
   createCatalogFile,
   deleteCatalogFile,
   fetchCatalogUrl,
@@ -167,6 +168,36 @@ describe("catalogFiles API wrappers", () => {
     expect(url).toBe("/api/v1/files/import");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ files: [REQUEST] });
+  });
+
+  test("importCatalogFiles puts replaceExisting on the wire only when it is on", async () => {
+    mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(200, { results: [] })));
+    await importCatalogFiles([REQUEST], "https://example.com/c.yaml", true);
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      files: [REQUEST],
+      sourceUrl: "https://example.com/c.yaml",
+      replaceExisting: true,
+    });
+    await importCatalogFiles([REQUEST], undefined, false);
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ files: [REQUEST] });
+  });
+
+  test("checkImportCatalogFiles carries the batch URL like the import, and replaceExisting only when on", async () => {
+    mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(200, { results: [] })));
+    await checkImportCatalogFiles([REQUEST]);
+    expect(lastCall()[0]).toBe("/api/v1/files/import/check");
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ files: [REQUEST] });
+    await checkImportCatalogFiles([REQUEST], "https://example.com/c.yaml");
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      files: [REQUEST],
+      sourceUrl: "https://example.com/c.yaml",
+    });
+    await checkImportCatalogFiles([REQUEST], "https://example.com/c.yaml", true);
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      files: [REQUEST],
+      replaceExisting: true,
+      sourceUrl: "https://example.com/c.yaml",
+    });
   });
 
   test("fetchCatalogUrl POSTs the url", async () => {

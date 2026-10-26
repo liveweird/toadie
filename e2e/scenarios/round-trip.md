@@ -31,8 +31,36 @@
      ("Imported 0 of 2 documents."); nothing is overwritten (report & skip).
 7. They delete both files.
 
+## Scenario: a changed catalog-info.yaml re-imports as Updated with Replace existing files, and the history records it
+
+- *Owns*: one more throwaway Component (`e2e-rp-comp-…`) in the same run namespace, deleted at
+  the end.
+
+1. The admin opens the import page and pastes a one-document `catalog-info.yaml` (a Component
+   titled "First title") in the throwaway namespace, then clicks **Import**.
+   - *Expected*: the row reports **Created**.
+2. They change the title to "Second title" and import again with the **Replace existing files**
+   switch still OFF.
+   - *Expected*: the row reports **Already exists** — nothing is overwritten (the default).
+3. They turn the switch ON and click **Check**.
+   - *Expected*: the dry-run predicts **Would be updated** ("1 of 1 documents would import.").
+4. They click **Import**.
+   - *Expected*: the row reports **Updated** and the summary reads "Imported 1 of 1 documents.".
+5. They click **Import** once more with the identical document.
+   - *Expected*: the row reports **Unchanged** ("Imported 0 of 1 documents; 1 already matched.") —
+     the ordinary replace's no-op.
+6. They follow the row's link to the file's editor.
+   - *Expected*: the History section shows "File created by import." and exactly one "File
+     updated: Title." entry with "Title: First title → Second title" — the file was replaced in
+     place (its history is continuous), and the unchanged pass recorded nothing.
+7. They delete the file.
+
 ## Not covered here (and why)
 
+- **`UPDATED_WITH_FINDINGS`, the `sourceUrl` keep/re-stamp rule, in-batch duplicates,
+  soft-deleted identities, audit fields, revision bump, and rollback on a history failure** —
+  server-tested (`CatalogImportReplaceTest`, `CatalogFileAtomicHistoryTest`); the page's
+  rendering of the new statuses is unit-tested (`ImportCatalogFiles.test.tsx`).
 - **Per-document INVALID/ERROR rows, the 200-document cap, and per-file independence** —
   server-tested exhaustively (`RoundTripTest`); the import page's rendering of those statuses
   is unit-tested (`ImportCatalogFiles.test.tsx`).
