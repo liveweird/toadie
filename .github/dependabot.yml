@@ -92,7 +92,10 @@ updates:
   # majors are ignored here; patch/minor tag moves (21.0.12, 26.x-alpine) flow. The Dockerfile
   # FROMs are tag@sha256 digest pins, so Dependabot bumps the tag and its digest together.
   - package-ecosystem: "docker"
-    directory: "/"
+    # "/" is the Dockerfile; "/k8s" the bundled PostgreSQL's tag@digest image in the Deployment.
+    directories:
+      - "/"
+      - "/k8s"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
@@ -105,6 +108,31 @@ updates:
           - "patch"
     ignore:
       - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+
+  # Docker Compose: the demo stack's postgres/mailpit and the SSO overlay's stub IdP, all tag@digest
+  # pinned. PostgreSQL majors are a data-directory upgrade (pg_upgrade), never a dependency PR, and the
+  # overlay's Node major follows mise.toml like the Dockerfile's.
+  - package-ecosystem: "docker-compose"
+    directories:
+      - "/"
+      - "/e2e"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "postgres"
         update-types: ["version-update:semver-major"]
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]

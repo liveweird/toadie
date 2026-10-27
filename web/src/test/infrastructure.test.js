@@ -210,11 +210,11 @@ describe("deployment and verification safety defaults", () => {
 
   it("keeps the SSO e2e overlay to the stub identity provider on the Dockerfile's Node major, with no fixed container name", () => {
     const overlay = parse(ssoOverlaySource);
-    // Tag-pinned like compose's postgres/mailpit (Dependabot tracks only the Dockerfile's digest pins), on the same Node
-    // major as the Dockerfile's SPA build stage, so a Dockerfile-only bump never turns this red.
+    // Digest-pinned with its own digest (Dependabot's docker-compose ecosystem bumps it), on the same Node major as the
+    // Dockerfile's SPA build stage; only the major is compared, so a Dockerfile-only bump never turns this red.
     const dockerfileNode = dockerfileSource.match(/^FROM (?:--platform=\$BUILDPLATFORM )?node:(\d+)-alpine@sha256:[0-9a-f]{64} AS web$/m)?.[1];
     expect(dockerfileNode).toBeTruthy();
-    expect(overlay.services["stub-idp"].image).toBe(`node:${dockerfileNode}-alpine`);
+    expect(overlay.services["stub-idp"].image).toMatch(new RegExp(`^node:${dockerfileNode}-alpine@sha256:[0-9a-f]{64}$`));
     expect(Object.keys(overlay.services).sort()).toEqual(["app", "stub-idp"]);
     for (const service of Object.values(overlay.services)) expect(service).not.toHaveProperty("container_name");
     // Loopback only, like every demo service.
@@ -313,6 +313,17 @@ describe("deployment and verification safety defaults", () => {
       "${{ github.workflow == 'e2e' && format('e2e-dispatch-{0}', github.ref) || format('e2e-call-{0}', github.run_id) }}",
     );
     expect(parse(e2eSource).name).toBe("e2e");
+  });
+
+  it("pins every compose and k8s image by tag and multi-arch digest, with one PostgreSQL tag across both", () => {
+    const pinned = /^[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}$/;
+    const composeImages = Object.values(parse(composeSource).services).flatMap((service) => service.image ?? []);
+    expect(composeImages).toHaveLength(2);
+    for (const image of composeImages) expect(image).toMatch(pinned);
+    const k8sImage = parse(postgresDeploymentSource).spec.template.spec.containers[0].image;
+    expect(k8sImage).toMatch(pinned);
+    const tagOf = (image) => image.split("@")[0];
+    expect(tagOf(k8sImage)).toBe(tagOf(parse(composeSource).services.postgres.image));
   });
 
   it("cross-builds: the two build stages run on the build platform, only the runtime stage is per-platform", () => {
@@ -416,7 +427,9 @@ describe("deployment and verification safety defaults", () => {
 
   it("keeps Dependabot covering every dependency-bearing directory", () => {
     const dependabot = parse(dependabotSource);
-    const pairs = dependabot.updates.map((update) => [update.directory, update["package-ecosystem"]]);
+    const pairs = dependabot.updates.flatMap((update) =>
+      (update.directories ?? [update.directory]).map((directory) => [directory, update["package-ecosystem"]]),
+    );
     expect(pairs).toEqual(
       expect.arrayContaining([
         ["/web", "npm"],
@@ -424,9 +437,17 @@ describe("deployment and verification safety defaults", () => {
         ["/", "gradle"],
         ["/", "github-actions"],
         ["/", "docker"],
+        ["/k8s", "docker"],
+        ["/", "docker-compose"],
+        ["/e2e", "docker-compose"],
       ]),
     );
-    expect(pairs).toHaveLength(5);
+    expect(pairs).toHaveLength(8);
+    // A PostgreSQL major is a data-directory upgrade, never a dependency PR, wherever the image is tracked.
+    for (const ecosystem of ["docker", "docker-compose"]) {
+      const update = dependabot.updates.find((entry) => entry["package-ecosystem"] === ecosystem);
+      expect(update.ignore).toContainEqual({ "dependency-name": "postgres", "update-types": ["version-update:semver-major"] });
+    }
   });
 
   it("the app Deployment recreates rather than rolls (single-instance posture)", () => {
