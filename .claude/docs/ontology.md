@@ -141,7 +141,7 @@ full file back onto every blueprint that declares one, once every target exists.
 test-side tables here is now DATA with one canonical home:
 [`sample-data/port/commerce-payments/mapping/backstage.json`](../../sample-data/port/commerce-payments/mapping/backstage.json),
 a conversion mapping document (`.claude/docs/conversion-mapping.md` has the format) — eight pairs
-and 119 rules saying which property is which label, tag category, annotation, link or spec field,
+and 120 rules saying which property is which label, tag category, annotation, link or spec field,
 which blueprint is which kind (`library` is Component selected by `spec.type: library`), how
 `external: true` becomes the `external` namespace, how ownership (`$team` -> `spec.owner`) and the
 relations map, and which Group fields (`children`/`members`) are derived from the reverse side. It is
@@ -165,11 +165,18 @@ validated against the sample blueprints and the V22-seeded registries by `Sample
 - **`api` definitions**: the inline `definition` is written as `spec.definition`; an API without
   one gets a placeholder (`exportDefault`, also the rule's `importIgnore`, so it is never imported
   back as a definition) because Backstage requires the field — the sample gives every API its
-  definition, so the placeholder never appears in it. `definition_url` is declared `lossy`
-  for now: a Backstage `$text` substitution is an OBJECT (`{$text: <url>}`), not a string, and the
-  `backstage.io/definition-at-location` annotation key that would carry a location is not in the
-  V22-seeded annotation registry (registering it is a registry migration of its own), so writing a
-  definition location properly (and reading one back) is later conversion work.
+  definition, so the placeholder never appears in it. `definition_url` is an independent leaf
+  (since 2.31.0): a `copy` rule with the `url:` prefix writes it as the
+  `backstage.io/definition-at-location` annotation (registered for API by V47), so an API with
+  both gets both, one with only a URL gets the placeholder `spec.definition` plus the annotation,
+  and one with neither just the placeholder. On import the `url:` prefix is stripped; a value
+  without it is `VALUE_UNMAPPED` and kept. A Backstage `$text` substitution is an OBJECT
+  (`{$text: <url>}`), not a string, and resolving it would change the catalog's document model,
+  so the mapping deliberately does not emit it. Upstream lists the annotation as deprecated in
+  favour of `$text` (`.claude/docs/backstage-descriptor-format.md`); it is used here because it
+  is the one string-valued carrier. The annotation is now a managed leaf of the `api` pair's
+  footprint (`conversion/FootprintMerge.kt`): exporting over a stored file replaces or removes it,
+  so a hand-set `backstage.io/definition-at-location` on such a file is no longer preserved.
 - **Links**: `links` (array of `{title, url}`) <-> `metadata.links`; the named link properties
   (`ci_pipeline`, `dashboard`, `logs`, `runbook`, `slack_channel`) are `link` rules with a fixed title.
 - Ownership: the entity `team` field (string for single, array for multiple) is `spec.owner`; it is
