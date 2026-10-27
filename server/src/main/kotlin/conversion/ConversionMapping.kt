@@ -56,11 +56,7 @@ data class MappingFinding(val code: MappingFindingCode, val path: String, val me
 data class MappingDrift(val code: MappingDriftCode, val path: String, val message: String)
 
 /** The verdict of validating one document against the current blueprints and registries. */
-data class MappingVerdict(val findings: List<MappingFinding>, val drift: List<MappingDrift>) {
-    companion object {
-        val CLEAN = MappingVerdict(emptyList(), emptyList())
-    }
-}
+data class MappingVerdict(val findings: List<MappingFinding>, val drift: List<MappingDrift>)
 
 @Serializable
 data class ConversionMappingRequest(
