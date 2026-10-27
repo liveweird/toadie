@@ -323,6 +323,21 @@ describe("deployment and verification safety defaults", () => {
     expect(healthcheck).toContain("/readyz");
   });
 
+  it("makes the image HEALTHCHECK a real check in production mode: the forwarded-proto header and an exact 200", () => {
+    // The image runs KTOR_DEVELOPMENT=false, where HttpsRedirect answers a plain-HTTP /readyz with a 301.
+    // `curl --fail` passes on a 3xx, so a bare probe stays green whatever the database does. The app honours
+    // X-Forwarded-Proto only behind HTTP_BEHIND_PROXY=true (plugins/Http.kt), which the k8s Deployment sets too.
+    const runtimeStage = dockerfileSource.slice(dockerfileSource.indexOf("AS runtime"));
+    expect(runtimeStage).toMatch(/^ENV KTOR_DEVELOPMENT=false$/m);
+    const healthcheck = runtimeStage.match(/^HEALTHCHECK\s.*$/m)[0];
+    expect(healthcheck).toMatch(/X-Forwarded-Proto: https/);
+    expect(healthcheck).toContain("%{http_code}");
+    expect(healthcheck).toMatch(/= 200\b/);
+    expect(healthcheck).not.toContain("--fail");
+    const readiness = parse(appDeploymentSource).spec.template.spec.containers[0].readinessProbe.httpGet;
+    expect(readiness.httpHeaders).toContainEqual({ name: "X-Forwarded-Proto", value: "https" });
+  });
+
   it("passes the OpenTelemetry exporter selectors through compose and the k8s Deployment with the code's defaults, and no endpoint", () => {
     // The defaults are parsed from the code, never restated here.
     const defaults = Object.fromEntries(

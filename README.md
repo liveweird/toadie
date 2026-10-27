@@ -175,6 +175,8 @@ and the log says which setting is the problem.
   are still managed in Toadie's Users page.
 - Deleting a user who signed in with Okta also blocks that Okta identity from signing in again.
 - Signing out of Toadie does not sign you out of Okta.
+- Keep at least one administrator with a password: if Okta is down and every administrator signs in
+  only through it, nobody can get in as admin (details in the security rules linked below).
 
 The security rules behind all of this are in [security.md](.claude/docs/security.md) under
 "SSO login (OIDC)". To try the whole flow locally without Okta, the e2e stub provider is described

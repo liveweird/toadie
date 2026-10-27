@@ -33,8 +33,14 @@ class ServerTest {
         assertEquals("no-referrer", response.headers["Referrer-Policy"])
         val csp = response.headers["Content-Security-Policy"]
         assertNotNull(csp, "Content-Security-Policy header should be present")
-        assertContains(csp, "default-src 'self'")
-        assertContains(csp, "frame-ancestors 'none'")
+        // The exact policy, restated on purpose: a loosened or dropped directive must fail here,
+        // not slide through a comparison of the constant with itself (security.md "Token storage").
+        assertEquals(
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+                "font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; " +
+                "frame-ancestors 'none'",
+            csp,
+        )
     }
 
     @Test

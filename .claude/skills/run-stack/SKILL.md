@@ -85,7 +85,8 @@ start - read the boot log, do not work around it.
 **4. Verify.** `curl -s https://<host>/api/v1/login/options` answers `{"sso":{"label":"Okta"}}` when it is on
 and `{"sso":null}` when it is off. Then sign in through the button with a test user assigned to the
 application. Administrator accounts and accounts with email MFA are never linked or taken over by an
-Okta email - they keep password login. Signing out of Toadie does not sign out of Okta.
+Okta email - they keep password login. Signing out of Toadie does not sign out of Okta. Keep at least one ADMIN with a password so admin access survives an Okta outage
+(`.claude/docs/security.md` "SSO login (OIDC)", accepted risks).
 
 **Local end-to-end proof without Okta.** `e2e/compose.sso.yaml` is an overlay (e2e/CI only, never the
 long-lived stack) that adds a stub OIDC provider (`e2e/stub-idp/server.mjs`, port 18090) and turns SSO on.
