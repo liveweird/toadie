@@ -98,4 +98,5 @@ if (typeof document !== "undefined" && !document.fonts) {
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  sessionStorage.clear();
 });

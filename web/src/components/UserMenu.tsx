@@ -15,7 +15,7 @@ import {
 } from "@mantine/core";
 import { IconActivity, IconCheck, IconChevronDown, IconHistory, IconKey, IconLogout } from "@tabler/icons-react";
 import { logout } from "../api/auth";
-import { getUserId, isAdmin } from "../api/session";
+import { getUserId, hasPassword, isAdmin } from "../api/session";
 import { getUser, setUserLanguage } from "../api/users";
 import { flagSignedOut, notifyAuthChange } from "../auth";
 import { asSupportedLanguage, NATIVE_LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from "../i18n";
@@ -163,9 +163,12 @@ export default function UserMenu() {
           />
         </Box>
         <Menu.Divider />
-        <Menu.Item component={RouterLink} to="/change-password" leftSection={<IconKey size={14} />}>
-          {t("appShell.nav.changePassword")}
-        </Menu.Item>
+        {hasPassword() && (
+          // A passwordless (SSO-only) account has no password to change.
+          <Menu.Item component={RouterLink} to="/change-password" leftSection={<IconKey size={14} />}>
+            {t("appShell.nav.changePassword")}
+          </Menu.Item>
+        )}
         <Menu.Item
           component={RouterLink}
           to="/changelog"

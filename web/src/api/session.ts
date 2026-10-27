@@ -11,6 +11,7 @@ const REFRESH_TOKEN_KEY = "toadie.auth.refreshToken";
 const ROLES_KEY = "toadie.auth.roles";
 export const USER_ID_KEY = "toadie.auth.userId";
 const DISABLED_FEATURES_KEY = "toadie.auth.disabledFeatures";
+const HAS_PASSWORD_KEY = "toadie.auth.hasPassword";
 
 // Same-tab logout boundary. Refresh deliberately does not advance it: rotated credentials
 // still belong to the same login family, while clearSession invalidates all pending work.
@@ -106,6 +107,11 @@ export function hasFeature(feature: Feature): boolean {
   return !getDisabledFeatures().includes(feature);
 }
 
+/** False only for a passwordless (SSO-only) account; absent (a session stored before 2.32.0) reads as true so the Change password item stays. */
+export function hasPassword(): boolean {
+  return localStorage.getItem(HAS_PASSWORD_KEY) !== "false";
+}
+
 export function isAdmin(): boolean {
   return getRoles().includes("ADMIN");
 }
@@ -117,6 +123,7 @@ export function clearSession(): void {
   localStorage.removeItem(ROLES_KEY);
   localStorage.removeItem(USER_ID_KEY);
   localStorage.removeItem(DISABLED_FEATURES_KEY);
+  localStorage.removeItem(HAS_PASSWORD_KEY);
 }
 
 /**
@@ -129,6 +136,8 @@ export function persistSession(data: LoginSuccess): void {
   localStorage.setItem(ROLES_KEY, JSON.stringify(data.roles));
   localStorage.setItem(USER_ID_KEY, String(data.userId));
   localStorage.setItem(DISABLED_FEATURES_KEY, JSON.stringify(data.disabledFeatures ?? []));
+  // Only an explicit false hides the password affordances (a mid-deploy older server omits it).
+  localStorage.setItem(HAS_PASSWORD_KEY, String(data.hasPassword !== false));
   // Apply the user's stored language (V18) — one chokepoint covers login, the MFA step, and
   // the silent refresh (so an admin change propagates within the refresh window). The
   // inequality guard avoids re-firing languageChanged app-wide on every refresh; the

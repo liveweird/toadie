@@ -162,6 +162,11 @@ export default function Users() {
                             {t("users.youBadge")}
                           </Badge>
                         )}
+                        {user.sso && (
+                          <Badge size="xs" variant="outline" color="gray">
+                            {t("users.ssoBadge")}
+                          </Badge>
+                        )}
                       </Group>
                     </Table.Td>
                     <Table.Td>

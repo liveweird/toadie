@@ -18,7 +18,7 @@ const SEED_USERS = [
   { id: 2, name: "Bob Basic", email: "bob@example.com", roles: [] },
 ];
 
-function usersPage(items: typeof SEED_USERS, total = items.length) {
+function usersPage(items: Array<(typeof SEED_USERS)[number] & { sso?: boolean }>, total = items.length) {
   return jsonResponse(200, { items, page: 1, pageSize: 20, total });
 }
 
@@ -89,6 +89,17 @@ describe("Users page", () => {
     expect(screen.getByText("Bob Basic")).toBeInTheDocument();
     expect(screen.getByText("Admin")).toBeInTheDocument();
     expect(screen.getByText("You")).toBeInTheDocument();
+  });
+
+  test("marks single sign-on accounts with an SSO badge", async () => {
+    setupMocks(mockFetch, () => usersPage([
+      { id: 1, name: "Alice Admin", email: "alice@example.com", roles: ["ADMIN"], sso: false },
+      { id: 2, name: "Bob Basic", email: "bob@example.com", roles: [], sso: true },
+    ]));
+    renderPage();
+    const bob = (await screen.findByText("Bob Basic")).closest("tr")!;
+    expect(within(bob).getByText("SSO")).toBeInTheDocument();
+    expect(within(screen.getByText("Alice Admin").closest("tr")!).queryByText("SSO")).not.toBeInTheDocument();
   });
 
   test("the own row's menu offers Edit but neither Delete nor Reset password", async () => {

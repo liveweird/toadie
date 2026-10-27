@@ -2,6 +2,7 @@
 
 import { API_BASE, ApiError, ownsCurrentSession, safeJson, sessionBoundary, timeoutSignal } from "./http";
 import type { components, paths } from "./schema";
+import { internalReturnLocation } from "../auth";
 import { clearSession, getRefreshToken, getToken, persistSession } from "./session";
 
 type LoginBody = paths["/api/v1/login"]["post"]["requestBody"]["content"]["application/json"];
@@ -99,4 +100,71 @@ export async function logout(): Promise<void> {
     // fetch skipping clearSession would leave the user apparently signed in.
   }
   if (ownsCurrentSession(owner)) clearSession();
+}
+
+export type LoginOptions = components["schemas"]["LoginOptionsResponse"];
+
+/** Public read of what the sign-in page may offer besides the password form (the SSO button); never sends a JWT. */
+export async function loginOptions(): Promise<LoginOptions> {
+  const res = await fetch(`${API_BASE}/api/v1/login/options`, { signal: timeoutSignal() });
+  if (!res.ok) throw new ApiError(res.status, await safeJson(res));
+  return (await res.json()) as LoginOptions;
+}
+
+/**
+ * Second step of an SSO sign-in: exchanges the one-time hand-off code from the `/login/sso#code=`
+ * fragment for the ordinary token pair (persisted like a login). The request rides the attempt
+ * cookie the start navigation set. Throws ApiError on 401 (unknown/used/expired code or missing
+ * cookie) or 429; never refresh/retry it through authedFetch.
+ */
+export async function exchangeSsoCode(code: string): Promise<LoginSuccess> {
+  const body: components["schemas"]["SsoExchangeRequest"] = { code };
+  const res = await fetch(`${API_BASE}/api/v1/login/sso/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: timeoutSignal(),
+  });
+  if (!res.ok) throw new ApiError(res.status, await safeJson(res));
+  const data = (await res.json()) as LoginSuccess;
+  persistSession(data);
+  return data;
+}
+
+const SSO_RETURN_KEY = "toadie.sso.returnTo";
+
+/**
+ * Begins an SSO sign-in: remembers where to land afterwards (sessionStorage — it must survive the
+ * round trip through the identity provider, but not the tab) and leaves the SPA through a
+ * top-level navigation the server answers with a 302 to the provider. Without a `from` any
+ * stale remembered location is dropped, so an abandoned attempt never redirects a later one.
+ */
+export function startSsoLogin(from?: { pathname?: unknown; search?: unknown; hash?: unknown } | null): void {
+  try {
+    if (from && typeof from === "object") {
+      sessionStorage.setItem(SSO_RETURN_KEY, JSON.stringify({
+        pathname: from.pathname,
+        search: from.search,
+        hash: from.hash,
+      }));
+    } else {
+      sessionStorage.removeItem(SSO_RETURN_KEY);
+    }
+  } catch {
+    // Storage blocked: the sign-in still works, it just lands on the home page.
+  }
+  window.location.assign(`${API_BASE}/api/v1/login/sso/start`);
+}
+
+/** Reads and removes the remembered location; only a root-relative app path survives (`internalReturnLocation`), default `/`. */
+export function takeSsoReturnLocation(): string {
+  let from: unknown = null;
+  try {
+    const raw = sessionStorage.getItem(SSO_RETURN_KEY);
+    sessionStorage.removeItem(SSO_RETURN_KEY);
+    if (raw !== null) from = JSON.parse(raw);
+  } catch {
+    // Unreadable or blocked storage reads as "nothing remembered".
+  }
+  return internalReturnLocation({ from });
 }

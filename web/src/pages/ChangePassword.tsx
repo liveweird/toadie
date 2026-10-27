@@ -51,6 +51,7 @@ export default function ChangePassword() {
       setError(
         saveErrorMessage(err, t, {
           forbidden: "users.wrongCurrentPassword",
+          conflict: "users.passwordNotSet",
           failedStatus: "users.changeFailedStatus",
           failed: "users.changeFailedNetwork",
         }),

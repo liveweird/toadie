@@ -12,7 +12,16 @@ import {
   timeoutSignal,
   voidRequest,
 } from "./http";
-import { login, logout, isMfaChallenge, verifyMfa } from "./auth";
+import {
+  exchangeSsoCode,
+  isMfaChallenge,
+  login,
+  loginOptions,
+  logout,
+  startSsoLogin,
+  takeSsoReturnLocation,
+  verifyMfa,
+} from "./auth";
 import {
   TOKEN_KEY,
   clearSession,
@@ -20,6 +29,7 @@ import {
   getRoles,
   getToken,
   getUserId,
+  hasPassword,
   isAdmin,
   persistSession,
   setToken,
@@ -87,6 +97,22 @@ describe("session", () => {
     expect(getRoles()).toEqual([]);
     expect(getUserId()).toBeNull();
     expect(isAdmin()).toBe(false);
+  });
+
+  test("hasPassword round-trips through persistSession/clearSession and defaults to true when absent", () => {
+    expect(hasPassword()).toBe(true);
+    persistSession({ ...SESSION, hasPassword: false });
+    expect(localStorage.getItem("toadie.auth.hasPassword")).toBe("false");
+    expect(hasPassword()).toBe(false);
+    persistSession(SESSION);
+    expect(hasPassword()).toBe(true);
+    persistSession({ ...SESSION, hasPassword: false });
+    clearSession();
+    expect(localStorage.getItem("toadie.auth.hasPassword")).toBeNull();
+    expect(hasPassword()).toBe(true);
+    // A mid-deploy older server sends no flag: the menu item stays.
+    persistSession({ ...SESSION, hasPassword: undefined as unknown as boolean });
+    expect(hasPassword()).toBe(true);
   });
 
   test("corrupt stored roles and userId degrade to safe defaults", () => {
@@ -535,6 +561,70 @@ describe("auth flows", () => {
     const [url, init] = fetchMock().mock.calls.at(-1)!;
     expect(url).toBe("/api/v1/login/mfa");
     expect(JSON.parse((init as { body: string }).body)).toEqual({ challengeId: "ch-1", code: "123456" });
+  });
+
+  test("loginOptions reads the public options without a JWT", async () => {
+    persistSession(SESSION);
+    fetchMock().mockResolvedValueOnce(jsonResponse(200, { sso: { label: "Okta" } }));
+    expect(await loginOptions()).toEqual({ sso: { label: "Okta" } });
+    const [url, init] = fetchMock().mock.calls.at(-1)!;
+    expect(url).toBe("/api/v1/login/options");
+    expect((init as RequestInit).headers).toBeUndefined();
+    fetchMock().mockResolvedValueOnce(jsonResponse(500, { title: "boom", status: 500 }));
+    await expect(loginOptions()).rejects.toMatchObject({ status: 500 });
+  });
+
+  test("exchangeSsoCode posts the code and persists the session like a login", async () => {
+    fetchMock().mockResolvedValueOnce(jsonResponse(200, { ...SESSION, hasPassword: false }));
+    const data = await exchangeSsoCode("hand-off-code");
+    expect(data.token).toBe("access-1");
+    expect(getToken()).toBe("access-1");
+    expect(hasPassword()).toBe(false);
+    const [url, init] = fetchMock().mock.calls.at(-1)!;
+    expect(url).toBe("/api/v1/login/sso/exchange");
+    expect((init as RequestInit).method).toBe("POST");
+    expect(JSON.parse((init as { body: string }).body)).toEqual({ code: "hand-off-code" });
+    expect((init as { headers: Record<string, string> }).headers).not.toHaveProperty("Authorization");
+  });
+
+  test.each([401, 429])("exchangeSsoCode throws ApiError on %i and starts no session", async (status) => {
+    fetchMock().mockResolvedValueOnce(jsonResponse(status, { title: "no", status }));
+    await expect(exchangeSsoCode("x")).rejects.toMatchObject({ status });
+    expect(getToken()).toBeNull();
+  });
+
+  test("startSsoLogin remembers the return location and navigates to the start URL", () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    startSsoLogin({ pathname: "/files", search: "?a=1", hash: "#h", extra: "dropped" } as never);
+    expect(assign).toHaveBeenCalledWith("/api/v1/login/sso/start");
+    expect(JSON.parse(sessionStorage.getItem("toadie.sso.returnTo")!)).toEqual({
+      pathname: "/files", search: "?a=1", hash: "#h",
+    });
+    expect(takeSsoReturnLocation()).toBe("/files?a=1#h");
+    // Read-and-remove: a second read finds nothing.
+    expect(sessionStorage.getItem("toadie.sso.returnTo")).toBeNull();
+    expect(takeSsoReturnLocation()).toBe("/");
+    vi.unstubAllGlobals();
+  });
+
+  test("startSsoLogin without an origin drops a stale remembered location", () => {
+    vi.stubGlobal("location", { ...window.location, assign: vi.fn() });
+    sessionStorage.setItem("toadie.sso.returnTo", JSON.stringify({ pathname: "/stale" }));
+    startSsoLogin(undefined);
+    expect(sessionStorage.getItem("toadie.sso.returnTo")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  test.each([
+    ["an external path", JSON.stringify({ pathname: "//evil.example/x" })],
+    ["a backslash path", JSON.stringify({ pathname: "/\\evil" })],
+    ["a non-string path", JSON.stringify({ pathname: 5 })],
+    ["unparseable JSON", "{nope"],
+  ])("takeSsoReturnLocation falls back to / for %s", (_name, raw) => {
+    sessionStorage.setItem("toadie.sso.returnTo", raw);
+    expect(takeSsoReturnLocation()).toBe("/");
+    expect(sessionStorage.getItem("toadie.sso.returnTo")).toBeNull();
   });
 
   test("login throws ApiError with the response body on 401", async () => {

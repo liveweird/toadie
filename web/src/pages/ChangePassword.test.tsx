@@ -108,4 +108,18 @@ describe("ChangePassword page", () => {
     expect(await screen.findByText(/current password is incorrect/i)).toBeInTheDocument();
     expect(localStorage.getItem(TOKEN_KEY)).toBe("fake-token");
   });
+
+  test("a 409 password-not-set reads as an SSO account and keeps the session", async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(jsonResponse(409, {
+        type: "urn:toadie:password-not-set", title: "Conflict", status: 409,
+      })),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ChangePassword />);
+
+    await fill(user, "whatever-1", "new-password-42");
+    expect(await screen.findByText("This account signs in through SSO and has no password to change.")).toBeInTheDocument();
+    expect(localStorage.getItem(TOKEN_KEY)).toBe("fake-token");
+  });
 });
