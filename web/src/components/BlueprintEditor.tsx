@@ -7,7 +7,8 @@ import BlueprintFormFields from "./BlueprintFormFields";
 import CodePreviewCard from "./CodePreviewCard";
 import PageHeader from "./PageHeader";
 import { useBlueprintRowExpansion } from "../hooks/useBlueprintRowExpansion";
-import { toBlueprintRequest, type BlueprintFormValues } from "../utils/blueprintForm";
+import { toBlueprintRequest } from "../utils/blueprintFormMapping";
+import type { BlueprintFormValues } from "../utils/blueprintFormModel";
 import { blueprintsPath } from "../utils/blueprintLinks";
 import classes from "../theme.module.css";
 

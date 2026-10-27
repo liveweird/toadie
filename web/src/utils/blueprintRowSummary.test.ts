@@ -12,7 +12,7 @@ import {
   emptyMirrorDraft,
   emptyPropertyDraft,
   emptyRelationDraft,
-} from "./blueprintForm";
+} from "./blueprintFormModel";
 
 describe("propertyBadge", () => {
   test("a plain type with no distinguishing token is just the type", () => {

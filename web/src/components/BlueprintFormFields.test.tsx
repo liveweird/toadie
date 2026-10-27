@@ -12,7 +12,7 @@ import {
   emptyPropertyDraft,
   emptyRelationDraft,
   type BlueprintFormValues,
-} from "../utils/blueprintForm";
+} from "../utils/blueprintFormModel";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
 

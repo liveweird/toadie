@@ -1,4 +1,4 @@
-// Port's 14 named `EnumColor` values (`utils/blueprintForm.ts#ENUM_COLORS`) mapped onto a
+// Port's 14 named `EnumColor` values (`utils/blueprintFormModel.ts#ENUM_COLORS`) mapped onto a
 // value `EntityComputedValue`'s colorized Badge can use: a Mantine theme colour key where one
 // exists, a literal hex string for the four that don't (Mantine ships no bronze/gold/silver
 // shade, and "paleBlue" would collide with the theme's own "blue").

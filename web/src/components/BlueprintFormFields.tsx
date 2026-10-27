@@ -34,7 +34,7 @@ import {
   singleRelationIds,
   type RowFamily,
   type BlueprintFormValues,
-} from "../utils/blueprintForm";
+} from "../utils/blueprintFormModel";
 import { loadErrorMessage } from "../utils/saveError";
 import { lockedRowIds } from "../utils/systemBlueprints";
 
@@ -44,7 +44,7 @@ type Form = UseFormReturnType<BlueprintFormValues>;
  *  The `RowFamily` union is wider than Mantine's own `insertListItem` overload can verify
  *  against a single draft type, but every call site below passes a draft matching its own
  *  family literal, so the cast is safe (the `combinedPropertyIds` idiom already accepted
- *  the same trade-off in `utils/blueprintForm.ts`). */
+ *  the same trade-off in `utils/blueprintFormValidation.ts`). */
 function addRow(form: Form, expansion: BlueprintRowExpansion, family: RowFamily, draft: { key: string }) {
   form.insertListItem(family, draft as never);
   expansion.reveal(rowDomId(family, draft.key));

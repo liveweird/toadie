@@ -29,7 +29,7 @@ import {
   STRING_FORMATS,
   STRING_SPECS,
   type BlueprintFormValues,
-} from "../utils/blueprintForm";
+} from "../utils/blueprintFormModel";
 
 type Form = UseFormReturnType<BlueprintFormValues>;
 

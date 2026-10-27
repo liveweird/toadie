@@ -27,7 +27,7 @@ import TierFocusSelect from "../components/TierFocusSelect";
 import { useBlueprints } from "../hooks/useBlueprints";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { useTierFocus } from "../hooks/useTierFocus";
-import { blueprintDeleteErrorMessage } from "../utils/blueprintForm";
+import { blueprintDeleteErrorMessage } from "../utils/blueprintFormValidation";
 import { editBlueprintPath, newBlueprintPath } from "../utils/blueprintLinks";
 import { toBlueprintSyncTarget, type BlueprintSyncTarget } from "../utils/blueprintSync";
 import { entitiesPath } from "../utils/entityLinks";
