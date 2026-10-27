@@ -25,6 +25,9 @@ buildscript {
             // the report starts at zero.
             classpath("org.apache.logging.log4j:log4j-core:2.26.1")
             classpath("org.apache.logging.log4j:log4j-api:2.26.1")
+            // CVE-2026-102554 (Guava DoS during deserialization, fixed in 33.7.2): the plugin
+            // pulls 32.1.2-jre. Keep in step with the `guava` catalog line.
+            classpath("com.google.guava:guava:33.7.2-jre")
         }
     }
 }
@@ -232,6 +235,7 @@ dependencies {
     constraints {
         implementation(libs.scram.client) { because("CVE-2026-53712 (r2dbc-postgresql pulls 3.2)") }
         implementation(libs.scram.common) { because("CVE-2026-53712 (r2dbc-postgresql pulls 3.2)") }
+        implementation(libs.guava) { because("CVE-2026-102554 (transitive 32.1.3-android / 33.6.0-jre)") }
     }
 
     testImplementation(kotlin("test"))

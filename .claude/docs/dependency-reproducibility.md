@@ -81,10 +81,11 @@ this on 2026-09-30. Move that constraint deliberately, together with a regenerat
   runtime/test classpaths (the `jackson-bom` platform, the `scram` constraints, the
   `netty-bom`/`reactor-bom` platforms), or a literal `buildscript` constraint for a plugin classpath
   (root: FreeMarker 2.3.35 for Kover's reporter; `server/`: Jackson 2.22.4, plexus-utils 4.1.0,
-  log4j 2.26.1 for the Ktor plugin). Each carries a comment naming the advisory; buildscript blocks
+  log4j 2.26.1, Guava 33.7.2-jre for the Ktor plugin; the runtime/test Guava floor is the `guava`
+  catalog constraint, which also lifts the `-android` test-compile resolution). Each carries a comment naming the advisory; buildscript blocks
   use literals because the version catalog does not exist there yet. Then regenerate as above.
 - **Reference:** `.github/workflows/ci.yml` (`gradle-vulnerability-scan`), `gradle/libs.versions.toml`
-  (the `jackson-bom`/`scram`/`netty`/`reactor-bom` notes).
+  (the `jackson-bom`/`scram`/`guava`/`netty`/`reactor-bom` notes).
 - **Enforcement:** the CI job (Trivy pinned by tag AND digest, `--include-dev-deps`, which also fails
   if any expected lockfile is missing from Trivy's scanned targets) is part of the **Quality gate**;
   `:server:checkDependencyAlignment` (in `check`) fails when a floor leaves a Netty, Jackson or
