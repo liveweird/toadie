@@ -52,7 +52,8 @@ class UserService(private val database: R2dbcDatabase) {
         // so a soft-deleted user frees its email. Exposed table defs are query-only (not DDL),
         // so this column carries no `.uniqueIndex()`.
         val email = varchar("email", length = 254)
-        val passwordHash = varchar("password_hash", length = 255)
+        // Nullable since V48: NULL = a passwordless account (SSO-only until an admin sets one).
+        val passwordHash = varchar("password_hash", length = 255).nullable()
         // Single-column role storage (CHECK in V1); UserRole.USER is the baseline.
         val role = varchar("role", length = 20).default(UserRole.USER.name)
         val markedAsDeleted = bool("marked_as_deleted").default(false)
@@ -64,6 +65,10 @@ class UserService(private val database: R2dbcDatabase) {
         // Service accounts (V41, 2.15.0): a row that can never authenticate. A CHECK
         // constraint (V41) forbids service_account=true with role=ADMIN.
         val serviceAccount = bool("service_account").default(false)
+        // SSO identity (V48): both set or both NULL (CHECK). The unique index over the pair is FULL,
+        // not partial — a soft-deleted row keeps its link (persistence.md "Exceptions").
+        val ssoIssuer = varchar("sso_issuer", length = 512).nullable()
+        val ssoSubject = varchar("sso_subject", length = 255).nullable()
     }
 
     // Per-user feature flags (V12) — the DISABLED set; no row = enabled.
@@ -84,6 +89,8 @@ class UserService(private val database: R2dbcDatabase) {
             it[passwordHash] = user.passwordHash
             it[role] = user.role.name
             it[language] = user.language
+            it[ssoIssuer] = user.ssoIssuer
+            it[ssoSubject] = user.ssoSubject
         }
         val id = newRecord[Users.id].value
         // MFA is the one inverted-default flag (opt-in): every new user starts with the
@@ -316,6 +323,8 @@ class UserService(private val database: R2dbcDatabase) {
         language = this[Users.language],
         authVersion = this[Users.authVersion],
         serviceAccount = this[Users.serviceAccount],
+        ssoIssuer = this[Users.ssoIssuer],
+        ssoSubject = this[Users.ssoSubject],
     )
 }
 

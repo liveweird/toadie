@@ -31,7 +31,8 @@ enum class Feature { MFA }
 data class User(
     val name: String,
     val email: String,
-    val passwordHash: String,
+    /** bcrypt hash; null = a PASSWORDLESS account (V48 — reachable only through its SSO link). */
+    val passwordHash: String?,
     val role: UserRole = UserRole.USER,
     // Per-user feature flags (V12) — the DISABLED set, empty = full access. Rides the domain
     // object like the role so /login and /refresh mint the claim from the same read. Never
@@ -53,7 +54,22 @@ data class User(
      * carry an ordinary `created_by` attribution. Internal only, never part of UserResponse.
      */
     val serviceAccount: Boolean = false,
+    /**
+     * The external identity (V48): the OIDC issuer and the stable subject that proves it. Both or
+     * neither (a CHECK). Internal only, never part of UserResponse — the wire exposes just the
+     * [sso] boolean.
+     */
+    val ssoIssuer: String? = null,
+    val ssoSubject: String? = null,
 ) {
+    /** True when the account is linked to an external identity (V48). */
+    val sso: Boolean
+        get() = ssoSubject != null
+
+    /** False for a passwordless account (V48): password sign-in and self-service change fail. */
+    val hasPassword: Boolean
+        get() = passwordHash != null
+
     /** The wire/claim shape: additional roles only — empty for a regular user. */
     val additionalRoles: Set<UserRole>
         get() = role.asAdditionalRoles()
@@ -93,6 +109,10 @@ data class UserResponse(
     val disabledFeatures: List<Feature>,
     /** The stored per-user language (V18) — the ONE synced language (UI + emails). */
     val language: String,
+    /** True when the account is linked to an external identity provider (V48). */
+    val sso: Boolean,
+    /** False for a passwordless account (V48) — it cannot sign in with, or change, a password. */
+    val hasPassword: Boolean,
 )
 
 fun User.toResponse(id: UInt) = UserResponse(
@@ -102,6 +122,8 @@ fun User.toResponse(id: UInt) = UserResponse(
     roles = additionalRoles.sortedBy { it.name },
     disabledFeatures = disabledFeatures.sortedBy { it.name },
     language = language,
+    sso = sso,
+    hasPassword = hasPassword,
 )
 
 /** Body of PUT /users/{id}/language (target user or ADMIN — the switcher's save). */

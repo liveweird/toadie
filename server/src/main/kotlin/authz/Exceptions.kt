@@ -28,6 +28,13 @@ fun Int.orNotFound(resource: String): Int =
 open class ConflictException(message: String = "Conflict") : RuntimeException(message)
 
 /**
+ * A passwordless account (V48, SSO-only) asked to change its own password, which presupposes a
+ * current one → typed 409 (`urn:toadie:password-not-set`, `plugins/ErrorHandling.kt`). A
+ * [ConflictException] subclass, so an unregistered handler would still render a plain 409.
+ */
+class PasswordNotSetException : ConflictException("This account has no password set")
+
+/**
  * Caller-specific throttling (e.g. the per-account login lockout) → 429 with the given detail.
  * Distinct from the per-IP RateLimit plugin's bodiless 429, which the StatusPages
  * `status(TooManyRequests)` handler completes with a generic problem body.

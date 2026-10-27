@@ -5,6 +5,7 @@ import ch.nokillswit.authz.BadGatewayException
 import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.authz.ForbiddenException
 import ch.nokillswit.authz.NotFoundException
+import ch.nokillswit.authz.PasswordNotSetException
 import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.authz.UnauthorizedException
 import ch.nokillswit.catalog.CatalogRevisionConflictException
@@ -302,6 +303,13 @@ fun Application.configureErrorHandling() {
         }
         exception<ConflictException> { call, cause ->
             call.respondProblem(HttpStatusCode.Conflict, cause.message ?: "Conflict")
+        }
+        exception<PasswordNotSetException> { call, cause ->
+            call.respondProblem(
+                HttpStatusCode.Conflict,
+                cause.message,
+                type = "urn:toadie:password-not-set",
+            )
         }
         exception<CatalogRevisionConflictException> { call, cause ->
             call.respondProblem(

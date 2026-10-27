@@ -67,6 +67,7 @@ class MigrationChecksumTest {
         "V45__create_conversion_mappings.sql" to 400090258,
         "V46__create_telemetry.sql" to -291510673,
         "V47__annotation_keys_definition_at_location.sql" to -1547585490,
+        "V48__sso_identity.sql" to -1309986979,
     )
 
     @Test

@@ -87,6 +87,8 @@ data class LoginResponse(
     val disabledFeatures: List<Feature>,
     /** The user's stored language (V18) — the SPA applies it to the UI on login/refresh. */
     val language: String,
+    /** False for a passwordless (SSO-only, V48) account — the SPA hides password-change affordances. */
+    val hasPassword: Boolean,
 )
 
 // The refresh rejection detail per audited reason — data beside the handler, not control flow
@@ -131,6 +133,7 @@ private suspend fun JwtConfig.authResponse(
         // Not a JWT claim: the SPA reads it from this response, and emails read it fresh
         // at send time — nothing needs it inside the token.
         language = user.language,
+        hasPassword = user.hasPassword,
     )
 }
 
@@ -266,6 +269,7 @@ fun Application.configureAuthRoutes() {
                         verifyPassword(req.password, TIMING_EQUALIZER_HASH)
                         false
                     } else {
+                        // A passwordless account (V48) pays the same bcrypt round and fails inside.
                         verifyPassword(req.password, record.second.passwordHash)
                     }
                 if (record == null || !credentialsValid) {
@@ -273,7 +277,11 @@ fun Application.configureAuthRoutes() {
                     audit(
                         "login.failure",
                         "email" to email,
-                        "reason" to if (record == null) "unknown_email" else "wrong_password",
+                        "reason" to when {
+                            record == null -> "unknown_email"
+                            !record.second.hasPassword -> "no_password"
+                            else -> "wrong_password"
+                        },
                     )
                     if (tripped) audit("login.lockout", "email" to email)
                     throw UnauthorizedException("Unknown email or wrong password")

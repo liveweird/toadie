@@ -104,7 +104,8 @@ export interface paths {
          *     consecutive failures for one email (default 5, `LOGIN_LOCKOUT_THRESHOLD`), further
          *     attempts for that account — even with the correct password — are rejected with `429`
          *     for a lockout window (default 15 min, `LOGIN_LOCKOUT_DURATION_SECONDS`). A successful
-         *     login resets the counter.
+         *     login resets the counter. A passwordless (SSO-only) account answers the same `401` as a
+         *     wrong password for any submitted password, and counts toward the same lockout.
          *
          *     **Email MFA (opt-in via the `MFA` feature flag):** when the account has MFA enabled,
          *     correct credentials answer `200` with an `MfaChallengeResponse` instead of tokens — a
@@ -220,7 +221,9 @@ export interface paths {
          *     Throttled per submitted email — one request per interval
          *     (default 60 s, `PASSWORD_RESET_MIN_INTERVAL_SECONDS`) — uniformly for existing and
          *     unknown addresses, and rate-limited per client IP. A soft-deleted account is unknown
-         *     here (no link is minted, no email sent; the `202` stays uniform). Answers `503` on
+         *     here (no link is minted, no email sent; the `202` stays uniform), and so is a
+         *     passwordless (SSO-only) account: no link is minted and no email is sent, with the same
+         *     uniform `202`. Answers `503` on
          *     deployments without outbound email or a valid `MAIL_APP_URL` (HTTPS in production;
          *     HTTP is allowed in development; no subpath, userinfo, query, or fragment). The URL
          *     is configured, never derived from Host headers. Responses are no-store.
@@ -496,6 +499,11 @@ export interface paths {
          *     tokens on every device, even if minted in the same clock tick. The SPA clears its local
          *     session and returns to login. A self-change checked against credentials concurrently
          *     replaced by another request returns `403` without overwriting that newer password.
+         *
+         *     A passwordless account (SSO-only) has no current password to present, so its OWN
+         *     change answers `409` with problem type `urn:toadie:password-not-set`. An admin setting
+         *     the password of such an account is the deliberate, audited break-glass: it is allowed,
+         *     and afterwards the account has a password (`hasPassword` is true).
          */
         put: operations["changeUserPassword"];
         post?: never;
@@ -2600,6 +2608,8 @@ export interface components {
             /** @description Per-user feature flags — the admin-disabled set; empty = full access. */
             disabledFeatures: components["schemas"]["Feature"][];
             language: components["schemas"]["Language"];
+            /** @description False for a passwordless (SSO-only) account, which can neither sign in with nor change a password; the SPA hides its password-change affordances. */
+            hasPassword: boolean;
         };
         /**
          * @description An additional role. Every user is implicitly a regular user; the array only ever carries privileges added on top of that baseline. The wire `roles` array must never name USER (the implicit baseline) — only additional roles beyond it may appear.
@@ -2700,6 +2710,10 @@ export interface components {
             /** @description Per-user feature flags — the admin-disabled set; empty = full access. */
             disabledFeatures: components["schemas"]["Feature"][];
             language: components["schemas"]["Language"];
+            /** @description True when the account is linked to an external identity provider. */
+            sso: boolean;
+            /** @description False for a passwordless (SSO-only) account; an admin can still set one through `PUT /api/v1/users/{id}/password`. */
+            hasPassword: boolean;
         };
         UserPage: {
             items: components["schemas"]["UserResponse"][];
@@ -5479,6 +5493,15 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            /** @description The caller changes their OWN password but the account has none (SSO-only) — problem type `urn:toadie:password-not-set`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
             500: components["responses"]["InternalServerError"];
         };
     };

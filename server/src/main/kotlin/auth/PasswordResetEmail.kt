@@ -57,6 +57,12 @@ internal suspend fun processPasswordReset(
             audit("password_reset.unknown_email", "email" to email)
             return
         }
+        // A passwordless account (V48, SSO-only) has no password to reset: no token, no email. The
+        // request already answered 202, so this branch is invisible to the caller.
+        if (!user.hasPassword) {
+            audit("password_reset.skipped", "userId" to userId.toLong(), "reason" to "no_password")
+            return
+        }
         token = resets.issue(userId, user.authVersion) ?: return
         mailer.send(
             to = user.email,
