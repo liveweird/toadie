@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.30.1",
+    date: "2026-10-27",
+    en: `**Blueprint sync no longer reports a difference that isn't there.** After a blueprint was synced from its repository copy, reopening *Sync from source* still showed a difference and kept *Overwrite stored copy* enabled whenever the copy left out empty relations, mirror, calculation or aggregation sections. Empty and missing sections now count as the same, so the dialog says the blueprint is in sync.`,
+    pl: `**Synchronizacja blueprintu nie zgłasza już nieistniejącej różnicy.** Po zsynchronizowaniu blueprintu z kopią w repozytorium ponowne otwarcie *Synchronizuj ze źródłem* nadal pokazywało różnicę i pozostawiało włączone *Nadpisz zapisaną kopię*, gdy kopia pomijała puste sekcje relacji, odbić, obliczeń lub agregacji. Puste i brakujące sekcje są teraz traktowane jednakowo, więc okno informuje, że blueprint jest zsynchronizowany.`,
+  },
+  {
     version: "2.30.0",
     date: "2026-10-27",
     en: `**APIs and datasets in the commerce-payments demo now link to their contract in Covenant.** Covenant is Toadie's companion contract-management app. Every API and dataset in the demo gets a new computed *Covenant contract* property, a link that opens whatever contract or contracts Covenant has linked to that entity. Toadie stores nothing about those contracts; it only builds the address. An administrator changes the Covenant address for a deployment by editing the property's calculation in the API or Dataset blueprint.`,

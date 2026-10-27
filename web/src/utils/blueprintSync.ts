@@ -49,14 +49,35 @@ const BLUEPRINT_TOP_LEVEL_KEY_ORDER = [
   "tiers",
 ] as const;
 
-/** Renders a blueprint document with a stable key order for comparison — see
- *  `utils/canonicalJson.ts#canonicalDocumentJson` for the shared mechanism. */
-export function canonicalBlueprintDocumentJson(doc: Record<string, unknown>): string {
-  return canonicalDocumentJson(doc, BLUEPRINT_TOP_LEVEL_KEY_ORDER);
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The four top-level maps the server always stores and renders (an omitted one comes back as
+ * `{}`), so a stored blueprint and a source document that merely omits them are the same
+ * document. The COMPARISON drops an empty map on every side — current, source and baseline —
+ * rather than filling an absent one, so the line diff never shows a phantom `"relations": {}`
+ * line; what a sync sends stays exactly the picked document (this runs only inside the
+ * canonical rendering below), and the Blueprints page export keeps spelling the maps out.
+ */
+const EMPTY_WHEN_ABSENT_MAPS = ["relations", "mirrorProperties", "calculationProperties", "aggregationProperties"] as const;
+
+function withoutEmptyMaps(doc: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...doc };
+  for (const key of EMPTY_WHEN_ABSENT_MAPS) {
+    const value = result[key];
+    if (isPlainObject(value) && Object.keys(value).length === 0) delete result[key];
+  }
+  return result;
+}
+
+/** Renders a blueprint document with a stable key order for comparison — see
+ *  `utils/canonicalJson.ts#canonicalDocumentJson` for the shared mechanism. An empty
+ *  `relations`/`mirrorProperties`/`calculationProperties`/`aggregationProperties` map and an
+ *  absent one render identically (see [EMPTY_WHEN_ABSENT_MAPS]). */
+export function canonicalBlueprintDocumentJson(doc: Record<string, unknown>): string {
+  return canonicalDocumentJson(withoutEmptyMaps(doc), BLUEPRINT_TOP_LEVEL_KEY_ORDER);
 }
 
 /**

@@ -49,12 +49,6 @@ promotes it. A finished item is removed, not ticked.
   `$text` object substitution), and that key is not in the V22-seeded annotation registry. Registering it
   for API (a new registry migration) and adding a mapping rule would let the export carry the URL instead
   of only an inline `definition`.
-- [new] **Treat empty and absent blueprint maps as equal in the sync modal.** After a sync the stored
-  blueprint renders empty `relations`, `mirrorProperties`, `calculationProperties` and
-  `aggregationProperties` maps, so a source document that omits them never reads "in sync": reopening
-  the modal still shows a diff and keeps Overwrite enabled (`canonicalBlueprintDocumentJson` over
-  `blueprintExportDocument(detail)` vs. the picked source). The e2e fixture spells the four empty maps
-  out to work around it. Normalise both sides the same way and pin it with a vitest.
 
 ## Housekeeping
 
