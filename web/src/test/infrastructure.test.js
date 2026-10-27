@@ -222,6 +222,8 @@ describe("deployment and verification safety defaults", () => {
     // The stub's issuer is the app's SSO_ISSUER, and the app waits for the stub.
     expect(overlay.services["stub-idp"].environment.STUB_IDP_ISSUER).toBe(overlay.services.app.environment.SSO_ISSUER);
     expect(overlay.services.app.depends_on["stub-idp"].condition).toBe("service_healthy");
+    // The healthcheck names the IPv4 loopback: alpine's `localhost` is ::1 first and busybox wget never falls back.
+    expect(overlay.services["stub-idp"].healthcheck.test.join(" ")).toContain("http://127.0.0.1:");
     // The overlay relies on the base file running the app in development mode (the only mode accepting an http issuer).
     expect(parse(composeSource).services.app.environment.KTOR_DEVELOPMENT).toBe("true");
   });

@@ -22,7 +22,8 @@
 services:
   stub-idp:
     # Tag-pinned like compose's postgres/mailpit, on the Dockerfile's Node major (infrastructure.test.js
-    # pins the major); busybox wget ships with it for the healthcheck.
+    # pins the major); busybox wget ships with it for the healthcheck, which must name 127.0.0.1: alpine
+    # resolves `localhost` to ::1 first, busybox wget does not fall back, and the stub listens on IPv4.
     image: node:26-alpine
     command: ["node", "/stub/server.mjs"]
     # No container_name: a fixed name would collide between the CI project and any other stack.
@@ -38,7 +39,7 @@ services:
     ports:
       - "127.0.0.1:${STUB_IDP_PORT:-18090}:${STUB_IDP_PORT:-18090}"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:$${STUB_IDP_PORT}/healthz > /dev/null"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${STUB_IDP_PORT}/healthz > /dev/null"]
       interval: 3s
       timeout: 3s
       retries: 20
