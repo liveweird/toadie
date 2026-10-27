@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Task | Read |
 |---|---|
 | Server feature | `.claude/docs/package-layout.md` + `.claude/docs/persistence.md` + `.claude/docs/authorization.md` |
-| GraphQL integration | `.claude/docs/integration-api.md` + `api-guidelines/GRAPHQL-GUIDELINES.md` + committed `graphql/schema.graphqls` |
+| GraphQL integration | `.claude/docs/integration-api.md` + `api-guidelines/GRAPHQL-GUIDELINES.md` + committed `server/src/main/resources/graphql/schema.graphqls` |
 | REST API change | `api-guidelines/API-GUIDELINES.md` + the "OpenAPI contract" section below |
 | SPA (`web/`) | `web/CLAUDE.md`, the relevant section |
 | List endpoint | `.claude/docs/list-endpoints.md` |

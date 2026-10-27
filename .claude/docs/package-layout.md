@@ -347,7 +347,7 @@ ch.nokillswit
 │                       SavedEntityQueryService.kt (the lenses/ clone over V35's `entity_queries`:
 │                       own + PUBLIC list, creator-only mutations via the hybrid 404/403 verdict),
 │                       SavedEntityQueryRoutes.kt (`/api/v1/entity-queries`, any authenticated)
-├── conversion/         Backstage <-> Port conversion, phases 1-2 (Toadie-first): the stored MAPPING
+├── conversion/         Backstage <-> Port conversion, phases 1, 2 and 4 (Toadie-first): the stored MAPPING
 │                       DOCUMENT that says how a Port blueprint corresponds to a Backstage kind, and
 │                       its registry (the mapping-is-data rule: `.claude/docs/conversion-mapping.md`).
 │                       MappingDocument.kt (the typed model: pairs, rules, sealed

@@ -52,9 +52,12 @@ promotes it. A finished item is removed, not ticked.
   is per-process: MFA challenges; login/reset throttles; the token-blocklist cache (it can delay
   cross-instance revocation); the `IntegrationLimits` admission semaphore, per-client buckets and
   the retained-value ledger (`integration/IntegrationLimits.kt`); the Ktor per-IP buckets
-  (login, refresh, password-reset, MFA, integration and SSO); the jq quarantine set
-  (`entities/JqCalculation.kt`); the read ledger (`infra/concurrency/ReadLedger.kt`); and the SSO
-  hand-off store (`SsoHandoffs`) and seen-state set (`SsoSeenStates`) in `auth/sso/`. Move or
+  (login, refresh, password-reset, MFA, integration and SSO) and the per-user `telemetry` bucket
+  (`TELEMETRY_RATE_LIMIT`, `auth/AuthRoutes.kt`); the jq quarantine set and compile cache
+  (`entities/JqCalculation.kt`); the entity-query admission semaphore `querySlots`
+  (`entities/EntityService.kt`); the read ledger (`infra/concurrency/ReadLedger.kt`); and, in
+  `auth/sso/`, the SSO hand-off store (`SsoHandoffs`), seen-state set (`SsoSeenStates`) and the
+  discovery/JWKS `StaleServingCache` copies (`SsoDiscovery`, `IdTokenVerifier`). Move or
   redesign those stores, test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
   from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 
