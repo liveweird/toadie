@@ -132,8 +132,9 @@ Run the scan locally with the CI image: copy the lockfiles into a temp tree (`gr
   no report: re-run it. Only the OS layer is scanned (`--pkg-types os`): the application's Java
   dependencies are covered by the Gradle advisory scan over the lockfiles.
 
-Hand-maintained pins: Dependabot bumps the Dockerfile's base images and the workflows' `uses:` actions,
-but NOT images named inside `run:` steps or `.github/scripts/image-check.sh`. Bump these three by hand, tag and digest together (the multi-arch
+Hand-maintained pins: Dependabot bumps the Dockerfile's base images, the workflows' `uses:` actions (commit SHA
+plus tag comment), the k8s PostgreSQL (`docker` ecosystem over `/` and `/k8s`) and the compose and SSO-overlay
+images (`docker-compose` ecosystem over `/` and `/e2e`, 2.32.4), all tag@digest, but NOT images named inside `run:` steps or `.github/scripts/image-check.sh`. Bump these three by hand, tag and digest together (the multi-arch
 index digest from `docker buildx imagetools inspect <image>:<tag>`): `ghcr.io/aquasecurity/trivy`
 (the same pin is in `ci.yml`'s Gradle advisory scan; the infrastructure test demands they match),
 `moby/buildkit` (the buildx builder) and `tonistiigi/binfmt` (the QEMU installer).
