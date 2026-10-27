@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.32.1",
+    date: "2026-10-27",
+    en: `**Check-up upkeep.** From the October check-up: the container's own health check now really checks the database, a stricter test pins the security policy, and the docs say how to keep administrator access when Okta is unavailable.`,
+    pl: `**Porządki po przeglądzie.** Po październikowym przeglądzie: własna kontrola stanu kontenera naprawdę sprawdza teraz bazę danych, ostrzejszy test przypina politykę bezpieczeństwa, a dokumentacja podpowiada, jak zachować dostęp administratora, gdy Okta jest niedostępna.`,
+  },
+  {
     version: "2.32.0",
     date: "2026-10-27",
     en: `**Sign in with Okta.** Toadie can now sign you in through Okta (any OpenID Connect provider). It is off by default; an administrator turns it on with \`SSO_ENABLED\`. The sign-in page leads with “Sign in with Okta” and keeps the password form. Your first Okta sign-in creates your account, or links it to an existing one with the same email — except administrator accounts and accounts with email MFA, which keep signing in with their password. Accounts created through Okta have no password, so *Change password* is hidden for them, and the Users list marks SSO accounts with a badge.`,
