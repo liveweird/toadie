@@ -39,7 +39,7 @@ internal class StaleServingCache<T : Any>(
     private sealed interface Step<out T> {
         class Use<T>(val value: T) : Step<T>
         class Wait<T>(val flight: CompletableDeferred<Outcome<T>>, val fallback: T?) : Step<T>
-        class Lead<T>(val flight: CompletableDeferred<Outcome<T>>, val fallback: T?) : Step<T>
+        class Lead<T>(val flight: CompletableDeferred<Outcome<T>>, val fallback: T?, val previousAttempt: Long) : Step<T>
     }
 
     private val monitor = Any()
@@ -55,7 +55,7 @@ internal class StaleServingCache<T : Any>(
         while (true) {
             when (val step = decide(wantFresh)) {
                 is Step.Use -> return step.value
-                is Step.Lead -> return lead(step.flight, step.fallback)
+                is Step.Lead -> return lead(step)
                 is Step.Wait -> when (val outcome = step.flight.await()) {
                     is Outcome.Loaded -> return outcome.value
                     is Outcome.Failed -> return step.fallback ?: throw outcome.cause
@@ -75,11 +75,13 @@ internal class StaleServingCache<T : Any>(
         if (usable != null && now - lastAttempt < refreshIntervalMillis) return Step.Use(usable)
         val mine = CompletableDeferred<Outcome<T>>()
         flight = mine
+        val previousAttempt = lastAttempt
         lastAttempt = now
-        Step.Lead(mine, usable)
+        Step.Lead(mine, usable, previousAttempt)
     }
 
-    private suspend fun lead(mine: CompletableDeferred<Outcome<T>>, fallback: T?): T {
+    private suspend fun lead(step: Step.Lead<T>): T {
+        val mine = step.flight
         var loaded: T? = null
         var failure: Exception? = null
         try {
@@ -92,6 +94,9 @@ internal class StaleServingCache<T : Any>(
             val problem = failure
             synchronized(monitor) {
                 loaded?.let { entry = Entry(it, clock()) }
+                // An abandoned flight never reached the issuer's answer, so it must not count as an attempt: otherwise the
+                // waiters re-deciding below would serve the old value for a whole interval (a rotated key refused for 60 s).
+                if (loaded == null && problem == null) lastAttempt = step.previousAttempt
                 flight = null
             }
             mine.complete(
@@ -102,6 +107,6 @@ internal class StaleServingCache<T : Any>(
                 },
             )
         }
-        return loaded ?: fallback ?: throw checkNotNull(failure)
+        return loaded ?: step.fallback ?: throw checkNotNull(failure)
     }
 }

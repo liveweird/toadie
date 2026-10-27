@@ -114,4 +114,30 @@ class StaleServingCacheTest {
         assertEquals(2, loads.get())
         assertTrue(cache.get() == 2)
     }
+
+    @Test
+    fun `a cancelled leader does not count as an attempt, so a waiter wanting fresh data still loads`() = runBlocking<Unit> {
+        val release = CompletableDeferred<Unit>()
+        val started = CompletableDeferred<Unit>()
+        val loads = AtomicInteger()
+        var now = 0L
+        val cache = StaleServingCache<Int>(ttlMillis = 1_000, refreshIntervalMillis = 100, clock = { now }) {
+            val n = loads.incrementAndGet()
+            if (n == 2) {
+                started.complete(Unit)
+                release.await()
+            }
+            n
+        }
+        assertEquals(1, cache.get())
+        // A rotated key past the retry interval: the cached value is not good enough, and the leader's refresh hangs.
+        now = 200
+        val leader = launch(start = CoroutineStart.UNDISPATCHED) { cache.get { it < 2 } }
+        started.await()
+        val waiter = async(start = CoroutineStart.UNDISPATCHED) { cache.get { it < 2 } }
+        yield()
+        leader.cancelAndJoin()
+        release.complete(Unit)
+        assertEquals(3, waiter.await(), "the waiter loads instead of being served the old value for an interval")
+    }
 }

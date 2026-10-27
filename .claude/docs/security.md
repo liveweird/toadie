@@ -526,6 +526,7 @@ OpenID Connect sign-in behind `SSO_ENABLED` (default `false`; 2.32.0 ships the s
   - An Okta org admin can assert any verified email, so can sign in as (and link to) any non-ADMIN, non-MFA account in the admitted domains; the identity provider's administrators are inside the trust boundary.
   - An account promoted to ADMIN after it was created or linked through SSO stays reachable by its Okta identity; the `link_refused` rule guards the link, not later promotion.
   - Email MFA enabled AFTER an account was linked is not applied on the SSO path (the identity provider's sign-on policy owns the second factor).
+  - A key removed from the JWKS stays accepted while the JWKS cannot be refreshed, for at most its TTL plus the 24 h staleness bound (about 25 h); a fresh JWKS drops it at once.
   - An ID token whose `aud` is an array without `azp` is accepted when the array contains the client id (OIDC Core asks for `azp` only for multiple audiences, and Okta issues a single audience).
 - **Exception:** none. Okta sign-out (RP-initiated logout) is not implemented; signing out of Toadie ends only the Toadie session.
 
