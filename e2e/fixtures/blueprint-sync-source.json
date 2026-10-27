@@ -6,7 +6,6 @@
     "properties": {
       "label": { "type": "string", "title": "Label" },
       "source_note": { "type": "string", "title": "Source note" }
-    },
-    "required": []
+    }
   }
 }

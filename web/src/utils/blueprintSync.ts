@@ -63,19 +63,34 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  */
 const EMPTY_WHEN_ABSENT_MAPS = ["relations", "mirrorProperties", "calculationProperties", "aggregationProperties"] as const;
 
+/**
+ * The same rule one level down: the server's `BlueprintSchema` defaults `properties` to `{}` and
+ * `required` to `[]` and always renders both, so a source that omits an empty one is the same
+ * schema. Dropped from the comparison only, like the maps above.
+ */
+function withoutEmptySchemaMembers(schema: unknown): unknown {
+  if (!isPlainObject(schema)) return schema;
+  const result = { ...schema };
+  if (isPlainObject(result.properties) && Object.keys(result.properties).length === 0) delete result.properties;
+  if (Array.isArray(result.required) && result.required.length === 0) delete result.required;
+  return result;
+}
+
 function withoutEmptyMaps(doc: Record<string, unknown>): Record<string, unknown> {
   const result = { ...doc };
   for (const key of EMPTY_WHEN_ABSENT_MAPS) {
     const value = result[key];
     if (isPlainObject(value) && Object.keys(value).length === 0) delete result[key];
   }
+  if ("schema" in result) result.schema = withoutEmptySchemaMembers(result.schema);
   return result;
 }
 
 /** Renders a blueprint document with a stable key order for comparison — see
  *  `utils/canonicalJson.ts#canonicalDocumentJson` for the shared mechanism. An empty
  *  `relations`/`mirrorProperties`/`calculationProperties`/`aggregationProperties` map and an
- *  absent one render identically (see [EMPTY_WHEN_ABSENT_MAPS]). */
+ *  absent one render identically (see [EMPTY_WHEN_ABSENT_MAPS]), and so do an empty
+ *  `schema.properties`/`schema.required` and an absent one (see [withoutEmptySchemaMembers]). */
 export function canonicalBlueprintDocumentJson(doc: Record<string, unknown>): string {
   return canonicalDocumentJson(withoutEmptyMaps(doc), BLUEPRINT_TOP_LEVEL_KEY_ORDER);
 }

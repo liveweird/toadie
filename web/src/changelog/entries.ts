@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.31.1",
+    date: "2026-10-27",
+    en: `**Blueprint sync ignores another empty section.** *Sync from source* no longer reports a difference when the repository copy of a blueprint leaves out an empty list of required properties, or an empty property list. Empty and missing now count as the same here too, so the dialog says the blueprint is in sync.`,
+    pl: `**Synchronizacja blueprintu pomija kolejną pustą sekcję.** *Synchronizuj ze źródłem* nie zgłasza już różnicy, gdy kopia blueprintu w repozytorium pomija pustą listę wymaganych właściwości albo pustą listę właściwości. Tu również puste i brakujące sekcje są traktowane jednakowo, więc okno informuje, że blueprint jest zsynchronizowany.`,
+  },
+  {
     version: "2.31.0",
     date: "2026-10-27",
     en: `**API definition URLs now travel to Backstage and back.** The default conversion mapping writes an API's *Definition* URL as Backstage's \`backstage.io/definition-at-location\` annotation (\`url:<address>\`), and a Backstage import fills the URL back in; the annotation key is now registered for APIs. The inline definition is carried as before. Two things to know: a workspace keeps its stored mapping until you replace it (for the demo, run \`mapping/load.sh --delete\` and then \`mapping/load.sh\`), and once it is replaced the mapping manages that annotation, so exporting over an existing catalog file replaces or removes it, and importing an older Backstage file that lacks it, with merging on, clears the stored URL. Export to Backstage first if your catalog files predate this release.`,
