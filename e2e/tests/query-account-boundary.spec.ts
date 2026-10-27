@@ -12,10 +12,10 @@ import {
 } from "./helpers";
 
 async function signInWithoutClearingStorage(page: Parameters<typeof login>[0], email: string, password: string) {
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Email" }).fill(email);
   await page.getByRole("textbox", { name: "Password" }).fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(accountMenu(page)).toBeVisible({ timeout: 15_000 });
 }
 

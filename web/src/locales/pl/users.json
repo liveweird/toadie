@@ -10,6 +10,7 @@
   "resetPassword": "Zresetuj hasło",
   "resetPasswordAria": "Zresetuj hasło dla {{name}}",
   "youBadge": "Ty",
+  "ssoBadge": "SSO",
   "loadFailed": "Nie udało się wczytać kont",
   "userNotFound": "Nie znaleziono konta.",
   "userGone": "Konto już nie istnieje.",
@@ -50,6 +51,7 @@
   "newPassword": "Nowe hasło",
   "confirmPassword": "Powtórz nowe hasło",
   "wrongCurrentPassword": "Obecne hasło jest niepoprawne.",
+  "passwordNotSet": "To konto loguje się przez SSO i nie ma hasła, które można zmienić.",
   "changeFailedStatus": "Zmiana nie powiodła się ({{status}})",
   "changeFailedNetwork": "Zmiana nie powiodła się. Sprawdź połączenie i spróbuj ponownie.",
   "toast": {

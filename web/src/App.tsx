@@ -22,6 +22,7 @@ import classes from "./theme.module.css";
 // The ADMIN telemetry panel: a lazy chunk a non-admin never downloads (it is only mounted for an ADMIN with the panel open).
 const TelemetryPanel = lazy(() => import("./components/TelemetryPanel"));
 const Login = lazy(() => import("./pages/Login"));
+const SsoCallback = lazy(() => import("./pages/SsoCallback"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ConfirmPasswordReset = lazy(() => import("./pages/ConfirmPasswordReset"));
 const Hierarchy = lazy(() => import("./pages/Hierarchy"));
@@ -206,6 +207,9 @@ export default function App() {
             </RedirectIfAuthed>
           }
         />
+        {/* Public and deliberately NOT inside RedirectIfAuthed: a signed-in browser finishing an SSO
+            attempt must still consume its one-time code (switching accounts, or replacing a stale session). */}
+        <Route path="/login/sso" element={<SsoCallback />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/reset-password/confirm" element={<ConfirmPasswordReset />} />
         <Route element={<RequireAuth />}>

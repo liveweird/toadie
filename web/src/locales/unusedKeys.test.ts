@@ -123,6 +123,9 @@ const DYNAMIC_KEY_PREFIXES: ReadonlyArray<string> = [
   // (the `ImportFileResult` status enum).
   "conversion.export.createModal.status.",
   "conversion.export.createModal.checkStatus.",
+  // t(`auth.ssoError.${code}`) — pages/Login.tsx (the `#sso_error=` fragment code, narrowed to
+  // cancelled | expired | failed | not_allowed).
+  "auth.ssoError.",
 ];
 
 function usedDynamically(key: string): boolean {

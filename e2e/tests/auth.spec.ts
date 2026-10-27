@@ -5,7 +5,7 @@ test("admin can log in and log out", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Entity hierarchy", exact: true })).toBeVisible();
 
   await signOut(page);
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
   await expect(page.getByText("You've been signed out.")).toBeVisible();
 });
 
@@ -13,18 +13,18 @@ test("invalid credentials are rejected", async ({ page }) => {
   await page.goto("/login");
   await page.getByRole("textbox", { name: "Email" }).fill(ADMIN);
   await page.getByRole("textbox", { name: "Password" }).fill("definitely-wrong");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Invalid email or password")).toBeVisible();
 });
 
 test("a deep link is guarded and lands back after signing in", async ({ page }) => {
   await page.goto("/some/deep/path?blueprint=_team#quality-probe");
   // Anonymous → bounced to the sign-in form.
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
 
   await page.getByRole("textbox", { name: "Email" }).fill(ADMIN);
   await page.getByRole("textbox", { name: "Password" }).fill("changeme");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
   // Back at the requested path — inside the shell it renders the not-found page (no blank).
   await expect(page).toHaveURL(/\/some\/deep\/path\?blueprint=_team#quality-probe$/);

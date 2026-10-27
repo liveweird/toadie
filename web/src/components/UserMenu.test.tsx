@@ -50,6 +50,22 @@ describe("UserMenu", () => {
     expect(screen.getByRole("menuitem", { name: /Changelog/ })).toHaveAttribute("href", "/changelog");
   });
 
+  test("a passwordless (SSO-only) session has no Change password item; an older session without the flag keeps it", async () => {
+    stubFetch((url) => (url === "/api/v1/users/7" ? Response.json(ME) : undefined));
+    localStorage.setItem("toadie.auth.hasPassword", "false");
+    const user = userEvent.setup();
+    const { unmount } = renderMenu();
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
+    expect(await screen.findByRole("menuitem", { name: /Changelog/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Change password" })).not.toBeInTheDocument();
+    unmount();
+
+    localStorage.removeItem("toadie.auth.hasPassword");
+    renderMenu();
+    await user.click(screen.getByRole("button", { name: /Account menu$/ }));
+    expect(await screen.findByRole("menuitem", { name: "Change password" })).toBeInTheDocument();
+  });
+
   test("names the trigger by its visible text: the user's name first, the initials as CSS content", async () => {
     stubFetch((url) => (url === "/api/v1/users/7" ? Response.json(ME) : undefined));
     renderMenu();

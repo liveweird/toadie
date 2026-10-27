@@ -10,6 +10,7 @@
   "resetPassword": "Reset password",
   "resetPasswordAria": "Reset password for {{name}}",
   "youBadge": "You",
+  "ssoBadge": "SSO",
   "loadFailed": "Failed to load users",
   "userNotFound": "User not found.",
   "userGone": "User no longer exists.",
@@ -50,6 +51,7 @@
   "newPassword": "New password",
   "confirmPassword": "Confirm new password",
   "wrongCurrentPassword": "The current password is incorrect.",
+  "passwordNotSet": "This account signs in through SSO and has no password to change.",
   "changeFailedStatus": "Change failed ({{status}})",
   "changeFailedNetwork": "Change failed. Check your connection and try again.",
   "toast": {

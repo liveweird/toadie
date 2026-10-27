@@ -27,7 +27,7 @@ async function scan(page: Parameters<typeof login>[0]): Promise<void> {
 
 test("login screen has no WCAG A/AA violations", async ({ page }) => {
   await page.goto("/login");
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
   await scan(page);
 });
 

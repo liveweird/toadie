@@ -31,14 +31,30 @@ promotes it. A finished item is removed, not ticked.
   schedule and retention against those targets. The 10 GiB initial claim and isolated restore
   drill are already implemented; the procedure is in [k8s/BACKUP-RESTORE.md](k8s/BACKUP-RESTORE.md).
 
+## Authentication
+
+- [new] **Sign out of Okta too (RP-initiated logout).** Signing out of Toadie ends only the Toadie
+  session; the Okta session stays, so the next "Sign in with Okta" completes without a prompt. Read
+  `end_session_endpoint` from discovery, keep the ID token as the `id_token_hint` for the session
+  (or fetch a fresh one), redirect through it with a `post_logout_redirect_uri` registered in the
+  Okta application, and decide what a provider without the endpoint does. Update the "Exception"
+  line of `.claude/docs/security.md` "SSO login (OIDC)" and the run-stack runbook with it.
+- [new] **Let an admin unlink or re-link an SSO identity.** A linked identity is permanent today:
+  there is no way to move an account to another Okta subject, detach SSO from an account, or
+  re-admit an identity whose linked account was deleted (the V48 `(issuer, subject)` index covers
+  deleted rows, so that identity stays refused with `account_deleted`). Add an ADMIN action on the
+  Users row with its audit event and docs line, and decide whether unlinking an account that has no
+  password must first set one.
+
 ## Scaling constraint
 
 - [new] **Remove instance-local state before allowing multiple app replicas.** Every one of these
   is per-process: MFA challenges; login/reset throttles; the token-blocklist cache (it can delay
   cross-instance revocation); the `IntegrationLimits` admission semaphore, per-client buckets and
   the retained-value ledger (`integration/IntegrationLimits.kt`); the Ktor per-IP buckets
-  (login, refresh, password-reset, MFA and integration); the jq quarantine set
-  (`entities/JqCalculation.kt`); and the read ledger (`infra/concurrency/ReadLedger.kt`). Move or
+  (login, refresh, password-reset, MFA, integration and SSO); the jq quarantine set
+  (`entities/JqCalculation.kt`); the read ledger (`infra/concurrency/ReadLedger.kt`); and the SSO
+  hand-off store (`SsoHandoffs`) and seen-state set (`SsoSeenStates`) in `auth/sso/`. Move or
   redesign those stores, test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
   from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 

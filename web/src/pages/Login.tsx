@@ -1,13 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
-import { Alert, Anchor, Button, Center, PasswordInput, PinInput, Stack, Text, TextInput } from "@mantine/core";
+import { useQuery } from "@tanstack/react-query";
+import { Alert, Anchor, Button, Center, Divider, PasswordInput, PinInput, Stack, Text, TextInput } from "@mantine/core";
 import { isEmail, isNotEmpty, useForm } from "@mantine/form";
-import { isMfaChallenge, login, verifyMfa, type MfaChallenge } from "../api/auth";
+import { isMfaChallenge, login, loginOptions, startSsoLogin, verifyMfa, type MfaChallenge } from "../api/auth";
 import { saveErrorMessage } from "../utils/saveError";
 import { consumeSignedOut, internalReturnLocation, notifyAuthChange } from "../auth";
 import AuthCard from "../components/AuthCard";
 import { MAX_EMAIL_LENGTH } from "../utils/userForm";
+
+const SSO_ERRORS = ["cancelled", "expired", "failed", "not_allowed"] as const;
+type SsoError = (typeof SSO_ERRORS)[number];
+
+/** The `#sso_error=<code>` the SSO callback redirects to; an absent fragment is null, an unrecognised code reads as `failed`. */
+function ssoErrorFromHash(hash: string): SsoError | null {
+  const code = new URLSearchParams(hash.slice(1)).get("sso_error");
+  if (code === null) return null;
+  return SSO_ERRORS.find((known) => known === code) ?? "failed";
+}
 
 export default function Login() {
   const { t } = useTranslation();
@@ -19,6 +30,17 @@ export default function Login() {
   // Email MFA: non-null switches the card to the code-entry step.
   const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
   const [code, setCode] = useState("");
+  // Read once from the fragment, which the effect below then strips from the address bar.
+  const [ssoError, setSsoError] = useState<SsoError | null>(() => ssoErrorFromHash(location.hash));
+  // A failed read just hides the button: the password form never depends on it.
+  const options = useQuery({ queryKey: ["loginOptions"], queryFn: loginOptions, retry: false, staleTime: 60_000 });
+  const sso = options.data?.sso ?? null;
+
+  useEffect(() => {
+    if (location.hash.includes("sso_error")) {
+      navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: location.state });
+    }
+  }, [location.hash, location.pathname, location.search, location.state, navigate]);
 
   const form = useForm({
     initialValues: { email: "", password: "" },
@@ -35,6 +57,7 @@ export default function Login() {
 
   async function onSubmit(values: { email: string; password: string }) {
     setError(null);
+    setSsoError(null);
     setSignedOut(false);
     setSubmitting(true);
     try {
@@ -126,6 +149,23 @@ export default function Login() {
 
   return (
     <AuthCard title={t("auth.signIn")}>
+      {ssoError && (
+        <Alert color="red" variant="light">
+          {t(`auth.ssoError.${ssoError}`)}
+        </Alert>
+      )}
+      {sso && (
+        <>
+          <Button
+            variant="default"
+            fullWidth
+            onClick={() => startSsoLogin((location.state as { from?: Location } | null)?.from)}
+          >
+            {t("auth.ssoSignIn", { label: sso.label })}
+          </Button>
+          <Divider label={t("auth.ssoOr")} labelPosition="center" />
+        </>
+      )}
       <form onSubmit={form.onSubmit(onSubmit)} noValidate>
         <Stack>
           <TextInput

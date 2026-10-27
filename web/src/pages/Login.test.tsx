@@ -14,16 +14,30 @@ const SESSION = {
   roles: [],
 };
 
+const OPTIONS_URL = "/api/v1/login/options";
+
 describe("Login", () => {
+  // The page reads the public login options on mount; that read is answered apart from the
+  // queued `fetchMock()` responses so the tests below keep scripting only their own requests.
+  let optionsResponse: () => Response | Promise<Response>;
+  const apiMock = vi.fn();
+
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn());
+    optionsResponse = () => jsonResponse(200, { sso: null });
+    apiMock.mockReset();
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
+      url === OPTIONS_URL ? Promise.resolve(optionsResponse()) : (apiMock(url, init) as Promise<Response>),
+    );
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
   });
 
-  const fetchMock = () => fetch as unknown as ReturnType<typeof vi.fn>;
+  const fetchMock = () => apiMock;
 
   async function submit(email = "user@test.example", password = "correct-horse") {
     const user = userEvent.setup();
@@ -166,5 +180,85 @@ describe("Login", () => {
       "href",
       "/reset-password",
     );
+  });
+
+  describe("single sign-on", () => {
+    function stubAssign() {
+      const assign = vi.fn();
+      vi.stubGlobal("location", { ...window.location, assign });
+      return assign;
+    }
+
+    test("shows the provider button above the password form when the options enable SSO", async () => {
+      optionsResponse = () => jsonResponse(200, { sso: { label: "Okta" } });
+      renderWithProviders(<Login />, { route: "/login" });
+      const button = await screen.findByRole("button", { name: "Sign in with Okta" });
+      expect(screen.getByText("or")).toBeInTheDocument();
+      const email = screen.getByLabelText("Email");
+      expect(button.compareDocumentPosition(email) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByRole("link", { name: /forgot password/i })).toBeInTheDocument();
+    });
+
+    test("shows no button when SSO is off", async () => {
+      renderWithProviders(<Login />, { route: "/login" });
+      await waitFor(() => expect(screen.getByLabelText("Email")).toBeInTheDocument());
+      expect(screen.queryByRole("button", { name: /sign in with/i })).not.toBeInTheDocument();
+      expect(screen.queryByText("or")).not.toBeInTheDocument();
+    });
+
+    test("a failed options read hides the button and leaves the password form working", async () => {
+      optionsResponse = () => jsonResponse(500, { title: "boom", status: 500 });
+      fetchMock().mockResolvedValueOnce(jsonResponse(200, SESSION));
+      renderWithProviders(<Login />, { route: "/login" });
+      await submit();
+      await waitFor(() => expect(localStorage.getItem("toadie.auth.token")).toBe("access-1"));
+      expect(screen.queryByRole("button", { name: /sign in with/i })).not.toBeInTheDocument();
+    });
+
+    test("clicking stores the return location and navigates to the start URL", async () => {
+      const assign = stubAssign();
+      optionsResponse = () => jsonResponse(200, { sso: { label: "Okta" } });
+      renderWithProviders(<Login />, {
+        route: { pathname: "/login", state: { from: { pathname: "/entities", search: "?blueprint=_team", hash: "#q" } } },
+      });
+      await userEvent.click(await screen.findByRole("button", { name: "Sign in with Okta" }));
+      expect(assign).toHaveBeenCalledWith("/api/v1/login/sso/start");
+      expect(JSON.parse(sessionStorage.getItem("toadie.sso.returnTo")!)).toEqual({
+        pathname: "/entities", search: "?blueprint=_team", hash: "#q",
+      });
+    });
+
+    test("clicking without a protected-route origin stores nothing", async () => {
+      const assign = stubAssign();
+      sessionStorage.setItem("toadie.sso.returnTo", JSON.stringify({ pathname: "/stale" }));
+      optionsResponse = () => jsonResponse(200, { sso: { label: "Okta" } });
+      renderWithProviders(<Login />, { route: "/login" });
+      await userEvent.click(await screen.findByRole("button", { name: "Sign in with Okta" }));
+      expect(assign).toHaveBeenCalledWith("/api/v1/login/sso/start");
+      expect(sessionStorage.getItem("toadie.sso.returnTo")).toBeNull();
+    });
+
+    test.each([
+      ["cancelled", /sign-in was cancelled/i],
+      ["expired", /took too long and expired/i],
+      ["failed", /single sign-on failed/i],
+      ["not_allowed", /cannot sign in through single sign-on/i],
+      ["something_new", /single sign-on failed/i],
+    ])("#sso_error=%s renders its alert and strips the fragment", async (code, message) => {
+      renderWithProviders(<><Login /><LocationProbe /></>, { route: `/login#sso_error=${code}` });
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/login$/));
+    });
+
+    test("stripping the error fragment keeps the protected-route origin for the next sign-in", async () => {
+      renderWithProviders(
+        <><Login /><LocationProbe /></>,
+        { route: { pathname: "/login", hash: "#sso_error=cancelled", state: { from: { pathname: "/files" } } } },
+      );
+      await screen.findByText(/sign-in was cancelled/i);
+      fetchMock().mockResolvedValueOnce(jsonResponse(200, SESSION));
+      await submit();
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/files$/));
+    });
   });
 });

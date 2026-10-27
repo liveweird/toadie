@@ -1,0 +1,57 @@
+# SSO e2e overlay. e2e/CI ONLY: the long-lived `toadie` stack never uses it, and the client secret
+# below is a throwaway test value shared with the stub identity provider, not a credential.
+#
+# Invoke it from the REPO ROOT, beside the base file (the CI workflow does exactly this):
+#
+#   docker compose -p toadie-check -f docker-compose.yaml -f e2e/compose.sso.yaml up -d --build
+#
+# Compose resolves every relative path in every -f file against the project directory, which
+# defaults to the directory of the FIRST file (the repo root) - not against this file. That is
+# why the stub is mounted as ./e2e/stub-idp and not ./stub-idp. Passing --project-directory
+# would change it, so do not.
+#
+# The app already runs with KTOR_DEVELOPMENT=true in docker-compose.yaml, the only mode that
+# accepts the plain-http issuer below (production requires https for issuer and redirect URI).
+#
+# Two origins on purpose: the browser reaches the stub at http://localhost:${STUB_IDP_PORT} (the
+# published port, used for /authorize only); the app reaches it in-network at http://stub-idp:...
+# (discovery, /token, /jwks). The stub's issuer must equal the app's SSO_ISSUER byte for byte.
+#
+# SSO_REDIRECT_URI defaults to the compose app's own origin; a verification stack on other ports
+# (the `-p toadie-check` override) sets it, e.g. SSO_REDIRECT_URI=http://localhost:18081/api/v1/login/sso/callback.
+services:
+  stub-idp:
+    # Tag-pinned like compose's postgres/mailpit, on the Dockerfile's Node major (infrastructure.test.js
+    # pins the major); busybox wget ships with it for the healthcheck, which must name 127.0.0.1: alpine
+    # resolves `localhost` to ::1 first, busybox wget does not fall back, and the stub listens on IPv4.
+    image: node:26-alpine
+    command: ["node", "/stub/server.mjs"]
+    # No container_name: a fixed name would collide between the CI project and any other stack.
+    restart: unless-stopped
+    volumes:
+      - ./e2e/stub-idp:/stub:ro
+    environment:
+      STUB_IDP_PORT: "${STUB_IDP_PORT:-18090}"
+      STUB_IDP_ISSUER: "http://stub-idp:${STUB_IDP_PORT:-18090}"
+      STUB_IDP_PUBLIC_URL: "http://localhost:${STUB_IDP_PORT:-18090}"
+      STUB_IDP_CLIENT_ID: toadie-e2e
+      STUB_IDP_CLIENT_SECRET: e2e-only-not-a-secret
+    ports:
+      - "127.0.0.1:${STUB_IDP_PORT:-18090}:${STUB_IDP_PORT:-18090}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${STUB_IDP_PORT}/healthz > /dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    depends_on:
+      stub-idp:
+        condition: service_healthy
+    environment:
+      SSO_ENABLED: "true"
+      SSO_LABEL: Okta
+      SSO_ISSUER: "http://stub-idp:${STUB_IDP_PORT:-18090}"
+      SSO_CLIENT_ID: toadie-e2e
+      SSO_CLIENT_SECRET: e2e-only-not-a-secret
+      SSO_REDIRECT_URI: "${SSO_REDIRECT_URI:-http://localhost:8081/api/v1/login/sso/callback}"

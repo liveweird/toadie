@@ -75,9 +75,9 @@ test("admin creates a user who signs in, changes their password, and is finally 
   await signOut(page);
   // Fresh load: the logout notification can remount the login form and drop typed values.
   await page.goto("/login");
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Email" }).fill(throwaway.email);
   await page.getByRole("textbox", { name: "Password" }).fill(newPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText(/invalid email or password/i)).toBeVisible();
 });
