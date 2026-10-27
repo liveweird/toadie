@@ -114,6 +114,7 @@ describe("UserMenu", () => {
     const user = userEvent.setup();
     renderMenu();
     await user.click(screen.getByRole("button", { name: /Account menu$/ }));
+    expect(await screen.findByRole("radiogroup", { name: "Theme" })).toBeInTheDocument();
     await user.click(await screen.findByRole("radio", { name: "Dark" }));
     await waitFor(() =>
       expect(document.documentElement.getAttribute("data-mantine-color-scheme")).toBe("dark"),

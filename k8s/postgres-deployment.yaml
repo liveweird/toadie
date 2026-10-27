@@ -17,6 +17,20 @@ spec:
       labels:
         io.kompose.service: postgres
     spec:
+      # postgres:18-alpine's `postgres` user is uid/gid 70. Running the pod as that user (rather than
+      # letting the entrypoint start as root and drop to it through gosu) means the container never
+      # holds root: with a non-root start the entrypoint skips its chown/gosu step and runs initdb as
+      # uid 70 directly. fsGroup makes the PVC group-writable by gid 70 (a volume first initialised by
+      # the former root start already belongs to 70:70, so existing data keeps working);
+      # OnRootMismatch skips the recursive re-own once the volume root already matches.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - env:
             - name: POSTGRES_DB
@@ -51,16 +65,44 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 5
           name: toadie-postgres
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 5432
               protocol: TCP
+          # Demo-sized: PostgreSQL's default shared_buffers is 128 MB and the app's R2DBC pool caps at
+          # 20 connections, so steady state sits well under the 256 MiB request; the 1 GiB limit leaves
+          # room for an index build or autovacuum on top of a busy pool (page cache and /dev/shm count
+          # against it too). No CPU limit (throttling a database only adds latency).
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              memory: "1Gi"
           volumeMounts:
-            # postgres 18+ images keep data in a versioned subdir of /var/lib/postgresql;
-            # mounting the pre-18 /var/lib/postgresql/data path breaks the container.
+            # postgres 18+ images keep data in a versioned subdir of /var/lib/postgresql
+            # (PGDATA=/var/lib/postgresql/18/docker); mounting the pre-18 /var/lib/postgresql/data
+            # path breaks the container.
             - mountPath: /var/lib/postgresql
               name: postgres-data
+            # Writable scratch under readOnlyRootFilesystem: the server's unix socket and lock file
+            # live in /var/run/postgresql, and /tmp holds temporary files. Everything else it writes
+            # is under the data volume.
+            - mountPath: /var/run/postgresql
+              name: run
+            - mountPath: /tmp
+              name: tmp
       restartPolicy: Always
       volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
         - name: postgres-data
           persistentVolumeClaim:
             claimName: postgres-data

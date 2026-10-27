@@ -11,6 +11,8 @@
   "resetPasswordAria": "Zresetuj hasło dla {{name}}",
   "youBadge": "Ty",
   "ssoBadge": "SSO",
+  "noPasswordBadge": "Brak hasła",
+  "noPasswordHint": "To konto nie ma hasła: logowanie jest możliwe tylko przez SSO, dopóki administrator nie ustawi hasła.",
   "loadFailed": "Nie udało się wczytać kont",
   "userNotFound": "Nie znaleziono konta.",
   "userGone": "Konto już nie istnieje.",

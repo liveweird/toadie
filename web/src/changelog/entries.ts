@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.32.2",
+    date: "2026-10-27",
+    en: `**Check-up upkeep, part two.** The Users list marks accounts without a password, the theme switch is announced to screen readers, the bundled PostgreSQL runs as a non-root user on Kubernetes, and duplicate SSO identities or integration keys get a clear error message.`,
+    pl: `**Porządki po przeglądzie, część druga.** Lista użytkowników oznacza konta bez hasła, przełącznik motywu jest odczytywany czytnikom ekranu, dołączony PostgreSQL działa w Kubernetes jako użytkownik bez uprawnień roota, a zduplikowane tożsamości SSO i klucze integracji dostają czytelny komunikat o błędzie.`,
+  },
+  {
     version: "2.32.1",
     date: "2026-10-27",
     en: `**Check-up upkeep.** From the October check-up: the container's own health check now really checks the database, a stricter test pins the security policy, and the docs say how to keep administrator access when Okta is unavailable.`,

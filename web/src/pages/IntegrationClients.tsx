@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Alert, Badge, Button, Group, Menu, Modal, Paper, Select, Stack, Table, Text, TextInput } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconKey, IconKeyOff, IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
@@ -26,6 +25,7 @@ import TableLoadingRow from "../components/TableLoadingRow";
 import { charCountDescription } from "../utils/charCount";
 import { formatDateTime } from "../utils/relativeTime";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
+import { showSuccessToast } from "../utils/toast";
 
 const MAX_NAME = 100;
 const COLUMN_COUNT = 6;
@@ -114,7 +114,7 @@ export default function IntegrationClients() {
       setCreated((current) => (current?.client.id === target.id ? null : current));
       await queryClient.invalidateQueries({ queryKey: ["integrationClients"] });
       if (!ownsCurrentSession(owner)) return;
-      notifications.show({ message: t("integration.toast.revoked"), color: "teal" });
+      showSuccessToast(t("integration.toast.revoked"));
       setRevokeTarget(null);
     } catch (err) {
       if (!ownsCurrentSession(owner)) return;
@@ -180,7 +180,7 @@ export default function IntegrationClients() {
       {created && (
         <Alert
           key={created.client.id}
-          color="yellow"
+          color="orange"
           variant="light"
           title={t("integration.keyPanelTitle", { name: created.client.name })}
           withCloseButton
