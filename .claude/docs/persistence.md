@@ -584,7 +584,7 @@ that row's create/update audit before another row or pass two begins. Final ERRO
 later cancellation cannot erase this event; pass two emits no duplicate. Audit logs remain
 post-commit external output, not an atomic database outbox or a process-crash delivery guarantee.
 
-Current migrations are `V1`–`V46` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32; V44, an additive column, follows V43's paragraph; V45, a new registry table, follows V44's; V46, the telemetry tables, has its own section at the end of this file, "Telemetry (V46)") — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V47` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32; V47, a data-only annotation-key seed, follows V43's paragraph; V44, an additive column, follows V43's paragraph; V45, a new registry table, follows V44's; V46, the telemetry tables, has its own section at the end of this file, "Telemetry (V46)") — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -753,6 +753,19 @@ read back exclusively through `Json.decodeFromString` (`LabelService.kt`,
 `CatalogRegistryReader.kt`) and never string-compared, so PostgreSQL's `jsonb` round-trip
 re-serializing the array with spaces is immaterial. Migration checksums, including V43, are
 pinned in `MigrationChecksumTest`; `LabelTest` pins the widened kinds and the eleven keys.
+
+**V47 — `backstage.io/definition-at-location` annotation key (2.31.0).** A pure DATA seed of
+V17's `annotation_keys` (V22's bytes stay immutable): it registers the well-known
+`backstage.io/definition-at-location` key for the API kind only, so the default conversion
+mapping's `definition_url` rule (`copy` codec, `url:` prefix) can write it on an exported API
+without every export landing as a registry finding. V43's posture, not V22's: the INSERT is
+guarded by `NOT EXISTS` over ALL rows with that `LOWER(key)`, soft-deleted included, so a key an
+admin registered by hand (with whatever kinds), edited or deliberately deleted stays exactly as
+it is and is never resurrected (V22's `ON CONFLICT DO NOTHING` targets the partial active-rows
+index, so a soft-deleted twin did not conflict there). Idempotent: a second run inserts nothing.
+`allowed_kinds` is read back exclusively through `Json.decodeFromString`. The key is not one of
+the server-written `backstage.io/*` keys the registry refuses. The checksum is pinned in
+`MigrationChecksumTest`; `AnnotationKeyTest` pins the five seeded keys.
 
 **V44 — blueprint tiers (2.18.0).** One additive column, `blueprints.tiers TEXT NOT NULL DEFAULT
 '{}'` — the `hierarchy_relations` (V34) idiom: a Toadie-only JSON object stored BESIDE the Port

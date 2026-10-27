@@ -34,7 +34,7 @@ class AnnotationKeyTest {
     private suspend fun HttpClient.readKeys(): AnnotationKeyList = get("/api/v1/annotation-keys").body()
 
     @Test
-    fun `the V22 seed registers the well-known backstage io keys, none of them server-written`() = testApplication {
+    fun `the V22 and V47 seeds register the well-known backstage io keys, none server-written`() = testApplication {
         usePostgresTestcontainer()
         val byKey = seededClient("annseed").readKeys().items.associateBy { it.key }
         val seeded = listOf(
@@ -42,14 +42,16 @@ class AnnotationKeyTest {
             "backstage.io/techdocs-ref",
             "backstage.io/kubernetes-id",
             "backstage.io/kubernetes-label-selector",
+            "backstage.io/definition-at-location",
         )
-        assertTrue(seeded.all { it in byKey }, "V22 must seed all four keys: ${byKey.keys}")
+        assertTrue(seeded.all { it in byKey }, "V22 and V47 must seed all five keys: ${byKey.keys}")
+        assertEquals(listOf("API"), byKey.getValue("backstage.io/definition-at-location").kinds)
         assertEquals(
             listOf("Component", "API", "System", "Domain", "Resource"),
             byKey.getValue("backstage.io/techdocs-ref").kinds,
         )
         // The seed shares backstage.io's prefix with the keys the catalog server writes
-        // itself, which the registry refuses — none of the four may be one of those.
+        // itself, which the registry refuses — none of the five may be one of those.
         for (reserved in listOf(
             "backstage.io/managed-by-location",
             "backstage.io/managed-by-origin-location",
