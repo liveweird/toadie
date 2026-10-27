@@ -9,6 +9,7 @@ import { lockfiles } from "./repoLockfiles.js";
 // Read repository configuration as test data without exposing it through Vite's dev server.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const composeSource = readFileSync(resolve(repoRoot, "docker-compose.yaml"), "utf8");
+const ssoOverlaySource = readFileSync(resolve(repoRoot, "e2e/compose.sso.yaml"), "utf8");
 const ciSource = readFileSync(resolve(repoRoot, ".github/workflows/ci.yml"), "utf8");
 const imageCheckPath = resolve(repoRoot, ".github/scripts/image-check.sh");
 const imageCheckSource = readFileSync(imageCheckPath, "utf8");
@@ -192,11 +193,37 @@ describe("deployment and verification safety defaults", () => {
     const workflow = parse(e2eSource);
     expect(workflow.on).toHaveProperty("workflow_call");
     const steps = workflow.jobs.e2e.steps ?? [];
-    expect(steps.some((step) => step.run === "docker compose -p toadie-ci up -d --build")).toBe(true);
+    // Every compose call carries the SSO overlay pair, so the stub identity provider is started, logged and removed too.
+    const files = "-f docker-compose.yaml -f e2e/compose.sso.yaml";
+    expect(steps.some((step) => step.run === `docker compose -p toadie-ci ${files} up -d --build`)).toBe(true);
     const cleanup = steps.find((step) => step.run?.includes("down --volumes"));
     expect(cleanup?.if).toBe("${{ always() }}");
-    expect(cleanup?.run).toBe("docker compose -p toadie-ci down --volumes --remove-orphans");
+    expect(cleanup?.run).toBe(`docker compose -p toadie-ci ${files} down --volumes --remove-orphans`);
+    const logs = steps.find((step) => step.run?.includes("logs --no-color"));
+    expect(logs?.run).toBe(`docker compose -p toadie-ci ${files} logs --no-color > e2e/stack.log`);
+    const wait = steps.find((step) => step.run?.includes("/readyz"));
+    expect(wait?.run).toContain("http://localhost:18090/healthz");
     expect(steps.some((step) => step.run?.includes("npm run typecheck && npm run check:scenarios"))).toBe(true);
+    // No compose invocation of the project may omit the overlay.
+    for (const step of steps) if (step.run?.includes("docker compose")) expect(step.run).toContain(files);
+  });
+
+  it("keeps the SSO e2e overlay to the stub identity provider on the Dockerfile's Node major, with no fixed container name", () => {
+    const overlay = parse(ssoOverlaySource);
+    // Tag-pinned like compose's postgres/mailpit (Dependabot tracks only the Dockerfile's digest pins), on the same Node
+    // major as the Dockerfile's SPA build stage, so a Dockerfile-only bump never turns this red.
+    const dockerfileNode = dockerfileSource.match(/^FROM (?:--platform=\$BUILDPLATFORM )?node:(\d+)-alpine@sha256:[0-9a-f]{64} AS web$/m)?.[1];
+    expect(dockerfileNode).toBeTruthy();
+    expect(overlay.services["stub-idp"].image).toBe(`node:${dockerfileNode}-alpine`);
+    expect(Object.keys(overlay.services).sort()).toEqual(["app", "stub-idp"]);
+    for (const service of Object.values(overlay.services)) expect(service).not.toHaveProperty("container_name");
+    // Loopback only, like every demo service.
+    for (const port of overlay.services["stub-idp"].ports) expect(port).toMatch(/^127\.0\.0\.1:/);
+    // The stub's issuer is the app's SSO_ISSUER, and the app waits for the stub.
+    expect(overlay.services["stub-idp"].environment.STUB_IDP_ISSUER).toBe(overlay.services.app.environment.SSO_ISSUER);
+    expect(overlay.services.app.depends_on["stub-idp"].condition).toBe("service_healthy");
+    // The overlay relies on the base file running the app in development mode (the only mode accepting an http issuer).
+    expect(parse(composeSource).services.app.environment.KTOR_DEVELOPMENT).toBe("true");
   });
 
   it("runs the container as a non-root user", () => {
@@ -312,6 +339,29 @@ describe("deployment and verification safety defaults", () => {
     // A default endpoint is not neutral for gRPC, so the operator adds it.
     expect(environment).not.toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
     expect(env.find((entry) => entry.name === "OTEL_EXPORTER_OTLP_ENDPOINT")).toBeUndefined();
+  });
+
+  it("keeps SSO opt-in: every k8s SSO key is optional, the client secret comes from the Secret, and the base compose stack has none", () => {
+    const env = parse(appDeploymentSource).spec.template.spec.containers[0].env;
+    const sso = env.filter((entry) => entry.name.startsWith("SSO_"));
+    expect(sso.map((entry) => entry.name).sort()).toEqual([
+      "SSO_ALLOWED_EMAIL_DOMAINS",
+      "SSO_CLIENT_ID",
+      "SSO_CLIENT_SECRET",
+      "SSO_ENABLED",
+      "SSO_ISSUER",
+      "SSO_LABEL",
+      "SSO_REDIRECT_URI",
+    ]);
+    for (const entry of sso) {
+      const ref = entry.valueFrom.secretKeyRef ?? entry.valueFrom.configMapKeyRef;
+      expect(ref.optional, entry.name).toBe(true);
+      expect(ref.key).toBe(entry.name);
+      expect(ref.name).toBe(entry.name === "SSO_CLIENT_SECRET" ? "toadie-secrets" : "toadie-config");
+    }
+    expect(sso.find((entry) => entry.name === "SSO_CLIENT_SECRET").valueFrom).toHaveProperty("secretKeyRef");
+    // SSO exists in compose only through the e2e overlay.
+    expect(composeSource).not.toContain("SSO_");
   });
 
   it("gives the compose app service a container healthcheck", () => {

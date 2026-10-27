@@ -50,7 +50,12 @@ setup/teardown behavior above is unchanged.
 
 With `CI` set, `failOnFlakyTests` means a passing retry still fails the gate. Missing Mailpit
 fails reset/MFA journeys rather than skipping them; local log-only development may still skip
-those two mail-dependent journeys.
+those two mail-dependent journeys. The workflow also starts the stack with the SSO overlay
+(`-f docker-compose.yaml -f e2e/compose.sso.yaml`, a Node stub OpenID Connect provider on
+`127.0.0.1:18090` with SSO switched on for the app) and waits for the stub; `sso.spec.ts` fails in CI
+without it and skips locally on a stack without SSO. The overlay is e2e/CI only (see its header for
+the path and port rules); to run the journeys locally, bring a disposable project up with it as
+shown in `.claude/skills/run-stack/SKILL.md` "Enable Okta SSO".
 
 For a separate local verification stack, set both `E2E_BASE_URL` (the SPA/API origin) and
 `E2E_MAILPIT_URL` (the matching catcher, default `http://localhost:8026`). Its `MAIL_APP_URL`
@@ -201,7 +206,8 @@ from Lettuce, that any new or edited spec must satisfy:
   its throwaway account (its reset requests use unique per-run emails against the in-memory
   per-email throttle; development uses the 100/min request bucket, confirmation stays 10/min);
   `mfa` owns its throwaway accounts and toggles ONLY their MFA flags (the seed admin's MFA
-  flag is never touched — enabling it would make every spec's login demand a code) — all
+  flag is never touched — enabling it would make every spec's login demand a code); `sso` owns
+  its throwaway accounts (created through the UI or by the SSO sign-in itself) — all
   deleted by their own spec.
 - **The namespaces dictionary is single-writer state.** Catalog writes accept only
   dictionary-defined namespaces, and the dictionary PUT is a whole-document replace — two
@@ -641,6 +647,11 @@ the same commit** — this list is the coverage map, the scenario file is the de
   badge and live "Filled through tier 4", and the Focus folding the untiered field behind "Show
   1 more field" → the Entity graph's `$fillTier < 1` query and graph Focus leaving only the
   tiered blueprint's node → cleanup; owns only its own `e2e-tier-*` rows.
+- [`sso.spec.ts`](scenarios/sso.md) — single sign-on through the stub identity provider
+  (`e2e/stub-idp`, the `e2e/compose.sso.yaml` overlay): a new email signs in from a deep link and
+  gets a passwordless account the admin sees badged SSO; the same email as a password account is
+  linked and keeps its password; cancelling at the provider shows the alert; an administrator
+  account is refused. Skips when `/api/v1/login/options` has no SSO locally; fails in CI.
 - [`types.spec.ts`](scenarios/types.md) — the per-kind type dictionaries: seeded rows → modal
   validation → append a unique type to the Domain dictionary → the regular user's read-only
   view → the editor's Type Select on a new Domain file → restore; the type registry's only

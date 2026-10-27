@@ -59,7 +59,7 @@ async function gotoSignInForm(page: Page): Promise<void> {
   if (!page.url().startsWith("http")) await page.goto("/login");
   await page.evaluate(() => localStorage.clear());
   await page.goto("/login");
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
 }
 
 /** Sign in through the real login form. */
@@ -68,7 +68,7 @@ export async function login(page: Page, email = ADMIN, password = PASSWORD): Pro
   // Target by textbox role: getByLabel("Password") also matches the visibility-toggle button.
   await page.getByRole("textbox", { name: "Email" }).fill(email);
   await page.getByRole("textbox", { name: "Password" }).fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(accountMenu(page)).toBeVisible({ timeout: 15_000 });
 }
 

@@ -93,7 +93,7 @@ test("a reset link preserves the old password until confirmation and cannot be r
     await page.goto("/login");
     await page.getByRole("textbox", { name: "Email" }).fill(user.email);
     await page.getByRole("textbox", { name: "Password" }).fill(user.password);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByText("Invalid email or password")).toBeVisible();
 
     await page.goto(resetUrl!);

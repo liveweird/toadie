@@ -36,7 +36,7 @@ test("a language switch persists across reload and re-login on a fresh device", 
   await page.goto("/login");
   await page.getByRole("textbox", { name: "Email" }).fill(throwaway.email);
   await page.getByRole("textbox", { name: "Password" }).fill(throwaway.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Hierarchia encji", exact: true })).toBeVisible();
 
   // Signing back in as the (English-language) seed admin flips the UI back to English the

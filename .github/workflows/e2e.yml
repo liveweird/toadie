@@ -41,15 +41,18 @@ jobs:
         working-directory: e2e
         run: npx playwright install --with-deps chromium
 
-      # Own the stack outside Playwright so failed setup still gets logs and cleanup.
+      # Own the stack outside Playwright so failed setup still gets logs and cleanup. The SSO
+      # overlay (e2e/compose.sso.yaml) adds the stub identity provider and turns SSO on; every
+      # compose call below carries the same -f pair so the stub is started, logged and removed.
       - name: Start isolated stack
-        run: docker compose -p toadie-ci up -d --build
+        run: docker compose -p toadie-ci -f docker-compose.yaml -f e2e/compose.sso.yaml up -d --build
 
-      - name: Wait for the API and mail catcher
+      - name: Wait for the API, mail catcher and stub identity provider
         run: |
           for attempt in {1..60}; do
             if curl --fail --silent --max-time 3 http://localhost:8081/readyz &&
-               curl --fail --silent --max-time 3 http://localhost:8026/api/v1/messages > /dev/null; then
+               curl --fail --silent --max-time 3 http://localhost:8026/api/v1/messages > /dev/null &&
+               curl --fail --silent --max-time 3 http://localhost:18090/healthz > /dev/null; then
               exit 0
             fi
             sleep 2
@@ -67,7 +70,7 @@ jobs:
 
       - name: Collect stack diagnostics
         if: ${{ always() }}
-        run: docker compose -p toadie-ci logs --no-color > e2e/stack.log
+        run: docker compose -p toadie-ci -f docker-compose.yaml -f e2e/compose.sso.yaml logs --no-color > e2e/stack.log
 
       - name: Upload report
         if: ${{ !cancelled() }}
@@ -82,4 +85,4 @@ jobs:
 
       - name: Remove this runner's disposable stack and database
         if: ${{ always() }}
-        run: docker compose -p toadie-ci down --volumes --remove-orphans
+        run: docker compose -p toadie-ci -f docker-compose.yaml -f e2e/compose.sso.yaml down --volumes --remove-orphans
