@@ -163,9 +163,13 @@ private val UNIQUE_CONSTRAINT_DETAILS = mapOf(
     "uq_blueprints_identifier_active" to "A blueprint with this identifier already exists",
     "uq_entities_blueprint_identifier_active" to "An entity with this identifier already exists in this blueprint",
     "uq_conversion_mappings_name_active" to "A conversion mapping with this name already exists",
+    "uq_users_sso_identity" to "This single sign-on identity is already linked to an account",
+    "uq_integration_clients_key_hash" to "An integration client with this key already exists",
+    "uq_integration_clients_service_user" to "This service account already belongs to an integration client",
 )
 
-private fun Throwable.uniqueViolationDetail(): String {
+// Internal (not private) only so UniqueConstraintDetailsTest can pin the whole map without a database.
+internal fun Throwable.uniqueViolationDetail(): String {
     var found: String? = null
     anyInChain { t ->
         val message = t.message ?: return@anyInChain false
