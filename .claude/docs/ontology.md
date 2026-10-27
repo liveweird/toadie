@@ -145,7 +145,7 @@ and 120 rules saying which property is which label, tag category, annotation, li
 which blueprint is which kind (`library` is Component selected by `spec.type: library`), how
 `external: true` becomes the `external` namespace, how ownership (`$team` -> `spec.owner`) and the
 relations map, and which Group fields (`children`/`members`) are derived from the reverse side. It is
-validated against the sample blueprints and the V22-seeded registries by `SampleBlueprintsTest`
+validated against the sample blueprints and the seeded registries (V22, V43, V47) by `SampleBlueprintsTest`
 (zero blocking findings, zero drift); do not restate its contents here. What stays prose:
 
 - **Port-only (no pair, dropped on export)**: `product`, `dataset`, `api_adoption`,
@@ -176,7 +176,12 @@ validated against the sample blueprints and the V22-seeded registries by `Sample
   favour of `$text` (`.claude/docs/backstage-descriptor-format.md`); it is used here because it
   is the one string-valued carrier. The annotation is now a managed leaf of the `api` pair's
   footprint (`conversion/FootprintMerge.kt`): exporting over a stored file replaces or removes it,
-  so a hand-set `backstage.io/definition-at-location` on such a file is no longer preserved.
+  so a hand-set `backstage.io/definition-at-location` on such a file is no longer preserved. The
+  import side is symmetric: a Backstage → Port conversion with merge over an API whose catalog
+  document carries no annotation (any document exported before 2.31.0) clears the stored
+  `definition_url` — re-export to Backstage first. A workspace keeps its stored mapping until it
+  is replaced (`mapping/load.sh --delete && mapping/load.sh`, or a PUT), so these rules apply only
+  after that.
 - **Links**: `links` (array of `{title, url}`) <-> `metadata.links`; the named link properties
   (`ci_pipeline`, `dashboard`, `logs`, `runbook`, `slack_channel`) are `link` rules with a fixed title.
 - Ownership: the entity `team` field (string for single, array for multiple) is `spec.owner`; it is
