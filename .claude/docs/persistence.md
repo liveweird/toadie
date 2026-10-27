@@ -280,6 +280,23 @@ The `org.postgresql:postgresql` JDBC driver is on the classpath solely for Flywa
   adding a suspending or heavy row consumer inside a transaction. The `Lifecycle` interface stays hidden from the
   pool, as for the statement-timeout cache.
 
+### Shutdown: in-flight requests on SIGTERM
+
+- **Applies when:** setting `ktor.deployment.shutdownGracePeriod`/`shutdownTimeout` in `application.yaml`, setting
+  `terminationGracePeriodSeconds` or a `preStop` hook on `k8s/app-deployment.yaml`, or raising the database
+  deadlines above.
+- **Requirement:** neither Ktor key is set, so `EngineMain`'s shutdown hook stops Netty with Ktor 3.6.0's
+  defaults: a 1 s quiet period inside a 5 s overall ceiling for in-flight calls. The pod keeps Kubernetes' default
+  30 s `terminationGracePeriodSeconds`, which must stay above Ktor's shutdown timeout so the JVM exits on its
+  own rather than by SIGKILL. A call still running at that point (one waiting near the 30 s statement timeout or
+  the 45 s response deadline) is cut off. This is accepted: with one replica and `Recreate` (the "Scaling
+  constraint" item in `BACKLOG.md`) a rollout is already an outage, and raising the shutdown timeout to cover the
+  45 s deadline would only lengthen it. Revisit this together with multiple replicas, where draining matters.
+- **Reference:** `server/src/main/resources/application.yaml` (`ktor.deployment`), `k8s/app-deployment.yaml`.
+- **Enforcement:** `web/src/test/infrastructure.test.js` ("keeps the pod's termination grace above Ktor's
+  shutdown timeout").
+- **Exception:** none.
+
 ### Statement timeouts: the per-connection cache
 
 - **Applies when:** touching `infra/db/StatementTimeoutCache.kt`, the factory wrapping in
