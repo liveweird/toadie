@@ -42,14 +42,6 @@ promotes it. A finished item is removed, not ticked.
   redesign those stores, test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
   from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 
-## Product
-
-- [next] **Export API definition URLs to Backstage.** The conversion keeps `api.definition_url` lossy:
-  Backstage expresses a remote definition as the `backstage.io/definition-at-location` annotation (or a
-  `$text` object substitution), and that key is not in the V22-seeded annotation registry. Registering it
-  for API (a new registry migration) and adding a mapping rule would let the export carry the URL instead
-  of only an inline `definition`.
-
 ## Housekeeping
 
 - [new] **Align Temurin with the `21.0.12.1` respin.** The runtime JRE already runs

@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.31.0",
+    date: "2026-10-27",
+    en: `**API definition URLs now travel to Backstage and back.** The default conversion mapping writes an API's *Definition* URL as Backstage's \`backstage.io/definition-at-location\` annotation (\`url:<address>\`), and a Backstage import fills the URL back in; the annotation key is now registered for APIs. The inline definition is carried as before. Two things to know: a workspace keeps its stored mapping until you replace it (for the demo, run \`mapping/load.sh --delete\` and then \`mapping/load.sh\`), and once it is replaced the mapping manages that annotation, so exporting over an existing catalog file replaces or removes it, and importing an older Backstage file that lacks it, with merging on, clears the stored URL. Export to Backstage first if your catalog files predate this release.`,
+    pl: `**Adresy URL definicji API trafiają teraz do Backstage i z powrotem.** Domyślne mapowanie konwersji zapisuje adres URL *Definicji* API jako adnotację Backstage \`backstage.io/definition-at-location\` (\`url:<adres>\`), a import z Backstage odtwarza ten adres; klucz adnotacji jest teraz zarejestrowany dla API. Definicja wbudowana jest przenoszona jak dotąd. Warto wiedzieć dwie rzeczy: obszar roboczy zachowuje zapisane mapowanie, dopóki go nie zastąpisz (w demo uruchom \`mapping/load.sh --delete\`, a potem \`mapping/load.sh\`), a po zastąpieniu mapowanie zarządza tą adnotacją, więc eksport do istniejącego pliku katalogu ją zastępuje lub usuwa, a import starszego pliku Backstage bez niej przy włączonym scalaniu czyści zapisany adres. Jeśli Twoje pliki katalogu powstały przed tym wydaniem, najpierw wykonaj eksport do Backstage.`,
+  },
+  {
     version: "2.30.1",
     date: "2026-10-27",
     en: `**Blueprint sync no longer reports a difference that isn't there.** After a blueprint was synced from its repository copy, reopening *Sync from source* still showed a difference and kept *Overwrite stored copy* enabled whenever the copy left out empty relations, mirror, calculation or aggregation sections. Empty and missing sections now count as the same, so the dialog says the blueprint is in sync.`,
