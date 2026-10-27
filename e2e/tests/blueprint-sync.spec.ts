@@ -100,7 +100,7 @@ test("a source set in the blueprint editor turns on the Last sync column and the
 // FIXTURE_COMMIT to that commit — a PR-branch commit stays fetchable after the merge; the
 // up-front probe fails loudly while the pin and the file on disk disagree.
 const FIXTURE_REPO_PATH = "e2e/fixtures/blueprint-sync-source.json";
-const FIXTURE_COMMIT = "ea5ff202188538eac530c539a1765c84bc3eda24";
+const FIXTURE_COMMIT = "fd60532a337c62b772ba00335b2e60dd0253a9a6";
 const FIXTURE_SOURCE_URL = `https://raw.githubusercontent.com/liveweird/toadie/${FIXTURE_COMMIT}/${FIXTURE_REPO_PATH}`;
 
 type SourceFixture = {
