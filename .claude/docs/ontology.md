@@ -25,7 +25,7 @@ both are declared, never observed — `declared_by` (format `user`) + `verified_
 runtime-evidence fields, since Toadie observes nothing, so an absent `major_line`/
 `contract_version` is a valid "undeclared" adoption; `dataset.contract_url` points at the
 published contract rather than a `data_contract` blueprint, since contract documents live in
-contract-management tools and Toadie only records that one exists; an adoption coexisting with
+contract-management tools and Toadie only records that one exists (the calculated `covenant_contract` on `api`/`dataset`, 2.30.0, is the separate Covenant PAGE for that entity, not the ODCS document `contract_url` points at); an adoption coexisting with
 the consumer's own `consumes_apis`/`consumes_datasets` is a convention, never validated.
 `SampleBlueprintsTest` pins everything below that is
 mechanical, and `SampleEntitiesTest` proves the entity sample saves with zero findings (`.claude/docs/testing.md`).
@@ -98,7 +98,7 @@ same way; `notes` (the same two blueprints) is the first `format: markdown` prop
 text, no further validation. **Regulatory flags (2.17.0)** are plain `boolean` properties, never yes/no enums: `gdpr`/`pci_dss`/`banking_outsourcing` on `service`, `api`, `resource` and `dataset` (on the first three ↔ the `yes`/`no` labels `gdpr`/`pci-dss`/`banking-outsourcing` on Component/API/Resource — widened from Resource-only by V43; `dataset` is Port-only, no label) and `cash_flow_impact`/`dora_cif` on `service` (↔ `cash-flow-impact`/`dora-cif` on Component). `_user.employment_type` (`employee`/`contractor`) is a Port-only enum — Backstage User has no twin. No secrets,
 connection strings or hostnames as properties, ever.
 
-**Computed properties (phase 5, v1.27.0).** Twenty-two mirror/calculation/aggregation properties
+**Computed properties (phase 5, v1.27.0).** Twenty-four mirror/calculation/aggregation properties
 across ten blueprints, evaluated at entity read time (`.claude/docs/port-data-model.md`
 "Computed properties"); `SampleEntitiesTest` derives every expected value from the sample
 entity files rather than hardcoding them.
@@ -119,6 +119,8 @@ entity files rather than hardcoding them.
 | `dataset` | `consumer_count` | aggregation (2.13.0) | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [consumes_datasets]}]` — reverse, one hop, distinguished from `producer_count` by relation key |
 | `dataset` | `adoption_count` | aggregation (2.13.0) | target `dataset_adoption`, `entities/count` — direct, inbound via `dataset_adoption.dataset` |
 | `api` | `adoption_count` | aggregation (2.13.0) | target `api_adoption`, `entities/count` — direct, inbound via `api_adoption.api` |
+| `dataset` | `covenant_contract` | calculation (2.30.0), `format: url` | `"http://localhost:8082/toadie/dataset/" + (.identifier \| @uri)` — the Covenant resolver page for the dataset's contract(s); the base URL is edited per deployment in the blueprint's calculation; `contract_url` stays the stored link to the ODCS document itself |
+| `api` | `covenant_contract` | calculation (2.30.0), `format: url` | `"http://localhost:8082/toadie/api/" + (.identifier \| @uri)` — same shape, `/toadie/api/`; Covenant (the companion contract-management app) owns the link and resolves it to the linked contract(s), Toadie stores nothing about it; `@uri` percent-encodes the identifier as ONE path segment (jq 1.6 set — pinned in `JqCalculationTest`); no `description` key, a calculation property carries none |
 | `service` | `domain_title` | mirror | `system.domain.$title` |
 | `service` | `stack` | calculation | `((.properties.languages // []) + (.properties.frameworks // [])) \| join(", ")` |
 | `service` | `risk` | calculation, colorized | `technology_status`/`lifecycle` black-list/deprecated → `high` (red), grey-zone/sunsetting → `medium` (yellow), else `low` (green) |

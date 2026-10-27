@@ -602,6 +602,34 @@ class SampleEntitiesTest {
             )
         }
 
+        // api/dataset.covenant_contract (2.30.0): a calculation building the Covenant resolver URL
+        // from the identifier alone (every sample identifier is [a-z0-9-], so it is its own
+        // @uri encoding; the encoding itself is pinned in JqCalculationTest).
+        assertEquals(
+            JsonPrimitive("http://localhost:8082/toadie/api/checkout-rest"),
+            propertiesOf("api", "checkout-rest")["covenant_contract"],
+            "api/checkout-rest.covenant_contract",
+        )
+        assertEquals(
+            JsonPrimitive("http://localhost:8082/toadie/dataset/payments-ledger"),
+            propertiesOf("dataset", "payments-ledger")["covenant_contract"],
+            "dataset/payments-ledger.covenant_contract",
+        )
+        apis.forEach { api ->
+            assertEquals(
+                JsonPrimitive("http://localhost:8082/toadie/api/${api.identifier}"),
+                propertiesOf("api", api.identifier)["covenant_contract"],
+                "api/${api.identifier}.covenant_contract",
+            )
+        }
+        datasets.forEach { dataset ->
+            assertEquals(
+                JsonPrimitive("http://localhost:8082/toadie/dataset/${dataset.identifier}"),
+                propertiesOf("dataset", dataset.identifier)["covenant_contract"],
+                "dataset/${dataset.identifier}.covenant_contract",
+            )
+        }
+
         // api_adoption.api_lifecycle / dataset_adoption.dataset_lifecycle: single-hop mirrors (2.13.0).
         apiAdoptions.forEach { adoption ->
             val apiIdentifier = (adoption.relations.getValue("api") as JsonPrimitive).content
