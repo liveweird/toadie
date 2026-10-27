@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { screen, waitFor } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { useBlueprintSave } from "./useBlueprintSave";
-import { emptyBlueprintForm, type BlueprintFormValues } from "../utils/blueprintForm";
+import { emptyBlueprintForm, type BlueprintFormValues } from "../utils/blueprintFormModel";
 import { ApiError } from "../api/http";
 import { renderWithProviders } from "../test/render";
 

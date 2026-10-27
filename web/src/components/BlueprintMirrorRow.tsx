@@ -1,7 +1,7 @@
 import { Group, TextInput } from "@mantine/core";
 import { type UseFormReturnType } from "@mantine/form";
 import { useTranslation } from "react-i18next";
-import { MAX_TITLE_LENGTH, type BlueprintFormValues } from "../utils/blueprintForm";
+import { MAX_TITLE_LENGTH, type BlueprintFormValues } from "../utils/blueprintFormModel";
 
 type Form = UseFormReturnType<BlueprintFormValues>;
 

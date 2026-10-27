@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { screen } from "@testing-library/react";
 import { useForm } from "@mantine/form";
 import BlueprintPropertyRow from "./BlueprintPropertyRow";
-import { emptyBlueprintForm, emptyPropertyDraft, type BlueprintFormValues, type PropertyType } from "../utils/blueprintForm";
+import { emptyBlueprintForm, emptyPropertyDraft, type BlueprintFormValues, type PropertyType } from "../utils/blueprintFormModel";
 import { renderWithProviders } from "../test/render";
 
 // Removal/reordering lives one level up, in PropertiesFieldset's shared RowControls (the

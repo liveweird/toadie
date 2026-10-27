@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { screen } from "@testing-library/react";
 import { useForm } from "@mantine/form";
 import BlueprintRelationRow from "./BlueprintRelationRow";
-import { emptyBlueprintForm, emptyRelationDraft, type BlueprintFormValues } from "../utils/blueprintForm";
+import { emptyBlueprintForm, emptyRelationDraft, type BlueprintFormValues } from "../utils/blueprintFormModel";
 import { jsonResponse } from "../test/http";
 import { renderWithProviders } from "../test/render";
 

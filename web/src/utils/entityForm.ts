@@ -1,12 +1,12 @@
 import type { TFunction } from "i18next";
 import type { Blueprint } from "../api/blueprints";
 import type { Entity, EntityBody } from "../api/entities";
-import { safeJsonParse } from "./blueprintForm";
+import { safeJsonParse } from "./blueprintFormMapping";
 import { computedPropertyIds } from "./computedProperties";
 import { saveErrorMessage } from "./saveError";
 import { sourceUrlProblem } from "./sourceUrl";
 
-// Wire shapes, derived structurally from the generated contract (the blueprintForm.ts idiom)
+// Wire shapes, derived structurally from the generated contract (the blueprintFormMapping.ts idiom)
 // rather than hand-typed.
 export type PropertyDefinitionWire = Blueprint["schema"]["properties"][string];
 export type RelationDefinitionWire = Blueprint["relations"][string];

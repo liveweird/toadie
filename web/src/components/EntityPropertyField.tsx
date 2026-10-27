@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import EntityOptionsSelect from "./EntityOptionsSelect";
 import TierLabel from "./TierLabel";
-import { safeJsonParse } from "../utils/blueprintForm";
+import { safeJsonParse } from "../utils/blueprintFormMapping";
 import { entityFindingProps } from "../utils/entityFieldFindings";
 import type { EntityFinding } from "../api/entities";
 import type { EntityFormValues, PropertyDefinitionWire } from "../utils/entityForm";

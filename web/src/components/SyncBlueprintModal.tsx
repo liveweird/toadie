@@ -11,7 +11,7 @@ import {
   type BlueprintBody,
 } from "../api/blueprints";
 import YamlDiffView from "./YamlDiffView";
-import { blueprintSaveErrorMessage } from "../utils/blueprintForm";
+import { blueprintSaveErrorMessage } from "../utils/blueprintFormValidation";
 import {
   canonicalBlueprintDocumentJson,
   pickSourceBlueprintDocument,

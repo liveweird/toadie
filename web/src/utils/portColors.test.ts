@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ENUM_COLORS } from "./blueprintForm";
+import { ENUM_COLORS } from "./blueprintFormModel";
 import { portColor } from "./portColors";
 
 const HEX_RE = /^#[0-9A-Fa-f]{6}$/;

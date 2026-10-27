@@ -1,8 +1,10 @@
 # Build outputs — rebuilt inside the image
 **/build/
 .gradle/
-web/node_modules/
+**/node_modules/
 web/dist/
+e2e/test-results/
+e2e/playwright-report/
 
 # IDE / local cruft (.git stays IN the context — the SPA build stage reads the
 # commit sha/timestamp from it for the version stamp)

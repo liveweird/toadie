@@ -289,6 +289,32 @@ describe("deployment and verification safety defaults", () => {
     for (const line of froms) expect(line).toMatch(/^FROM\s+(--platform=\$BUILDPLATFORM\s+)?\S+@sha256:[0-9a-f]{64}(\s+AS\s+\S+)?$/);
   });
 
+  it("pins every remote GitHub Action by full commit SHA with its release tag as a comment", () => {
+    // A tag can be moved; a commit cannot. Dependabot's github-actions ecosystem bumps the SHA and the comment together.
+    for (const source of [ciSource, e2eSource, fixupWorkflowSource]) {
+      const uses = source.split("\n").filter((line) => /^\s*(- )?uses:\s/.test(line));
+      expect(uses.length).toBeGreaterThan(0);
+      for (const line of uses) {
+        if (/uses:\s+\.\//.test(line)) continue;
+        expect(line).toMatch(/uses:\s+[\w.-]+\/[\w.-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/);
+      }
+    }
+  });
+
+  it("keeps every node_modules tree and the e2e outputs out of the Docker build context", () => {
+    const ignored = readFileSync(resolve(repoRoot, ".dockerignore"), "utf8").split("\n");
+    for (const entry of ["**/node_modules/", "e2e/test-results/", "e2e/playwright-report/"]) expect(ignored).toContain(entry);
+  });
+
+  it("groups only manual e2e dispatches per ref, never sharing a group with the calling CI run", () => {
+    const { concurrency } = parse(e2eSource);
+    expect(concurrency["cancel-in-progress"]).toBe(false);
+    expect(concurrency.group).toBe(
+      "${{ github.workflow == 'e2e' && format('e2e-dispatch-{0}', github.ref) || format('e2e-call-{0}', github.run_id) }}",
+    );
+    expect(parse(e2eSource).name).toBe("e2e");
+  });
+
   it("cross-builds: the two build stages run on the build platform, only the runtime stage is per-platform", () => {
     // web/dist and the installDist JARs are platform-independent, so a multi-arch build compiles them
     // once; the runtime stage (and its emulated useradd) is the only stage that follows the target.
@@ -421,6 +447,14 @@ describe("deployment and verification safety defaults", () => {
     // Ktor's 10 s default fails a boot whose Flyway is still waiting for PostgreSQL.
     expect(startupTimeoutMillis).toBeGreaterThan(10_000);
     expect(probeBudgetMillis).toBeGreaterThan(startupTimeoutMillis);
+  });
+
+  it("keeps the pod's termination grace above Ktor's shutdown timeout", () => {
+    // The trade-off is in .claude/docs/persistence.md "Shutdown: in-flight requests on SIGTERM".
+    const deployment = parse(applicationYamlSource).ktor.deployment ?? {};
+    const shutdownTimeoutMillis = Number(deployment.shutdownTimeout ?? 5_000);
+    const graceSeconds = parse(appDeploymentSource).spec.template.spec.terminationGracePeriodSeconds ?? 30;
+    expect(graceSeconds * 1000).toBeGreaterThan(shutdownTimeoutMillis);
   });
 
   it("the app pod and container declare full security context (non-root, read-only root, no capabilities)", () => {

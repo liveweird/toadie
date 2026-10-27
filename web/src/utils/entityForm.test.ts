@@ -18,11 +18,11 @@ import {
 import { ApiError } from "../api/http";
 
 // Key-echoing translator: assertions match on i18n keys, not rendered English (the
-// blueprintForm.test.ts idiom).
+// blueprintFormValidation.test.ts idiom).
 const t = ((key: string) => key) as TFunction;
 
 // A representative blueprint covering every widget the entity editor renders — cast at the
-// boundary like blueprintForm.test.ts's FULL_REQUEST fixture, since the open JSON-Schema
+// boundary like blueprintFormMapping.test.ts's FULL_REQUEST fixture, since the open JSON-Schema
 // sub-trees make a literal fixture too narrow for the generated type.
 const BLUEPRINT = {
   id: 1,

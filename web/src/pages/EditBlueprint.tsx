@@ -14,12 +14,9 @@ import PageHeader from "../components/PageHeader";
 import SyncBlueprintModal from "../components/SyncBlueprintModal";
 import SyncStateText, { syncStateSource } from "../components/SyncStateText";
 import { useBlueprintSave } from "../hooks/useBlueprintSave";
-import {
-  blueprintFormValidation,
-  emptyBlueprintForm,
-  fromBlueprintResponse,
-  type BlueprintFormValues,
-} from "../utils/blueprintForm";
+import { fromBlueprintResponse } from "../utils/blueprintFormMapping";
+import { emptyBlueprintForm, type BlueprintFormValues } from "../utils/blueprintFormModel";
+import { blueprintFormValidation } from "../utils/blueprintFormValidation";
 import { blueprintsPath } from "../utils/blueprintLinks";
 import { toBlueprintSyncTarget, type BlueprintSyncTarget } from "../utils/blueprintSync";
 import { FORM_MAX_WIDTH } from "../utils/layout";

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormErrors, UseFormReturnType } from "@mantine/form";
 import { rowDomId, type RowExpansionApi } from "../components/EditorRowList";
-import { ROW_FAMILIES, rowsWithErrors, type BlueprintFormValues, type RowFamily } from "../utils/blueprintForm";
+import { ROW_FAMILIES, rowsWithErrors, type BlueprintFormValues, type RowFamily } from "../utils/blueprintFormModel";
 
 /** The five families' rows, uniformly typed to what `firstRowIds`/`revealErrors` need —
  *  sidesteps TypeScript's inability to index `BlueprintFormValues` by a widened `RowFamily`
- *  union directly (the `combinedPropertyIds` idiom in `utils/blueprintForm.ts`). */
+ *  union directly (the `combinedPropertyIds` idiom in `utils/blueprintFormValidation.ts`). */
 function familyRows(values: BlueprintFormValues): Record<RowFamily, { key: string }[]> {
   return {
     properties: values.properties,

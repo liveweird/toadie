@@ -62,7 +62,8 @@
   `BlueprintConcurrencyTest`; no browser journey can hold a database lock.
 - **The advanced property families' editors** (mirror, calculation, aggregation, ownership)
   and every property type's widget — pinned by the co-located unit suites
-  (`BlueprintPropertyRow.test.tsx`, `BlueprintFormFields.test.tsx`, `blueprintForm.test.ts`).
+  (`BlueprintPropertyRow.test.tsx`, `BlueprintFormFields.test.tsx`, `blueprintFormModel.test.ts`, `blueprintFormMapping.test.ts`,
+  `blueprintFormValidation.test.ts`).
 - **The foldable row list's own contract** (mount/unmount, badges, Expand/Collapse all, the
   jump Select's focus behaviour, the collapsed error dot, the first-row/reveal/revealErrors
   rules) — pinned by `EditorRowList.test.tsx`, `useBlueprintRowExpansion.test.tsx`, and

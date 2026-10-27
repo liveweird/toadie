@@ -4,7 +4,7 @@ import type { Entity } from "../api/entities";
 import { computedDefinitions, computedPropertyIds, computedValuesOf, previewComputedColumns } from "./computedProperties";
 
 // A representative blueprint covering every computed-property family and every calculation
-// output type — cast at the boundary like blueprintForm.test.ts's FULL_REQUEST fixture, since
+// output type — cast at the boundary like blueprintFormMapping.test.ts's FULL_REQUEST fixture, since
 // the wire shape carries fields this test doesn't need to populate.
 const BLUEPRINT = {
   mirrorProperties: {

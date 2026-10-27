@@ -4,7 +4,7 @@ import type {
   MirrorDraft,
   PropertyDraft,
   RelationDraft,
-} from "./blueprintForm";
+} from "./blueprintFormModel";
 
 // EditorRowList's neutral gray header badge, one helper per row family — a one-line summary
 // of literal Port tokens (never translated, the same rule as the field Selects themselves:

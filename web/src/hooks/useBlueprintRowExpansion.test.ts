@@ -8,7 +8,7 @@ import {
   emptyPropertyDraft,
   emptyRelationDraft,
   type BlueprintFormValues,
-} from "../utils/blueprintForm";
+} from "../utils/blueprintFormModel";
 
 function useHarness(initialValues: BlueprintFormValues) {
   const form = useForm<BlueprintFormValues>({ initialValues });

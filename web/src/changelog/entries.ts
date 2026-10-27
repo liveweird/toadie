@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.32.3",
+    date: "2026-10-27",
+    en: `**Check-up upkeep, part three.** Under the hood only: the blueprint editor's form logic is split into smaller modules, the build pins every GitHub Action to an exact commit, and the docs explain what happens to running requests when the app shuts down.`,
+    pl: `**Porządki po przeglądzie, część trzecia.** Tylko pod maską: logika formularza edytora blueprintów jest podzielona na mniejsze moduły, build przypina każdą akcję GitHub do konkretnego commita, a dokumentacja wyjaśnia, co dzieje się z trwającymi żądaniami, gdy aplikacja się zamyka.`,
+  },
+  {
     version: "2.32.2",
     date: "2026-10-27",
     en: `**Check-up upkeep, part two.** The Users list marks accounts without a password, the theme switch is announced to screen readers, the bundled PostgreSQL runs as a non-root user on Kubernetes, and duplicate SSO identities or integration keys get a clear error message.`,

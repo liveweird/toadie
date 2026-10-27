@@ -9,7 +9,7 @@ import {
   AVERAGE_OF,
   MAX_TITLE_LENGTH,
   type BlueprintFormValues,
-} from "../utils/blueprintForm";
+} from "../utils/blueprintFormModel";
 
 type Form = UseFormReturnType<BlueprintFormValues>;
 

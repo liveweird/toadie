@@ -3,7 +3,7 @@ import { type UseFormReturnType } from "@mantine/form";
 import { useTranslation } from "react-i18next";
 import BlueprintTargetSelect from "./BlueprintTargetSelect";
 import TierSelect from "./TierSelect";
-import { MAX_TITLE_LENGTH, type BlueprintFormValues } from "../utils/blueprintForm";
+import { MAX_TITLE_LENGTH, type BlueprintFormValues } from "../utils/blueprintFormModel";
 
 type Form = UseFormReturnType<BlueprintFormValues>;
 

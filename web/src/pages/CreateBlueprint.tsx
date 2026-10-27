@@ -5,7 +5,8 @@ import { createBlueprint } from "../api/blueprints";
 import { isAdmin } from "../api/session";
 import BlueprintEditor from "../components/BlueprintEditor";
 import { useBlueprintSave } from "../hooks/useBlueprintSave";
-import { blueprintFormValidation, emptyBlueprintForm, type BlueprintFormValues } from "../utils/blueprintForm";
+import { emptyBlueprintForm, type BlueprintFormValues } from "../utils/blueprintFormModel";
+import { blueprintFormValidation } from "../utils/blueprintFormValidation";
 import { blueprintsPath } from "../utils/blueprintLinks";
 
 export default function CreateBlueprint() {

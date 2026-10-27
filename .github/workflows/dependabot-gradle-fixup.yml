@@ -37,13 +37,13 @@ jobs:
       GRAPHQL_BASELINE_REVISION: ${{ github.event.pull_request.base.sha }}
     steps:
       # The PR head itself, never the merge ref: the artifact must describe exactly this commit.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
       # No dependency cache of any kind: the point is a cold, empty-home resolution.
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21.0.12+8.0.LTS'
@@ -74,7 +74,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: printf '{"headSha":"%s","baseSha":"%s","pr":"%s","runId":"%s"}\n' "$HEAD_SHA" "$BASE_SHA" "$PR_NUMBER" "$RUN_ID" > "$RUNNER_TEMP/fixup/manifest.json"
       - name: Upload the fix-up artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gradle-fixup-${{ env.HEAD_SHA }}
           path: ${{ runner.temp }}/fixup/

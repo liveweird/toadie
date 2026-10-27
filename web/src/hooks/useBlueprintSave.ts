@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import type { BlueprintBody } from "../api/blueprints";
-import { blueprintSaveErrorMessage, toBlueprintRequest, type BlueprintFormValues } from "../utils/blueprintForm";
+import { toBlueprintRequest } from "../utils/blueprintFormMapping";
+import type { BlueprintFormValues } from "../utils/blueprintFormModel";
+import { blueprintSaveErrorMessage } from "../utils/blueprintFormValidation";
 import { blueprintsPath } from "../utils/blueprintLinks";
 import { showSuccessToast } from "../utils/toast";
 
