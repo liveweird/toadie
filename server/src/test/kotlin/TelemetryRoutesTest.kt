@@ -33,12 +33,16 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+// 2023-03-15T12:00:00Z.
+private const val PINNED_BASE_MILLIS = 1_678_881_600_000L
+
 /**
  * The telemetry read API (`telemetry/TelemetryRoutes.kt`, `GET /api/v1/telemetry/current` and `/history`): ADMIN only, 403 before
  * 400, and the shapes the panel reads - over rows seeded straight into the telemetry tables, never over a running sampler (the
  * suite boots none, `telemetry.enabled` is false).
  *
- * The clock is pinned (`TelemetryOverridesKey`) 1000 days in the past, hour-aligned plus 20 minutes, so the windows are fixed.
+ * The clock is pinned (`TelemetryOverridesKey`) to a FIXED instant in the past (`PINNED_BASE_MILLIS`), hour-aligned plus 20
+ * minutes, so the windows are fixed.
  * Isolation is NOT the pinned time: the telemetry tables are this class's own, emptied before each test (`wipeTelemetry`), and test
  * classes run serially.
  */
@@ -48,7 +52,8 @@ class TelemetryRoutesTest {
     @Before
     fun emptyTelemetry() = runBlocking { wipeTelemetry(store) }
 
-    private val now = hourFloor(System.currentTimeMillis() - 1000 * TELE_DAY) + 20 * TELE_MINUTE
+    // A fixed instant (never the wall clock), so the hour/day alignment of every window is the same on every run.
+    private val now = hourFloor(PINNED_BASE_MILLIS) + 20 * TELE_MINUTE
     private val hourStart = hourFloor(now)
 
     /** The newest completed raw bucket at the pinned `now`. */

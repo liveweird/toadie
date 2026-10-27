@@ -380,12 +380,14 @@ class SsoLoginTest {
     @Test
     fun `every ID token defect ends at the failed redirect and creates nothing`() = testApplication {
         StubIdp().use { stub ->
-            ssoApp(stub)
+            // One captured clock: the app validates against it and every hand-built claim below derives from it.
+            val clock = MovableClock()
+            ssoApp(stub, clock = clock)
             val browser = browser()
-            val now = System.currentTimeMillis() / 1000
+            val now = clock.instant().epochSecond
             fun hs256(): String = JWT.create().withKeyId("kid-1").withIssuer(stub.issuer).withAudience(stub.clientId).withSubject("s")
-                .withClaim("email", "x@sso.test").withClaim("email_verified", true).withIssuedAt(java.util.Date())
-                .withExpiresAt(java.util.Date(System.currentTimeMillis() + 3_600_000)).sign(Algorithm.HMAC256("secret"))
+                .withClaim("email", "x@sso.test").withClaim("email_verified", true).withIssuedAt(java.util.Date(now * 1000))
+                .withExpiresAt(java.util.Date((now + 3_600) * 1000)).sign(Algorithm.HMAC256("secret"))
             val noKid = JWT.create().withIssuer(stub.issuer).withAudience(stub.clientId).withSubject("s").sign(Algorithm.none())
             class Defect(val name: String, val authorize: (Attempt) -> String)
             val defects = listOf(
@@ -548,7 +550,7 @@ class SsoLoginTest {
             ssoApp(stub, clock = clock)
             val browser = browser()
             // The tokens must outlive the hand-moved clock.
-            val longLived = mapOf<String, Any?>("exp" to System.currentTimeMillis() / 1000 + 3 * 86400)
+            val longLived = mapOf<String, Any?>("exp" to clock.instant().epochSecond + 3 * 86400)
             assertTrue(browser.signInAndExchange(stub, longLived).userId > 0u)
             assertEquals(1, stub.discoveryFetches.get())
             assertEquals(1, stub.jwksFetches.get())
