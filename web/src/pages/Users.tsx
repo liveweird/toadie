@@ -167,6 +167,11 @@ export default function Users() {
                             {t("users.ssoBadge")}
                           </Badge>
                         )}
+                        {!user.hasPassword && (
+                          <Badge size="xs" variant="light" color="orange" title={t("users.noPasswordHint")}>
+                            {t("users.noPasswordBadge")}
+                          </Badge>
+                        )}
                       </Group>
                     </Table.Td>
                     <Table.Td>

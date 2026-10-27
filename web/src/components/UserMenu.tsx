@@ -153,6 +153,7 @@ export default function UserMenu() {
           <SegmentedControl
             size="xs"
             fullWidth
+            aria-label={t("appShell.userMenu.theme")}
             value={colorScheme}
             onChange={(value) => setColorScheme(value as "light" | "dark" | "auto")}
             data={[

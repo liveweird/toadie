@@ -11,6 +11,8 @@
   "resetPasswordAria": "Reset password for {{name}}",
   "youBadge": "You",
   "ssoBadge": "SSO",
+  "noPasswordBadge": "No password",
+  "noPasswordHint": "This account has no password: it can only sign in through SSO until an administrator sets one.",
   "loadFailed": "Failed to load users",
   "userNotFound": "User not found.",
   "userGone": "User no longer exists.",

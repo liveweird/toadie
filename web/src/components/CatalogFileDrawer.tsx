@@ -102,7 +102,7 @@ function Summary({ file }: { file: CatalogFileResponse }) {
       <Row label={t("catalog.section.annotations")}>{text(annotations > 0 ? String(annotations) : null)}</Row>
       <Row label={t("catalog.field.source")}>
         {file.sourceUrl ? (
-          <Anchor href={file.sourceUrl} target="_blank" rel="noopener" size="sm" style={{ wordBreak: "break-all" }}>
+          <Anchor href={file.sourceUrl} target="_blank" rel="noreferrer" size="sm" style={{ wordBreak: "break-all" }}>
             {file.sourceUrl}
           </Anchor>
         ) : (
