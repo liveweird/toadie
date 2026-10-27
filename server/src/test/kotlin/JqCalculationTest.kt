@@ -64,6 +64,21 @@ class JqCalculationTest {
     }
 
     @Test
+    fun `at-uri percent-encodes the characters that would break an identifier out of ONE path segment`() {
+        // The Covenant contract link (`api`/`dataset` `covenant_contract`) puts `.identifier | @uri`
+        // into a URL path. jackson-jq matches jq 1.6: UTF-8 percent bytes with uppercase hex, and
+        // only `A-Za-z0-9-_.~!*'()` kept literal (jq 1.7 would also encode `!*'()`). Every kept
+        // character is legal unencoded in an RFC 3986 path segment and decodes to itself.
+        val input = buildJsonObject { put("identifier", "a/b+c:d@e=f g é#?%&;,[]") }
+        assertEquals(
+            JsonPrimitive("a%2Fb%2Bc%3Ad%40e%3Df%20g%20%C3%A9%23%3F%25%26%3B%2C%5B%5D"),
+            JqEvaluator().evaluate(".identifier | @uri", input),
+        )
+        val literal = buildJsonObject { put("identifier", "Az09-_.~!*'()") }
+        assertEquals(JsonPrimitive("Az09-_.~!*'()"), JqEvaluator().evaluate(".identifier | @uri", literal))
+    }
+
+    @Test
     fun `the first value of a comma expression wins`() {
         val evaluator = JqEvaluator()
         val input = buildJsonObject {

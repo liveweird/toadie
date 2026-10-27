@@ -101,6 +101,14 @@
       "calculationSpec": { "calculationBy": "entities", "func": "count" }
     }
   },
+  "calculationProperties": {
+    "covenant_contract": {
+      "title": "Covenant contract",
+      "type": "string",
+      "format": "url",
+      "calculation": "\"http://localhost:8082/toadie/api/\" + (.identifier | @uri)"
+    }
+  },
   "ownership": {
     "type": "Direct",
     "title": "Owned by"

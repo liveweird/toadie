@@ -4,12 +4,32 @@ import { canonicalBlueprintDocumentJson, pickSourceBlueprintDocument } from "./b
 describe("canonicalBlueprintDocumentJson", () => {
   test("orders top-level keys in the fixed identity order, only those present", () => {
     const json = canonicalBlueprintDocumentJson({
-      relations: {},
+      relations: { parent: { title: "Parent", target: "service", required: false, many: false } },
       schema: { properties: {}, required: [] },
       identifier: "service",
       title: "Service",
     });
     expect(Object.keys(JSON.parse(json))).toEqual(["identifier", "title", "schema", "relations"]);
+  });
+
+  test("an empty relations/mirror/calculation/aggregation map renders the same as an absent one", () => {
+    const bare = { identifier: "service", title: "Service", schema: { properties: {}, required: [] } };
+    const spelledOut = {
+      ...bare,
+      relations: {},
+      mirrorProperties: {},
+      calculationProperties: {},
+      aggregationProperties: {},
+    };
+    expect(canonicalBlueprintDocumentJson(spelledOut)).toBe(canonicalBlueprintDocumentJson(bare));
+    expect(canonicalBlueprintDocumentJson(spelledOut)).not.toContain("relations");
+  });
+
+  test("a non-empty map still renders, and does not mutate its input", () => {
+    const doc = { identifier: "s", title: "S", mirrorProperties: { a: { title: "A", path: "x.$title" } }, relations: {} };
+    const json = canonicalBlueprintDocumentJson(doc);
+    expect(Object.keys(JSON.parse(json))).toEqual(["identifier", "title", "mirrorProperties"]);
+    expect(doc).toHaveProperty("relations", {});
   });
 
   test("orders unrecognized top-level keys alphabetically after the fixed ones", () => {
