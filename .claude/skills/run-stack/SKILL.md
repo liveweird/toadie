@@ -41,6 +41,67 @@ in `.claude/docs/integration-api.md`). Reapplying `k8s/` preserves the opt-in. R
 share PostgreSQL within each deployment; separate Compose and Kubernetes volumes do not share
 sample data automatically.
 
+## Enable Okta SSO
+
+SSO is opt-in (`SSO_ENABLED`, default `false`) and adds a "Sign in with Okta" button above the password
+form; password login keeps working. The server contract, the boot refusals and the accepted risks live in
+`.claude/docs/security.md` "SSO login (OIDC)" - read it before changing anything below.
+
+**1. Okta admin console.** Applications -> Applications -> Create App Integration -> **OIDC - OpenID
+Connect** -> **Web Application**. Then:
+
+- Grant type: **Authorization Code** (nothing else needed).
+- Under Client Authentication / proof of possession, enable **Require PKCE** (the server always sends S256).
+- **Sign-in redirect URI**: `https://<host>/api/v1/login/sso/callback` - exactly that path, no trailing
+  slash, the same origin as `MAIL_APP_URL`. Production requires https; plain http is accepted only with
+  `KTOR_DEVELOPMENT=true`.
+- **Assignments** decide who can sign in at all. Toadie creates an account on first sign-in for ANY user the
+  application admits, so assign deliberately and ALSO set `SSO_ALLOWED_EMAIL_DOMAINS` (comma list; blank =
+  any domain, which the app logs as a boot WARN).
+- Copy the client id and client secret from the application's General tab.
+
+**2. Issuer.** `https://<org>.okta.com/oauth2/default` for the default custom authorization server, or
+`https://<org>.okta.com` for the org authorization server. It must equal the `issuer` in
+`<issuer>/.well-known/openid-configuration` byte for byte (no trailing slash).
+
+**3. Configuration.** Required once enabled: `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`,
+`SSO_REDIRECT_URI` (or a correct `MAIL_APP_URL`); optional `SSO_LABEL` (default `Okta`), `SSO_SCOPES`
+(default `openid email profile`), `SSO_ALLOWED_EMAIL_DOMAINS`. An incomplete set makes the app refuse to
+start - read the boot log, do not work around it.
+
+- **Compose:** add the variables to the `app` service's `environment` (or an untracked override file).
+  Never commit the client secret.
+- **Kubernetes:** the Deployment already reads the keys, all optional. The non-secret ones come from the
+  `toadie-config` ConfigMap - patch without replacing `MAIL_APP_URL`:
+
+  ```bash
+  kubectl -n toadie patch configmap toadie-config --type merge -p \
+    '{"data":{"SSO_ENABLED":"true","SSO_ISSUER":"https://<org>.okta.com/oauth2/default","SSO_CLIENT_ID":"<client-id>","SSO_REDIRECT_URI":"https://<host>/api/v1/login/sso/callback","SSO_ALLOWED_EMAIL_DOMAINS":"example.com"}}'
+  kubectl -n toadie patch secret toadie-secrets --type merge -p \
+    "{\"stringData\":{\"SSO_CLIENT_SECRET\":\"<client-secret>\"}}"
+  kubectl -n toadie rollout restart deployment/app
+  ```
+
+**4. Verify.** `curl -s https://<host>/api/v1/login/options` answers `{"sso":{"label":"Okta"}}` when it is on
+and `{"sso":null}` when it is off. Then sign in through the button with a test user assigned to the
+application. Administrator accounts and accounts with email MFA are never linked or taken over by an
+Okta email - they keep password login. Signing out of Toadie does not sign out of Okta.
+
+**Local end-to-end proof without Okta.** `e2e/compose.sso.yaml` is an overlay (e2e/CI only, never the
+long-lived stack) that adds a stub OIDC provider (`e2e/stub-idp/server.mjs`, port 18090) and turns SSO on.
+Run it from the repo root, with the base file first, on a disposable project:
+
+```bash
+docker compose -p toadie-check -f docker-compose.yaml -f e2e/compose.sso.yaml up -d --build
+cd e2e && npx playwright test tests/sso.spec.ts
+docker compose -p toadie-check -f docker-compose.yaml -f e2e/compose.sso.yaml down --volumes --remove-orphans
+```
+
+(`sso.spec.ts` skips itself when SSO is off and fails under `CI`.) The base file's fixed container names
+and ports mean a second project cannot run beside the long-lived `toadie` stack unchanged: add an extra
+untracked override file that renames the containers and shifts the published ports (and set
+`STUB_IDP_PORT` / `SSO_REDIRECT_URI` plus `E2E_BASE_URL` to match), and never `down -v` the default project.
+
 ## Reproducibility — what is pinned, and what deliberately is not
 
 Pinned: direct dependency versions (`gradle/libs.versions.toml`, `web/package.json` + `package-lock.json` installed with `npm ci`), the transitive Gradle graph (dependency locking, `gradle.lockfile` and `buildscript-gradle.lockfile` in each of `core/` and `server/`, plus the root `gradle.lockfile`, `settings-gradle.lockfile` and `buildscript-gradle.lockfile`), the SHA-256 of every resolved Gradle artifact and POM (`gradle/verification-metadata.xml`, enforced automatically by Gradle whenever the file exists — CI runs `--dependency-verification strict`, and the Docker build's `installDist` is checked too) — both regenerated together from an empty `GRADLE_USER_HOME` after a dependency change, see `.claude/docs/dependency-reproducibility.md`; HIGH/CRITICAL advisories in the locks fail the CI Gradle advisory scan, the Gradle distribution checksum (`distributionSha256Sum` in `gradle-wrapper.properties`), the toolchains (`mise.toml`: Temurin 21 + Node 26, matching the Dockerfile and the e2e workflow), the Dockerfile's three base images by tag AND multi-arch digest (`node:26-alpine@sha256:…`, `eclipse-temurin:21.0.12_8-jdk@sha256:…` and the runtime `21.0.12.1_1-jre@sha256:…`, a respin ahead of mise/CI until the BACKLOG alignment item lands; Dependabot bumps each), and compose's `postgres:18-alpine` / `axllent/mailpit:v1.30` by tag only. The Dockerfile cross-builds (amd64+arm64) and the CI "Container image" job scans its OS layer; the rules and hand-maintained pins live in `.claude/docs/dependency-reproducibility.md`.
