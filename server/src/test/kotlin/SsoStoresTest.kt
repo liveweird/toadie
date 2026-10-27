@@ -4,14 +4,19 @@ import ch.nokillswit.auth.sso.SsoAccountRefusedException
 import ch.nokillswit.auth.sso.SsoAccounts
 import ch.nokillswit.auth.sso.SsoHandoffs
 import ch.nokillswit.auth.sso.SsoOutcome
+import ch.nokillswit.auth.sso.SsoSeenStates
 import ch.nokillswit.auth.sso.SsoStateCookie
 import ch.nokillswit.auth.sso.VerifiedIdToken
+import ch.nokillswit.auth.sso.ssoCookieName
+import ch.nokillswit.users.SsoLinkVerdict
 import ch.nokillswit.users.SsoLookup
 import ch.nokillswit.users.User
+import ch.nokillswit.users.ssoLinkVerdict
 import io.ktor.server.plugins.BadRequestException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -92,6 +97,46 @@ class SsoStoresTest {
         now += 1_001
         handoffs.issue(4u, 0, byteArrayOf(), SsoOutcome.CREATED)
         handoffs.issue(5u, 0, byteArrayOf(), SsoOutcome.CREATED)
+    }
+
+    // ---- single-use state ----------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `a state is accepted once, forgotten when its cookie expires, and the set is bounded by evicting the oldest`() {
+        var now = 0L
+        val seen = SsoSeenStates(maxTracked = 3, clock = { now })
+        assertTrue(seen.firstUse("a", 600))
+        assertFalse(seen.firstUse("a", 600), "a repeat is refused")
+        assertTrue(seen.firstUse("b", 601))
+        assertTrue(seen.firstUse("c", 602))
+        // Full: the next distinct state evicts the oldest ("a") instead of failing; eviction never refuses a login.
+        assertTrue(seen.firstUse("d", 603))
+        assertTrue(seen.firstUse("a", 604), "the evicted entry is the oldest")
+        assertFalse(seen.firstUse("d", 603))
+        now = 700
+        assertTrue(seen.firstUse("d", 1300), "every entry expired with its cookie")
+    }
+
+    @Test
+    fun `the cookie is host-prefixed in production only`() {
+        assertEquals("__Host-toadie_sso", ssoCookieName(production = true))
+        assertEquals("toadie_sso", ssoCookieName(production = false))
+    }
+
+    // ---- the email-matched account -------------------------------------------------------------------------------------------
+
+    @Test
+    fun `a same-email account already holding the incoming identity is that account, any other link is a conflict`() {
+        fun verdict(storedIssuer: String?, storedSubject: String?, role: String = "USER", mfa: Boolean = false) =
+            ssoLinkVerdict(storedIssuer, storedSubject, role, mfa, "https://idp.test", "sub-1")
+        // The concurrent first sign-in (two browsers) that committed between the identity lookup and the email lock.
+        assertEquals(SsoLinkVerdict.SAME_IDENTITY, verdict("https://idp.test", "sub-1"))
+        assertEquals(SsoLinkVerdict.SAME_IDENTITY, verdict("https://idp.test", "sub-1", role = "ADMIN", mfa = true))
+        assertEquals(SsoLinkVerdict.SUBJECT_CONFLICT, verdict("https://idp.test", "sub-2"))
+        assertEquals(SsoLinkVerdict.SUBJECT_CONFLICT, verdict("https://other.test", "sub-1"))
+        assertEquals(SsoLinkVerdict.REFUSED, verdict(null, null, role = "ADMIN"))
+        assertEquals(SsoLinkVerdict.REFUSED, verdict(null, null, mfa = true))
+        assertEquals(SsoLinkVerdict.LINK, verdict(null, null))
     }
 
     // ---- account creation rules --------------------------------------------------------------------------------------------

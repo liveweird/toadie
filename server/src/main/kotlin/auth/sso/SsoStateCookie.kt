@@ -10,7 +10,13 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+/** The development cookie name (plain http cannot carry a `__Host-` cookie). */
 internal const val SSO_COOKIE_NAME = "toadie_sso"
+
+/** The production name: the `__Host-` prefix makes a browser refuse it unless `Secure`, `Path=/` and without a `Domain`. */
+internal const val SSO_HOST_COOKIE_NAME = "__Host-$SSO_COOKIE_NAME"
+
+internal fun ssoCookieName(production: Boolean): String = if (production) SSO_HOST_COOKIE_NAME else SSO_COOKIE_NAME
 
 /** Domain-separation label for the cookie key: HMAC(jwt.secret, label) — the raw JWT secret never signs anything else. */
 private const val STATE_KEY_LABEL = "toadie-sso-state"
@@ -34,7 +40,8 @@ class SsoAttempt(
 )
 
 /**
- * The stateless `toadie_sso` attempt cookie: `base64url(json).base64url(HMAC-SHA256)`. No server-side attempt store
+ * The stateless attempt cookie (`toadie_sso`; `__Host-toadie_sso` in production):
+ * `base64url(json).base64url(HMAC-SHA256)`. No server-side attempt store
  * exists to exhaust (a store would be admitted pre-authentication). The signing key is derived from the JWT secret with
  * a fixed label, so rotating the secret kills in-flight attempts together with every session. Verification is
  * constant-time; a malformed, forged, oversized or expired value simply opens as null.

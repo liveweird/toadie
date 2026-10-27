@@ -4,8 +4,6 @@ import ch.nokillswit.infra.fetch.OperatorHttp
 import io.ktor.util.AttributeKey
 import java.net.URI
 import java.net.URISyntaxException
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -34,27 +32,20 @@ private const val DISCOVERY_SUFFIX = ".well-known/openid-configuration"
 private const val DISCOVERY_TTL_MILLIS = 60 * 60 * 1000L
 
 /**
- * Lazy, cached OIDC discovery (`<issuer>/.well-known/openid-configuration`, one hour; a failure is never cached).
- * The document's `issuer` must equal the configured one exactly, and — outside development — every endpoint
- * must be https. Overlapping first logins share one fetch (the mutex).
+ * Lazy, cached OIDC discovery (`<issuer>/.well-known/openid-configuration`, one hour; a failure is never cached as good).
+ * The document's `issuer` must equal the configured one exactly, and — outside development — every endpoint must be
+ * https. The fetch happens outside any lock and overlapping first logins share one (single flight); when a refresh after
+ * the hour fails, the last good document keeps being served for up to 24 more hours, retried at most once a minute
+ * ([StaleServingCache]).
  */
 class SsoDiscovery(
     private val config: SsoConfig,
     private val http: () -> OperatorHttp,
-    private val clock: () -> Long = System::currentTimeMillis,
+    clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val lock = Mutex()
-    private var cached: SsoEndpoints? = null
-    private var fetchedAt = 0L
+    private val cache = StaleServingCache(DISCOVERY_TTL_MILLIS, clock = clock) { fetch() }
 
-    suspend fun endpoints(): SsoEndpoints = lock.withLock {
-        val current = cached
-        if (current != null && clock() - fetchedAt < DISCOVERY_TTL_MILLIS) return current
-        fetch().also {
-            cached = it
-            fetchedAt = clock()
-        }
-    }
+    suspend fun endpoints(): SsoEndpoints = cache.get()
 
     private suspend fun fetch(): SsoEndpoints {
         val url = config.issuer.let { if (it.endsWith("/")) it else "$it/" } + DISCOVERY_SUFFIX
@@ -84,11 +75,11 @@ class SsoDiscovery(
     }
 }
 
-private val lenientJson = Json { isLenient = false; ignoreUnknownKeys = true }
+private val strictJson = Json { isLenient = false; ignoreUnknownKeys = true }
 
 /** The body as a JSON object, or null when it is not one (never throws, never echoes the body). */
 internal fun parseObject(body: String): JsonObject? = try {
-    lenientJson.parseToJsonElement(body).jsonObject
+    strictJson.parseToJsonElement(body).jsonObject
 } catch (_: SerializationException) {
     null
 } catch (_: IllegalArgumentException) {

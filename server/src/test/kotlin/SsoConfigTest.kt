@@ -131,8 +131,35 @@ class SsoConfigTest {
         refused("sso.issuer" to "https://bad host/x")
         refused("sso.redirectUri" to "https://toadie.example.com/api/v1/login/sso/callback?x=1")
         assertTrue(SSO_CALLBACK_HINT in refused("sso.redirectUri" to "https://toadie.example.com/elsewhere"))
-        // A proxy prefix in front of the callback path is fine.
-        assertNotNull(config("sso.redirectUri" to "https://toadie.example.com/toadie/api/v1/login/sso/callback"))
+        // The path must EQUAL the callback path: no proxy prefix (the cookie is Path=/ and the Location root-relative), no trailing slash.
+        assertTrue(SSO_CALLBACK_HINT in refused("sso.redirectUri" to "https://toadie.example.com/toadie/api/v1/login/sso/callback"))
+        refused("sso.redirectUri" to "https://toadie.example.com/api/v1/login/sso/callback/")
+        refused("sso.redirectUri" to "https://toadie.example.com/api/v1/login/sso/callback/extra")
+        assertNotNull(config("sso.redirectUri" to "https://toadie.example.com/api/v1/login/sso/callback"))
+    }
+
+    @Test
+    fun `an issuer over the 512 character column is refused, one at the limit is not`() {
+        val prefix = "https://tenant.okta.com/"
+        assertTrue("512" in refused("sso.issuer" to prefix + "x".repeat(513 - prefix.length)))
+        assertNotNull(config("sso.issuer" to prefix + "x".repeat(512 - prefix.length)))
+    }
+
+    @Test
+    fun `the flag is read like every other boolean flag and the client secret is trimmed like its siblings`() {
+        assertNotNull(config("sso.enabled" to "TRUE"))
+        assertNotNull(config("sso.enabled" to "True"))
+        assertNull(SsoConfig.fromConfig(MapApplicationConfig("sso.enabled" to "yes", "sso.clientSecret" to ""), false, null))
+        assertEquals("padded", assertNotNull(config("sso.clientSecret" to "  padded \n")).clientSecret)
+    }
+
+    @Test
+    fun `a blank allowed-domain list is a boot warning, a configured one is not`() {
+        val open = assertNotNull(config()).bootWarnings()
+        assertEquals(1, open.size)
+        assertTrue("allowedEmailDomains" in open.single())
+        assertFalse("super-secret-value" in open.single())
+        assertTrue(assertNotNull(config("sso.allowedEmailDomains" to "example.com")).bootWarnings().isEmpty())
     }
 
     @Test

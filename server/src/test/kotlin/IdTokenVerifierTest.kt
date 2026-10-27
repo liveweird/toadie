@@ -109,6 +109,40 @@ class IdTokenVerifierTest {
     }
 
     @Test
+    fun `a JWKS that cannot be refetched after its hour keeps serving the last good key set, for at most a day past its expiry`() =
+        runBlocking<Unit> {
+            StubIdp().use { stub ->
+                val rig = rig(stub)
+                // The tokens must outlive the hand-moved clock.
+                val far = mapOf<String, Any?>("exp" to System.currentTimeMillis() / 1000 + 5 * 86400)
+                rig.verifier.verify(rig.token(far), "n-1")
+                assertEquals(1, stub.jwksFetches.get())
+
+                stub.jwksStatus = 503
+                rig.clock.advanceSeconds(3601)
+                rig.verifier.verify(rig.token(far), "n-1")
+                assertEquals(2, stub.jwksFetches.get(), "the refresh was attempted and failed; the stale key set verified")
+                rig.verifier.verify(rig.token(far), "n-1")
+                assertEquals(2, stub.jwksFetches.get(), "no second attempt inside the minute")
+                rig.clock.advanceSeconds(61)
+                rig.verifier.verify(rig.token(far), "n-1")
+                assertEquals(3, stub.jwksFetches.get())
+
+                // An unknown kid during the outage is a plain rejection, not an outage error.
+                rig.clock.advanceSeconds(61)
+                val unknown = rig.token(far, StubKey.rsa2048("kid-x", 1))
+                assertEquals("id_token_invalid", rejection { rig.verifier.verify(unknown, "n-1") }.reason)
+
+                // Past the staleness bound there is no key set: the outage surfaces (the caller maps it to idp_unavailable).
+                rig.clock.advanceSeconds(25 * 3600)
+                assertFailsWith<SsoUpstreamException> { rig.verifier.verify(rig.token(far), "n-1") }
+                // And a failure is never cached as good: the recovery is picked up on the very next call.
+                stub.jwksStatus = 200
+                rig.verifier.verify(rig.token(far), "n-1")
+            }
+        }
+
+    @Test
     fun `a JWKS entry that is not usable for signing yields a rejection, and the first of two duplicate kids wins`() = runBlocking<Unit> {
         StubIdp().use { stub ->
             val rig = rig(stub)

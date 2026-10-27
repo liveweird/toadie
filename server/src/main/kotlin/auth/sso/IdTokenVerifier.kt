@@ -18,8 +18,6 @@ import java.security.spec.InvalidKeySpecException
 import java.security.spec.RSAPublicKeySpec
 import java.time.Clock
 import java.util.Base64
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
@@ -39,7 +37,6 @@ class IdTokenRejectedException(
 
 private const val MIN_RSA_BITS = 2048
 private const val JWKS_TTL_MILLIS = 60 * 60 * 1000L
-private const val JWKS_REFETCH_INTERVAL_MILLIS = 60 * 1000L
 private const val CLOCK_LEEWAY_SECONDS = 60L
 private const val MAX_ID_TOKEN_LENGTH = 16 * 1024
 private const val MAX_NAME_CLAIM = 200
@@ -50,8 +47,10 @@ private const val MAX_NAME_CLAIM = 200
  * The header is decoded FIRST and must name `RS256` and a `kid`; the JWK is picked by `kid`, must be an RSA key of at
  * least 2048 bits, is built with the JDK `KeyFactory` and handed to java-jwt's `Algorithm.RSA256` (which also refuses a
  * header whose `alg` differs). The JWKS is cached for an hour; an unknown `kid` triggers at most one refetch per
- * minute, so rotation is picked up without letting a token stream turn into a JWKS stream. Then `iss`, `aud`, `azp`,
- * `exp`/`iat`/`nbf` (60 seconds of leeway), `nonce`, `sub`, `email`, `email_verified == true` and the allowed domain.
+ * minute, so rotation is picked up without letting a token stream turn into a JWKS stream; the fetch runs outside any
+ * lock and, when it fails, the last good key set is served for up to 24 more hours ([StaleServingCache]). Then `iss`,
+ * `aud`, `azp`, `exp`/`iat`/`nbf` (60 seconds of leeway), `nonce`, `sub`, `email`, `email_verified == true` and the
+ * allowed domain.
  */
 class IdTokenVerifier(
     private val config: SsoConfig,
@@ -59,11 +58,9 @@ class IdTokenVerifier(
     private val http: () -> OperatorHttp,
     private val clock: Clock = Clock.systemUTC(),
 ) {
-    private class Jwks(val keys: Map<String, RSAPublicKey?>, val fetchedAt: Long)
+    private class Jwks(val keys: Map<String, RSAPublicKey?>)
 
-    private val lock = Mutex()
-    private var jwks: Jwks? = null
-    private var lastFetchAttempt = Long.MIN_VALUE / 2
+    private val jwks = StaleServingCache(JWKS_TTL_MILLIS, clock = clock::millis) { fetchJwks() }
 
     suspend fun verify(idToken: String, expectedNonce: String): VerifiedIdToken {
         if (idToken.length > MAX_ID_TOKEN_LENGTH) throw invalid()
@@ -113,21 +110,14 @@ class IdTokenVerifier(
 
     private fun invalid() = IdTokenRejectedException("id_token_invalid")
 
-    /** The key for [kid], refetching the JWKS when stale or (rate-limited) when the kid is unknown. Null = unusable/unknown. */
-    private suspend fun keyFor(kid: String): RSAPublicKey? = lock.withLock {
-        val now = clock.millis()
-        val current = jwks
-        val stale = current == null || now - current.fetchedAt >= JWKS_TTL_MILLIS
-        val unknownKid = current != null && kid !in current.keys
-        val mayRefetch = now - lastFetchAttempt >= JWKS_REFETCH_INTERVAL_MILLIS
-        if (stale || (unknownKid && mayRefetch)) {
-            lastFetchAttempt = now
-            jwks = fetchJwks(now)
-        }
-        jwks?.keys?.get(kid)
-    }
+    /**
+     * The key for [kid]: from the cached JWKS, refreshed when an hour old or — at most once a minute — when [kid] is
+     * unknown, so rotation is picked up. A failed refresh serves the last good key set (bounded staleness). Null =
+     * unusable/unknown.
+     */
+    private suspend fun keyFor(kid: String): RSAPublicKey? = jwks.get { kid !in it.keys }.keys[kid]
 
-    private suspend fun fetchJwks(now: Long): Jwks {
+    private suspend fun fetchJwks(): Jwks {
         val response = http().getJson(discovery.endpoints().jwksUri)
         if (response.status != 200) throw SsoUpstreamException("JWKS answered status ${response.status}")
         val document = parseObject(response.body) ?: throw SsoUpstreamException("JWKS is not a JSON object")
@@ -138,7 +128,7 @@ class IdTokenVerifier(
             // First wins; a duplicate kid can never replace a key already accepted.
             if (id !in keys) keys[id] = rsaKeyOf(jwk)
         }
-        return Jwks(keys, now)
+        return Jwks(keys)
     }
 
     /** Null = present but unusable: not RSA, not for signing, malformed, or under 2048 bits. */

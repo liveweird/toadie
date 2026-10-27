@@ -69,6 +69,7 @@ fun Application.configureSso() {
         return
     }
     log.info("SSO login enabled ({})", config)
+    config.bootWarnings().forEach { log.warn(it) }
 
     val clock = SeamClock(this)
     // Resolved on first use, after a test had its chance to publish a client that trusts its stub (the UrlFetcherKey idiom).
@@ -85,6 +86,7 @@ fun Application.configureSso() {
         discovery = discovery,
         verifier = IdTokenVerifier(config, discovery, httpProvider, clock),
         cookies = SsoStateCookie(jwtConfig.secret, clock),
+        seenStates = SsoSeenStates(clock = { clock.millis() }),
         handoffs = handoffs,
         accounts = SsoAccounts(users),
         users = users,
@@ -92,14 +94,17 @@ fun Application.configureSso() {
         onFailureLog = { cause -> log.warn("SSO callback failed unexpectedly ({})", cause.javaClass.name) },
     )
     val secureCookie = !developmentMode
+    // Production: `__Host-` + Secure + Path=/ + no Domain, so a sibling subdomain cannot toss its own cookie over ours.
+    // Development serves plain http, which cannot carry a `__Host-` cookie. Set and clear share these attributes exactly.
+    val cookieName = ssoCookieName(production = secureCookie)
 
     // Lax: the callback is a cross-site top-level navigation from the IdP, which Strict would not carry the cookie on.
     fun attemptCookie(value: String, maxAge: Int, expires: GMTDate? = null) = Cookie(
-        name = SSO_COOKIE_NAME,
+        name = cookieName,
         value = value,
         maxAge = maxAge,
         expires = expires,
-        path = SSO_PATH_PREFIX,
+        path = "/",
         secure = secureCookie,
         httpOnly = true,
         extensions = mapOf("SameSite" to "Lax"),
@@ -118,14 +123,14 @@ fun Application.configureSso() {
                     call.setAttemptCookie(flow.seal(attempt))
                     call.respondRedirect(location)
                 } catch (failure: SsoFlowException) {
-                    audit("login.sso_failure", "reason" to failure.reason)
+                    audit("login.sso_failure", "reason" to failure.reason, "host" to failure.host)
                     call.respondRedirect(ssoErrorLocation(failure.error))
                 }
             }
             get(SSO_CALLBACK_PATH) {
                 val query = call.request.queryParameters
                 try {
-                    val result = flow.callback(call.request.cookies[SSO_COOKIE_NAME], query["code"], query["state"], query["error"])
+                    val result = flow.callback(call.request.cookies[cookieName], query["code"], query["state"], query["error"])
                     // The cookie stays: the exchange must present its bind secret again (a planted code is then useless).
                     call.respondRedirect("/login/sso#code=${result.code}")
                 } catch (failure: SsoFlowException) {
@@ -135,8 +140,10 @@ fun Application.configureSso() {
                         "reason" to failure.reason,
                         "email" to failure.email,
                         "sub" to failure.subject,
+                        "host" to failure.host,
                     )
-                    call.clearAttemptCookie()
+                    // A request that did not prove it owns the attempt (state mismatch, replay) leaves the cookie alone.
+                    if (failure.clearCookie) call.clearAttemptCookie()
                     call.respondRedirect(ssoErrorLocation(failure.error))
                 }
             }
@@ -147,7 +154,7 @@ fun Application.configureSso() {
                     // Uniform for every cause: unknown, expired, replayed, wrong browser, account changed.
                     throw UnauthorizedException("Invalid or expired sign-in code")
                 }
-                val attempt = flow.open(call.request.cookies[SSO_COOKIE_NAME]) ?: reject()
+                val attempt = flow.open(call.request.cookies[cookieName]) ?: reject()
                 val handoff = handoffs.consume(req.code) ?: reject()
                 if (!MessageDigest.isEqual(handoff.bindHash, bindHash(attempt.bind))) reject()
                 call.clearAttemptCookie()

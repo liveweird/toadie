@@ -33,7 +33,6 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -42,6 +41,7 @@ private const val START = "/api/v1/login/sso/start"
 private const val CALLBACK = "/api/v1/login/sso/callback"
 private const val EXCHANGE = "/api/v1/login/sso/exchange"
 private const val COOKIE = "toadie_sso"
+private const val HOST_COOKIE = "__Host-toadie_sso"
 private const val TEST_JWT_SECRET = "sso-test-jwt-secret-0123456789abcdef"
 private const val REDIRECT_URI = "http://localhost:8081/api/v1/login/sso/callback"
 
@@ -126,6 +126,8 @@ class SsoLoginTest {
         assertEquals("/login#sso_error=$error", result.location)
         assertNull(result.code)
     }
+
+    private fun stateOf(attempt: Attempt): String = StubIdp.queryOf(attempt.location).getValue("state")
 
     private fun failureOf(capture: LogCapture, reason: String) =
         capture.events.firstOrNull { it.message == "login.sso_failure" && it.hasKeyValue("reason", reason) }
@@ -235,7 +237,8 @@ class SsoLoginTest {
                 assertNotNull(stored.passwordHash)
                 assertEquals(HttpStatusCode.OK, browser.login(email, "password-1234").status)
                 val linked = assertNotNull(audit.events.firstOrNull { it.message == "user.sso_linked" })
-                assertTrue(linked.hasKeyValue("userId", id.toLong()) && linked.hasKeyValue("issuer", stub.issuer))
+                assertTrue(linked.hasKeyValue("userId", id.toLong()) && linked.hasKeyValue("issuerHost", "127.0.0.1"))
+                assertNull(linked.keyValuePairs.firstOrNull { it.key == "issuer" }, "the host only, never the full issuer URL")
                 assertTrue(assertNotNull(audit.events.firstOrNull { it.message == "login.sso_success" }).hasKeyValue("outcome", "linked"))
             }
         }
@@ -458,21 +461,117 @@ class SsoLoginTest {
     // ---- the callback's other failure modes -------------------------------------------------------------------------------
 
     @Test
-    fun `an IdP error ends at the redirect, and access_denied reads as cancelled`() = testApplication {
+    fun `an IdP error for this attempt ends at the redirect, and access_denied reads as cancelled`() = testApplication {
         StubIdp().use { stub ->
             ssoApp(stub)
             val browser = browser()
             withAuditCapture { audit ->
                 val cancelled = browser.start()
-                val denied = browser.callback(cancelled.cookie, "error=access_denied&state=x")
+                val denied = browser.callback(cancelled.cookie, "error=access_denied&state=${stateOf(cancelled)}")
                 assertEquals("/login#sso_error=cancelled", denied.headers[HttpHeaders.Location])
                 val failed = browser.start()
-                val other = browser.callback(failed.cookie, "error=server_error&error_description=boom&state=x")
+                val other = browser.callback(failed.cookie, "error=server_error&error_description=boom&state=${stateOf(failed)}")
                 assertEquals("/login#sso_error=failed", other.headers[HttpHeaders.Location])
                 assertEquals(2, audit.events.count { it.message == "login.sso_failure" && it.hasKeyValue("reason", "idp_error") })
                 // The failure clears the attempt cookie.
                 assertTrue(denied.setCookie().any { it.name == COOKIE && it.maxAge == 0 })
             }
+        }
+    }
+
+    @Test
+    fun `a forged IdP error with the wrong state neither ends the attempt nor clears its cookie`() = testApplication {
+        StubIdp().use { stub ->
+            ssoApp(stub)
+            val browser = browser()
+            withAuditCapture { audit ->
+                val victim = browser.start()
+                // A cross-site page navigates the victim's browser to the callback with an error and a guessed state.
+                val forged = browser.callback(victim.cookie, "error=access_denied&state=x")
+                assertEquals("/login#sso_error=failed", forged.headers[HttpHeaders.Location])
+                assertNotNull(failureOf(audit, "state_invalid"))
+                assertNull(failureOf(audit, "idp_error"))
+                assertTrue(forged.setCookie().none { it.name == COOKIE }, "a state mismatch leaves the valid cookie alone")
+                // No state at all behaves the same.
+                assertTrue(browser.callback(victim.cookie, "error=access_denied").setCookie().none { it.name == COOKIE })
+                // The victim's in-flight attempt still completes with the same cookie.
+                val real = browser.callback(victim.cookie, stub.authorize(victim.location))
+                assertTrue(real.headers[HttpHeaders.Location].orEmpty().startsWith("/login/sso#code="))
+            }
+        }
+    }
+
+    @Test
+    fun `a callback replayed with the same cookie and state is refused before any token request`() = testApplication {
+        StubIdp().use { stub ->
+            ssoApp(stub)
+            val browser = browser()
+            withAuditCapture { audit ->
+                val attempt = browser.start()
+                val query = stub.authorize(attempt.location)
+                val first = browser.callback(attempt.cookie, query)
+                assertTrue(first.headers[HttpHeaders.Location].orEmpty().startsWith("/login/sso#code="))
+                assertEquals(1, stub.tokenRequests.size)
+
+                // A second callback with the same cookie + state (a fresh code each time, so the stub's own single-use would not help).
+                val replay = browser.callback(attempt.cookie, stub.authorize(attempt.location))
+                assertEquals("/login#sso_error=failed", replay.headers[HttpHeaders.Location])
+                assertEquals(1, stub.tokenRequests.size, "the replay never reached the token endpoint")
+                assertNotNull(failureOf(audit, "state_invalid"))
+                // The replay did not clear the cookie the first success is still waiting to exchange with.
+                assertTrue(replay.setCookie().none { it.name == COOKIE })
+                val code = first.headers[HttpHeaders.Location].orEmpty().substringAfter("#code=")
+                assertEquals(HttpStatusCode.OK, browser.exchange(code, attempt.cookie).status)
+            }
+        }
+    }
+
+    @Test
+    fun `an unreachable issuer audits the failing host and nothing else about the URL`() = testApplication {
+        StubIdp().use { stub ->
+            ssoApp(stub)
+            val browser = browser()
+            withAuditCapture { audit ->
+                stub.stopServing()
+                assertEquals("/login#sso_error=failed", browser.get(START).headers[HttpHeaders.Location])
+                val failure = assertNotNull(failureOf(audit, "idp_unavailable"))
+                assertTrue(failure.hasKeyValue("host", "127.0.0.1"))
+                assertTrue(failure.keyValuePairs.none { pair -> pair.value.toString().contains("https://") })
+            }
+        }
+    }
+
+    @Test
+    fun `discovery and the JWKS keep serving their last good copy when the issuer goes down after their TTL`() = testApplication {
+        StubIdp().use { stub ->
+            val clock = MovableClock()
+            ssoApp(stub, clock = clock)
+            val browser = browser()
+            // The tokens must outlive the hand-moved clock.
+            val longLived = mapOf<String, Any?>("exp" to System.currentTimeMillis() / 1000 + 3 * 86400)
+            assertTrue(browser.signInAndExchange(stub, longLived).userId > 0u)
+            assertEquals(1, stub.discoveryFetches.get())
+            assertEquals(1, stub.jwksFetches.get())
+
+            // Both caches are now more than an hour old and the issuer's discovery AND key endpoints fail.
+            stub.discoveryStatus = 503
+            stub.jwksStatus = 503
+            clock.advanceSeconds(3601)
+            assertTrue(browser.signIn(stub, longLived).location.startsWith("/login/sso#code="), "the stale copies still sign in")
+            assertEquals(2, stub.discoveryFetches.get(), "one refresh was attempted and failed")
+            assertEquals(2, stub.jwksFetches.get())
+            // Attempts are spaced a minute apart: the next sign-in inside it does not touch the issuer again.
+            assertTrue(browser.signIn(stub, longLived).location.startsWith("/login/sso#code="))
+            assertEquals(2, stub.discoveryFetches.get())
+            assertEquals(2, stub.jwksFetches.get())
+            clock.advanceSeconds(61)
+            assertTrue(browser.signIn(stub, longLived).location.startsWith("/login/sso#code="))
+            assertEquals(3, stub.discoveryFetches.get())
+            assertEquals(3, stub.jwksFetches.get())
+
+            // Past the 24 hour staleness bound no copy is usable: the failure surfaces as it always did.
+            clock.advanceSeconds(25 * 3600)
+            assertEquals("/login#sso_error=failed", browser.get(START).headers[HttpHeaders.Location])
         }
     }
 
@@ -620,7 +719,7 @@ class SsoLoginTest {
     }
 
     @Test
-    fun `the attempt cookie is HttpOnly, SameSite Lax, path-scoped and ten minutes, and every SSO answer is no-store`() = testApplication {
+    fun `the development attempt cookie is plain-named, Path slash, HttpOnly Lax, and every SSO answer is no-store`() = testApplication {
         StubIdp().use { stub ->
             ssoApp(stub)
             val browser = browser()
@@ -628,7 +727,8 @@ class SsoLoginTest {
             val raw = start.headers.getAll(HttpHeaders.SetCookie).orEmpty().single { it.startsWith("$COOKIE=") }
             assertTrue("HttpOnly" in raw, raw)
             assertTrue("SameSite=Lax" in raw, raw)
-            assertTrue("Path=/api/v1/login/sso" in raw, raw)
+            assertTrue(Regex("Path=/(;|$)").containsMatchIn(raw), raw)
+            assertFalse("Domain" in raw, raw)
             assertTrue("Max-Age=600" in raw, raw)
             assertFalse("Secure" in raw, "development mode serves http")
             assertEquals("no-store", start.headers[HttpHeaders.CacheControl])
@@ -639,27 +739,48 @@ class SsoLoginTest {
     }
 
     @Test
-    fun `in production mode the attempt cookie is Secure`() = testApplication {
-        StubIdp().use { stub ->
-            withSeedRestored {
-                ssoApp(
-                    stub,
-                    "sso.redirectUri" to "https://toadie.example.com/api/v1/login/sso/callback",
-                    "http.behindProxy" to "true",
-                    "bootstrap.adminInitialPassword" to "rotated-${UUID.randomUUID()}",
-                    "jwt.secret" to "strong-${UUID.randomUUID()}",
-                    "mail.transport" to "disabled",
-                    "mail.appUrl" to "https://toadie.example.com",
-                    production = true,
-                )
-                // The proxy contract: X-Forwarded-Proto marks the request as already over TLS (no HTTPS redirect).
-                val start = browser().get(START) { header("X-Forwarded-Proto", "https") }
-                assertEquals(HttpStatusCode.Found, start.status)
-                val raw = start.headers.getAll(HttpHeaders.SetCookie).orEmpty().single { it.startsWith("$COOKIE=") }
-                assertTrue("Secure" in raw && "HttpOnly" in raw && "SameSite=Lax" in raw, raw)
+    fun `in production the attempt cookie is a Secure host-prefixed Path slash cookie without a Domain, set and cleared alike`() =
+        testApplication {
+            StubIdp().use { stub ->
+                withSeedRestored {
+                    ssoApp(
+                        stub,
+                        "sso.redirectUri" to "https://toadie.example.com/api/v1/login/sso/callback",
+                        "http.behindProxy" to "true",
+                        "bootstrap.adminInitialPassword" to "rotated-${UUID.randomUUID()}",
+                        "jwt.secret" to "strong-${UUID.randomUUID()}",
+                        "mail.transport" to "disabled",
+                        "mail.appUrl" to "https://toadie.example.com",
+                        production = true,
+                    )
+                    val browser = browser()
+                    // The proxy contract: X-Forwarded-Proto marks the request as already over TLS (no HTTPS redirect).
+                    val start = browser.get(START) { header("X-Forwarded-Proto", "https") }
+                    assertEquals(HttpStatusCode.Found, start.status)
+                    val cookies = start.headers.getAll(HttpHeaders.SetCookie).orEmpty()
+                    assertTrue(cookies.none { it.startsWith("$COOKIE=") }, "no plain-named cookie")
+                    val raw = cookies.single { it.startsWith("$HOST_COOKIE=") }
+                    assertTrue("Secure" in raw && "HttpOnly" in raw && "SameSite=Lax" in raw && "Max-Age=600" in raw, raw)
+                    assertTrue(Regex("Path=/(;|$)").containsMatchIn(raw), raw)
+                    assertFalse("Domain" in raw, raw)
+
+                    // The callback reads the host-prefixed cookie; a failed one clears it with the SAME attributes.
+                    val value = start.setCookie().first { it.name == HOST_COOKIE }.value
+                    val location = start.headers[HttpHeaders.Location].orEmpty()
+                    val forwarded = { request: io.ktor.client.request.HttpRequestBuilder ->
+                        request.header("X-Forwarded-Proto", "https")
+                        request.header(HttpHeaders.Cookie, "$HOST_COOKIE=$value")
+                    }
+                    val ok = browser.get("$CALLBACK?${stub.authorize(location)}") { forwarded(this) }
+                    assertTrue(ok.headers[HttpHeaders.Location].orEmpty().startsWith("/login/sso#code="), ok.headers[HttpHeaders.Location])
+                    val failed = browser.get("$CALLBACK?code=c&state=x") { header("X-Forwarded-Proto", "https") }
+                    assertEquals("/login#sso_error=expired", failed.headers[HttpHeaders.Location])
+                    val cleared = failed.headers.getAll(HttpHeaders.SetCookie).orEmpty().single { it.startsWith("$HOST_COOKIE=") }
+                    assertTrue("Secure" in cleared && Regex("Path=/(;|$)").containsMatchIn(cleared) && "Max-Age=0" in cleared, cleared)
+                    assertFalse("Domain" in cleared, cleared)
+                }
             }
         }
-    }
 
     @Test
     fun `options names the provider label when SSO is on`() = testApplication {
@@ -722,7 +843,7 @@ class SsoLoginTest {
         assertTrue(failure is IllegalStateException)
 
         val email = uniqueEmail("sso-dup")
-        TestUsers.seed(email = email, password = "password-1234", role = UserRole.ADMIN)
+        TestUsers.seed(email = email, password = "password-1234", role = UserRole.USER)
         val calls = AtomicLong()
         // An always-colliding creator behind a lookup that always says Unknown: the second attempt's violation propagates.
         val stuck = ch.nokillswit.auth.sso.SsoAccounts({ _, _, _ -> ch.nokillswit.users.SsoLookup.Unknown }) { user ->
@@ -732,6 +853,5 @@ class SsoLoginTest {
         val duplicate = runCatching { stuck.resolve("https://idp.test/x", ch.nokillswit.auth.sso.VerifiedIdToken("sub-2", email, null)) }
         assertTrue(duplicate.isFailure)
         assertEquals(2, calls.get())
-        assertNotEquals(0, calls.get())
     }
 }

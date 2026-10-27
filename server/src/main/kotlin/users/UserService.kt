@@ -55,6 +55,29 @@ sealed interface SsoLookup {
     data object Unknown : SsoLookup
 }
 
+/** What the email-matched account is, as far as [ssoLinkVerdict] needs to know. */
+internal enum class SsoLinkVerdict { SAME_IDENTITY, SUBJECT_CONFLICT, REFUSED, LINK }
+
+/**
+ * Decides what a same-email ACTIVE account means for the incoming (issuer, subject). A stored pair that EQUALS the
+ * incoming one is the account itself — the identity lookup missed it only because a concurrent first sign-in (two
+ * browsers) committed the link between that lookup and the email lock — so it is [SsoLinkVerdict.SAME_IDENTITY], never
+ * a conflict. A different stored pair is a conflict; an ADMIN or MFA-enabled account is refused; otherwise it links.
+ */
+internal fun ssoLinkVerdict(
+    storedIssuer: String?,
+    storedSubject: String?,
+    role: String,
+    mfaEnabled: Boolean,
+    issuer: String,
+    subject: String,
+): SsoLinkVerdict = when {
+    storedSubject != null && storedIssuer == issuer && storedSubject == subject -> SsoLinkVerdict.SAME_IDENTITY
+    storedSubject != null -> SsoLinkVerdict.SUBJECT_CONFLICT
+    role == UserRole.ADMIN.name || mfaEnabled -> SsoLinkVerdict.REFUSED
+    else -> SsoLinkVerdict.LINK
+}
+
 // Deliberately no "role": the wire shape is a set, and a set has no order (the Lettuce rule).
 private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "id" to UserService.Users.id,
@@ -169,10 +192,19 @@ class UserService(private val database: R2dbcDatabase) {
             .singleOrNull()
             ?: return@suspendTransaction SsoLookup.Unknown
         val id = match[Users.id].value
-        when {
-            match[Users.ssoSubject] != null -> SsoLookup.SubjectConflict
-            match[Users.role] == UserRole.ADMIN.name || Feature.MFA !in featuresOf(id) -> SsoLookup.LinkRefused
-            else -> {
+        val verdict = ssoLinkVerdict(
+            match[Users.ssoIssuer],
+            match[Users.ssoSubject],
+            match[Users.role],
+            Feature.MFA !in featuresOf(id),
+            issuer,
+            subject,
+        )
+        when (verdict) {
+            SsoLinkVerdict.SAME_IDENTITY -> SsoLookup.Existing(id)
+            SsoLinkVerdict.SUBJECT_CONFLICT -> SsoLookup.SubjectConflict
+            SsoLinkVerdict.REFUSED -> SsoLookup.LinkRefused
+            SsoLinkVerdict.LINK -> {
                 Users.update({ Users.id eq id }) {
                     it[ssoIssuer] = issuer
                     it[ssoSubject] = subject

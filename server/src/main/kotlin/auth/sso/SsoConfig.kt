@@ -15,6 +15,9 @@ private const val DEFAULT_LABEL = "Okta"
 private const val DEFAULT_SCOPES = "openid email profile"
 private const val MAX_LABEL_LENGTH = 50
 private const val MAX_CONFIG_URL_LENGTH = 2048
+
+/** `users.sso_issuer` is VARCHAR(512) (V48): a longer issuer could never be stored on an account. */
+private const val MAX_ISSUER_LENGTH = 512
 private const val MAX_URL_PORT = 65535
 
 // RFC 6749 section 3.3: a scope token is one or more printable ASCII characters other than space, '"' and '\'.
@@ -44,6 +47,16 @@ class SsoConfig internal constructor(
     fun isEmailAllowed(email: String): Boolean =
         allowedEmailDomains.isEmpty() || email.substringAfterLast('@', "") in allowedEmailDomains
 
+    /** Boot-time WARN lines [configureSso] logs; empty when nothing needs the operator's attention. */
+    fun bootWarnings(): List<String> = buildList {
+        if (allowedEmailDomains.isEmpty()) {
+            add(
+                "sso.allowedEmailDomains is blank: any identity the provider authenticates may create an account; " +
+                    "restrict who can sign in with the provider's own app assignment (SSO_ALLOWED_EMAIL_DOMAINS narrows it here)",
+            )
+        }
+    }
+
     /** Label and issuer HOST only: no secret, and never a full URL in a log line. */
     override fun toString(): String = "SsoConfig(label=$label, issuerHost=${URI(issuer).host})"
 
@@ -55,7 +68,7 @@ class SsoConfig internal constructor(
          */
         fun fromConfig(config: ApplicationConfig, development: Boolean, mailAppUrl: String?): SsoConfig? {
             fun read(key: String): String = config.propertyOrNull("sso.$key")?.getString().orEmpty()
-            if (read("enabled").trim() != "true") return null
+            if (!read("enabled").trim().toBoolean()) return null
 
             val label = read("label").trim().ifEmpty { DEFAULT_LABEL }
             if (label.length > MAX_LABEL_LENGTH || label.any { it.isISOControl() }) {
@@ -63,13 +76,14 @@ class SsoConfig internal constructor(
             }
             val issuer = read("issuer").trim()
             val clientId = read("clientId").trim()
-            val clientSecret = read("clientSecret")
+            val clientSecret = read("clientSecret").trim()
             if (issuer.isEmpty()) throw SsoConfigException("sso.issuer is required when SSO is enabled (SSO_ISSUER)")
             if (clientId.isEmpty()) throw SsoConfigException("sso.clientId is required when SSO is enabled (SSO_CLIENT_ID)")
             if (clientSecret.isBlank()) {
                 throw SsoConfigException("sso.clientSecret is required when SSO is enabled (SSO_CLIENT_SECRET)")
             }
             requireUrl("sso.issuer", issuer, development)
+            if (issuer.length > MAX_ISSUER_LENGTH) throw SsoConfigException("sso.issuer must be at most $MAX_ISSUER_LENGTH characters")
 
             val redirectUri = redirectUriOf(read("redirectUri").trim(), mailAppUrl, development)
             val scopes = read("scopes").trim().ifEmpty { DEFAULT_SCOPES }.split(Regex("\\s+"))
@@ -91,8 +105,10 @@ class SsoConfig internal constructor(
         private fun redirectUriOf(configured: String, mailAppUrl: String?, development: Boolean): String {
             if (configured.isNotEmpty()) {
                 requireUrl("sso.redirectUri", configured, development)
-                if (!URI(configured).rawPath.orEmpty().endsWith(SSO_CALLBACK_PATH)) {
-                    throw SsoConfigException("sso.redirectUri must end with $SSO_CALLBACK_PATH")
+                // EQUAL, not a suffix: the attempt cookie is `Path=/` and the callback's Location is root-relative, so a
+                // sub-path deployment cannot work (the same no-sub-path rule as `resetAppUrl`).
+                if (URI(configured).rawPath.orEmpty() != SSO_CALLBACK_PATH) {
+                    throw SsoConfigException("sso.redirectUri must have exactly the path $SSO_CALLBACK_PATH")
                 }
                 return configured
             }

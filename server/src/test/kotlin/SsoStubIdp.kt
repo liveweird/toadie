@@ -77,6 +77,9 @@ class StubIdp(
     private val clientCertificates = HandshakeCertificates.Builder().addTrustedCertificate(certificate.certificate).build()
     private val handlers = Executors.newCachedThreadPool { Thread(it).apply { isDaemon = true } }
 
+    // The client side of http(): one pool per stub (not one per call), shut down with the stub.
+    private val clientWorkers = Executors.newCachedThreadPool { Thread(it).apply { isDaemon = true } }
+
     private class Pending(val idToken: String, val challenge: String, val redirectUri: String)
 
     private val pending = ConcurrentHashMap<String, Pending>()
@@ -91,6 +94,10 @@ class StubIdp(
 
     @Volatile
     var discoveryStatus = 200
+
+    /** Anything but 200 makes the JWKS endpoint fail (an outage after the keys were cached). */
+    @Volatile
+    var jwksStatus = 200
 
     /** Replaces (or, for null, removes) members of the discovery document, e.g. an http endpoint. */
     @Volatile
@@ -124,7 +131,7 @@ class StubIdp(
     fun http(timeout: Duration = Duration.ofSeconds(10)) = OperatorHttp(
         allowHttp = false,
         timeout = timeout,
-        executor = Executors.newCachedThreadPool { Thread(it).apply { isDaemon = true } },
+        executor = clientWorkers,
         customizeClient = { it.sslSocketFactory(clientCertificates.sslSocketFactory(), clientCertificates.trustManager) },
     )
 
@@ -192,6 +199,7 @@ class StubIdp(
 
     private fun jwks(exchange: HttpExchange) {
         jwksFetches.incrementAndGet()
+        if (jwksStatus != 200) return reply(exchange, jwksStatus, """{"error":"unavailable"}""")
         val enc = Base64.getUrlEncoder().withoutPadding()
         val keys = published.joinToString(",") { key ->
             val modulus = key.publicKey.modulus.toByteArray().let { if (it[0] == 0.toByte()) it.copyOfRange(1, it.size) else it }
@@ -229,9 +237,17 @@ class StubIdp(
         exchange.responseBody.use { it.write(bytes) }
     }
 
+    private val serving = java.util.concurrent.atomic.AtomicBoolean(true)
+
+    /** Stops answering (connections are refused from now on) while the client side keeps working: an issuer outage. */
+    fun stopServing() {
+        if (serving.compareAndSet(true, false)) server.stop(0)
+    }
+
     override fun close() {
-        server.stop(0)
+        stopServing()
         handlers.shutdownNow()
+        clientWorkers.shutdownNow()
     }
 
     companion object {

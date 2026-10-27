@@ -97,7 +97,7 @@ ch.nokillswit
 │                       + LoginThrottle + the revoked-token blocklist
 ├── auth/sso/           OIDC sign-in behind `SSO_ENABLED` (2.32.0): `SsoConfig` (the `sso:` block + the boot
 │                       refusals), `SsoDiscovery` (lazy cached discovery over `OperatorHttp`), `IdTokenVerifier`
-│                       (RS256/JWKS), `SsoStateCookie` (the signed `toadie_sso` attempt cookie), `SsoHandoffs`
+│                       (RS256/JWKS), `SsoStateCookie` (the signed `toadie_sso` / `__Host-toadie_sso` attempt cookie), `SsoSeenStates` (single-use state), `StaleServingCache` (discovery/JWKS refresh), `SsoHandoffs`
 │                       (the 60 s single-use code store), `SsoAccounts` (existing/linked/created resolution),
 │                       `SsoFlow` (the callback logic, minus HTTP) and `SsoRoutes` (`configureSso`: `GET
 │                       /login/options` always, `GET /login/sso/start|callback` + `POST /login/sso/exchange`

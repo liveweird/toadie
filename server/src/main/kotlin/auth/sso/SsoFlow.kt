@@ -6,6 +6,7 @@ import ch.nokillswit.infra.fetch.OperatorHttp
 import ch.nokillswit.infra.fetch.OperatorHttpException
 import ch.nokillswit.users.UserService
 import io.ktor.http.URLBuilder
+import java.net.URI
 import java.security.MessageDigest
 
 /** The `sso_error` fragment values the SPA understands (`/login#sso_error=<value>`). */
@@ -20,6 +21,9 @@ internal fun ssoErrorLocation(error: String): String = "/login#sso_error=$error"
 /**
  * A sign-in attempt that ends at the error redirect. [reason] is the precise `login.sso_failure` audit reason; [error] is
  * the coarse, user-facing `sso_error` code. [email] and [subject] are set only once the ID token's signature verified.
+ * [host] is the unreachable issuer-side host of an `idp_unavailable` failure (never a URL). [clearCookie] is false when the
+ * request did not prove it owns the attempt (a state mismatch or replay): such a request must leave the browser's valid
+ * attempt cookie alone, or a forged cross-site callback would kill the victim's in-flight sign-in.
  */
 class SsoFlowException(
     val reason: String,
@@ -27,6 +31,8 @@ class SsoFlowException(
     val email: String? = null,
     val subject: String? = null,
     cause: Throwable? = null,
+    val host: String? = null,
+    val clearCookie: Boolean = true,
 ) : RuntimeException("SSO sign-in failed: $reason", cause)
 
 /** A successful callback: the one-time [code] for the fragment redirect (the account is already resolved). */
@@ -43,6 +49,7 @@ class SsoFlow(
     private val discovery: SsoDiscovery,
     private val verifier: IdTokenVerifier,
     private val cookies: SsoStateCookie,
+    private val seenStates: SsoSeenStates,
     private val handoffs: SsoHandoffs,
     private val accounts: SsoAccounts,
     private val users: UserService,
@@ -69,14 +76,21 @@ class SsoFlow(
         }.buildString()
     }
 
-    /** Completes one callback. [cookie] is the raw `toadie_sso` value; [code]/[state]/[error] are the three query parameters. */
+    /** Completes one callback. [cookie] is the raw attempt-cookie value; [code]/[state]/[error] are the three query parameters. */
     suspend fun callback(cookie: String?, code: String?, state: String?, error: String?): SsoCallbackResult = failuresAsSso {
         val attempt = cookies.open(cookie) ?: throw SsoFlowException("state_invalid", SSO_ERROR_EXPIRED)
+        // The state comes BEFORE the IdP's error: a forged cross-site `?error=...&state=x` proves nothing about this attempt
+        // and must neither end it nor clear its cookie.
+        if (state == null || !MessageDigest.isEqual(state.toByteArray(), attempt.state.toByteArray())) {
+            throw SsoFlowException("state_invalid", SSO_ERROR_FAILED, clearCookie = false)
+        }
         if (error != null) {
             throw SsoFlowException("idp_error", if (error == "access_denied") SSO_ERROR_CANCELLED else SSO_ERROR_FAILED)
         }
-        if (code.isNullOrEmpty() || state == null || !MessageDigest.isEqual(state.toByteArray(), attempt.state.toByteArray())) {
-            throw SsoFlowException("state_invalid", SSO_ERROR_FAILED)
+        if (code.isNullOrEmpty()) throw SsoFlowException("state_invalid", SSO_ERROR_FAILED, clearCookie = false)
+        // Single use: one cookie + state pair reaches the token endpoint once (a replayed callback is refused before any request).
+        if (!seenStates.firstUse(attempt.state, attempt.exp)) {
+            throw SsoFlowException("state_invalid", SSO_ERROR_FAILED, clearCookie = false)
         }
         val token = verifier.verify(exchangeCode(code, attempt), attempt.nonce)
         val resolved = try {
@@ -112,7 +126,7 @@ class SsoFlow(
             audit("user.created", "newUserId" to resolved.userId.toLong(), "email" to token.email, "via" to "sso")
         }
         if (resolved.outcome == SsoOutcome.LINKED) {
-            audit("user.sso_linked", "userId" to resolved.userId.toLong(), "issuer" to config.issuer)
+            audit("user.sso_linked", "userId" to resolved.userId.toLong(), "issuerHost" to URI(config.issuer).host)
         }
     }
 
@@ -126,7 +140,8 @@ class SsoFlow(
                 cause.email,
                 cause.subject,
             )
-            is OperatorHttpException, is SsoUpstreamException -> SsoFlowException("idp_unavailable", SSO_ERROR_FAILED)
+            is OperatorHttpException -> SsoFlowException("idp_unavailable", SSO_ERROR_FAILED, host = cause.host)
+            is SsoUpstreamException -> SsoFlowException("idp_unavailable", SSO_ERROR_FAILED)
             is SsoHandoffs.CapacityExceededException -> SsoFlowException("handoff_capacity", SSO_ERROR_FAILED)
             else -> {
                 onFailureLog(cause)
