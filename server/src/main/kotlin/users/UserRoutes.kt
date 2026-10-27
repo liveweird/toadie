@@ -7,6 +7,7 @@ import ch.nokillswit.auth.verifyPassword
 import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.authz.ForbiddenException
 import ch.nokillswit.authz.NotFoundException
+import ch.nokillswit.authz.PasswordNotSetException
 import ch.nokillswit.authz.caller
 import ch.nokillswit.authz.orNotFound
 import ch.nokillswit.authz.requireAdmin
@@ -232,6 +233,10 @@ fun Application.configureUserRoutes() {
                 if (caller.userId == route.parent.id) {
                     val existing = userService.read(route.parent.id).orNotFound("User")
                     expectedAuthVersion = existing.authVersion
+                    // A passwordless (SSO-only, V48) account has no current password to present: a
+                    // typed 409, not the 403 wrong-password denial. Only the SELF path can reach
+                    // it — an admin setting another account's password is the audited break-glass.
+                    if (!existing.hasPassword) throw PasswordNotSetException()
                     if (req.currentPassword == null || !verifyPassword(req.currentPassword, existing.passwordHash)) {
                         audit(
                             "password.change_denied",

@@ -39,11 +39,13 @@ import kotlin.time.Duration.Companion.seconds
 private const val LOGIN_RATE_LIMIT = "login"
 private const val REFRESH_RATE_LIMIT = "refresh"
 private const val MFA_RATE_LIMIT = "mfa"
+internal const val SSO_RATE_LIMIT = "sso"
 internal const val INTEGRATION_RATE_LIMIT = "integration"
 internal const val TELEMETRY_RATE_LIMIT = "telemetry"
 
 private const val DEFAULT_REFRESH_LIMIT_PER_MINUTE = 30
 private const val TELEMETRY_REQUESTS_PER_MINUTE = 30
+private const val SSO_PRODUCTION_REQUESTS_PER_MINUTE = 30
 
 @Serializable
 data class LoginRequest(val email: String, val password: String)
@@ -87,6 +89,8 @@ data class LoginResponse(
     val disabledFeatures: List<Feature>,
     /** The user's stored language (V18) — the SPA applies it to the UI on login/refresh. */
     val language: String,
+    /** False for a passwordless (SSO-only, V48) account — the SPA hides password-change affordances. */
+    val hasPassword: Boolean,
 )
 
 // The refresh rejection detail per audited reason — data beside the handler, not control flow
@@ -100,7 +104,7 @@ private val REFRESH_REJECT_MESSAGES = mapOf(
     "user_gone" to "User no longer exists",
 )
 
-private suspend fun JwtConfig.authResponse(
+internal suspend fun JwtConfig.authResponse(
     userId: UInt,
     user: User,
     sessions: AuthSessionService,
@@ -131,6 +135,7 @@ private suspend fun JwtConfig.authResponse(
         // Not a JWT claim: the SPA reads it from this response, and emails read it fresh
         // at send time — nothing needs it inside the token.
         language = user.language,
+        hasPassword = user.hasPassword,
     )
 }
 
@@ -195,6 +200,10 @@ fun Application.configureAuthRoutes() {
         developmentMode,
     )
 
+    // The SSO bucket follows the mode like the login bucket (30/min production; 1000/min development, where the e2e suite
+    // drives many sign-ins from one host).
+    val ssoLimit = if (developmentMode) 1000 else SSO_PRODUCTION_REQUESTS_PER_MINUTE
+
     // Throttle login to blunt password brute-forcing, and refresh to blunt token abuse: a token
     // bucket per client host.
     install(RateLimit) {
@@ -216,6 +225,12 @@ fun Application.configureAuthRoutes() {
         }
         register(RateLimitName(PASSWORD_RESET_CONFIRM_RATE_LIMIT)) {
             rateLimiter(limit = 10, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
+        // The SSO routes (auth/sso/SsoRoutes.kt, mounted there; the plugin installs only once): 30/min in production, lifted in
+        // development like the login bucket. Registered whether or not SSO is enabled — GET /login/options is always mounted on it.
+        register(RateLimitName(SSO_RATE_LIMIT)) {
+            rateLimiter(limit = ssoLimit, refillPeriod = 60.seconds)
             requestKey { call -> call.request.origin.remoteHost }
         }
         // The integration provider lives here because Ktor allows the RateLimit plugin to be
@@ -266,6 +281,7 @@ fun Application.configureAuthRoutes() {
                         verifyPassword(req.password, TIMING_EQUALIZER_HASH)
                         false
                     } else {
+                        // A passwordless account (V48) pays the same bcrypt round and fails inside.
                         verifyPassword(req.password, record.second.passwordHash)
                     }
                 if (record == null || !credentialsValid) {
@@ -273,7 +289,11 @@ fun Application.configureAuthRoutes() {
                     audit(
                         "login.failure",
                         "email" to email,
-                        "reason" to if (record == null) "unknown_email" else "wrong_password",
+                        "reason" to when {
+                            record == null -> "unknown_email"
+                            !record.second.hasPassword -> "no_password"
+                            else -> "wrong_password"
+                        },
                     )
                     if (tripped) audit("login.lockout", "email" to email)
                     throw UnauthorizedException("Unknown email or wrong password")

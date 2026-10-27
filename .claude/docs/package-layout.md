@@ -68,7 +68,11 @@ ch.nokillswit
 │                       ledger (`READ_BUDGET_BYTES`, `ReadLedger`/`ReadBudgetExceeded`,
 │                       `throwReadBudgetHttp`), relocated from entities/ in 2.19.0 — see
 │                       `.claude/docs/security.md` "Entity read memory budget"
-├── infra/fetch/        UrlFetch.kt — the SSRF-guarded outbound fetcher (relocated from
+├── infra/fetch/        OperatorHttp.kt — the narrow HTTP client for OPERATOR-CONFIGURED endpoints (the
+│                       SSO issuer; `OperatorHttp`/`OperatorResponse`/`OperatorHttpException`; its own
+│                       2-worker `operator-http` pool, no address rule, never handed a request-derived
+│                       URL — `.claude/docs/security.md` "Operator-configured outbound HTTP") +
+│                       UrlFetch.kt — the SSRF-guarded outbound fetcher (relocated from
 │                       catalog/ in 2.9.0 when entities gained their own source references:
 │                       `UrlFetcher`/`UrlFetcherKey`, one shared bounded pool, plus
 │                       `ApplicationCall.fetchForCaller` — 2.13.1, the byte-identical
@@ -91,6 +95,14 @@ ch.nokillswit
 │                       + /password-reset/confirm (atomic password/grant consumption, V26)
 │                       + PasswordResetThrottle + token minting + password hashing
 │                       + LoginThrottle + the revoked-token blocklist
+├── auth/sso/           OIDC sign-in behind `SSO_ENABLED` (2.32.0): `SsoConfig` (the `sso:` block + the boot
+│                       refusals), `SsoDiscovery` (lazy cached discovery over `OperatorHttp`), `IdTokenVerifier`
+│                       (RS256/JWKS), `SsoStateCookie` (the signed `toadie_sso` / `__Host-toadie_sso` attempt cookie), `SsoSeenStates` (single-use state), `StaleServingCache` (discovery/JWKS refresh), `SsoHandoffs`
+│                       (the 60 s single-use code store), `SsoAccounts` (existing/linked/created resolution),
+│                       `SsoFlow` (the callback logic, minus HTTP) and `SsoRoutes` (`configureSso`: `GET
+│                       /login/options` always, `GET /login/sso/start|callback` + `POST /login/sso/exchange`
+│                       only with the flag; the only place `OperatorHttp` is constructed) —
+│                       `.claude/docs/security.md` "SSO login (OIDC)"
 ├── users/              the user domain: ADMIN-only management CRUD (/api/v1/users list/create
 │                       + {id} get/put/delete with the self-delete 403 and last-admin 409
 │                       protections) + PUT /api/v1/users/{id}/password + the per-user feature

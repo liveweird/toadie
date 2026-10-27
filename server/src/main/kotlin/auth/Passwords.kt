@@ -39,9 +39,17 @@ internal fun validatePassword(password: String) {
 internal suspend fun hashPassword(plain: String, cost: Int = 12): String =
     withContext(Dispatchers.Default) { BCrypt.withDefaults().hashToString(cost, plain.toCharArray()) }
 
-internal suspend fun verifyPassword(plain: String, hash: String): Boolean =
-    !exceedsBcryptLimit(plain) &&
-        withContext(Dispatchers.Default) { BCrypt.verifyer().verify(plain.toCharArray(), hash).verified }
+/**
+ * A null [hash] is a passwordless account (V48): the verify still pays a full bcrypt round
+ * against [TIMING_EQUALIZER_HASH] — so it costs what a wrong password costs — and always fails.
+ */
+internal suspend fun verifyPassword(plain: String, hash: String?): Boolean {
+    if (exceedsBcryptLimit(plain)) return false
+    val matched = withContext(Dispatchers.Default) {
+        BCrypt.verifyer().verify(plain.toCharArray(), hash ?: TIMING_EQUALIZER_HASH).verified
+    }
+    return hash != null && matched
+}
 
 /**
  * A real cost-12 hash of a throwaway string, verified against when a login's email matches no

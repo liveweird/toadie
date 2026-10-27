@@ -36,6 +36,7 @@ const SESSION = {
   roles: ["ADMIN" as const],
   disabledFeatures: [],
   language: "en" as const,
+  hasPassword: true,
 };
 
 const NEXT_SESSION = {

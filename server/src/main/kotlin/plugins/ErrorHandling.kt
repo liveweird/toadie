@@ -5,8 +5,12 @@ import ch.nokillswit.authz.BadGatewayException
 import ch.nokillswit.authz.ConflictException
 import ch.nokillswit.authz.ForbiddenException
 import ch.nokillswit.authz.NotFoundException
+import ch.nokillswit.authz.PasswordNotSetException
 import ch.nokillswit.authz.TooManyRequestsException
 import ch.nokillswit.authz.UnauthorizedException
+import ch.nokillswit.auth.sso.SSO_CALLBACK_PATH
+import ch.nokillswit.auth.sso.SSO_ERROR_FAILED
+import ch.nokillswit.auth.sso.ssoErrorLocation
 import ch.nokillswit.catalog.CatalogRevisionConflictException
 import ch.nokillswit.infra.fetch.SourceReferenceConflictException
 import ch.nokillswit.infra.validation.InvalidPayloadException
@@ -25,6 +29,7 @@ import io.ktor.server.plugins.PayloadTooLargeException
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondRedirect
 import io.r2dbc.spi.R2dbcException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -232,7 +237,13 @@ fun Application.configureErrorHandling() {
         // go through TooManyRequestsException below (handled calls are marked and skipped),
         // never a direct respondProblem, or their specific detail would be replaced.
         status(HttpStatusCode.TooManyRequests) { call, status ->
-            call.respondProblem(status, "Rate limit exceeded — retry later")
+            // The SSO callback is a browser navigation from the IdP: EVERY outcome, a throttled one included, ends at the
+            // login page's error redirect, never a JSON page (auth/sso/SsoRoutes.kt).
+            if (call.request.path() == SSO_CALLBACK_PATH) {
+                call.respondRedirect(ssoErrorLocation(SSO_ERROR_FAILED))
+            } else {
+                call.respondProblem(status, "Rate limit exceeded — retry later")
+            }
         }
         // Routing's wrong-method-on-an-existing-path rejection is a bodiless 405; give it the
         // RFC 7807 body every other error carries (MT-004; API-ERR-001). No `Allow` header —
@@ -302,6 +313,13 @@ fun Application.configureErrorHandling() {
         }
         exception<ConflictException> { call, cause ->
             call.respondProblem(HttpStatusCode.Conflict, cause.message ?: "Conflict")
+        }
+        exception<PasswordNotSetException> { call, cause ->
+            call.respondProblem(
+                HttpStatusCode.Conflict,
+                cause.message,
+                type = "urn:toadie:password-not-set",
+            )
         }
         exception<CatalogRevisionConflictException> { call, cause ->
             call.respondProblem(

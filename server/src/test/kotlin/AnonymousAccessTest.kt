@@ -105,6 +105,11 @@ class AnonymousAccessTest {
         val expectedPublic = setOf(
             "POST /api/v1/login",
             "POST /api/v1/login/mfa",
+            // SSO (V48, behind SSO_ENABLED): the options probe, the two browser navigations and the code exchange.
+            "GET /api/v1/login/options",
+            "GET /api/v1/login/sso/start",
+            "GET /api/v1/login/sso/callback",
+            "POST /api/v1/login/sso/exchange",
             "POST /api/v1/refresh",
             "POST /api/v1/password-reset",
             "POST /api/v1/password-reset/confirm",

@@ -34,6 +34,50 @@ data class UserListResult(
     val total: Long,
 )
 
+/** The verdict of [UserService.resolveSsoIdentity]; only [Unknown] leaves the caller to create the account. */
+sealed interface SsoLookup {
+    /** The identity is already linked to this active account. */
+    data class Existing(val userId: UInt) : SsoLookup
+
+    /** An unlinked active account with the same email was linked just now. */
+    data class Linked(val userId: UInt) : SsoLookup
+
+    /** The identity belongs to a soft-deleted account — refused, never recreated. */
+    data object Deleted : SsoLookup
+
+    /** The same-email account is an ADMIN or has MFA enabled — never linked from an IdP-asserted email. */
+    data object LinkRefused : SsoLookup
+
+    /** The same-email account is already linked to a different external identity. */
+    data object SubjectConflict : SsoLookup
+
+    /** No account has this identity or this email. */
+    data object Unknown : SsoLookup
+}
+
+/** What the email-matched account is, as far as [ssoLinkVerdict] needs to know. */
+internal enum class SsoLinkVerdict { SAME_IDENTITY, SUBJECT_CONFLICT, REFUSED, LINK }
+
+/**
+ * Decides what a same-email ACTIVE account means for the incoming (issuer, subject). A stored pair that EQUALS the
+ * incoming one is the account itself — the identity lookup missed it only because a concurrent first sign-in (two
+ * browsers) committed the link between that lookup and the email lock — so it is [SsoLinkVerdict.SAME_IDENTITY], never
+ * a conflict. A different stored pair is a conflict; an ADMIN or MFA-enabled account is refused; otherwise it links.
+ */
+internal fun ssoLinkVerdict(
+    storedIssuer: String?,
+    storedSubject: String?,
+    role: String,
+    mfaEnabled: Boolean,
+    issuer: String,
+    subject: String,
+): SsoLinkVerdict = when {
+    storedSubject != null && storedIssuer == issuer && storedSubject == subject -> SsoLinkVerdict.SAME_IDENTITY
+    storedSubject != null -> SsoLinkVerdict.SUBJECT_CONFLICT
+    role == UserRole.ADMIN.name || mfaEnabled -> SsoLinkVerdict.REFUSED
+    else -> SsoLinkVerdict.LINK
+}
+
 // Deliberately no "role": the wire shape is a set, and a set has no order (the Lettuce rule).
 private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "id" to UserService.Users.id,
@@ -52,7 +96,8 @@ class UserService(private val database: R2dbcDatabase) {
         // so a soft-deleted user frees its email. Exposed table defs are query-only (not DDL),
         // so this column carries no `.uniqueIndex()`.
         val email = varchar("email", length = 254)
-        val passwordHash = varchar("password_hash", length = 255)
+        // Nullable since V48: NULL = a passwordless account (SSO-only until an admin sets one).
+        val passwordHash = varchar("password_hash", length = 255).nullable()
         // Single-column role storage (CHECK in V1); UserRole.USER is the baseline.
         val role = varchar("role", length = 20).default(UserRole.USER.name)
         val markedAsDeleted = bool("marked_as_deleted").default(false)
@@ -64,6 +109,10 @@ class UserService(private val database: R2dbcDatabase) {
         // Service accounts (V41, 2.15.0): a row that can never authenticate. A CHECK
         // constraint (V41) forbids service_account=true with role=ADMIN.
         val serviceAccount = bool("service_account").default(false)
+        // SSO identity (V48): both set or both NULL (CHECK). The unique index over the pair is FULL,
+        // not partial — a soft-deleted row keeps its link (persistence.md "Exceptions").
+        val ssoIssuer = varchar("sso_issuer", length = 512).nullable()
+        val ssoSubject = varchar("sso_subject", length = 255).nullable()
     }
 
     // Per-user feature flags (V12) — the DISABLED set; no row = enabled.
@@ -84,6 +133,8 @@ class UserService(private val database: R2dbcDatabase) {
             it[passwordHash] = user.passwordHash
             it[role] = user.role.name
             it[language] = user.language
+            it[ssoIssuer] = user.ssoIssuer
+            it[ssoSubject] = user.ssoSubject
         }
         val id = newRecord[Users.id].value
         // MFA is the one inverted-default flag (opt-in): every new user starts with the
@@ -113,6 +164,54 @@ class UserService(private val database: R2dbcDatabase) {
             .toList()
             .singleOrNull()
             ?.let { it[Users.id].value to it.toUser(featuresOf(it[Users.id].value)) }
+    }
+
+    /**
+     * The read-and-link half of SSO account resolution (`auth/sso/SsoAccounts.kt`), in ONE transaction. The
+     * (issuer, subject) pair is matched across DELETED rows too (the V48 full unique index): an active row is the
+     * account, a deleted one is refused — deleting a user really revokes its SSO access. Otherwise the ACTIVE human
+     * account with the same canonical email is locked (FOR UPDATE, like [lockedUser]) and linked, unless it is an
+     * ADMIN or has MFA enabled (an IdP-asserted email never silently takes over an admin or replaces a second
+     * factor) or is already linked to a different identity. No match is [SsoLookup.Unknown]: the caller creates.
+     */
+    suspend fun resolveSsoIdentity(issuer: String, subject: String, email: String): SsoLookup = suspendTransaction(database) {
+        val identity = Users.selectAll()
+            .where { (Users.ssoIssuer eq issuer) and (Users.ssoSubject eq subject) }
+            .toList()
+            .singleOrNull()
+        if (identity != null) {
+            return@suspendTransaction when {
+                identity[Users.markedAsDeleted] -> SsoLookup.Deleted
+                else -> SsoLookup.Existing(identity[Users.id].value)
+            }
+        }
+        val match = Users.selectAll()
+            .where { (Users.email eq canonicalEmail(email)) and human() }
+            .forUpdate()
+            .toList()
+            .singleOrNull()
+            ?: return@suspendTransaction SsoLookup.Unknown
+        val id = match[Users.id].value
+        val verdict = ssoLinkVerdict(
+            match[Users.ssoIssuer],
+            match[Users.ssoSubject],
+            match[Users.role],
+            Feature.MFA !in featuresOf(id),
+            issuer,
+            subject,
+        )
+        when (verdict) {
+            SsoLinkVerdict.SAME_IDENTITY -> SsoLookup.Existing(id)
+            SsoLinkVerdict.SUBJECT_CONFLICT -> SsoLookup.SubjectConflict
+            SsoLinkVerdict.REFUSED -> SsoLookup.LinkRefused
+            SsoLinkVerdict.LINK -> {
+                Users.update({ Users.id eq id }) {
+                    it[ssoIssuer] = issuer
+                    it[ssoSubject] = subject
+                }
+                SsoLookup.Linked(id)
+            }
+        }
     }
 
     // The plaintext rules (min length, bcrypt byte ceiling) are route-side by necessity:
@@ -316,6 +415,8 @@ class UserService(private val database: R2dbcDatabase) {
         language = this[Users.language],
         authVersion = this[Users.authVersion],
         serviceAccount = this[Users.serviceAccount],
+        ssoIssuer = this[Users.ssoIssuer],
+        ssoSubject = this[Users.ssoSubject],
     )
 }
 

@@ -104,7 +104,8 @@ export interface paths {
          *     consecutive failures for one email (default 5, `LOGIN_LOCKOUT_THRESHOLD`), further
          *     attempts for that account — even with the correct password — are rejected with `429`
          *     for a lockout window (default 15 min, `LOGIN_LOCKOUT_DURATION_SECONDS`). A successful
-         *     login resets the counter.
+         *     login resets the counter. A passwordless (SSO-only) account answers the same `401` as a
+         *     wrong password for any submitted password, and counts toward the same lockout.
          *
          *     **Email MFA (opt-in via the `MFA` feature flag):** when the account has MFA enabled,
          *     correct credentials answer `200` with an `MfaChallengeResponse` instead of tokens — a
@@ -141,6 +142,112 @@ export interface paths {
          *     per client IP.
          */
         post: operations["verifyMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/login/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the sign-in page may offer besides the password form
+         * @description Public. Always registered, so a deployment with single sign-on disabled
+         *     (`SSO_ENABLED=false`, the default) answers `{"sso": null}` instead of `404`. With SSO
+         *     enabled, `sso.label` is the provider name for the "Sign in with ..." button
+         *     (`SSO_LABEL`, default `Okta`). Never cached (`Cache-Control: no-store`); deliberately
+         *     outside the SSO rate-limit bucket, since the answer is a constant.
+         */
+        get: operations["getLoginOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/login/sso/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Begin an OIDC sign-in (browser navigation)
+         * @description Registered only when `SSO_ENABLED=true` (otherwise `404`). A top-level browser
+         *     navigation, not an XHR: it sets the signed, HttpOnly, `SameSite=Lax` attempt cookie
+         *     (`__Host-toadie_sso`, `Secure`, `Path=/`, no `Domain` in production; `toadie_sso` over
+         *     plain http in development; ten minutes) and answers `302` to the identity
+         *     provider's authorization endpoint (authorization code flow with PKCE S256). A failure
+         *     before the redirect (the provider is unreachable) answers `302` to
+         *     `/login#sso_error=failed`. Never cached; rate-limited per client IP with the SSO bucket
+         *     (a throttled start answers `429`).
+         */
+        get: operations["startSsoLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/login/sso/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The identity provider's redirect target (browser navigation)
+         * @description Registered only when `SSO_ENABLED=true` (otherwise `404`). The registered redirect URI.
+         *     EVERY outcome is a `302`, including a throttled request: success redirects to
+         *     `/login/sso#code=<one-time code>` (the code travels in the fragment, so it reaches
+         *     neither server logs nor a Referer), and every failure redirects to
+         *     `/login#sso_error=<cancelled|expired|failed|not_allowed>`; the precise reason goes to
+         *     the audit trail only. The attempt cookie is kept on success (the exchange needs it) and
+         *     cleared on failure.
+         */
+        get: operations["completeSsoLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/login/sso/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange the one-time sign-in code for a JWT pair
+         * @description Registered only when `SSO_ENABLED=true` (otherwise `404`). The second step of an SSO
+         *     sign-in: the SPA posts the code it read from the redirect fragment. The code is
+         *     single-use, expires after 60 seconds and is bound to the browser that started the
+         *     attempt: the request must carry that attempt's cookie (`__Host-toadie_sso` in
+         *     production, `toadie_sso` in development), so a code planted
+         *     into another browser is useless. Answers the ordinary `LoginResponse` (refresh, logout
+         *     and revocation then work as for a password session; email MFA is not applied, the
+         *     identity provider owns the second factor). Every failure (unknown, expired, replayed,
+         *     wrong browser, account changed or deleted since the callback) is the uniform `401`.
+         *     Never cached; rate-limited per client IP with the SSO bucket.
+         */
+        post: operations["exchangeSsoCode"];
         delete?: never;
         options?: never;
         head?: never;
@@ -220,7 +327,9 @@ export interface paths {
          *     Throttled per submitted email — one request per interval
          *     (default 60 s, `PASSWORD_RESET_MIN_INTERVAL_SECONDS`) — uniformly for existing and
          *     unknown addresses, and rate-limited per client IP. A soft-deleted account is unknown
-         *     here (no link is minted, no email sent; the `202` stays uniform). Answers `503` on
+         *     here (no link is minted, no email sent; the `202` stays uniform), and so is a
+         *     passwordless (SSO-only) account: no link is minted and no email is sent, with the same
+         *     uniform `202`. Answers `503` on
          *     deployments without outbound email or a valid `MAIL_APP_URL` (HTTPS in production;
          *     HTTP is allowed in development; no subpath, userinfo, query, or fragment). The URL
          *     is configured, never derived from Host headers. Responses are no-store.
@@ -496,6 +605,11 @@ export interface paths {
          *     tokens on every device, even if minted in the same clock tick. The SPA clears its local
          *     session and returns to login. A self-change checked against credentials concurrently
          *     replaced by another request returns `403` without overwriting that newer password.
+         *
+         *     A passwordless account (SSO-only) has no current password to present, so its OWN
+         *     change answers `409` with problem type `urn:toadie:password-not-set`. An admin setting
+         *     the password of such an account is the deliberate, audited break-glass: it is allowed,
+         *     and afterwards the account has a password (`hasPassword` is true).
          */
         put: operations["changeUserPassword"];
         post?: never;
@@ -2600,6 +2714,19 @@ export interface components {
             /** @description Per-user feature flags — the admin-disabled set; empty = full access. */
             disabledFeatures: components["schemas"]["Feature"][];
             language: components["schemas"]["Language"];
+            /** @description False for a passwordless (SSO-only) account, which can neither sign in with nor change a password; the SPA hides its password-change affordances. */
+            hasPassword: boolean;
+        };
+        LoginOptionsResponse: {
+            /** @description The single sign-on option; null when SSO is disabled on this deployment. */
+            sso: {
+                /** @description The provider name for the "Sign in with ..." button. */
+                label: string;
+            } | null;
+        };
+        SsoExchangeRequest: {
+            /** @description The one-time code from the `/login/sso#code=` redirect fragment. */
+            code: string;
         };
         /**
          * @description An additional role. Every user is implicitly a regular user; the array only ever carries privileges added on top of that baseline. The wire `roles` array must never name USER (the implicit baseline) — only additional roles beyond it may appear.
@@ -2700,6 +2827,10 @@ export interface components {
             /** @description Per-user feature flags — the admin-disabled set; empty = full access. */
             disabledFeatures: components["schemas"]["Feature"][];
             language: components["schemas"]["Language"];
+            /** @description True when the account is linked to an external identity provider. */
+            sso: boolean;
+            /** @description False for a passwordless (SSO-only) account; an admin can still set one through `PUT /api/v1/users/{id}/password`. */
+            hasPassword: boolean;
         };
         UserPage: {
             items: components["schemas"]["UserResponse"][];
@@ -4934,6 +5065,105 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    getLoginOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sign-in options */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginOptionsResponse"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    startSsoLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the identity provider (or to `/login#sso_error=failed`) */
+            302: {
+                headers: {
+                    /** @description The authorization URL, or the login page's error location */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    completeSsoLogin: {
+        parameters: {
+            query?: {
+                /** @description The authorization code (success redirect from the provider). */
+                code?: string;
+                /** @description The opaque state echoed by the provider; must match the attempt cookie. */
+                state?: string;
+                /** @description The provider's error code (for example `access_denied` when the user cancels). */
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to `/login/sso#code=...` on success, or to `/login#sso_error=...` */
+            302: {
+                headers: {
+                    /** @description A relative login-page location */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    exchangeSsoCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SsoExchangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Token issued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     refresh: {
         parameters: {
             query?: never;
@@ -5479,6 +5709,15 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            /** @description The caller changes their OWN password but the account has none (SSO-only) — problem type `urn:toadie:password-not-set`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
             500: components["responses"]["InternalServerError"];
         };
     };

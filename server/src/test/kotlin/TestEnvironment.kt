@@ -324,6 +324,49 @@ object TestUsers {
         }.singleOrNull()
     }
 
+    /**
+     * Seeds a PASSWORDLESS SSO-linked account (V48): a NULL `password_hash` and a unique
+     * `(issuer, subject)` pair, through the ordinary [UserService.create] path.
+     */
+    suspend fun seedPasswordless(
+        email: String,
+        name: String = "SSO Person",
+        role: UserRole = UserRole.USER,
+        issuer: String = "https://idp.test/${java.util.UUID.randomUUID()}",
+        subject: String = java.util.UUID.randomUUID().toString(),
+    ): UInt = service.create(
+        User(name = name, email = email, passwordHash = null, role = role, ssoIssuer = issuer, ssoSubject = subject),
+    )
+
+    /** Direct `UPDATE ... SET password_hash = NULL` — turns a seeded, already-logged-in user passwordless (V48). */
+    suspend fun clearPassword(id: UInt) {
+        suspendTransaction(sharedTestDatabase) {
+            UserService.Users.update({ UserService.Users.id eq id }) {
+                it[UserService.Users.passwordHash] = null
+            }
+        }
+    }
+
+    /**
+     * A direct, unguarded write of the V48 identity pair — the [forcePromoteToAdmin] idiom for the
+     * `ck_users_sso_identity_pair` / `ck_users_service_account_no_sso` constraints. Lets the
+     * underlying R2DBC exception propagate.
+     */
+    suspend fun forceSsoIdentity(id: UInt, issuer: String?, subject: String?) {
+        suspendTransaction(sharedTestDatabase) {
+            UserService.Users.update({ UserService.Users.id eq id }) {
+                it[UserService.Users.ssoIssuer] = issuer
+                it[UserService.Users.ssoSubject] = subject
+            }
+        }
+    }
+
+    /** The raw stored hash (null = passwordless), bypassing the `human()` filtering. */
+    suspend fun rawPasswordHash(id: UInt): String? = suspendTransaction(sharedTestDatabase) {
+        UserService.Users.selectAll().where { UserService.Users.id eq id }
+            .map { it[UserService.Users.passwordHash] }.toList().single()
+    }
+
     /** Direct soft-delete for fixtures needing to bypass the endpoint's guards. */
     suspend fun softDelete(id: UInt) {
         suspendTransaction(sharedTestDatabase) {
