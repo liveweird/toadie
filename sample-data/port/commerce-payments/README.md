@@ -172,7 +172,7 @@ owner: a rerun reports `exists, skipped` for every query and never overwrites an
 [`mapping/backstage.json`](mapping/backstage.json) is a conversion mapping document
 (`schemaVersion` 1): the stored DATA — never server code — that says which Port blueprint is which
 Backstage kind and which property, relation or title field becomes which label, tag category,
-annotation, link or spec field. It holds eight pairs and 119 rules: `_team` → Group, `_user` →
+annotation, link or spec field. It holds eight pairs and 120 rules: `_team` → Group, `_user` →
 User, `domain` → Domain, `system` → System, `service` and `library` → Component (the library pair
 is selected by `spec.type: library` and writes that type as a constant), `api` → API and
 `resource` → Resource. `product`, `dataset`, `environment`, `cluster`, `workload`, `api_adoption`

@@ -772,6 +772,7 @@ metadata:
     pci-dss: "no"
     banking-outsourcing: "no"
   annotations:
+    backstage.io/definition-at-location: url:https://github.com/acme/catalog-service/blob/main/schema.graphql
     backstage.io/techdocs-ref: url:https://docs.example.com/apis/catalog-graphql
 spec:
   type: graphql
@@ -840,6 +841,8 @@ metadata:
     gdpr: "yes"
     pci-dss: "no"
     banking-outsourcing: "no"
+  annotations:
+    backstage.io/definition-at-location: url:https://github.com/acme/live-cart-gateway/blob/main/PROTOCOL.md
 spec:
   type: web-sockets
   lifecycle: experimental
@@ -898,6 +901,7 @@ metadata:
     pci-dss: "yes"
     banking-outsourcing: "yes"
   annotations:
+    backstage.io/definition-at-location: url:https://github.com/acme/payments-gateway/blob/main/proto/payments/v1/payments.proto
     backstage.io/techdocs-ref: url:https://docs.example.com/apis/payments-grpc
 spec:
   type: grpc
@@ -934,6 +938,8 @@ metadata:
     gdpr: "yes"
     pci-dss: "yes"
     banking-outsourcing: "yes"
+  annotations:
+    backstage.io/definition-at-location: url:https://developer.acquirer.example.com/openapi.yaml
 spec:
   type: openapi
   lifecycle: production

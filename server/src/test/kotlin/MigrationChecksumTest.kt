@@ -66,6 +66,7 @@ class MigrationChecksumTest {
         "V44__blueprint_tiers.sql" to 871349196,
         "V45__create_conversion_mappings.sql" to 400090258,
         "V46__create_telemetry.sql" to -291510673,
+        "V47__annotation_keys_definition_at_location.sql" to -1547585490,
     )
 
     @Test

@@ -1,7 +1,7 @@
 {
   "identifier": "api",
   "title": "API",
-  "description": "A contract other software calls or subscribes to: a REST/GraphQL/gRPC/WebSocket interface, or a Kafka topic described by an AsyncAPI document. The service that implements it lists it under provides_apis; callers under consumes_apis. Backstage kind: API (type → spec.type, definition_url → spec.definition via $text, system → spec.system, the team field → spec.owner; exposure/hosting_model/gdpr/pci_dss/banking_outsourcing → labels).",
+  "description": "A contract other software calls or subscribes to: a REST/GraphQL/gRPC/WebSocket interface, or a Kafka topic described by an AsyncAPI document. The service that implements it lists it under provides_apis; callers under consumes_apis. Backstage kind: API (type → spec.type, definition_url → backstage.io/definition-at-location (url: location), system → spec.system, the team field → spec.owner; exposure/hosting_model/gdpr/pci_dss/banking_outsourcing → labels).",
   "icon": "Link",
   "hierarchyRelations": {"composition": "system"},
   "schema": {
@@ -28,7 +28,7 @@
       "definition_url": {
         "type": "string",
         "title": "Definition",
-        "description": "Where the OpenAPI/AsyncAPI/GraphQL/proto document lives (Backstage spec.definition: $text).",
+        "description": "Where the OpenAPI/AsyncAPI/GraphQL/proto document lives (Backstage backstage.io/definition-at-location, url: location).",
         "format": "url"
       },
       "definition": {

@@ -20,7 +20,7 @@ makes of the 42 Port entities of the eight mapped blueprints.
 Forty documents use the `default` namespace and two use `external` (a Port entity flagged
 `external`). Every structural shape, namespace, and registry-backed value is valid against the seeded
 vocabulary. The file uses all seeded type values, all four lifecycles, both namespaces, all eleven
-label keys, all four annotation keys, and all four tag categories.
+label keys, all five annotation keys, and all four tag categories.
 
 The catalog is intentionally not reference-clean. Four soft reference findings in two documents
 exercise the Errors report and import waiver:

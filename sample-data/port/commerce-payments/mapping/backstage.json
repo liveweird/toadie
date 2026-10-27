@@ -134,6 +134,7 @@
         {"port": {"property": "type"}, "backstage": {"spec": "type"}, "codec": "copy"},
         {"port": {"property": "lifecycle"}, "backstage": {"spec": "lifecycle"}, "codec": "copy"},
         {"port": {"property": "definition"}, "backstage": {"spec": "definition"}, "codec": "copy", "exportDefault": "# no definition recorded", "importIgnore": ["# no definition recorded"]},
+        {"port": {"property": "definition_url"}, "backstage": {"annotation": "backstage.io/definition-at-location"}, "codec": "copy", "prefix": "url:"},
         {"port": {"meta": "title"}, "backstage": {"metadata": "title"}, "codec": "copy"},
         {"port": {"property": "description"}, "backstage": {"metadata": "description"}, "codec": "copy"},
         {"port": {"meta": "team"}, "backstage": {"spec": "owner"}, "codec": "ref"},
@@ -146,8 +147,7 @@
         {"port": {"property": "pci_dss"}, "backstage": {"label": "pci-dss"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
         {"port": {"property": "banking_outsourcing"}, "backstage": {"label": "banking-outsourcing"}, "codec": "valueMap", "map": {"true": "yes", "false": "no"}},
         {"port": {"relation": "system"}, "backstage": {"spec": "system"}, "codec": "ref"}
-      ],
-      "lossy": {"properties": ["definition_url"]}
+      ]
     },
     {
       "blueprint": "resource",
