@@ -68,7 +68,11 @@ ch.nokillswit
 │                       ledger (`READ_BUDGET_BYTES`, `ReadLedger`/`ReadBudgetExceeded`,
 │                       `throwReadBudgetHttp`), relocated from entities/ in 2.19.0 — see
 │                       `.claude/docs/security.md` "Entity read memory budget"
-├── infra/fetch/        UrlFetch.kt — the SSRF-guarded outbound fetcher (relocated from
+├── infra/fetch/        OperatorHttp.kt — the narrow HTTP client for OPERATOR-CONFIGURED endpoints (the
+│                       SSO issuer; `OperatorHttp`/`OperatorResponse`/`OperatorHttpException`; its own
+│                       2-worker `operator-http` pool, no address rule, never handed a request-derived
+│                       URL — `.claude/docs/security.md` "Operator-configured outbound HTTP") +
+│                       UrlFetch.kt — the SSRF-guarded outbound fetcher (relocated from
 │                       catalog/ in 2.9.0 when entities gained their own source references:
 │                       `UrlFetcher`/`UrlFetcherKey`, one shared bounded pool, plus
 │                       `ApplicationCall.fetchForCaller` — 2.13.1, the byte-identical

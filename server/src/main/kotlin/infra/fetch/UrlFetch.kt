@@ -395,7 +395,7 @@ private class FetchTooLargeException : IOException()
 private class FetchRedirectException : IOException()
 private class FetchHttpStatusException(val status: Int) : IOException()
 
-private object DirectSocketFactory : SocketFactory() {
+internal object DirectSocketFactory : SocketFactory() {
     override fun createSocket(): Socket = Socket(Proxy.NO_PROXY)
 
     override fun createSocket(host: String, port: Int): Socket = unsupported()
