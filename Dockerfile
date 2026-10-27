@@ -85,7 +85,14 @@ ENV TOADIE_BUILD_VERSION=$TOADIE_BUILD_VERSION \
     TOADIE_BUILD_COMMIT=$TOADIE_BUILD_COMMIT
 EXPOSE 8081
 # Plain `docker run` gets a health status too. docker-compose.yaml keeps its explicit copy of this
-# check; Kubernetes ignores HEALTHCHECK and uses the probes in k8s/app-deployment.yaml. The -jre
-# base ships curl.
-HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=12 CMD curl --fail --silent --max-time 2 http://localhost:8081/readyz || exit 1
+# check (development mode, no redirect); Kubernetes ignores HEALTHCHECK and uses the probes in
+# k8s/app-deployment.yaml. The -jre base ships curl.
+# The image runs production mode, where HttpsRedirect answers a plain-HTTP request with a 301 and
+# `curl --fail` treats a 3xx as success, so a bare probe would stay green whatever the database
+# does. X-Forwarded-Proto: https marks the probe as already secure, but the app honours it ONLY
+# with HTTP_BEHIND_PROXY=true (plugins/Http.kt) - which any real deployment behind its TLS
+# terminator sets. So the check demands exactly 200: without that setting the 301 makes the
+# container unhealthy (it cannot serve a browser either), and with it /readyz's DB round-trip
+# decides (503 while PostgreSQL is away).
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=12 CMD test "$(curl --silent --max-time 2 --output /dev/null --write-out '%{http_code}' --header 'X-Forwarded-Proto: https' http://localhost:8081/readyz)" = 200 || exit 1
 ENTRYPOINT ["/app/bin/server"]
