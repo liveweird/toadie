@@ -80,7 +80,8 @@ spec:
                   optional: true
             # Single sign-on (OIDC, Okta) is opt-in and ships off. Every key is optional: a missing
             # ConfigMap/key keeps SSO disabled (the server's default). To enable, set SSO_ENABLED="true"
-            # plus SSO_ISSUER, SSO_CLIENT_ID and SSO_REDIRECT_URI in `toadie-config` and SSO_CLIENT_SECRET
+            # plus SSO_ISSUER, SSO_CLIENT_ID and SSO_REDIRECT_URI in `toadie-config` (SSO_SCOPES,
+            # default "openid email profile", is optional) and SSO_CLIENT_SECRET
             # in `toadie-secrets` (k8s/templates/secret.yaml), then restart; an incomplete set makes the
             # app refuse to start. The runbook is .claude/skills/run-stack/SKILL.md "Enable Okta SSO";
             # the rules are .claude/docs/security.md "SSO login (OIDC)".
@@ -113,6 +114,12 @@ spec:
                 configMapKeyRef:
                   name: toadie-config
                   key: SSO_REDIRECT_URI
+                  optional: true
+            - name: SSO_SCOPES
+              valueFrom:
+                configMapKeyRef:
+                  name: toadie-config
+                  key: SSO_SCOPES
                   optional: true
             - name: SSO_ALLOWED_EMAIL_DOMAINS
               valueFrom:

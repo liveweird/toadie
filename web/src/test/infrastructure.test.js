@@ -369,6 +369,7 @@ describe("deployment and verification safety defaults", () => {
       "SSO_ISSUER",
       "SSO_LABEL",
       "SSO_REDIRECT_URI",
+      "SSO_SCOPES",
     ]);
     for (const entry of sso) {
       const ref = entry.valueFrom.secretKeyRef ?? entry.valueFrom.configMapKeyRef;
@@ -443,6 +444,31 @@ describe("deployment and verification safety defaults", () => {
     const tmpVolumeMount = appContainer.volumeMounts.find((v) => v.name === "tmp");
     expect(tmpVolumeMount).toBeDefined();
     expect(tmpVolumeMount.mountPath).toBe("/tmp");
+  });
+
+  it("runs the bundled PostgreSQL as uid 70 with the PVC group-writable, a read-only root and bounded resources", () => {
+    const pod = parse(postgresDeploymentSource).spec.template.spec;
+    expect(pod.securityContext).toMatchObject({
+      runAsNonRoot: true,
+      runAsUser: 70,
+      runAsGroup: 70,
+      fsGroup: 70,
+      seccompProfile: { type: "RuntimeDefault" },
+    });
+    const container = pod.containers[0];
+    expect(container.securityContext.allowPrivilegeEscalation).toBe(false);
+    expect(container.securityContext.readOnlyRootFilesystem).toBe(true);
+    expect(container.securityContext.capabilities.drop).toEqual(["ALL"]);
+    expect(container.resources.requests.memory).toBeDefined();
+    expect(container.resources.requests.cpu).toBeDefined();
+    expect(container.resources.limits.memory).toBeDefined();
+    // Under a read-only root postgres needs its socket directory and /tmp writable; the data lives on the PVC.
+    const mounts = Object.fromEntries(container.volumeMounts.map((mount) => [mount.mountPath, mount.name]));
+    expect(mounts["/var/lib/postgresql"]).toBe("postgres-data");
+    for (const path of ["/var/run/postgresql", "/tmp"]) {
+      const volume = pod.volumes.find((candidate) => candidate.name === mounts[path]);
+      expect(volume?.emptyDir, path).toBeDefined();
+    }
   });
 });
 
