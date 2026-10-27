@@ -266,6 +266,124 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/login/options:
+    get:
+      tags: [auth]
+      operationId: getLoginOptions
+      summary: What the sign-in page may offer besides the password form
+      description: |
+        Public. Always registered, so a deployment with single sign-on disabled
+        (`SSO_ENABLED=false`, the default) answers `{"sso": null}` instead of `404`. With SSO
+        enabled, `sso.label` is the provider name for the "Sign in with ..." button
+        (`SSO_LABEL`, default `Okta`). Never cached (`Cache-Control: no-store`); deliberately
+        outside the SSO rate-limit bucket, since the answer is a constant.
+      security: []
+      responses:
+        '200':
+          description: The sign-in options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginOptionsResponse'
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/login/sso/start:
+    get:
+      tags: [auth]
+      operationId: startSsoLogin
+      summary: Begin an OIDC sign-in (browser navigation)
+      description: |
+        Registered only when `SSO_ENABLED=true` (otherwise `404`). A top-level browser
+        navigation, not an XHR: it sets the signed, HttpOnly, `SameSite=Lax` attempt cookie
+        `toadie_sso` (path `/api/v1/login/sso`, ten minutes) and answers `302` to the identity
+        provider's authorization endpoint (authorization code flow with PKCE S256). A failure
+        before the redirect (the provider is unreachable) answers `302` to
+        `/login#sso_error=failed`. Never cached; rate-limited per client IP with the SSO bucket
+        (a throttled start answers `429`).
+      security: []
+      responses:
+        '302':
+          description: Redirect to the identity provider (or to `/login#sso_error=failed`)
+          headers:
+            Location:
+              schema: { type: string }
+              description: The authorization URL, or the login page's error location
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/login/sso/callback:
+    get:
+      tags: [auth]
+      operationId: completeSsoLogin
+      summary: The identity provider's redirect target (browser navigation)
+      description: |
+        Registered only when `SSO_ENABLED=true` (otherwise `404`). The registered redirect URI.
+        EVERY outcome is a `302`, including a throttled request: success redirects to
+        `/login/sso#code=<one-time code>` (the code travels in the fragment, so it reaches
+        neither server logs nor a Referer), and every failure redirects to
+        `/login#sso_error=<cancelled|expired|failed|not_allowed>`; the precise reason goes to
+        the audit trail only. The attempt cookie is kept on success (the exchange needs it) and
+        cleared on failure.
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          description: The authorization code (success redirect from the provider).
+          schema: { type: string }
+        - name: state
+          in: query
+          required: false
+          description: The opaque state echoed by the provider; must match the attempt cookie.
+          schema: { type: string }
+        - name: error
+          in: query
+          required: false
+          description: The provider's error code (for example `access_denied` when the user cancels).
+          schema: { type: string }
+      responses:
+        '302':
+          description: Redirect to `/login/sso#code=...` on success, or to `/login#sso_error=...`
+          headers:
+            Location:
+              schema: { type: string }
+              description: A relative login-page location
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1/login/sso/exchange:
+    post:
+      tags: [auth]
+      operationId: exchangeSsoCode
+      summary: Exchange the one-time sign-in code for a JWT pair
+      description: |
+        Registered only when `SSO_ENABLED=true` (otherwise `404`). The second step of an SSO
+        sign-in: the SPA posts the code it read from the redirect fragment. The code is
+        single-use, expires after 60 seconds and is bound to the browser that started the
+        attempt: the request must carry that attempt's `toadie_sso` cookie, so a code planted
+        into another browser is useless. Answers the ordinary `LoginResponse` (refresh, logout
+        and revocation then work as for a password session; email MFA is not applied, the
+        identity provider owns the second factor). Every failure (unknown, expired, replayed,
+        wrong browser, account changed or deleted since the callback) is the uniform `401`.
+        Never cached; rate-limited per client IP with the SSO bucket.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SsoExchangeRequest'
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/refresh:
     post:
       tags: [auth]
@@ -3837,6 +3955,28 @@ components:
           description: >-
             False for a passwordless (SSO-only) account, which can neither sign in with nor
             change a password; the SPA hides its password-change affordances.
+
+    LoginOptionsResponse:
+      type: object
+      required: [sso]
+      properties:
+        sso:
+          type: object
+          nullable: true
+          required: [label]
+          description: The single sign-on option; null when SSO is disabled on this deployment.
+          properties:
+            label:
+              type: string
+              description: The provider name for the "Sign in with ..." button.
+
+    SsoExchangeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: The one-time code from the `/login/sso#code=` redirect fragment.
 
     UserRole:
       type: string

@@ -95,6 +95,14 @@ ch.nokillswit
 │                       + /password-reset/confirm (atomic password/grant consumption, V26)
 │                       + PasswordResetThrottle + token minting + password hashing
 │                       + LoginThrottle + the revoked-token blocklist
+├── auth/sso/           OIDC sign-in behind `SSO_ENABLED` (2.32.0): `SsoConfig` (the `sso:` block + the boot
+│                       refusals), `SsoDiscovery` (lazy cached discovery over `OperatorHttp`), `IdTokenVerifier`
+│                       (RS256/JWKS), `SsoStateCookie` (the signed `toadie_sso` attempt cookie), `SsoHandoffs`
+│                       (the 60 s single-use code store), `SsoAccounts` (existing/linked/created resolution),
+│                       `SsoFlow` (the callback logic, minus HTTP) and `SsoRoutes` (`configureSso`: `GET
+│                       /login/options` always, `GET /login/sso/start|callback` + `POST /login/sso/exchange`
+│                       only with the flag; the only place `OperatorHttp` is constructed) —
+│                       `.claude/docs/security.md` "SSO login (OIDC)"
 ├── users/              the user domain: ADMIN-only management CRUD (/api/v1/users list/create
 │                       + {id} get/put/delete with the self-delete 403 and last-admin 409
 │                       protections) + PUT /api/v1/users/{id}/password + the per-user feature

@@ -53,6 +53,9 @@ ktor:
       - ch.nokillswit.conversion.ConversionMappingRoutesKt.configureConversionMappingRoutes
       - ch.nokillswit.auth.AuthRoutesKt.configureAuthRoutes
       - ch.nokillswit.auth.PasswordResetRoutesKt.configurePasswordResetRoutes
+      # OIDC sign-in (`.claude/docs/security.md` "SSO login (OIDC)"): after configureAuthRoutes, which installs the RateLimit plugin and
+      # registers the `sso` bucket these routes mount. GET /login/options is always registered; the three flow routes only when sso.enabled.
+      - ch.nokillswit.auth.sso.SsoRoutesKt.configureSso
       # The ADMIN telemetry reads (`.claude/docs/observability.md` "Telemetry"): after configureAuthRoutes, which installs the
       # RateLimit plugin and registers the per-user `telemetry` bucket the routes mount; the pressure seams are read per request.
       - ch.nokillswit.telemetry.TelemetryRoutesKt.configureTelemetryRoutes
@@ -267,3 +270,21 @@ telemetry:
 # Read-only Port integration API; admin key management remains available when disabled.
 integration:
   enabled: "$INTEGRATION_ENABLED:false"
+
+# OIDC single sign-on (auth/sso/, `.claude/docs/security.md` "SSO login (OIDC)"): authorization code + PKCE S256, confidential client.
+# OFF by default — the flow routes are not registered and GET /api/v1/login/options answers {"sso":null}. When enabled the app REFUSES to
+# start without an issuer, client id, client secret and a redirect URI (explicit, or derived from MAIL_APP_URL); in production the issuer
+# and redirect URI must be https. The client secret is never logged.
+sso:
+  enabled: "$SSO_ENABLED:false"
+  # The sign-in button's provider name (the SPA shows "Sign in with <label>").
+  label: "$SSO_LABEL:Okta"
+  # The OIDC issuer URL, e.g. https://<org>.okta.com/oauth2/default; its discovery document's `issuer` must equal it exactly.
+  issuer: "$SSO_ISSUER:"
+  clientId: "$SSO_CLIENT_ID:"
+  clientSecret: "$SSO_CLIENT_SECRET:"
+  # Blank = derived from MAIL_APP_URL + /api/v1/login/sso/callback. Must equal a redirect URI registered at the IdP.
+  redirectUri: "$SSO_REDIRECT_URI:"
+  scopes: "$SSO_SCOPES:openid email profile"
+  # Comma-separated email domains admitted for linking AND account creation; blank = any verified email.
+  allowedEmailDomains: "$SSO_ALLOWED_EMAIL_DOMAINS:"

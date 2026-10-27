@@ -34,6 +34,27 @@ data class UserListResult(
     val total: Long,
 )
 
+/** The verdict of [UserService.resolveSsoIdentity]; only [Unknown] leaves the caller to create the account. */
+sealed interface SsoLookup {
+    /** The identity is already linked to this active account. */
+    data class Existing(val userId: UInt) : SsoLookup
+
+    /** An unlinked active account with the same email was linked just now. */
+    data class Linked(val userId: UInt) : SsoLookup
+
+    /** The identity belongs to a soft-deleted account — refused, never recreated. */
+    data object Deleted : SsoLookup
+
+    /** The same-email account is an ADMIN or has MFA enabled — never linked from an IdP-asserted email. */
+    data object LinkRefused : SsoLookup
+
+    /** The same-email account is already linked to a different external identity. */
+    data object SubjectConflict : SsoLookup
+
+    /** No account has this identity or this email. */
+    data object Unknown : SsoLookup
+}
+
 // Deliberately no "role": the wire shape is a set, and a set has no order (the Lettuce rule).
 private val SORTABLE_COLUMNS: Map<String, Column<*>> = mapOf(
     "id" to UserService.Users.id,
@@ -120,6 +141,45 @@ class UserService(private val database: R2dbcDatabase) {
             .toList()
             .singleOrNull()
             ?.let { it[Users.id].value to it.toUser(featuresOf(it[Users.id].value)) }
+    }
+
+    /**
+     * The read-and-link half of SSO account resolution (`auth/sso/SsoAccounts.kt`), in ONE transaction. The
+     * (issuer, subject) pair is matched across DELETED rows too (the V48 full unique index): an active row is the
+     * account, a deleted one is refused — deleting a user really revokes its SSO access. Otherwise the ACTIVE human
+     * account with the same canonical email is locked (FOR UPDATE, like [lockedUser]) and linked, unless it is an
+     * ADMIN or has MFA enabled (an IdP-asserted email never silently takes over an admin or replaces a second
+     * factor) or is already linked to a different identity. No match is [SsoLookup.Unknown]: the caller creates.
+     */
+    suspend fun resolveSsoIdentity(issuer: String, subject: String, email: String): SsoLookup = suspendTransaction(database) {
+        val identity = Users.selectAll()
+            .where { (Users.ssoIssuer eq issuer) and (Users.ssoSubject eq subject) }
+            .toList()
+            .singleOrNull()
+        if (identity != null) {
+            return@suspendTransaction when {
+                identity[Users.markedAsDeleted] -> SsoLookup.Deleted
+                else -> SsoLookup.Existing(identity[Users.id].value)
+            }
+        }
+        val match = Users.selectAll()
+            .where { (Users.email eq canonicalEmail(email)) and human() }
+            .forUpdate()
+            .toList()
+            .singleOrNull()
+            ?: return@suspendTransaction SsoLookup.Unknown
+        val id = match[Users.id].value
+        when {
+            match[Users.ssoSubject] != null -> SsoLookup.SubjectConflict
+            match[Users.role] == UserRole.ADMIN.name || Feature.MFA !in featuresOf(id) -> SsoLookup.LinkRefused
+            else -> {
+                Users.update({ Users.id eq id }) {
+                    it[ssoIssuer] = issuer
+                    it[ssoSubject] = subject
+                }
+                SsoLookup.Linked(id)
+            }
+        }
     }
 
     // The plaintext rules (min length, bcrypt byte ceiling) are route-side by necessity:
