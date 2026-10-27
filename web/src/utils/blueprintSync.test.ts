@@ -25,6 +25,23 @@ describe("canonicalBlueprintDocumentJson", () => {
     expect(canonicalBlueprintDocumentJson(spelledOut)).not.toContain("relations");
   });
 
+  test("an empty schema.required/properties renders the same as an absent one", () => {
+    const stored = { identifier: "system", title: "System", schema: { properties: {}, required: [] } };
+    expect(canonicalBlueprintDocumentJson({ identifier: "system", title: "System", schema: {} })).toBe(
+      canonicalBlueprintDocumentJson(stored),
+    );
+    const withProperty = { identifier: "s", title: "S", schema: { properties: { a: { type: "string" } } } };
+    expect(canonicalBlueprintDocumentJson({ ...withProperty, schema: { ...withProperty.schema, required: [] } })).toBe(
+      canonicalBlueprintDocumentJson(withProperty),
+    );
+    expect(stored.schema).toEqual({ properties: {}, required: [] });
+  });
+
+  test("a non-empty schema.required still renders", () => {
+    const json = canonicalBlueprintDocumentJson({ identifier: "s", title: "S", schema: { properties: {}, required: ["a"] } });
+    expect(JSON.parse(json).schema).toEqual({ required: ["a"] });
+  });
+
   test("a non-empty map still renders, and does not mutate its input", () => {
     const doc = { identifier: "s", title: "S", mirrorProperties: { a: { title: "A", path: "x.$title" } }, relations: {} };
     const json = canonicalBlueprintDocumentJson(doc);
