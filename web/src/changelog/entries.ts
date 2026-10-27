@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.32.0",
+    date: "2026-10-27",
+    en: `**Sign in with Okta.** Toadie can now sign you in through Okta (any OpenID Connect provider). It is off by default; an administrator turns it on with \`SSO_ENABLED\`. The sign-in page leads with “Sign in with Okta” and keeps the password form. Your first Okta sign-in creates your account, or links it to an existing one with the same email — except administrator accounts and accounts with email MFA, which keep signing in with their password. Accounts created through Okta have no password, so *Change password* is hidden for them, and the Users list marks SSO accounts with a badge.`,
+    pl: `**Logowanie przez Okta.** Toadie potrafi teraz zalogować Cię przez Okta (lub innego dostawcę OpenID Connect). Funkcja jest domyślnie wyłączona; administrator/ka włącza ją zmienną \`SSO_ENABLED\`. Strona logowania zaczyna się od przycisku „Zaloguj przez Okta” i nadal zawiera formularz z hasłem. Pierwsze logowanie przez Okta tworzy Twoje konto albo łączy je z istniejącym kontem o tym samym adresie e-mail — z wyjątkiem kont administratorskich i kont z uwierzytelnianiem e-mailem (MFA), które nadal logują się hasłem. Konta utworzone przez Okta nie mają hasła, więc pozycja *Zmiana hasła* jest dla nich ukryta, a lista użytkowników oznacza konta SSO plakietką.`,
+  },
+  {
     version: "2.31.1",
     date: "2026-10-27",
     en: `**Blueprint sync ignores another empty section.** *Sync from source* no longer reports a difference when the repository copy of a blueprint leaves out an empty list of required properties, or an empty property list. Empty and missing now count as the same here too, so the dialog says the blueprint is in sync.`,
