@@ -1,7 +1,6 @@
 package ch.nokillswit.infra.fetch
 
 import ch.nokillswit.infra.concurrency.awaitBounded
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.Proxy
@@ -253,27 +252,12 @@ private class OperatorCall(
         return builder.build()
     }
 
-    private fun readBody(response: Response): String {
-        val body = response.body
-        val declaredLength = body.contentLength()
-        if (declaredLength > MAX_FETCH_BYTES) throw tooLarge()
-        val initialSize = minOf(MAX_FETCH_BYTES, declaredLength.coerceAtLeast(0).toInt())
-        val output = ByteArrayOutputStream(initialSize)
-        val source = body.source()
-        val buffer = ByteArray(8_192)
-        var received = 0
-        while (true) {
-            val count = source.read(buffer, 0, minOf(buffer.size, MAX_FETCH_BYTES - received + 1))
-            if (count == -1) break
-            received += count
-            if (received > MAX_FETCH_BYTES) throw tooLarge()
-            output.write(buffer, 0, count)
-        }
-        if (declaredLength >= 0 && received.toLong() != declaredLength) {
-            throw OperatorHttpException(OperatorHttpFailure.UNAVAILABLE, target.scheme, target.host)
-        }
-        return output.toString(Charsets.UTF_8)
-    }
+    private fun readBody(response: Response): String =
+        readCappedBody(
+            response,
+            tooLarge = ::tooLarge,
+            unavailable = { OperatorHttpException(OperatorHttpFailure.UNAVAILABLE, target.scheme, target.host) },
+        )
 
     private fun tooLarge() = OperatorHttpException(OperatorHttpFailure.TOO_LARGE, target.scheme, target.host)
 }

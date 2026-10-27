@@ -85,7 +85,10 @@ ch.nokillswit
 │                       `blueprints/BlueprintSync.kt`'s byte-identical `replaceRow` blocks —
 │                       `catalog/CatalogFileService.kt`'s own sync predates the type, always
 │                       waives, and stays its own inline copy); consumers: `POST …/files/fetch`,
-│                       `POST …/entities/fetch`, and `POST …/blueprints/fetch`
+│                       `POST …/entities/fetch`, and `POST …/blueprints/fetch` +
+│                       CappedBody.kt — `readCappedBody`, the one capped response-body reader
+│                       (2.32.2) `UrlFetch.kt` and `OperatorHttp.kt` share, each passing its own
+│                       too-large / truncated failure factories
 ├── audit/              security audit trail: `audit(event, fields…)` → AUDIT-marked structured logs; `AuditEvent("…")` literals for a shared emitter (2.13.1)
 ├── authz/              CallerPrincipal + guards (requireAdmin, requireSelfOrAdmin) + typed
 │                       HTTP exceptions (401/403/404/409/429/502)

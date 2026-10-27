@@ -12,7 +12,6 @@ import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.util.AttributeKey
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.InetAddress
@@ -370,25 +369,8 @@ private fun rejectNonSuccess(response: Response, cancel: () -> Unit): Response {
     throw FetchHttpStatusException(code)
 }
 
-private fun readResponse(response: Response): String {
-    val body = response.body
-    val declaredLength = body.contentLength()
-    if (declaredLength > MAX_FETCH_BYTES) throw FetchTooLargeException()
-    val initialSize = minOf(MAX_FETCH_BYTES, declaredLength.coerceAtLeast(0).toInt())
-    val output = ByteArrayOutputStream(initialSize)
-    val source = body.source()
-    val buffer = ByteArray(8_192)
-    var received = 0
-    while (true) {
-        val count = source.read(buffer, 0, minOf(buffer.size, MAX_FETCH_BYTES - received + 1))
-        if (count == -1) break
-        received += count
-        if (received > MAX_FETCH_BYTES) throw FetchTooLargeException()
-        output.write(buffer, 0, count)
-    }
-    if (declaredLength >= 0 && received.toLong() != declaredLength) throw FetchUnavailableException()
-    return output.toString(Charsets.UTF_8)
-}
+private fun readResponse(response: Response): String =
+    readCappedBody(response, ::FetchTooLargeException, ::FetchUnavailableException)
 
 private class FetchUnavailableException : IOException()
 private class FetchTooLargeException : IOException()
