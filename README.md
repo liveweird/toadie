@@ -36,7 +36,8 @@ Port's Entity hierarchy; later visits remember your last world.
   [Port model reference](.claude/docs/port-data-model.md) and [sample-data guide](sample-data/README.md).
 - **Shared application services:** administrator-managed login accounts and feature flags,
   one-time generated password reveals, self-service password changes and reset links,
-  opt-in email MFA, synchronized English/Polish language, and the shared application shell.
+  opt-in email MFA, optional sign-in with Okta (any OpenID Connect provider), synchronized
+  English/Polish language, and the shared application shell.
   Administrator privileges govern management features, not ownership of shared catalog data.
 
 For contributor conventions and the task-specific documentation map, start with
@@ -122,6 +123,62 @@ Outbound mail is configured through environment variables: `MAIL_TRANSPORT` (`lo
 `true`; the bundled Mailpit needs `false`), `SMTP_USER`/`SMTP_PASSWORD` (optional), `MAIL_FROM`
 (sender address, default `toadie@localhost`) and `MAIL_APP_URL`. A blank `SMTP_HOST` refuses
 startup under the `smtp` transport.
+
+## Sign in with Okta (SSO)
+
+Toadie can sign people in through Okta, or any other OpenID Connect provider. It is off by default.
+When it is on, the sign-in page shows "Sign in with Okta" above the password form, and password
+login keeps working.
+
+**1. Create the Okta application.** In the Okta admin console go to Applications → Applications →
+Create App Integration, and choose **OIDC - OpenID Connect** → **Web Application**. Then:
+
+- Grant type: **Authorization Code**.
+- Turn on **Require PKCE**.
+- Sign-in redirect URI: `https://<your-toadie-host>/api/v1/login/sso/callback`, exactly that path.
+- Assign the users or groups who may sign in. Toadie creates an account on the first sign-in of
+  anyone the application admits.
+- Copy the client ID and client secret from the General tab.
+
+**2. Find the issuer.** It is `https://<org>.okta.com/oauth2/default` for the default custom
+authorization server, or `https://<org>.okta.com` for the org authorization server. It must match
+the `issuer` in `<issuer>/.well-known/openid-configuration` exactly, with no trailing slash.
+
+**3. Configure Toadie.**
+
+| Variable | Required | Value |
+|---|---|---|
+| `SSO_ENABLED` | yes | `true` |
+| `SSO_ISSUER` | yes | the issuer from step 2 |
+| `SSO_CLIENT_ID` | yes | from the Okta application |
+| `SSO_CLIENT_SECRET` | yes | from the Okta application; keep it in a secret, never in git |
+| `SSO_REDIRECT_URI` | if `MAIL_APP_URL` is not your public URL | the redirect URI from step 1 |
+| `SSO_ALLOWED_EMAIL_DOMAINS` | recommended | comma-separated domains allowed to sign in, e.g. `example.com` |
+| `SSO_LABEL` | no | the button's provider name, default `Okta` |
+| `SSO_SCOPES` | no | default `openid email profile` |
+
+With Docker Compose, add them to the `app` service's environment. On Kubernetes, put the
+non-secret values in the `toadie-config` ConfigMap and `SSO_CLIENT_SECRET` in the `toadie-secrets`
+Secret, then restart the app. The exact `kubectl` commands are in the
+[run-stack runbook](.claude/skills/run-stack/SKILL.md) under "Enable Okta SSO". In production the issuer
+and redirect URI must be `https`. With SSO on and a value missing or wrong, the app refuses to start
+and the log says which setting is the problem.
+
+**4. Check it.** `curl -s https://<your-toadie-host>/api/v1/login/options` answers
+`{"sso":{"label":"Okta"}}` when SSO is on. Then sign in with a user assigned to the application.
+
+**Good to know:**
+
+- A first Okta sign-in links to an existing Toadie account with the same email. Administrator
+  accounts and accounts with email MFA are never linked; they keep signing in with their password.
+- Accounts created through Okta have no password, so "Change password" is hidden for them. Roles
+  are still managed in Toadie's Users page.
+- Deleting a user who signed in with Okta also blocks that Okta identity from signing in again.
+- Signing out of Toadie does not sign you out of Okta.
+
+The security rules behind all of this are in [security.md](.claude/docs/security.md) under
+"SSO login (OIDC)". To try the whole flow locally without Okta, the e2e stub provider is described
+in the runbook.
 
 ## Local development
 
