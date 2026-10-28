@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.32.5",
+    date: "2026-10-28",
+    en: `**Sign-in internals, consolidated.** Under the hood only: the stores behind email codes and Okta sign-in now share one tested building block, which prepares the ground for running more than one server.`,
+    pl: `**Uporządkowane mechanizmy logowania.** Tylko pod maską: magazyny kodów e-mail i logowania przez Okta korzystają teraz z jednego przetestowanego elementu, co przygotowuje grunt pod uruchamianie więcej niż jednego serwera.`,
+  },
+  {
     version: "2.32.4",
     date: "2026-10-28",
     en: `**Pinned container images.** The demo stack's PostgreSQL and Mailpit, the Kubernetes PostgreSQL and the test identity provider now run exact image builds, kept current by Dependabot. The bundled PostgreSQL moves from 18.4 to 18.6.`,
