@@ -93,6 +93,12 @@ class BoundedTtlStoreTest {
     }
 
     @Test
+    fun `a non-positive capacity is refused at construction`() {
+        assertFailsWith<IllegalArgumentException> { expiring(0, WhenFull.EVICT_OLDEST) }
+        assertFailsWith<IllegalArgumentException> { expiring(-1, WhenFull.REFUSE) }
+    }
+
+    @Test
     fun `issue regenerates a key that collides with a live entry`() {
         val s = expiring(10, WhenFull.REFUSE)
         assertEquals(Admission.ADMITTED, s.admit("a", now + 100))

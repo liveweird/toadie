@@ -35,6 +35,10 @@ class BoundedTtlStore<K : Any, V : Any>(
 ) {
     enum class Admission { ADMITTED, DUPLICATE, FULL }
 
+    init {
+        require(capacity > 0) { "capacity must be positive" }
+    }
+
     // Insertion-ordered; also the monitor, so there is exactly one lock and no second map to drift from it.
     private val entries = LinkedHashMap<K, V>()
 
