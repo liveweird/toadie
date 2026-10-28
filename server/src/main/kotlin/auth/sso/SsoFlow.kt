@@ -68,8 +68,12 @@ class SsoFlow(
     private val onFailureLog: (Throwable) -> Unit = {},
     /** The provider step's deadline, read per logout (a test publishes a short one after the module loaded). */
     private val signOutDeadline: () -> Duration = { SIGN_OUT_DEADLINE },
-    /** Called once per [ProviderSignOutResult.Unavailable] logout with a safe cause description (class name, failure kind). */
-    private val onSignOutUnavailable: (String) -> Unit = {},
+    /**
+     * Called once per logout whose provider step went wrong, with a safe cause description (class name, failure kind, or
+     * `deadline`): [servedFromCache] is true when a hung refresh was answered from the still-servable cached discovery
+     * document (the logout redirects anyway), false for [ProviderSignOutResult.Unavailable].
+     */
+    private val onSignOutProblem: (cause: String, servedFromCache: Boolean) -> Unit = { _, _ -> },
 ) {
     fun newAttempt(): SsoAttempt = cookies.newAttempt()
 
@@ -128,31 +132,36 @@ class SsoFlow(
      * `post_logout_redirect_uri`, no `state`. Never throws for a provider problem — an unreadable or too slow discovery
      * is [ProviderSignOutResult.Unavailable] — and never logs the token or the URL. It runs under [NonCancellable] and
      * a [signOutDeadline]: the session is already revoked, so a client that hung up must not skip the caller's `logout`
-     * audit, and a hung IdP must not hold the logout.
+     * audit, and a hung IdP must not hold the logout. A hung refresh behaves like a refused one: while the last good
+     * discovery document is still servable its end-session endpoint is used ([onSignOutProblem] logs that).
      */
     suspend fun endSessionUrl(idToken: String): ProviderSignOutResult = withContext(NonCancellable) {
         withTimeoutOrNull(signOutDeadline()) {
             catchingFailures(
-                {
-                    val endpoint = discovery.endpoints().endSessionEndpoint
-                    if (endpoint == null) {
-                        ProviderSignOutResult.Unsupported
-                    } else {
-                        ProviderSignOutResult.Redirect(
-                            URLBuilder(endpoint).apply {
-                                parameters.append("id_token_hint", idToken)
-                                parameters.append("post_logout_redirect_uri", config.postLogoutRedirectUri)
-                            }.buildString(),
-                        )
-                    }
-                },
+                { providerSignOut(discovery.endpoints(), idToken) },
                 { cause -> unavailable(describe(cause)) },
             )
-        } ?: unavailable("deadline")
+        } ?: deadlineFallback(idToken)
+    }
+
+    private fun deadlineFallback(idToken: String): ProviderSignOutResult {
+        val cached = discovery.cachedEndpoints() ?: return unavailable("deadline")
+        onSignOutProblem("deadline", true)
+        return providerSignOut(cached, idToken)
+    }
+
+    private fun providerSignOut(endpoints: SsoEndpoints, idToken: String): ProviderSignOutResult {
+        val endpoint = endpoints.endSessionEndpoint ?: return ProviderSignOutResult.Unsupported
+        return ProviderSignOutResult.Redirect(
+            URLBuilder(endpoint).apply {
+                parameters.append("id_token_hint", idToken)
+                parameters.append("post_logout_redirect_uri", config.postLogoutRedirectUri)
+            }.buildString(),
+        )
     }
 
     private fun unavailable(description: String): ProviderSignOutResult {
-        onSignOutUnavailable(description)
+        onSignOutProblem(description, false)
         return ProviderSignOutResult.Unavailable
     }
 

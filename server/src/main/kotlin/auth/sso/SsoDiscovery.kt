@@ -58,6 +58,9 @@ class SsoDiscovery(
 
     suspend fun endpoints(): SsoEndpoints = cache.get()
 
+    /** The last good document while it is still servable (TTL plus the staleness bound), without any network call. */
+    fun cachedEndpoints(): SsoEndpoints? = cache.peekUsable()
+
     private suspend fun fetch(): SsoEndpoints {
         val url = config.issuer.let { if (it.endsWith("/")) it else "$it/" } + DISCOVERY_SUFFIX
         val response = http().getJson(url)

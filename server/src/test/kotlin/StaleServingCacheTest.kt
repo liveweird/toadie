@@ -5,6 +5,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -12,6 +13,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 
 /**
@@ -140,4 +142,35 @@ class StaleServingCacheTest {
         release.complete(Unit)
         assertEquals(3, waiter.await(), "the waiter loads instead of being served the old value for an interval")
     }
+
+    @Test
+    fun `a leader cancelled by its own deadline counts as an attempt, and the value stays peekable only inside the stale bound`() =
+        runBlocking<Unit> {
+            val loads = AtomicInteger()
+            var now = 0L
+            val hang = CompletableDeferred<Unit>()
+            val cache = StaleServingCache<Int>(
+                ttlMillis = 1_000, maxStaleMillis = 10_000, refreshIntervalMillis = 100, clock = { now },
+            ) {
+                val n = loads.incrementAndGet()
+                if (n > 1) hang.await()
+                n
+            }
+            assertNull(cache.peekUsable(), "nothing cached yet")
+            assertEquals(1, cache.get())
+            now = 2_000
+            assertEquals(1, cache.peekUsable())
+            // The refresh hangs and the caller's deadline cancels it.
+            assertNull(withTimeoutOrNull(50) { cache.get() })
+            assertEquals(2, loads.get())
+            // A deadline is an attempt: inside the interval the stale value is served with no second load.
+            assertEquals(1, cache.get())
+            assertEquals(2, loads.get())
+            // A plain cancellation is not (the sibling test): past the interval the next caller loads again.
+            now = 2_101
+            assertNull(withTimeoutOrNull(50) { cache.get() })
+            assertEquals(3, loads.get())
+            now = 1_000 + 10_000
+            assertNull(cache.peekUsable(), "past ttl + maxStale nothing is servable")
+        }
 }

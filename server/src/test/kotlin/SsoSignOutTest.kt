@@ -299,7 +299,57 @@ class SsoSignOutTest {
         }
 
     @Test
-    fun `a hung identity provider ends the provider step at the deadline - a 204 audited as unavailable`() =
+    fun `a hung identity provider inside the stale window still redirects with the cached endpoint and holds the retry spacing`() =
+        testApplication {
+            StubIdp().use { stub ->
+                advertise(stub)
+                val clock = MovableClock()
+                ssoApp(stub, clock = clock)
+                application.attributes.put(SsoSignOutDeadlineKey, 300.milliseconds)
+                val browser = browser()
+                val session = browser.signInAndExchange(stub)
+                val second = browser.signInAndExchange(stub)
+                val retained = assertNotNull(storedIdToken(session.userId))
+                val client = jsonClient()
+                // The cached document expires (inside the 24 h staleness bound), and the refresh never answers until the test lets it.
+                clock.advanceSeconds(2 * 3600)
+                val release = CountDownLatch(1)
+                val answered = AtomicInteger()
+                stub.onDiscovery = {
+                    release.await(30, TimeUnit.SECONDS)
+                    answered.incrementAndGet()
+                }
+                val fetchesBefore = stub.discoveryFetches.get()
+                val appLog = LogCapture(application.log.name)
+                try {
+                    withAuditCapture { audit ->
+                        val response = client.logout(session)
+                        // The response came while the provider was still holding the request: the deadline ended it,
+                        // not the provider's answer and not OperatorHttp's own 10 s.
+                        assertEquals(0, answered.get())
+                        assertEquals(HttpStatusCode.OK, response.status)
+                        assertTrue(response.body<LogoutResponse>().endSessionUrl.startsWith("${stub.issuer}/v1/logout?"))
+                        assertTrue(logoutEventOf(audit, session.userId).hasKeyValue("sso", "redirected"))
+                        assertNoLeak(audit, retained)
+                    }
+                    assertEquals(0, sessionRows(session.userId))
+                    val warnings = appLog.events.filter { "sign-out deadline" in it.formattedMessage }
+                    assertEquals(1, warnings.size)
+                    assertTrue(warnings.single().formattedMessage.endsWith("(deadline)"))
+                    assertFalse(retained in warnings.single().formattedMessage, "no token in the log")
+                    assertEquals(fetchesBefore + 1, stub.discoveryFetches.get())
+                    // The deadline-abandoned refresh counted as an attempt: the next logout inside the interval does not ask again.
+                    assertEquals(HttpStatusCode.OK, client.logout(second).status)
+                    assertEquals(fetchesBefore + 1, stub.discoveryFetches.get(), "a hung issuer is not re-asked per logout")
+                } finally {
+                    release.countDown()
+                    appLog.detach()
+                }
+            }
+        }
+
+    @Test
+    fun `a hung identity provider past the stale window ends the provider step at the deadline - a 204 audited as unavailable`() =
         testApplication {
             StubIdp().use { stub ->
                 advertise(stub)
@@ -309,8 +359,8 @@ class SsoSignOutTest {
                 val session = browser().signInAndExchange(stub)
                 val retained = assertNotNull(storedIdToken(session.userId))
                 val client = jsonClient()
-                // The cached document expires, and the refresh never answers until the test lets it.
-                clock.advanceSeconds(2 * 3600)
+                // Beyond the TTL plus the 24 h staleness bound: no usable copy, and the refresh never answers until the test lets it.
+                clock.advanceSeconds(26 * 3600)
                 val release = CountDownLatch(1)
                 val answered = AtomicInteger()
                 stub.onDiscovery = {
@@ -321,9 +371,7 @@ class SsoSignOutTest {
                 try {
                     withAuditCapture { audit ->
                         val response = client.logout(session)
-                        // The response came while the provider was still holding the request: the deadline ended it,
-                        // not the provider's answer and not OperatorHttp's own 10 s.
-                        assertEquals(0, answered.get())
+                        assertEquals(0, answered.get(), "the deadline ended the step, not the provider's answer")
                         assertEquals(HttpStatusCode.NoContent, response.status)
                         assertTrue(logoutEventOf(audit, session.userId).hasKeyValue("sso", "unavailable"))
                         assertNoLeak(audit, retained)
@@ -333,6 +381,8 @@ class SsoSignOutTest {
                     val warnings = appLog.events.filter { "sign-out unavailable" in it.formattedMessage }
                     assertEquals(1, warnings.size)
                     val text = warnings.single().formattedMessage
+                    // The 300 ms deadline always precedes OperatorHttp's own 10 s timeout, which would be named by its exception.
+                    assertTrue("(deadline)" in text && "OperatorHttpException" !in text, "the deadline ended the step: $text")
                     assertTrue(retained !in text && "127.0.0.1" !in text && "id_token_hint" !in text && "http" !in text, "no token, no URL")
                 } finally {
                     release.countDown()

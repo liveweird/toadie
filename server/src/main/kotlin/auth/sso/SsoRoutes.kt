@@ -99,7 +99,13 @@ fun Application.configureSso() {
         onFailureLog = { cause -> log.warn("SSO callback failed unexpectedly ({})", cause.javaClass.name) },
         signOutDeadline = { attributes.getOrNull(SsoSignOutDeadlineKey) ?: SIGN_OUT_DEADLINE },
         // The cause description only (class name and failure kind): the end-session URL embeds the ID token.
-        onSignOutUnavailable = { cause -> log.warn("SSO provider sign-out unavailable; signed out locally only ({})", cause) },
+        onSignOutProblem = { cause, servedFromCache ->
+            if (servedFromCache) {
+                log.warn("SSO provider discovery missed the sign-out deadline; used the cached end-session endpoint ({})", cause)
+            } else {
+                log.warn("SSO provider sign-out unavailable; signed out locally only ({})", cause)
+            }
+        },
     )
     // Logout (auth/AuthRoutes.kt) asks for the provider's end-session URL through this seam only; it reads no SSO type.
     attributes.put(ProviderSignOutKey, ProviderSignOut(flow::endSessionUrl))
