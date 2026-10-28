@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:18-alpine
+    # Tag AND multi-arch digest, like the Dockerfile's base images; Dependabot's docker-compose
+    # ecosystem bumps the pair. Keep the tag equal to k8s/postgres-deployment.yaml's.
+    image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
     container_name: toadie-postgres
     restart: unless-stopped
     environment:
@@ -24,7 +26,7 @@ services:
   mailpit:
     # Local mail catcher for the demo: password-reset and MFA email lands here.
     # Read it at http://localhost:8026 (8025 is Lettuce's).
-    image: axllent/mailpit:v1.30
+    image: axllent/mailpit:v1.30@sha256:d5ecbb067db3705fa953d79e1b7f81ef84038df67aba6c52825d8c02a1ea748a
     container_name: toadie-mailpit
     restart: unless-stopped
     ports:

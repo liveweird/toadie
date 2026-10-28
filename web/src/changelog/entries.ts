@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.32.4",
+    date: "2026-10-28",
+    en: `**Pinned container images.** The demo stack's PostgreSQL and Mailpit, the Kubernetes PostgreSQL and the test identity provider now run exact image builds, kept current by Dependabot. The bundled PostgreSQL moves from 18.4 to 18.6.`,
+    pl: `**Przypięte obrazy kontenerów.** PostgreSQL i Mailpit w stosie demo, PostgreSQL w Kubernetes oraz testowy dostawca tożsamości działają teraz na dokładnie określonych buildach obrazów, aktualizowanych przez Dependabota. Dołączony PostgreSQL przechodzi z wersji 18.4 na 18.6.`,
+  },
+  {
     version: "2.32.3",
     date: "2026-10-27",
     en: `**Check-up upkeep, part three.** Under the hood only: the blueprint editor's form logic is split into smaller modules, the build pins every GitHub Action to an exact commit, and the docs explain what happens to running requests when the app shuts down.`,

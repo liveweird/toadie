@@ -20,9 +20,10 @@ spec:
       # postgres:18-alpine's `postgres` user is uid/gid 70. Running the pod as that user (rather than
       # letting the entrypoint start as root and drop to it through gosu) means the container never
       # holds root: with a non-root start the entrypoint skips its chown/gosu step and runs initdb as
-      # uid 70 directly. fsGroup makes the PVC group-writable by gid 70 (a volume first initialised by
-      # the former root start already belongs to 70:70, so existing data keeps working);
-      # OnRootMismatch skips the recursive re-own once the volume root already matches.
+      # uid 70 directly. fsGroup makes the PVC group-writable by gid 70: a volume first initialised by
+      # the former root start has a 0:0 root and a 70:0 data directory, and the first non-root start
+      # re-owns it to group 70 (setgid), so existing data keeps working (proven on OrbStack, 2.32.4);
+      # OnRootMismatch skips that recursive re-own once the volume root already matches.
       securityContext:
         runAsNonRoot: true
         runAsUser: 70
@@ -47,7 +48,9 @@ spec:
                 secretKeyRef:
                   name: toadie-secrets
                   key: POSTGRES_USER
-          image: postgres:18-alpine
+          # Tag AND multi-arch digest (Dependabot's docker ecosystem covers /k8s); the tag stays equal to
+          # docker-compose.yaml's.
+          image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
           # Keep the probe command as a proper argv list (a single-string argv can't exec).
           # The readinessProbe gates the Service endpoint (the compose
           # `depends_on: service_healthy` equivalent).
