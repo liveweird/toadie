@@ -46,6 +46,14 @@ promotes it. A finished item is removed, not ticked.
   Users row with its audit event and docs line, and decide whether unlinking an account that has no
   password must first set one.
 
+- [new] **Bound the unauthenticated MFA and SSO-exchange fields.** `MfaVerifyRequest`
+  (`challengeId`, `code`) and `SsoExchangeRequest.code` declare no `maxLength` in the OpenAPI
+  contract and have no route-side length check, so a ~10 MiB value is encoded and hashed while the
+  store's lock is held (bounded by the `mfa`/`sso` buckets; unchanged by the 2.32.5 store refactor,
+  found by its security audit). Declare `maxLength` (32 / 6 / 43), reject longer values with a
+  route-side 400 per `.claude/docs/security.md` "Request payload validation", regenerate
+  `web/src/api/schema.ts`.
+
 ## Scaling constraint
 
 - [new] **Remove instance-local state before allowing multiple app replicas.** Every one of these
@@ -58,8 +66,10 @@ promotes it. A finished item is removed, not ticked.
   (`entities/EntityService.kt`); the read ledger (`infra/concurrency/ReadLedger.kt`); and, in
   `auth/sso/`, the SSO hand-off store (`SsoHandoffs`), seen-state set (`SsoSeenStates`) and the
   discovery/JWKS `StaleServingCache` copies (`SsoDiscovery`, `IdTokenVerifier`). Move or
-  redesign those stores (start by giving `MfaChallenges`, `SsoHandoffs`, `SsoSeenStates` and
-  `PasswordResetThrottle` one bounded TTL-store primitive, so a shared backend replaces one class, not four),
+  redesign those stores (`MfaChallenges`, `SsoHandoffs` and `SsoSeenStates` are thin policies
+  over `infra/concurrency/BoundedTtlStore`, so a shared backend implements that one class; the
+  two throttles — `LoginThrottle`, `PasswordResetThrottle` — are per-principal recency maps and
+  a separate, smaller seam),
   test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
   from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 

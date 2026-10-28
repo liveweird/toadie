@@ -542,6 +542,22 @@ pins across `EntityTest`, `EntityQueryRouteTest`, `EntityGraphTest`, `QueryEvalu
 (the default-capacity ledger never trips at ordinary test-fixture scale) — `EntityGraphTest`'s
 own fixtures were mechanically updated for `EntityGraphSource.relations` replacing `.document`.
 
+**Bounded TTL store.** `BoundedTtlStoreTest` is the pure suite of the bounded TTL primitive
+(`infra/concurrency/BoundedTtlStore.kt`, injected clock, no database): `admit` reports `ADMITTED` then
+`DUPLICATE` and re-admits a key after expiry, `REFUSE` at capacity answers `FULL`/null with live entries
+untouched and expiry reopening admission (the sweep precedes the capacity decision), `EVICT_OLDEST`
+never refuses, drops the eldest live entry and never evicts for a duplicate, the sweep drops an expired
+entry queued behind a live one (the `SsoSeenStates` replay case a head-only purge would get wrong),
+`issue` regenerates a colliding key and evicts nothing when its generator throws, `update` is an atomic
+read-modify-write (absent sees null and inserts nothing, null removes, a replacement for an absent key
+is an `IllegalStateException`) that sees expired entries, and `remove` hands a value out once even when
+expired. Latch-synchronized contenders exercise the ceiling (32 issues into capacity 7 keep exactly 7),
+single-use (32 removes, one winner), no lost increment (64 updates) and the evicting store settling at
+exactly capacity; these are probabilistic races that a missing lock fails often, not on every run.
+`MfaChallengesTest` races the policy too: 32 concurrent correct submissions give exactly one success,
+and 32 concurrent wrong guesses under `maxAttempts = 5` give 4 `wrong_code`, 1 `too_many_attempts` and
+27 `unknown_challenge`.
+
 **Catalog read budget (2.19.0).** `CatalogFileReadBudgetTest` drives a private service via
 `TestCatalogFiles.tunedService(readLedger)` (the `TestEntities.tunedService` shape), no timing: a
 capacity-1 ledger makes `graph`/`errors`/`export` answer `BadRequestException` (a unique fixture

@@ -67,7 +67,13 @@ ch.nokillswit
 │                       URL fetch and the jq evaluator; ReadLedger.kt — the process-wide read memory
 │                       ledger (`READ_BUDGET_BYTES`, `ReadLedger`/`ReadBudgetExceeded`,
 │                       `throwReadBudgetHttp`), relocated from entities/ in 2.19.0 — see
-│                       `.claude/docs/security.md` "Entity read memory budget"
+│                       `.claude/docs/security.md` "Entity read memory budget";
+│                       BoundedTtlStore.kt — the one bounded, expiring, keyed in-memory store
+│                       (`BoundedTtlStore`/`WhenFull`: `admit`/`issue`/`update`/`remove`, each one
+│                       critical section under a single lock, expiry swept at admission, REFUSE or
+│                       EVICT_OLDEST at the ceiling); the adopters `auth/MfaChallenges`,
+│                       `auth/sso/SsoHandoffs` and `auth/sso/SsoSeenStates` are thin policies over it —
+│                       the seam a shared backend implements once
 ├── infra/fetch/        OperatorHttp.kt — the narrow HTTP client for OPERATOR-CONFIGURED endpoints (the
 │                       SSO issuer; `OperatorHttp`/`OperatorResponse`/`OperatorHttpException`; its own
 │                       2-worker `operator-http` pool, no address rule, never handed a request-derived
