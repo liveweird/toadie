@@ -134,4 +134,50 @@ class MfaChallengesTest {
             executor.shutdownNow()
         }
     }
+
+    /** Runs [contenders] copies of [action] released together by one latch; returns their results in order. */
+    private fun <T> race(contenders: Int, action: () -> T): List<T> {
+        val ready = CountDownLatch(contenders)
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(contenders)
+        try {
+            val futures = (1..contenders).map {
+                executor.submit<T> {
+                    ready.countDown()
+                    start.await()
+                    action()
+                }
+            }
+            assertTrue(ready.await(5, TimeUnit.SECONDS), "all contenders should reach the gate")
+            start.countDown()
+            return futures.map { it.get(5, TimeUnit.SECONDS) }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `concurrent correct submissions - exactly one wins, the rest find no challenge`() {
+        val s = store()
+        val issued = s.issue(42u)
+        val outcomes = race(32) { s.verify(issued.challengeId, issued.code) }
+        assertEquals(1, outcomes.count { it is MfaChallenges.Outcome.Success })
+        assertEquals(31, outcomes.count { (it as? MfaChallenges.Outcome.Failure)?.reason == "unknown_challenge" })
+    }
+
+    @Test
+    fun `concurrent wrong guesses never exceed the attempt cap`() {
+        val s = store(maxAttempts = 5)
+        val issued = s.issue(42u)
+        val wrong = if (issued.code == "000000") "111111" else "000000"
+        val reasons = race(32) { (s.verify(issued.challengeId, wrong) as MfaChallenges.Outcome.Failure).reason }
+        assertEquals(4, reasons.count { it == "wrong_code" })
+        assertEquals(1, reasons.count { it == "too_many_attempts" })
+        assertEquals(27, reasons.count { it == "unknown_challenge" })
+        // The challenge is gone: even the right code cannot succeed now.
+        assertEquals(
+            "unknown_challenge",
+            (s.verify(issued.challengeId, issued.code) as MfaChallenges.Outcome.Failure).reason,
+        )
+    }
 }

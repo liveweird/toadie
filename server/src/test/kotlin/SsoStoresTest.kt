@@ -118,6 +118,17 @@ class SsoStoresTest {
     }
 
     @Test
+    fun `an expired state queued behind a live one is swept, so the live one is not evicted and cannot replay`() {
+        var now = 0L
+        val seen = SsoSeenStates(maxTracked = 2, clock = { now })
+        assertTrue(seen.firstUse("a", 1_000))
+        assertTrue(seen.firstUse("b", 100))
+        now = 200
+        assertTrue(seen.firstUse("c", 1_000))
+        assertFalse(seen.firstUse("a", 1_000), "the live state is still remembered")
+    }
+
+    @Test
     fun `the cookie is host-prefixed in production only`() {
         assertEquals("__Host-toadie_sso", ssoCookieName(production = true))
         assertEquals("toadie_sso", ssoCookieName(production = false))
