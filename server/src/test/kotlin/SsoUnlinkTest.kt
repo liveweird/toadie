@@ -17,8 +17,10 @@ import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withTimeout
+import java.sql.DriverManager
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -256,6 +258,27 @@ class SsoUnlinkTest {
         }
 
     @Test
+    fun `a soft-deleted linked passwordless ADMIN or MFA-enabled row is still released with 204`() = testApplication {
+        StubIdp().use { stub ->
+            ssoApp(stub)
+            val (admin, _) = adminClient()
+            withAuditCapture { audit ->
+                suspend fun assertReleased(id: UInt) {
+                    TestUsers.softDelete(id)
+                    assertEquals(HttpStatusCode.NoContent, admin.delete(ssoPath(id)).status)
+                    assertNull(TestUsers.rawSsoSubject(id), "the deleted row's link is released")
+                }
+                // The same rows an ACTIVE account answers 409 for (previous test): deletion exempts them, no password is needed.
+                assertReleased(TestUsers.seedPasswordless(uniqueEmail("sso-unlink-dadmin"), role = UserRole.ADMIN, issuer = stub.issuer))
+                val mfaUser = TestUsers.seedPasswordless(uniqueEmail("sso-unlink-dmfa"), issuer = stub.issuer)
+                TestUsers.service.setDisabledFeatures(mfaUser, emptySet())
+                assertReleased(mfaUser)
+                assertEquals(2, audit.events.count { it.message == "user.sso_unlinked" && it.hasKeyValue("deleted", true) })
+            }
+        }
+    }
+
+    @Test
     fun `an administrator with a password can be unlinked, and its next SSO sign-in is link_refused`() = testApplication {
         StubIdp().use { stub ->
             ssoApp(stub)
@@ -286,19 +309,21 @@ class SsoUnlinkTest {
         // The version the hand-off is issued from is the one the lookup itself saw.
         assertEquals(SsoLookup.Existing(id, before), TestUsers.service.resolveSsoIdentity(issuer, subject, email))
 
-        val locked = CompletableDeferred<Unit>()
+        val locked = CompletableDeferred<Int>()
         val release = CompletableDeferred<Unit>()
         withContext(Dispatchers.Default) {
             // An unlink (the same row-level steps as UserService.unlinkSso), held open mid-transaction.
             val unlink = async {
-                TestUsers.unlinkHoldingLock(id) {
-                    locked.complete(Unit)
+                TestUsers.unlinkHoldingLock(id) { holderPid ->
+                    locked.complete(holderPid)
                     release.await()
                 }
             }
-            locked.await()
+            val holderPid = locked.await()
             val lookup = async { TestUsers.service.resolveSsoIdentity(issuer, subject, email) }
-            assertNull(withTimeoutOrNull(500) { lookup.await() }, "the lookup waits for the unlink's row lock")
+            // Observed, not timed: PostgreSQL reports a backend waiting on the unlink's lock (fails without the lookup's FOR UPDATE).
+            awaitBlockedWriter(holderPid)
+            assertFalse(lookup.isCompleted, "the lookup waits for the unlink's row lock")
             release.complete(Unit)
             unlink.await()
             // The unlink won: the identity no longer matches, so the callback links by the ordinary rule at the NEW version -
@@ -306,6 +331,19 @@ class SsoUnlinkTest {
             assertEquals(SsoLookup.Linked(id, before + 1), lookup.await())
         }
         assertNotNull(assertNotNull(TestUsers.service.read(id)).ssoSubject)
+    }
+
+    private suspend fun awaitBlockedWriter(holderPid: Int) = withContext(Dispatchers.IO) {
+        DriverManager.getConnection(PostgresTestSupport.jdbcUrl, PostgresTestSupport.user, PostgresTestSupport.password).use { observer ->
+            withTimeout(15_000) {
+                observer.prepareStatement(
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE ? = ANY(pg_blocking_pids(pid)))",
+                ).use { query ->
+                    query.setInt(1, holderPid)
+                    while (!query.executeQuery().use { it.next(); it.getBoolean(1) }) delay(25)
+                }
+            }
+        }
     }
 
     private suspend fun assertRefusedNotAllowed(browser: HttpClient, stub: StubIdp, claims: Map<String, Any?>) =

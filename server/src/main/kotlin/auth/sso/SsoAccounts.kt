@@ -26,6 +26,8 @@ class SsoAccountRefusedException(val reason: String, val userId: UInt? = null) :
  */
 class SsoResolved(val userId: UInt, val outcome: SsoOutcome, val authVersion: Long)
 
+private const val NEW_ACCOUNT_AUTH_VERSION = 0L
+
 /**
  * Account resolution for a verified ID token (`.claude/docs/security.md` "SSO login (OIDC)"):
  *
@@ -39,8 +41,6 @@ class SsoResolved(val userId: UInt, val outcome: SsoOutcome, val authVersion: Lo
  * A concurrent first login for the same person hits a unique index (23505) on step 3 (or on a link); the whole
  * resolution then re-runs ONCE, and finds the winner's row. The email stored on an account is never overwritten from a claim.
  */
-private const val NEW_ACCOUNT_AUTH_VERSION = 0L
-
 class SsoAccounts(
     private val lookup: suspend (issuer: String, subject: String, email: String) -> SsoLookup,
     private val creator: suspend (User) -> UInt,

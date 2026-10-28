@@ -260,7 +260,8 @@ class UserService(private val database: R2dbcDatabase) {
         if (row[Users.ssoSubject] == null) {
             return@suspendTransaction if (wasDeleted) SsoUnlink.NotFound else SsoUnlink.NotLinked
         }
-        // Deleted rows are exempt: they cannot sign in either way, and a released identity signs in as a NEW account.
+        // Deleted rows are exempt: they cannot sign in either way, and a released identity signs in under the ordinary
+        // rule (links to an active same-email account if one exists, otherwise a new one).
         val neverRelinks = row[Users.role] == UserRole.ADMIN.name || Feature.MFA !in featuresOf(id)
         if (!wasDeleted && row[Users.passwordHash] == null && neverRelinks) return@suspendTransaction SsoUnlink.PasswordRequired
         Users.update({ Users.id eq id }) {
