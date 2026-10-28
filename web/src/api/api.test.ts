@@ -659,6 +659,52 @@ describe("auth flows", () => {
     expect(getRefreshToken()).toBe(NEXT_SESSION.refreshToken);
   });
 
+  test("logout resolves the provider's end-session URL from a 200, and null from a 204", async () => {
+    persistSession(SESSION);
+    const endSessionUrl = "https://idp.example.test/logout?id_token_hint=abc&post_logout_redirect_uri=https%3A%2F%2Fapp.example.test%2Flogin";
+    fetchMock().mockResolvedValueOnce(jsonResponse(200, { endSessionUrl }));
+    await expect(logout()).resolves.toBe(endSessionUrl);
+    expect(getToken()).toBeNull();
+
+    persistSession(SESSION);
+    fetchMock().mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await expect(logout()).resolves.toBeNull();
+    expect(getToken()).toBeNull();
+  });
+
+  test.each([
+    ["a javascript: URL", { endSessionUrl: "javascript:alert(1)" }],
+    ["a data: URL", { endSessionUrl: "data:text/html,x" }],
+    ["a relative path", { endSessionUrl: "/logout" }],
+    ["a non-string value", { endSessionUrl: 42 }],
+    ["a missing member", {}],
+  ])("logout ignores %s in the 200 body but still clears the session", async (_label, body) => {
+    persistSession(SESSION);
+    fetchMock().mockResolvedValueOnce(jsonResponse(200, body));
+    await expect(logout()).resolves.toBeNull();
+    expect(getToken()).toBeNull();
+  });
+
+  test("logout with an unreadable 200 body still clears the session and resolves null", async () => {
+    persistSession(SESSION);
+    fetchMock().mockResolvedValueOnce(new Response("not json", { status: 200 }));
+    await expect(logout()).resolves.toBeNull();
+    expect(getToken()).toBeNull();
+  });
+
+  test("a held logout whose session was replaced does not hand back an end-session URL", async () => {
+    persistSession(SESSION);
+    const revoke = deferred<Response>();
+    fetchMock().mockReturnValueOnce(revoke.promise);
+    const logoutPromise = logout();
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(1));
+    clearSession();
+    persistSession(NEXT_SESSION);
+    revoke.resolve(jsonResponse(200, { endSessionUrl: "https://idp.example.test/logout" }));
+    await expect(logoutPromise).resolves.toBeNull();
+    expect(getToken()).toBe(NEXT_SESSION.token);
+  });
+
   test("logout without a stored token is a no-op fetch-wise", async () => {
     localStorage.setItem(TOKEN_KEY, "");
     clearSession();

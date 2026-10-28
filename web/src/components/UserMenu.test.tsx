@@ -155,5 +155,40 @@ describe("UserMenu", () => {
     await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(localStorage.getItem("toadie.auth.token")).toBeNull());
     expect(await screen.findByText("login page")).toBeInTheDocument();
+    expect(sessionStorage.getItem("toadie.signedOut")).toBeNull();
+  });
+
+  describe("Sign out of an SSO session", () => {
+    const END_SESSION = "https://idp.example.test/logout?id_token_hint=abc";
+    const assign = vi.fn();
+
+    beforeEach(() => {
+      assign.mockReset();
+      vi.stubGlobal("location", { ...window.location, assign });
+    });
+
+    afterEach(() => sessionStorage.clear());
+
+    test("clears the session, keeps the banner flag across the navigation, and leaves for the provider's end-session URL", async () => {
+      stubFetch((url) => (url === "/api/v1/logout" ? Response.json({ endSessionUrl: END_SESSION }) : undefined));
+      const user = userEvent.setup();
+      renderMenu();
+      await user.click(screen.getByRole("button", { name: /Account menu$/ }));
+      await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
+      await waitFor(() => expect(assign).toHaveBeenCalledWith(END_SESSION));
+      expect(localStorage.getItem("toadie.auth.token")).toBeNull();
+      expect(sessionStorage.getItem("toadie.signedOut")).not.toBeNull();
+    });
+
+    test("a non-http(s) end-session URL is ignored: the ordinary navigation to /login", async () => {
+      stubFetch((url) => (url === "/api/v1/logout" ? Response.json({ endSessionUrl: "javascript:alert(1)" }) : undefined));
+      const user = userEvent.setup();
+      renderMenu();
+      await user.click(screen.getByRole("button", { name: /Account menu$/ }));
+      await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
+      expect(await screen.findByText("login page")).toBeInTheDocument();
+      expect(assign).not.toHaveBeenCalled();
+      expect(localStorage.getItem("toadie.auth.token")).toBeNull();
+    });
   });
 });

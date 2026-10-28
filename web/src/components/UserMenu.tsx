@@ -17,7 +17,7 @@ import { IconActivity, IconCheck, IconChevronDown, IconHistory, IconKey, IconLog
 import { logout } from "../api/auth";
 import { getUserId, hasPassword, isAdmin } from "../api/session";
 import { getUser, setUserLanguage } from "../api/users";
-import { flagSignedOut, notifyAuthChange } from "../auth";
+import { flagSignedOut, notifyAuthChange, persistSignedOutFlag } from "../auth";
 import { asSupportedLanguage, NATIVE_LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from "../i18n";
 import { useChangelogUnseen } from "../hooks/useChangelogSeen";
 import { setTelemetryPanelOpen, useTelemetryPanelOpen } from "../hooks/useTelemetryPanel";
@@ -80,11 +80,18 @@ export default function UserMenu() {
   }
 
   async function handleSignOut() {
-    await logout();
+    const endSessionUrl = await logout();
     queryClient.clear();
     flagSignedOut();
-    navigate("/login", { replace: true });
+    // An SSO session also ends at the identity provider: leave the SPA for its end-session URL (it
+    // returns to /login, where the persisted flag shows the banner). Never stored or logged: it
+    // carries the ID token.
+    if (endSessionUrl === null) navigate("/login", { replace: true });
     notifyAuthChange();
+    if (endSessionUrl !== null) {
+      persistSignedOutFlag();
+      window.location.assign(endSessionUrl);
+    }
   }
 
   return (

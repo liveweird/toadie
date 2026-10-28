@@ -51,6 +51,18 @@ describe("Login", () => {
     return <output data-testid="location">{location.pathname + location.search + location.hash}</output>;
   }
 
+  test("returning from the identity provider's sign-out shows the signed-out banner once", async () => {
+    // The flag the sign-out persisted before leaving the SPA; a fresh page load has no in-memory one.
+    sessionStorage.setItem("toadie.signedOut", "1");
+    const { unmount } = renderWithProviders(<Login />, { route: "/login" });
+    expect(screen.getByText("You've been signed out.")).toBeInTheDocument();
+    expect(sessionStorage.getItem("toadie.signedOut")).toBeNull();
+    unmount();
+
+    renderWithProviders(<Login />, { route: "/login" });
+    expect(screen.queryByText("You've been signed out.")).not.toBeInTheDocument();
+  });
+
   test("client-side validation blocks an empty submit without a request", async () => {
     renderWithProviders(<Login />, { route: "/login" });
     const user = userEvent.setup();

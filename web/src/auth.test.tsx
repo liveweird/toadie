@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { act } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { QueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import {
   bindQueryCacheToAuthBoundary,
   consumeSignedOut,
   flagSignedOut,
+  persistSignedOutFlag,
   notifyAuthChange,
 } from "./auth";
 
@@ -31,6 +32,8 @@ function TestRoutes() {
 }
 
 describe("route guards", () => {
+  afterEach(() => sessionStorage.clear());
+
   test("RequireAuth redirects an anonymous visitor to /login", () => {
     renderWithProviders(<TestRoutes />, { route: "/secret" });
     expect(screen.getByText("login page")).toBeInTheDocument();
@@ -71,6 +74,36 @@ describe("route guards", () => {
     flagSignedOut();
     expect(consumeSignedOut()).toBe(true);
     expect(consumeSignedOut()).toBe(false);
+  });
+
+  test("the persisted signed-out flag survives a reload, is read and removed once", () => {
+    persistSignedOutFlag();
+    // A fresh page load has no in-memory flag; the sessionStorage one stands in for it.
+    expect(consumeSignedOut()).toBe(true);
+    expect(sessionStorage.getItem("toadie.signedOut")).toBeNull();
+    expect(consumeSignedOut()).toBe(false);
+  });
+
+  test("an in-memory flag is consumed without eating the persisted one the returning page needs", () => {
+    flagSignedOut();
+    persistSignedOutFlag();
+    expect(consumeSignedOut()).toBe(true);
+    expect(sessionStorage.getItem("toadie.signedOut")).not.toBeNull();
+    expect(consumeSignedOut()).toBe(true);
+    expect(consumeSignedOut()).toBe(false);
+  });
+
+  test("blocked storage reads as no flag and never throws", () => {
+    const blocked = () => {
+      throw new Error("blocked");
+    };
+    vi.stubGlobal("sessionStorage", { getItem: blocked, setItem: blocked, removeItem: blocked });
+    try {
+      expect(() => persistSignedOutFlag()).not.toThrow();
+      expect(consumeSignedOut()).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

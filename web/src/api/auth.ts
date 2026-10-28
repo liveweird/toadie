@@ -9,6 +9,7 @@ type LoginBody = paths["/api/v1/login"]["post"]["requestBody"]["content"]["appli
 // Tokens, or (MFA-enabled accounts) a second-factor challenge — discriminate via isMfaChallenge.
 type LoginOk = paths["/api/v1/login"]["post"]["responses"]["200"]["content"]["application/json"];
 type LoginSuccess = components["schemas"]["LoginResponse"];
+type LogoutResponse = components["schemas"]["LogoutResponse"];
 export type MfaChallenge = components["schemas"]["MfaChallengeResponse"];
 
 export function isMfaChallenge(data: LoginOk): data is MfaChallenge {
@@ -81,25 +82,49 @@ export async function confirmPasswordReset(token: string, password: string): Pro
   if (!res.ok) throw new ApiError(res.status, await safeJson(res));
 }
 
-export async function logout(): Promise<void> {
+/** Only an http(s) URL may be navigated to; anything else (javascript:, data:, junk) reads as absent. */
+function httpUrlOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "https:" || protocol === "http:" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Signs out: revokes server-side (best-effort) and clears the local session. Resolves the identity
+ * provider's end-session URL when the server answered `200 {endSessionUrl}` for an SSO session
+ * (http/https only — the caller navigates there, and must neither store nor log it), else null.
+ * Also null when another login replaced this one while the revoke was in flight: a stale sign-out
+ * must not carry the browser away from the newer session.
+ */
+export async function logout(): Promise<string | null> {
   const token = getToken();
-  if (!token) return;
+  if (!token) return null;
   // Captured BEFORE the await: if the session is signed out and ANOTHER login happens while
   // the revoke is in flight, this call's late completion must not wipe the new session.
   const owner = sessionBoundary();
+  let endSessionUrl: string | null = null;
   try {
-    await fetch(`${API_BASE}/api/v1/logout`, {
+    const res = await fetch(`${API_BASE}/api/v1/logout`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       // Include the refresh token so an explicit logout revokes it too, not just the access token.
       body: JSON.stringify({ refreshToken: getRefreshToken() }),
       signal: timeoutSignal(),
     });
+    if (res.status === 200) {
+      endSessionUrl = httpUrlOrNull(((await res.json()) as Partial<LogoutResponse>).endSessionUrl);
+    }
   } catch {
     // Best-effort revoke: offline/timeout must not block the LOCAL sign-out — a rejected
     // fetch skipping clearSession would leave the user apparently signed in.
   }
-  if (ownsCurrentSession(owner)) clearSession();
+  if (!ownsCurrentSession(owner)) return null;
+  clearSession();
+  return endSessionUrl;
 }
 
 export type LoginOptions = components["schemas"]["LoginOptionsResponse"];

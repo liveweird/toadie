@@ -67,14 +67,39 @@ export function bindQueryCacheToAuthBoundary(client: QueryClient): () => void {
 
 let pendingSignedOutBanner = false;
 
+/** Survives a full-page navigation (the identity provider's end-session round trip); the tab, not the browser. */
+const SIGNED_OUT_KEY = "toadie.signedOut";
+
 export function flagSignedOut(): void {
   pendingSignedOutBanner = true;
 }
 
+/** Carries the flag across a top-level navigation away from the SPA; blocked storage just loses the banner. */
+export function persistSignedOutFlag(): void {
+  try {
+    sessionStorage.setItem(SIGNED_OUT_KEY, "1");
+  } catch {
+    // Storage blocked: the sign-out still happened, only the banner is lost.
+  }
+}
+
+/**
+ * One-shot read of the signed-out banner flag. A pending in-memory flag wins and leaves the stored
+ * one alone: the SPA's own redirect to /login can render before a navigation to the provider
+ * unloads the page, and that transient Login must not eat the flag the returning page needs.
+ */
 export function consumeSignedOut(): boolean {
-  const v = pendingSignedOutBanner;
-  pendingSignedOutBanner = false;
-  return v;
+  if (pendingSignedOutBanner) {
+    pendingSignedOutBanner = false;
+    return true;
+  }
+  try {
+    const stored = sessionStorage.getItem(SIGNED_OUT_KEY) !== null;
+    sessionStorage.removeItem(SIGNED_OUT_KEY);
+    return stored;
+  } catch {
+    return false;
+  }
 }
 
 function useAuth(): { token: string | null; isAuthenticated: boolean } {
