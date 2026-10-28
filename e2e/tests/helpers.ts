@@ -91,9 +91,10 @@ export async function signOut(page: Page): Promise<void> {
   // that URL is not the end of the round trip: wait for the document the provider redirects back
   // to (a `load` event — an in-app route change fires none), or a later step races the navigation.
   const reloaded = page.waitForEvent("load");
+  // A password session never reloads; keep the unused waiter's rejection on page close handled.
+  reloaded.catch(() => undefined);
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   if ((await logout).status() === 200) await reloaded;
-  else reloaded.catch(() => undefined);
   await page.waitForURL(/\/login$/);
 }
 
