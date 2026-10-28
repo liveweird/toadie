@@ -25,7 +25,7 @@ services:
     # ecosystem), on the Dockerfile's Node major (infrastructure.test.js pins the major, never the digest, so a
     # Dockerfile-only bump never turns this red); busybox wget ships with it for the healthcheck, which must name 127.0.0.1: alpine
     # resolves `localhost` to ::1 first, busybox wget does not fall back, and the stub listens on IPv4.
-    image: node:26-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a
+    image: node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797
     command: ["node", "/stub/server.mjs"]
     # No container_name: a fixed name would collide between the CI project and any other stack.
     restart: unless-stopped
