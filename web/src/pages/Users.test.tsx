@@ -340,6 +340,29 @@ describe("Users page", () => {
     expect(await screen.findByText(/no linked SSO identity any more/i)).toBeInTheDocument();
   });
 
+  test("a 409 on unlink asks for a password first", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "DELETE") {
+        return Promise.resolve(
+          jsonResponse(409, { type: "urn:toadie:password-not-set", title: "Conflict", status: 409 }),
+        );
+      }
+      if (url.startsWith("/api/v1/users?")) {
+        return Promise.resolve(usersPage([SEED_USERS[0], { ...SEED_USERS[1], sso: true, hasPassword: false }]));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Operations for Bob Basic" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Unlink SSO identity for Bob Basic" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /^unlink$/i }));
+
+    expect(await screen.findByText(/Set a password for this account first/i)).toBeInTheDocument();
+  });
+
   test("shows the load-failure alert", async () => {
     setupMocks(mockFetch, () => jsonResponse(500, { title: "boom", status: 500 }));
     renderPage();

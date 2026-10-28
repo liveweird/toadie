@@ -10,7 +10,8 @@ import { showSuccessToast } from "../utils/toast";
  * The admin unlink-SSO flow: confirm → DELETE `/users/{id}/sso` → toast + list refresh. Owns the
  * target/pending/error state; the page renders the `ConfirmActionModal` from it. A 404 means the
  * row was already unlinked (or deleted) behind the admin's back — the message says so and the
- * list is refreshed so the stale SSO badge goes away, while the confirm stays open to dismiss.
+ * list is refreshed so the stale SSO badge goes away, while the confirm stays open to dismiss. A 409
+ * (a passwordless ADMIN or MFA-enabled account) asks for a password first and leaves the list alone.
  */
 export function useUnlinkSso() {
   const { t } = useTranslation();
@@ -41,6 +42,8 @@ export function useUnlinkSso() {
       setError(
         saveErrorMessage(err, t, {
           notFound: "users.unlinkGone",
+          // An ADMIN or MFA-enabled account without a password never re-links by email: the server refuses (409).
+          conflict: "users.unlinkNeedsPassword",
           failedStatus: "common.error.actionFailedStatus",
           failed: "common.error.actionFailed",
         }),

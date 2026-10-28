@@ -80,6 +80,23 @@ describe("useUnlinkSso", () => {
     expect(showSuccessToast).not.toHaveBeenCalled();
   });
 
+  test("a 409 asks for a password first, keeps the confirm open and leaves the list alone", async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse(409, { type: "urn:toadie:password-not-set", title: "Conflict", status: 409 }),
+    );
+    const { result } = renderHook(() => useUnlinkSso(), { wrapper });
+
+    act(() => result.current.request(TARGET));
+    await act(() => result.current.confirm());
+
+    expect(result.current.error).toBe(
+      "Set a password for this account first: an administrator or MFA-enabled account never re-links through single sign-on.",
+    );
+    expect(result.current.target).toEqual(TARGET);
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(showSuccessToast).not.toHaveBeenCalled();
+  });
+
   test("another failure surfaces the status-tagged message without refreshing", async () => {
     mockFetch.mockResolvedValue(jsonResponse(500, { title: "boom", status: 500 }));
     const { result } = renderHook(() => useUnlinkSso(), { wrapper });

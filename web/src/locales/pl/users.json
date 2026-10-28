@@ -29,6 +29,7 @@
   "unlinkBodyNoPassword": "Odłączyć konto \"{{name}}\" ({{email}}) od jego tożsamości w logowaniu jednokrotnym? Sesje tej osoby kończą się teraz. To konto nie ma hasła: dopóki ta osoba nie zaloguje się ponownie przez SSO albo nie ustawisz hasła, nikt nie zaloguje się na to konto.",
   "unlinkConfirm": "Odłącz",
   "unlinkFailedTitle": "Nie udało się odłączyć tożsamości SSO",
+  "unlinkNeedsPassword": "Najpierw ustaw hasło dla tego konta: konto administratora lub z włączonym MFA nigdy nie łączy się ponownie przez logowanie jednokrotne.",
   "unlinkGone": "To konto nie ma już powiązanej tożsamości SSO (albo już nie istnieje).",
   "resetTitle": "Zresetować hasło?",
   "resetBody": "Wygenerować nowe hasło dla \"{{name}}\"? Dotychczasowe hasło natychmiast przestanie działać.",

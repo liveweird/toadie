@@ -29,6 +29,7 @@
   "unlinkBodyNoPassword": "Detach \"{{name}}\" ({{email}}) from their single sign-on identity? Their sessions end now. This account has no password: until this person signs in through SSO again, or you set a password, nobody can sign in to it.",
   "unlinkConfirm": "Unlink",
   "unlinkFailedTitle": "Failed to unlink the SSO identity",
+  "unlinkNeedsPassword": "Set a password for this account first: an administrator or MFA-enabled account never re-links through single sign-on.",
   "unlinkGone": "This account has no linked SSO identity any more (or no longer exists).",
   "resetTitle": "Reset password?",
   "resetBody": "Generate a new password for \"{{name}}\"? Their current password stops working immediately.",
