@@ -60,14 +60,14 @@ class BoundedTtlStore<K : Any, V : Any>(
      */
     fun issue(value: V, newKey: () -> K): K? = synchronized(entries) {
         sweep()
-        if (entries.size >= capacity) {
-            if (whenFull == WhenFull.REFUSE) return null
-            evictEldest()
-        }
+        val full = entries.size >= capacity
+        if (full && whenFull == WhenFull.REFUSE) return null
         var key: K
         do {
             key = newKey()
         } while (key in entries)
+        // Evict only once the key exists, so a throwing generator leaves the store as it was.
+        if (full) evictEldest()
         entries[key] = value
         key
     }

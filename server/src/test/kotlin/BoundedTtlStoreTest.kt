@@ -72,6 +72,27 @@ class BoundedTtlStoreTest {
     }
 
     @Test
+    fun `the sweep drops an expired entry queued behind a live one, so a full EVICT_OLDEST store keeps the live one`() {
+        // The SsoSeenStates delta: a head-only purge would stop at the live "a" and evict it, letting its state replay.
+        val s = expiring(2, WhenFull.EVICT_OLDEST)
+        assertEquals(Admission.ADMITTED, s.admit("a", now + 1_000))
+        assertEquals(Admission.ADMITTED, s.admit("b", now + 100))
+        now += 200
+        assertEquals(Admission.ADMITTED, s.admit("c", now + 1_000))
+        assertEquals(Admission.DUPLICATE, s.admit("a", now + 1_000))
+        assertNull(s.remove("b"))
+        assertEquals(2, s.size)
+    }
+
+    @Test
+    fun `issue under EVICT_OLDEST evicts nothing when the key generator throws`() {
+        val s = expiring(1, WhenFull.EVICT_OLDEST)
+        assertEquals(Admission.ADMITTED, s.admit("a", now + 1_000))
+        assertFailsWith<IllegalStateException> { s.issue(now + 1_000) { error("no key") } }
+        assertEquals(now + 1_000, s.remove("a"))
+    }
+
+    @Test
     fun `issue regenerates a key that collides with a live entry`() {
         val s = expiring(10, WhenFull.REFUSE)
         assertEquals(Admission.ADMITTED, s.admit("a", now + 100))
