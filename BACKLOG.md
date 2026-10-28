@@ -58,8 +58,10 @@ promotes it. A finished item is removed, not ticked.
   (`entities/EntityService.kt`); the read ledger (`infra/concurrency/ReadLedger.kt`); and, in
   `auth/sso/`, the SSO hand-off store (`SsoHandoffs`), seen-state set (`SsoSeenStates`) and the
   discovery/JWKS `StaleServingCache` copies (`SsoDiscovery`, `IdTokenVerifier`). Move or
-  redesign those stores (start by giving `MfaChallenges`, `SsoHandoffs`, `SsoSeenStates` and
-  `PasswordResetThrottle` one bounded TTL-store primitive, so a shared backend replaces one class, not four),
+  redesign those stores (`MfaChallenges`, `SsoHandoffs` and `SsoSeenStates` are thin policies
+  over `infra/concurrency/BoundedTtlStore`, so a shared backend implements that one class; the
+  two throttles — `LoginThrottle`, `PasswordResetThrottle` — are per-principal recency maps and
+  a separate, smaller seam),
   test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
   from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 
