@@ -65,6 +65,15 @@ export async function deleteUser(id: number): Promise<void> {
   await voidRequest(`/api/v1/users/${id}`, { method: "DELETE" });
 }
 
+/**
+ * Detach the user's single sign-on identity (ADMIN; 204). The server ends their sessions and the
+ * next SSO sign-in with the same email links the account again. 404 = unknown user or no linked
+ * identity; 403 = the caller's own row.
+ */
+export async function unlinkUserSso(id: number): Promise<void> {
+  await voidRequest(`/api/v1/users/${id}/sso`, { method: "DELETE" });
+}
+
 /** Wholesale-replace the user's disabled-feature set (ADMIN only). */
 export async function updateUserFeatures(id: number, disabledFeatures: Feature[]): Promise<void> {
   const body: FeaturesUpdateBody = { disabledFeatures };

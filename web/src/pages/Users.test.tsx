@@ -239,6 +239,107 @@ describe("Users page", () => {
     await waitFor(() => expect(screen.queryByText(body.password)).not.toBeInTheDocument());
   });
 
+  test("the Unlink SSO identity item shows only on other users' SSO rows", async () => {
+    setupMocks(mockFetch, () => usersPage([
+      { id: 1, name: "Alice Admin", email: "alice@example.com", roles: ["ADMIN"], sso: true, hasPassword: true },
+      { id: 2, name: "Bob Basic", email: "bob@example.com", roles: [], sso: true, hasPassword: true },
+      { id: 3, name: "Carol Local", email: "carol@example.com", roles: [], sso: false, hasPassword: true },
+    ]));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Alice Admin");
+    // Own row (self-unlink is a server 403): no item even though the account is SSO-linked.
+    await user.click(screen.getByRole("button", { name: "Operations for Alice Admin" }));
+    await screen.findByRole("menuitem", { name: "Edit Alice Admin" });
+    expect(
+      screen.queryByRole("menuitem", { name: "Unlink SSO identity for Alice Admin" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    // A non-SSO row: nothing to unlink.
+    await user.click(screen.getByRole("button", { name: "Operations for Carol Local" }));
+    await screen.findByRole("menuitem", { name: "Delete Carol Local" });
+    expect(
+      screen.queryByRole("menuitem", { name: "Unlink SSO identity for Carol Local" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Operations for Bob Basic" }));
+    expect(
+      await screen.findByRole("menuitem", { name: "Unlink SSO identity for Bob Basic" }),
+    ).toBeInTheDocument();
+  });
+
+  test("unlinking confirms, DELETEs the sso link, refetches, and toasts", async () => {
+    const toast = vi.spyOn(notifications, "show").mockReturnValue("id");
+    let listCount = 0;
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "DELETE" && url === "/api/v1/users/2/sso") {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      if (url.startsWith("/api/v1/users?")) {
+        listCount++;
+        return Promise.resolve(usersPage([
+          SEED_USERS[0],
+          { ...SEED_USERS[1], sso: listCount === 1, hasPassword: true },
+        ]));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Operations for Bob Basic" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Unlink SSO identity for Bob Basic" }));
+    const dialog = await screen.findByRole("dialog");
+    // A row with a password gets the plain wording, not the nobody-can-sign-in warning.
+    expect(within(dialog).queryByText(/nobody can sign in/i)).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: /^unlink$/i }));
+
+    await waitFor(() =>
+      expect(within(screen.getByText("Bob Basic").closest("tr")!).queryByText("SSO")).not.toBeInTheDocument(),
+    );
+    expect(listCount).toBeGreaterThanOrEqual(2);
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "SSO identity unlinked", color: "teal" }),
+    );
+    toast.mockRestore();
+  });
+
+  test("a passwordless row warns that nobody can sign in until an SSO sign-in or a password", async () => {
+    setupMocks(mockFetch, () => usersPage([
+      SEED_USERS[0],
+      { ...SEED_USERS[1], sso: true, hasPassword: false },
+    ]));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Operations for Bob Basic" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Unlink SSO identity for Bob Basic" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/nobody can sign in to it/i)).toBeInTheDocument();
+  });
+
+  test("a 404 on unlink says the identity is already gone", async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "DELETE") {
+        return Promise.resolve(jsonResponse(404, { title: "Not Found", status: 404 }));
+      }
+      if (url.startsWith("/api/v1/users?")) {
+        return Promise.resolve(usersPage([SEED_USERS[0], { ...SEED_USERS[1], sso: true }]));
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Operations for Bob Basic" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Unlink SSO identity for Bob Basic" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /^unlink$/i }));
+
+    expect(await screen.findByText(/no linked SSO identity any more/i)).toBeInTheDocument();
+  });
+
   test("shows the load-failure alert", async () => {
     setupMocks(mockFetch, () => jsonResponse(500, { title: "boom", status: 500 }));
     renderPage();
